@@ -14,10 +14,49 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { sessionShape } from '@deepseek-ai/dsh-benchmarks/session-corpus/corpus-shape.ts'
-import { SyntheticCorpusWriter } from '@deepseek-ai/dsh-benchmarks/session-corpus/synthetic-corpus.ts'
 import { removeTree } from '../harness/roots.ts'
 import { PROFILE } from './home.ts'
+
+/** The parts of upstream's corpus modules the benchmark uses. */
+interface CorpusModules {
+  /** `corpus-shape.ts`: the anchor of a chat's length. */
+  readonly sessionShape: (rank: number, count: number) => { readonly anchor: number }
+  /** `synthetic-corpus.ts`: a chat's id. */
+  readonly corpusSessionId: (rank: number) => string
+  /** `synthetic-corpus.ts`: the writer. */
+  readonly SyntheticCorpusWriter: new () => {
+    author(anchor: number): Promise<unknown>
+    writeCorpus(root: string, count: number): Promise<{ readonly facts: { readonly compressedBytes: number } }>
+  }
+}
+
+/** Upstream's corpus modules, as `@deepseek-ai/dsh-benchmarks` names them. */
+const CORPUS_MODULES: { readonly shape: string, readonly corpus: string } = {
+  shape: '@deepseek-ai/dsh-benchmarks/session-corpus/corpus-shape.ts',
+  corpus: '@deepseek-ai/dsh-benchmarks/session-corpus/synthetic-corpus.ts',
+}
+
+/**
+ * Load upstream's corpus modules. The specifiers are not literals, so this package's program does not typecheck
+ * upstream's benchmark sources, which upstream's own benchmark build checks under its configuration.
+ * @returns the functions and the writer.
+ */
+export async function corpusModules(): Promise<CorpusModules> {
+  // A non-literal specifier gives the module untyped; the interface above states the part used.
+  const shape: Pick<CorpusModules, 'sessionShape'> = await import(CORPUS_MODULES.shape)
+  const corpus: Omit<CorpusModules, 'sessionShape'> = await import(CORPUS_MODULES.corpus)
+  return { sessionShape: shape.sessionShape, corpusSessionId: corpus.corpusSessionId, SyntheticCorpusWriter: corpus.SyntheticCorpusWriter }
+}
+
+/**
+ * The ids of the first chats of a synthetic corpus.
+ * @param count - how many.
+ * @returns their ids, in rank order.
+ */
+export async function chatIds(count: number): Promise<readonly string[]> {
+  const { corpusSessionId } = await corpusModules()
+  return Array.from({ length: count }, (_, rank) => corpusSessionId(rank))
+}
 
 /** What a written chat corpus holds. */
 export interface ChatCorpus {
@@ -44,6 +83,7 @@ export async function chatCorpus(cache: string, chats: number, log: (text: strin
   const work = `${directory}.writing`
   removeTree(work)
   mkdirSync(work, { recursive: true })
+  const { SyntheticCorpusWriter, sessionShape } = await corpusModules()
   const writer = new SyntheticCorpusWriter()
   const anchors = [...new Set(Array.from({ length: chats }, (_, rank) => sessionShape(rank, chats).anchor))].sort((a, b) => a - b)
   for (const anchor of anchors) await writer.author(anchor)

@@ -10,7 +10,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { corpusSessionId } from '@deepseek-ai/dsh-benchmarks/session-corpus/synthetic-corpus.ts'
+import { chatIds } from '../../fixtures/data.ts'
 import { copyHome, delorun, deloRequest, stopHome, type InstalledHome } from '../../fixtures/home.ts'
 import { installedChannel, templateHome } from '../../fixtures/releases.ts'
 import { expectSuccess, run, type Finished } from '../../harness/processes.ts'
@@ -39,17 +39,17 @@ interface WorkspaceDocument {
 /**
  * Put every synthetic chat into the home's first workspace, so exporting it carries them all.
  * @param deloHome - the Delo home.
- * @param chats - how many synthetic chats it holds.
+ * @param chats - the synthetic chats' ids.
  * @returns the workspace's id, or `undefined` when the home has no workspace registry or no workspace.
  */
-export function gatherIntoWorkspace(deloHome: string, chats: number): string | undefined {
+export function gatherIntoWorkspace(deloHome: string, chats: readonly string[]): string | undefined {
   const path = join(deloHome, 'storages', 'workspace.json')
   if (!existsSync(path)) return undefined
   const document = JSON.parse(readFileSync(path, 'utf8')) as WorkspaceDocument
   const [id, workspace] = Object.entries(document.tables?.workspaces ?? {})[0] ?? []
   if (id === undefined || workspace === undefined) return undefined
   const ids = new Set(workspace.sessionIds ?? [])
-  for (let rank = 0; rank < chats; rank++) ids.add(corpusSessionId(rank))
+  for (const chat of chats) ids.add(chat)
   const gathered = { ...document, tables: { ...document.tables, workspaces: { ...document.tables!.workspaces, [id]: { ...workspace, sessionIds: [...ids] } } } }
   writeFileSync(path, `${JSON.stringify(gathered, undefined, 2)}\n`)
   return id
@@ -123,14 +123,14 @@ async function trashRoute(studio: Studio, path: string, body: Readonly<Record<st
 /**
  * One repetition's items.
  * @param home - the home, copied from the template.
- * @param chats - how many synthetic chats it holds.
+ * @param chats - the synthetic chats' ids.
  * @param workspace - the workspace that holds them, if the home has one.
  * @returns the items.
  */
-async function repetition(home: InstalledHome, chats: number, workspace: string | undefined): Promise<Record<string, number>> {
+async function repetition(home: InstalledHome, chats: readonly string[], workspace: string | undefined): Promise<Record<string, number>> {
   const items: Record<string, number> = {}
   const out = (name: string): string => join(home.root.path, name)
-  const exportChat = expectSuccess(await delorun(home, ['export', corpusSessionId(0), '--out', out('chat.delo')], 600_000), '`delorun export` of a chat')
+  const exportChat = expectSuccess(await delorun(home, ['export', chats[0]!, '--out', out('chat.delo')], 600_000), '`delorun export` of a chat')
   items['export-chat'] = exportChat.endedAt - exportChat.startedAt
   if (workspace !== undefined) {
     const exportWorkspace = expectSuccess(await delorun(home, ['export', workspace, '--out', out('workspace.delo')], 600_000), '`delorun export` of the workspace')
@@ -140,12 +140,12 @@ async function repetition(home: InstalledHome, chats: number, workspace: string 
   }
   const start = expectSuccess(await delorun(home, ['start'], 300_000), '`delorun start`')
   const studio = await openStudio(home.root.deloHome, start.startedAt)
-  const deleted = await trashRoute(studio, '/api/deloTrash.deleteChat', { sessionId: corpusSessionId(0) })
+  const deleted = await trashRoute(studio, '/api/deloTrash.deleteChat', { sessionId: chats[0] })
   items['trash-delete-chat'] = deleted.ms
   const restored = await trashRoute(studio, '/api/deloTrash.restore', { itemId: (deleted.answer as { readonly id: string }).id })
   items['trash-restore-chat'] = restored.ms
   const allStarted = Date.now()
-  for (let rank = 0; rank < chats; rank++) await trashRoute(studio, '/api/deloTrash.deleteChat', { sessionId: corpusSessionId(rank) })
+  for (const chat of chats) await trashRoute(studio, '/api/deloTrash.deleteChat', { sessionId: chat })
   items['trash-delete-all'] = Date.now() - allStarted
   items['trash-list-full'] = (await trashRoute(studio, '/api/deloTrash.list', {})).ms
   await stopHome(home)
@@ -169,10 +169,11 @@ export const dataSuite: Suite = {
     const scenarios: ScenarioResult[] = []
     const skipped: Skipped[] = []
     for (const scenario of dataSuite.scenarios.filter(candidate => selected.includes(candidate.id))) {
-      const chats = scenario.id === 'small' ? context.options.chatsSmall : context.options.chatsLarge
+      const count = scenario.id === 'small' ? context.options.chatsSmall : context.options.chatsLarge
+      const chats = await chatIds(count)
       let workspace: string | undefined
-      const template: BenchRoot = await templateHome(context, `data-chats-${String(chats)}`, chats, (root) => { workspace = gatherIntoWorkspace(root.deloHome, chats) })
-      workspace ??= gatherIntoWorkspace(template.deloHome, 0)
+      const template: BenchRoot = await templateHome(context, `data-chats-${String(count)}`, count, (root) => { workspace = gatherIntoWorkspace(root.deloHome, chats) })
+      workspace ??= gatherIntoWorkspace(template.deloHome, [])
       if (workspace === undefined) skipped.push({ item: `${scenario.id}: export and import of a workspace`, reason: 'the installed home has no workspace registry entry to gather the chats into' })
       const samples = new Samples()
       const failures: string[] = []
@@ -192,7 +193,7 @@ export const dataSuite: Suite = {
           root.dispose()
         }
       }
-      scenarios.push({ scenario: scenario.id, description: scenario.description, parameters: { chats }, completed, phases: samples.results(Object.keys(DATA_ITEMS)), failures })
+      scenarios.push({ scenario: scenario.id, description: scenario.description, parameters: { chats: count }, completed, phases: samples.results(Object.keys(DATA_ITEMS)), failures })
     }
     return { suite: 'data', scenarios, skipped }
   },

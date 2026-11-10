@@ -6,6 +6,7 @@ import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Finished, TimedLine } from '../src/harness/processes.ts'
 import { CLI_COMMANDS, CLI_ITEMS, commandItems } from '../src/suites/cli/index.ts'
+import { chatIds, corpusModules } from '../src/fixtures/data.ts'
 import { DATA_ITEMS, gatherIntoWorkspace, shellWord } from '../src/suites/data/index.ts'
 import { INSTALL_ITEMS, installItems } from '../src/suites/install/index.ts'
 import { oldestVersion } from '../src/suites/recovery/index.ts'
@@ -62,12 +63,17 @@ describe('the recovery suite', () => {
 })
 
 describe('the data suite', () => {
+  it('names the synthetic chats as upstream\'s corpus does', async () => {
+    expect(await chatIds(2)).toEqual(['bench-00000', 'bench-00001'])
+    expect(typeof (await corpusModules()).SyntheticCorpusWriter).toBe('function')
+  })
+
   it('gathers every synthetic chat into the home\'s first workspace, keeping its own chats', () => {
     const home = scratch()
     mkdirSync(join(home, 'storages'))
     const path = join(home, 'storages', 'workspace.json')
     writeFileSync(path, JSON.stringify({ version: 1, tables: { workspaces: { w1: { path: '/w', title: 'W', sessionIds: ['own', 'bench-00001'] }, w2: { path: '/x', title: 'X', sessionIds: [] } } } }))
-    expect(gatherIntoWorkspace(home, 2)).toBe('w1')
+    expect(gatherIntoWorkspace(home, ['bench-00000', 'bench-00001'])).toBe('w1')
     const document = JSON.parse(readFileSync(path, 'utf8')) as { version: number, tables: { workspaces: Record<string, { sessionIds: string[] }> } }
     expect(document.version).toBe(1)
     expect(document.tables.workspaces.w1!.sessionIds).toEqual(['own', 'bench-00001', 'bench-00000'])
@@ -76,12 +82,12 @@ describe('the data suite', () => {
 
   it('gathers nothing in a home without a registry or without a workspace', () => {
     const home = scratch()
-    expect(gatherIntoWorkspace(home, 1)).toBeUndefined()
+    expect(gatherIntoWorkspace(home, ['c'])).toBeUndefined()
     mkdirSync(join(home, 'storages'))
     writeFileSync(join(home, 'storages', 'workspace.json'), JSON.stringify({ tables: {} }))
-    expect(gatherIntoWorkspace(home, 1)).toBeUndefined()
+    expect(gatherIntoWorkspace(home, ['c'])).toBeUndefined()
     writeFileSync(join(home, 'storages', 'workspace.json'), JSON.stringify({ tables: { workspaces: { w: { path: '/w', title: 'W' } } } }))
-    expect(gatherIntoWorkspace(home, 1)).toBe('w')
+    expect(gatherIntoWorkspace(home, ['c'])).toBe('w')
   })
 
   it('quotes a shell word so the shell gives back the same text', () => {
@@ -95,14 +101,14 @@ describe('the start suite', () => {
   it('reads the studio\'s start link from the home log, ignoring records from before the start', () => {
     const home = scratch()
     const file = resolveSurface({ kind: 'home', home, profile: 'default' }).file
-    mkdirSync(dirname(file), { recursive: true })
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
     const record = (ts: string, msg: string): string => JSON.stringify({ ts, level: 'info', surface: 'home-default', pid: 1, logger: 'stdout', source: 'captured', msg })
     writeFileSync(file, [
       record('2026-11-10T00:00:00.000Z', 'dsh web: http://127.0.0.1:1111/?token=old'),
       record('2026-11-10T00:00:02.000Z', 'booting'),
       record('2026-11-10T00:00:03.000Z', 'dsh web: http://127.0.0.1:2222/?token=a-b_c'),
       '',
-    ].join('\n'))
+    ].join('\n'), { mode: 0o600 })
     expect(studioLink(home, Date.parse('2026-11-10T00:00:01.000Z'))).toBe('http://127.0.0.1:2222/?token=a-b_c')
     expect(studioLink(home, Date.parse('2026-11-10T00:00:04.000Z'))).toBeUndefined()
   })
