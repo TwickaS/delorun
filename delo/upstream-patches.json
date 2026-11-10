@@ -1836,7 +1836,7 @@
       "path": "packages/deliverables/workspace-changes/src/confinement.ts",
       "class": "security",
       "reason": "New: wraps each repository git command through ctx.sandbox under the Session's resolved ctx.sandboxPolicy plus the private snapshot directory (only that directory writable for a read-only Session), unconfined only under danger-full-access or without a mounted sandbox, and rejects rather than running unconfined when the sandbox cannot confine.",
-      "sha256": "e39cf9c5a87e84b71a7b9e4cf9caedfd6e239c70b579ca300f345d890f398df2"
+      "sha256": "897c5cc0bba97481a55c5f57fd2b0fce7014af724fcd31b8c2c6586a0893c9ab"
     },
     {
       "path": "packages/deliverables/workspace-changes/src/hardening.ts",

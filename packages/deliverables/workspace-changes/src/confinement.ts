@@ -4,7 +4,7 @@
  * @module @deepseek-ai/dsh-workspace-changes/confinement
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { ConfinedSandboxMode, SandboxExecutionPolicy, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import { SandboxUnavailableError, type ConfinedSandboxMode, type SandboxExecutionPolicy, type SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { GitConfinement } from './git.ts'
@@ -35,19 +35,21 @@ export function gitPolicy(policy: SandboxExecutionPolicy & { mode: ConfinedSandb
 /**
  * The {@link GitConfinement} of one Session: its policy resolved per command through `ctx.sandboxPolicy` and wrapped
  * through `ctx.sandbox`. Commands run unconfined only where the Session's commands do: under `danger-full-access`, or
- * in a composition that mounts no sandbox. A sandbox that cannot confine a command rejects it, as it rejects the
- * Session's own commands.
+ * in a composition that mounts no sandbox policy. A policy in a confined mode with no sandbox service mounted, such
+ * as while the sandbox reloads or after it failed to start, rejects the command with `SandboxUnavailableError`, as
+ * the shell does; a sandbox that cannot confine a command rejects it too.
  * @param ctx - context whose `sandbox` and `sandboxPolicy` services are read when each command starts.
  * @param session - the Session whose policy applies.
  * @returns the confinement.
  */
 export function sessionConfinement(ctx: Context, session: Session): GitConfinement {
   return async (argv, writes, signal) => {
-    const sandbox = ctx.get('sandbox')
     const policies = ctx.get('sandboxPolicy')
-    if (sandbox === undefined || policies === undefined) return undefined
+    if (policies === undefined) return undefined
     const policy = policies.resolve({ session })
     if (policy.mode === 'danger-full-access') return undefined
+    const sandbox = ctx.get('sandbox')
+    if (sandbox === undefined) throw new SandboxUnavailableError(policy.mode, 'no sandbox service is mounted')
     const confined = gitPolicy({ ...policy, mode: policy.mode }, writes)
     const wrapped = await sandbox.confine(argv, confined, signal)
     return { argv: wrapped.argv, mode: confined.mode, runnerFailureRules: wrapped.runnerFailureRules }

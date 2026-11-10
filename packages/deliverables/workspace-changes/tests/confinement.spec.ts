@@ -76,6 +76,13 @@ describe('sessionConfinement', () => {
     expect(await confinement(['git', 'rev-parse'], [], signal)).toMatchObject({ mode: 'read-only' })
   })
 
+  it('rejects a command when the Session\'s policy is confined but no sandbox service is mounted', async () => {
+    for (const mode of ['workspace-write', 'read-only']) {
+      const confinement = sessionConfinement(services({ sandboxPolicy: { resolve: () => ({ mode, workspaceRoot: '/w' }) } }), session)
+      await expect(confinement(['git'], [], signal)).rejects.toBeInstanceOf(SandboxUnavailableError)
+    }
+  })
+
   it('rejects a command the sandbox cannot confine instead of running it unconfined', async () => {
     const refused = new SandboxUnavailableError('workspace-write')
     const confinement = sessionConfinement(services({
