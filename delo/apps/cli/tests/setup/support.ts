@@ -79,8 +79,9 @@ export function scriptedPrompter(script: readonly Answer[], recording: Recording
 /** What a fake ending did. */
 export interface EndingLog {
   readonly spawned: string[]
-  readonly started: { mode: StartMode, open: boolean }[]
-  readonly opened: string[]
+  readonly started: StartMode[]
+  /** How many times the ending opened the studio. */
+  opened: number
 }
 
 /** How the fake ending behaves. */
@@ -89,6 +90,8 @@ export interface EndingBehaviour {
   readonly canOpen?: boolean
   readonly address?: string | undefined
   readonly startResult?: 0 | 1
+  /** Whether a browser takes the link; true by default. */
+  readonly opens?: boolean
 }
 
 /**
@@ -103,14 +106,14 @@ export function fakeEnding(log: EndingLog, behaviour: EndingBehaviour = {}): End
       log.spawned.push([command, ...args].join(' '))
       return Promise.resolve(behaviour.installExit ?? 0)
     },
-    start: (mode, open) => {
-      log.started.push({ mode, open })
+    start: (mode) => {
+      log.started.push(mode)
       return Promise.resolve(behaviour.startResult ?? 0)
     },
-    address: () => Promise.resolve('address' in behaviour ? behaviour.address : 'http://127.0.0.1:3080/?token=abc'),
-    open: (url) => {
-      log.opened.push(url)
-      return Promise.resolve(true)
+    address: () => Promise.resolve('address' in behaviour ? behaviour.address : 'http://127.0.0.1:3080/'),
+    open: () => {
+      log.opened += 1
+      return Promise.resolve(behaviour.opens ?? true)
     },
     canOpen: () => behaviour.canOpen ?? true,
     identity: () => ({ user: 'person', host: 'machine' }),

@@ -10,7 +10,7 @@ import { API_PATH } from './api-path.ts'
 import { CONNECT_PATH } from './connect-protocol.ts'
 import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
 import { assertTrustedAuthority } from './api-request-trust.ts'
-import { BrowserAuth } from './browser-auth.ts'
+import { BrowserAuth, DEFAULT_REOPEN_HINT } from './browser-auth.ts'
 import { HostConnectionService } from './rpc-host.ts'
 import { ConnectionRecoveryConfigSchema, resolveConnectionConfig, type ConnectionRecoveryConfig } from './recovery-config.ts'
 
@@ -126,6 +126,15 @@ export interface ConnectionConfig {
   cookieMaxAgeDays?: number
   /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
   maxRequestBodyBytes?: number
+  /**
+   * C16 switch `one_time_launch_tokens`. When true, no reusable process launch token exists: each
+   * `authenticatedUrl` call mints a token that expires after 60 seconds, at most 5 wait at once with the oldest
+   * dropped, its first presentation consumes it, and an exchange from another site or with another `Host` than the
+   * URL's is refused. Default: false, upstream's reusable process token.
+   */
+  oneTimeLaunchTokens?: boolean
+  /** The instruction a refused index or `/connect` request is given for signing in again. Default: `reopen the URL printed by dsh web`. */
+  reopenHint?: string
 }
 
 export const Config: z<ConnectionConfig> = z.object({
@@ -133,6 +142,8 @@ export const Config: z<ConnectionConfig> = z.object({
   trustedHosts: z.array(String).default([]),
   cookieMaxAgeDays: z.natural().min(1).default(30),
   maxRequestBodyBytes: z.natural().min(1).default(DEFAULT_MAX_REQUEST_BODY_BYTES),
+  oneTimeLaunchTokens: z.boolean().default(false),
+  reopenHint: z.string().min(1).default(DEFAULT_REOPEN_HINT),
 })
 
 /**
@@ -148,6 +159,7 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
   const trustedHosts = config?.trustedHosts ?? []
   const cookieMaxAgeDays = config?.cookieMaxAgeDays ?? 30
   const maxRequestBodyBytes = config?.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES
+  const launch = { oneTime: config?.oneTimeLaunchTokens ?? false, reopenHint: config?.reopenHint ?? DEFAULT_REOPEN_HINT }
   // Config boundary: a malformed entry fails the load loudly here rather than
   // silently authorizing its hostname prefix at request time.
   for (const entry of trustedHosts) assertTrustedAuthority(entry)
@@ -155,10 +167,12 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
   const connection = new HostConnectionService(
     ctx,
     trustedHosts,
-    await BrowserAuth.create(ctx.root, ctx.credentials, cookieMaxAgeDays, (minted) => { ctx.emit('authenticator/minted', minted) }),
+    await BrowserAuth.create(ctx.root, ctx.credentials, cookieMaxAgeDays, (minted) => { ctx.emit('authenticator/minted', minted) }, launch),
   )
   ctx.inject(['webServer'], (webCtx) => {
     assertImageBodyCapacity(webCtx, maxRequestBodyBytes)
+    // One-time launch tokens are consumed by any loopback request that presents them, not only by the exchanges.
+    if (launch.oneTime) webCtx.on('webserver/request', (request) => { connection.consumeStrayLaunchTokens(request) })
     webCtx.on('webserver/index-inject', (table, peer) => {
       table.push({ kind: 'global', name: '__DSH_CONNECTION_RECOVERY__', value: recovery })
       // A reach listener's policy refuses remote media, so its pages render placeholders instead of requesting it.

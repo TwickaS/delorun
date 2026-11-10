@@ -1251,6 +1251,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../../packages/host/webserver
@@ -1269,6 +1272,9 @@ importers:
       '@deepseek-ai/dsh-sandbox-local':
         specifier: workspace:*
         version: link:../../../packages/sandbox/sandbox-local
+      '@deepseek-ai/dsh-web-app':
+        specifier: workspace:*
+        version: link:../../../packages/bundle/web-app
       '@delo/archive':
         specifier: workspace:*
         version: link:../../packages/archive

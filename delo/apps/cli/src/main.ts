@@ -7,6 +7,7 @@
  * | `delorun [--profile <name>] [--foreground]` | runs setup on a home without the CLI profile; otherwise starts the home process in the background, or in this terminal when setup's answer or `--foreground` says so, and opens the studio |
  * | `delorun setup [<section>] [--profile <name>] [--list]` | setup, Quick or Full, or one section again ([setup](./setup/index.ts)) |
  * | `delorun start [--foreground] [--open] [--profile <name>]` | the home process in the background, or in this terminal ([start](./start.ts)) |
+ * | `delorun open [--print] [--profile <name>]` | the studio in the browser with a link that signs in once, or that link printed ([open](./open/command.ts)) |
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
@@ -38,6 +39,7 @@ import { statusCommand } from './status.ts'
 import { stopCommand } from './stop.ts'
 import { doctorCommand } from './doctor/index.ts'
 import { logsCommand } from './logs/command.ts'
+import { openCommand } from './open/command.ts'
 import { recoverCommand } from './recover.ts'
 import { trashCommand } from './trash/command.ts'
 import { exportCommand } from './export/command.ts'
@@ -49,7 +51,7 @@ import { applyDeloVersionEnvironment, DeloVersionError, versionCommand } from '.
 import { verifyCommand } from './verify/index.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, trashCommand, exportCommand, importCommand, verifyCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, openCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, trashCommand, exportCommand, importCommand, verifyCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.

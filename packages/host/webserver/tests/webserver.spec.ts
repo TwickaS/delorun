@@ -465,6 +465,21 @@ describe('real Loader composition', () => {
   // Real-Loader composition resolves workspace packages through tsx at test
   // time; first resolution after the host/client program split is slow enough
   // to trip the default 5s budget on cold caches.
+  it('shows each main-listener request and upgrade to webserver/request first, and routes it when a listener throws', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const server = loaded.webServer
+    const seen: string[] = []
+    loaded.on('webserver/request', () => { throw new Error('observer failed') })
+    loaded.on('webserver/request', (req) => { seen.push(req.url ?? '') })
+    server.register({ kind: 'exact', path: '/probe', handler: (_req, res) => { seen.push('route'); res.end('routed') } })
+    server.registerUpgrade({ path: '/socket', handler: (_req, socket) => { socket.end('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: dsh-test\r\n\r\n') } })
+    expect(await request(server.port, '/probe?token=x')).toMatchObject({ status: 200, body: 'routed' })
+    expect(await request(server.port, '/probe')).toMatchObject({ status: 200, body: 'routed' })
+    const socket = await upgrade(server.port, '/socket')
+    socket.destroy()
+    expect(seen).toEqual(['/probe?token=x', 'route', '/probe', 'route', '/socket'])
+  })
+
   it('serves registered routes, index taps, and the fallback-seat semantics', { timeout: 60_000 }, async () => {
     const loaded = await loadComposition()
     const unloaded = [...loaded.loader.entries()]

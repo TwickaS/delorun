@@ -1,6 +1,7 @@
 /**
  * The C16 switch registry held against the tree. A switch's Config field is a
- * property of an interface named `Config` whose JSDoc names it as
+ * property of an interface named `Config`, or of the interface a
+ * `const Config: z<…>` schema in the same file is typed by, whose JSDoc names it as
  * `C16 switch \`<id>\``. A boolean field's schema in the same file declares
  * `<key>: z.boolean().default(<value>)`; a presence field's declares no boolean
  * default, and {@link presenceErrors} holds its key against the rows each
@@ -66,18 +67,39 @@ function schemaDefaults(source: ts.SourceFile): Map<string, boolean> {
 }
 
 /**
+ * The interfaces whose properties are Config fields: `Config`, and the interface a `Config` schema constant is typed
+ * by, such as `ConnectionConfig` in `const Config: z<ConnectionConfig>`.
+ * @param source - the parsed file.
+ * @returns the interface names.
+ */
+function configInterfaces(source: ts.SourceFile): Set<string> {
+  const names = new Set(['Config'])
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'Config'
+      && node.type !== undefined && ts.isTypeReferenceNode(node.type)) {
+      const [argument] = node.type.typeArguments ?? []
+      if (argument !== undefined && ts.isTypeReferenceNode(argument) && ts.isIdentifier(argument.typeName)) names.add(argument.typeName.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return names
+}
+
+/**
  * The C16 switch fields one file declares.
  * @param path - the repository path, reported with each marker.
  * @param text - the file's TypeScript source.
- * @returns one marker per `Config` property whose JSDoc names a switch.
+ * @returns one marker per Config field ({@link configInterfaces}) whose JSDoc names a switch.
  */
 export function switchMarkers(path: string, text: string): SwitchMarker[] {
   if (!text.includes('C16 switch')) return []
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
   const defaults = schemaDefaults(source)
+  const interfaces = configInterfaces(source)
   const markers: SwitchMarker[] = []
   const visit = (node: ts.Node): void => {
-    if (ts.isInterfaceDeclaration(node) && node.name.text === 'Config') {
+    if (ts.isInterfaceDeclaration(node) && interfaces.has(node.name.text)) {
       for (const member of node.members) {
         if (!ts.isPropertySignature(member)) continue
         const key = propertyName(member.name)

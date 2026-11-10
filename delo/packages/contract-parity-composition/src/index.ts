@@ -395,6 +395,21 @@ export const PARITY_SWITCHES = [
     // it mounts no service and no listener, so every turn starts as upstream's.
     sources: ['delo/packages/bundle-local/src/update-gate.ts'],
   },
+  {
+    id: 'one_time_launch_tokens',
+    state: 'built',
+    registeredBy: 'Delo edit of upstream\'s connection, which @delo/bundle-local mounts with the switch on',
+    defaultValue: true,
+    parityValue: false,
+    // Who signs in to the studio changes, not what reaches the model: a feature switch.
+    modelVisible: false,
+    field: {
+      module: '@deepseek-ai/dsh-client-connection',
+      source: 'packages/client/connection/src/index.ts',
+      key: 'oneTimeLaunchTokens',
+    },
+    sources: [],
+  },
 ] as const satisfies readonly ParitySwitchEntry[]
 
 /** One registry entry, as declared. */

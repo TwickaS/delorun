@@ -70,15 +70,18 @@ function fakeHttpServer(host = '127.0.0.1'): { server: WebServer } {
 }
 
 /** Deterministic Host Connection face for URL publication and frontend injection. */
-function provideConnection(ctx: Context): void {
+function provideConnection(ctx: Context, oneTimeLaunchTokens = false): void {
+  let minted = 0
   ctx.provide('connection', {
     // Adds the process token to the given canonical root, preserving any
-    // public mount prefix the caller passed.
+    // public mount prefix the caller passed; one-time mode mints a new token per call.
     authenticatedUrl(baseUrl: string) {
       const url = new URL(baseUrl)
-      url.searchParams.set('token', 'test-token')
+      minted += 1
+      url.searchParams.set('token', oneTimeLaunchTokens ? `one-time-${String(minted)}` : 'test-token')
       return url.href
     },
+    oneTimeLaunchTokens,
     authorizeIndex: () => true,
     requestRejection: () => undefined,
     rpc: {},
@@ -177,6 +180,27 @@ describe('web-app runtime glue', () => {
     expect(urlContribution?.resolve()).toEqual({ DSH_WEB_URL: 'https://proxy.example:8443/web/' })
     // The service advertises the row's effective publicUrl, whether it came from --public-url or a profile override.
     expect(ctx.webApp.getAdvertisedUrl()).toBe('https://proxy.example:8443/web/')
+  })
+
+  it('prints the URL without a token and mints one for the browser handoff under one-time launch tokens', async () => {
+    stageDist()
+    const ctx = new Context()
+    onTestFinished(() => ctx.fiber.dispose())
+    ctx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]))
+    ctx.provide('webServer', fakeHttpServer().server)
+    provideConnection(ctx, true)
+    provideLoader(ctx)
+    const lifecycle: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((message) => { lifecycle.push(String(message)) })
+    const openBrowser = vi.fn(async (url: string) => { lifecycle.push(`open:${url}`) })
+    internals.openBrowser = openBrowser
+    apply(ctx, new Config({ openBrowser: true, printUrl: true, surfaceContext: false }))
+    await vi.waitFor(() => { expect(openBrowser).toHaveBeenCalled() })
+    expect(lifecycle).toEqual([
+      'dsh web: http://127.0.0.1:4567',
+      'dsh web: opening the default browser; pass --no-open to disable',
+      'open:http://127.0.0.1:4567/?token=one-time-1',
+    ])
   })
 
   it('publishes no readiness side effect when printing and browser opening are disabled', async () => {

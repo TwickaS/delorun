@@ -1,18 +1,18 @@
 /**
  * The end of an interactive setup: the offer to install the `delorun` command, then starting Delorun and opening
  * the studio, and the text that says what is running and how to look at it or stop it. Everything that touches the
- * computer goes through {@link Ending}, so specs inject a fake spawn and a fake start.
+ * computer goes through {@link Ending}, so specs inject a fake spawn and a fake start. The studio address comes from
+ * the home process's `status` answer and carries no token; the browser gets a one-time link the home process mints
+ * ([studio](../open/studio.ts)).
  *
  * @module @delo/cli/setup/ending
  */
-import { spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
 import { hostname, userInfo } from 'node:os'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { canOpenNativePath } from '@deepseek-ai/dsh-native-command'
-import { resolveSurface } from '@delo/logs'
+import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import { queryHomeStatus } from '@delo/home-process'
 import { EXIT, type ExitCode } from '../exit.ts'
 import type { CommandOutput, CommandResult } from '../command.ts'
+import { computerOpener, openStudio, profileFlag, spawnCommand, type StudioOpener } from '../open/studio.ts'
 import { startDetached, startForeground } from '../start.ts'
 import { SetupCancelled, type Prompter } from './prompts.ts'
 
@@ -32,22 +32,21 @@ export interface Ending {
    */
   spawn(command: string, args: readonly string[]): Promise<number>
   /**
-   * Start Delorun.
+   * Start Delorun without opening the studio.
    * @param mode - detached from the terminal, or attached to it.
-   * @param open - whether an attached start opens the studio itself.
    * @returns the start's result, as {@link startDetached} and {@link startForeground} return it.
    */
-  start(mode: StartMode, open: boolean): Promise<CommandResult>
+  start(mode: StartMode): Promise<CommandResult>
   /**
-   * @returns the studio's address once the started process has printed it, or `undefined` when it did not.
+   * @returns the studio's loopback address, without a token, from the running home process's `status` answer, or
+   *   `undefined` when it serves no studio or does not answer.
    */
   address(): Promise<string | undefined>
   /**
-   * Hand the address to the computer's default browser.
-   * @param url - the address.
+   * Ask the home process for a fresh one-time studio link and hand it to the computer's default browser.
    * @returns whether a browser took it.
    */
-  open(url: string): Promise<boolean>
+  open(): Promise<boolean>
   /**
    * @returns whether a browser can plausibly be shown on this computer: a desktop, and not an SSH session.
    */
@@ -59,66 +58,19 @@ export interface Ending {
 }
 
 /**
- * Run a command with the terminal attached.
- * @param command - the program.
- * @param args - its arguments.
- * @param stdio - where its input and output go.
- * @returns its exit code; 127 when it could not start.
+ * The studio address a running home process reports.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @returns the address without a token, or `undefined` when the home process serves no studio or does not answer.
  */
-export function spawnCommand(command: string, args: readonly string[], stdio: 'inherit' | 'ignore' = 'inherit'): Promise<number> {
-  return new Promise((resolve) => {
-    const child = spawn(command, [...args], { stdio })
-    child.once('error', () => { resolve(127) })
-    child.once('close', (code) => { resolve(code ?? 127) })
-  })
-}
-
-/**
- * The studio address a started process printed: the last `dsh web: <address>` line of the log text.
- * @param log - the home log's text.
- * @returns the address, or `undefined`.
- */
-export function studioAddressFromLog(log: string): string | undefined {
-  const matches = [...log.matchAll(/dsh web: (https?:\/\/\S+)/gu)]
-  return matches.at(-1)?.[1]
-}
-
-/** How long the address is waited for, in steps. */
-const ADDRESS_ATTEMPTS = 20
-const ADDRESS_STEP_MS = 250
-
-/**
- * Wait one step while the address is awaited.
- * @returns when the step has passed.
- */
-export const pauseOneStep = (): Promise<void> => sleep(ADDRESS_STEP_MS)
-
-/**
- * Wait for the home log to hold the studio's address.
- * @param read - reads the log text, empty while the log does not exist.
- * @param pause - waits one step.
- * @returns the address, or `undefined` when the log never held one.
- */
-export async function waitForAddress(read: () => string, pause: () => Promise<void>): Promise<string | undefined> {
-  for (let attempt = 0; attempt < ADDRESS_ATTEMPTS; attempt += 1) {
-    const address = studioAddressFromLog(read())
-    if (address !== undefined) return address
-    await pause()
+export async function studioAddress(home: string, profile: string): Promise<string | undefined> {
+  try {
+    const status = await queryHomeStatus(home, profile, HOME_STATUS_TIMEOUT_MS)
+    return 'studio' in status && typeof status.studio === 'string' ? status.studio : undefined
+  } catch (_notAnswering) {
+    // The start reported success, so a home process that does not answer now has stopped; the report says so.
+    return undefined
   }
-  return undefined
-}
-
-/**
- * The command that hands an address to the computer's browser.
- * @param platform - `process.platform`.
- * @param env - the environment, read for WSL.
- * @param url - the address.
- * @returns the program and arguments.
- */
-export function openerFor(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>, url: string): readonly [string, readonly string[]] {
-  if (platform === 'darwin') return ['open', [url]]
-  if (platform === 'win32' || (env['WSL_DISTRO_NAME'] ?? '') !== '') return ['cmd.exe', ['/c', 'start', '""', url]]
-  return ['xdg-open', [url]]
 }
 
 /**
@@ -128,35 +80,21 @@ export function openerFor(platform: NodeJS.Platform, env: Readonly<Record<string
  * @param output - where the start writes.
  * @param env - the environment `delorun` inherited.
  * @param run - runs a program; {@link spawnCommand} by default.
- * @param pause - waits one step while the address is awaited; a timer by default.
+ * @param opener - how the studio is opened; this computer's, through `run`, by default.
  * @returns the ending.
  */
 export function computerEnding(
   home: string, profile: string, output: CommandOutput, env: Readonly<Record<string, string | undefined>>,
-  run: typeof spawnCommand = spawnCommand, pause: () => Promise<void> = pauseOneStep,
+  run: typeof spawnCommand = spawnCommand, opener: StudioOpener = computerOpener(env, run),
 ): Ending {
   return {
     spawn: (command, args) => run(command, args),
-    start: (mode, open) => mode === 'background' ? startDetached(home, profile, output) : startForeground({ home, profile, open, output }),
-    address() {
-      const file = resolveSurface({ kind: 'home', home, profile }).file
-      return waitForAddress(() => existsSync(file) ? readFileSync(file, 'utf8') : '', pause)
-    },
-    async open(url) {
-      const [command, args] = openerFor(process.platform, env, url)
-      return (await run(command, args, 'ignore')) === 0
-    },
-    canOpen: () => sshSession(env) ? false : canOpenNativePath({ env }),
+    start: mode => mode === 'background' ? startDetached(home, profile, output, false, opener) : startForeground({ home, profile, open: false, output }),
+    address: () => studioAddress(home, profile),
+    open: async () => (await openStudio(home, profile, opener)).kind === 'opened',
+    canOpen: () => opener.canOpen(),
     identity: () => ({ user: userInfo().username, host: hostname() }),
   }
-}
-
-/**
- * @param env - the environment.
- * @returns whether the terminal is an SSH session.
- */
-function sshSession(env: Readonly<Record<string, string | undefined>>): boolean {
-  return (env['SSH_CONNECTION'] ?? '') !== '' || (env['SSH_TTY'] ?? '') !== ''
 }
 
 /** What the ending needs to know about the run. */
@@ -167,15 +105,6 @@ export interface EndingRequest {
   readonly background: boolean
   /** Where the ending writes. */
   readonly output: CommandOutput
-}
-
-/**
- * The flag that selects a profile other than the default, for the commands the ending prints.
- * @param profile - the profile.
- * @returns the flag with a leading space, or the empty string.
- */
-function profileFlag(profile: string): string {
-  return profile === 'default' ? '' : ` --profile ${profile}`
 }
 
 /**
@@ -209,10 +138,10 @@ export async function finishSetup(prompter: Prompter, ending: Ending, request: E
   }
   const mode: StartMode = request.background ? 'background' : 'foreground'
   const canOpen = ending.canOpen()
-  const started = await ending.start(mode, canOpen)
+  const started = await ending.start(mode)
   if (started !== undefined && started !== EXIT.ok) return started
   const address = await ending.address()
-  const opened = mode === 'background' && canOpen && address !== undefined && await ending.open(address)
+  const opened = canOpen && address !== undefined && await ending.open()
   output.stdout(report(mode, request.profile, address, canOpen, opened, ending.identity()))
   return EXIT.ok
 }
@@ -232,10 +161,14 @@ function report(mode: StartMode, profile: string, address: string | undefined, c
   const lines = [mode === 'background'
     ? 'Delorun is running in the background and keeps running after you close this terminal.'
     : 'Delorun is running in this terminal. Closing the terminal stops it.']
-  lines.push(address === undefined ? 'The studio address is in the log: delorun logs --follow' : `Studio: ${address}${opened ? ' (opened in your browser)' : ''}`)
+  lines.push(address === undefined ? `The home process reports no studio; see delorun status${flag} and delorun logs --follow${flag}` : `Studio: ${address}${opened ? ' (opened in your browser)' : ''}`)
   if (!canOpen && address !== undefined) {
     const port = new URL(address).port || '80'
-    lines.push('There is no browser to open here. To reach the studio from your own computer, run this there and open the address above:', `  ssh -L ${port}:127.0.0.1:${port} ${identity.user}@${identity.host}`)
+    lines.push(
+      'There is no browser to open here. To reach the studio from your own computer, run this there:',
+      `  ssh -L ${port}:127.0.0.1:${port} ${identity.user}@${identity.host}`,
+      `then run delorun open --print${flag} here and open the link it prints there; it signs in once, within one minute.`,
+    )
   }
   lines.push(`  delorun status${flag}`, `  delorun logs --follow${flag}`, `  delorun stop${flag}`)
   return `${lines.join('\n')}\n`

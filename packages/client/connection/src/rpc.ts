@@ -300,11 +300,15 @@ export interface HostConnectionHandle {
   authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean
 
   /**
-   * Add the fresh process token to an ordinary Web application URL.
+   * Add a launch token to an ordinary Web application URL: the process token, or with
+   * {@link oneTimeLaunchTokens} a token minted for this one opening.
    * @param baseUrl - clean application URL whose authority and mount are preserved.
    * @returns tokenized URL for initial login; a mount proxy strips its prefix before {@link authorizeIndex}.
    */
   authenticatedUrl(baseUrl: string): string
+
+  /** Whether each {@link authenticatedUrl} call mints a one-time token that expires after 60 seconds. */
+  readonly oneTimeLaunchTokens: boolean
 }
 
 /** Transport-independent Fetch handler used by HTTP and worker carriers. */

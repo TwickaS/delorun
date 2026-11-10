@@ -6,6 +6,7 @@ import { CONNECT_PATH, type ConnectionInteractions } from './connect-protocol.ts
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import type { MintedCredential } from './authenticator.ts'
+import { OneTimeLaunchTokens, type LaunchTokenRedemption } from './launch-tokens.ts'
 import type {
   ConnectionIndexRequest,
   ConnectionIndexResponse,
@@ -21,6 +22,21 @@ const COOKIE_PAYLOAD_VERSION = 1
 const STORED_SECRET_VERSION = 1
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]*$/
 const PROCESS_LAUNCH_TOKENS = new WeakMap<object, string>()
+const PROCESS_ONE_TIME_TOKENS = new WeakMap<object, OneTimeLaunchTokens>()
+
+/** How launch tokens are issued and what a refused request is told. */
+export interface LaunchTokenOptions {
+  /** Issue one-time launch tokens ({@link OneTimeLaunchTokens}) instead of the reusable process token. */
+  readonly oneTime: boolean
+  /** The instruction the 401 body gives for signing in again. */
+  readonly reopenHint: string
+}
+
+/** The 401 instruction for signing in again unless the deployment configures its own. */
+export const DEFAULT_REOPEN_HINT = 'reopen the URL printed by dsh web'
+
+/** Upstream's launch-token behaviour: one reusable process token. */
+const PROCESS_TOKEN_OPTIONS: LaunchTokenOptions = { oneTime: false, reopenHint: DEFAULT_REOPEN_HINT }
 
 interface StoredSecretPayload {
   readonly version: typeof STORED_SECRET_VERSION
@@ -57,6 +73,14 @@ function decodeBase64Url(value: string): Buffer | undefined {
   const padding = '='.repeat((4 - value.length % 4) % 4)
   const decoded = Buffer.from(value.replaceAll('-', '+').replaceAll('_', '/') + padding, 'base64')
   return encodeBase64Url(decoded) === value ? decoded : undefined
+}
+
+function processOneTimeTokens(owner: object): OneTimeLaunchTokens {
+  const existing = PROCESS_ONE_TIME_TOKENS.get(owner)
+  if (existing !== undefined) return existing
+  const created = new OneTimeLaunchTokens()
+  PROCESS_ONE_TIME_TOKENS.set(owner, created)
+  return created
 }
 
 function processLaunchToken(owner: object): string {
@@ -106,6 +130,17 @@ function storedSecret(record: CredentialRecord | undefined): Buffer | undefined 
     throw new Error('client-connection: browser-session credential record has an invalid secret')
   }
   return secret
+}
+
+/**
+ * Whether a token exchange arrives from another site: a `Sec-Fetch-Site` other than `none` or `same-origin`, or an
+ * `Origin` other than the request's own.
+ */
+function crossSite(headers: ConnectionTrustRequest['headers'], host: string, secure: boolean): boolean {
+  const site = header(headers, 'sec-fetch-site')
+  if (site !== undefined && site !== 'none' && site !== 'same-origin') return true
+  const origin = header(headers, 'origin')
+  return origin !== undefined && origin !== `${secure ? 'https' : 'http'}://${host}`
 }
 
 function tokenMatches(actual: string, expected: string): boolean {
@@ -207,10 +242,14 @@ async function initializeSecret(credentials: CredentialProvider): Promise<Buffer
 /**
  * Process launch-token exchange and persistent signed-cookie verification.
  * Connection loads the credential provider's signing secret during activation
- * and retains it for synchronous request authentication.
+ * and retains it for synchronous request authentication. With one-time launch
+ * tokens no process token exists: each {@link authenticatedUrl} mints a token
+ * that its first presentation consumes, and an exchange from another site is
+ * refused.
  */
 export class BrowserAuth {
-  private readonly launchToken: string
+  /** The reusable process token, or the store of one-time tokens. */
+  private readonly launchTokens: { readonly kind: 'process'; readonly token: string } | { readonly kind: 'one-time'; readonly store: OneTimeLaunchTokens }
   private readonly maxAgeMilliseconds: number
 
   private constructor(
@@ -218,8 +257,11 @@ export class BrowserAuth {
     private readonly secret: Buffer,
     maxAgeDays: number,
     private readonly onMint: (credential: MintedCredential) => void,
+    private readonly launch: LaunchTokenOptions,
   ) {
-    this.launchToken = processLaunchToken(processOwner)
+    this.launchTokens = launch.oneTime
+      ? { kind: 'one-time', store: processOneTimeTokens(processOwner) }
+      : { kind: 'process', token: processLaunchToken(processOwner) }
     this.maxAgeMilliseconds = maxAgeDays * DAY_MILLISECONDS
     if (!Number.isSafeInteger(this.maxAgeMilliseconds)
       || !Number.isSafeInteger(Date.now() + this.maxAgeMilliseconds)) {
@@ -234,26 +276,56 @@ export class BrowserAuth {
    * @param credentials - persistent credential provider for the Web profile.
    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
    * @param onMint - called synchronously for each credential minted, before its response is written.
-   * @returns initialized authentication owner with the process owner's launch token.
+   * @param launch - the launch-token mode and the 401 instruction; upstream's reusable process token by default.
+   * @returns initialized authentication owner with the process owner's launch token or one-time token store.
    */
   static async create(
     processOwner: object,
     credentials: CredentialProvider,
     maxAgeDays: number,
     onMint: (credential: MintedCredential) => void = () => {},
+    launch: LaunchTokenOptions = PROCESS_TOKEN_OPTIONS,
   ): Promise<BrowserAuth> {
-    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, onMint)
+    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, onMint, launch)
+  }
+
+  /** Whether each launch URL carries its own one-time token. */
+  get oneTimeLaunchTokens(): boolean {
+    return this.launchTokens.kind === 'one-time'
   }
 
   /**
-   * Add this process's launch token to the caller's application URL.
+   * Add a launch token to the caller's application URL: this process's token, or a one-time token minted for this
+   * URL's protocol and host.
    * @param baseUrl - clean browser URL whose authority and mount are preserved.
-   * @returns the same URL carrying the process token as its sole authentication input.
+   * @returns the same URL carrying the token as its sole authentication input.
    */
   authenticatedUrl(baseUrl: string): string {
     const url = new URL(baseUrl)
-    url.searchParams.set(TOKEN_QUERY, this.launchToken)
+    url.searchParams.set(TOKEN_QUERY, this.launchTokens.kind === 'one-time' ? this.launchTokens.store.mint(url) : this.launchTokens.token)
     return url.href
+  }
+
+  /**
+   * Consume one-time launch tokens presented where no exchange may happen, such as on a reach listener.
+   * @param presented - every `token` value of the refused request.
+   */
+  consumeLaunchTokens(presented: readonly string[]): void {
+    if (this.launchTokens.kind === 'one-time' && presented.length > 0) this.launchTokens.store.redeem(presented, undefined)
+  }
+
+  /**
+   * Whether a request's launch tokens may be exchanged. With one-time tokens every presented token is consumed,
+   * and a token presented from another site or with a `Host` other than the one it was minted for is refused.
+   */
+  private launchAccepted(req: ConnectionIndexRequest, tokens: readonly string[], secure: boolean): LaunchTokenRedemption {
+    if (this.launchTokens.kind === 'process') {
+      return tokens.length === 1 && tokenMatches(tokens.join(''), this.launchTokens.token) ? { kind: 'accepted' } : { kind: 'refused' }
+    }
+    const host = header(req.headers, 'host')
+    const redeemed = this.launchTokens.store.redeem(tokens, host)
+    if (redeemed.kind !== 'accepted' || host === undefined) return redeemed
+    return crossSite(req.headers, host, secure) ? { kind: 'refused' } : redeemed
   }
 
   /**
@@ -275,8 +347,8 @@ export class BrowserAuth {
     const tokens = url.searchParams.getAll(TOKEN_QUERY)
     if (tokens.length > 0) {
       const authority = requestAudience(req.headers, secure)
-      if (req.method === 'GET' && url.pathname === '/' && tokens.length === 1
-        && authority !== undefined && tokenMatches(tokens.join(''), this.launchToken)) {
+      const redeemed = this.launchAccepted(req, tokens, secure)
+      if (req.method === 'GET' && url.pathname === '/' && authority !== undefined && redeemed.kind === 'accepted') {
         const issuedAt = Date.now()
         const expiresAt = issuedAt + this.maxAgeMilliseconds
         const value = encodeCookie({
@@ -306,7 +378,7 @@ export class BrowserAuth {
         res.end()
         return false
       }
-      this.writeUnauthorized(req, res)
+      this.writeUnauthorized(req, res, redeemed.kind === 'other-host' ? redeemed.host : undefined)
       return false
     }
     if (this.isAuthenticated(req, secure)) return true
@@ -331,15 +403,16 @@ export class BrowserAuth {
     const declarations = url.searchParams.getAll('interactions')
     const interactions = declarations[0] ?? 'none'
     if (declarations.length > 1 || (interactions !== 'answer' && interactions !== 'none')) {
+      this.consumeLaunchTokens(url.searchParams.getAll(TOKEN_QUERY))
       res.writeHead(400, { 'cache-control': 'no-store', 'content-type': 'text/plain; charset=utf-8' })
       res.end('interactions must be declared once as answer or none\n')
       return
     }
     const tokens = url.searchParams.getAll(TOKEN_QUERY)
     const authority = requestAudience(req.headers, secure)
-    if (req.method !== 'GET' || url.pathname !== CONNECT_PATH || tokens.length !== 1
-      || authority === undefined || !tokenMatches(tokens.join(''), this.launchToken)) {
-      this.writeUnauthorized(req, res)
+    const redeemed = this.launchAccepted(req, tokens, secure)
+    if (req.method !== 'GET' || url.pathname !== CONNECT_PATH || authority === undefined || redeemed.kind !== 'accepted') {
+      this.writeUnauthorized(req, res, redeemed.kind === 'other-host' ? redeemed.host : undefined)
       return
     }
     const issuedAt = Date.now()
@@ -397,14 +470,16 @@ export class BrowserAuth {
    * Answer the minimal 401 every refused index or `/connect` request receives.
    * @param req - the refused request; a HEAD request receives no body.
    * @param res - the response, owned to completion.
+   * @param boundTo - the host a one-time token presented at another host was minted for, which the body names.
    */
-  writeUnauthorized(req: ConnectionIndexRequest, res: ConnectionIndexResponse): void {
+  writeUnauthorized(req: ConnectionIndexRequest, res: ConnectionIndexResponse, boundTo?: string): void {
     res.writeHead(401, {
       'cache-control': 'no-store',
       'content-type': 'text/plain; charset=utf-8',
     })
+    const bound = boundTo === undefined ? '' : `this sign-in link was made for ${boundTo} and signs in only there; `
     res.end(req.method === 'HEAD'
       ? undefined
-      : 'dsh web authentication required; reopen the URL printed by dsh web.\n')
+      : `dsh web authentication required; ${bound}${this.launch.reopenHint}.\n`)
   }
 }

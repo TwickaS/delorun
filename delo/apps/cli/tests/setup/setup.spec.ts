@@ -87,7 +87,7 @@ beforeEach(async () => {
   await ensureHomeTree(home, PROFILE)
   lines = []
   recording = { screen: [], asked: [] }
-  ending = { spawned: [], started: [], opened: [] }
+  ending = { spawned: [], started: [], opened: 0 }
   output = { stdout: text => void lines.push(text), stderr: text => void lines.push(text) }
 })
 

@@ -118,7 +118,7 @@ describe('the real tree', () => {
     // A row may be restated per profile; one switch is still one claim. The consent plugins and the update gate are
     // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'permission_defaults', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal',
+      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
     expect(presenceErrors(registry, shipped, parity)).toEqual([])
@@ -135,6 +135,31 @@ describe('the switch fields', () => {
   it('reads the switch id, the key and the schema default of each marked Config field', () => {
     expect(switchMarkers('delo/packages/plugin-fixture/src/config.ts', FIXTURE_CONFIG)).toEqual([
       { path: 'delo/packages/plugin-fixture/src/config.ts', line: 4, id: 'fixture_context', key: 'fixtureContext', defaultValue: false },
+    ])
+  })
+
+  it('reads the fields of the interface a Config schema is typed by', () => {
+    const text = [
+      'export interface ConnectionConfig {',
+      '  /** C16 switch `fixture_context`: on in Delo. */',
+      '  fixtureContext?: boolean',
+      '}',
+      'export interface Unrelated {',
+      '  /** C16 switch `other_context`. */',
+      '  otherContext?: boolean',
+      '}',
+      'export const Config: z<ConnectionConfig> = z.object({ fixtureContext: z.boolean().default(false) })',
+      'const Other: z<Unrelated> = z.object({})',
+      // Neither names an interface: no annotation, no type argument, a type literal, a qualified name, a pattern.
+      'const Config = 1',
+      'const Config: Schema = 1',
+      'const Config: z<{ a: 1 }> = 1',
+      'const Config: z<ns.Unrelated> = 1',
+      'const { Config } = schemas',
+      '',
+    ].join('\n')
+    expect(switchMarkers('packages/fixture/src/index.ts', text)).toEqual([
+      { path: 'packages/fixture/src/index.ts', line: 3, id: 'fixture_context', key: 'fixtureContext', defaultValue: false },
     ])
   })
 
@@ -324,7 +349,7 @@ describe('the parity overlay', () => {
     const rows = parseOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
-    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'main_chat', 'mcp_add_consent', 'permission_defaults', 'preset_inspect', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal'])
+    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'preset_inspect', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_turn_refusal'])
   })
 
   it('fails a switch left on, a key that is no switch, and a row that sets more than config', () => {

@@ -31,12 +31,15 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import { START_WAIT_MS } from '@delo/contract-home-process'
-import { CountingChatGate, HomeProcess, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type UpdateSupport } from '@delo/home-process'
+import { CountingChatGate, HomeProcess, openHomeLog, captureHomeOutput, queryHomeStatus, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, refuseSkippedDeloBundles, type BootedRow, type RowState } from './delo-bundles.ts'
+import { announceStudio } from './open/announce.ts'
+import { hostStudioLink } from './open/host-link.ts'
+import { computerOpener, type StudioOpener } from './open/studio.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
 import { upstreamLinking } from './setup/index.ts'
@@ -92,6 +95,8 @@ export interface StartDependencies {
    * @returns the pipe, or `undefined` for a fresh start.
    */
   readonly handover: () => Promise<HandoverPipe | undefined>
+  /** How a start that opens the studio asks the home process for a link and opens it ({@link computerOpener}). */
+  readonly opener: StudioOpener
 }
 
 
@@ -115,6 +120,12 @@ export interface BootedProfile {
    * @returns its host and port, or `undefined` when the profile serves no studio.
    */
   readonly studio: () => { readonly host: string, readonly port: number } | undefined
+  /**
+   * Mint a studio sign-in link for one opening ([host link](./open/host-link.ts)).
+   * @param port - a loopback port that forwards to the studio, or `undefined` for the studio's own port.
+   * @returns the link, or why none can be made for this computer.
+   */
+  readonly studioLink: (port: number | undefined) => StudioLinkResult
 }
 
 /** Loader fiber states, mirrored as upstream's startup audit mirrors them because Cordis's enum is `const`. */
@@ -152,7 +163,7 @@ export interface StartRequest {
   readonly home: string
   /** The CLI profile. */
   readonly profile: string
-  /** Whether the studio opens in the browser once the profile has booted. */
+  /** Whether the studio opens in the browser, through the home process's `studio.open-token`, once it runs. */
   readonly open: boolean
   /** Where the start writes. */
   readonly output: CommandOutput
@@ -186,6 +197,7 @@ export function upstreamDependencies(): StartDependencies {
           const server = ctx.get('webServer')
           return server?.port === undefined ? undefined : { host: server.host, port: server.port }
         },
+        studioLink: port => hostStudioLink(ctx, port),
       }
     },
     loadEnvironment: () => loadLayeredEnv('delorun'),
@@ -198,6 +210,7 @@ export function upstreamDependencies(): StartDependencies {
     runtime: home => runtimeOfFile(home, fileURLToPath(import.meta.url)),
     updates: storeUpdateSupport,
     handover: () => inheritedHandover(),
+    opener: computerOpener(process.env),
   }
 }
 
@@ -254,8 +267,10 @@ export async function startForeground(request: StartRequest, dependencies: Start
     if (!(error instanceof HomeLayoutError) || error.code !== 'HOME_RUNNING') throw error
     const holder = readHomeLock(runDirectory(request.home, request.profile))
     request.output.stdout(`Delo is already running for the profile ${request.profile}${holder === undefined ? '' : ` (process ${String(holder.pid)}, started ${holder.startedAt})`}.\n`)
+    await announceStudio(request.home, request.profile, request.open, request.output, dependencies.opener)
     return EXIT.ok
   }
+  if (handover === undefined) await announceStudio(request.home, request.profile, request.open, request.output, dependencies.opener)
   dependencies.onExit(() => {
     closeLog()
     rmSync(sandboxOverlayPath(request.home, request.profile), { force: true })
@@ -306,7 +321,8 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       profile: request.profile,
       resolvedProfile,
       patchFiles: [overlay, ...safe === undefined ? [] : safe.patchFiles],
-      args: request.open ? [] : ['--no-open'],
+      // The studio opens through the home process's `studio.open-token`, never through upstream's browser handoff.
+      args: ['--no-open'],
     })
   } catch (error) {
     await removeSandboxOverlay(request.home, request.profile)
@@ -329,6 +345,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       const address = booted.studio()
       return address === undefined ? undefined : `http://${address.host.includes(':') ? `[${address.host}]` : address.host}:${String(address.port)}/`
     },
+    studioLink: booted.studioLink,
     failedRows: () => failed,
     rows: () => ids,
     check: expect => checkHealth({
@@ -352,21 +369,23 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
  * @param home - the prepared Delo home.
  * @param profile - the CLI profile.
  * @param output - where the command writes.
- * @param open - whether the home process opens the studio in the browser once it runs.
+ * @param open - whether this command opens the studio in the browser once the home process runs.
+ * @param opener - how the studio is opened; this computer's by default.
  * @returns {@link EXIT.ok} when the home process runs, {@link EXIT.failed} when it exited or did not report `running`
  *   within 120 seconds.
  * @throws {CliError} when the home has no CLI profile.
  */
-export async function startDetached(home: string, profile: string, output: CommandOutput, open = false): Promise<CommandResult> {
+export async function startDetached(home: string, profile: string, output: CommandOutput, open = false, opener: StudioOpener = computerOpener(process.env)): Promise<CommandResult> {
   if (!hasCliProfile(home, profile)) throw new CliError(EXIT.failed, `delorun: the CLI profile ${profile} is not set up in ${home}; run: delorun setup`)
   const running = await answeringStatus(home, profile)
   if (running !== undefined) {
     output.stdout(`Delo is already running for the profile ${profile} (process ${String(running.pid)}, ${running.state}).\n`)
+    await announceStudio(home, profile, open, output, opener)
     return EXIT.ok
   }
   const entry = process.argv[1]
   if (entry === undefined) throw new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so the home process cannot be started')
-  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', ...open ? ['--open'] : [], '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
+  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
   let exitCode: number | null | undefined
   child.once('exit', (code) => { exitCode = code })
   child.unref()
@@ -380,6 +399,7 @@ export async function startDetached(home: string, profile: string, output: Comma
         'See it with delorun status, follow its log with delorun logs --follow, and stop it with delorun stop.',
         '',
       ].join('\n'))
+      await announceStudio(home, profile, open, output, opener)
       return EXIT.ok
     }
     if (exitCode !== undefined) {

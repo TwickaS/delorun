@@ -9,7 +9,7 @@
 import { once } from 'node:events'
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http'
 import { connect } from 'node:net'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
 import {
@@ -20,7 +20,9 @@ import {
   reachContentSecurityPolicy,
   inject,
   type Admission,
+  type ConnectionConfig,
   type ConnectionIndexRequest,
+  HostConnectionService,
   type ListenerPolicy,
   type PeerScope,
   type ReachListener,
@@ -111,12 +113,12 @@ afterEach(async () => {
 })
 
 /** A web server with Connection, a provider, routes that record running, and one open reach listener. */
-async function start(address = ADDRESS): Promise<Harness> {
+async function start(address = ADDRESS, config: ConnectionConfig = {}): Promise<Harness> {
   const ctx = new Context()
   contexts.push(ctx)
   provideBrowserCredentials(ctx)
   await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 })
-  await ctx.plugin({ inject: [...inject], apply })
+  await ctx.plugin({ inject: [...inject], apply }, config)
   const ran: string[] = []
   const identity: string[] = []
   ctx.webServer.register({ kind: 'exact', path: '/exact', handler: (_req, res) => { ran.push('exact'); res.end('exact') } })
@@ -259,6 +261,60 @@ describe('reach listener dispatch', () => {
     expectRefusal(await send(port, '/connect', { cookie: SESSION }), 'CONNECT_REFUSED')
     expectRefusal(await send(port, '/exact', { cookie: `${SESSION}; ${String(loopbackCookie)}` }), 'UPSTREAM_COOKIE_REFUSED')
     expect(harness.ran).toEqual([])
+  })
+
+  it('consumes a one-time launch token it refuses, so the loopback listener refuses it too', async () => {
+    const harness = await start(ADDRESS, { oneTimeLaunchTokens: true })
+    expect(harness.ctx.connection.oneTimeLaunchTokens).toBe(true)
+    const loopback = { host: `127.0.0.1:${String(harness.loopbackPort)}` }
+    const mint = (): string => new URL(harness.ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(harness.loopbackPort)}/`)).search
+    const presented = mint()
+    expectRefusal(await send(reachPort(harness), `/${presented}`), 'LAUNCH_TOKEN_REFUSED')
+    expect((await send(harness.loopbackPort, `/connect${presented}`, loopback)).status).toBe(401)
+    expect((await send(harness.loopbackPort, `/connect${mint()}`, loopback)).status).toBe(302)
+  })
+
+  it('consumes a one-time launch token wherever a loopback request presents it and is refused', async () => {
+    const harness = await start(ADDRESS, { oneTimeLaunchTokens: true })
+    const loopback = { host: `127.0.0.1:${String(harness.loopbackPort)}` }
+    const mint = (): string => new URL(harness.ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(harness.loopbackPort)}/`)).search
+    const spentBy = async (path: string, headers: Record<string, string>, before?: () => void): Promise<number> => {
+      const token = mint()
+      before?.()
+      const refused = await send(harness.loopbackPort, `${path}${token}`, headers)
+      harness.provider.loopbackPolicy = undefined
+      expect((await send(harness.loopbackPort, `/connect${token}`, loopback)).status).toBe(401)
+      return refused.status
+    }
+    // The trust fence, a provider policy that refuses launch tokens, an asset path, `/api` and an index route.
+    expect(await spentBy('/connect', { host: 'evil.example' })).toBe(403)
+    const refusing = (): void => { harness.provider.loopbackPolicy = { listener: 'loopback', scheme: 'http', hostRule: { kind: 'upstream-fence' }, acceptsLaunchToken: false, preLogin: [] } }
+    expect(await spentBy('/connect', loopback, refusing)).toBe(401)
+    expect(await spentBy('/index-probe', loopback, refusing)).toBe(401)
+    expect(await spentBy('/index-probe', loopback)).toBe(401)
+    expect(await spentBy('/plugins/x/client.js', loopback)).toBe(200)
+    expect(await spentBy(`${API_PATH}/session.list`, loopback)).toBe(401)
+    expect(await spentBy('/exact', loopback)).toBe(200)
+    expect((await send(harness.loopbackPort, `/connect${mint()}`, loopback)).status).toBe(302)
+    expect(() => { (harness.ctx.connection as HostConnectionService).consumeStrayLaunchTokens({ url: 'http://[', headers: {} }) }).not.toThrow()
+  })
+
+  it('subscribes to webserver/request only with one-time launch tokens on', async () => {
+    const stray = vi.spyOn(HostConnectionService.prototype, 'consumeStrayLaunchTokens')
+    const parity = await start(ADDRESS)
+    expect((await send(parity.loopbackPort, '/exact?token=x', { host: `127.0.0.1:${String(parity.loopbackPort)}` })).status).toBe(200)
+    expect(stray).not.toHaveBeenCalled()
+    const delo = await start(ADDRESS, { oneTimeLaunchTokens: true })
+    expect((await send(delo.loopbackPort, '/exact?token=x', { host: `127.0.0.1:${String(delo.loopbackPort)}` })).status).toBe(200)
+    expect(stray).toHaveBeenCalledOnce()
+    stray.mockRestore()
+  })
+
+  it('refuses a reach request with more than four token values without reading them', async () => {
+    const harness = await start(ADDRESS, { oneTimeLaunchTokens: true })
+    const token = new URL(harness.ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(harness.loopbackPort)}/`)).searchParams.get('token') ?? ''
+    expectRefusal(await send(reachPort(harness), `/?${['a', 'b', 'c', 'd', token].map(value => `token=${value}`).join('&')}`), 'LAUNCH_TOKEN_REFUSED')
+    expect((await send(harness.loopbackPort, `/connect?token=${token}`, { host: `127.0.0.1:${String(harness.loopbackPort)}` })).status).toBe(302)
   })
 
   it('removes Tailscale identity headers before admission', async () => {

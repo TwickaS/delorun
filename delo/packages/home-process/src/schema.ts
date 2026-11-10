@@ -25,6 +25,7 @@ const request = z.discriminatedUnion('op', [
   z.strictObject({ ...base, op: z.literal('update.cancel') }),
   z.strictObject({ ...base, op: z.literal('rollback'), args: z.strictObject({ ...drain, profileOnly: z.boolean() }) }),
   z.strictObject({ ...base, op: z.literal('stop'), args: z.strictObject({ mode: z.enum(['drain', 'cancel']) }) }),
+  z.strictObject({ ...base, op: z.literal('studio.open-token'), args: z.strictObject({ port: z.number().int().min(1).max(65_535).optional() }).optional() }),
 ])
 
 /**

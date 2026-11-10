@@ -51,6 +51,19 @@
     credentialOnboarding: true
     welcomeNotice: false
 
+# Studio sign-in links work once (C4, C16 switch `one_time_launch_tokens`): no
+# reusable launch token exists, each link `delorun open` or a start asks for
+# expires after 60 seconds and its first use consumes it, and a refused
+# request tells the person to run `delorun open`, or `--port` for a link
+# through a forwarded port. The row restates the web
+# bundle's trustedHosts expression and keeps its `inject: [webStartup]`.
+- id: connection
+  name: '@deepseek-ai/dsh-client-connection'
+  config:
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+    oneTimeLaunchTokens: true
+    reopenHint: run delorun open to open the studio, or delorun open --print --port <port> for a link through a forwarded port
+
 # C1's home protection on upstream's sandbox provider. The row is mounted bare
 # by the base bundle, and `protectedHome` defaults to unset there, so a confined
 # command reads the whole harness home — the consent stores under `secrets/`

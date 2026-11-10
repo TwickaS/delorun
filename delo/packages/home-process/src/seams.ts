@@ -13,7 +13,7 @@
  * @module @delo/home-process/seams
  */
 import type { RuntimeVersion } from '@delo/contract-home-layout'
-import type { UpdateJournal } from '@delo/contract-home-process'
+import type { StudioLink, UpdateJournal } from '@delo/contract-home-process'
 import type { ExchangeOptions, ResponseLine, UnsignedRequest } from './client.ts'
 
 /** C1's two pointers. */
@@ -220,13 +220,14 @@ export interface ChatGate {
 }
 
 /**
- * The Host's way to the home process: the update channel, with the current start's token held in memory. The
- * Host's update plugin sends the studio's "Update now" and rollback through it, for a studio session the studio's
- * own authentication admitted; the Host has no other handle on the home process.
+ * The Host's way to the home process: the update channel, with the Host's channel token held in memory, which the
+ * channel accepts for every operation but `studio.open-token`. The Host's update plugin sends the studio's "Update
+ * now" and rollback through it, for a studio session the studio's own authentication admitted; the Host has no
+ * other handle on the home process.
  */
 export interface UpdateChannelAccess {
   /**
-   * Send one request over the update channel with the current start's token.
+   * Send one request over the update channel with the Host's channel token.
    * @param request - the request without `v` and `token`.
    * @param options - a line listener and a deadline.
    * @returns every response line.
@@ -246,6 +247,11 @@ export interface HostRunner {
   boot(access: UpdateChannelAccess): Promise<RunningHost>
 }
 
+/** A studio link, or the reason the Host cannot make one that reaches the studio from this computer. */
+export type StudioLinkResult =
+  | { readonly kind: 'link', readonly link: StudioLink }
+  | { readonly kind: 'unavailable', readonly reason: string }
+
 /** A booted Host. */
 export interface RunningHost {
   /** Its running chats. */
@@ -255,6 +261,12 @@ export interface RunningHost {
    * @returns the URL, or `undefined` when the Host serves no studio.
    */
   studio(): string | undefined
+  /**
+   * Mint a studio sign-in link for one opening, as `studio.open-token` returns it.
+   * @param port - a loopback port that forwards to the studio, or `undefined` for the studio's own port.
+   * @returns the link, or why none can be made for this computer.
+   */
+  studioLink(port: number | undefined): StudioLinkResult
   /**
    * The rows that did not load at boot, which a successor's H4 allows.
    * @returns their ids or names.

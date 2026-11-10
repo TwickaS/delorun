@@ -29,9 +29,9 @@ import {
   adoptHomeLock,
   checkPrivateDirectory,
   readHomeLock,
+  newStartToken,
   removeStartTokenFile,
   runDirectory,
-  StartTokenCheck,
   startTokenFile,
   writeNewStartToken,
   type HolderProbe,
@@ -46,6 +46,7 @@ import { startSuccessor, type HandoverPipe, type Successor } from './handover.ts
 import { UpdateHandshake, type HandshakeSubject, type UpdateSupport } from './handshake.ts'
 import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted, readJournal, removeJournal, removeStash, writeJournal } from './journal.ts'
 import type { ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
+import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
 /** What a home process runs with; `delorun` supplies every value. */
@@ -99,6 +100,8 @@ export class HomeProcess implements HandshakeSubject {
   private state: HomeProcessState = 'starting'
   private lock: HomeLock | undefined
   private token: StartToken | undefined
+  /** The token the Host's requests carry, held only in memory; it cannot ask for a studio link. */
+  private hostToken: StartToken | undefined
   private channel: TokenSocket | undefined
   private host: RunningHost | undefined
   private launched: LaunchedSupervisor | undefined
@@ -113,8 +116,8 @@ export class HomeProcess implements HandshakeSubject {
   private ended = false
   private readonly access: UpdateChannelAccess = {
     send: async (request, options) => {
-      if (this.token === undefined || this.channel === undefined) throw new Error('the update channel is not open')
-      return exchangeLines(this.socketPath, JSON.stringify({ v: UPDATE_PROTOCOL_VERSION, token: this.token, ...request }), options)
+      if (this.hostToken === undefined || this.channel === undefined) throw new Error('the update channel is not open')
+      return exchangeLines(this.socketPath, JSON.stringify({ v: UPDATE_PROTOCOL_VERSION, token: this.hostToken, ...request }), options)
     },
   }
 
@@ -370,22 +373,27 @@ export class HomeProcess implements HandshakeSubject {
     const { home, profile, redactor, logger } = this.options
     this.token = await writeNewStartToken(home, profile)
     redactor.register(this.token, 'start-token')
+    this.hostToken = newStartToken()
+    redactor.register(this.hostToken, 'start-token')
+    const check = new ChannelTokenCheck(this.token, this.hostToken)
     this.channel = await listenUpdateChannel({
       socketPath: this.socketPath,
-      check: new StartTokenCheck(this.token),
+      check,
       logger,
-      handle: async (request, progress) => this.dispatch(request, progress),
+      handle: async (request, progress) => this.dispatch(request, progress, check),
       answered: (request) => { this.answered(request) },
     })
     logger.info('update channel listening')
   }
 
-  private async dispatch(request: UpdateChannelRequest, progress: (fields: Readonly<Record<string, unknown>>) => void): Promise<Readonly<Record<string, unknown>>> {
+  private async dispatch(request: UpdateChannelRequest, progress: (fields: Readonly<Record<string, unknown>>) => void, check: ChannelTokenCheck): Promise<Readonly<Record<string, unknown>>> {
     switch (request.op) {
       case 'status':
         return { status: await this.status() }
       case 'stop':
         return this.requestStop(request.args.mode, progress)
+      case 'studio.open-token':
+        return studioOpenToken(request, check, this.host)
       case 'update.prepare':
         this.refuseOutsideRunning()
         if (this.handshake === undefined) throw new HomeProcessError('VERIFY_FAILED', 'this build has no runtime store, so no release can be fetched and verified')

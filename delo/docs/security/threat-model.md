@@ -80,7 +80,7 @@ A process of the person's user that runs outside the sandbox can read and change
 
 ### Other users on the machine
 
-On Linux and macOS, other non-administrator users cannot read the home, whose directories have mode 0700 and protected files 0600, and cannot connect to the update channel's socket, which has mode 0600 inside a 0700 directory. On Windows Delo checks no access list, and the home has the access the operating system gives a new directory in the person's profile. Other users can open a TCP connection to the studio's loopback listener, which admits upstream's launch token and upstream's signed cookies ([C4](../contracts/c04-admission.md#sessions)). The launch token is reusable for the life of the Host process and travels in the URL that opens the studio; anyone who obtains that URL while the Host runs can open the studio as the person. An administrator or root can do everything the person can. On a rootful Docker engine, membership of the `docker` group is equivalent to root.
+On Linux and macOS, other non-administrator users cannot read the home, whose directories have mode 0700 and protected files 0600, and cannot connect to the update channel's socket, which has mode 0600 inside a 0700 directory. On Windows Delo checks no access list, and the home has the access the operating system gives a new directory in the person's profile. Other users can open a TCP connection to the studio's loopback listener, which admits a launch token and upstream's signed cookies ([C4](../contracts/c04-admission.md#sessions)). In the CLI profile the launch token is one-time: `delorun` obtains each from the home process with the person's start token, it expires after 60 seconds, and its first presentation consumes it ([C4](../contracts/c04-admission.md#launch-tokens)). It still travels in the URL handed to the browser launcher, whose command line other users can read on Linux without `hidepid`, so another user can race the browser to it in the seconds before the browser's first request. A cookie obtained that way, or copied from the browser, admits for 30 days. `delorun headless` and the desktop app run upstream's profiles, where the launch token stays reusable for the life of the Host process. An administrator or root can do everything the person can. On a rootful Docker engine, membership of the `docker` group is equivalent to root.
 
 ### The network
 
@@ -146,7 +146,7 @@ Docker workspaces are not built. [C9](../contracts/c09-runtime-supervisor.md) sp
 
 ### Admission and listeners
 
-[C4](../contracts/c04-admission.md) defines admission. The loopback listener, `127.0.0.1:3080` in the CLI profile, runs upstream's admission unchanged: upstream's launch token, `/connect`, and stateless signed cookies that expire 30 days after they are minted, with no idle limit, no server-side record and no revocation. Every browser holding a cookie acts as the one owner, and the loopback studio sends no Content Security Policy. Setup's `--yes` and `--config` forms never turn reach on ([C11](../contracts/c11-setup-answers.md)), and no other form does: reach is not built. The reach listener's dispatcher is built in upstream's connection and opened by nothing. Recording each loopback credential with a 7-day idle limit is in the [reach design](../design/reach.md#loopback-credentials).
+[C4](../contracts/c04-admission.md) defines admission. The loopback listener, `127.0.0.1:3080` in the CLI profile, runs upstream's admission with one-time launch tokens turned on: a launch token that works once within 60 seconds, `/connect`, and stateless signed cookies that expire 30 days after they are minted, with no idle limit, no server-side record and no revocation. A reader of the home's `.credentials.yaml` can sign such a cookie without any launch token. Every browser holding a cookie acts as the one owner, and the loopback studio sends no Content Security Policy. Setup's `--yes` and `--config` forms never turn reach on ([C11](../contracts/c11-setup-answers.md)), and no other form does: reach is not built. The reach listener's dispatcher is built in upstream's connection and opened by nothing. Recording each loopback credential with a 7-day idle limit is in the [reach design](../design/reach.md#loopback-credentials).
 
 ### Device approval
 
@@ -158,7 +158,7 @@ No reach provider is built. [C7](../contracts/c07-reach-providers.md) and [C6](.
 
 ### Sign-in
 
-No sign-in beyond upstream's launch token exists. [C14](../contracts/c14-oidc-passkeys.md) specifies the passkey and OpenID Connect identity factors, which are not built.
+No sign-in beyond a launch token from `delorun open` exists. [C14](../contracts/c14-oidc-passkeys.md) specifies the passkey and OpenID Connect identity factors, which are not built.
 
 ### Releases, the log and the rebuild
 
@@ -221,7 +221,7 @@ Each limit below is stated in the contract that owns it. `delorun verify` report
 | Escalated commands | A command under `danger-full-access` runs unconfined: it can read every secret under the home and the start token and reach the update channel; upstream's prompt does not say so |
 | Same-user processes outside the sandbox | They can read and change everything under the home, mint loopback credentials, run `delorun` and `docker`, and alter the launcher, the stored root and the checks |
 | Process memory on macOS and Windows | Protection of the home process's memory rests on the operating system's rules, which no Delo test checks |
-| The loopback studio's credentials | The launch token is reusable for the Host process's life and travels in the URL that opens the studio; a cookie admits for 30 days, survives restarts and cannot be revoked; every holder acts as the owner, and no Content Security Policy applies |
+| The loopback studio's credentials | In the CLI profile a launch token works once within 60 seconds, yet travels on the browser launcher's command line, where another user or a confined command under Landlock or Seatbelt can race the browser to it within that minute; a cookie admits for 30 days, survives restarts and cannot be revoked; a reader of `.credentials.yaml` can sign one; every holder acts as the owner, and no Content Security Policy applies |
 | Plugins | A plugin runs with the harness's authority; Delo pins nothing beyond upstream's lockfile and can revoke nothing |
 | Clock trust | A clock set back accepts a release timestamp or log checkpoint past its real expiry; a clock set forward refuses fresh metadata, and the refusal names the expiry and the local time |
 | A home that never connects | Its release stays `unchecked` against the log, and a different view of the log shown to it goes undetected |

@@ -305,6 +305,12 @@ interface ReachConnection {
 
 /** What every reach listener of one Connection records, which Connection's admission reads. */
 export class ReachState {
+  /**
+   * @param consumeLaunchTokens - consumes the one-time launch tokens a reach request presents, which no reach
+   *   listener exchanges.
+   */
+  constructor(readonly consumeLaunchTokens: (presented: readonly string[]) => void) {}
+
   /** Requests a reach listener dispatched, with the Peer each was admitted for, or `undefined` for pre-login. */
   readonly requests = new WeakMap<object, PeerScope | undefined>()
   /** Peers a reach dispatcher admitted. */
@@ -374,6 +380,8 @@ class ReachDispatcher {
     const target = new URL(request.url ?? '/', 'http://reach.invalid')
     const { nonce, headers: security } = reachHeaders(target.pathname)
     const refuse = (code: ReachRefusalCode): WebGateDecision => ({ kind: 'refuse', ...refusal(REACH_REFUSAL_STATUS[code], code, security) })
+    const presented = target.searchParams.getAll(TOKEN_QUERY)
+    if (presented.length > 0) this.state.consumeLaunchTokens(presented)
     if (this.stopped) return refuse('NOT_SIGNED_IN')
     removeIdentityHeaders(request)
     const rule = this.rule

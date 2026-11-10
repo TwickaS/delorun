@@ -13,6 +13,7 @@ import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
+import { requestStudioLink } from '../src/open/studio.ts'
 import { startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 import { runtimeOfFile } from '../src/update/runtime.ts'
 
@@ -213,7 +214,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       prepareProfile: upstreamDependencies().prepareProfile,
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
-        return Promise.resolve({ rows: () => rows, shutdown: (code) => { shutdowns.push(code); return Promise.resolve() }, watchChats: () => {}, studio: () => undefined })
+        return Promise.resolve({ rows: () => rows, shutdown: (code) => { shutdowns.push(code); return Promise.resolve() }, watchChats: () => {}, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => () => Promise.resolve('answered'),
@@ -223,6 +224,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       runtime: home => runtimeOfFile(home, join(home, 'not-a-runtime')),
       updates: () => { throw new Error('a start outside the store has no update support') },
       handover: async () => Promise.resolve(undefined),
+      opener: { canOpen: () => true, link: requestStudioLink, open: () => Promise.reject(new Error('no link reaches the browser here')) },
     }
   }
 
@@ -288,7 +290,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: context }, recording(seen))).toBeUndefined()
     expect(seen).toHaveLength(1)
     const overlay = join(deloHome, 'run', 'default', 'sandbox.patch.yml')
-    expect(seen[0]).toMatchObject({ dshHome: deloHome, options: { profile: 'default', patchFiles: [overlay], args: [] } })
+    expect(seen[0]).toMatchObject({ dshHome: deloHome, options: { profile: 'default', patchFiles: [overlay], args: ['--no-open'] } })
     // C1's confinement on the profile's sandbox row: the home, its read exemptions and both channels' sockets.
     expect(parse(readFileSync(overlay, 'utf8'))).toEqual([{ id: 'sandbox', config: expect.objectContaining({
       protectedHome: deloHome,
@@ -304,6 +306,10 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const printed: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) } }, recording(seen))).toBe(EXIT.ok)
     expect(printed.join('')).toContain(`Delo is already running for the profile default (process ${String(process.pid)}`)
+    expect(printed.join('')).toContain('Run delorun open to open the studio in your browser.\n')
+    const opening: string[] = []
+    expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: { stdout: () => {}, stderr: text => void opening.push(text) } }, recording(seen))).toBe(EXIT.ok)
+    expect(opening.join('')).toBe('The home process for the profile default did not give a studio link (STUDIO_UNAVAILABLE: the Host serves no studio); see delorun status.\n')
     expect(seen).toHaveLength(1)
     const silent: StartDependencies = { ...recording(seen), probe: () => () => Promise.resolve('silent') }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context }, silent)).rejects.toMatchObject({ code: 'HOME_UNRESPONSIVE' })

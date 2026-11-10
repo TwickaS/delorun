@@ -123,7 +123,7 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
     if (existsSync(join(dist, 'manifest.webmanifest'))) expect(JSON.parse(readFileSync(join(dist, 'manifest.webmanifest'), 'utf8')).name).toBe(title)
   })
 
-  it('starts the Host in the home process and serves the studio\'s index on loopback to a client that holds the start token', async (test) => {
+  it('starts the Host in the home process and serves the studio\'s index on loopback to a client with a one-time link from delorun open', async (test) => {
     const root = scratch(test, 'delo-closure-serve-')
     const extracted = join(root, 'closure')
     mkdirSync(extracted)
@@ -151,19 +151,26 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
     const host = spawn(node, [entry, 'start', '--foreground'], { cwd: root, env })
     test.onTestFinished(() => { host.kill('SIGKILL') })
     let output = ''
-    const address = new Promise<string>((resolve, reject) => {
+    const running = new Promise<void>((resolve, reject) => {
       host.stdout.on('data', (chunk: Buffer) => {
         output += chunk.toString('utf8')
-        const match = /dsh web: (http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+)/u.exec(output)
-        if (match !== null) resolve(match[1]!)
+        if (output.includes('Run delorun open to open the studio in your browser.') && output.includes('dsh web: ')) resolve()
       })
       host.stderr.on('data', (chunk: Buffer) => { output += chunk.toString('utf8') })
       host.on('exit', () => { reject(new Error(`the Host ended before it served: ${output}`)) })
     })
-    const url = await address
-    // The start token is exchanged for a cookie by a redirect; a request without either is refused.
+    await running
+    // The start prints the studio's address without a token; `delorun open --print` asks the home process for a link.
+    expect(output).toMatch(/dsh web: http:\/\/127\.0\.0\.1:\d+\/?\n/u)
+    expect(output).not.toContain('token=')
+    const printed = spawnSync(node, [entry, 'open', '--print'], { cwd: root, env, encoding: 'utf8' })
+    expect(printed.status).toBe(0)
+    const url = printed.stdout.split('\n')[0]!
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]{43}$/u)
+    // The one-time token is exchanged for a cookie by a redirect, once; a request without either is refused.
     const served = await fetch(url, { redirect: 'manual' })
     expect(served.status).toBe(303)
+    expect((await fetch(url, { redirect: 'manual' })).status).toBe(401)
     const cookie = (served.headers.get('set-cookie') ?? '').split(';')[0]!
     const index = await fetch(new URL('/', url), { headers: { cookie } })
     expect(index.status).toBe(200)

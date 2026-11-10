@@ -3,7 +3,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { PeerId, PeerScope, Principal } from '@deepseek-ai/dsh-typert-protocol'
-import type { ConnectionInteractions } from './connect-protocol.ts'
+import { CONNECT_PATH, type ConnectionInteractions } from './connect-protocol.ts'
 import {
   RpcId,
   type ClientRequest,
@@ -74,6 +74,21 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/**
+ * A request's target, or `undefined` when it does not parse; the router answers such a request itself.
+ * @param request - an incoming request.
+ * @returns the parsed target.
+ */
+function requestTarget(request: ConnectionIndexRequest): URL | undefined {
+  try {
+    /* v8 ignore next -- node:http always sets url on server requests. */
+    return new URL(request.url ?? '/', 'http://dsh.invalid')
+  } catch (_unparsable) {
+    // An unparsable target presents no token this process could have minted.
+    return undefined
+  }
+}
+
 /** Host Connection service whose channel registrations belong to the caller fiber. */
 export class HostConnectionService extends Service implements HostConnectionAdmission {
   /** The Peer every authenticated browser connection shares. */
@@ -84,7 +99,7 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
   /** What this Connection's reach listeners record: dispatched requests, admitted Peers and open connections. */
-  private readonly reach = new ReachState()
+  private readonly reach = new ReachState((presented) => { this.browserAuth.consumeLaunchTokens(presented) })
 
   readonly allowsRemoteAuthorities: boolean
 
@@ -227,16 +242,35 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
    */
   authorizeConnect(request: ConnectionIndexRequest, response: ConnectionIndexResponse): void {
     if (!this.isTrusted(request) || this.disposed) {
+      this.consumePresentedLaunchTokens(request)
       response.writeHead(this.disposed ? 401 : 403)
       response.end(this.disposed ? 'unauthorized' : 'forbidden')
       return
     }
     if (!this.acceptsLaunchToken()) {
+      this.consumePresentedLaunchTokens(request)
       this.browserAuth.writeUnauthorized(request, response)
       return
     }
     this.browserAuth.authorizeConnect(request, response,
       this.owner.get('webServer')?.protocol === 'https:', interactions => this.publishPeer(interactions))
+  }
+
+  /**
+   * Consume the one-time launch tokens a loopback request presents outside the two exchanges, the root and
+   * `/connect`, whose own handling consumes them; with the process token this does nothing.
+   * @param request - a request the web server's main listener received, before routing.
+   */
+  consumeStrayLaunchTokens(request: ConnectionIndexRequest): void {
+    const target = requestTarget(request)
+    if (target === undefined || target.pathname === '/' || target.pathname === CONNECT_PATH) return
+    this.browserAuth.consumeLaunchTokens(target.searchParams.getAll('token'))
+  }
+
+  /** Consume every one-time launch token a refused request presents. */
+  private consumePresentedLaunchTokens(request: ConnectionIndexRequest): void {
+    /* v8 ignore next -- a routed request's target always parses, and node:http always sets url. */
+    this.browserAuth.consumeLaunchTokens(new URL(request.url ?? '/', 'http://dsh.invalid').searchParams.getAll('token'))
   }
 
   /** Whether the loaded authenticator provider, if any, lets the loopback listener exchange the launch token. */
@@ -265,6 +299,7 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
       /* v8 ignore next -- node:http always sets url on server requests. */
       const exchange = new URL(request.url ?? '/', 'http://dsh.invalid').searchParams.has('token')
       if (exchange && !this.acceptsLaunchToken()) {
+        this.consumePresentedLaunchTokens(request)
         this.browserAuth.writeUnauthorized(request, response)
         return false
       }
@@ -281,9 +316,14 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
     return this.browserAuth.authorizeIndex(request, response, this.ctx.get('webServer')?.protocol === 'https:')
   }
 
-  /** Add this process's launch token to the clean application URL. */
+  /** Add a launch token to the clean application URL: the process token, or a one-time token for this opening. */
   authenticatedUrl(baseUrl: string): string {
     return this.browserAuth.authenticatedUrl(baseUrl)
+  }
+
+  /** Whether each launch URL carries its own one-time token. */
+  get oneTimeLaunchTokens(): boolean {
+    return this.browserAuth.oneTimeLaunchTokens
   }
 
   /**

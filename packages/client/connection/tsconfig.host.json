@@ -15,6 +15,7 @@
     "src/connect-protocol.ts",
     "src/http-bridge.ts",
     "src/index.ts",
+    "src/launch-tokens.ts",
     "src/loopback-hostname.ts",
     "src/peer.ts",
     "src/reach.ts",

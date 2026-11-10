@@ -43,6 +43,14 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'webserver/index-inject'(table: IndexInjection[], peer: PeerScope): void
+    /**
+     * Observe one request or upgrade request the main listener received, before any route sees it. Listeners
+     * must not write a response; one that throws is logged and the request is routed regardless. An additional
+     * listener's gate decides its own requests.
+     * @param request - The incoming request.
+     * @mode emit
+     */
+    'webserver/request'(request: IncomingMessage): void
   }
 }
 
@@ -704,7 +712,11 @@ export class WebServer extends Service {
 
   /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
   async [Service.init](): Promise<void> {
-    const listener = this.requestListener()
+    const route = this.requestListener()
+    const listener = (req: IncomingMessage, res: ServerResponse): void => {
+      this.observeRequest(req)
+      route(req, res)
+    }
     const tls = this.tlsConfig
     // Disposal waits for in-flight acquisition and closes any listener it produces.
     await this.ctx.effect(async () => {
@@ -728,6 +740,7 @@ export class WebServer extends Service {
         })
       }
       this.server.on('upgrade', (req, socket, head) => {
+        this.observeRequest(req)
         this.dispatchUpgrade(req, socket, head, this.upgradedSockets)
       })
 
@@ -853,6 +866,22 @@ export class WebServer extends Service {
     }
     this.additionalListeners.set(options.id, open)
     return open
+  }
+
+  /**
+   * Run each `webserver/request` listener for one main-listener request. A listener that throws is logged, and the
+   * request is routed regardless.
+   * @param req - the request.
+   */
+  private observeRequest(req: IncomingMessage): void {
+    const args: unknown[] = ['webserver/request', req]
+    for (const callback of this.ctx.events.dispatch('emit', args)) {
+      try {
+        callback(...args)
+      } catch (error) {
+        this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
   }
 
   /**

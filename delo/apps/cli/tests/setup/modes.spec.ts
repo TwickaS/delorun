@@ -84,7 +84,7 @@ beforeEach(async () => {
   home = join(osHome, '.delo')
   await ensureHomeTree(home, PROFILE)
   recording = { screen: [], asked: [] }
-  ending = { spawned: [], started: [], opened: [] }
+  ending = { spawned: [], started: [], opened: 0 }
 })
 
 afterEach(() => {
@@ -126,7 +126,7 @@ Set up the CLI profile default at <profile>.
 ? Install the delorun command? (runs npm install -g delorun) (Yes)
 = Yes
 Delorun is running in the background and keeps running after you close this terminal.
-Studio: http://127.0.0.1:3080/?token=abc (opened in your browser)
+Studio: http://127.0.0.1:3080/ (opened in your browser)
   delorun status
   delorun logs --follow
   delorun stop`
@@ -154,8 +154,8 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
       { id: 'profile', status: 'skipped' },
     ])
     expect(ending.spawned).toEqual(['npm install -g delorun'])
-    expect(ending.started).toEqual([{ mode: 'background', open: true }])
-    expect(ending.opened).toEqual(['http://127.0.0.1:3080/?token=abc'])
+    expect(ending.started).toEqual(['background'])
+    expect(ending.opened).toBe(1)
     expect(readBackgroundAnswer(profileDirectory(home, PROFILE))).toBe(true)
   })
 
@@ -319,7 +319,7 @@ Set up the CLI profile work at <work profile>.
 ? Install the delorun command? (runs npm install -g delorun) (Yes)
 = Yes
 Delorun is running in this terminal. Closing the terminal stops it.
-Studio: http://127.0.0.1:4100/?token=abc
+Studio: http://127.0.0.1:4100/ (opened in your browser)
   delorun status --profile work
   delorun logs --follow --profile work
   delorun stop --profile work`
@@ -328,7 +328,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
   const FULL_SCRIPT: readonly Answer[] = ['full', 'environment', 'safer', 'no', 'work', '4100', 'save', true]
 
   it('asks the background and profile sections after Quick\'s, and shows them on the review', async () => {
-    expect(await interactive(FULL_SCRIPT, { behaviour: { address: 'http://127.0.0.1:4100/?token=abc' } })).toBe(EXIT.ok)
+    expect(await interactive(FULL_SCRIPT, { behaviour: { address: 'http://127.0.0.1:4100/' } })).toBe(EXIT.ok)
     expect(screen()).toBe(FULL_TRANSCRIPT)
   })
 
@@ -339,8 +339,8 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     expect(patchOf('work')).toContainEqual({ id: 'webserver', config: { host: '127.0.0.1', port: 4100, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
     expect(recordOf('work').sections.map(record => record.status)).toEqual(['seen', 'answered', 'answered', 'answered', 'answered'])
     expect(readBackgroundAnswer(profileDirectory(home, 'work'))).toBe(false)
-    expect(ending.started).toEqual([{ mode: 'foreground', open: true }])
-    expect(ending.opened).toEqual([])
+    expect(ending.started).toEqual(['foreground'])
+    expect(ending.opened).toBe(1)
     expect(screen()).toContain('Delorun is running in this terminal. Closing the terminal stops it.')
     expect(screen()).toContain('  delorun status --profile work')
     expect(screen()).toContain('  delorun stop --profile work')
@@ -350,7 +350,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     expect(await interactive(['full', 'environment', 'safer', 'yes', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(patchOf().map(row => row.id)).not.toContain('webserver')
     expect(recordOf().profile).toEqual({ name: null, port: null })
-    expect(ending.started).toEqual([{ mode: 'background', open: true }])
+    expect(ending.started).toEqual(['background'])
   })
 
   it('asks again for a port that is in use, a port outside the range, a name that is taken and a name that is refused', async () => {
@@ -396,18 +396,25 @@ describe('the ending', { timeout: TIMEOUT_MS }, () => {
 
   it('prints the address and an SSH port-forward line when no browser can open', async () => {
     expect(await interactive(QUICK_SCRIPT, { behaviour: { canOpen: false } })).toBe(EXIT.ok)
-    expect(ending.opened).toEqual([])
-    expect(ending.started).toEqual([{ mode: 'background', open: false }])
-    expect(screen()).toContain('Studio: http://127.0.0.1:3080/?token=abc')
+    expect(ending.opened).toBe(0)
+    expect(ending.started).toEqual(['background'])
+    expect(screen()).toContain('Studio: http://127.0.0.1:3080/\n')
     expect(screen()).toContain('There is no browser to open here.')
     expect(screen()).toContain('  ssh -L 3080:127.0.0.1:3080 person@machine')
+    expect(screen()).toContain('then run delorun open --print here and open the link it prints there; it signs in once, within one minute.')
   })
 
-  it('names the log when the started process printed no address', async () => {
-    expect(await interactive(QUICK_SCRIPT, { behaviour: { address: undefined, canOpen: false } })).toBe(EXIT.ok)
-    expect(screen()).toContain('The studio address is in the log: delorun logs --follow')
+  it('names status and the log when the home process reports no studio, and opens nothing', async () => {
+    expect(await interactive(QUICK_SCRIPT, { behaviour: { address: undefined } })).toBe(EXIT.ok)
+    expect(screen()).toContain('The home process reports no studio; see delorun status and delorun logs --follow')
     expect(screen()).not.toContain('ssh -L')
-    expect(ending.opened).toEqual([])
+    expect(ending.opened).toBe(0)
+  })
+
+  it('does not claim the studio opened when no browser took the link', async () => {
+    expect(await interactive(QUICK_SCRIPT, { behaviour: { opens: false } })).toBe(EXIT.ok)
+    expect(ending.opened).toBe(1)
+    expect(screen()).toContain('Studio: http://127.0.0.1:3080/\n')
   })
 
   it('returns the start\'s failure code and prints no success text', async () => {

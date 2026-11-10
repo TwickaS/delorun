@@ -32,6 +32,7 @@ import {
   type ProfileSnapshots,
   type RollbackSteps,
   type RunningHost,
+  type StudioLinkResult,
   type RuntimePointers,
   type RuntimeStore,
   type SessionDataCopies,
@@ -308,6 +309,18 @@ export class FixtureHost implements RunningHost {
 
   studio(): string | undefined {
     return 'http://127.0.0.1:1/'
+  }
+
+  /** Links minted so far. */
+  links = 0
+
+  /** The ports the links were asked for. */
+  readonly linkPorts: (number | undefined)[] = []
+
+  studioLink(port: number | undefined): StudioLinkResult {
+    this.links += 1
+    this.linkPorts.push(port)
+    return { kind: 'link', link: { url: `http://127.0.0.1:${String(port ?? 1)}/?token=fixture-link-${String(this.links)}`, oneTime: true } }
   }
 
   failedRows(): readonly string[] {

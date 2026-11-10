@@ -23,6 +23,10 @@
 #                           parity composition leaves the fetchGuard service
 #                           unmounted, and the provider reads its absence per
 #                           hop and runs unguarded.
+#   one_time_launch_tokens  the connection row carries the web bundle's
+#                           trustedHosts expression, which a row here would
+#                           erase; the bundle's patch of the row is left out,
+#                           so upstream's reusable launch token signs in.
 #
 # The overlay also mounts @delo/bundle-local, the bundle Delo's CLI profiles
 # add after upstream's web template: the last blocks restate that bundle's

@@ -150,6 +150,23 @@ export interface StopRequest extends RequestBase {
   }
 }
 
+/**
+ * The `studio.open-token` request: a fresh studio sign-in link for the person at the computer. The home process
+ * accepts it only with the start token from the token file, never with the token the Host's own requests carry.
+ */
+export interface StudioOpenTokenRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'studio.open-token'
+  /** Arguments; omitted for a link to the studio's own port. */
+  readonly args?: {
+    /**
+     * A loopback port, 1 to 65535, that forwards to the studio, such as the local end of an SSH port forward: the
+     * link names the studio's loopback host with this port, and signs in only there.
+     */
+    readonly port?: number
+  }
+}
+
 /** Every request the update channel accepts; no request carries a path, an archive, a URL or a command. */
 export type UpdateChannelRequest =
   | StatusRequest
@@ -158,6 +175,7 @@ export type UpdateChannelRequest =
   | UpdateCancelRequest
   | RollbackRequest
   | StopRequest
+  | StudioOpenTokenRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =
@@ -178,6 +196,7 @@ export type HomeProcessErrorCode =
   | 'DATA_COPY_NO_SPACE'
   | 'ROLLBACK_NEEDS_DATA_COPY'
   | 'ROLLBACK_TARGET_UNUSABLE'
+  | 'STUDIO_UNAVAILABLE'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {
@@ -209,9 +228,21 @@ export interface HomeStatus {
   }
 }
 
+/** The answer to `studio.open-token`. */
+export interface StudioLink {
+  /** The studio's loopback address with a launch token, such as `http://127.0.0.1:3080/?token=…`. */
+  readonly url: string
+  /**
+   * Whether the token works once and for at most 60 seconds (C4, "Loopback sessions"); false when the profile keeps
+   * upstream's reusable launch token.
+   */
+  readonly oneTime: boolean
+}
+
 /** One response line; the final line of a handshake carries `outcome`. */
 export type UpdateChannelResponse =
   | { readonly ok: true, readonly status: HomeStatus }
+  | ({ readonly ok: true } & StudioLink)
   | { readonly ok: true, readonly phase: UpdatePhase }
   /** One line of the target's install progress during `update.prepare`, as the launcher prints it, newline included. */
   | { readonly ok: true, readonly line: string }

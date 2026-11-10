@@ -14,7 +14,7 @@ This contract defines the background process that keeps a person's CLI home runn
 
 The home process, the update channel with its token check and fixed request set, the handshake, interrupted updates and rollback are built and reached by `delorun`, `delorun start`, `stop`, `status`, `update` and `recover`; the supervisor launch, the confinement probes, start at login, the studio's caller and the Windows pipe are not.
 
-- **Built and reached:** the lock, the per-start token compared in constant time, the update channel on the Unix socket `run/<profile>/update.sock` with its request, size, time and connection limits, the drain with the CLI profile's turn refusal, the handover over an inherited pipe, the health check and automatic rollback, and the journal that finishes an interrupted update at the next start.
+- **Built and reached:** the lock, the per-start token compared in constant time, the Host's channel token and `studio.open-token`, which `delorun open`, the start and setup's ending use, the update channel on the Unix socket `run/<profile>/update.sock` with its request, size, time and connection limits, the drain with the CLI profile's turn refusal, the handover over an inherited pipe, the health check and automatic rollback, and the journal that finishes an interrupted update at the next start.
 - **Not built:** step 6 of the start sequence, because `delorun start` passes the home process no supervisor ([C9](c09-runtime-supervisor.md)); step 8, the confinement probes, and `delorun verify` reporting their results; start at login, `--at-login` and the launcher copy it runs; the Host's update plugin, so the studio's "Update now" and rollback do not exist and the channel serves only the `delorun` command; `delorun status --follow`; the named pipe on Windows: the channel takes the same socket path on every platform, no test shows it opening on Windows, and windows-acl has no rule that denies a confined command the connect or the read of the token; the escalation prompt wording requirement 10 names ([C1](c01-home-layout.md)).
 - **Not reached by Delo's sandbox rules:** a command run by `delorun headless`, which uses upstream's headless profile without Delo's protected home and denied sockets, can read the start token and connect to the channel while a home process runs; the closed request set of requirement 4 still applies to it.
 
@@ -61,7 +61,8 @@ The home process is one operating-system process per CLI profile. It runs the pr
 ## Commands
 
 - **`delorun start`** starts the home process for the profile and waits until it reports `running`, for at most 120 seconds; a start that does not reach `running` prints the failure and the log's location. When a live home process already answers `status`, the command prints its state and exits 0. `--foreground` runs the process in the terminal and also writes its log. `--at-login`, which would install the login item first ([start at login](#start-at-login)), is not built.
-- **`delorun`** with no arguments runs setup on a home without a CLI profile; otherwise it starts the home process as `delorun start` does and opens the studio.
+- **`delorun`** with no arguments runs setup on a home without a CLI profile; otherwise it starts the home process as `delorun start` does and opens the studio as `delorun open` does.
+- **`delorun open`** asks the running home process for a studio link with `studio.open-token` and hands it to the default browser; `--print` prints the link once instead, and `--port <n>` makes it for a loopback port that forwards to the studio. With Delo's composition the link signs in once, within 60 seconds ([C4](c04-admission.md#launch-tokens)). A start prints the studio's address without a token and the line that names `delorun open`; `delorun start --open`, a bare `delorun` and setup's ending open the studio through `studio.open-token` and never read an address from a log. With no home process running, `delorun open` exits 3.
 - **`delorun stop`** sends `stop` with the mode `drain`: the home process refuses new turns and waits for running chats for at most 1,800 seconds, then stops. `--now` sends the mode `cancel`, which cancels running turns and background jobs through upstream's cancellation and then stops. `--at-login` also removes the login item. With no home process running, the command prints that and exits 0.
 - **`delorun status`** prints the state, process id, `startId`, the `current`, `previous` and running runtime versions, the launcher version, the update phase if one runs, and the number of running chats; it shows no login item, because none is built. `--json` prints the `status` response. It exits 0 when the home process runs, 3 when none runs and 1 on an error.
 
@@ -84,6 +85,7 @@ The update channel is the socket [C1](c01-home-layout.md) places at `run/<profil
 
 - **Callers.** It serves the person's `delorun` command, which reads the token file. The Host's update plugin, which would act for a studio session that the studio's own authentication admitted (upstream's loopback authentication, or C4's admission on a reach listener) and attach the token it holds in memory, is not built, so no studio action reaches the channel.
 - **The token check.** The first line of each connection is a request with the field `token`. The home process compares it in constant time with the current start's token. A missing, malformed, wrong or previous start's token receives `UNAUTHENTICATED`, and the connection closes; that response carries no other information.
+- **The Host's channel token.** The home process creates a second token at each start, holds it only in memory and gives it to the Host in the `UpdateChannelAccess` it receives at boot. The channel accepts it for every operation but `studio.open-token`, which receives `UNAUTHENTICATED` for it.
 - **Framing.** Each connection carries one request, encoded as one line of UTF-8 JSON of at most 16,384 bytes, and the response lines that answer it, each one JSON object followed by a newline. The home process closes the connection after the final response line.
 - **Timing.** A request line that has not arrived 5 seconds after the connection opens closes the connection with `REQUEST_TIMEOUT`. At most 8 connections are open at once; a further connection is closed at once with `BUSY`.
 - **Logging.** A refused authentication is logged without the presented value, at most one line per second; further refusals in that second are counted in the next line.
@@ -100,6 +102,7 @@ Every request has the fields `v` (the protocol version, 1), `token`, `op` and, w
 | `update.cancel` | none | one line; an update still in `waiting` returns to `running` with the runtime unchanged |
 | `rollback` | `wait` and `drainTimeoutS` as for `update.apply`; `profileOnly`: a boolean | as `update.apply`, with the target the update record's `from`; the final `outcome` is `rolled-back`, `aborted` or `failed` |
 | `stop` | `mode`: `drain` or `cancel` | progress lines, then one final line before the process exits |
+| `studio.open-token` | `port`, optional: a loopback port from 1 to 65535 that forwards to the studio | one line: `url`, the studio's loopback address, with `port` in place of the studio's own port when given, and a launch token that the Host mints for this request, and `oneTime`, whether that token works once within 60 seconds ([C4](c04-admission.md#launch-tokens)); `STUDIO_UNAVAILABLE`, with the reason, when no Host runs, the Host serves no studio, its studio listens on an address other than loopback, or it publishes the studio at a public URL |
 
 - **Response lines.** Each line has `ok` (a boolean); a failed line has `error`, a code from [errors](#errors), and a progress line has `phase`, or, while `update.prepare` installs the target, `line`: one line of the install's progress with its newline, the same text the launcher prints while it installs a release. A report expires 600 seconds after `update.prepare` returns it; `update.apply` with an expired or unknown `reportId` fails with `REPORT_EXPIRED`.
 - **`failed`.** An `update.apply` or `rollback` that ends `failed` leaves a rollback the home process may not finish itself; the home process stops once the final line is sent, and the update record stays for the next start ([interrupted updates](#interrupted-updates)).
@@ -183,7 +186,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 
 | Code | Meaning |
 | --- | --- |
-| `UNAUTHENTICATED` | The request's token is missing, malformed, wrong or from a previous start |
+| `UNAUTHENTICATED` | The request's token is missing, malformed, wrong or from a previous start, or `studio.open-token` carries the Host's channel token |
 | `SCHEMA_VIOLATION` | The request has an unknown `op`, an unknown field or a field of the wrong type |
 | `REQUEST_TIMEOUT` | No request line arrived within 5 seconds |
 | `REQUEST_TOO_LARGE` | The request line exceeds 16,384 bytes |
@@ -200,11 +203,12 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 | `DATA_COPY_NO_SPACE` | The session-data copy the person chose does not fit on the home's filesystem ([C3](c03-update-report.md#data-formats)) |
 | `ROLLBACK_NEEDS_DATA_COPY` | The data differs, the target started and no copy exists, so [C3](c03-update-report.md#rollback)'s table refuses the rollback; at a start, the record says the table refused the automatic rollback |
 | `ROLLBACK_TARGET_UNUSABLE` | The version a rollback returns to is not installed or fails its start check, so the rollback is refused before any step |
+| `STUDIO_UNAVAILABLE` | `studio.open-token` found no running Host, or a Host that cannot make a link for this computer; the line's `detail` says which |
 
 ## Consumers
 
 - `delo/packages/home-process`: the home process, the update channel, the handshake, the journal and the login items.
-- `delo/apps/cli`: `delorun`, `delorun start`, `stop`, `status`, `update` and `recover`.
+- `delo/apps/cli`: `delorun`, `delorun start`, `open`, `stop`, `status`, `update` and `recover`, and setup's ending, which opens the studio through `studio.open-token`.
 - `delo/packages/runtime-store`: the pointer writes and installs the handshake calls ([C1](c01-home-layout.md)).
 - `delo/packages/logs`: the home process's operational log ([C20](c20-operational-logs.md)).
 - The Host's update plugin, "Update now" and the studio's rollback, which are not built; no shipped bundle mounts an update plugin.
@@ -232,6 +236,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 8. The handover passes over an inherited pipe; the token is never in a command line, an environment variable, a response or a log.
 9. The protection rests on confining the agent's commands. A process of the person's user outside the sandbox can run `delorun update` itself, and this contract claims no protection against it. No root-owned helper exists.
 10. A command reaches the update channel with the token only when it runs unconfined. A `danger-full-access` escalation is approved only through [C1](c01-home-layout.md)'s escalation prompt, which states that full access reaches Delo's home, its tokens, the Docker supervisor and the update channel.
+11. The channel gives a studio link only for `studio.open-token` with the start token, never for a request carrying the Host's channel token. Neither the response line nor the link is logged, and `delorun` prints the link only under `delorun open --print`.
 
 ### Denial tests
 
@@ -244,6 +249,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 | `update-channel-landlock` | Under Landlock, a confined workspace command's connect to the update channel succeeds, its request fails with `UNAUTHENTICATED` because it cannot read the token, and `delorun verify` reports that state |
 | `update-channel-not-enforced-reported` | On a fixture dialect that cannot enforce [C1](c01-home-layout.md)'s rules, `delorun verify` reports them as `not-enforced` |
 | `update-request-fields` | A request with a path, URL or command field, or an unknown `op`, is refused with `SCHEMA_VIOLATION` and changes nothing |
+| `studio-open-token-person-only` | `studio.open-token` returns a fresh link for the start token; the Host's channel token, which `status` accepts, and a missing or wrong token receive `UNAUTHENTICATED`; a request with an unknown argument or a port outside 1 to 65535 receives `SCHEMA_VIOLATION`; and neither the link nor its token reaches the home log |
 | `update-request-limits` | A request line above 16,384 bytes, a connection silent for 5 seconds and a ninth connection are each closed with their codes |
 | `desktop-independent` | With a fixture desktop Host running, `delorun start` succeeds, and `delorun update` leaves the desktop process running and the desktop profile byte-identical |
 | `requester-killed` | Killing the requesting terminal in each phase leaves the home process running and `current` naming a whole version |
@@ -257,6 +263,7 @@ The home process writes the update record `run/<profile>/update.json`, mode 0600
 - **Full access.** A command approved for `danger-full-access` can read the token and send any request a `delorun` command can send, within the closed request set.
 - **Process memory.** On macOS and Windows the protection of the home process's memory rests on the operating system's own rules for reading another process's memory, which no Delo test proves.
 - **The person's own processes.** A process of the person's user outside the sandbox can read the token and run `delorun update` itself.
+- **Code in the Host.** The Host's channel token stops a request the Host sends over the channel, such as one it forwards for a studio session, from obtaining a studio link. It does not confine Host code: a Host plugin runs unconfined in the home process and can call upstream's `authenticatedUrl` itself or read the token file.
 
 ## Enforcement per platform and dialect
 
@@ -271,4 +278,4 @@ The update channel inherits [C1](c01-home-layout.md)'s rules for confined comman
 | No sandbox, or `danger-full-access` | succeeds | accepted when the command reads the token file, as for any process of the person's user |
 
 - **Login items.** The systemd user unit, the launch agent and the scheduled task run as the person's user with that user's access; none runs with elevated rights.
-- **Process inspection.** The token is held only in memory and in the token file, never in a command line or the environment, which same-user processes can list on macOS and Linux. bwrap gives confined commands their own process namespace, and Landlock denies a confined command tracing a process outside its domain.
+- **Process inspection.** The token is held only in memory and in the token file, never in a command line or the environment, which same-user processes can list on macOS and Linux. bwrap gives confined commands their own process namespace, and Landlock denies a confined command tracing a process outside its domain. The studio link that `delorun open` hands to the browser launcher is on the launcher's command line; [C4](c04-admission.md#what-this-does-not-prove) states that exposure.

@@ -91,6 +91,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     },
   },
   {
+    id: 'connection',
+    kind: 'changed',
+    reason: 'The C16 switch `one_time_launch_tokens` on: a studio sign-in link works once, within 60 seconds, and a refused request tells the person to run `delorun open`; upstream keeps one reusable launch token for the life of the Host.',
+    parity: { kind: 'upstream', reason: 'The switch\'s parity value is off: the overlay leaves the row to upstream\'s web bundle, so the recorded web scenarios sign in with the reusable process token, as they were recorded.' },
+  },
+  {
     id: 'ui-settings-models',
     kind: 'changed',
     reason: 'Upstream\'s preview notice is replaced by Delo\'s own notice (welcomeNotice off), and the other onboarding settings keep upstream\'s values.',

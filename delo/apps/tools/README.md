@@ -327,6 +327,7 @@ A patch row replaces its entry's whole `config` and reaches only entries of the 
 | `preset_inspect` | Config default `false`. The row sits in each Web preset's plugin list, which a patch reaches only by replacing the whole preset row. |
 | `container_denial_marker` | Config default `false`. The bundles and the root configurations set `sandbox-policy`'s mode and workspace root, which an overlay row would erase. |
 | `sandbox_protected_reads` | Config default `false`. The bundles set the search tools' over-cap sampling choice, which an overlay row would erase. |
+| `one_time_launch_tokens` | Config default `false` of `@deepseek-ai/dsh-client-connection`'s `oneTimeLaunchTokens`. The `connection` row carries the web bundle's `trustedHosts` expression, which an overlay row would erase. |
 | `doctor` | Config default `false`. Only the `doctor` profile mounts the app, and the replay starts no doctor process. |
 | `studio_additions`, `main_chat` | Config defaults `false` of `@delo/plugin-theme`'s `studioAdditions` and `@delo/plugin-main-chat`'s `enabled`. The replay composes upstream's bundles, which mount neither `@delo/bundle-studio` nor the main chat. |
 
@@ -352,6 +353,7 @@ The overlay also mounts [`@delo/bundle-local`](../../packages/bundle-local/READM
 | `container_denial_marker` | built | `@deepseek-ai/dsh-sandbox-policy` `containerDenialMarker` | on | off: no shipped row sets it | off | yes |
 | `sandbox_protected_reads` | built | `@deepseek-ai/dsh-sandbox-local` `protectedHome` | on | on, through `@delo/bundle-local`'s `sandbox` row | off | yes |
 | `update_turn_refusal` | built | `@delo/bundle-local/update-gate` `enabled` | on | on, through `@delo/bundle-local` | off | yes |
+| `one_time_launch_tokens` | built | `@deepseek-ai/dsh-client-connection` `oneTimeLaunchTokens` | on | on, through `@delo/bundle-local`'s `connection` row | off | no |
 
 The registry default is the value the registry states for Delo's default composition; the CLI profile column is what the profile that `delorun` starts composes today, which differs from it for `main_chat`, `preset_inspect`, `plugin_manager_read_exemption`, `profile_history` and `container_denial_marker`. `delorun headless` runs upstream's `headless` template, in which every switch is at its parity value. Each built field's schema default is the parity value.
 
@@ -359,7 +361,7 @@ The registry default is the value the registry states for Delo's default composi
 
 The check reads the TypeScript sources under `delo/**/src` and every ledgered upstream source under `packages/` and `apps/`, without specs. It fails when:
 
-- a property of an interface named `Config` whose JSDoc names `` C16 switch `<id>` `` has no built registry entry with that field, or its entry is still planned;
+- a property of an interface named `Config`, or of the interface a `const Config: z<…>` schema is typed by, whose JSDoc names `` C16 switch `<id>` `` has no built registry entry with that field, or its entry is still planned;
 - a built entry's source has no such field, the field's `z.boolean().default(…)` is not the parity value, the entry's parity value equals its default, or a model-visible entry names no source file or no scenario `<profile>/delo-<id>`;
 - a Delo-owned source calls a model-visible registration API, or a ledgered upstream edit changes a line inside a top-level statement that calls one, and no built, model-visible entry lists that file in its sources;
 - an overlay row names a module with no built switch, sets a key that is no switch of that module or a value that is not the parity value, or sets anything besides `id`, `name` and `config`, or a built switch is neither in the overlay nor in `DEFAULT_PARITY` in `overlay.ts` with its reason;

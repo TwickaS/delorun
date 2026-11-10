@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { PeerId } from '@deepseek-ai/dsh-typert-protocol'
 import { BrowserAuth } from '../src/browser-auth.ts'
+import { OneTimeLaunchTokens } from '../src/launch-tokens.ts'
 import type { ConnectionIndexRequest, ConnectionIndexResponse } from '../src/rpc.ts'
 import { RecordCredentials } from './browser-credentials.ts'
 
@@ -366,5 +367,182 @@ describe('BrowserAuth', () => {
 
     await expect(createAuth(new RecordCredentials(), Number.MAX_SAFE_INTEGER))
       .rejects.toThrow(/safe timestamp range/u)
+  })
+})
+
+describe('one-time launch tokens', () => {
+  const AUTHORITY = '127.0.0.1:3080'
+  const HINT = 'run the open command again'
+
+  function oneTimeAuth(store = new RecordCredentials(), processOwner: object = {}): Promise<BrowserAuth> {
+    return BrowserAuth.create(processOwner, credentials(store), 30, () => {}, { oneTime: true, reopenHint: HINT })
+  }
+
+  /** Present a launch URL's query at the root, with extra headers, and return the response. */
+  function present(auth: BrowserAuth, launchUrl: string, headers: Record<string, string> = {}, method = 'GET'): ResponseState {
+    const target = new URL(launchUrl)
+    const res = response()
+    expect(auth.authorizeIndex({ method, url: `/${target.search}`, headers: { host: AUTHORITY, ...headers } }, res.value)).toBe(false)
+    return res.state
+  }
+
+  function signsIn(state: ResponseState): boolean {
+    return state.status === 303 && state.headers?.['set-cookie']?.startsWith('dsh-auth-') === true
+  }
+
+  it('signs in once with each token and refuses its second use with the configured instruction', async () => {
+    const auth = await oneTimeAuth()
+    expect(auth.oneTimeLaunchTokens).toBe(true)
+    const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    const other = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    expect(new URL(other).searchParams.get('token')).not.toBe(new URL(launchUrl).searchParams.get('token'))
+    expect(new URL(launchUrl).searchParams.get('token')).toMatch(/^[A-Za-z0-9_-]{43}$/u)
+    expect(signsIn(present(auth, launchUrl))).toBe(true)
+    expect(present(auth, launchUrl)).toEqual({
+      status: 401,
+      headers: { 'cache-control': 'no-store', 'content-type': 'text/plain; charset=utf-8' },
+      body: `dsh web authentication required; ${HINT}.\n`,
+    })
+    expect(signsIn(present(auth, other))).toBe(true)
+  })
+
+  it('refuses a token at another loopback port or name, naming the address it was made for', async () => {
+    const auth = await oneTimeAuth()
+    for (const host of ['127.0.0.1:3081', 'localhost:3080']) {
+      const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+      expect(present(auth, launchUrl, { host })).toEqual({
+        status: 401,
+        headers: { 'cache-control': 'no-store', 'content-type': 'text/plain; charset=utf-8' },
+        body: `dsh web authentication required; this sign-in link was made for ${AUTHORITY} and signs in only there; ${HINT}.\n`,
+      })
+      expect(present(auth, launchUrl).status).toBe(401)
+    }
+    const forwarded = auth.authenticatedUrl('http://127.0.0.1:4000/')
+    expect(signsIn(present(auth, forwarded, { host: '127.0.0.1:4000' }))).toBe(true)
+  })
+
+  it('refuses Origin: null and accepts Sec-Fetch-Site: same-origin', async () => {
+    const auth = await oneTimeAuth()
+    const opaque = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    expect(present(auth, opaque, { origin: 'null' }).status).toBe(401)
+    expect(present(auth, opaque).status).toBe(401)
+    expect(signsIn(present(auth, auth.authenticatedUrl(`http://${AUTHORITY}/`), { 'sec-fetch-site': 'same-origin' }))).toBe(true)
+  })
+
+  it('drops expired tokens before it counts the five, and refuses more than four token values unread', () => {
+    vi.useFakeTimers()
+    const store = new OneTimeLaunchTokens()
+    const url = new URL(`http://${AUTHORITY}/`)
+    for (let minted = 0; minted < 5; minted += 1) store.mint(url)
+    vi.advanceTimersByTime(60_000)
+    const fresh = store.mint(url)
+    expect(store.waiting).toBe(1)
+    expect(store.redeem([fresh, 'a', 'b', 'c', 'd'], AUTHORITY)).toEqual({ kind: 'refused' })
+    expect(store.waiting).toBe(1)
+    expect(store.redeem([fresh], AUTHORITY)).toEqual({ kind: 'accepted' })
+  })
+
+  it('refuses a token after 60 seconds', async () => {
+    vi.useFakeTimers()
+    const auth = await oneTimeAuth()
+    const fresh = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    const stale = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    vi.advanceTimersByTime(59_999)
+    expect(signsIn(present(auth, fresh))).toBe(true)
+    vi.advanceTimersByTime(1)
+    expect(present(auth, stale).status).toBe(401)
+  })
+
+  it('keeps at most five waiting tokens and drops the oldest when a sixth is minted', async () => {
+    const auth = await oneTimeAuth()
+    const urls = Array.from({ length: 6 }, () => auth.authenticatedUrl(`http://${AUTHORITY}/`))
+    expect(present(auth, urls[0]!).status).toBe(401)
+    for (const url of urls.slice(1)) expect(signsIn(present(auth, url))).toBe(true)
+  })
+
+  it('refuses and consumes a token presented with another Host, from another site, by another method or beside another token', async () => {
+    const auth = await oneTimeAuth()
+    const cases: readonly [Record<string, string>, string?][] = [
+      [{ host: 'localhost:3080' }],
+      [{ host: 'not a host' }],
+      [{ 'sec-fetch-site': 'cross-site' }],
+      [{ 'sec-fetch-site': 'same-site' }],
+      [{ origin: 'http://evil.example' }],
+      [{}, 'HEAD'],
+    ]
+    for (const [headers, method] of cases) {
+      const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+      expect(present(auth, launchUrl, headers, method).status).toBe(401)
+      expect(present(auth, launchUrl).status).toBe(401)
+    }
+    const first = new URL(auth.authenticatedUrl(`http://${AUTHORITY}/`))
+    const second = new URL(auth.authenticatedUrl(`http://${AUTHORITY}/`))
+    const both = new URL(`http://${AUTHORITY}/`)
+    both.searchParams.append('token', first.searchParams.get('token') ?? '')
+    both.searchParams.append('token', second.searchParams.get('token') ?? '')
+    expect(present(auth, both.href).status).toBe(401)
+    expect(present(auth, first.href).status).toBe(401)
+    expect(present(auth, second.href).status).toBe(401)
+    const navigated = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    expect(signsIn(present(auth, navigated, { 'sec-fetch-site': 'none', origin: `http://${AUTHORITY}` }))).toBe(true)
+    const tls = await oneTimeAuth()
+    const secureUrl = new URL(tls.authenticatedUrl('https://studio.example/'))
+    const res = response()
+    tls.authorizeIndex({ method: 'GET', url: `/${secureUrl.search}`, headers: { host: 'studio.example', origin: 'https://studio.example' } }, res.value, true)
+    expect(signsIn(res.state)).toBe(true)
+  })
+
+  it('accepts no process token and keeps waiting tokens across a reload of the same process owner', async () => {
+    const store = new RecordCredentials()
+    const owner = {}
+    const auth = await oneTimeAuth(store, owner)
+    const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    // The same process owner's reusable token, which upstream's mode would accept, signs nothing in.
+    const stock = await createAuth(store, 30, owner)
+    const processUrl = stock.authenticatedUrl(`http://${AUTHORITY}/`)
+    expect(signsIn(present(stock, processUrl))).toBe(true)
+    expect(present(auth, processUrl).status).toBe(401)
+    const reloaded = await oneTimeAuth(store, owner)
+    expect(signsIn(present(reloaded, launchUrl))).toBe(true)
+    expect(present(auth, launchUrl).status).toBe(401)
+  })
+
+  it('exchanges a token once at /connect and consumes one presented with a refused declaration', async () => {
+    const auth = await oneTimeAuth()
+    const publish = vi.fn(() => 'api-operator' as PeerId)
+    const connect = (url: string): ResponseState => {
+      const target = new URL(url)
+      const res = response()
+      auth.authorizeConnect(request(`${target.pathname}${target.search}`), res.value, false, publish)
+      return res.state
+    }
+    const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/connect`)
+    expect(connect(launchUrl).status).toBe(302)
+    expect(connect(launchUrl).status).toBe(401)
+    const elsewhere = new URL(auth.authenticatedUrl('http://127.0.0.1:4000/connect'))
+    const bound = response()
+    auth.authorizeConnect(request(`${elsewhere.pathname}${elsewhere.search}`), bound.value, false, publish)
+    expect(bound.state.body).toBe(`dsh web authentication required; this sign-in link was made for 127.0.0.1:4000 and signs in only there; ${HINT}.\n`)
+    const declared = auth.authenticatedUrl(`http://${AUTHORITY}/connect?interactions=sometimes`)
+    expect(connect(declared).status).toBe(400)
+    expect(connect(declared.replace('interactions=sometimes&', '')).status).toBe(401)
+    expect(publish).toHaveBeenCalledOnce()
+  })
+
+  it('consumes a token on request, as a reach listener does with one it refuses', async () => {
+    const auth = await oneTimeAuth()
+    const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    auth.consumeLaunchTokens([new URL(launchUrl).searchParams.get('token') ?? ''])
+    expect(present(auth, launchUrl).status).toBe(401)
+  })
+
+  it('keeps the reusable process token when the mode is off', async () => {
+    const auth = await createAuth(new RecordCredentials())
+    expect(auth.oneTimeLaunchTokens).toBe(false)
+    const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    expect(auth.authenticatedUrl(`http://${AUTHORITY}/`)).toBe(launchUrl)
+    auth.consumeLaunchTokens([new URL(launchUrl).searchParams.get('token') ?? ''])
+    expect(signsIn(present(auth, launchUrl, { host: AUTHORITY, 'sec-fetch-site': 'cross-site' }))).toBe(true)
+    expect(signsIn(present(auth, launchUrl))).toBe(true)
   })
 })

@@ -286,8 +286,11 @@ export interface WebScaffold {
   mode: WebSnapshotMode
   /** Browser-facing origin for the bound test server (the mount root under `publicMount`). */
   baseUrl: string
-  /** Process-token URL that establishes this scaffold's browser session. */
-  authenticatedUrl: string
+  /**
+   * Launch URL that establishes this scaffold's browser session: the process token, or under Connection's one-time
+   * launch tokens a fresh token on every read.
+   */
+  readonly authenticatedUrl: string
   /** Settled root context (the in-process readiness barrier; headless event subscription is its sanctioned use). */
   ctx: Context
   /** Temp project directory sessions run in (shell/fs tool cwd). */
@@ -769,7 +772,6 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   })
   let port = 0
   let baseUrl = ''
-  let authenticatedUrl = ''
   let cookieHeader = ''
   let publicProxy: PrefixProxy | undefined
   let replayHandle: ReplayHandle | undefined
@@ -951,12 +953,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       publicProxy.setTarget(port)
       baseUrl = `http://${publicHost}:${String(publicProxy.port)}${publicPrefix}`
     }
-    authenticatedUrl = ctx.connection.authenticatedUrl(baseUrl)
     // Chromium resolves *.localhost itself; Node may not. Both scaffold
     // listeners bind loopback, including the optional prefix proxy.
-    const loginUrl = new URL(authenticatedUrl)
-    loginUrl.hostname = '127.0.0.1'
-    const login = await fetch(loginUrl, { redirect: 'manual' })
+    const loginBase = new URL(baseUrl)
+    loginBase.hostname = '127.0.0.1'
+    const login = await fetch(ctx.connection.authenticatedUrl(loginBase.href), { redirect: 'manual' })
     const setCookie = login.headers.get('set-cookie')
     if (login.status !== 303 || login.headers.get('location') !== './' || setCookie === null) {
       throw new Error('web e2e scaffold: browser token exchange did not return its session cookie')
@@ -985,7 +986,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     harnessHome,
     mode,
     baseUrl,
-    authenticatedUrl,
+    get authenticatedUrl() { return ctx.connection.authenticatedUrl(baseUrl) },
     ctx,
     workspaceCwd,
     persistenceRoot,
