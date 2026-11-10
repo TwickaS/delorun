@@ -6,12 +6,13 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
 import { checkEnvironment, cgroupBudget, removeScratch, scratchDir, scratchPlace, statfsOf, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
 import { affectsParity, declaredBuildOutputs, declineClosureOffHost, declineUnansweredDocker, JOURNEY_SPEC, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
-import { closureHostProblem } from '../src/checks/closure.ts'
+import { CLOSURE_SPEC, closureHostProblem, closureRunProblem } from '../src/checks/closure.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
 
@@ -419,6 +420,20 @@ describe('the closure lane', () => {
     const declined = declineClosureOffHost(merge(['delo/apps/cli/src/main.ts']), problem).find(check => check.id === 'tests:closure')
     expect(declined).toMatchObject({ declined: problem, declinedByHost: true, mergeOnly: true })
     expect(declineClosureOffHost(merge(['delo/apps/cli/src/main.ts']), undefined).find(check => check.id === 'tests:closure')?.declined).toBeUndefined()
+  })
+
+  it('names a closure spec that exists in the repository', () => {
+    expect(existsSync(fileURLToPath(new URL(`../../../../${CLOSURE_SPEC}`, import.meta.url)))).toBe(true)
+  })
+
+  it('fails a run that passed no test, skipped one or failed one, and passes one where every test ran and passed', () => {
+    const report = (total: number, passed: number, pending = 0, failed = 0): string => JSON.stringify({ numTotalTests: total, numPassedTests: passed, numFailedTests: failed, numPendingTests: pending, numTodoTests: 0 })
+    expect(closureRunProblem(report(0, 0))).toBe(`no closure test ran; ${CLOSURE_SPEC} found no test to run`)
+    expect(closureRunProblem(report(3, 0, 3))).toBe('3 of 3 closure tests did not run')
+    expect(closureRunProblem(report(3, 2, 0, 1))).toBe('1 of 3 closure tests did not pass')
+    expect(closureRunProblem('')).toMatch(/^the closure specs' report does not read: /u)
+    expect(closureRunProblem('{}')).toBe(`no closure test ran; ${CLOSURE_SPEC} found no test to run`)
+    expect(closureRunProblem(report(3, 3))).toBeUndefined()
   })
 })
 

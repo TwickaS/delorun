@@ -216,6 +216,8 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
       verify: ['verify', '--offline', '--json'],
       plugin: ['plugin', '--profile', 'default', 'list'],
       headless: ['headless', '--help'],
+      'import-home': ['import-home', '--dry-run'],
+      open: ['open', '--print'],
     }
     const help = run(['--help']).output
     const listed = help.slice(help.indexOf('Commands:')).split('\n').slice(1).map(line => /^ {2}(\S+)/u.exec(line)?.[1]).filter(name => name !== undefined)
