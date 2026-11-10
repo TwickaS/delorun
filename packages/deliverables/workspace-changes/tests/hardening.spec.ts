@@ -3,6 +3,7 @@
  * unstarted while the snapshot, diff, gitlink and ignore operations still complete. Each mechanism plants a program
  * that would create a marker file.
  */
+import { spawnSync } from 'node:child_process'
 import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -76,6 +77,15 @@ async function everyOperation(cwd: string, change: () => Promise<void>): Promise
 
 const edit = (cwd: string) => () => writeFile(join(cwd, 'a.txt'), 'one\ntwo\n')
 
+/**
+ * The positive control: plain git, as the person runs it, with no hardening and the given environment, so a case
+ * shows its planted program does run when nothing switches it off. Its exit status is irrelevant; the marker is the
+ * evidence.
+ */
+function plainGit(cwd: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): void {
+  spawnSync('git', args, { cwd, env, stdio: 'ignore', timeout: 30_000 })
+}
+
 // The planted programs are POSIX shell commands and executable hook scripts. Each case runs about a dozen git commands.
 describe.skipIf(process.platform === 'win32')('Host git commands over repository state a confined command can write', { timeout: 60_000 }, () => {
   it('the snapshot ignores a configured file-system monitor', async () => {
@@ -83,6 +93,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     git(cwd, 'config', 'core.fsmonitor', plant('fsmonitor'))
     expect(await everyOperation(cwd, edit(cwd))).toEqual(['a.txt'])
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['status'])
+    expect(await readdir(markers)).toContain('fsmonitor')
   })
 
   it('the snapshot runs no clean filter that a .gitattributes entry selects', async () => {
@@ -92,6 +104,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     await writeFile(join(cwd, '.gitattributes'), '* filter=planted\n')
     expect(await everyOperation(cwd, edit(cwd))).toEqual(['a.txt'])
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['add', 'a.txt'])
+    expect(await readdir(markers)).toContain('clean')
   })
 
   it('the snapshot runs no long-running filter process and completes for a required filter', async () => {
@@ -101,6 +115,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     await writeFile(join(cwd, '.git', 'info', 'attributes'), '*.txt filter=planted\n')
     expect(await everyOperation(cwd, edit(cwd))).toEqual(['a.txt'])
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['add', 'a.txt'])
+    expect(await readdir(markers)).toContain('process')
   })
 
   it('the snapshot runs no repository hook, wherever core.hooksPath points', async () => {
@@ -112,6 +128,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     git(cwd, 'config', 'core.hooksPath', planted)
     await everyOperation(cwd, () => writeFile(join(cwd, 'a.txt'), 'three\n'))
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['add', 'a.txt'])
+    expect(await readdir(markers)).toContain('hooks-path')
   })
 
   it('keeps a filter defined through an included file switched off, even under a name holding "="', async () => {
@@ -122,6 +140,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     await writeFile(join(cwd, '.gitattributes'), '*.txt filter=a=b\n')
     expect(await everyOperation(cwd, edit(cwd))).toEqual(['a.txt'])
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['add', 'a.txt'])
+    expect(await readdir(markers)).toContain('included-clean')
   })
 
   it('a .git file naming another git directory brings none of its programs', async () => {
@@ -138,6 +158,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     await writeFile(join(cwd, '.git'), `gitdir: ${planted}\n`)
     expect(await everyOperation(cwd, edit(cwd))).toEqual(['a.txt'])
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['add', 'a.txt'])
+    expect(await readdir(markers)).toEqual(expect.arrayContaining(['gitfile-fsmonitor', 'gitfile-clean', 'gitfile-hook']))
   })
 
   it('no git command takes configuration or programs from inherited GIT_* variables', async () => {
@@ -147,6 +169,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     vi.stubEnv('GIT_DIR', join(markers, 'elsewhere'))
     expect(await everyOperation(cwd, edit(cwd))).toEqual(['a.txt'])
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['status'], { ...process.env, GIT_DIR: undefined })
+    expect(await readdir(markers)).toContain('parameters')
   })
 
   it('the diff runs no external diff or textconv driver', async () => {
@@ -157,6 +181,8 @@ describe.skipIf(process.platform === 'win32')('Host git commands over repository
     await writeFile(join(cwd, '.gitattributes'), '* diff=planted\n')
     expect(await everyOperation(cwd, edit(cwd))).toEqual(['a.txt'])
     expect(await readdir(markers)).toEqual([])
+    plainGit(cwd, ['diff', '--no-ext-diff', 'a.txt'])
+    expect(await readdir(markers)).toContain('textconv')
   })
 })
 
