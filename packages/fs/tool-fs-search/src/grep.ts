@@ -36,8 +36,6 @@ export const GREP_MAX_LINE_BYTES = 2000
 
 /** Resolved grep-tool caps — plugin config after defaulting (see `Config` in index.ts). */
 export interface GrepToolCaps {
-  /** Whether the tool honours the sandbox provider's `protectedReads` (the `protectedReads` config). */
-  protectedReads: boolean
   /** Max flat matches retained inline; later matches go to the formatted spill file. */
   maxMatches: number
   /** Max bytes retained per matched-line preview. */
@@ -325,7 +323,7 @@ export function applyGrepTool(ctx: Context, caps: GrepToolCaps): void {
     async execute(args, exec) {
       const input = parseGrepArgs(args)
       const run = await runRipgrep(ctx, exec, 'grep', buildGrepCommand(input), caps.rawOutputMaxBytes, caps.graceMs, caps.stderrMaxBytes)
-      const keep = protectedSearchFilter(ctx, exec, 'grep', run.workdir, input.path, caps.protectedReads)
+      const keep = protectedSearchFilter(ctx, exec, 'grep', run.workdir, input.path)
       if (run.noMatches) return { matches: [] }
 
       const all: GrepMatch[] = []

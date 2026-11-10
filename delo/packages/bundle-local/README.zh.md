@@ -41,8 +41,7 @@ kind: "package-bundle"
 | `deepseek-account` | 改变 | `disabled: true`：没有 DeepSeek 账户登录、Platform、用量或充值页面；`llm-deepseek-account` 在没有账户的情况下保持不可用 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `product-analytics` | 改变 | `config.enabled: false`，重申上游的 `appVersion`，并保留上游的 `disabled` 条件，因此该行只在桌面 profile 中挂载，并且在 Delo CLI profile 中不接受任何事件 | `config.enabled: true` | 与此处所写相同；回放不挂载桌面端 Host |
 | `session-telemetry-otel` | 改变 | `disabled: true`：反馈时不再把会话日志前缀发往 DeepSeek 的收集端 | 已启用，`FEEDBACK_ONLY` | 沿用上游的组合：覆盖层省略该行 |
-| `sandbox` | 改变 | `config.protectedHome` 是 harness 主目录（C1 对每个运行时进程都把它设为 Delo 主目录），并带上 C1 的读取豁免（`runtimes`、`skills`、`dsh-runtimes`）：受限命令无法读取 `<home>/secrets` 下的同意存储 | 该行以裸配置挂载，因此提供方不保护任何主目录 | 沿用上游的组合：覆盖层省略该行，因此回放运行上游的限闭 |
-| `tool-fs-search` | 改变 | `config.protectedReads: true`，并重申各组合包的 `sampleOverCapGlobResults: false`：`glob` 与 `grep` 拒绝 Delo 主目录下的路径，与文件工具一致 | 插件的默认值，即 `false`：该防护关闭，因此搜索可以到达主目录 | 沿用上游的组合：覆盖层省略该行 |
+| `sandbox` | 改变 | `config.protectedHome` 是 harness 主目录（C1 对每个运行时进程都把它设为 Delo 主目录），并带上 C1 的读取豁免（`runtimes`、`skills`、`dsh-runtimes`）：受限命令无法读取 `<home>/secrets` 下的同意存储，并且挂载 `read`、`read_image`、`apply_patch`、`glob` 与 `grep` 的每一行（包括每个 agent 预设中的行）都拒绝相同的路径 | 该行以裸配置挂载，因此提供方不保护任何主目录，这些工具也不拒绝任何路径 | 沿用上游的组合：覆盖层省略该行，因此回放运行上游的限闭，这些工具按上游的方式搜索 |
 | `command-feedback` | 改变 | `disabled: true`：没有 `/feedback` 命令 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `ui-message-feedback` | 改变 | `disabled: true`：没有赞、踩以及反馈对话框；上游没有打开外部页面的行 | 已启用 | 沿用上游的组合：覆盖层省略该行 |
 | `ui-settings-account` | 改变 | `disabled: true`：没有账户菜单项、登录对话框与账户分区 | 已启用 | 沿用上游的组合：覆盖层省略该行 |

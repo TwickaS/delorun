@@ -59,7 +59,6 @@ Routine budgets stay out of the model-facing schema: a model that needs surround
 | Key | Default | Meaning |
 |---|---|---|
 | `sampleOverCapGlobResults` | none (required) | `true` samples an over-cap `glob` page across top-level entries; `false` keeps the modification-time-ordered head |
-| `protectedReads` | `false` | Whether the tools honour the sandbox provider's protected reads (see [Protected reads](#protected-reads)) |
 | `globMaxResults` | `100` | Max paths one `glob` call shows inline |
 | `grepMaxMatches` | `250` | Max flat matches one `grep` call retains inline; later matches go to the formatted spill artifact |
 | `grepMaxLineBytes` | `2000` | Byte cap per matched-line preview, preserving UTF-8 boundaries |
@@ -74,7 +73,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 <a id="protected-reads"></a>
 ### Protected reads
 
-The optional `protectedReads` key gates whether the tools honour the mounted `ctx.sandbox` provider's protected reads. It defaults to `false`, the parity value the replay composition rests on, and both tools then keep stock behaviour: they search everywhere the session reaches, even when the provider reports protected reads. Turning it off costs the transcript: a `glob` or `grep` over a directory that contains the protected home lists that home's files and prints their matched lines — a key file's contents included — where `read` and `read_image` refuse the same path. Delo's CLI profiles set it to `true` in the `tool-fs-search` row of `@delo/bundle-local`. With it `true`, a search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under the protected home, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`.
+Both tools honour the mounted `ctx.sandbox` provider's protected reads, as `read` and `read_image` do, and no row setting turns this off. A search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under the protected home, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`. A provider that protects no home, such as the local provider without `protectedHome`, leaves both tools searching everywhere the session reaches.
 
 ### Deployment requirement
 
@@ -82,7 +81,7 @@ Node deployments receive the `@vscode/ripgrep` platform package on supported mac
 
 ### Failures and recovery
 
-Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). With the `protectedReads` config on, the sandbox provider's protected reads add `SEARCH_SANDBOX_DENIED` and leave the protected paths out of a wider search ([Protected reads](#protected-reads)). Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
+Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). The sandbox provider's protected reads add `SEARCH_SANDBOX_DENIED` and leave the protected paths out of a wider search ([Protected reads](#protected-reads)). Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
 
 -----
 

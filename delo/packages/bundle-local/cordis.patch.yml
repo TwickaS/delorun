@@ -14,14 +14,6 @@
   config:
     enabled: false
 
-# Searching the machine must not reach Delo's own home: the search tools' protected-read fence is on, so `glob` and
-# `grep` refuse a path under it as the file tools already do (C16 switch sandbox_protected_reads). A patch replaces
-# the targeted row's whole `config`, so the bundles' over-cap sampling choice is restated.
-- id: tool-fs-search
-  config:
-    sampleOverCapGlobResults: false
-    protectedReads: true
-
 # DeepSeek's account and Platform sign-in (browser PKCE to platform.deepseek.com, account details, Usage and Top-up pages)
 # is removed from Delo's CLI profiles: the first release has no DeepSeek account service. The row stays in upstream's
 # composition for parity, and llm-deepseek-account, which needs a signed-in account, stays inert without it. The
@@ -33,15 +25,6 @@
 # DeepSeek's collector when the person sends feedback, and Delo has no DeepSeek feedback service, so the row is disabled.
 - id: session-telemetry-otel
   disabled: true
-
-# The search tools' protected-read fence, on: with the sandbox row Delo's start configures, `glob` and `grep` refuse a
-# search rooted under the Delo home and leave its paths out of a wider search, as `read` and `read_image` already do.
-# Upstream ships the fence off, so a bare profile keeps searching the whole machine and prints what it finds there. A
-# patch replaces the targeted row's whole `config`, so this row restates upstream's over-cap sampling choice.
-- id: tool-fs-search
-  config:
-    sampleOverCapGlobResults: false
-    protectedReads: true
 
 # The /feedback command and the message feedback surface (Like, Dislike and the dialog) send through that exporter.
 # Upstream offers no row that opens an external page, so Delo's composition hides both instead.
@@ -68,8 +51,11 @@
 # command reads the whole harness home — the consent stores under `secrets/`
 # included. `dshHomePath` is the harness home, which C1 sets to the Delo home
 # for every runtime process; the readable entries are C1's read exemptions,
-# which hold no secret. `delorun start` keeps adding that profile's channel
-# sockets as `deniedSockets` in `run/<profile>/sandbox.patch.yml`.
+# which hold no secret. The provider's protected home is also what every tool
+# row refuses to read or search, the rows inside each agent preset included:
+# `read`, `read_image`, `apply_patch`, `glob` and `grep` take it from this row
+# and from no setting of their own. `delorun start` keeps adding that profile's
+# channel sockets as `deniedSockets` in `run/<profile>/sandbox.patch.yml`.
 - id: sandbox
   config:
     protectedHome: !!js dshHomePath()

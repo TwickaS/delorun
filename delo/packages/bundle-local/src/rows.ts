@@ -60,14 +60,8 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'sandbox',
     kind: 'changed',
-    reason: 'The sandbox row carries C1\'s home protection: `protectedHome` is the Delo home, with C1\'s read exemptions, so a confined command cannot read the consent stores under its `secrets/` directory; upstream mounts the row with no protected home.',
-    parity: { kind: 'upstream', reason: 'The replay runs upstream\'s confinement: the overlay leaves the row out, so the provider protects no home and a recorded scenario that reads the harness home replays as it was recorded.' },
-  },
-  {
-    id: 'tool-fs-search',
-    kind: 'changed',
-    reason: 'Searching the machine no longer reaches Delo\'s own home: `protectedReads` is on, so `glob` and `grep` refuse a path under it as the file tools already do; upstream leaves the fence off.',
-    parity: { kind: 'upstream', reason: 'C16\'s changed default takes upstream\'s value, the fence\'s own default, off; the overlay does not restate the row.' },
+    reason: 'The sandbox row carries C1\'s home protection: `protectedHome` is the Delo home, with C1\'s read exemptions, so a confined command cannot read the consent stores under its `secrets/` directory, and the read and search tools of every row, the agent presets\' included, refuse the same paths; upstream mounts the row with no protected home.',
+    parity: { kind: 'upstream', reason: 'The replay runs upstream\'s confinement: the overlay leaves the row out, so the provider protects no home, the read and search tools refuse nothing, and a recorded scenario that reads or searches the harness home replays as it was recorded.' },
   },
   {
     id: 'command-feedback',

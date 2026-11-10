@@ -74,14 +74,6 @@ export const inject = ['tools', 'systemPrompt', 'subprocess', 'workingDirectory'
 export interface Config {
   /** Whether an over-cap `glob` page is sampled across top-level entries instead of taking the modification-time head. */
   sampleOverCapGlobResults: boolean
-  /**
-   * Honour the sandbox provider's `protectedReads` in `glob` and `grep`: drop the paths under the
-   * protected home from a wider search's results and refuse a protected search root with
-   * `SEARCH_SANDBOX_DENIED`. Off, both tools keep stock behaviour and search everywhere the session
-   * reaches, even when the provider reports protected reads. This is Delo's C16 switch
-   * `sandbox_protected_reads`, off in the parity composition.
-   */
-  protectedReads?: boolean
   /** Max paths one `glob` call retains inline; later paths go to the formatted spill file. */
   globMaxResults?: number
   /** Max flat matches one `grep` call retains inline; later matches go to the formatted spill file. */
@@ -105,7 +97,6 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   sampleOverCapGlobResults: z.boolean().required(),
-  protectedReads: z.boolean().default(false),
   globMaxResults: z.number().default(GLOB_MAX_RESULTS),
   grepMaxMatches: z.number().default(GREP_MAX_MATCHES),
   grepMaxLineBytes: z.number().default(GREP_MAX_LINE_BYTES),
@@ -151,7 +142,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   assertPositiveInteger('timeoutMs', resolved.timeoutMs)
   applyGlobTool(ctx, {
     sampleOverCapGlobResults: resolved.sampleOverCapGlobResults,
-    protectedReads: resolved.protectedReads,
     maxResults: resolved.globMaxResults,
     maxMetaBytes: resolved.searchMetaMaxBytes,
     rawOutputMaxBytes: resolved.rawOutputMaxBytes,
@@ -160,7 +150,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     timeoutMs: resolved.timeoutMs,
   })
   applyGrepTool(ctx, {
-    protectedReads: resolved.protectedReads,
     maxMatches: resolved.grepMaxMatches,
     maxLineBytes: resolved.grepMaxLineBytes,
     maxMetaBytes: resolved.searchMetaMaxBytes,
