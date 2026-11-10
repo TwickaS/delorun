@@ -6,7 +6,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./plugin-interface.json": "./plugin-interface.json"
   },
   "dependencies": {
     "@delo/contract-release-manifest": "workspace:*"

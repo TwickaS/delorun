@@ -4,6 +4,7 @@
  * ([package manager](./package-manager.ts)); upstream's parser refuses the desktop app's profile for
  * `plugin`, as it does for `dsh`. `delorun headless …` boots upstream's `headless` profile through Delo's composition
  * ([headless](./headless.ts)), not through upstream's command line.
+ * `delorun plugin check` is Delo's own and reaches upstream's command line not at all.
  *
  * `delorun plugin` boots no Host and has no composition: no sandbox overlay, no sandbox invariants and no pre-start
  * steps. Under upstream's profile file lock it runs pnpm in the profile directory with the person's arguments and this
@@ -26,6 +27,7 @@ import { useHomeShared } from './home-exclusion.ts'
 import { selectCommandProfile } from './profile.ts'
 import { runUpstreamProfile, upstreamDependencies } from './start.ts'
 import { shippedPackageManager } from './package-manager.ts'
+import { runPluginCheck } from './plugin-check.ts'
 
 /**
  * Run upstream's command line with these arguments.
@@ -64,11 +66,14 @@ export async function plugin(args: readonly string[], context: CommandContext, r
   return undefined
 }
 
-/** `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management. */
+/**
+ * `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management; `delorun plugin check <directory>` is
+ * Delo's own ([plugin check](./plugin-check.ts)), which needs no profile.
+ */
 export const pluginCommand: CliCommand = {
   name: 'plugin',
-  summary: 'Manage a profile\'s plugins, as dsh plugin does',
-  run: (args, context) => plugin(args, context),
+  summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit',
+  run: async (args, context) => args[0] === 'check' ? runPluginCheck(args.slice(1), context) : plugin(args, context),
 }
 
 /**

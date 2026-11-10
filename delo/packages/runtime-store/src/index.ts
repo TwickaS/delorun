@@ -13,7 +13,7 @@ export { runtimeStoreDescriber, storeRemedies } from './refusal.ts'
 export { launchFiles, launchProtocolOf, SUPPORTED, type LaunchCommand, type LauncherSupport } from './launch.ts'
 export { parseRuntimeVersion, StorePaths } from './paths.ts'
 export type { RuntimePointers } from './pointer.ts'
-export type { ReleaseFileBytes, TrustedRootSource, VerifiedRelease } from './release.ts'
+export { readStoredRelease, type ReleaseFileBytes, type TrustedRootSource, type VerifiedRelease } from './release.ts'
 export {
   HomeRuntimeStore,
   type ChannelRelease,

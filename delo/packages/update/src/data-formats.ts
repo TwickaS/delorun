@@ -22,35 +22,29 @@ import {
 } from '@delo/contract-update-report'
 import type { SemanticVersion, Sha256Hex } from '@delo/contract-release-manifest'
 import { z } from 'zod'
+import deloRecords from './data-records.json' with { type: 'json' }
 
 /**
  * The versioned records Delo's own packages keep under the home and a previous release reads, by record name, at the
- * version this release writes. A record whose writer changes its version changes this table in the same commit, so the
- * next update names the data change; `delo/apps/cli/tests/update-records.spec.ts` checks each entry against what its
- * owner writes.
+ * version this release writes, as `data-records.json` beside this module lists them. A record whose writer changes its
+ * version changes that file in the same commit, so the next update names the data change and the release tool refuses
+ * to sign the change as a patch release; `delo/apps/cli/tests/update-records.spec.ts` checks each entry against what
+ * its owner writes. The records:
+ *
+ * - `update-record`: `run/<profile>/update.json`, the update record (C19, C3).
+ * - `store-layout`: `runtimes/store.json` (C1).
+ * - `profile-safety`: `profiles/<profile>/delo-safety.json` (C3).
+ * - `safe-mode`: `run/<profile>/safe-mode.json` (C3).
+ * - `update-report`: `profiles/<profile>/delo-update-report.json` (C3).
+ * - `session-data-copy`: `data-copies/<version>/copy.json` (C3).
+ * - `data-restore-journal`: `data-copies/restore.json` (C3).
+ * - `storage:delo_workspaces`: the `delo_workspaces` storage domain under `storages/`, its `defineDomain` version
+ *   (`@delo/plugin-workspaces`).
+ * - `storage:delo_chat_states`: the `delo_chat_states` storage domain under `storages/`, its `defineDomain` version
+ *   (`@delo/plugin-chat-states`).
+ * - `trash-item`: `trash/items/<id>/item.json`, a trash item's record, at `TRASH_ITEM_SCHEMA_VERSION` (`@delo/trash`).
  */
-export const DELO_RECORDS: Readonly<Record<string, number>> = Object.freeze({
-  /** `run/<profile>/update.json`, the update record (C19, C3). */
-  'update-record': 1,
-  /** `runtimes/store.json` (C1). */
-  'store-layout': 1,
-  /** `profiles/<profile>/delo-safety.json` (C3). */
-  'profile-safety': 1,
-  /** `run/<profile>/safe-mode.json` (C3). */
-  'safe-mode': 1,
-  /** `profiles/<profile>/delo-update-report.json` (C3). */
-  'update-report': 2,
-  /** `data-copies/<version>/copy.json` (C3). */
-  'session-data-copy': 1,
-  /** `data-copies/restore.json` (C3). */
-  'data-restore-journal': 1,
-  /** The `delo_workspaces` storage domain under `storages/`, its `defineDomain` version (`@delo/plugin-workspaces`). */
-  'storage:delo_workspaces': 1,
-  /** The `delo_chat_states` storage domain under `storages/`, its `defineDomain` version (`@delo/plugin-chat-states`). */
-  'storage:delo_chat_states': 1,
-  /** `trash/items/<id>/item.json`, a trash item's record, at `TRASH_ITEM_SCHEMA_VERSION` (`@delo/trash`). */
-  'trash-item': 1,
-})
+export const DELO_RECORDS: Readonly<Record<string, number>> = Object.freeze({ ...deloRecords })
 
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u)
 const dataFormatsSchema = z.strictObject({

@@ -79,6 +79,7 @@ function recording(seen: RunProfileOptions[], stops: string[], overrides: readon
         shutdown: (code) => { stops.push(`shutdown ${String(code)}`); return Promise.resolve() },
         dispose: () => { stops.push('dispose'); return Promise.resolve() },
         watchChats: () => undefined,
+        watchUpdates: () => Promise.resolve(),
         studio: () => undefined,
         studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
       })

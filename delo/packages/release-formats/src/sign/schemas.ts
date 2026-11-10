@@ -8,7 +8,9 @@ import {
   DESKTOP_PLATFORMS,
   RELEASE_FILE_SIZE_LIMITS,
   RELEASE_SCHEMAS,
+  RELEASE_SUMMARY_MAX_LENGTH,
   RUNTIME_PLATFORMS,
+  isValidSummary,
   type AdvisoryId,
   type KeyId,
   type NpmIntegrity,
@@ -93,7 +95,13 @@ const desktopRef = fileRef.extend({ sha512: z.string().regex(/^[A-Za-z0-9+/]{86}
 /** An image's reference; `seccomp`, when present, is the release file holding the profile its containers run under. */
 export const ImageRefSchema = z.strictObject({ repository: z.string().min(1), index: oci, platforms: z.strictObject({ 'linux/amd64': oci, 'linux/arm64': oci }), seccomp: fileRef.exactOptional() })
 
-/** The signed content of a release manifest. */
+/** A release summary as `isValidSummary` of the contract package defines it. */
+export const ReleaseSummarySchema = z.string().refine(isValidSummary, `a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters, no control, format or line-break character, and no whitespace at either end`)
+
+/**
+ * The signed content of a release manifest. `security` and `summary` are optional, so a manifest signed before they
+ * existed still reads; signing requires both (`ManifestDraftSchema` in `release.ts`).
+ */
 export const ManifestSchema = z.strictObject({
   schema: z.literal(RELEASE_SCHEMAS.manifest),
   version,
@@ -109,6 +117,8 @@ export const ManifestSchema = z.strictObject({
   install: z.strictObject({ sh: fileRef, ps1: fileRef }),
   rebuild: z.strictObject({ record: fileRef, builders: z.array(z.strictObject({ name: z.string().min(1), ci: z.literal(false) })).min(1) }),
   advisories: z.strictObject({ report: fileRef, accepted: z.array(z.string().regex(/^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/u).transform(value => brandString<AdvisoryId>(value))) }),
+  security: z.boolean().exactOptional(),
+  summary: ReleaseSummarySchema.exactOptional(),
 })
 
 /** The signed content of a runtime file list. */

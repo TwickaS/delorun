@@ -83,6 +83,7 @@ const dependencies: HeadlessDependencies = {
       shutdown: async () => { await ctx.fiber.dispose() },
       dispose: async () => { await ctx.fiber.dispose() },
       watchChats: () => {},
+      watchUpdates: () => Promise.resolve(),
       studio: () => undefined,
       studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
     } satisfies BootedProfile

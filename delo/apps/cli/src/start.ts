@@ -56,6 +56,8 @@ import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.t
 import { launcherAnchor } from './update/trusted-root.ts'
 import { loadDeloEnvironment } from './launch-environment.ts'
 import { registerFatalRelease } from './last-resort.ts'
+import { runtimePlatformOf } from './update/channel.ts'
+import { startNoticeLine, watchUpdates, type UpdateWatchOptions } from './update/notice-host.ts'
 
 /**
  * Adds `@delo/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}).
@@ -183,6 +185,12 @@ export interface BootedProfile {
    * @param gate - the gate.
    */
   readonly watchChats: (gate: CountingChatGate) => void
+  /**
+   * Attach the update check to the Host ([notice-host](./update/notice-host.ts)).
+   * @param options - the home, the profile, the platform, the running version and the terminal line.
+   * @returns once the check is attached, or its record removed when the person switched it off.
+   */
+  readonly watchUpdates: (options: UpdateWatchOptions) => Promise<void>
   /**
    * The studio's loopback listener.
    * @returns its host and port, or `undefined` when the profile serves no studio.
@@ -320,6 +328,7 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
     dispose: async () => { await ctx.fiber.dispose() },
     watchChats: (gate) => { watchChats(ctx, gate) },
     devices: () => localDeviceApproval(ctx),
+    watchUpdates: async options => watchUpdates(ctx, options),
     // The CLI profile's invariants require the service, so it is absent only in a profile that holds no turn.
     releaseTurns: () => { ctx.get('deloTurnGate')?.release() },
     studio: () => {
@@ -518,6 +527,9 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     })
   }
   booted.releaseTurns()
+  if (stored !== undefined) {
+    await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) } })
+  }
   return runningHost(booted, request, async () => {
     if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root)
   })
@@ -603,9 +615,11 @@ export async function startDetached(home: string, profile: string, output: Comma
   while (Date.now() < deadline) {
     const status = await answeringStatus(home, profile)
     if (status?.state === 'running' && status.pid === child.pid) {
+      const notice = await startNoticeLine(home, profile, process.env)
       output.stdout([
         `Delo is running in the background for the profile ${profile} (process ${String(status.pid)})${status.studio === undefined ? '' : ` at ${status.studio}`}; it keeps running after this terminal closes.`,
         'See it with delorun status, follow its log with delorun logs --follow, and stop it with delorun stop.',
+        ...notice === undefined ? [] : [notice],
         '',
       ].join('\n'))
       await announceStudio(home, profile, open, output, opener)

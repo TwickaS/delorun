@@ -303,6 +303,34 @@ export interface ReleaseManifest {
   readonly rebuild: { readonly record: FileRef, readonly builders: readonly RebuildBuilder[] }
   /** The advisory check's report and every accepted advisory. */
   readonly advisories: { readonly report: FileRef, readonly accepted: readonly AdvisoryId[] }
+  /**
+   * Whether the release is marked as a security fix. Signing always writes it; a reader treats an absent value, which
+   * only a manifest signed before the field existed holds, as false.
+   */
+  readonly security?: boolean
+  /**
+   * The release's one-line summary, valid by {@link isValidSummary}. Signing always writes it; a reader treats
+   * an absent value as no summary.
+   */
+  readonly summary?: string
+}
+
+/** The most Unicode code points a release summary holds. */
+export const RELEASE_SUMMARY_MAX_LENGTH = 200
+
+/** {@link isValidSummary}'s rule; the `u` flag counts a surrogate pair as one character, and no `g` or `y` flag keeps `test` stateless. */
+const RELEASE_SUMMARY_PATTERN = /^(?!\s)(?!.*\s$)(?=.{1,200}$)[^\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+$/u
+
+/**
+ * Whether a text is a valid release summary: 1 to {@link RELEASE_SUMMARY_MAX_LENGTH} Unicode code points (a surrogate
+ * pair counts once), no control (Cc), format (Cf), line separator (Zl) or paragraph separator (Zp) character, and no
+ * whitespace at either end, so it is never blank. Terminals and the studio print the summary, so it carries no line
+ * break, terminal escape or bidirectional override.
+ * @param text - the candidate summary.
+ * @returns true when the text is a valid summary.
+ */
+export function isValidSummary(text: string): boolean {
+  return RELEASE_SUMMARY_PATTERN.test(text)
 }
 
 /** Mode of a runtime file. */

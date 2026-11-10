@@ -35,7 +35,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'plugin-manager',
     kind: 'changed',
-    reason: 'Plugin management protects Delo\'s consent and guard rows, the update gate and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components.',
+    reason: 'Plugin management protects Delo\'s consent and guard rows, the update gate, the update check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components.',
     parity: { kind: 'upstream', reason: 'The replay runs upstream\'s protection: the overlay leaves the row out, so `plugin_manager` lists and refuses the recorded scenarios\' rows as upstream does.' },
   },
   {
@@ -155,6 +155,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'The C16 switch `update_turn_refusal` on: while `delorun update` or a stop waits for running chats, the first step of every new turn is refused with `UPDATE_PENDING`, so the wait ends once the running turns end; and the first step of every turn waits until `delorun` has checked the booted Host\'s rows and services (`holdUntilChecked`). The plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the deloTurnGate service is absent, so every turn starts as upstream starts it.' },
+  },
+  {
+    id: 'delo-update-check',
+    kind: 'added',
+    reason: 'The C16 switch `update_check` on: at start and once a day while the Host runs, the channel\'s newest release is fetched and verified as an update verifies it, and the studio shows a notice when it is newer; upstream makes no such request, and the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'Stock DSH makes no request for a newer release, and a disabled row mounts nothing: no service, no route and no check.' },
   },
   {
     id: 'delo-trash',

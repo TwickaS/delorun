@@ -111,8 +111,8 @@ export interface PlannedParitySwitch extends ParitySwitchBase {
 export type ParitySwitchEntry = BuiltParitySwitch | PlannedParitySwitch
 
 /**
- * The registry: one entry per model-visible Delo change, plus the feature switches of the doctor and the studio
- * additions. `defaultValue` applies in
+ * The registry: one entry per model-visible Delo change, plus the feature switches of the doctor, the studio
+ * additions and the update check. `defaultValue` applies in
  * Delo's default composition and `parityValue` applies in the parity composition.
  */
 export const PARITY_SWITCHES = [
@@ -421,6 +421,22 @@ export const PARITY_SWITCHES = [
       module: '@deepseek-ai/dsh-client-connection',
       source: 'packages/client/connection/src/index.ts',
       key: 'oneTimeLaunchTokens',
+    },
+    sources: [],
+  },
+  {
+    id: 'update_check',
+    state: 'built',
+    registeredBy: '@delo/bundle-local, its delo-update-check row',
+    defaultValue: true,
+    parityValue: false,
+    // A request for the channel's newest release and a notice in the studio change nothing a model reads: a feature
+    // switch. Off, the row provides no service and registers no route, so no check runs, as in stock DSH.
+    modelVisible: false,
+    field: {
+      module: '@delo/bundle-local/update-check',
+      source: 'delo/packages/bundle-local/src/update-check.ts',
+      key: 'enabled',
     },
     sources: [],
   },

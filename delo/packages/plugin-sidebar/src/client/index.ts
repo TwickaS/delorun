@@ -6,7 +6,8 @@
  * wide sidebar hides upstream's New Session button, and the foot is one row.
  * Delo's chat-states plugin (`ctx.deloChatStates`) adds the Snoozed and
  * Settled shelves, snoozing, settling and wakings; the list follows it
- * arriving or leaving.
+ * arriving or leaving. Below the list, a quiet notice names a newer Delorun
+ * release when the harness's update check found one.
  *
  * The plugin applies only while the Delo look is on (the `deloStudio`
  * service); with the stock look it registers nothing, and every sidebar and
@@ -14,6 +15,8 @@
  * @module @delo/plugin-sidebar/client
  */
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the 'connection/reset' event merge and the connection service's type.
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.contextMenus merge, whose open menu keeps its chat's row lit.
@@ -43,6 +46,8 @@ import { Sidebar, type SidebarInjected } from './Sidebar.tsx'
 import { SidebarSettingsSection, type SidebarSettingsInjected } from './SettingsSection.tsx'
 import { UndoNotice, type UndoNoticeInjected } from './UndoNotice.tsx'
 import { createUndoLine } from './undo.ts'
+import { fetchUpdateNotice, UpdateNoticeStore } from './update-notice.ts'
+import type { UpdateNoticeFace } from './UpdateNotice.tsx'
 
 export type { RowDrag, RowSnoozeOption, RowStateActions, MenuPoint } from './ChatRow.tsx'
 export type { SidebarInjected, SidebarProps, SidebarSources } from './Sidebar.tsx'
@@ -52,6 +57,8 @@ export type { SidebarSettingsInjected, SidebarSettingsProps } from './SettingsSe
 export type { FootLauncherProps } from './FootLauncher.tsx'
 export type { UndoNoticeInjected, UndoNoticeProps } from './UndoNotice.tsx'
 export { createUndoLine, type UndoEntry, type UndoKind, type UndoLine } from './undo.ts'
+export { DISMISSED_KEY, fetchUpdateNotice, UpdateNoticeResponseSchema, UpdateNoticeStore, type DismissalStorage } from './update-notice.ts'
+export { UpdateNoticeCard, type UpdateNoticeCardProps, type UpdateNoticeFace } from './UpdateNotice.tsx'
 export { GENERATIVE_SCENES, GenerativeArt, seededRandom, type GenerativeScene } from './GenerativeArt.tsx'
 export { IconPicker, ICON_EMOJIS, type IconPickerProps, type IconPickerTarget } from './IconPicker.tsx'
 export { GLYPHS, WorkspaceBadge, WorkspaceIconsContext } from './WorkspaceBadge.tsx'
@@ -215,8 +222,8 @@ export const preference: SidebarInjected['preference'] = {
 }
 
 /**
- * While the Delo look provides `deloStudio`, register the dictionaries, the chat list, the header art, the Sidebar section and T3 Code's foot (its Settings
- * button and undo notice in one row), and hide upstream's New Session button while the list offers its own.
+ * While the Delo look provides `deloStudio`, register the dictionaries, the chat list with the update notice below it, the header art, the Sidebar section
+ * and T3 Code's foot (its Settings button and undo notice in one row), and hide upstream's New Session button while the list offers its own.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: Context): void {
@@ -259,6 +266,12 @@ export function applyStudio(ctx: Context): void {
     ctx.uiWorkspace.unpinSession(id).catch((error: unknown) => { console.warn('delo sidebar: the chat was not unpinned', error) })
   }
   const undoLine = createUndoLine()
+  const updates = new UpdateNoticeStore(fetchUpdateNotice, preference)
+  const refreshMinutes: HostObservable<number> = { getSnapshot: () => settings.getSnapshot().updateNoticeRefreshMinutes, subscribe: settings.subscribe }
+  ctx.effect(() => updates.start(refreshMinutes, listener => ctx.on('connection/reset', listener)), 'delo-sidebar: update notice reads')
+  // A page a reach listener served, a remote session, shows the notice's text only, with no control.
+  const remote = (ctx.get('connection') as ConnectionHandle | undefined)?.remoteMedia === 'placeholder'
+  const updateNotice: UpdateNoticeFace = { notice: updates.visible, dismiss: remote ? null : (release) => { updates.dismiss(release) } }
   let actionsFor: DeloChatStates | undefined
   let actions: RowStateActions | null = null
   const chatStatesSource = <T,>(pick: (service: DeloChatStates) => HostObservable<T>, fallback: T) =>
@@ -303,6 +316,7 @@ export function applyStudio(ctx: Context): void {
     },
     preference,
     undoLine,
+    updateNotice,
   }
   ctx.effect(() => ctx.slots.inject('sidebar.workspaces.list', () => ctx.slots.register({
     name: 'sidebar.workspaces.list', locale: NS, inject: () => list,

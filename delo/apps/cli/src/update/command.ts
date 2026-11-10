@@ -6,21 +6,29 @@
  * snapshot and every rollback run git, so the command refuses before it asks the home process for anything when git
  * cannot run on this computer.
  *
- * - `--check` prints the report and changes nothing in the profile or the active runtime.
+ * - `--check` runs the update check ([notice](./notice.ts)) on demand, whatever the profile's switch says: it fetches
+ *   and verifies only the channel's signed metadata, needs no home process, prints the notice's line, and installs and
+ *   changes nothing.
  * - `--yes` confirms a report with no `disabled` or `removed` item and no unverified item, and takes the copy when the
  *   data differs.
  * - `--data-copy` takes a copy when the data does not differ; `--no-data-copy` declines it when it does.
  *
  * @module @delo/cli/update/command
  */
+import { fileURLToPath } from 'node:url'
 import { confirm, isCancel, select } from '@clack/prompts'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { UpdateReport } from '@delo/contract-update-report'
 import { queryHomeStatus, sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
 import { historyGitProblem } from '@delo/profile-safety'
 import { confirmsWithoutAsking, dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE } from '@delo/update'
+import { UPDATE_CHECK_DEFAULTS } from '@delo/bundle-local/update-check'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
+import { runtimePlatformOf } from './channel.ts'
+import { checkForUpdate, noticeLines, noticeOf, profileReader, runningRelease, type CheckOptions } from './notice.ts'
+import { runtimeOfFile, type RunningRuntime } from './runtime.ts'
+import { launcherAnchor } from './trusted-root.ts'
 
 /** The questions the command asks; specs answer them. */
 export interface UpdatePrompts {
@@ -50,6 +58,54 @@ export const TERMINAL_PROMPTS: UpdatePrompts = {
     const answer = await select({ message: 'The chat data changes format. Take a copy first?', options: [{ value: true, label: 'Copy the chat data (recommended)' }, { value: false, label: 'Continue without the copy', hint: note }], initialValue: true })
     return isCancel(answer) ? true : answer
   },
+}
+
+/** What `delorun update --check` reads outside this module; specs replace them. */
+export interface UpdateCheckDependencies {
+  /**
+   * The runtime this command runs.
+   * @param home - the resolved Delo home.
+   * @returns its version and whether it runs from the store.
+   */
+  readonly runtime: (home: string) => RunningRuntime
+  /** The fetch, the clock and the publication the check uses; contract C2's by default. */
+  readonly check?: Pick<CheckOptions, 'fetch' | 'now' | 'publication'>
+}
+
+/** The check's dependencies in a real run. */
+export const CHECK_DEPENDENCIES: UpdateCheckDependencies = {
+  runtime: home => runtimeOfFile(home, fileURLToPath(import.meta.url)),
+}
+
+/**
+ * `delorun update --check`: run the update check now and print what it found.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile, whose record the check writes and whose plugins it counts.
+ * @param context - where the command writes.
+ * @param dependencies - the runtime and the check's fetch, clock and publication.
+ * @returns 0 when the check verified the channel's newest release, 1 when it failed.
+ */
+async function runCheck(home: string, profile: string, context: CommandContext, dependencies: UpdateCheckDependencies): Promise<CommandResult> {
+  const runtime = dependencies.runtime(home)
+  if (!runtime.store) {
+    context.stderr('delorun update --check: this Delo does not run from the runtime store, so it has no release channel to check; install Delo with its launcher.\n')
+    return EXIT.failed
+  }
+  const platform = runtimePlatformOf(process.platform, process.arch)
+  const anchor = launcherAnchor(home, context.env)
+  const record = await checkForUpdate({ home, profile, platform, running: runtime.version, anchor, timeoutMs: UPDATE_CHECK_DEFAULTS.timeoutSeconds * 1000, ...dependencies.check })
+  if (record.failure !== undefined) {
+    context.stderr(`delorun update --check: the check failed, so nothing is known about a newer release: ${record.failure}\n`)
+    return EXIT.failed
+  }
+  const running = await runningRelease(home, platform, runtime.version, await anchor.root())
+  const notice = await noticeOf(record, running, profileReader(home, profile))
+  if (notice === undefined) {
+    context.stdout(`Delorun ${running.delo} is the newest release on the ${running.channel} channel.\n`)
+    return EXIT.ok
+  }
+  for (const line of noticeLines(notice)) context.stdout(`${line}\n`)
+  return EXIT.ok
 }
 
 /** The options `delorun update` takes. */
@@ -187,12 +243,18 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
  * @param args - the arguments after `update`.
  * @param context - the environment and output.
  * @param prompts - the questions; the terminal's by default.
- * @returns 0 when the update committed, nothing needed updating, `--check` printed the report or the person declined;
- *   1 when it was refused, rolled back or failed; 3 when no home process runs.
+ * @param checks - what `--check` reads; the real runtime and contract C2's publication by default.
+ * @returns 0 when the update committed, nothing needed updating, `--check` verified the channel or the person
+ *   declined; 1 when it was refused, rolled back or failed, or `--check` failed; 2 for a wrong command line; 3 when no
+ *   home process runs.
  */
-export async function runUpdate(args: readonly string[], context: CommandContext, prompts: UpdatePrompts = TERMINAL_PROMPTS): Promise<CommandResult> {
+export async function runUpdate(args: readonly string[], context: CommandContext, prompts: UpdatePrompts = TERMINAL_PROMPTS, checks: UpdateCheckDependencies = CHECK_DEPENDENCIES): Promise<CommandResult> {
   const values = parseOptions('update', args, UPDATE_OPTIONS)
   const { home, profile } = await prepareHome(context, values.profile)
+  if (values.check === true) {
+    if (values.yes === true || values['data-copy'] !== undefined || values['no-data-copy'] !== undefined) throw new CliError(EXIT.usage, 'delorun update: --check applies nothing, so it takes no --yes, --data-copy or --no-data-copy')
+    return runCheck(home.path, profile, context, checks)
+  }
   try {
     await queryHomeStatus(home.path, profile, HOME_STATUS_TIMEOUT_MS)
   } catch (_notRunning) {
@@ -212,7 +274,6 @@ export async function runUpdate(args: readonly string[], context: CommandContext
     return EXIT.ok
   }
   for (const line of reportLines(report)) context.stdout(`${line}\n`)
-  if (values.check === true) return EXIT.ok
   const decision = await decide(report, values, prompts, context)
   if (!decision.apply) {
     context.stdout('Nothing changed.\n')
@@ -235,9 +296,9 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   }
 }
 
-/** `delorun update [--yes] [--check] [--data-copy | --no-data-copy] [--profile <name>]`. */
+/** `delorun update [--check | --yes] [--data-copy | --no-data-copy] [--profile <name>]`. */
 export const updateCommand: CliCommand = {
   name: 'update',
-  summary: 'Fetch the newest release, show what it changes, and apply it: --check, --yes, --data-copy, --no-data-copy',
+  summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --yes, --data-copy, --no-data-copy',
   run: async (args, context) => runUpdate(args, context),
 }

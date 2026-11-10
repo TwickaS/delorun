@@ -34,7 +34,7 @@ function slowProfile(): { readonly booted: BootedProfile, readonly exits: number
   }
   const shutdown = createProcessShutdown(dispose, (code) => { exits.push(code) }, () => undefined)
   return {
-    booted: { rows: () => [], providerOf: () => undefined, releaseTurns: () => undefined, shutdown: code => shutdown.shutdown(code), dispose, watchChats: () => undefined, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) },
+    booted: { rows: () => [], providerOf: () => undefined, releaseTurns: () => undefined, shutdown: code => shutdown.shutdown(code), dispose, watchChats: () => undefined, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) },
     exits,
     disposed: () => disposed,
   }

@@ -212,7 +212,7 @@ describe('runUpdate', () => {
     const path = process.env.PATH
     process.env.PATH = mkdtempSync(join(tmpdir(), 'delo-no-git-'))
     try {
-      await expect(update(['--check'])).rejects.toMatchObject({
+      await expect(update([])).rejects.toMatchObject({
         exit: EXIT.failed,
         message: 'delorun update: Delo saves the profile\'s history with git before it updates, so it can go back, and git cannot run here: no git command is on PATH. Install git, then run delorun update again. Nothing was fetched or changed.',
       })
@@ -236,10 +236,10 @@ describe('runUpdate', () => {
     expect(sent('update.apply')).toHaveLength(0)
   })
 
-  it('prints the report and the phases it passed through, and changes nothing, with --check', async () => {
+  it('prints the report and the phases it passed through, and changes nothing, when the person declines', async () => {
     await homeAnswering({ prepare: prepared(report({ items: [CHANGED_BUNDLE] })) })
 
-    expect(await update(['--check'])).toBe(EXIT.ok)
+    expect(await update([], { confirm: async () => Promise.resolve(false) })).toBe(EXIT.ok)
 
     expect(output.stdout).toContain('… fetching\n')
     expect(output.stdout).toContain('Update from Delo 1.0.0 (DSH 0.2.2) to Delo 1.1.0 (DSH 0.2.2) on the stable channel.\n')
@@ -407,26 +407,26 @@ describe('runUpdate', () => {
   it('reports the home process\'s refusal of the report, with its detail when it gives one', async () => {
     await homeAnswering({ prepare: [{ ok: false, error: 'UPDATE_PENDING', detail: 'an update is already running' }] })
 
-    const failure = await update(['--check']).catch((error: unknown) => error)
+    const failure = await update([]).catch((error: unknown) => error)
 
     expect(failure).toMatchObject({ exit: EXIT.failed, message: 'delorun update: the home process refused to prepare the update: UPDATE_PENDING\nan update is already running' })
   })
 
   it('reports a refusal without a detail by its code alone', async () => {
     await homeAnswering({ prepare: [{ ok: false, error: 'SCHEMA_VIOLATION' }] })
-    await expect(update(['--check'])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: SCHEMA_VIOLATION' })
+    await expect(update([])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: SCHEMA_VIOLATION' })
   })
 
   it('reports an answer with no lines as no answer, and says nothing was applied', async () => {
     await homeAnswering({ prepare: [] })
 
-    await expect(update(['--check'])).rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun update: the home process ended the request to prepare the update without an answer. Nothing was applied. Its log records why: delorun logs home' })
+    await expect(update([])).rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun update: the home process ended the request to prepare the update without an answer. Nothing was applied. Its log records why: delorun logs home' })
   })
 
   it('takes no progress line for the final answer of a prepare that ended without one', async () => {
     await homeAnswering({ prepare: [{ ok: true, phase: 'checking' }, { ok: true, phase: 'reporting' }] })
 
-    await expect(update(['--check'])).rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun update: the home process ended the request to prepare the update without an answer. Nothing was applied. Its log records why: delorun logs home' })
+    await expect(update([])).rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun update: the home process ended the request to prepare the update without an answer. Nothing was applied. Its log records why: delorun logs home' })
   })
 
   it('says the outcome is unknown when an apply ends after its progress lines', async () => {
@@ -438,7 +438,7 @@ describe('runUpdate', () => {
   it('shows a VERIFY_FAILED refusal\'s whole explanation, remedies included', async () => {
     await homeAnswering({ prepare: [{ ok: true, phase: 'checking' }, { ok: false, error: 'VERIFY_FAILED', detail: 'Delo refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' }] })
 
-    await expect(update(['--check'])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: VERIFY_FAILED\nDelo refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' })
+    await expect(update([])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: VERIFY_FAILED\nDelo refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' })
   })
 
   it('reports the home process\'s refusal to apply', async () => {

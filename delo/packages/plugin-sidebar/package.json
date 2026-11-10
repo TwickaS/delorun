@@ -1,6 +1,6 @@
 {
   "name": "@delo/plugin-sidebar",
-  "description": "Delo's sidebar: the chat list as cards with shelves, search and a workspace filter, workspace icons and header art, through upstream's sidebar seats",
+  "description": "Delo's sidebar: the chat list as cards with shelves, search and a workspace filter, workspace icons, header art and the update notice, through upstream's sidebar seats",
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
@@ -43,6 +43,11 @@
     "build": "tsc -b tsconfig.json && tsdown",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
+  "dependencies": {
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/contract-update-report": "workspace:*",
+    "zod": "4.4.3"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~"
   },
@@ -50,6 +55,8 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-api-session-controller": "workspace:*",
     "@deepseek-ai/dsh-api-workspace-controller": "workspace:*",
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-client-locale": "workspace:*",
     "@deepseek-ai/dsh-client-store": "workspace:*",
     "@deepseek-ai/dsh-client-test-runtime": "workspace:*",

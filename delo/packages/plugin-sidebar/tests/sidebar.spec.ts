@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { apply, Config, DEFAULT_SIDEBAR_SETTINGS, MAX_WORKSPACE_ICONS } from '../src/index.ts'
 
 describe('the host half', () => {
-  it('defaults every setting, keeps each live-editable, and refuses an unknown choice or a width off the slider', () => {
+  it('defaults every setting, keeps each live-editable, and refuses an unknown choice, a width off the slider or an update notice interval out of range', () => {
     const config = Config({})
     expect(Object.fromEntries(Object.keys(DEFAULT_SIDEBAR_SETTINGS).map(key => [key, config[key as keyof typeof config].get()])))
       .toEqual(DEFAULT_SIDEBAR_SETTINGS)
@@ -11,7 +11,7 @@ describe('the host half', () => {
     for (const wrong of [
       { headerArt: 'stars' }, { artPalette: 'teal' }, { view: 'list' }, { workingShelf: 'yes' }, { artStrength: 'loud' }, { artStyle: 'flag' },
       { sort: 'name' }, { confirmUnpin: 1 }, { width: 200 }, { width: 500 }, { width: 257 }, { artSeed: 0 }, { artSeed: 2_147_483_648 },
-      { workspaceIcons: ['folder'] },
+      { workspaceIcons: ['folder'] }, { updateNoticeRefreshMinutes: 4 }, { updateNoticeRefreshMinutes: 1441 }, { updateNoticeRefreshMinutes: 7.5 },
     ]) {
       expect(Config['~standard'].validate(wrong)).toHaveProperty('issues')
     }

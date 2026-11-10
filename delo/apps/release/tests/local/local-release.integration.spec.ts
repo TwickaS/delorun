@@ -41,6 +41,8 @@ async function request(test: Parameters<typeof scratch>[0], directory: string, t
     commit: COMMIT,
     version,
     dsh: '0.2.2-rc.1',
+    security: false,
+    summary: 'A local fixture release.',
     channel: join(directory, 'channel'),
     roots: [trusted.root],
     targetsKey: trusted.keys.targets,
@@ -78,7 +80,7 @@ describe('a local release', () => {
     const manifest = verifySignedManifest(root.metadata, manifestBytes)
     expect(timestamp.channels.stable).toMatchObject({ release: '0.1.0', manifest: { name: built.manifestName } })
     expect(timestamp.channels.beta.release).toBe('0.1.0')
-    expect(manifest).toMatchObject({ version: '0.1.0', dsh: '0.2.2-rc.1', channel: 'stable', source: { repository: RELEASE_REPOSITORY_URL, tag: 'v0.1.0', commit: COMMIT }, rebuild: { builders: [{ name: LOCAL_BUILDER, ci: false }] } })
+    expect(manifest).toMatchObject({ version: '0.1.0', dsh: '0.2.2-rc.1', channel: 'stable', source: { repository: RELEASE_REPOSITORY_URL, tag: 'v0.1.0', commit: COMMIT }, rebuild: { builders: [{ name: LOCAL_BUILDER, ci: false }] }, security: false, summary: 'A local fixture release.' })
     const list = verifyFileList(root.metadata, manifest, 'linux-x64', readFileSync(join(releaseDirectory(channel, '0.1.0'), 'delorun-0.1.0-linux-x64.files.json')))
     expect(list.files.map(file => file.path)).toEqual(['app/node_modules/@delo/cli/package.json', 'app/node_modules/@delo/cli/src/bin.js', 'node/bin/node'])
     const archive = readFileSync(join(releaseDirectory(channel, '0.1.0'), 'delorun-0.1.0-linux-x64.tar.gz'))
@@ -146,6 +148,16 @@ describe('a local release', () => {
     expect(built).toBe(false)
   })
 
+  it('refuses a summary that is not one plain line, before building anything', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    let built = false
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { summary: 'Two\nlines', closures: () => { built = true; return Promise.resolve() } })))
+      .rejects.toThrow('the summary "Two\\nlines" is not a release summary: 1 to 200 characters on one line')
+    expect(built).toBe(false)
+    expect(existsSync(join(directory, 'channel'))).toBe(false)
+  })
+
   it('refuses a closure build that wrote the file list of another version', async (test) => {
     const directory = scratch(test)
     const trusted = trust()
@@ -198,7 +210,7 @@ describe('the local-release command', () => {
     const trusted = trust()
     const log = await serveLog(test, trusted)
     writeKey(directory, trusted)
-    const args = ['--version', version, '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, ...extra]
+    const args = ['--version', version, '--summary', 'A local fixture release.', '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, ...extra]
     return { directory, args }
   }
 
@@ -212,6 +224,17 @@ describe('the local-release command', () => {
     const manifest = readEnvelope('manifest', readFileSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0', 'delorun-0.1.0.manifest.json'))).signed
     expect(manifest.source.commit).toMatch(/^[0-9a-f]{40}$/u)
     expect(manifest.dsh).toMatch(/^\d+\.\d+\.\d+/u)
+    expect(manifest).toMatchObject({ security: false, summary: 'A local fixture release.' })
+  })
+
+  it('marks the release as a security fix with --security', async (test) => {
+    const closures = scratch(test)
+    await fixtureClosure(test, '0.1.0')(closures)
+    const { directory, args } = await command(test, '0.1.0', ['--closures-from', closures, '--security'])
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    expect(await main(args)).toBe(0)
+    const manifest = readEnvelope('manifest', readFileSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0', 'delorun-0.1.0.manifest.json'))).signed
+    expect(manifest).toMatchObject({ security: true, summary: 'A local fixture release.' })
   })
 
   it('builds the Linux x64 closure of the commit when it is given no closure files, and keeps only the two release files', async (test) => {
@@ -244,7 +267,7 @@ describe('the local-release command', () => {
     const log = await serveLog(test, trusted, { uncosignedPolls: 2 })
     writeKey(directory, trusted)
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
-    const args = ['--version', '0.1.0', '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--closures-from', closures]
+    const args = ['--version', '0.1.0', '--summary', 'A local fixture release.', '--out', join(directory, 'channel'), '--root', join(directory, 'root.json'), '--targets-key', join(directory, 'targets.pem'), '--timestamp-key', join(directory, 'timestamp.pem'), '--state', join(directory, 'state.json'), '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles, '--closures-from', closures]
     expect(await main([...args, '--log-poll-seconds', '0'])).toBe(0)
   })
 
@@ -275,7 +298,7 @@ describe('the local-release command', () => {
   it('refuses a call that names too little, a version that is not one, and a failed build, with exit status 1', async (test) => {
     const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     expect(await main(['--version', '0.1.0'])).toBe(1)
-    expect(failure).toHaveBeenLastCalledWith(expect.stringContaining('local-release: pass --version, --out, --root'))
+    expect(failure).toHaveBeenLastCalledWith(expect.stringContaining('local-release: pass --version, --summary, --out, --root'))
     const { args } = await command(test, 'not-a-version', ['--closures-from', scratch(test)])
     expect(await main(args)).toBe(1)
     expect(failure).toHaveBeenLastCalledWith(expect.stringContaining('local-release:'))

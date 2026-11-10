@@ -77,6 +77,10 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   VERIFICATION_REPORT_SCHEMA_VERSION: null,
   // A release's own signed file, read from the runtime closure, never from the home's data.
   'delo.data-formats': null,
+  // The release tool's inventory of plugin-facing interfaces, read from the repository at signing, never from the home.
+  'delo.plugin-interface': null,
+  // The update check's record, which the next check replaces; a release that cannot read it reads it as absent.
+  'delo.update-check': null,
   // Signed release and catalogue metadata: each is verified against its signature and refetched, never chat data.
   'delo.catalogue-index': null,
   'delo.catalogue-revocations': null,

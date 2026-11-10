@@ -1,0 +1,12 @@
+{
+  "update-record": 1,
+  "store-layout": 1,
+  "profile-safety": 1,
+  "safe-mode": 1,
+  "update-report": 2,
+  "session-data-copy": 1,
+  "data-restore-journal": 1,
+  "storage:delo_workspaces": 1,
+  "storage:delo_chat_states": 1,
+  "trash-item": 1
+}

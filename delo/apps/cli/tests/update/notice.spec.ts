@@ -1,0 +1,428 @@
+/**
+ * The update check (`delo/apps/cli/src/update/notice.ts`, `notice-host.ts`), over a temporary home whose store runs
+ * release 0.1.0 and a stand-in host that publishes a newer release signed under the same throwaway root: what the check
+ * sends, what it verifies and records, what it shows for the profile's plugins, and what the Host's source, a
+ * background start and `delorun update --check` print. No request leaves loopback.
+ */
+import { execFileSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import { Context } from '@deepseek-ai/cordis'
+import { DELO_HOME_ENTRIES, DELO_LAUNCHER_ROOTS_ENV, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
+import type { SemanticVersion, UtcTimestamp } from '@delo/contract-release-manifest'
+import { UPDATE_CHECK_SCHEMA, type UpdateCheckRecord } from '@delo/contract-update-report'
+import * as UpdateCheck from '@delo/bundle-local/update-check'
+import { ensureHomeTree } from '@delo/home'
+import type { DeloLogger } from '@delo/logs'
+import { RuntimeStore } from '@delo/runtime-store'
+import { envelope, fixtureRelease, NOW, releasePaths, type Fixture } from '../../../install/tests/support.ts'
+import { EXIT } from '../../src/exit.ts'
+import { recordedLogTransport, runtimePlatformOf, type Publication } from '../../src/update/channel.ts'
+import { launcherAnchor, type LauncherAnchor } from '../../src/update/trusted-root.ts'
+import { runUpdate, updateCommand, type UpdateCheckDependencies } from '../../src/update/command.ts'
+import { checkedReleaseOf, checkForUpdate, countDisabled, noticeLine, noticeLines, noticeOf, withDeadline, readUpdateCheck, removeUpdateCheck, runningRelease, updateCheckPath, updateKind, writeUpdateCheck } from '../../src/update/notice.ts'
+import { recordedNoticeLine, startNoticeLine, updateCheckSource, watchUpdates } from '../../src/update/notice-host.ts'
+import { checkUpdate } from '../../src/doctor/update.ts'
+import { fakeClosure, signedRelease, writeClosure } from './support.ts'
+
+const PROFILE = 'default'
+const RUNNING = brandString<RuntimeVersion>('0.1.0')
+const NEWEST = brandString<RuntimeVersion>('0.2.0')
+const platform = runtimePlatformOf(process.platform, process.arch)
+const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
+const SUMMARY = 'Fixes the reach listener\'s origin check.'
+const semantic = (text: string): SemanticVersion => brandString<SemanticVersion>(text)
+const clock = (): Date => new Date(NOW * 1000)
+
+/** One request the stand-in host received. */
+interface Seen {
+  readonly method: string
+  readonly url: string
+  readonly headers: IncomingHttpHeaders
+  readonly body: number
+}
+
+/** A stand-in release host that records every request and can stop answering. */
+interface Host {
+  readonly origin: string
+  readonly files: Map<string, Buffer>
+  readonly seen: Seen[]
+  silent: boolean
+  close(): Promise<void>
+}
+
+/**
+ * Serve a fixture release.
+ * @param fixture - the release.
+ * @returns the host.
+ */
+async function host(fixture: Fixture): Promise<Host> {
+  const files = releasePaths(fixture)
+  const seen: Seen[] = []
+  const state = { silent: false }
+  const server: Server = createServer((request, response) => {
+    let body = 0
+    request.on('data', (chunk: Buffer) => { body += chunk.byteLength })
+    request.on('end', () => {
+      seen.push({ method: request.method ?? '', url: request.url ?? '', headers: request.headers, body })
+      if (state.silent) return
+      const bytes = files.get(request.url ?? '')
+      if (bytes === undefined) response.writeHead(404).end()
+      else response.writeHead(200, { 'content-length': String(bytes.byteLength) }).end(bytes)
+    })
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const origin = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
+  return {
+    origin, files, seen,
+    get silent() { return state.silent },
+    set silent(value: boolean) { state.silent = value },
+    close: async () => {
+      server.closeAllConnections()
+      await new Promise<void>(resolve => server.close(() => { resolve() }))
+    },
+  }
+}
+
+let base: string
+let home: string
+let fixture: Fixture
+let server: Host
+let publication: Publication
+/** The environment a launcher-started process has: the directory of the release roots the launcher ships. */
+let launched: Readonly<Record<string, string>>
+let anchor: LauncherAnchor
+
+/**
+ * Write files under a directory, creating their parents.
+ * @param directory - the directory.
+ * @param files - the contents by relative path.
+ */
+function writeFiles(directory: string, files: Readonly<Record<string, string>>): void {
+  for (const [path, content] of Object.entries(files)) {
+    const target = join(directory, path)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, content)
+  }
+}
+
+/**
+ * Write the profile with one installed plugin.
+ * @param engines - the plugin's `engines`.
+ */
+function profileWith(engines: Record<string, string>): void {
+  const profileDir = join(home, 'profiles', PROFILE)
+  rmSync(profileDir, { recursive: true, force: true })
+  writeFiles(profileDir, {
+    'package.json': JSON.stringify({ name: 'profile', private: true, dependencies: { 'example-plugin': '1.0.0' }, dsh: { profile: { bundles: [] } } }),
+    'node_modules/example-plugin/package.json': JSON.stringify({ name: 'example-plugin', version: '1.0.0', engines }),
+  })
+}
+
+/**
+ * Run one check against the stand-in.
+ * @param timeoutMs - the deadline.
+ * @returns the record.
+ */
+async function check(timeoutMs = 10_000): Promise<UpdateCheckRecord> {
+  return checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs, now: clock, publication })
+}
+
+beforeAll(async () => {
+  base = realpathSync(mkdtempSync(join(tmpdir(), 'dun-')))
+  home = join(base, 'h')
+  await ensureHomeTree(home, PROFILE)
+  fixture = await fixtureRelease({ version: '0.2.0', dsh: '0.2.3', notice: { security: true, summary: SUMMARY } })
+  writeFileSync(join(home, DELO_HOME_ENTRIES.trust, TRUST_FILES.root), fixture.roots[0]!, { mode: 0o600 })
+  mkdirSync(join(base, 'roots'))
+  writeFileSync(join(base, 'roots', '1.root.json'), fixture.roots[0]!)
+  launched = { [DELO_LAUNCHER_ROOTS_ENV]: join(base, 'roots') }
+  anchor = launcherAnchor(home, launched)
+  const store = new RuntimeStore({ home, platform, logger: SILENT })
+  for (const version of [RUNNING, NEWEST]) {
+    const closure = fakeClosure(version, { healthy: true, persistence: 'a'.repeat(64) })
+    await store.install({ version, root: fixture.rootMetadata, fill: async (directory) => {
+      writeClosure(directory, closure)
+      return Promise.resolve(signedRelease(fixture.keys.targets, platform, version, closure))
+    } })
+  }
+}, 120_000)
+
+beforeEach(async () => {
+  server = await host(fixture)
+  publication = { source: { metadata: server.origin, files: (version, name) => `${server.origin}/releases/${version}/${name}` }, hosts: { scheme: 'http:', hosts: ['127.0.0.1'], maxRedirects: 5 } }
+  await removeUpdateCheck(home, PROFILE)
+  profileWith({ delo: '^0.1.0' })
+})
+
+afterEach(async () => {
+  await server.close()
+})
+
+afterAll(() => {
+  execFileSync('chmod', ['-R', 'u+rwX', base])
+  rmSync(base, { recursive: true, force: true })
+})
+
+describe('the check', { timeout: 60_000 }, () => {
+  it('update-notice-sends-no-identifier: asks only for the channel\'s signed files, with no query, cookie, body or name of this installation', async () => {
+    await check()
+    expect(server.seen.map(request => request.url)).toEqual(['/timestamp.json', '/releases/0.2.0/delorun-0.2.0.manifest.json', '/releases/0.2.0/delorun-0.2.0.manifest.log.json'])
+    for (const request of server.seen) {
+      expect(request.method).toBe('GET')
+      expect(request.url).not.toContain('?')
+      expect(request.body).toBe(0)
+      expect(request.headers.cookie).toBeUndefined()
+      expect(request.headers.authorization).toBeUndefined()
+      const sent = `${request.url} ${JSON.stringify(request.headers)}`
+      for (const identifying of ['0.1.0', PROFILE, 'example-plugin', home]) expect(sent).not.toContain(identifying)
+      expect(JSON.stringify(request.headers).toLowerCase()).not.toContain('delo')
+    }
+  })
+
+  it('records the verified release with its upstream version, its security mark and its summary', async () => {
+    const record = await check()
+    expect(record).toEqual({ schema: UPDATE_CHECK_SCHEMA, checked: clock().toISOString(), verified: clock().toISOString(), newest: { delo: '0.2.0', dsh: '0.2.3', channel: 'stable', security: true, summary: SUMMARY } })
+    expect(await readUpdateCheck(home, PROFILE)).toEqual(record)
+    expect(readFileSync(updateCheckPath(home, PROFILE), 'utf8').endsWith('\n')).toBe(true)
+  })
+
+  it('counts the installed plugins the release would disable on either axis, at the moment it is read', async () => {
+    const record = await check()
+    const running = await runningRelease(home, platform, RUNNING, fixture.rootMetadata)
+    const read = async () => (await import('../../src/update/sources.ts')).readProfileFacts(home, PROFILE)
+    expect(await noticeOf(record, running, read)).toEqual({ running: { delo: '0.1.0', dsh: '0.2.2' }, release: record.newest, kind: 'minor', disables: 1 })
+    profileWith({ delo: '>=0.1.0', dsh: '>=0.2.2' })
+    expect((await noticeOf(record, running, read))?.disables).toBe(0)
+    profileWith({ dsh: '0.2.2' })
+    expect((await noticeOf(record, running, read))?.disables).toBe(1)
+    expect(countDisabled({ plugins: [], bundles: [], layers: [], exemptions: { dsh: {}, delo: {} } }, running, record.newest!)).toBe(0)
+  })
+
+  it('update-notice-unverified-index-silent: records why a check failed and keeps the last verified release', async () => {
+    const verified = await check()
+    server.files.set('/timestamp.json', envelope(fixture.timestamp, [fixture.keys.targets]))
+    const failed = await check()
+    expect(failed.failure).toMatch(/timestamp/u)
+    expect(failed.newest).toEqual(verified.newest)
+    expect(failed.verified).toBe(verified.verified)
+    await removeUpdateCheck(home, PROFILE)
+    const first = await check()
+    expect(first.newest).toBeUndefined()
+    expect(first.failure).toBeDefined()
+    expect(await noticeOf(first, await runningRelease(home, platform, RUNNING, fixture.rootMetadata), () => Promise.reject(new Error('not read')))).toBeUndefined()
+  })
+
+  it('refuses a manifest that is not the one the timestamp names', async () => {
+    server.files.set('/releases/0.2.0/delorun-0.2.0.manifest.json', Buffer.from('{"signed":{}}'))
+    expect((await check()).failure).toBeDefined()
+  })
+
+  it('update-notice-deadline: ends a check whose host never answers at its deadline', async () => {
+    server.silent = true
+    const started = Date.now()
+    const record = await check(300)
+    expect(record.failure).toBeDefined()
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
+  it('records a failure when the running release is not in the store', async () => {
+    const record = await checkForUpdate({ home, profile: PROFILE, platform, running: brandString<RuntimeVersion>('9.9.9'), anchor, timeoutMs: 1_000, now: clock, publication })
+    expect(record.failure).toBeDefined()
+    expect(server.seen).toEqual([])
+  })
+
+  it('uses this process\'s clock and contract C2\'s publication by default, through the fetch it is given', async () => {
+    const asked: string[] = []
+    const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs: 1_000, fetch: async (input) => { asked.push(String(input)); throw new Error('offline') } })
+    expect(asked).toEqual(['https://releases.delorun.com/timestamp.json'])
+    expect(record.failure).toContain('offline')
+    expect(Date.parse(record.checked)).toBeGreaterThan(NOW * 1000 - 400 * 86_400_000)
+  })
+
+  it('holds a request without a signal of its own to the deadline, and one with a signal to both', async () => {
+    const deadline = new AbortController()
+    const seen: (AbortSignal | null | undefined)[] = []
+    const fetch = withDeadline(async (_input, init) => { seen.push(init?.signal); return new Response('') }, deadline.signal)
+    await fetch('http://127.0.0.1/a')
+    const own = new AbortController()
+    await fetch('http://127.0.0.1/b', { signal: own.signal })
+    expect(seen[0]).toBe(deadline.signal)
+    deadline.abort()
+    expect(seen[1]?.aborted).toBe(true)
+  })
+
+  it('goes through the fetch it is given, with its own deadline on each request', async () => {
+    const signals: AbortSignal[] = []
+    const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs: 10_000, now: clock, publication, fetch: async (input, init) => { signals.push(init!.signal!); return globalThis.fetch(input, init) } })
+    expect(record.failure).toBeUndefined()
+    expect(signals).toHaveLength(3)
+  })
+})
+
+describe('the record', () => {
+  const valid: UpdateCheckRecord = { schema: UPDATE_CHECK_SCHEMA, checked: brandString<UtcTimestamp>('2027-01-15T08:00:00.000Z'), newest: { delo: semantic('0.2.0'), dsh: semantic('0.2.3'), channel: 'stable', security: false } }
+
+  it('reads what it wrote, and nothing from a file that is absent, not JSON, not the schema or readable by others', async () => {
+    expect(await readUpdateCheck(home, PROFILE)).toBeUndefined()
+    await writeUpdateCheck(home, PROFILE, valid)
+    expect(await readUpdateCheck(home, PROFILE)).toEqual(valid)
+    chmodSync(updateCheckPath(home, PROFILE), 0o644)
+    expect(await readUpdateCheck(home, PROFILE)).toBeUndefined()
+    writeFileSync(updateCheckPath(home, PROFILE), 'not json', { mode: 0o600 })
+    chmodSync(updateCheckPath(home, PROFILE), 0o600)
+    expect(await readUpdateCheck(home, PROFILE)).toBeUndefined()
+    writeFileSync(updateCheckPath(home, PROFILE), JSON.stringify({ ...valid, schema: 'delo.update-check/2' }))
+    expect(await readUpdateCheck(home, PROFILE)).toBeUndefined()
+  })
+
+  it('refuses a recorded summary that would print a control character on the terminal', async () => {
+    writeFileSync(updateCheckPath(home, PROFILE), JSON.stringify({ ...valid, newest: { ...valid.newest, summary: 'Run \u001b[2Jthis' } }), { mode: 0o600 })
+    expect(await readUpdateCheck(home, PROFILE)).toBeUndefined()
+  })
+})
+
+describe('what the notice says', () => {
+  const running = { delo: semantic('0.1.0'), dsh: semantic('0.2.2'), channel: 'stable' as const }
+  const release = { delo: semantic('0.1.3'), dsh: semantic('0.2.2'), channel: 'stable' as const, security: true }
+
+  it('names a security fix that keeps every plugin, and a release that moves the base and turns plugins off', () => {
+    expect(noticeLine({ running, release, kind: 'patch', disables: 0 })).toBe('Delorun 0.1.3 is available (security fix; all your plugins stay compatible). Run: delorun update')
+    expect(noticeLine({ running, release: { ...release, delo: semantic('0.2.0'), dsh: semantic('0.3.0'), security: false }, kind: 'minor', disables: 2 }))
+      .toBe('Delorun 0.2.0 is available (minor release on DSH 0.3.0; it would turn off 2 of your plugins). Run: delorun update')
+  })
+
+  it('reads the mark and the summary from a manifest, and their absence as no security fix and no summary', () => {
+    expect(checkedReleaseOf(fixture.manifest)).toEqual({ delo: '0.2.0', dsh: '0.2.3', channel: 'stable', security: true, summary: SUMMARY })
+    const { security: _security, summary: _summary, ...older } = fixture.manifest
+    expect(checkedReleaseOf(older)).toEqual({ delo: '0.2.0', dsh: '0.2.3', channel: 'stable', security: false })
+  })
+
+  it('reaches the release log the trusted root names', () => {
+    const transport = recordedLogTransport({}, fixture.rootMetadata, globalThis.fetch)
+    expect(typeof transport.latestCheckpoint).toBe('function')
+  })
+
+  it('prints the summary beneath the line when the release has one', () => {
+    expect(noticeLines({ running, release, kind: 'patch', disables: 0 })).toHaveLength(1)
+    expect(noticeLines({ running, release: { ...release, summary: SUMMARY }, kind: 'patch', disables: 0 })[1]).toBe(`  ${SUMMARY}`)
+  })
+
+  it('says how far a release moves', () => {
+    expect(updateKind(semantic('0.1.0'), semantic('1.0.0'))).toBe('major')
+    expect(updateKind(semantic('0.1.0'), semantic('1.0.0-rc.1'))).toBe('major')
+    expect(updateKind(semantic('0.1.0'), semantic('0.2.0'))).toBe('minor')
+    expect(updateKind(semantic('0.1.0'), semantic('0.2.0-rc.1'))).toBe('minor')
+    expect(updateKind(semantic('0.1.0'), semantic('0.1.1'))).toBe('patch')
+    expect(updateKind(semantic('0.1.0'), semantic('0.1.1-rc.1'))).toBe('patch')
+  })
+
+  it('shows nothing for a release that is not newer than the running one', async () => {
+    const record: UpdateCheckRecord = { schema: UPDATE_CHECK_SCHEMA, checked: brandString<UtcTimestamp>('2027-01-15T08:00:00.000Z'), newest: { ...release, delo: semantic('0.1.0') } }
+    expect(await noticeOf(record, running, () => Promise.reject(new Error('not read')))).toBeUndefined()
+    expect(await noticeOf(undefined, running, () => Promise.reject(new Error('not read')))).toBeUndefined()
+  })
+})
+
+describe('in a running Host', { timeout: 60_000 }, () => {
+  it('reads the record, checks on demand, and prints each newer version once', async () => {
+    const lines: string[] = []
+    const source = updateCheckSource({ home, profile: PROFILE, platform, running: RUNNING, anchor, line: (text) => { lines.push(text) }, publication, now: clock })
+    expect(await source.read()).toEqual({})
+    const state = await source.check(10_000)
+    expect(state.checked).toBe(NOW * 1000)
+    expect(state.notice?.release.delo).toBe('0.2.0')
+    expect(await source.read()).toEqual(state)
+    expect(lines).toEqual(['Delorun 0.2.0 is available (security fix on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update'])
+  })
+
+  it('attaches the check to the row\'s service, and removes the record when the row is switched off', async () => {
+    await check()
+    const off = new Context()
+    await watchUpdates(off, { home, profile: PROFILE, platform, running: RUNNING, anchor, line: () => {}, publication, now: clock })
+    expect(await readUpdateCheck(home, PROFILE)).toBeUndefined()
+    await off.fiber.dispose()
+
+    await check()
+    const on = new Context()
+    await on.plugin(UpdateCheck, { enabled: true, intervalHours: 24, timeoutSeconds: 15 })
+    await watchUpdates(on, { home, profile: PROFILE, platform, running: RUNNING, anchor, line: () => {}, publication, now: clock })
+    expect((await on.deloUpdateCheck.notice())?.release.delo).toBe('0.2.0')
+    await on.fiber.dispose()
+  })
+
+  it('gives a background start the recorded line, and nothing when the running release cannot be read', async () => {
+    expect(await recordedNoticeLine(home, PROFILE, platform, RUNNING, anchor.root)).toBeUndefined()
+    await check()
+    expect(await recordedNoticeLine(home, PROFILE, platform, RUNNING, anchor.root)).toBe('Delorun 0.2.0 is available (security fix on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update')
+    expect(await recordedNoticeLine(home, PROFILE, platform, brandString<RuntimeVersion>('9.9.9'), anchor.root)).toBeUndefined()
+    expect(await startNoticeLine(home, PROFILE, launched, join(home, 'runtimes', '0.1.0', 'app', 'start.js'))).toContain('Delorun 0.2.0 is available')
+    expect(await startNoticeLine(home, PROFILE, launched)).toBeUndefined()
+  })
+})
+
+describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () => {
+  const output = { stdout: '', stderr: '' }
+  const context = () => ({ env: { ...process.env, ...launched, DELO_HOME: home, DELO_PROFILE: PROFILE }, stdout: (text: string) => { output.stdout += text }, stderr: (text: string) => { output.stderr += text } })
+  const noPrompts = { confirm: () => Promise.reject(new Error('asked')), copy: () => Promise.reject(new Error('asked')) }
+
+  beforeEach(() => {
+    output.stdout = ''
+    output.stderr = ''
+  })
+
+  /**
+   * Run `delorun update` with the stand-in publication.
+   * @param args - the arguments.
+   * @param store - whether this Delo runs from the store.
+   * @param version - the version it runs.
+   * @returns the exit code.
+   */
+  async function update(args: readonly string[], store = true, version = RUNNING): Promise<number | undefined> {
+    const checks: UpdateCheckDependencies = { runtime: () => ({ version, store }), check: { now: clock, publication } }
+    return runUpdate(args, context(), noPrompts, checks)
+  }
+
+  it('prints the notice and the summary, and starts no home process', async () => {
+    expect(await update(['--check'])).toBe(EXIT.ok)
+    expect(output.stdout).toBe(`Delorun 0.2.0 is available (security fix on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update\n  ${SUMMARY}\n`)
+  })
+
+  it('says the running release is the newest when the channel names it, and prints no summary a manifest lacks', async () => {
+    expect(await update(['--check'], true, NEWEST)).toBe(EXIT.ok)
+    expect(output.stdout).toBe('Delorun 0.2.0 is the newest release on the stable channel.\n')
+    await writeUpdateCheck(home, PROFILE, { schema: UPDATE_CHECK_SCHEMA, checked: brandString<UtcTimestamp>('2027-01-15T08:00:00.000Z'), newest: { delo: semantic('0.2.0'), dsh: semantic('0.2.3'), channel: 'stable', security: false } })
+    const lines: string[] = []
+    await updateCheckSource({ home, profile: PROFILE, platform, running: RUNNING, anchor, line: (text) => { lines.push(text) } }).read()
+    expect(lines).toEqual(['Delorun 0.2.0 is available (minor release on DSH 0.2.3; it would turn off 1 of your plugins). Run: delorun update'])
+  })
+
+  it('exits 1 naming the failure, and refuses outside the store and with --yes', async () => {
+    server.files.delete('/timestamp.json')
+    expect(await update(['--check'])).toBe(EXIT.failed)
+    expect(output.stderr).toMatch(/^delorun update --check: the check failed, so nothing is known about a newer release: /u)
+    expect(await update(['--check'], false)).toBe(EXIT.failed)
+    expect(output.stderr).toContain('does not run from the runtime store')
+    await expect(update(['--check', '--yes'])).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(update(['--check', '--no-data-copy'])).rejects.toMatchObject({ exit: EXIT.usage })
+    expect(await updateCommand.run(['--check'], context())).toBe(EXIT.failed)
+  })
+
+  it('reports the last check in delorun doctor', async () => {
+    const store = { version: RUNNING, store: true }
+    expect(await checkUpdate(home, PROFILE, { ...store, store: false }, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('does not run from the runtime store') })
+    expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('no update check is recorded') })
+    await check()
+    expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('Delorun 0.2.0 is available') })
+    server.silent = true
+    await check(200)
+    expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('failed, so the studio shows no notice') })
+    await writeUpdateCheck(home, PROFILE, { schema: UPDATE_CHECK_SCHEMA, checked: brandString<UtcTimestamp>('2027-01-15T08:00:00.000Z'), newest: { delo: semantic('0.1.0'), dsh: semantic('0.2.2'), channel: 'stable', security: false } })
+    expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: 'Delorun 0.1.0 is the newest release on the stable channel (checked 2027-01-15T08:00:00.000Z).' })
+  })
+})

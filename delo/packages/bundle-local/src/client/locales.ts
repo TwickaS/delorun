@@ -1,4 +1,4 @@
-/** The Privacy settings section's copy. */
+/** The Privacy settings section's copy, and the statements that setup's privacy note also prints. */
 
 /** English dictionary. */
 export const en = {
@@ -10,6 +10,7 @@ export const en = {
   'statement.delo': 'Delo has no telemetry of its own.',
   'statement.optIns': 'DeepSeek Harness\'s desktop analytics and DeepSeek\'s session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.',
   'statement.feedback': 'Sending feedback includes a session-log prefix, and it is sent only when you send feedback.',
+  'statement.updateCheck': 'Delo checks once a day whether a newer release exists, by fetching the release channel\'s signed files from releases.delorun.com and GitHub; it sends no identifier, and those hosts see this computer\'s address. Turn it off in Settings → Privacy.',
   'sessionLog.title': 'DeepSeek session-log upload',
   'sessionLog.description': 'Requests to DeepSeek\'s official model API also carry the part of the chat\'s session log not sent yet.',
   'sessionLog.confirm.title': 'Turn on DeepSeek session-log upload?',
@@ -19,6 +20,11 @@ export const en = {
   'analytics.unavailable': 'Only the desktop app collects these analytics, and this profile does not.',
   'analytics.confirm.title': 'Turn on desktop analytics?',
   'analytics.confirm.body': 'The desktop app will report selected interactions, such as sending a message, switching models and installing plugins, to DeepSeek\'s analytics collector, with your device and account identifiers, the app version and your system\'s details. Message contents and keys are not included. Turning it off in Settings → Privacy stops further reports.',
+  'updateCheck.title': 'Check for new releases',
+  'updateCheck.description': 'Once a day Delo fetches the release channel\'s signed files from releases.delorun.com and GitHub to see whether a newer release exists. It sends no identifier and nothing about your plugins; those hosts see this computer\'s address.',
+  'updateCheck.unavailable': 'This profile does not check for new releases.',
+  'updateCheck.confirm.title': 'Turn on the release check?',
+  'updateCheck.confirm.body': 'Once a day, and when Delo starts, Delo will fetch the release channel\'s signed files from releases.delorun.com and GitHub to see whether a newer release exists, and the sidebar and terminal will say when one does. The requests carry no identifier and nothing about your plugins; those hosts see this computer\'s address. Nothing is downloaded or installed until you run delorun update.',
   'confirm.accept': 'Turn on',
   'confirm.cancel': 'Cancel',
   'confirm.close': 'Close',
@@ -40,6 +46,7 @@ export const zh: typeof en = {
   'statement.delo': 'Delo 没有自己的遥测。',
   'statement.optIns': 'DeepSeek Harness 的桌面端分析与 DeepSeek 的会话日志上传默认关闭，只有你打开后才会生效。你之后可以在“设置 → 隐私”中打开。',
   'statement.feedback': '发送反馈时会附带会话日志的前缀部分，且只在你发送反馈时发送。',
+  'statement.updateCheck': 'Delo 每天检查一次是否有更新的版本，方式是从 releases.delorun.com 和 GitHub 获取发布渠道的签名文件；它不发送任何标识符，这些主机会看到这台电脑的地址。可在“设置 → 隐私”中关闭。',
   'sessionLog.title': 'DeepSeek 会话日志上传',
   'sessionLog.description': '发往 DeepSeek 官方模型 API 的请求会同时携带该对话尚未发送的会话日志部分。',
   'sessionLog.confirm.title': '打开 DeepSeek 会话日志上传？',
@@ -49,6 +56,11 @@ export const zh: typeof en = {
   'analytics.unavailable': '只有桌面应用会收集这些分析数据，当前 profile 不会收集。',
   'analytics.confirm.title': '打开桌面端分析？',
   'analytics.confirm.body': '桌面应用将向 DeepSeek 的分析收集服务报告选定的交互，例如发送消息、切换模型和安装插件，并附带你的设备与账号标识、应用版本和系统信息。不包含消息内容和密钥。在“设置 → 隐私”中关闭后将不再继续报告。',
+  'updateCheck.title': '检查新版本',
+  'updateCheck.description': 'Delo 每天一次从 releases.delorun.com 和 GitHub 获取发布渠道的签名文件，查看是否有更新的版本。它不发送任何标识符，也不发送你的插件信息；这些主机会看到这台电脑的地址。',
+  'updateCheck.unavailable': '当前 profile 不检查新版本。',
+  'updateCheck.confirm.title': '打开版本检查？',
+  'updateCheck.confirm.body': 'Delo 将在每天一次以及启动时，从 releases.delorun.com 和 GitHub 获取发布渠道的签名文件，查看是否有更新的版本；有新版本时，侧边栏和终端会提示你。这些请求不携带任何标识符，也不包含你的插件信息；这些主机会看到这台电脑的地址。在你运行 delorun update 之前，不会下载或安装任何内容。',
   'confirm.accept': '打开',
   'confirm.cancel': '取消',
   'confirm.close': '关闭',

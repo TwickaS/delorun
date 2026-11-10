@@ -18,7 +18,9 @@ import {
   RELEASE_FILE_SIZE_LIMITS,
   RELEASE_METADATA_ORIGIN,
   RELEASE_REPOSITORY_URL,
+  type ChannelPointer,
   type ReleaseChannel as ChannelName,
+  type ReleaseManifest,
   type RootMetadata,
   type RuntimePlatform,
   type SemanticVersion,
@@ -27,7 +29,7 @@ import type { FilledRelease } from '@delo/runtime-store'
 import type { RuntimeChannel, ChannelRelease } from '@delo/runtime-store'
 import { parseRuntimeVersion } from '@delo/runtime-store'
 import { archiveFormat } from '@delo/release-formats/archive/entry'
-import { walkRootChain } from '@delo/release-formats/sign/verify'
+import { walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
 import { HomeLayoutError } from '@delo/home'
 import { ReleaseLogInternalError, type ReleaseLogTransport } from '@delo/release-verify/online'
 import { checkAndStore, recordResult } from '@delo/release-verify/record'
@@ -101,6 +103,15 @@ interface Resolved {
   readonly checkedAt: number
 }
 
+/** The channel's current release as {@link LauncherChannel} verified it, before any log check. */
+interface Current {
+  readonly root: TrustedRoot
+  readonly pointer: ChannelPointer
+  readonly verified: VerifiedChannelRelease
+  readonly manifestBytes: Buffer
+  readonly bundleBytes: Buffer
+}
+
 /** A release the channel resolved but has not filled, for its own error messages. */
 const NO_RELEASE = 'this channel has not resolved a release to install'
 
@@ -147,19 +158,60 @@ export class LauncherChannel implements RuntimeChannel {
    */
   async resolve(target?: RuntimeVersion): Promise<ChannelRelease> {
     const now = Math.floor(this.now() / 1000)
+    const current = await this.current(now, target, 'record')
+    const { pointer, root } = current
+    const log = await this.checkLog({ root: root.metadata, version: pointer.release, manifest: current.manifestBytes, bundle: current.bundleBytes, now, transport: this.logFor(root.metadata), mode: 'enforce' })
+    if (log.state === 'failed') {
+      throw new InstallError('RELEASE_LOG_FAILED', `release ${pointer.release}`, `the release log failed its check (${String(log.refusal)}: ${String(log.detail)}); nothing was installed`)
+    }
+    this.options.progress?.({ step: 'log-checked', version: pointer.release, state: log.state, ...log.detail === undefined ? {} : { detail: log.detail } })
+    const version = asVersion(pointer.release)
+    const release: ChannelRelease = { version, root: root.metadata }
+    this.resolved.set(version, { release, verified: current.verified, manifestBytes: current.manifestBytes, bundleBytes: current.bundleBytes, log, checkedAt: now })
+    return release
+  }
+
+  /**
+   * Name and verify the channel's current release without installing it or recording anything: the same root chain,
+   * timestamp, manifest and release-log bundle checks as {@link LauncherChannel.resolve}, with the timestamp held to the
+   * stored one, and no online log check. Nothing under `trust/` changes, so a check running beside an install or an
+   * update never moves what they rely on.
+   * @returns the verified manifest of the channel's current release.
+   * @throws {InstallError} `DOWNLOAD_REFUSED`, `DOWNLOAD_FAILED`, `INSTALL_VERIFY_FAILED`, `RELEASE_METADATA_INVALID`,
+   *   `RELEASE_LOG_FAILED` or `TRUST_STATE_INVALID`, as {@link LauncherChannel.resolve} does before its log check.
+   */
+  async newest(): Promise<ReleaseManifest> {
+    const current = await this.current(Math.floor(this.now() / 1000), undefined, 'read-only')
+    return current.verified.manifest
+  }
+
+  /**
+   * Contract C2's client verification steps 1 to 3 and contract C18's bundle check over the channel's current release.
+   * @param now - the clock, in Unix seconds.
+   * @param target - the version a person asked for, if any.
+   * @param trust - `record` writes the verified roots and timestamp under `trust/` and reports progress, as an install
+   *   does; `read-only` writes and reports nothing.
+   * @returns what verified, with the bytes an install keeps.
+   */
+  private async current(now: number, target: RuntimeVersion | undefined, trust: 'record' | 'read-only'): Promise<Current> {
     const stamp = await this.downloader.bytes(`${this.source.metadata}/timestamp.json`, RELEASE_FILE_SIZE_LIMITS.timestamp)
     const roots = await this.rootChain(rootVersionOf(stamp.bytes))
     const stored = await readStoredTimestamp(this.options.home)
     const { root, timestamp } = verifyTimestampUnderRoots({ roots, timestamp: stamp.bytes, now, ...stored === undefined ? {} : { stored } })
-    await writeTrustedRoot(this.options.home, roots.at(-1)!)
-    await writeStoredRootChain(this.options.home, roots)
-    await writeStoredTimestamp(this.options.home, stamp.bytes)
+    const record = trust === 'record'
+    if (record) {
+      await writeTrustedRoot(this.options.home, roots.at(-1)!)
+      await writeStoredRootChain(this.options.home, roots)
+      await writeStoredTimestamp(this.options.home, stamp.bytes)
+    }
     const pointer = timestamp.channels[this.options.channel]
-    const version = asVersion(pointer.release)
-    this.options.progress?.({ step: 'resolved', channel: this.options.channel, version: pointer.release })
+    if (record) {
+      // An install refuses a version the store cannot name before it downloads anything more.
+      asVersion(pointer.release)
+      this.options.progress?.({ step: 'resolved', channel: this.options.channel, version: pointer.release })
+    }
     const manifest = await this.downloader.bytes(this.source.files(pointer.release, pointer.manifest.name), pointer.manifest.length)
-    const bundleName = bundleFileName(pointer.release)
-    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleName), RELEASE_LOG_BUNDLE_SIZE_LIMIT)
+    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleFileName(pointer.release)), RELEASE_LOG_BUNDLE_SIZE_LIMIT)
     const verified = verifyChannelRelease({
       root: root.metadata,
       timestamp,
@@ -168,15 +220,8 @@ export class LauncherChannel implements RuntimeChannel {
       bundle: bundle.bytes,
       ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
     })
-    this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
-    const log = await this.checkLog({ root: root.metadata, version: pointer.release, manifest: manifest.bytes, bundle: bundle.bytes, now, transport: this.logFor(root.metadata), mode: 'enforce' })
-    if (log.state === 'failed') {
-      throw new InstallError('RELEASE_LOG_FAILED', `release ${pointer.release}`, `the release log failed its check (${String(log.refusal)}: ${String(log.detail)}); nothing was installed`)
-    }
-    this.options.progress?.({ step: 'log-checked', version: pointer.release, state: log.state, ...log.detail === undefined ? {} : { detail: log.detail } })
-    const release: ChannelRelease = { version, root: root.metadata }
-    this.resolved.set(version, { release, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes, log, checkedAt: now })
-    return release
+    if (record) this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
+    return { root, pointer, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
   }
 
   /**

@@ -82,6 +82,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloOnboarding.setupRecord': { device: 'refused', reason: 'what the terminal setup recorded serves onboarding at the computer' },
   '/api/deloMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
   '/api/deloMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
+  '/api/deloUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },
   '/api/deloTrash.list': { device: 'refused', reason: TRASH },
   '/api/deloTrash.deleteChat': { device: 'refused', reason: TRASH },
   '/api/deloTrash.deleteWorkspace': { device: 'refused', reason: TRASH },

@@ -25,6 +25,9 @@
       "path": "../../../packages/api/workspace-controller/tsconfig.client.json"
     },
     {
+      "path": "../../../packages/client/connection/tsconfig.client.json"
+    },
+    {
       "path": "../../../packages/client/locale/tsconfig.client.json"
     },
     {
@@ -59,6 +62,9 @@
     },
     {
       "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/util/brand"
     },
     {
       "path": "../plugin-chat-states/tsconfig.client.json"

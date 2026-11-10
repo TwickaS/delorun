@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@delo/contract-release-manifest` defines the files of a Delo release: the Ed25519 signature envelope, the root and timestamp metadata with their key roles, the release manifest, the runtime file list, the rebuild record and the advisory acceptances, with the lifetimes and size limits as constants. The package holds exported types and readonly constants only, with no runtime code, so it never changes what a process does; the contract page [C2 Release manifest and signature](../../docs/contracts/c02-release-manifest.md) is the authority, and this package follows it. Its entry is `src/index.ts`, exported as `.`.
+`@delo/contract-release-manifest` defines the files of a Delo release: the Ed25519 signature envelope, the root and timestamp metadata with their key roles, the release manifest, the runtime file list, the rebuild record and the advisory acceptances, with the lifetimes and size limits as constants. The package holds exported types, readonly constants and one pure function, `isValidSummary`, which states the release summary's rule, so it never changes what a process does; the contract page [C2 Release manifest and signature](../../docs/contracts/c02-release-manifest.md) is the authority, and this package follows it. Its entry is `src/index.ts`, exported as `.`.
 
 ## Contents
 

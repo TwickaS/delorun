@@ -1,8 +1,8 @@
-/** One upstream opt-in on the Privacy section: its Host configuration form and its write state. */
+/** One switch on the Privacy section: its Host configuration form and its write state. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 
-/** The field both upstream opt-ins expose: `config.enabled` of their profile row. */
+/** The field every switch's row exposes: `config.enabled` of its profile row. */
 export interface OptInSettings {
   enabled: boolean
 }

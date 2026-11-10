@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { devNull } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { TestContext } from 'vitest'
@@ -27,7 +27,10 @@ import { publicKeyEntry, readSigningKey, signEnvelope } from '@delo/release-form
 import { toJsonValue } from '@delo/release-formats/sign/json'
 import { signRelease, SigningRefusal } from '../../src/sign/release.ts'
 import { ManifestSchema } from '@delo/release-formats/sign/schemas'
-import { runEntry, scratch, writeTree, type RunResult } from '../support.ts'
+import { PERSISTENCE_SCHEMA_PATH } from '../../src/closure/data-formats.ts'
+import { DELO_RECORDS_PATH, UPSTREAM_VERSION_PATH } from '../../src/sign/patch-rule.ts'
+import { PLUGIN_INTERFACE_PATH, readPluginInterface } from '../../src/sign/plugin-interface.ts'
+import { REPO, runEntry, scratch, writeTree, type RunResult } from '../support.ts'
 
 /** The fixture release's version. */
 export const VERSION = '0.1.0'
@@ -89,12 +92,12 @@ function ref(directory: string, name: string): FileRef {
   return { name, length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
 }
 
-async function closures(directory: string, marker: string): Promise<void> {
+async function closures(directory: string, marker: string, version: string): Promise<void> {
   mkdirSync(directory, { recursive: true })
   for (const platform of RUNTIME_PLATFORMS) {
     const stage = join(directory, '..', `stage-${marker}-${platform}`)
     writeTree(stage, { 'app/package.json': '{"name":"dsh-python-runtime-closure"}\n', 'app/pnpm-lock.yaml': LOCKFILE, 'app/lib/bin.js': `// ${platform}\n`, 'node/LICENSE': 'licence\n' })
-    await archiveClosure({ stage, outDir: directory, version: VERSION, platform, epoch: EPOCH, pins: undefined })
+    await archiveClosure({ stage, outDir: directory, version, platform, epoch: EPOCH, pins: undefined })
   }
 }
 
@@ -104,8 +107,49 @@ export const COMMITTED_BASE_DIGEST = 'b'.repeat(64)
 /** The native compiler the fixture repository's committed toolchain names, which the checkout's does not. */
 export const COMMITTED_COMPILER = 'fixture compiler, committed at the release tag only'
 
+/** The upstream DSH version the fixture release builds on, as its draft's `dsh` and its committed app-boot package state. */
+export const FIXTURE_DSH = '0.2.2-rc.1'
+
+/** An earlier release the fixture repository commits and tags before the release, for the patch rule. */
+export interface EarlierFixtureRelease {
+  /** Its version, tagged `v<version>`. */
+  readonly version: string
+  /** The upstream version its app-boot package names; {@link FIXTURE_DSH} by default. */
+  readonly dsh?: string
+  /** Changes its tree after the release facts are written, before the commit. */
+  readonly change?: (repo: string) => void
+}
+
+/** How a fixture release differs from the default one. */
+export interface FixtureOptions {
+  /** The release's version; {@link VERSION} by default. */
+  readonly version?: string
+  /** Earlier releases, oldest first, committed and tagged before the release. */
+  readonly earlier?: readonly EarlierFixtureRelease[]
+}
+
+/**
+ * Write the files the patch rule reads at a commit: the app-boot package naming the upstream version, and the
+ * persistence-schema inventory, Delo's record versions, the plugin-facing interface inventory and the sources of its
+ * covered entries as the checkout holds them.
+ * @param repo - the fixture repository's work tree.
+ * @param dsh - the upstream version the app-boot package names.
+ */
+export function writeReleaseFacts(repo: string, dsh: string): void {
+  const write = (path: string, content: string | Buffer): void => {
+    mkdirSync(dirname(join(repo, path)), { recursive: true })
+    writeFileSync(join(repo, path), content)
+  }
+  write(UPSTREAM_VERSION_PATH, `${JSON.stringify({ name: '@deepseek-ai/dsh-app-boot', version: dsh }, undefined, 2)}\n`)
+  const inventory = readFileSync(join(REPO, PLUGIN_INTERFACE_PATH))
+  const sources = readPluginInterface(inventory).covered.map(entry => entry.source)
+  for (const path of [PERSISTENCE_SCHEMA_PATH, DELO_RECORDS_PATH, PLUGIN_INTERFACE_PATH, ...sources]) write(path, readFileSync(join(REPO, path)))
+}
+
 /** A fixture release on disk. */
 export interface ReleaseFixture {
+  /** The release's version. */
+  readonly version: string
   readonly repo: string
   readonly release: string
   readonly rebuild: string
@@ -133,7 +177,8 @@ export interface ReleaseFixture {
  * @param test - the running test.
  * @returns the fixture.
  */
-export async function releaseFixture(test: TestContext): Promise<ReleaseFixture> {
+export async function releaseFixture(test: TestContext, options: FixtureOptions = {}): Promise<ReleaseFixture> {
+  const version = options.version ?? VERSION
   const directory = scratch(test, 'delo-signing-')
   const repo = join(directory, 'repo')
   mkdirSync(repo)
@@ -141,6 +186,14 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   const git = (args: readonly string[]): string => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8', timeout: 30_000 }).trim()
   git(['init', '-q', '-b', 'main'])
   writeFileSync(join(repo, 'README.md'), 'fixture\n')
+  for (const earlier of options.earlier ?? []) {
+    writeReleaseFacts(repo, earlier.dsh ?? FIXTURE_DSH)
+    earlier.change?.(repo)
+    git(['add', '-A'])
+    git(['commit', '-q', '--allow-empty', '-m', `release ${earlier.version}`])
+    git(['tag', `v${earlier.version}`])
+  }
+  writeReleaseFacts(repo, FIXTURE_DSH)
   mkdirSync(join(repo, 'delo/apps/release'), { recursive: true })
   for (const file of RECIPE_FILES) {
     let text = readFileSync(join(RECIPE_DIR, file), 'utf8')
@@ -157,62 +210,65 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
   writeFileSync(join(repo, '.github', 'CODEOWNERS'), '* @example-maintainer\n')
   git(['add', '-A'])
   git(['commit', '-q', '-m', 'fixture'])
-  git(['tag', `v${VERSION}`])
+  git(['tag', `v${version}`])
   const commit = git(['rev-parse', 'HEAD'])
   const release = join(directory, 'release')
   const rebuild = join(directory, 'rebuild')
-  const recordPath = join(directory, `delorun-${VERSION}.rebuild.json`)
-  await closures(release, 'workflow')
-  await closures(rebuild, 'holder')
+  const recordPath = join(directory, `delorun-${version}.rebuild.json`)
+  await closures(release, 'workflow', version)
+  await closures(rebuild, 'holder', version)
   const digest = `sha256:${'a'.repeat(64)}`
   const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   const recipe = recipeAt(repo, commit)
   let images: Record<'s2' | 's3', typeof image & { seccomp: FileRef }> | undefined
   for (const directory of [release, rebuild]) {
-    const seccomp = await writeSeccompProfiles(recipe.images, directory, VERSION)
+    const seccomp = await writeSeccompProfiles(recipe.images, directory, version)
     images = { s2: { ...image, seccomp: seccomp.s2 }, s3: { ...image, seccomp: seccomp.s3 } }
-    writeFileSync(join(directory, imagesName(VERSION)), `${JSON.stringify({ ...images, builder: recipe.toolchain.images, debian: { s2: { 'linux/amd64': [], 'linux/arm64': [] }, s3: { 'linux/amd64': [], 'linux/arm64': [] } } }, undefined, 2)}\n`)
-    await writeReleaseSbom(directory, VERSION, recipe.toolchain, recipe.images.base)
+    writeFileSync(join(directory, imagesName(version)), `${JSON.stringify({ ...images, builder: recipe.toolchain.images, debian: { s2: { 'linux/amd64': [], 'linux/arm64': [] }, s3: { 'linux/amd64': [], 'linux/arm64': [] } } }, undefined, 2)}\n`)
+    await writeReleaseSbom(directory, version, recipe.toolchain, recipe.images.base)
   }
   const feed = await feedStandIn(test, {})
-  const report = await releaseAdvisoryCheck(repo, commit, release, semanticVersion(VERSION), feed.url)
-  writeFileSync(join(release, 'delorun-0.1.0.advisories.json'), `${JSON.stringify(report, undefined, 2)}\n`)
+  const report = await releaseAdvisoryCheck(repo, commit, release, semanticVersion(version), feed.url)
+  writeFileSync(join(release, `delorun-${version}.advisories.json`), `${JSON.stringify(report, undefined, 2)}\n`)
   for (const name of ['install.sh', 'install.ps1']) writeFileSync(join(release, name), `${name}\n`)
   const desktop: Record<string, unknown> = {}
   for (const platform of DESKTOP_PLATFORMS) {
-    const names = { installer: `Delo-${VERSION}-${platform}.installer`, update: `Delo-${VERSION}-${platform}.update`, blockmap: `Delo-${VERSION}-${platform}.blockmap` }
+    const names = { installer: `Delo-${version}-${platform}.installer`, update: `Delo-${version}-${platform}.update`, blockmap: `Delo-${version}-${platform}.blockmap` }
     for (const name of Object.values(names)) writeFileSync(join(release, name), `${name}\n`)
     const sha512 = (name: string): string => createHash('sha512').update(readFileSync(join(release, name))).digest('base64')
     desktop[platform] = { installer: { ...ref(release, names.installer), sha512: sha512(names.installer) }, update: { ...ref(release, names.update), sha512: sha512(names.update) }, blockmap: ref(release, names.blockmap) }
   }
   const draft = {
     schema: RELEASE_SCHEMAS.manifest,
-    version: VERSION,
-    dsh: '0.2.2-rc.1',
+    version,
+    dsh: FIXTURE_DSH,
     channel: 'stable',
-    source: { repository: RELEASE_REPOSITORY_URL, tag: `v${VERSION}`, commit },
+    source: { repository: RELEASE_REPOSITORY_URL, tag: `v${version}`, commit },
     runtime: Object.fromEntries(RUNTIME_PLATFORMS.map((platform) => {
-      const archive = `delorun-${VERSION}-${platform}.${platform === 'win32-x64' ? 'zip' : 'tar.gz'}`
-      return [platform, { archive: ref(release, archive), files: ref(release, `delorun-${VERSION}-${platform}.files.json`) }]
+      const archive = `delorun-${version}-${platform}.${platform === 'win32-x64' ? 'zip' : 'tar.gz'}`
+      return [platform, { archive: ref(release, archive), files: ref(release, `delorun-${version}-${platform}.files.json`) }]
     })),
     desktop,
     images,
-    sbom: { ...ref(release, 'delorun-0.1.0.spdx.json'), format: 'SPDX-2.3+json' },
-    npm: [{ name: 'delorun', version: VERSION, integrity: `sha512-${'A'.repeat(86)}==` }],
+    sbom: { ...ref(release, `delorun-${version}.spdx.json`), format: 'SPDX-2.3+json' },
+    npm: [{ name: 'delorun', version, integrity: `sha512-${'A'.repeat(86)}==` }],
     install: { sh: ref(release, 'install.sh'), ps1: ref(release, 'install.ps1') },
-    advisories: { report: ref(release, 'delorun-0.1.0.advisories.json'), accepted: [] },
+    advisories: { report: ref(release, `delorun-${version}.advisories.json`), accepted: [] },
+    security: false,
+    summary: 'The fixture release.',
   }
   writeFileSync(join(release, 'manifest-draft.json'), `${JSON.stringify(draft, undefined, 2)}\n`)
   const attestationKey = randomBytes(32)
   const attestationKeyPath = join(directory, 'attestation.key')
   writeFileSync(attestationKeyPath, attestationKey, { mode: 0o600 })
   const attestationPath = join(directory, 'rebuild.attestation.json')
-  writeFileSync(attestationPath, attestationText(attestationKey, { version: VERSION, commit, outputs: await outputRefs(rebuild) }))
+  writeFileSync(attestationPath, attestationText(attestationKey, { version, commit, outputs: await outputRefs(rebuild) }))
   const keys = throwawayKeys()
   const keyPath = join(directory, 'targets.pem')
   writeFileSync(keyPath, keys.targets.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 })
   const run = (entry: string, args: readonly string[], extraEnv: NodeJS.ProcessEnv = {}): RunResult => runEntry(entry, args, { CI: '', GITHUB_ACTIONS: '', ...extraEnv }, repo)
   return {
+    version,
     repo,
     release,
     rebuild,
@@ -224,7 +280,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     keys,
     commit,
     run,
-    record: () => run('record-rebuild.ts', ['--version', VERSION, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
+    record: () => run('record-rebuild.ts', ['--version', version, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
     sign: async (signEnv = {}, args = {}) => {
       feed.answer(args.advisories ?? {})
       try {
@@ -280,6 +336,8 @@ export function manifestContent(version: string, archive: Uint8Array): ReleaseMa
     install: { sh: ref, ps1: ref },
     rebuild: { record: ref, builders: [{ name: 'holder', ci: false }] },
     advisories: { report: ref, accepted: [] },
+    security: false,
+    summary: 'The fixture release.',
   })
 }
 

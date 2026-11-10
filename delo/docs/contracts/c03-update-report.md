@@ -14,7 +14,7 @@ Before an update applies, Delo shows what the target release would change or bre
 
 The CLI home's update and rollback are built and reached by `delorun update` and `delorun recover`; the studio's and the desktop app's are not, and undo and restore run without their checks and approval prompt.
 
-- **Built and reached:** `delorun update` builds the report against the newest release on the channel, applies nothing until the person confirms (`--yes` confirms only a report with no `disabled`, `removed` or unverified item), writes the snapshot, waits for running chats while the CLI profile's update gate refuses new turns, takes the session-data copy, runs H1 to H5 within 120 seconds and rolls back automatically when one fails. `delorun recover` rolls back through the one table, restores a profile history version, enters and leaves safe mode and discards set-aside data.
+- **Built and reached:** `delorun update` builds the report against the newest release on the channel, applies nothing until the person confirms (`--yes` confirms only a report with no `disabled`, `removed` or unverified item), writes the snapshot, waits for running chats while the CLI profile's update gate refuses new turns, takes the session-data copy, runs H1 to H5 within 120 seconds and rolls back automatically when one fails. `delorun recover` rolls back through the one table, restores a profile history version, enters and leaves safe mode and discards set-aside data. The [update check](#update-check) runs in the Host of a CLI home that runs from the store, writes its record and serves the notice to the terminal, the studio's sidebar and `delorun doctor`.
 - **Not built:** the studio's update screen, "Update now" and rollback; the desktop updater's use of this report and procedure; the status records, which the report reads and no installation writes, so the other installation always shows `unknown`; the approval prompt and the install-time plugin checks of undo and restore (R5), so `delorun recover restore` applies a version at once and lists what changed afterwards; the revocation list (no release publishes one, so every report lists `revocations` as not checked); H1's release-log condition, because H1 checks the runtime files only; reverting a restore that fails partway, which leaves the profile partly restored; the startup report with Update, Keep disabled and Roll back, because upstream's start disables an incompatible row and prints one line to standard error; the desktop's fatal recovery writing a history version and offering the profile from before the update; a history version before profile normalisation.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
@@ -23,6 +23,7 @@ The requirements and denial tests below that this list names as not built or rea
 
 - [Status](#status)
 - [Installations and update states](#installations-and-update-states)
+- [Update check](#update-check)
 - [When a report is made](#when-a-report-is-made)
 - [Report fields](#report-fields)
 - [Items](#items)
@@ -65,6 +66,14 @@ Each installation has its own profile and its own Delo and DSH versions; updatin
 | `unknown` | Only for the other installation: its status record is absent or unreadable. |
 
 The desktop app maps upstream's `DesktopUpdateState.phase` onto these: `idle` to `current`, `checking` to `current`, `available` to `available`, `downloading` to `downloading`, `verifying` to `verifying`, `ready` to `awaiting-confirmation`, `installing` to `applying`, and `error` to `failed`.
+
+## Update check
+
+Before any report, a running installation learns that a newer release exists through the update check ([design](../design/update-notice.md)). The check fetches the channel's `timestamp.json`, any newer root file, the channel's manifest and its release-log bundle, and verifies them as an update does, from the same launcher roots and the channel the installation recorded ([C2](c02-release-manifest.md#client-verification) steps 1 to 3 and [C18](c18-release-log.md)'s bundle check), without the online log check; it downloads no archive, writes nothing under `trust/` and sends no identifier. It runs in the CLI home's Host, at start when the last check is at least the `delo-update-check` row's `intervalHours` old and then each interval, with one deadline of `timeoutSeconds`, and on demand with `delorun update --check`. The row's `enabled` is C16 switch `update_check` ([C16](c16-parity-composition.md)).
+
+Each check writes `run/<profile>/update-check.json` at mode 0600, schema `delo.update-check/1`: `checked`, the time of the check; `newest`, the newest release the last successful check verified, with its `delo` and `dsh` versions, its `channel`, `security` (false for a manifest without the mark) and `summary` when the manifest carries one; `verified`, when `newest` was verified; and `failure`, the reason the last check failed. A failed check keeps `newest` and `verified`. A record that is laxer than mode 0600 or does not validate reads as absent.
+
+A notice exists when `newest.delo` is newer than the running Delo version. It states the running release, the newer release, the step by semantic version (`patch`, `minor` or `major`) and how many installed plugins of the profile the newer release would disable on either version axis, which [Items](#items)' plugin evaluation decides with no revocation list, from the profile as it is installed when the notice is read. The notice names `delorun update` and applies nothing. The terminal shows it as one line, the studio's sidebar through the Connection route `GET /api/deloUpdateCheck.notice`, which answers `{ "notice": <notice> | null }`, and `delorun doctor` as its `update` line. With the switch off, the row registers no route, and the next start removes the record.
 
 ## When a report is made
 
@@ -197,6 +206,8 @@ A plugin version the current revocation list revokes is restored disabled with i
 | Health-check limit | 120 seconds after the target starts |
 | Status records read per report | 2, one per installation |
 | Session-data copies kept | 1 |
+| Update check interval | 24 hours by default, from 1 to 480 |
+| Update check deadline | 15 seconds by default, from 1 to 120 |
 
 ## Consumers
 
@@ -221,6 +232,7 @@ The report's `schema` names its major version; reason codes form a closed list i
 - R6. Both installations' versions and update states are shown, and updating one never switches the other.
 - R7. No update whose data differs applies before the person has seen the `data` item and chosen about the copy.
 - R8. No rollback deletes chat data.
+- R9. The update check sends nothing about the person or the profile, shows only a release whose signed metadata verified, applies nothing, never delays a start, and does not run while its switch is off.
 
 ### Denial tests
 
@@ -247,4 +259,11 @@ The report's `schema` names its major version; reason codes form a closed list i
 | `c03-pointer-swap-applies-the-table` | update | `delorun recover rollback` with no home process running applies the table; it never swaps the pointers alone. |
 | `c03-second-rollback-keeps-both-set-asides` | update | Two update-and-rollback rounds leave two set-aside directories. |
 | `c03-interrupted-restore-completes-before-a-host-starts` | update | A restore killed between its renames is completed at the next start before the Host boots. |
+| `update-notice-sends-no-identifier` | update-notice | Every request of a check is a bare `GET` of a channel file with no query, cookie, body, profile, plugin or running version. |
+| `update-notice-unverified-index-silent` | update-notice | A timestamp or manifest that does not verify records the failure and keeps the last verified release. |
+| `update-notice-replayed-timestamp-refused` | update-notice | A timestamp older than the stored one is refused. |
+| `update-notice-writes-no-trust-state` | update-notice | A check leaves `trust/` as it was and runs no online log check. |
+| `update-notice-deadline` | update-notice | A host that never answers ends the check at its deadline. |
+| `update-notice-off-makes-no-request` | update-notice | With the switch off the row mounts no service and no route. |
+| `update-notice-remote-session-offers-no-action` | update-notice | A remote session's notice offers no control. |
 | `c03-previous-release-reads-delorun-records` | update | Every record `deloRecords` names is written at the version listed, and the update record a release writes is read back by the same reader. |

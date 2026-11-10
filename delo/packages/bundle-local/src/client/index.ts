@@ -1,8 +1,9 @@
 /**
- * `@delo/bundle-local`'s browser half: the Privacy section in Settings, with Delo's statements and the consent
+ * `@delo/bundle-local`'s browser half: the Privacy section in Settings, with Delo's statements, the consent
  * switches for upstream's two opt-ins, DeepSeek's session-log upload (`session-log-deepseek`) and the desktop app's
- * analytics (`product-analytics`). Each switch writes only its own row's `config.enabled` through upstream's
- * configuration form, into the active profile's `cordis.patch.yml`.
+ * analytics (`product-analytics`), and the switch of Delo's release check (`delo-update-check`). Each switch writes
+ * only its own row's `config.enabled` through upstream's configuration form, into the active profile's
+ * `cordis.patch.yml`.
  *
  * It also registers the Devices section, which shows the reach state and manages the devices the home approved, and
  * the notice that an answer the home refused, such as a full-access grant from a remote studio, must be given at the
@@ -85,10 +86,14 @@ export const PRIVACY_SECTION_ID = 'delo-privacy'
 /** The section's place in the Settings navigation: after upstream's Plugins section (15). */
 export const PRIVACY_SECTION_ORDER = 20
 
-/** The Host row each opt-in writes, from C11's answer-to-row mapping. */
+/** The row of Delo's release check, whose `enabled` is C16 switch `update_check`. */
+export const UPDATE_CHECK_ROW = 'delo-update-check'
+
+/** The Host row each switch writes: the opt-ins from C11's answer-to-row mapping, and the release check's row. */
 export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
   sessionLog: SETUP_OPT_IN_ROWS.sessionLogUpload,
   analytics: SETUP_OPT_IN_ROWS.desktopAnalytics,
+  updateCheck: UPDATE_CHECK_ROW,
 }
 
 /**
@@ -134,6 +139,7 @@ export function apply(ctx: Context): void {
   const optIns: Record<OptInId, OptIn> = {
     sessionLog: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.sessionLog)),
     analytics: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.analytics)),
+    updateCheck: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.updateCheck)),
   }
   const face = (): PrivacySectionInjected => ({
     hooks: {
@@ -141,6 +147,8 @@ export function apply(ctx: Context): void {
       sessionLogMutation: optIns.sessionLog.state,
       analytics: optIns.analytics.form,
       analyticsMutation: optIns.analytics.state,
+      updateCheck: optIns.updateCheck.form,
+      updateCheckMutation: optIns.updateCheck.state,
     },
     setEnabled: (id, enabled) => optIns[id].setEnabled(enabled),
   })

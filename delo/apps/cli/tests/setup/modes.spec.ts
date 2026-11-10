@@ -101,6 +101,7 @@ const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
   Delo has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
+  Delo checks once a day whether a newer release exists, by fetching the release channel's signed files from releases.delorun.com and GitHub; it sends no identifier, and those hosts see this computer's address. Turn it off in Settings → Privacy.
 ? Where does the DeepSeek API key come from?
 > Enter the key now (stored in the home's credentials document)
   Read DEEPSEEK_API_KEY from the environment at each start
@@ -287,6 +288,7 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
   Delo has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
+  Delo checks once a day whether a newer release exists, by fetching the release channel's signed files from releases.delorun.com and GitHub; it sends no identifier, and those hosts see this computer's address. Turn it off in Settings → Privacy.
 ? Where does the DeepSeek API key come from?
 > Enter the key now (stored in the home's credentials document)
   Read DEEPSEEK_API_KEY from the environment at each start

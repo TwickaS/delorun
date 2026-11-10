@@ -1,6 +1,7 @@
 /**
  * `delorun doctor [--port <n>]`: runs four checks in order, then reads the
- * running release's release-log check state, and prints one line per check.
+ * running release's release-log check state and the profile's last update
+ * check, and prints one line per check.
  * `pass` lines go to standard output; `warn` and `fail` lines go to standard
  * error. The checks are described in [checks](./checks.ts) and the record
  * lines in [records](./records.ts). The stock-home import line is printed only
@@ -15,12 +16,15 @@
  * it: the reference stored in the home's `.credentials.yaml` first, then the
  * environment, the invoking directory's `.env` and the home's `.env`. The
  * `.env` layers are loaded the way `delorun start` loads them, so this process
- * first gets the launch variables that `delorun start` sets.
+ * first gets the launch variables that `delorun start` sets. The `update` check
+ * reports the profile's last update check from its record ([update](./update.ts))
+ * and sends no request.
  *
  * @module @delo/cli/doctor
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delo/contract-setup-answers'
 import { readProtectedFile, resolveDeloHome } from '@delo/home'
 import { parseDocument } from 'yaml'
@@ -32,17 +36,23 @@ import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { deloVersion } from '../version.ts'
 import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
+import { checkUpdate } from './update.ts'
+import { runtimePlatformOf } from '../update/channel.ts'
+import { runtimeOfFile } from '../update/runtime.ts'
+import { launcherAnchor } from '../update/trusted-root.ts'
 
 /** The `delorun doctor --help` text. */
 const DOCTOR_USAGE = [
   'Usage: delorun doctor [--port <n>]',
   '',
   'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key) and the studio\'s port (port),',
-  'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused.',
+  'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
+  'and the last check for a newer release (update), which sends no request.',
   'Prints one line per check: pass on standard output, warn or fail on standard error.',
   'Exit codes: 0 when no check fails, 1 when one fails, 2 for a wrong command line. Warnings do not change the exit code.',
   '',
-  'No model is contacted and no command runs, except the read-only probe `docker version` of the Docker engine; no container starts.',
+  'No model is contacted, no request is sent and no command runs, except the read-only probe `docker version` of the Docker',
+  'engine; no container starts. The update line reports the last check delorun made; delorun update --check makes one now.',
   'The key is checked by its format alone, and it is never printed.',
   '',
   '  --port <n>  the loopback port to check, from 1 to 65535 (default 3080, the studio\'s port)',
@@ -118,6 +128,17 @@ async function keyCheck(context: CommandContext, profile: string): Promise<Check
 }
 
 /**
+ * The update check: resolve the home and this command's runtime, then report the profile's last update check.
+ * @param context - the command's environment.
+ * @param profile - the CLI profile.
+ * @returns the check's result.
+ */
+async function updateCheck(context: CommandContext, profile: string): Promise<CheckResult> {
+  const home = (await resolveDeloHome(context.env)).path
+  return checkUpdate(home, profile, runtimeOfFile(home, fileURLToPath(import.meta.url)), () => runtimePlatformOf(process.platform, process.arch), launcherAnchor(home, context.env).root)
+}
+
+/**
  * Run one check. A failure inside the check becomes that check's failure
  * line, so the remaining checks still run.
  * @param name - the check's name.
@@ -172,7 +193,7 @@ export interface DoctorEnvironment {
 export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
   return {
     name: 'doctor',
-    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port and the release-log check',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the release-log check and the last update check',
     async run(args, context) {
       if (args.includes('--help') || args.includes('-h')) {
         context.stdout(DOCTOR_USAGE)
@@ -187,6 +208,7 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         await guarded('key', () => keyCheck(context, profile)),
         await guarded('port', () => checkPort(port)),
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
+        await guarded('update', async () => updateCheck(context, profile)),
       ]
       const { importRecord } = environment
       if (importRecord !== undefined) results.push(await guarded('import', async () => checkImportRecord((await resolveDeloHome(context.env)).path, importRecord)))

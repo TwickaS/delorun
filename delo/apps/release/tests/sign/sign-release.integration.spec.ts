@@ -5,7 +5,7 @@
  * Every key is a throwaway key generated in the test.
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
@@ -37,6 +37,13 @@ function editDraft(fixture: ReleaseFixture, edit: (draft: { runtime: Record<stri
   writeFileSync(path, `${JSON.stringify(draft, undefined, 2)}\n`)
 }
 
+function editDraftFields(fixture: ReleaseFixture, edit: (draft: Record<string, unknown>) => void): void {
+  const path = join(fixture.release, 'manifest-draft.json')
+  const draft = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+  edit(draft)
+  writeFileSync(path, `${JSON.stringify(draft, undefined, 2)}\n`)
+}
+
 function refusedWithoutWriting(fixture: ReleaseFixture, result: { status: number | null, stderr: string }, message: string): void {
   expect(result.stderr).toContain(message)
   expect(result.status).toBe(1)
@@ -57,6 +64,7 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     const manifest = verifySignedManifest(root, readFileSync(join(fixture.release, MANIFEST)))
     expect(manifest.rebuild.builders).toEqual([{ name: 'fixture-holder', ci: false }])
     expect(manifest.source.commit).toBe(fixture.commit)
+    expect(manifest).toMatchObject({ security: false, summary: 'The fixture release.' })
     expect(manifest.rebuild.record.name).toBe(RECORD)
     expect(() => checkFileRef(manifest.rebuild.record, readFileSync(join(fixture.release, RECORD)))).not.toThrow()
     expect(readFileSync(join(fixture.release, RECORD))).toEqual(readFileSync(fixture.recordPath))
@@ -424,5 +432,72 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     expect(readFileSync(join(fixture.release, `delorun-${VERSION}.spdx.json`), 'utf8')).toContain(COMMITTED_BASE_DIGEST)
     expect(fixture.record().status).toBe(0)
     expect((await fixture.sign()).status).toBe(0)
+  })
+
+  it('c02-draft-without-notice-fields-refused: signing refuses a draft without security or without summary', async (test) => {
+    const fixture = await releaseFixture(test)
+    for (const field of ['security', 'summary']) {
+      const path = join(fixture.release, 'manifest-draft.json')
+      const original = readFileSync(path)
+      editDraftFields(fixture, (draft) => { delete draft[field] })
+      refusedWithoutWriting(fixture, await fixture.sign(), 'the manifest draft manifest-draft.json does not read')
+      writeFileSync(path, original)
+    }
+  })
+
+  it('c02-summary-control-characters-refused: signing refuses a draft whose summary holds an escape, a newline or a right-to-left override', async (test) => {
+    const fixture = await releaseFixture(test)
+    for (const summary of ['Fixes \u001b[31mred\u001b[0m text', 'Two\nlines', 'Fixes ‮evil.exe']) {
+      editDraftFields(fixture, (draft) => { draft.summary = summary })
+      refusedWithoutWriting(fixture, await fixture.sign(), 'a release summary: 1 to 200 characters')
+    }
+  })
+
+  it('c02-summary-too-long-refused: signing refuses a draft whose summary is longer than 200 characters', async (test) => {
+    const fixture = await releaseFixture(test)
+    editDraftFields(fixture, (draft) => { draft.summary = 'x'.repeat(201) })
+    refusedWithoutWriting(fixture, await fixture.sign(), 'a release summary: 1 to 200 characters')
+  })
+
+  it('c02-security-not-boolean-refused: signing refuses a draft whose security is not a boolean', async (test) => {
+    const fixture = await releaseFixture(test)
+    editDraftFields(fixture, (draft) => { draft.security = 'true' })
+    refusedWithoutWriting(fixture, await fixture.sign(), 'the manifest draft manifest-draft.json does not read')
+  })
+
+  it('patch-rule-allows-equal-patch: a security-fix patch with the earlier release\'s base, formats and interface signs, and the manifest carries the marker', async (test) => {
+    const fixture = await releaseFixture(test, { version: '0.1.1', earlier: [{ version: '0.1.0' }] })
+    editDraftFields(fixture, (draft) => { Object.assign(draft, { security: true, summary: 'Fixes a crash when a workspace path holds a newline.' }) })
+    expect(fixture.record().status).toBe(0)
+    const result = await fixture.sign()
+    expect(result.stderr).toBe('')
+    expect(result.status).toBe(0)
+    const manifest = verifySignedManifest(rootFile(fixture.keys).metadata, readFileSync(join(fixture.release, 'delorun-0.1.1.manifest.json')))
+    expect(manifest).toMatchObject({ version: '0.1.1', security: true, summary: 'Fixes a crash when a workspace path holds a newline.' })
+  })
+
+  it('patch-rule-skips-new-minor: the first release of a minor signs on a moved upstream base', async (test) => {
+    const fixture = await releaseFixture(test, { version: '0.2.0', earlier: [{ version: '0.1.0', dsh: '0.2.1' }, { version: '0.1.1', dsh: '0.2.1' }] })
+    expect(fixture.record().status).toBe(0)
+    const result = await fixture.sign()
+    expect(result.stderr).toBe('')
+    expect(result.status).toBe(0)
+  })
+
+  it('refuses a patch the patch rule refuses before writing any file', async (test) => {
+    const fixture = await releaseFixture(test, { version: '0.1.1', earlier: [{ version: '0.1.0', dsh: '0.2.1' }] })
+    expect(fixture.record().status).toBe(0)
+    const before = readdirSync(fixture.release).sort()
+    const result = await fixture.sign()
+    expect(result.stderr).toBe('signing refuses: release 0.1.1 is a patch of 0.1.0 and moves DSH from 0.2.1 to 0.2.2-rc.1; a release that moves the upstream base is at least a minor: release it as 0.2.0')
+    expect(result.status).toBe(1)
+    expect(readdirSync(fixture.release).sort()).toEqual(before)
+  })
+
+  it('patch-rule-refuses-draft-base-mismatch: signing refuses a draft whose dsh is not the app-boot version at the release commit', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    editDraftFields(fixture, (draft) => { draft.dsh = '0.2.3' })
+    refusedWithoutWriting(fixture, await fixture.sign(), `the draft's dsh 0.2.3 is not 0.2.2-rc.1, the upstream version packages/boot/app-boot/package.json names at the release commit ${fixture.commit}; draft the release with dsh 0.2.2-rc.1`)
   })
 })

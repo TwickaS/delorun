@@ -7,11 +7,13 @@
  * The channel's origins are the ones the launcher that installed the runtime recorded in `trust/channel.json`, and
  * the release log is the one the trusted root names unless that record names another, each read through the
  * launcher's own `channelPlan` and `logPlan`, so an update fetches from where the installation did.
+ * The update check opens the same channel, from the same roots and record, with its own deadline
+ * ({@link homeCheckChannel}).
  *
  * @module @delo/cli/update/channel
  */
 import { RUNTIME_PLATFORMS, type ReleaseChannel, type RootMetadata, type RuntimePlatform } from '@delo/contract-release-manifest'
-import { Downloader, LauncherChannel, progressLines, readChannelRecord, type ChannelOrigins, type InstallProgress } from '@delo/install'
+import { Downloader, LauncherChannel, progressLines, readChannelRecord, RELEASE_TIMINGS, type ChannelOrigins, type HostRule, type InstallProgress, type ReleaseSource } from '@delo/install'
 import { channelPlan, logPlan } from '@delo/npm-launcher'
 import { tilesTransport, type Fetch, type ReleaseLogTransport } from '@delo/release-verify'
 import type { UpdateReleaseChannel } from '@delo/runtime-store'
@@ -81,5 +83,55 @@ export async function homeReleaseChannel(home: string, platform: RuntimePlatform
     source: plan.source,
     downloader: new Downloader({ hosts: plan.rule }),
     progress: installLines(line),
+  })
+}
+
+/** What {@link homeCheckChannel} needs besides the home. */
+export interface CheckChannelOptions {
+  /** The runtime platform. */
+  readonly platform: RuntimePlatform
+  /** The channel the running release names. */
+  readonly channel: ReleaseChannel
+  /** The root files the launcher that started this runtime ships, oldest first. */
+  readonly shipped: readonly Uint8Array[]
+  /** The fetch every request goes through; it carries the check's deadline. */
+  readonly fetch: typeof globalThis.fetch
+  /** How long one request may take, in milliseconds. */
+  readonly timeoutMs: number
+  /** The clock, in milliseconds. */
+  readonly now: () => number
+  /** Where the files are published and the hosts they may come from; the installation's recorded channel by default. */
+  readonly publication?: Publication
+}
+
+/** Where release files are published, and the download rule for their hosts. */
+export interface Publication {
+  /** The metadata host and the release files' URLs. */
+  readonly source: ReleaseSource
+  /** The hosts, scheme and redirects a download may use. */
+  readonly hosts: HostRule
+}
+
+/**
+ * The release channel of this home as the update check opens it: the channel {@link homeReleaseChannel} opens, from
+ * the same launcher roots and the same channel record, whose every request is held to the check's timeout. The check
+ * calls only `LauncherChannel.newest`, which runs no online log check, so the log transport is never asked.
+ * @param home - the resolved Delo home.
+ * @param options - the platform, the channel, the launcher's roots, the fetch, the timeout, the clock and the publication.
+ * @returns the channel.
+ * @throws {InstallError} `TRUST_STATE_INVALID` when the channel record does not read; the launcher's refusal of a
+ *   recorded origin that breaks its rule.
+ */
+export async function homeCheckChannel(home: string, options: CheckChannelOptions): Promise<LauncherChannel> {
+  const origins = await readChannelRecord(home) ?? {}
+  const plan = channelPlan(origins)
+  const publication = options.publication ?? { source: plan.source, hosts: plan.rule }
+  const timings = { connectMs: Math.min(options.timeoutMs, RELEASE_TIMINGS.connectMs), stallMs: Math.min(options.timeoutMs, RELEASE_TIMINGS.stallMs), totalMs: options.timeoutMs }
+  return new LauncherChannel({
+    home, platform: options.platform, roots: options.shipped, channel: options.channel,
+    log: trusted => recordedLogTransport(origins, trusted, options.fetch),
+    source: publication.source,
+    downloader: new Downloader({ fetch: options.fetch, timings, hosts: publication.hosts }),
+    now: options.now,
   })
 }

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delo/contract-plugin-versions": "workspace:*",
     "@delo/contract-release-log": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/contract-update-report": "workspace:*",

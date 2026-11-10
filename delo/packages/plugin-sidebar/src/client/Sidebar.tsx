@@ -7,7 +7,8 @@
  * first nine chats, and Alt with that digit opens one outside a text field.
  * Dragging a card pins, reorders the pins, unpins, settles, returns or wakes
  * it, as T3 Code's drag does. Settling, snoozing, pinning and unpinning offer
- * Undo for a few seconds, in the undo notice at the sidebar's foot. Ported
+ * Undo for a few seconds, in the undo notice at the sidebar's foot. Below the
+ * list, a quiet notice names a newer Delorun release when one exists. Ported
  * from T3 Code's sidebar (`apps/web/src/components/Sidebar.tsx` and its
  * `sidebar/` parts, MIT, © 2026 T3 Tools Inc.) onto the harness's Sessions
  * and Workspaces.
@@ -35,6 +36,7 @@ import {
   withAutoSettled, type ChatStatusFacts, type SidebarChat, type SidebarFolder, type SidebarListItem, type SidebarListMarker, type SidebarSection,
 } from './sections.ts'
 import type { UndoKind, UndoLine } from './undo.ts'
+import { UpdateNoticeCard, type UpdateNoticeFace } from './UpdateNotice.tsx'
 import { WorkspaceBadge, WorkspaceIconsContext } from './WorkspaceBadge.tsx'
 import css from './Sidebar.module.css'
 
@@ -86,6 +88,8 @@ export type SidebarInjected = {
   readonly preference: { readonly read: (key: string) => string | null; readonly write: (key: string, value: string) => void }
   /** The last change the person can take back, which the foot's undo notice offers. */
   readonly undoLine: UndoLine
+  /** The update notice shown below the list. */
+  readonly updateNotice: UpdateNoticeFace
 }
 
 /** The list's props: its seat's owner props and the studio's hooks, the dictionary and what the list does. */
@@ -134,7 +138,7 @@ export function Sidebar(props: SidebarProps) {
     list, workspaces, open, startSession, canAddWorkspace, addWorkspaceAnchor, addWorkspace, renameSession, renameWorkspace,
     deleteWorkspace, searchSessions, searchRequest, searchShortcut, openSessionMenu,
     useSessionStatus, useWorkspaces, useSnoozed, useSettled, useWoke, useKept, useAutoSettleDays, useSnoozedUntil, useChatStatesReady,
-    useMenuTarget, useSettings, pin, unpin, setWorkspaceIcon, pruneIcons, attach, preference, t,
+    useMenuTarget, useSettings, pin, unpin, setWorkspaceIcon, pruneIcons, attach, preference, updateNotice, t,
   } = props
   const statuses = useSessionStatus(state => state as ReadonlyMap<SessionId, ChatStatusFacts>)
   const pinnedIds = useWorkspaces(state => state.pinnedSessionIds)
@@ -679,6 +683,7 @@ export function Sidebar(props: SidebarProps) {
               </HoverCardGroup>
             )}
         </div>
+        <UpdateNoticeCard face={updateNotice} t={t} />
         {iconWorkspace !== undefined && (
           <IconPicker
             t={t}

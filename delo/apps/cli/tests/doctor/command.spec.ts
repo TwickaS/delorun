@@ -91,12 +91,12 @@ function writeState(state: 'verified' | 'unchecked' | 'failed'): void {
 const IMPORT: DshImportRecordEntry = { at: '2026-11-09T08:00:00.000Z', source: '/home/person/.dsh', chats: 2, workspaces: 1, profiles: ['web'], credentials: [], skipped: 0 }
 
 describe('delorun doctor in process', { timeout: 60_000 }, () => {
-  it('prints the release-log line after the four checks, and no import line without a reader', async () => {
+  it('prints the release-log line and the update line after the four checks, and no import line without a reader', async () => {
     writeState('verified')
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('pass release-log: release 0.4.0 verified against the release log at 2026-11-10T10:00:00Z.\n')
-    expect(result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log'])
+    expect(result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log', 'update'])
     expect(result.lines.some(line => / import: /.test(line))).toBe(false)
   })
 

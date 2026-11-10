@@ -52,7 +52,7 @@ async function servedRelease(test: TestContext, closureFiles?: string): Promise<
   writeFileSync(rootPath, trusted.root)
   const channel = join(directory, 'channel')
   const built = await runEntryAsync('local-release.ts', [
-    '--version', VERSION, '--out', channel, '--root', rootPath,
+    '--version', VERSION, '--summary', 'A local fixture release.', '--out', channel, '--root', rootPath,
     '--targets-key', keyFile(directory, 'targets.pem', trusted.keys.targets),
     '--timestamp-key', keyFile(directory, 'timestamp.pem', trusted.keys.timestamp),
     '--state', join(directory, 'state.json'),
@@ -254,7 +254,7 @@ describe('the built launcher against a local release', LIMIT, () => {
     writeFileSync(rootPath, trusted.root)
     const channel = join(directory, 'channel')
     const signed = await runEntryAsync('local-release.ts', [
-      '--version', VERSION, '--out', channel, '--root', rootPath,
+      '--version', VERSION, '--summary', 'A local fixture release.', '--out', channel, '--root', rootPath,
       '--targets-key', keyFile(directory, 'targets.pem', trusted.keys.targets),
       '--timestamp-key', keyFile(directory, 'timestamp.pem', trusted.keys.timestamp),
       '--state', join(directory, 'state.json'),

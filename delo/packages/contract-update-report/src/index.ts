@@ -303,3 +303,61 @@ export interface RestoreChanges {
   /** Exemption grants added or removed, per axis file. */
   readonly exemptions: readonly { readonly axis: VersionAxis, readonly key: string, readonly version: SemanticVersion, readonly change: 'added' | 'removed' }[]
 }
+
+/** The `schema` value of the update-check record, `run/<profile>/update-check.json` (contract C3, "Update check"). */
+export const UPDATE_CHECK_SCHEMA = 'delo.update-check/1'
+
+/** The channel's newest release as the update check verified it: the facts its signed manifest states. */
+export interface CheckedRelease {
+  /** Delo's version of the release. */
+  readonly delo: SemanticVersion
+  /** Upstream's version the release is built on. */
+  readonly dsh: SemanticVersion
+  /** The channel the release is published on. */
+  readonly channel: ReleaseChannel
+  /** Whether the release is marked as a security fix; false for a manifest that carries no mark. */
+  readonly security: boolean
+  /** The release's one-line summary; absent for a manifest that carries none. */
+  readonly summary?: string
+}
+
+/** The update check's record of one CLI profile: when it last ran and what it last verified. */
+export interface UpdateCheckRecord {
+  /** Always {@link UPDATE_CHECK_SCHEMA}. */
+  readonly schema: typeof UPDATE_CHECK_SCHEMA
+  /** When the last check ran, whether it succeeded or not. */
+  readonly checked: UtcTimestamp
+  /** The newest release the last successful check verified; absent before any check succeeded. */
+  readonly newest?: CheckedRelease
+  /** When {@link UpdateCheckRecord.newest} was verified. */
+  readonly verified?: UtcTimestamp
+  /** Why the last check failed; absent when it succeeded. */
+  readonly failure?: string
+}
+
+/** How far a newer release moves from the running one, by its semantic version. */
+export type UpdateKind = 'patch' | 'minor' | 'major'
+
+/** A newer release than the one that runs, as the terminal, `delorun doctor` and the studio show it. */
+export interface UpdateNotice {
+  /** The release that runs. */
+  readonly running: { readonly delo: SemanticVersion, readonly dsh: SemanticVersion }
+  /** The newer release. */
+  readonly release: CheckedRelease
+  /** How far it moves. */
+  readonly kind: UpdateKind
+  /** How many installed plugins of the profile the release would disable on either version axis. */
+  readonly disables: number
+}
+
+/** The command a notice names; the notice itself applies nothing. */
+export const UPDATE_COMMAND = 'delorun update'
+
+/** The harness's Connection Fetch route that answers `GET` with {@link UpdateNoticeResponse}. */
+export const UPDATE_NOTICE_PATH = '/api/deloUpdateCheck.notice'
+
+/** The answer of {@link UPDATE_NOTICE_PATH}: the notice, or `null` when no newer release is known. */
+export interface UpdateNoticeResponse {
+  /** The notice, or `null`. */
+  readonly notice: UpdateNotice | null
+}

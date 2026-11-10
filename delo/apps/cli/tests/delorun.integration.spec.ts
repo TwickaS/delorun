@@ -7,7 +7,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
-import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES } from '@delo/contract-home-layout'
+import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { HostNotStoppedError, sendHomeRequest, type LocalDeviceApproval } from '@delo/home-process'
 import { parse } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
@@ -18,6 +19,7 @@ import { NO_APPROVED_CONTENT } from '../src/compose.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { requestStudioLink } from '../src/open/studio.ts'
 import { realPreStartSteps, startForeground, upstreamAddStudioBundle, upstreamDependencies, type StartDependencies } from '../src/start.ts'
+import type { UpdateWatchOptions } from '../src/update/notice-host.ts'
 import { runtimeOfFile } from '../src/update/runtime.ts'
 import { composedBootRows, composedProviders } from './fixtures/composed-rows.ts'
 
@@ -246,7 +248,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
         const booted = (): BootedRow[] => composedBootRows(deloHome, options, rows)
-        return Promise.resolve({ rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
+        return Promise.resolve({ rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => () => Promise.resolve('answered'),
@@ -322,6 +324,26 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     rmSync(join(deloHome, 'profiles', 'default', 'delo-migrations.json'))
     const failing: StartDependencies = { ...recording([]), preStartSteps: realPreStartSteps(() => Promise.reject(new Error('disk gone')), () => Promise.resolve(false)) }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, failing)).rejects.toThrow('disk gone')
+  })
+
+  it('attaches the update check to a Host that runs from the store, and prints its line', async () => {
+    expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    const watched: UpdateWatchOptions[] = []
+    const printed: string[] = []
+    const output = { ...context, stdout: (text: string) => void printed.push(text) }
+    const fromStore: StartDependencies = {
+      ...recording([]),
+      runProfile: async (options) => ({
+        ...await recording([]).runProfile(options),
+        watchUpdates: (watch) => { watched.push(watch); watch.line('Delorun 0.1.1 is available'); return Promise.resolve() },
+      }),
+      runtime: () => ({ version: brandString<RuntimeVersion>('0.1.0'), store: true }),
+      updates: () => ({ copies: { recover: () => Promise.resolve() }, store: { pointers: () => Promise.resolve({ current: brandString<RuntimeVersion>('0.1.0') }) } }) as never,
+    }
+    expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, fromStore)).toBeUndefined()
+    expect(watched).toEqual([expect.objectContaining({ home: deloHome, profile: 'default', running: '0.1.0' })])
+    expect(printed).toContain('Delorun 0.1.1 is available\n')
+    rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
   })
 
   it('boots the CLI profile with DSH_HOME set to the Delo home, and a second start leaves one holder', async () => {
