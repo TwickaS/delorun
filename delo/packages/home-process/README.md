@@ -92,7 +92,7 @@ The specs drive the handshake through a fixture store in `tests/support.ts`, whi
 
 ## Not yet implemented
 
-- The chat gate counts no background job and holds no scheduled delivery.
+- The CLI's Host counts running chats but does not refuse a new turn while the gate is held, because a hook on the model request path needs a registered parity switch (contract C16); it counts no background job and holds no scheduled delivery.
 - Step 8's confinement probes and their results, and `delorun verify`'s report of a dialect that cannot enforce C1's rules. The home process wraps no confined command itself yet; the probes, when they land, retry once a Landlock wrap refused with exit code 125 because an entry on the path to the home changed between the wrap and the launch, before reporting it.
 - Start at login (`--at-login`) and `delorun status --follow`.
 - The Windows named pipe with C1's DACL: the channel listens only on a Unix socket.

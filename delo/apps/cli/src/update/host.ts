@@ -1,12 +1,11 @@
 /**
  * What the CLI's Host reports to the home process (contracts C19 and C3): its running chats, counted from upstream's
- * `agent/status` event with each agent's own cancellation, a new turn refused while an update or a stop waits, and
- * C3's health check H1 to H5 over the booted rows, the studio's listener, the runtime's files and the profile's
- * bundle list.
+ * `agent/status` event with each agent's own cancellation, and C3's health check H1 to H5 over the booted rows, the
+ * studio's listener, the runtime's files and the profile's bundle list.
  *
- * A turn that begins while the gate is held reaches upstream's `agent/pre-step` hook at its first step, which rejects
- * it, so the turn ends `blocked` and the agent becomes idle. Background jobs and held scheduled deliveries are not
- * counted yet.
+ * A turn that begins while the gate is held is counted, and the drain waits for it; refusing it needs a hook on the
+ * model request path, which contract C16 requires to sit behind a registered parity switch. Background jobs and held
+ * scheduled deliveries are not counted yet.
  *
  * @module @delo/cli/update/host
  */
@@ -22,10 +21,10 @@ import type { BootedRow } from '../delo-bundles.ts'
 export const STUDIO_HEALTH_TIMEOUT_MS = 10_000
 
 /**
- * Count the Host's running chats into the gate and refuse a new turn while it is held.
+ * Count the Host's running chats into the gate.
  * @param ctx - the booted profile's root context.
  * @param gate - the home process's gate.
- * @returns nothing; both listeners are effects of `ctx` and go with it.
+ * @returns nothing; the listener is an effect of `ctx` and goes with it.
  */
 export function watchChats(ctx: Context, gate: CountingChatGate): void {
   const ends = new Map<Agent, () => void>()
@@ -36,11 +35,6 @@ export function watchChats(ctx: Context, gate: CountingChatGate): void {
     }
     ends.get(agent)?.()
     ends.delete(agent)
-  })
-  ctx.on('agent/pre-step', async (payload, next) => {
-    // A turn's first step while an update or a stop waits: the turn is refused before it reaches the model.
-    if (payload.step === 1 && gate.held) return { kind: 'reject' }
-    return next()
   })
 }
 

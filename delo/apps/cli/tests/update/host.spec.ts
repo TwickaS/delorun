@@ -38,19 +38,6 @@ describe('watchChats', () => {
     return { ctx, gate }
   }
 
-  /**
-   * Offer a step to the pre-step hook and report what the chain decided.
-   * @param ctx - the context.
-   * @param agent - the agent proposing the step.
-   * @param step - the step number within the turn.
-   * @returns the decision's kind.
-   */
-  async function proposeStep(ctx: Context, agent: Agent, step: number): Promise<string> {
-    const payload = { agent, messages: [], turn: 1, step, signal: new AbortController().signal, modelSelection: { provider: 'p', model: 'm' } }
-    const decision = await ctx.waterfall('agent/pre-step', payload, () => Promise.resolve({ kind: 'enter' as const, messages: [] }))
-    return decision.kind
-  }
-
   it('counts an agent while it runs, once however often it reports running, and stops counting when it is idle', async () => {
     const { ctx, gate } = watched()
     const agent = fakeAgent()
@@ -82,24 +69,6 @@ describe('watchChats', () => {
 
     expect(first.cancellations).toEqual([{ kind: 'hook', reason: 'Delo is stopping or updating' }])
     expect(second.cancellations).toEqual([{ kind: 'hook', reason: 'Delo is stopping or updating' }])
-  })
-
-  it('rejects the first step of a turn while the gate is held, and lets it through once released', async () => {
-    const { ctx, gate } = watched()
-    const agent = fakeAgent()
-
-    const release = gate.hold()
-    expect(await proposeStep(ctx, agent, 1)).toBe('reject')
-
-    release()
-    expect(await proposeStep(ctx, agent, 1)).toBe('enter')
-  })
-
-  it('lets a later step of a turn that began before the hold carry on', async () => {
-    const { ctx, gate } = watched()
-    gate.hold()
-
-    expect(await proposeStep(ctx, fakeAgent(), 2)).toBe('enter')
   })
 })
 
