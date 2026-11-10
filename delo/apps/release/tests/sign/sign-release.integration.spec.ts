@@ -293,6 +293,9 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     const result = fixture.run('sign-release.ts', ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath])
     refusal(result.stderr)
     expect(result.status).toBe(1)
+    const stated = fixture.run('sign-release.ts', ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--first-of-line'])
+    refusal(stated.stderr)
+    expect(stated.status).toBe(1)
   })
 
   it('refuses a rebuild without the SBOM, recording or signing', async (test) => {
@@ -497,6 +500,19 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     const result = await fixture.sign()
     expect(result.stderr).toBe('')
     expect(result.status).toBe(0)
+  })
+
+  it('patch-rule-refuses-patch-without-earlier-release: signing refuses a patch version with no earlier release of its line, and signs it as the first of the line when the holder says so', async (test) => {
+    const fixture = await releaseFixture(test, { version: '0.1.3' })
+    expect(fixture.record().status).toBe(0)
+    const refused = await fixture.sign()
+    expect(refused.stderr).toContain('signing refuses: release 0.1.3 is a patch version, but no earlier release of 0.1 is tagged here')
+    expect(refused.stderr).toContain('sign with --first-of-line')
+    expect(refused.status).toBe(1)
+    expect(existsSync(join(fixture.release, 'delorun-0.1.3.manifest.json'))).toBe(false)
+    const signed = await fixture.sign({}, { firstOfLine: true })
+    expect(signed.stderr).toBe('')
+    expect(signed.status).toBe(0)
   })
 
   it('refuses a patch the patch rule refuses before writing any file', async (test) => {

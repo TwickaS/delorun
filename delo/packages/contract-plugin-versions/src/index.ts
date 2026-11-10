@@ -87,13 +87,13 @@ export const VERSION_OUTPUT_LABELS: readonly ['Delo', 'DSH'] = ['Delo', 'DSH']
 /** The `schema` value of `plugin-interface.json`, the inventory of the interfaces Delo offers plugins. */
 export const PLUGIN_INTERFACE_SCHEMA = 'delo.plugin-interface/1'
 
-/** Where a service runs: in the Host process, or in the studio's browser page (a source under a `client/` directory). */
+/** Where a service or an event runs: in the Host process, or in the studio's browser page (a source under a `client/` directory). */
 export type PluginInterfaceSide = 'host' | 'browser'
 
 /**
- * One interface a Delo package offers. A `service` is a member of Cordis's `interface Context` that the named source
- * file declares inside `declare module '@deepseek-ai/cordis'`; a `manifest-field` is a plugin `package.json` field,
- * written as its dotted path, that the named source file reads.
+ * One interface a Delo package offers. A `service` is a member of Cordis's `interface Context`, and an `event` a member
+ * of its `interface Events`, that the named source file declares inside `declare module '@deepseek-ai/cordis'`; a
+ * `manifest-field` is a plugin `package.json` field, written as its dotted path, that the named source file reads.
  */
 export type PluginInterfaceEntry =
   | {
@@ -102,6 +102,16 @@ export type PluginInterfaceEntry =
     /** The `Context` member's name, such as `deloStudio`. */
     readonly name: string
     /** Where the service runs. */
+    readonly side: PluginInterfaceSide
+    /** The repository-relative source file that declares it. */
+    readonly source: string
+  }
+  | {
+    /** A Cordis event. */
+    readonly kind: 'event'
+    /** The `Events` member's name, such as `delo/update-ready`. */
+    readonly name: string
+    /** Where the event is emitted and handled. */
     readonly side: PluginInterfaceSide
     /** The repository-relative source file that declares it. */
     readonly source: string
@@ -118,14 +128,15 @@ export type PluginInterfaceEntry =
 /**
  * `delo/packages/contract-plugin-versions/plugin-interface.json`, exported as `./plugin-interface.json`. `covered`
  * lists the interfaces plugins may rely on, which a patch release keeps exactly; `internal` lists every other context
- * service a Delo package declares, which Delo's own packages use and plugins must not rely on. Every service a Delo
- * package declares appears in exactly one of the two lists.
+ * service and event a Delo package or app declares, which Delo's own code uses and plugins must not rely on. Every
+ * service and event declared in a `src` tree under `delo/packages/` or `delo/apps/` appears in exactly one of the two
+ * lists.
  */
 export interface PluginInterface {
   /** Always {@link PLUGIN_INTERFACE_SCHEMA}. */
   readonly schema: typeof PLUGIN_INTERFACE_SCHEMA
   /** The interfaces offered to plugins. */
   readonly covered: readonly PluginInterfaceEntry[]
-  /** Delo's own services, not offered to plugins. */
+  /** Delo's own services and events, not offered to plugins. */
   readonly internal: readonly PluginInterfaceEntry[]
 }

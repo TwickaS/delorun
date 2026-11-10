@@ -1,9 +1,9 @@
 /**
  * The plugin-facing interface inventory, `delo/packages/contract-plugin-versions/plugin-interface.json`
- * (`delo.plugin-interface/1`), and the source checks behind it: which members of Cordis's `interface Context` a source
- * file declares inside `declare module '@deepseek-ai/cordis'`, and whether a source file reads a plugin manifest field.
- * The patch rule (`patch-rule.ts`) and the inventory's drift spec both use these checks, so the inventory and the rule
- * read sources the same way.
+ * (`delo.plugin-interface/1`), and the source checks behind it: which members of Cordis's `interface Context` (services)
+ * and `interface Events` (events) a source file declares inside `declare module '@deepseek-ai/cordis'`, and whether a
+ * source file reads a plugin manifest field. The patch rule (`patch-rule.ts`) and the inventory's drift spec both use
+ * these checks, so the inventory and the rule read sources the same way.
  *
  * @module @delo/release/sign/plugin-interface
  */
@@ -15,8 +15,14 @@ import { canonicalJson, parseStrictJson, toJsonValue } from '@delo/release-forma
 /** The inventory's path relative to the repository root. */
 export const PLUGIN_INTERFACE_PATH = 'delo/packages/contract-plugin-versions/plugin-interface.json'
 
-/** The module name whose `interface Context` augmentations declare context services. */
+/** The module name whose `interface Context` and `interface Events` augmentations declare services and events. */
 export const CORDIS_MODULE = '@deepseek-ai/cordis'
+
+/** The Cordis interface whose members each declared entry kind names. */
+export const CORDIS_INTERFACES = { service: 'Context', event: 'Events' } as const
+
+/** A Cordis interface the inventory reads members of. */
+export type CordisInterface = (typeof CORDIS_INTERFACES)[keyof typeof CORDIS_INTERFACES]
 
 /** The inventory's size limit before parsing. */
 const PLUGIN_INTERFACE_SIZE_LIMIT = 256 * 1024
@@ -26,6 +32,7 @@ const sourcePath = z.string().max(512).regex(/^[A-Za-z0-9_@-][A-Za-z0-9._@-]*(?:
 
 const entrySchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('service'), name: z.string().regex(/^[A-Za-z_$][\w$]*$/u), side: z.enum(['host', 'browser']), source: sourcePath }),
+  z.strictObject({ kind: z.literal('event'), name: z.string().max(128).regex(/^[A-Za-z0-9_$@][\w$@./:-]*$/u), side: z.enum(['host', 'browser']), source: sourcePath }),
   z.strictObject({ kind: z.literal('manifest-field'), name: z.string().regex(/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/u), source: sourcePath }),
 ])
 
@@ -66,7 +73,8 @@ export function entryKey(entry: PluginInterfaceEntry): string {
 export function describeEntry(entry: PluginInterfaceEntry): string {
   switch (entry.kind) {
     case 'service':
-      return `service ${entry.name} (${entry.side}, in ${entry.source})`
+    case 'event':
+      return `${entry.kind} ${entry.name} (${entry.side}, in ${entry.source})`
     case 'manifest-field':
       return `manifest field ${entry.name} (read in ${entry.source})`
   }
@@ -77,12 +85,15 @@ function parse(fileName: string, text: string): ts.SourceFile {
 }
 
 /**
- * The members of `interface Context` that a source file declares inside `declare module '@deepseek-ai/cordis'`.
- * @param fileName - the file's name, whose `.tsx` extension selects JSX parsing.
+ * The members of a Cordis interface that a source file declares inside `declare module '@deepseek-ai/cordis'`: of
+ * `Context`, its services; of `Events`, its events. Members named by an identifier or a string literal count; index
+ * signatures and computed names do not.
+ * @param fileName - the file's name, whose `.tsx` extension selects JSX parsing; a `.d.ts` file parses as TypeScript.
  * @param text - the file's text.
+ * @param name - the interface, `Context` or `Events`.
  * @returns the member names in declaration order, repeated when the file declares one twice.
  */
-export function declaredContextMembers(fileName: string, text: string): string[] {
+export function declaredCordisMembers(fileName: string, text: string, name: CordisInterface): string[] {
   const members: string[] = []
   // A file that never names the module declares nothing in it, and parsing it is the cost of a drift check.
   if (!text.includes(CORDIS_MODULE)) return members
@@ -90,10 +101,10 @@ export function declaredContextMembers(fileName: string, text: string): string[]
     if (!ts.isModuleDeclaration(statement) || !ts.isStringLiteral(statement.name) || statement.name.text !== CORDIS_MODULE) continue
     if (statement.body === undefined || !ts.isModuleBlock(statement.body)) continue
     for (const declaration of statement.body.statements) {
-      if (!ts.isInterfaceDeclaration(declaration) || declaration.name.text !== 'Context') continue
+      if (!ts.isInterfaceDeclaration(declaration) || declaration.name.text !== name) continue
       for (const member of declaration.members) {
-        const name = member.name
-        if (name !== undefined && (ts.isIdentifier(name) || ts.isStringLiteral(name))) members.push(name.text)
+        const key = member.name
+        if (key !== undefined && (ts.isIdentifier(key) || ts.isStringLiteral(key))) members.push(key.text)
       }
     }
   }
@@ -131,15 +142,16 @@ export function readsManifestField(fileName: string, text: string, field: string
 }
 
 /**
- * Whether a source file still offers an entry: a service it declares, or a manifest field it reads.
+ * Whether a source file still offers an entry: a service or an event it declares, or a manifest field it reads.
  * @param entry - the entry.
  * @param text - the text of the entry's source file.
- * @returns true when the source declares the service or reads the field.
+ * @returns true when the source declares the service or the event, or reads the field.
  */
 export function sourceOffers(entry: PluginInterfaceEntry, text: string): boolean {
   switch (entry.kind) {
     case 'service':
-      return declaredContextMembers(entry.source, text).includes(entry.name)
+    case 'event':
+      return declaredCordisMembers(entry.source, text, CORDIS_INTERFACES[entry.kind]).includes(entry.name)
     case 'manifest-field':
       return readsManifestField(entry.source, text, entry.name)
   }

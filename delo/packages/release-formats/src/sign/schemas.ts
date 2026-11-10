@@ -96,7 +96,7 @@ const desktopRef = fileRef.extend({ sha512: z.string().regex(/^[A-Za-z0-9+/]{86}
 export const ImageRefSchema = z.strictObject({ repository: z.string().min(1), index: oci, platforms: z.strictObject({ 'linux/amd64': oci, 'linux/arm64': oci }), seccomp: fileRef.exactOptional() })
 
 /** A release summary as `isValidSummary` of the contract package defines it. */
-export const ReleaseSummarySchema = z.string().refine(isValidSummary, `a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters, no control, format or line-break character, and no whitespace at either end`)
+export const ReleaseSummarySchema = z.string().refine(isValidSummary, `a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters, no control, format, line-break or lone surrogate character, and no whitespace at either end`)
 
 /**
  * The signed content of a release manifest. `security` and `summary` are optional, so a manifest signed before they

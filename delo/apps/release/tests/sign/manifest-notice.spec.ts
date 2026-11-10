@@ -1,12 +1,16 @@
 /**
  * The release manifest's notice fields, `security` and `summary`: a reader accepts a manifest without them, as a reader
  * sees no security marker and no summary there, and refuses a summary a terminal or the studio could not print as one
- * plain line, a summary above the length limit and a `security` that is not a boolean.
+ * plain line, a summary that is not valid Unicode, a summary above the length limit and a `security` that is not a
+ * boolean. Signing refuses a draft with a lone surrogate in its summary as well.
  */
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isValidSummary, RELEASE_SUMMARY_MAX_LENGTH, type ReleaseManifest } from '@delo/contract-release-manifest'
+import { MANIFEST_DRAFT_NAME } from '../../src/sign/release.ts'
 import { ManifestSchema } from '@delo/release-formats/sign/schemas'
-import { manifestContent } from './fixture.ts'
+import { manifestContent, releaseFixture } from './fixture.ts'
 
 /** A manifest the fixture builds, with its notice fields replaced or removed. */
 function manifest(fields: Record<string, unknown>, remove: readonly string[] = []): Record<string, unknown> {
@@ -15,11 +19,34 @@ function manifest(fields: Record<string, unknown>, remove: readonly string[] = [
   return content
 }
 
+/** The signing case builds a fixture release, which a loaded host slows. */
+const FIXTURE_TIMEOUT = { timeout: 60_000 }
+
 describe('the manifest\'s notice fields', () => {
   it('c02-summary-control-characters-refused: a reader refuses a summary holding an escape, a newline or a right-to-left override', () => {
     for (const summary of ['Fixes \u001b[31mred\u001b[0m text', 'Two\nlines', 'Fixes ‮evil.exe']) {
       expect(ManifestSchema.safeParse(manifest({ summary })).success, JSON.stringify(summary)).toBe(false)
       expect(isValidSummary(summary)).toBe(false)
+    }
+  })
+
+  it('c02-summary-lone-surrogate-refused: a reader and signing refuse a summary holding a lone high or low surrogate, and accept a surrogate pair', FIXTURE_TIMEOUT, async (test) => {
+    const lone = ['Fixes \uD83D alone', 'Fixes \uDD12 alone', 'Ends high \uD83D', '\uDD12 starts low', 'Reversed \uDD12\uD83D pair']
+    for (const summary of lone) {
+      expect(isValidSummary(summary), JSON.stringify(summary)).toBe(false)
+      expect(ManifestSchema.safeParse(manifest({ summary })).success, JSON.stringify(summary)).toBe(false)
+    }
+    expect(isValidSummary('Locks \uD83D\uDD12 the door')).toBe(true)
+    expect(ManifestSchema.safeParse(manifest({ summary: 'Locks \uD83D\uDD12 the door' })).success).toBe(true)
+    const fixture = await releaseFixture(test)
+    const path = join(fixture.release, MANIFEST_DRAFT_NAME)
+    const draft = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    for (const summary of lone) {
+      writeFileSync(path, `${JSON.stringify({ ...draft, summary }, undefined, 2)}\n`)
+      const result = await fixture.sign()
+      expect(result.stderr, JSON.stringify(summary)).toContain('a release summary: 1 to 200 characters, no control, format, line-break or lone surrogate character')
+      expect(result.status).toBe(1)
+      expect(existsSync(join(fixture.release, `delorun-${fixture.version}.manifest.json`))).toBe(false)
     }
   })
 
