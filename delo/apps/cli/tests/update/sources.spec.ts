@@ -15,6 +15,7 @@ import { EXEMPTION_FILES } from '@delo/contract-plugin-versions'
 import { ensureHomeTree } from '@delo/home'
 import { type DeloLogger } from '@delo/logs'
 import { RuntimeStore } from '@delo/runtime-store'
+import type { SkippedBundleFact } from '@delo/update'
 import { runtimePlatformOf } from '../../src/update/channel.ts'
 import { bundleFactsOf, readBundleTables, storeReportSources, type BundleTables } from '../../src/update/sources.ts'
 import { fakeClosure, signedRelease, throwawayRoot, writeClosure, type FakeBehaviour } from './support.ts'
@@ -27,6 +28,13 @@ const SAME = 'a'.repeat(64)
 const NEWER = 'b'.repeat(64)
 const BUNDLES = '@deepseek-ai/dsh-official-bundles'
 const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
+
+/**
+ * The skip of a bundle neither the target nor the profile installs.
+ * @param name - the bundle.
+ * @returns the skipped bundle.
+ */
+const ABSENT = (name: string): SkippedBundleFact => ({ package: name, reason: 'neither the target release nor the profile installs it', verification: 'verified' })
 
 /** The tables of release 1.1.0, whose own module `readBundleTables` imports. */
 const TABLES: BundleTables = {
@@ -82,6 +90,10 @@ beforeAll(async () => {
   await installRelease('1.2.0', { healthy: true, persistence: SAME }, { [`app/node_modules/${BUNDLES}/index.js`]: 'export const RETIRED_BUNDLES = [1]\nexport const INSTALLATION_OWNED_PROFILE_TUPLES = {}\nexport const PROFILE_TEMPLATES = {}\n' })
   await installRelease('1.3.0', { healthy: true, persistence: SAME }, { [`app/node_modules/${BUNDLES}/package.json`]: undefined, [`app/node_modules/${BUNDLES}/index.js`]: undefined })
   await installRelease('1.4.0', { healthy: true, persistence: SAME }, { 'data-formats.json': 'not json' })
+  await installRelease('1.5.0', { healthy: true, persistence: SAME }, {
+    'app/node_modules/@t/bundle/package.json': JSON.stringify({ name: '@t/bundle', version: '1.5.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }),
+    'app/node_modules/@t/bundle/cordis.patch.yml': '- insert:\n    - id: target-row\n      name: plugin-target\n',
+  })
 }, 120_000)
 
 afterAll(() => {
@@ -121,11 +133,11 @@ const sources = (bundleTables?: (runtime: string, node: string) => Promise<Bundl
 
 describe('bundleFactsOf', () => {
   it('reports the retired bundles the profile lists, and no template when its list is no installation-owned list', () => {
-    expect(bundleFactsOf(['@old/bundle', '@mine/bundle'], TABLES)).toEqual({ retired: ['@old/bundle'], skipped: [] })
+    expect(bundleFactsOf(['@old/bundle', '@mine/bundle'], TABLES)).toEqual({ retired: ['@old/bundle'] })
   })
 
   it('names the template that replaces a list equal to an installation-owned list', () => {
-    expect(bundleFactsOf(['@a/one', '@a/two'], TABLES)).toEqual({ retired: [], template: ['@a/new'], skipped: [] })
+    expect(bundleFactsOf(['@a/one', '@a/two'], TABLES)).toEqual({ retired: [], template: ['@a/new'] })
   })
 
   it('does not match a list that differs in order, in length or in one name', () => {
@@ -136,7 +148,7 @@ describe('bundleFactsOf', () => {
   })
 
   it('gives no template when the owned list has none in the target\'s templates', () => {
-    expect(bundleFactsOf(['@a/one', '@a/two'], { ...TABLES, templates: {} })).toEqual({ retired: [], skipped: [] })
+    expect(bundleFactsOf(['@a/one', '@a/two'], { ...TABLES, templates: {} })).toEqual({ retired: [] })
   })
 })
 
@@ -175,7 +187,7 @@ describe('storeReportSources', () => {
     it('reads the target\'s bundle tables with its own Node by default and answers for the profile\'s bundle list', TIMEOUT, async () => {
       writeFiles(profileDir, { 'package.json': manifest({ dsh: { profile: { bundles: ['@a/one', '@a/two'] } } }) })
 
-      expect((await sources().target('1.1.0')).bundles).toEqual({ retired: [], template: ['@a/new'], skipped: [] })
+      expect((await sources().target('1.1.0')).bundles).toEqual({ retired: [], template: ['@a/new'], skipped: [ABSENT('@a/new')], layers: [] })
     })
 
     it('hands the injected reader the target\'s directory and its Node, and uses what it returns', TIMEOUT, async () => {
@@ -188,7 +200,57 @@ describe('storeReportSources', () => {
       }).target('1.1.0')
 
       expect(asked).toEqual([[store.paths.version(v('1.1.0')), store.launchCommand(v('1.1.0'), PROFILE, []).command]])
-      expect(target.bundles).toEqual({ retired: ['@old/bundle'], skipped: [] })
+      expect(target.bundles).toEqual({ retired: ['@old/bundle'], skipped: [ABSENT('@mine/bundle')], layers: [] })
+    })
+  })
+
+  describe('the bundles the target loads', () => {
+    it('reads the target\'s bundles from its files, then the profile\'s, and names only the revocation list as not checked', TIMEOUT, async () => {
+      writeFiles(profileDir, {
+        'package.json': manifest({ dsh: { profile: { bundles: ['@t/bundle', '@p/bundle', '@p/old'] } } }),
+        'node_modules/@p/bundle/package.json': JSON.stringify({ name: '@p/bundle', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }),
+        'node_modules/@p/bundle/cordis.patch.yml': '- insert:\n    - name: plugin-profile\n',
+        'node_modules/@p/old/package.json': JSON.stringify({ name: '@p/old', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } }, engines: { dsh: '^0.1.0' } }),
+        'node_modules/@p/old/cordis.patch.yml': '- insert:\n    - name: plugin-old\n',
+      })
+
+      const target = await sources().target('1.5.0')
+
+      expect(target.bundles).toEqual({
+        retired: [],
+        skipped: [{ package: '@p/old', reason: 'it requires DSH ^0.1.0 and the target runs DSH 0.2.2', verification: 'verified' }],
+        layers: [
+          { layer: '@t/bundle', rows: [{ id: 'target-row', name: 'plugin-target', plugins: ['plugin-target'] }] },
+          { layer: '@p/bundle', rows: [{ name: 'plugin-profile', plugins: ['plugin-profile'] }] },
+        ],
+      })
+      expect(target.notChecked).toEqual(['revocations'])
+    })
+
+    it('hands the reader the list the target loads, both anchors, the target\'s versions, the DSH exemptions and the platform', TIMEOUT, async () => {
+      writeFiles(profileDir, {
+        'package.json': manifest({ dsh: { profile: { bundles: ['@old/bundle', '@mine/bundle'] } } }),
+        [EXEMPTION_FILES.dsh]: JSON.stringify({ '@mine/bundle@1.0.0': ['0.2.2'] }),
+      })
+      const asked: unknown[] = []
+      const layers = [{ layer: '@mine/bundle', rows: [] }]
+
+      const target = await storeReportSources({
+        home, profile: PROFILE, store, running: v('1.0.0'),
+        bundleTables: async () => Promise.resolve(TABLES),
+        bundleLayers: async (bundles, options) => {
+          asked.push([bundles, options])
+          return Promise.resolve({ layers, skipped: [] })
+        },
+      }).target('1.1.0')
+
+      expect(asked).toEqual([[['@mine/bundle'], {
+        anchors: [join(store.paths.version(v('1.1.0')), 'app', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), join(profileDir, 'package.json')],
+        versions: { dsh: '0.2.2', delo: '1.1.0' },
+        exemptions: { '@mine/bundle@1.0.0': ['0.2.2'] },
+        platform: process.platform,
+      }]])
+      expect(target.bundles).toEqual({ retired: ['@old/bundle'], skipped: [], layers })
     })
   })
 

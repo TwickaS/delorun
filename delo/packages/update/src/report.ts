@@ -123,7 +123,8 @@ export function buildUpdateReport(input: ReportInput): UpdateReport {
   const items = sortItems([
     ...plugins.items,
     ...bundleItems(profile.bundles, target.bundles),
-    ...rowItems(profile.layers, plugins.disabled),
+    // The bundles' layers apply first, then the person's patch layers, as upstream composes them.
+    ...rowItems([...target.bundles.layers, ...profile.layers], plugins.disabled),
     ...dataItems(input.data),
   ])
   return {

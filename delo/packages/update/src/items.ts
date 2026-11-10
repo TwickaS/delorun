@@ -15,7 +15,7 @@
 import { VERSION_AXES, type ExemptionRecord, type VersionAxis } from '@delo/contract-plugin-versions'
 import type { SemanticVersion } from '@delo/contract-release-manifest'
 import type { ItemAction, ItemDetail, ItemEffect, ItemVerification, PluginSubject, ReportItem, ReportReason, RowSubject } from '@delo/contract-update-report'
-import type { BundleFacts, LayerFact, RevokedPluginVersion, RowFact } from './facts.ts'
+import type { BundleFacts, LayerFact, RevokedPluginVersion, RowFact, SkippedBundleFact } from './facts.ts'
 import type { InstalledPluginFact } from './manifest.ts'
 import { evaluateRequirement, exemptionKey, type AxisDecision, type AxisVersions } from './versions.ts'
 
@@ -130,21 +130,22 @@ export function pluginItems(plugins: readonly InstalledPluginFact[], versions: R
 }
 
 /**
- * The bundle items the target's own tables make: a bundle the target cannot load is disabled, an installation-owned
- * list is replaced by the target's template, and any other retired bundle leaves the list.
+ * The bundle items the target's own tables and its bundles' metadata make: a bundle the target cannot load is
+ * disabled, an installation-owned list is replaced by the target's template, and any other retired bundle leaves the
+ * list.
  * @param bundles - the profile's bundle list.
  * @param facts - the target's bundle facts.
- * @returns the items, in the profile's order, then any skipped bundle the profile does not list.
+ * @returns the items, in the profile's order, then each bundle the template adds that the profile does not list.
  */
 export function bundleItems(bundles: readonly string[], facts: BundleFacts): readonly ReportItem[] {
   const items: ReportItem[] = []
-  const skipped = new Map(facts.skipped.map(entry => [entry.package, entry.reason]))
-  const skippedItem = (bundle: string, failure: string): ReportItem => ({ kind: 'bundle', subject: { package: bundle }, reason: 'bundle-skipped', effect: 'disabled', verification: 'verified', detail: { failure }, actions: ['keep-disabled', 'skip-update'] })
+  const skipped = new Map(facts.skipped.map(entry => [entry.package, entry]))
+  const skippedItem = (entry: SkippedBundleFact): ReportItem => ({ kind: 'bundle', subject: { package: entry.package }, reason: 'bundle-skipped', effect: 'disabled', verification: entry.verification, detail: { failure: entry.reason }, actions: ['keep-disabled', 'skip-update'] })
   const normalisedItem = (bundle: string): ReportItem => ({ kind: 'bundle', subject: { package: bundle }, reason: 'bundle-template-normalised', effect: 'changed', verification: 'verified', detail: {}, actions: [] })
   for (const bundle of bundles) {
     const failure = skipped.get(bundle)
     if (failure !== undefined) {
-      items.push(skippedItem(bundle, failure))
+      items.push(skippedItem(failure))
       continue
     }
     if (facts.template !== undefined) {
@@ -154,18 +155,25 @@ export function bundleItems(bundles: readonly string[], facts: BundleFacts): rea
     }
     if (facts.retired.includes(bundle)) items.push({ kind: 'bundle', subject: { package: bundle }, reason: 'bundle-retired', effect: 'removed', verification: 'verified', detail: {}, actions: [] })
   }
-  // A template can also add a bundle the profile does not list, which changes the list just as much.
-  if (facts.template !== undefined) for (const bundle of facts.template) if (!bundles.includes(bundle)) items.push(normalisedItem(bundle))
+  // A template can also add a bundle the profile does not list, which changes the list just as much; one the target
+  // cannot load is named for that instead.
+  if (facts.template !== undefined) {
+    for (const bundle of facts.template) {
+      if (bundles.includes(bundle)) continue
+      const failure = skipped.get(bundle)
+      items.push(failure === undefined ? normalisedItem(bundle) : skippedItem(failure))
+    }
+  }
   return items
 }
 
 /**
  * The bundle list the report predicts for the target, which health criterion H5 compares the profile against.
  * @param bundles - the profile's bundle list.
- * @param facts - the target's bundle facts.
+ * @param facts - the target's retired bundles and template.
  * @returns the template when the list is installation-owned, otherwise the list without the retired bundles.
  */
-export function predictBundleList(bundles: readonly string[], facts: BundleFacts): readonly string[] {
+export function predictBundleList(bundles: readonly string[], facts: Pick<BundleFacts, 'retired' | 'template'>): readonly string[] {
   if (facts.template !== undefined) return [...facts.template]
   return bundles.filter(bundle => !facts.retired.includes(bundle))
 }

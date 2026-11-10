@@ -42,9 +42,9 @@ Each axis has its own exact-version exemption file from the profile ([`@delo/con
 
 ## Bundles and rows
 
-The target's own tables decide the bundle items. A bundle in the target's retired list leaves the bundle list (`bundle-retired`, removed). A bundle the target could not load is disabled with upstream's failure text (`bundle-skipped`). And when the profile's list matches an installation-owned list that DSH replaces with its template, the whole list is replaced: every bundle that leaves and every bundle the template adds is `bundle-template-normalised`, and `predictBundleList` returns the target's template, which health criterion H5 compares the profile against.
+The target's own tables and its bundles' metadata decide the bundle items. A bundle in the target's retired list leaves the bundle list (`bundle-retired`, removed). A bundle the target could not load is disabled with the failure the caller read (`bundle-skipped`), `verified` when one of upstream's skip rules decides it and `unverified` when the bundle's metadata could not be read; a bundle the template adds is named as skipped when the target cannot load it. And when the profile's list matches an installation-owned list that DSH replaces with its template, the whole list is replaced: every bundle that leaves and every bundle the template adds is `bundle-template-normalised`, and `predictBundleList` returns the target's template, which health criterion H5 compares the profile against.
 
-The profile's layers decide the row items. Each layer — a bundle, the profile patch, the home patch or an overlay — is walked row by row. A row that loads a plugin the update disables is `row-disabled`, and its sentence names the row, the layer and the plugin. An Include is disabled whole when any row inside it reaches such a plugin (`row-include-blocked`), because the Include loads as one file. A row's item carries the verification of the plugin item that disabled it, so a row that rests on unreadable metadata is unverified too.
+The layers decide the row items: the patch layers of the bundles the target loads (`BundleFacts.layers`), then the profile's own (`ProfileFacts.layers`). Each layer — a bundle, the profile patch, the home patch or an overlay — is walked row by row. A row that loads a plugin the update disables is `row-disabled`, and its sentence names the row, the layer and the plugin. An Include is disabled whole when any row inside it reaches such a plugin (`row-include-blocked`), because the Include loads as one file. A row's item carries the verification of the plugin item that disabled it, so a row that rests on unreadable metadata is unverified too.
 
 ## Both installations
 
@@ -74,7 +74,7 @@ A record already in phase `rolling-back` completes that rollback: the function n
 
 ## The sentences
 
-`reasonMessage(item, versions)` states each reason in the words C3's reason table gives it, and `UNVERIFIED_NOTE` is the sentence shown beside an unverified item. The words live in this package because they are part of the contract, not a screen's copy: `delorun update` prints them as they are. That text reaches a person; nothing here is a session event or a tool result, so no model sees it and no session record carries it.
+`reasonMessage(item, versions)` states each reason in the words C3's reason table gives it, `UNVERIFIED_NOTE` is the sentence shown beside an unverified item, and `uncheckedMessage(source)` is the sentence shown for a source in `notChecked`. The words live in this package because they are part of the contract, not a screen's copy: `delorun update` prints them as they are. That text reaches a person; nothing here is a session event or a tool result, so no model sees it and no session record carries it.
 
 ## Seams for other packages
 
@@ -82,14 +82,14 @@ A record already in phase `rolling-back` completes that rollback: the function n
 
 | Interface | Implemented by |
 | --- | --- |
-| `ReportSources`: `running`, `statuses`, `profile`, `target`, `data`, `now` | `delo/apps/cli/src/update/sources.ts`: C1's store for both runtimes, the profile's manifest, plugins, patch layers and exemption files, both status records, and both releases' `data-formats.json` |
+| `ReportSources`: `running`, `statuses`, `profile`, `target`, `data`, `now` | `delo/apps/cli/src/update/sources.ts`: C1's store for both runtimes, the profile's manifest, plugins, patch layers and exemption files, the target's bundle tables and the bundles it loads (`bundle-layers.ts`), both status records, and both releases' `data-formats.json` |
 | `UpdateReporter.build` | `buildFromSources`, which `HomeRuntimeStore.prepare` and `reportRollback` call through the CLI's update support |
 
 One report is built at a time and a second request for the version already building joins it. The build is an effect of the context, so a disposed context returns no report: a caller still waiting is refused with `REPORT_DISPOSED` instead of being handed a report from a context that no longer exists.
 
 ## Not yet implemented
 
-- The CLI's readers walk the profile patch and the home patch but no bundle's own layer, report no bundle the target would skip, and read no revocation list; the health check's H3 to H5 catch what the report did not name.
+- The CLI's readers read no revocation list, because no release publishes one yet; the report names `revocations` in `notChecked`, and the health check's H3 catches a plugin the target disables that the report did not name.
 - A stored report's reader validates nothing yet: a report kept in a profile history version is read back against the contract's types by its reader, and the report format's own validator lands with the history's reader.
 - The studio's update screens (WP6.3) show this report. Their copy goes through the Web UI's locale dictionaries when they land; this package's sentences are the CLI's.
 - The health check's own criteria (H1 to H5) run in the CLI's Host (`delo/apps/cli/src/update/host.ts`) and the rollback triggers in the home process's handshake, not here; `health` is what they compare against.

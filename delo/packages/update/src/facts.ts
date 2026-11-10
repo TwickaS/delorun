@@ -9,7 +9,7 @@
  */
 import type { ExemptionRecord, VersionAxis } from '@delo/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
-import type { Installation, InstallationStatus, ReleaseCheckResult, ReportVersions, UncheckedSource } from '@delo/contract-update-report'
+import type { Installation, InstallationStatus, ItemVerification, ReleaseCheckResult, ReportVersions, UncheckedSource } from '@delo/contract-update-report'
 import type { DataFacts } from './data-formats.ts'
 import type { InstalledPluginFact } from './manifest.ts'
 
@@ -37,17 +37,23 @@ export interface RevokedPluginVersion {
   readonly message: string
 }
 
-/** A bundle the target cannot load, with the failure upstream's profile load reported. */
+/** A bundle the target cannot load, with the failure upstream's profile load would report. */
 export interface SkippedBundleFact {
-  /** The bundle's package name from the profile's bundle list. */
+  /** The bundle's package name from the bundle list the target loads. */
   readonly package: string
   /** The failure text, which the item's detail carries and its sentence quotes. */
   readonly reason: string
+  /**
+   * `verified` when one of upstream's skip rules decides it from metadata Delo read; `unverified` when Delo could not
+   * read the bundle's metadata, so the skip is a prediction it could not make.
+   */
+  readonly verification: ItemVerification
 }
 
 /**
  * What the report predicts about the profile's bundle list on the target: upstream's `RETIRED_BUNDLES`, the template
- * DSH writes when the list is installation-owned, and the bundles the target skipped.
+ * DSH writes when the list is installation-owned, the bundles the target would skip, and the patch layers of the
+ * bundles it loads.
  */
 export interface BundleFacts {
   /** Bundles retired in the target: they leave the bundle list. */
@@ -57,8 +63,10 @@ export interface BundleFacts {
    * with its template. Its presence means the whole list is replaced, not that the bundles in it changed one by one.
    */
   readonly template?: readonly string[]
-  /** Bundles the target could not load, in the profile's order. */
+  /** Bundles the target could not load, in the order of the bundle list it loads. */
   readonly skipped: readonly SkippedBundleFact[]
+  /** The patch layer of each bundle the target loads, in the order of that list, each named by its bundle. */
+  readonly layers: readonly LayerFact[]
 }
 
 /** The staged target release. */
@@ -109,7 +117,7 @@ export interface ProfileFacts {
   readonly plugins: readonly InstalledPluginFact[]
   /** The profile's bundle list, in the order it is written. */
   readonly bundles: readonly string[]
-  /** The layers the profile composes, each with its rows. */
+  /** The person's patch layers — the profile patch and the home patch — each with its rows; the bundles' layers are the target's ({@link BundleFacts.layers}). */
   readonly layers: readonly LayerFact[]
   /** Both exemption files as the profile holds them now. */
   readonly exemptions: Readonly<Record<VersionAxis, ExemptionRecord>>

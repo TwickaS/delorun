@@ -217,8 +217,8 @@ export type ReportItem =
   | ItemFields<'row', RowSubject>
   | ItemFields<'data', DataSubject>
 
-/** A source the report did not read, so its items cannot rest on it: the revocation list, the bundles' own layers, or the bundles the target would skip. */
-export type UncheckedSource = 'revocations' | 'bundle-layers' | 'skipped-bundles'
+/** A source the report did not read, so no item rests on it: `revocations`, the target's revocation list, when the target publishes none. */
+export type UncheckedSource = 'revocations'
 
 /** An update report, stored in the snapshot's history version. */
 export interface UpdateReport {

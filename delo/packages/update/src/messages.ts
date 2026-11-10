@@ -8,7 +8,7 @@
  *
  * @module @delo/update/messages
  */
-import type { PluginSubject, ReportItem, ReportVersions, RowSubject } from '@delo/contract-update-report'
+import type { PluginSubject, ReportItem, ReportVersions, RowSubject, UncheckedSource } from '@delo/contract-update-report'
 
 /** The two releases one item is about. */
 export interface MessageVersions {
@@ -139,6 +139,20 @@ export function dataCopyNote(versions: MessageVersions): string {
  * The sentence a report shows beside an unverified item, in C3's words: "Delo cannot predict this item".
  */
 export const UNVERIFIED_NOTE = 'Delo cannot predict this item.'
+
+/** The sentence each source in a report's `notChecked` states, in C3's words. */
+const UNCHECKED_NOTES: Readonly<Record<UncheckedSource, string>> = {
+  revocations: 'revocations. This release publishes no revocation list; the health check after the switch holds what one would show.',
+}
+
+/**
+ * The sentence a report shows for one source it did not read, after `Not checked: `.
+ * @param source - the source, from the report's `notChecked`.
+ * @returns the sentence C3 gives it.
+ */
+export function uncheckedMessage(source: UncheckedSource): string {
+  return UNCHECKED_NOTES[source]
+}
 
 /**
  * The sentence one item states.

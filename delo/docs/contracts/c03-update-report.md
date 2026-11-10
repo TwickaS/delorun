@@ -71,7 +71,7 @@ A report is built for one installation and one target release, after the target'
 | `generated` | timestamp | When the report was built. |
 | `installations` | list of `{ "id", "delo", "dsh", "state", "target"? }` | Both installations' versions and update states. |
 | `items` | list of item | Everything that changes, sorted by kind, then subject. |
-| `notChecked` | list of `revocations`, `bundle-layers`, `skipped-bundles` | The sources the report did not read; the report says so instead of counting them as checked. |
+| `notChecked` | list of `revocations` | The sources the report did not read; the report says so instead of counting them as checked. `revocations` means the target publishes no revocation list, and the report states: `Not checked: revocations. This release publishes no revocation list; the health check after the switch holds what one would show.` |
 | `counts` | `{ "disabled", "removed", "changed", "unverified", "data" }` | The number of items with each effect, of unverified items and of `data` items. |
 
 The report is stored in the snapshot's history version, so the history shows what the update was predicted to change.
@@ -108,11 +108,13 @@ The report is stored in the snapshot's history version, so the history shows wha
 | `data-format-changed` | data | changed | `Delo <to.delo> keeps chat data in a format Delo <from.delo> may not read.` |
 | `data-format-unknown` | data | changed | `Delo cannot tell whether Delo <from.delo> reads the chat data Delo <to.delo> writes.` |
 
+The `bundle-skipped` items and the rows of bundle layers come from the bundle list the target would load: the template, or the profile's list without the retired bundles. Each bundle resolves from the target's install anchor first and the profile second, as upstream's profile load resolves it. The target skips a bundle that does not resolve, declares no `dsh.bundle`, lists `dsh.bundle.platforms` without this machine's platform, has a DSH requirement (`engines.dsh`, else its `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*` peers) that the target does not meet and no exact-version exemption covers, or has an `engines.delo` the target does not meet. The patch files a loaded bundle declares in `dsh.bundle.patch` are walked row by row, like the profile patch, and each row's `layer` is the bundle.
+
 For a mismatch on either version axis the report names both target versions, and its `actions` offer updating the plugin to a version that meets the target and, for the axis that is unmet, an exact-version exemption on the target version ([C17](c17-plugin-versions.md#exemptions)).
 
 ## Verified and unverified
 
-An item is `verified` when every fact it states was read from a source Delo checked: the installed plugin's `package.json`, the staged target's packages and the verified manifest. It is `unverified` when a fact is missing or could not be read, such as a manifest that does not parse, a row whose module cannot be resolved, or a plugin that declares no requirement. Unverified items are never counted as safe: the report shows "Delo cannot predict this item" beside each, and the summary counts them. The health check treats them like named items.
+An item is `verified` when every fact it states was read from a source Delo checked: the installed plugin's `package.json`, the staged target's packages and the verified manifest. It is `unverified` when a fact is missing or could not be read, such as a manifest that does not parse, a row whose module cannot be resolved, a plugin that declares no requirement, or a bundle whose `package.json`, `dsh.bundle`, requirements or patch files are not in the form upstream reads, which is a `bundle-skipped` item. Unverified items are never counted as safe: the report shows "Delo cannot predict this item" beside each, and the summary counts them. The health check treats them like named items.
 
 ## Data formats
 

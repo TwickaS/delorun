@@ -2,11 +2,11 @@
  * The readers behind contract C3's report for the CLI home: the running and the staged target runtime from C1's store,
  * the profile's plugins, bundle list, patch layers and exemption files, both installations' status records, and both
  * releases' data facts. Every fact is read from a file; no plugin module is imported. The target's bundle tables are
- * upstream's `@deepseek-ai/dsh-official-bundles`, read by the target runtime's own Node from its verified files.
+ * upstream's `@deepseek-ai/dsh-official-bundles`, read by the target runtime's own Node from its verified files; the
+ * bundles of the list the target would load are read by `./bundle-layers.ts`, which reports the ones the target would
+ * skip and the patch layer of each one it loads.
  *
- * Not read yet, and named in the report's `notChecked`: the bundles' own layers (only the profile patch and the home
- * patch are walked), the bundles the target would skip, and the catalogue's revocation list, which no 0.1.0 release
- * publishes.
+ * Not read, and named in the report's `notChecked`: the catalogue's revocation list, which no 0.1.0 release publishes.
  *
  * @module @delo/cli/update/sources
  */
@@ -22,9 +22,10 @@ import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-re
 import type { InstallationStatus, ReportVersions } from '@delo/contract-update-report'
 import { bundleListOf, dependenciesOf, readInventory } from '@delo/profile-safety'
 import { readStoredRoot, type RuntimeStore, type VerifiedRuntime } from '@delo/runtime-store'
-import { planDataCopy, readDataFormats, readInstalledPlugin, type BundleFacts, type DataFacts, type InstallationStatusFacts, type InstalledPluginFact, type LayerFact, type ProfileFacts, type ReportSources, type TargetFacts } from '@delo/update'
+import { planDataCopy, predictBundleList, readDataFormats, readInstalledPlugin, type BundleFacts, type DataFacts, type InstallationStatusFacts, type InstalledPluginFact, type LayerFact, type ProfileFacts, type ReportSources, type TargetFacts } from '@delo/update'
 import semver from 'semver'
 import { z } from 'zod'
+import { bundleAnchors, readBundleLayers, type BundleLayerFacts, type BundleLayerOptions } from './bundle-layers.ts'
 
 const run = promisify(execFile)
 
@@ -48,6 +49,13 @@ export interface StoreSourcesOptions {
    * @returns the tables.
    */
   readonly bundleTables?: (runtime: string, node: string) => Promise<BundleTables>
+  /**
+   * Read the bundles the target loads; {@link readBundleLayers} by default.
+   * @param bundles - the bundle list the target loads.
+   * @param options - the anchors, the target's versions, the profile's DSH exemptions and the platform.
+   * @returns the layers and the skipped bundles.
+   */
+  readonly bundleLayers?: (bundles: readonly string[], options: BundleLayerOptions) => Promise<BundleLayerFacts>
 }
 
 /** Upstream's bundle tables in one release (`@deepseek-ai/dsh-official-bundles`). */
@@ -85,16 +93,16 @@ export async function readBundleTables(runtime: string, node: string): Promise<B
 }
 
 /**
- * The target's facts about the profile's bundle list: the retired bundles, and the template that replaces a list
+ * The target's table facts about the profile's bundle list: the retired bundles, and the template that replaces a list
  * equal to an installation-owned tuple.
  * @param bundles - the profile's bundle list.
  * @param tables - the target's tables.
- * @returns the facts; no bundle is reported as skipped.
+ * @returns the retired bundles and the template.
  */
-export function bundleFactsOf(bundles: readonly string[], tables: BundleTables): BundleFacts {
+export function bundleFactsOf(bundles: readonly string[], tables: BundleTables): Pick<BundleFacts, 'retired' | 'template'> {
   const owned = Object.entries(tables.tuples).find(([, tuple]) => tuple.length === bundles.length && tuple.every((bundle, at) => bundles[at] === bundle))
   const template = owned === undefined ? undefined : tables.templates[owned[0]]
-  return { retired: tables.retired.filter(bundle => bundles.includes(bundle)), ...template === undefined ? {} : { template }, skipped: [] }
+  return { retired: tables.retired.filter(bundle => bundles.includes(bundle)), ...template === undefined ? {} : { template } }
 }
 
 /**
@@ -202,6 +210,7 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
   const { home, profile, store } = options
   const profileDir = join(home, 'profiles', profile)
   const tables = options.bundleTables ?? readBundleTables
+  const bundleLayers = options.bundleLayers ?? readBundleLayers
   const verified = async (version: string): Promise<VerifiedRuntime> => store.checkRuntime(brandString<RuntimeVersion>(version), await readStoredRoot(home))
   const profileFacts = async (): Promise<ProfileFacts> => {
     const manifest = await readJson(join(profileDir, 'package.json'))
@@ -233,13 +242,22 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
       const command = store.launchCommand(runtime.version, profile, [])
       const manifestBytes = await readFile(store.paths.releaseFiles(runtime.version).manifest)
       const manifest = await readJson(join(profileDir, 'package.json'))
+      const versions = versionsOf(runtime)
+      const bundles = bundleListOf(manifest, join(profileDir, 'package.json'))
+      const listed = bundleFactsOf(bundles, await tables(directory, command.command))
+      const loaded = await bundleLayers(predictBundleList(bundles, listed), {
+        anchors: bundleAnchors(directory, profileDir),
+        versions: { dsh: versions.dsh, delo: versions.delo },
+        exemptions: await readExemptions(profileDir, 'dsh'),
+        platform: process.platform,
+      })
       return {
-        versions: versionsOf(runtime),
+        versions,
         // The store verified the signature now; the install verified freshness and the log before the files landed.
         release: { manifest: brandString<Sha256Hex>(createHash('sha256').update(manifestBytes).digest('hex')), signature: 'passed', freshness: 'passed', log: 'passed' },
-        bundles: bundleFactsOf(bundleListOf(manifest, join(profileDir, 'package.json')), await tables(directory, command.command)),
+        bundles: { ...listed, skipped: loaded.skipped, layers: loaded.layers },
         revocations: [],
-        notChecked: ['revocations', 'bundle-layers', 'skipped-bundles'],
+        notChecked: ['revocations'],
       }
     },
     data: async (version): Promise<DataFacts> => {

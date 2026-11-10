@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { INSTALLATIONS, UPDATE_REPORT_SCHEMA } from '@delo/contract-update-report'
-import { buildUpdateReport, bundleItems, countItems, disabledPluginNames, predictBundleList } from '../src/index.ts'
+import type { ReportItem } from '@delo/contract-update-report'
+import { buildUpdateReport, bundleItems, countItems, disabledPluginNames, predictBundleList, rowItems, sortItems, versionOf } from '../src/index.ts'
 import { BUNDLE_FACTS, FROM, GENERATED, PROFILE, STATUSES, TO, input, installed, profile, release, target, version } from './support.ts'
 
 /**
@@ -96,7 +97,7 @@ describe('the bundle list', () => {
   })
 
   it('replaces an installation-owned list with the target template, naming what leaves and what arrives', () => {
-    const facts = { retired: [], skipped: [], template: ['dsh-base', 'dsh-template-new'] }
+    const facts = { retired: [], skipped: [], layers: [], template: ['dsh-base', 'dsh-template-new'] }
     expect(predictBundleList(PROFILE.bundles, facts)).toEqual(['dsh-base', 'dsh-template-new'])
     expect(bundleItems(PROFILE.bundles, facts)).toMatchObject([
       { reason: 'bundle-template-normalised', effect: 'changed', subject: { package: 'dsh-retired-thing' } },
@@ -105,8 +106,22 @@ describe('the bundle list', () => {
     ])
   })
 
+  it('marks a skip that rests on metadata Delo could not read as unverified', () => {
+    const facts = { retired: [], skipped: [{ package: 'dsh-tools-bundle', reason: 'Delo could not read its package.json', verification: 'unverified' as const }], layers: [] }
+    expect(bundleItems(['dsh-tools-bundle'], facts)).toEqual([
+      { kind: 'bundle', subject: { package: 'dsh-tools-bundle' }, reason: 'bundle-skipped', effect: 'disabled', verification: 'unverified', detail: { failure: 'Delo could not read its package.json' }, actions: ['keep-disabled', 'skip-update'] },
+    ])
+  })
+
+  it('names a bundle the template adds as skipped when the target cannot load it', () => {
+    const facts = { retired: [], skipped: [{ package: 'dsh-template-new', reason: 'its package.json declares no dsh.bundle', verification: 'verified' as const }], layers: [], template: ['dsh-base', 'dsh-template-new'] }
+    expect(bundleItems(['dsh-base'], facts)).toMatchObject([
+      { reason: 'bundle-skipped', effect: 'disabled', verification: 'verified', subject: { package: 'dsh-template-new' }, detail: { failure: 'its package.json declares no dsh.bundle' } },
+    ])
+  })
+
   it('names nothing for a bundle the target skips and the profile does not list', () => {
-    expect(bundleItems(['dsh-base'], { retired: [], skipped: [{ package: 'dsh-absent', reason: 'missing dependency' }] })).toEqual([])
+    expect(bundleItems(['dsh-base'], { retired: [], skipped: [{ package: 'dsh-absent', reason: 'missing dependency', verification: 'verified' }], layers: [] })).toEqual([])
   })
 })
 
@@ -131,8 +146,36 @@ describe('the profile rows', () => {
     expect(unreadable.items).toContainEqual({ kind: 'row', subject: { name: 'cordis-plugin-bad', layer: 'home patch' }, reason: 'row-disabled', effect: 'disabled', verification: 'unverified', detail: { plugin: { name: 'bad', version: version('1.0.0') } }, actions: [] })
   })
 
+  it('disables a row of a bundle layer the target loads, as it does a row of the person\'s layers', () => {
+    const bundles = { retired: [], skipped: [], layers: [{ layer: 'dsh-own-bundle', rows: [{ id: 'own', name: 'dsh-own', plugins: ['calendar'] }] }] }
+    const report = buildUpdateReport(input({
+      profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.1.0' })], layers: [{ layer: 'profile patch', rows: [{ name: 'calendar', plugins: ['calendar'] }] }] }),
+      target: target({ bundles }),
+    }))
+    expect(report.items.flatMap(item => item.kind === 'row' ? [item.subject.layer] : [])).toEqual(['profile patch', 'dsh-own-bundle'])
+    expect(report.items).toContainEqual({ kind: 'row', subject: { id: 'own', name: 'dsh-own', layer: 'dsh-own-bundle' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: { plugin: { name: 'calendar', version: version('2.0.0') } }, actions: [] })
+  })
+
+  it('names no Include whose rows reach no disabled plugin, and no row that loads no plugin package', () => {
+    const disabled = new Map([['calendar', { subject: { name: 'calendar', version: version('2.0.0') }, verification: 'verified' as const }]])
+    expect(rowItems([{ layer: 'profile patch', rows: [{ name: 'include', include: { file: 'quiet.yml', rows: [{ name: 'row', plugins: ['notes'] }] } }, { name: 'file:///plugin.js' }] }], disabled)).toEqual([])
+  })
+
   it('reports nothing for a row whose plugin the update leaves alone', () => {
     const quiet = buildUpdateReport(input({ profile: profile({ plugins: [installed('fine', '1.0.0', { dsh: '^0.3.0' })], layers: [{ layer: 'dsh-base', rows: [{ name: 'row', plugins: ['fine'] }] }] }), target: target({ versions: release('1.0.0', '0.3.0') }) }))
     expect(quiet.items).toEqual([])
+  })
+})
+
+describe('sortItems', () => {
+  it('orders two items of one subject by their reason', () => {
+    const data = (reason: ReportItem['reason']): ReportItem => ({ kind: 'data', subject: { directories: ['sessions', 'storages'] }, reason, effect: 'changed', verification: 'verified', detail: {}, actions: [] })
+    expect(sortItems([data('data-format-unknown'), data('data-format-changed')]).map(item => item.reason)).toEqual(['data-format-changed', 'data-format-unknown'])
+  })
+})
+
+describe('versionOf', () => {
+  it('reads each axis\'s version of a release', () => {
+    expect([versionOf(TO, 'dsh'), versionOf(TO, 'delo')]).toEqual([TO.dsh, TO.delo])
   })
 })

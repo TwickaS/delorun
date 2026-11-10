@@ -109,10 +109,11 @@ describe('reportLines', () => {
     ])
   })
 
-  it('names the sources the report did not read', () => {
-    const lines = reportLines(report({ notChecked: ['revocations', 'bundle-layers'] }))
+  it('names the revocation list when the report did not read one, and nothing when it read every source', () => {
+    const lines = reportLines(report({ notChecked: ['revocations'] }))
 
-    expect(lines).toContain('Not checked: revocations, bundle-layers; the health check after the switch holds what these would show.')
+    expect(lines).toContain('Not checked: revocations. This release publishes no revocation list; the health check after the switch holds what one would show.')
+    expect(reportLines(report()).filter(line => line.startsWith('Not checked'))).toEqual([])
   })
 
   it('omits the size line when the report states no copy, and marks unverified chat data', () => {

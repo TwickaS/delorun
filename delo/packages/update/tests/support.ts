@@ -80,7 +80,7 @@ export function target(overrides: Partial<TargetFacts> = {}): TargetFacts {
   return {
     versions: TO,
     release: { manifest: MANIFEST, signature: 'passed', freshness: 'passed', log: 'passed' },
-    bundles: { retired: [], skipped: [] },
+    bundles: { retired: [], skipped: [], layers: [] },
     revocations: [],
     notChecked: [],
     ...overrides,
@@ -150,7 +150,7 @@ export const PROFILE: ProfileFacts = profile({
 })
 
 /** The target's bundle facts for the default fixture: one bundle retired, one the target cannot load. */
-export const BUNDLE_FACTS: BundleFacts = { retired: ['dsh-retired-thing'], skipped: [{ package: 'dsh-tools-bundle', reason: 'engines.dsh does not match' }] }
+export const BUNDLE_FACTS: BundleFacts = { retired: ['dsh-retired-thing'], skipped: [{ package: 'dsh-tools-bundle', reason: 'engines.dsh does not match', verification: 'verified' }], layers: [] }
 
 /**
  * The revocation the default fixture's target list holds.

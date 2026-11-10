@@ -23,3 +23,4 @@ The pre-update report in `delo/packages/update/`, the studio's update screens, `
 ## Known Limitations and Deferred Work
 
 - The report's reason list is closed for report format 2 (`delo.update-report/2`); a new reason needs a new format version, as the contract page states. Format 1 is retired: no release shipped it.
+- `UncheckedSource` has one value, `revocations`: no release publishes a revocation list yet, so a report names it in `notChecked`. The bundles' own layers and the bundles a target would skip are read, and are items rather than unchecked sources.

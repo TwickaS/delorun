@@ -15,7 +15,7 @@ import { confirm, isCancel, select } from '@clack/prompts'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { UpdateReport } from '@delo/contract-update-report'
 import { queryHomeStatus, sendHomeRequest, type ResponseLine } from '@delo/home-process'
-import { confirmsWithoutAsking, dataCopyNote, reasonMessage, UNVERIFIED_NOTE } from '@delo/update'
+import { confirmsWithoutAsking, dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE } from '@delo/update'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
 
@@ -84,7 +84,7 @@ export function reportLines(report: UpdateReport): readonly string[] {
   for (const item of changes) {
     lines.push(`  - ${item.effect}: ${reasonMessage(item, versions)}${item.verification === 'unverified' ? ` ${UNVERIFIED_NOTE}` : ''}`)
   }
-  if (report.notChecked.length > 0) lines.push(`Not checked: ${report.notChecked.join(', ')}; the health check after the switch holds what these would show.`)
+  for (const source of report.notChecked) lines.push(`Not checked: ${uncheckedMessage(source)}`)
   for (const item of report.items) {
     if (item.kind !== 'data') continue
     lines.push(`Chat data: ${reasonMessage(item, versions)}${item.verification === 'unverified' ? ` ${UNVERIFIED_NOTE}` : ''}`)

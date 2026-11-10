@@ -39,7 +39,7 @@ export { decideRollback, ROLLING_BACK_PHASE, rollbackUpdate, type RollbackDecisi
 export { type BundleFacts, type IncludeFact, type InstallationStatusFacts, type LayerFact, type ProfileFacts, type ReleaseChecks, type ReportInput, type RevokedPluginVersion, type RowFact, type SkippedBundleFact, type TargetFacts } from './facts.ts'
 export { bundleItems, pluginItems, predictBundleList, rowItems, versionOf, type DisabledPlugin, type PluginItems } from './items.ts'
 export { readInstalledPlugin, type DeclaredRequirement, type InstalledPluginFact, type PluginRequirements } from './manifest.ts'
-export { dataCopyNote, reasonMessage, UNVERIFIED_NOTE, type MessageVersions } from './messages.ts'
+export { dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE, type MessageVersions } from './messages.ts'
 export { buildUpdateReport, countItems, disabledPluginNames, sortItems } from './report.ts'
 export { buildFromSources, builtReport, readReportInput, UpdateReportService, type BuiltUpdateReport, type ReportHealth, type ReportSources, type UpdateReportOptions } from './service.ts'
 export { evaluateRequirement, exempted, exemptionKey, satisfiesRange, type AxisDecision, type AxisVersions } from './versions.ts'

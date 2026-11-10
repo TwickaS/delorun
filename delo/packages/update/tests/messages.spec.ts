@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { ReportItem } from '@delo/contract-update-report'
-import { UNVERIFIED_NOTE, buildUpdateReport, reasonMessage } from '../src/index.ts'
+import { UNVERIFIED_NOTE, buildUpdateReport, reasonMessage, uncheckedMessage } from '../src/index.ts'
 import { input, installed, profile, version } from './support.ts'
 
 /**
@@ -60,18 +60,18 @@ describe('reasonMessage', () => {
   })
 
   it('states a retired bundle, a normalised list and a skipped bundle', () => {
-    const retired = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: ['dsh-old'], skipped: [] } } }))
+    const retired = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: ['dsh-old'], skipped: [], layers: [] } } }))
     expect(reasonMessage(retired.items[0]!, retired)).toBe('dsh-old is retired in DSH 0.3.0 and leaves the bundle list.')
-    const normalised = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: [], skipped: [], template: ['dsh-base'] } } }))
+    const normalised = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-old'] }), target: { ...input().target, bundles: { retired: [], skipped: [], layers: [], template: ['dsh-base'] } } }))
     expect(reasonMessage(normalised.items[0]!, normalised)).toBe('The bundle list matches an installation-owned list that DSH 0.3.0 replaces with its template.')
-    const skipped = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-broken'] }), target: { ...input().target, bundles: { retired: [], skipped: [{ package: 'dsh-broken', reason: 'missing dependency' }] } } }))
+    const skipped = buildUpdateReport(input({ profile: profile({ bundles: ['dsh-broken'] }), target: { ...input().target, bundles: { retired: [], skipped: [{ package: 'dsh-broken', reason: 'missing dependency', verification: 'verified' }], layers: [] } } }))
     expect(reasonMessage(skipped.items[0]!, skipped)).toBe('dsh-broken cannot load on the target: missing dependency.')
   })
 
   it('states a disabled row and a blocked Include', () => {
     const rows = buildUpdateReport(input({
       profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })], layers: [{ layer: 'dsh-base', rows: [{ id: 'core', name: 'dsh-core', plugins: ['calendar'] }, { name: 'include', include: { file: 'x.yml', rows: [{ name: 'row', plugins: ['calendar'] }] } }] }] }),
-      target: { ...input().target, bundles: { retired: [], skipped: [] }, revocations: [] },
+      target: { ...input().target, bundles: { retired: [], skipped: [], layers: [] }, revocations: [] },
     }))
     const messages = rows.items.filter(item => item.kind === 'row').map(item => reasonMessage(item, rows))
     expect(messages).toEqual(['Row core in dsh-base loads calendar, which the update disables.', 'Include x.yml reaches calendar, which the update disables, so the whole Include is disabled.'])
@@ -83,12 +83,43 @@ describe('reasonMessage', () => {
         plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })],
         layers: [{ layer: 'dsh-base', rows: [{ name: 'outer', include: { file: 'outer.yml', rows: [{ name: 'inner', include: { file: 'inner.yml', rows: [{ name: 'leaf', plugins: ['calendar'] }] } }] } }] }],
       }),
-      target: { ...input().target, bundles: { retired: [], skipped: [] }, revocations: [] },
+      target: { ...input().target, bundles: { retired: [], skipped: [], layers: [] }, revocations: [] },
     }))
     expect(nested.items.filter(item => item.kind === 'row').map(item => reasonMessage(item, nested))).toEqual(['Include outer.yml reaches calendar, which the update disables, so the whole Include is disabled.'])
   })
 
+  it('states a Delo-axis exemption and one that does not follow the plugin, with Delo\'s versions', () => {
+    const plugins = [installed('pinned', '1.0.0', { dsh: '^0.3.0', delo: '^0.9.0' })]
+    const exempt = buildUpdateReport(input({ profile: profile({ plugins, exemptions: { dsh: {}, delo: { 'pinned@1.0.0': [version('1.0.0')] } } }) }))
+    const stale = buildUpdateReport(input({ profile: profile({ plugins, exemptions: { dsh: {}, delo: { 'pinned@1.0.0': [exempt.from.delo] } } }) }))
+    expect(reasonMessage(exempt.items[0]!, exempt)).toBe('pinned requires Delo ^0.9.0; your exemption for this exact version covers 1.0.0.')
+    expect(reasonMessage(stale.items[0]!, stale)).toBe(`pinned runs today under your exemption for ${exempt.from.delo}; the exemption does not cover 1.0.0.`)
+  })
+
+  it('leaves a fact out of the sentence when the item\'s detail does not carry it', () => {
+    const plugin = (reason: ReportItem['reason']): ReportItem => ({ kind: 'plugin', subject: { name: 'bare', version: version('1.0.0') }, reason, effect: 'disabled', verification: 'verified', detail: {}, actions: [] })
+    expect(['dsh-requirement-unmet', 'delo-requirement-unmet', 'requirement-unreadable', 'requirement-exempted', 'exemption-not-carried', 'plugin-revoked'].map(reason => reasonMessage(plugin(reason as ReportItem['reason']), report))).toEqual([
+      'bare requires DSH ; Delo 1.0.0 runs DSH 0.3.0.',
+      'bare requires Delo ; the update installs Delo 1.0.0.',
+      'bare declares engines. in a form Delo cannot read.',
+      'bare requires DSH ; your exemption for this exact version covers 0.3.0.',
+      `bare runs today under your exemption for ${report.from.dsh}; the exemption does not cover 0.3.0.`,
+      'bare is revoked: , .',
+    ])
+    expect(reasonMessage({ kind: 'bundle', subject: { package: 'dsh-x' }, reason: 'bundle-skipped', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('dsh-x cannot load on the target: .')
+    expect(reasonMessage({ kind: 'row', subject: { name: 'row-a', layer: 'home patch' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('Row row-a in home patch loads , which the update disables.')
+  })
+
+  it('names only the subject of an item whose reason belongs to another kind', () => {
+    expect(reasonMessage({ kind: 'plugin', subject: { name: 'odd', version: version('1.0.0') }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('odd')
+    expect(reasonMessage({ kind: 'bundle', subject: { package: 'dsh-odd' }, reason: 'row-disabled', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBe('dsh-odd')
+  })
+
   it('carries the sentence a report shows beside an unverified item', () => {
     expect(UNVERIFIED_NOTE).toBe('Delo cannot predict this item.')
+  })
+
+  it('states that the release publishes no revocation list when the report did not read one', () => {
+    expect(uncheckedMessage('revocations')).toBe('revocations. This release publishes no revocation list; the health check after the switch holds what one would show.')
   })
 })
