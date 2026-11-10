@@ -3,22 +3,25 @@
  *
  * - `on tailscale` checks that Tailscale is installed, running and signed in, that the tailnet has HTTPS certificates
  *   on, and that the person's user may configure `tailscale serve`; for the last it prints the one command the person
- *   runs and runs nothing through `sudo`. It then writes the profile's `delo-reach` row with this machine's `ts.net`
- *   address and prints the address and the trust statement. The running home applies it at its next start.
- * - `off` turns the option off in the row and removes the serve target at once.
+ *   runs and runs nothing through `sudo`. It refuses while Tailscale Funnel is on for the address, and removes any rule
+ *   on the serve port that is not this home's own, or every rule there while Delo is stopped, confirming each removal.
+ *   It then writes the profile's `delo-reach` row with this machine's `ts.net` address and the fixed listener port,
+ *   chosen once, and prints the address and the trust statement. The running home applies it at its next start.
+ * - `off` turns the option off in the row, removes whatever Tailscale serves on the serve port at once, and confirms it
+ *   is gone; a removal it cannot confirm exits non-zero with the reason.
  * - `status` prints the row, and whether the home runs; the studio's Devices section shows the live state.
  *
  * Every `tailscale` call goes through the injected runner.
  *
  * @module @delo/cli/reach/command
  */
-import { DEFAULT_SERVE_PORT, TAILSCALE_OPERATOR_COMMAND } from '@delo/contract-reach-providers'
-import { isPermissionRefusal, ReachError, readTailscale, systemTailscale, tailscaleAddress, unserve, type TailscaleRunner } from '@delo/reach'
+import { DEFAULT_SERVE_PORT } from '@delo/contract-reach-providers'
+import { funnelOn, ReachError, readServeRules, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delo/reach'
 import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext } from '../command.ts'
 import { hasCliProfile, selectProfile } from '../profile.ts'
-import { readReachRow, writeReachRow } from './row.ts'
+import { listenerPortFor, readReachRow, writeReachRow } from './row.ts'
 import { TRUST_STATEMENT } from './trust.ts'
 
 /** What the command runs against. */
@@ -98,26 +101,30 @@ async function turnOn(args: readonly string[], context: CommandContext, dependen
   const [option, ...rest] = args
   if (option !== 'tailscale') throw new CliError(EXIT.usage, `delorun reach on: the one option this build offers is tailscale\n${USAGE}`)
   const { home, profile } = await preparedProfile('on', rest, context)
+  const running = dependencies.running(home, profile)
   let dnsName: string
+  let listenerPort: number
   try {
     ({ dnsName } = await readTailscale(dependencies.tailscale))
-    const check = await dependencies.tailscale(['serve', 'status', '--json'])
-    if (check.code !== 0 && isPermissionRefusal(check.stderr)) {
-      throw new ReachError('TAILSCALE_SERVE_NOT_PERMITTED', `Your user may not configure tailscale serve yet. Run this once yourself, then run delorun reach on tailscale again:\n  ${TAILSCALE_OPERATOR_COMMAND}`)
-    }
+    listenerPort = await listenerPortFor(readReachRow(home, profile).listenerPort, running)
+    const target = serveTarget(listenerPort)
+    const rules = await readServeRules(dependencies.tailscale, dnsName, DEFAULT_SERVE_PORT, target)
+    if (rules.funnel) throw funnelOn(dnsName, DEFAULT_SERVE_PORT, 'then run delorun reach on tailscale again')
+    // A stopped home holds no port, so even its own rule would forward to a port any local program could bind.
+    if (rules.present && (!rules.own || !running)) await removeServe(dependencies.tailscale, dnsName, DEFAULT_SERVE_PORT, target)
   } catch (error) {
     if (!(error instanceof ReachError)) throw error
     context.stderr(`delorun reach: ${error.detail} (${error.code})\n`)
     return EXIT.failed
   }
   const address = tailscaleAddress(dnsName, DEFAULT_SERVE_PORT)
-  writeReachRow(home, profile, { enabled: true, address, servePort: DEFAULT_SERVE_PORT })
+  writeReachRow(home, profile, { ...readReachRow(home, profile), enabled: true, address, servePort: DEFAULT_SERVE_PORT, listenerPort })
   context.stdout([
     `Remote access is on for the profile ${profile} at ${address}`,
     '',
     ...TRUST_STATEMENT,
     '',
-    dependencies.running(home, profile)
+    running
       ? 'Restart Delo to apply it: delorun stop, then delorun start.'
       : 'It starts with Delo: delorun start.',
     'Then add your phone: run delorun devices approve here, open the address on the phone and type the code it shows.',
@@ -133,16 +140,26 @@ async function turnOn(args: readonly string[], context: CommandContext, dependen
  * @param dependencies - the runner and the running check.
  * @returns the exit code.
  */
-async function turnOff(args: readonly string[], context: CommandContext, dependencies: ReachDependencies): Promise<typeof EXIT.ok> {
+async function turnOff(args: readonly string[], context: CommandContext, dependencies: ReachDependencies): Promise<typeof EXIT.ok | typeof EXIT.failed> {
   const { home, profile } = await preparedProfile('off', args, context)
   const row = readReachRow(home, profile)
   writeReachRow(home, profile, { ...row, enabled: false })
-  const removed = await unserve(dependencies.tailscale, row.servePort)
-  const lines = [
-    `Remote access is off for the profile ${profile}.`,
-    removed ? 'Tailscale no longer serves this computer\'s studio.' : 'Tailscale did not confirm that it stopped serving; it serves nothing once Delo restarts.',
-  ]
-  if (dependencies.running(home, profile)) lines.push('Restart Delo to close the remote listener now: delorun stop, then delorun start.')
+  const running = dependencies.running(home, profile)
+  const lines = [`Remote access is off for the profile ${profile}.`]
+  try {
+    const host = URL.parse(row.address)?.hostname ?? (await readTailscale(dependencies.tailscale)).dnsName
+    await removeServe(dependencies.tailscale, host, row.servePort, serveTarget(row.listenerPort))
+    lines.push('Tailscale no longer serves this computer\'s studio.')
+  } catch (error) {
+    if (!(error instanceof ReachError)) throw error
+    if (error.code !== 'TAILSCALE_NOT_INSTALLED') {
+      context.stdout(`${lines.join('\n')}\n`)
+      context.stderr(`delorun reach: Tailscale may still serve this computer's studio. ${error.detail} (${error.code})\n`)
+      return EXIT.failed
+    }
+    lines.push('Tailscale is not installed, so nothing serves this computer\'s studio.')
+  }
+  if (running) lines.push('Restart Delo to close the remote listener now: delorun stop, then delorun start.')
   context.stdout(`${lines.join('\n')}\n`)
   return EXIT.ok
 }

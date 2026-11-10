@@ -15,8 +15,9 @@ import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { HomeAuthService } from '@delo/home-auth'
 import { newStartToken } from '@delo/home'
 import { approveDevices, removeDevice } from '@delo/home-process'
-import { ReachService, type TailscaleResult, type TailscaleRunner } from '@delo/reach'
+import { ReachService, type TailscaleRunner } from '@delo/reach'
 import { bootStudio, type Studio } from '../../../../packages/home-auth/tests/denial/admission/studio.ts'
+import { fakeTailscale } from '../../../../packages/reach/tests/fake-tailscale.ts'
 // @ts-expect-error -- the sign-in page's browser module is JavaScript without declarations.
 import { deviceIdOf, matchCodeOf, signInMessage } from '../../../../packages/home-auth/assets/sign-in.js'
 import { EXIT } from '../../src/exit.ts'
@@ -28,14 +29,10 @@ import { readReachRow } from '../../src/reach/row.ts'
 
 const HOST = 'phone-home.example.ts.net'
 const ADDRESS = `https://${HOST}`
-const calls: string[][] = []
-
-/** A fake `tailscale`: a signed-in machine with HTTPS on. */
-const tailscale: TailscaleRunner = async (args): Promise<TailscaleResult> => {
-  calls.push([...args])
-  if (args[0] === 'status') return { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: `${HOST}.` }, CertDomains: [HOST] }), stderr: '' }
-  return Promise.resolve({ code: 0, stdout: '', stderr: '' })
-}
+/** A fake `tailscale`: a signed-in machine with HTTPS on, keeping its serve configuration. */
+const fake = fakeTailscale(HOST)
+const tailscale: TailscaleRunner = fake.run
+const calls = fake.calls
 
 /** The reach service over the fake. */
 class FakeReach extends ReachService {
@@ -107,7 +104,7 @@ describe('remote access from a second device', () => {
     // `delorun reach on tailscale` checks Tailscale and writes the row the profile loads.
     await expect(createReachCommand({ tailscale, running: () => false }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
     const row = readReachRow(deloHome, 'default')
-    expect(row).toEqual({ enabled: true, address: ADDRESS, servePort: 443 })
+    expect(row).toEqual({ enabled: true, address: ADDRESS, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000 })
     expect(output.stdout).toContain('Only a device you approve at this computer')
 
     // The Host loads home-auth and the reach service from that row.
@@ -115,6 +112,8 @@ describe('remote access from a second device', () => {
     await studio.ctx.plugin(FakeReach, { enabled: true, tailscalePrivate: row })
     await new Promise<void>((resolve) => { studio.ctx.inject(['reach'], () => { resolve() }) })
     reachPort = Number(new URL(calls.find(call => call[0] === 'serve' && call[1] === '--bg')?.at(-1) ?? '').port)
+    // The serve target is the port the row recorded, which the home holds and relays to its reach listener.
+    expect(reachPort).toBe(row.listenerPort)
     expect(studio.ctx.reach.status()).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])
     // The studio port the CLI reaches is the profile's own.
     writeFileSync(join(deloHome, 'profiles', 'default', 'cordis.patch.yml'), `- id: webserver\n  config:\n    port: ${String(studio.ctx.webServer.port)}\n`)

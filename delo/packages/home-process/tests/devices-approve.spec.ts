@@ -38,6 +38,11 @@ class FakeDevices implements LocalDeviceApproval {
     return Promise.resolve({ id: 'device', label: 'Phone', address: 'https://home.example.ts.net' })
   }
 
+  cancel(requestId: string): void {
+    this.calls.push(`cancel ${requestId}`)
+    if (this.refusal !== undefined) throw this.refusal
+  }
+
   async remove(deviceId: string): Promise<{ readonly removed: boolean; readonly sessions: number; readonly connections: number }> {
     this.calls.push(`remove ${deviceId}`)
     if (this.refusal !== undefined) throw this.refusal
@@ -61,6 +66,7 @@ describe('devices.approve', () => {
     // Pins the caller rule: without it the Host's token opens the window and approves.
     await expect(approveDevices(request(), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     await expect(approveDevices(request({ requestId: PENDING.requestId, typedCode: '12345678' }), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    await expect(approveDevices(request({ cancelRequestId: PENDING.requestId }), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     expect(devices.calls).toEqual([])
     expect(devices.open).toBeUndefined()
   })
@@ -99,6 +105,22 @@ describe('devices.approve', () => {
       .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: 'INTERNAL_ERROR: the approval failed' })
     await expect(approveDevices(request({ requestId: PENDING.requestId }), 'person', devices)).rejects.toMatchObject({ code: 'SCHEMA_VIOLATION' })
     await expect(approveDevices(request(), 'person', undefined)).rejects.toMatchObject({ code: 'APPROVALS_UNAVAILABLE' })
+  })
+
+  it('cancels the request the person chose, alone, and names home-auth\'s refusal', async () => {
+    const devices = new FakeDevices()
+    await expect(approveDevices(request({ cancelRequestId: PENDING.requestId }), 'person', devices)).resolves.toEqual({ cancelled: PENDING.requestId })
+    // Pins the exclusive arguments: a cancel that also names an approval does neither.
+    await expect(approveDevices(request({ cancelRequestId: PENDING.requestId, requestId: PENDING.requestId, typedCode: '12345678' }), 'person', devices))
+      .rejects.toMatchObject({ code: 'SCHEMA_VIOLATION' })
+    await expect(approveDevices(request({ cancelRequestId: PENDING.requestId, typedCode: '12345678' }), 'person', devices)).rejects.toMatchObject({ code: 'SCHEMA_VIOLATION' })
+    devices.refusal = Object.assign(new Error('gone'), { code: 'APPROVAL_EXPIRED', detail: 'This request is no longer waiting' })
+    await expect(approveDevices(request({ cancelRequestId: PENDING.requestId }), 'person', devices))
+      .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: 'APPROVAL_EXPIRED: This request is no longer waiting' })
+    devices.refusal = new Error('broken')
+    await expect(approveDevices(request({ cancelRequestId: PENDING.requestId }), 'person', devices))
+      .rejects.toMatchObject({ code: 'APPROVAL_FAILED', detail: 'INTERNAL_ERROR: the cancel failed' })
+    expect(devices.calls).toEqual([`cancel ${PENDING.requestId}`, `cancel ${PENDING.requestId}`, `cancel ${PENDING.requestId}`])
   })
 
   it('tells the two credentials apart and accepts each', () => {
@@ -162,9 +184,13 @@ describe('devices.approve on a running home process', () => {
       .toMatchObject({ ok: true, device: { id: 'device' } })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.approve', args: { requestId: '../../etc/passwd', typedCode: '1234' } })))
       .toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
+    expect(final(await access.send({ op: 'devices.approve', args: { cancelRequestId: PENDING.requestId } }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.approve', args: { cancelRequestId: PENDING.requestId } })))
+      .toMatchObject({ ok: true, cancelled: PENDING.requestId })
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.approve', args: { cancelRequestId: '../x' } }))).toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
     expect(final(await access.send({ op: 'devices.remove', args: { deviceId: 'device' } }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.remove', args: { deviceId: 'device' } }))).toMatchObject({ ok: true, removed: true, sessions: 2 })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.remove', args: { deviceId: '../x' } }))).toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
-    expect(devices.calls).toEqual(['open', `approve ${PENDING.requestId} 1234 5678`, 'remove device'])
+    expect(devices.calls).toEqual(['open', `approve ${PENDING.requestId} 1234 5678`, `cancel ${PENDING.requestId}`, 'remove device'])
   })
 })

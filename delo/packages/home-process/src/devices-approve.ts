@@ -10,7 +10,8 @@
  *   read or opened.
  * - **The operation.** Without arguments it opens the approval window (claiming the home for the local person when it
  *   has no owner) and answers once a request is pending or the window closed. With `requestId` and `typedCode` it
- *   approves that request with the match code the person typed, which records the approver as `local`.
+ *   approves that request with the match code the person typed, which records the approver as `local`. With
+ *   `cancelRequestId` alone it cancels that pending request at the person's choice.
  *
  * @module @delo/home-process/devices-approve
  */
@@ -53,6 +54,12 @@ export interface LocalDeviceApproval {
    */
   approve(requestId: string, typedCode: string): Promise<{ readonly id: string; readonly label: string; readonly address: string }>
   /**
+   * Cancel one pending request.
+   * @param requestId - the request.
+   * @throws an error with a `code` property, such as `APPROVAL_EXPIRED`, for a request that is not pending.
+   */
+  cancel(requestId: string): void
+  /**
    * Remove one trusted device, ending its sessions and closing its reach connections.
    * @param deviceId - the device.
    * @returns whether it had a record, and how many sessions and connections ended.
@@ -73,10 +80,11 @@ export const PENDING_POLL_MS = 500
  * @param caller - the credential it carried.
  * @param devices - the Host's local approval, or undefined when the profile does not load `@delo/home-auth`.
  * @param wait - waits between looks for a pending request; a timer by default.
- * @returns the final line's fields: the window and the pending requests, or the approved device.
+ * @returns the final line's fields: the window and the pending requests, the approved device, or the cancelled
+ *   request's id.
  * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
- *   `SCHEMA_VIOLATION` for a request id without a code or the reverse; `APPROVAL_FAILED` naming home-auth's code for
- *   a refused approval.
+ *   `SCHEMA_VIOLATION` for a request id without a code or the reverse, or a cancel with either; `APPROVAL_FAILED`
+ *   naming home-auth's code for a refused approval or cancel.
  */
 export async function approveDevices(
   request: DevicesApproveRequest,
@@ -88,17 +96,24 @@ export async function approveDevices(
     throw new HomeProcessError('LOOPBACK_REQUIRED', 'approving a device needs you at your computer: run delorun devices approve there')
   }
   if (devices === undefined) throw new HomeProcessError('APPROVALS_UNAVAILABLE', 'this profile does not load @delo/home-auth')
-  const { requestId, typedCode } = request.args
+  const { requestId, typedCode, cancelRequestId } = request.args
   if ((requestId === undefined) !== (typedCode === undefined)) {
     throw new HomeProcessError('SCHEMA_VIOLATION', 'an approval names both the request and the typed code')
+  }
+  if (cancelRequestId !== undefined) {
+    if (requestId !== undefined) throw new HomeProcessError('SCHEMA_VIOLATION', 'a cancel names only the request to cancel')
+    try {
+      devices.cancel(cancelRequestId)
+    } catch (error) {
+      throw homeAuthRefusal('APPROVAL_FAILED', error, 'the cancel failed')
+    }
+    return { cancelled: cancelRequestId }
   }
   if (requestId !== undefined && typedCode !== undefined) {
     try {
       return { device: await devices.approve(requestId, typedCode) }
     } catch (error) {
-      const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR'
-      const detail = error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? error.detail : 'the approval failed'
-      throw new HomeProcessError('APPROVAL_FAILED', `${code}: ${detail}`)
+      throw homeAuthRefusal('APPROVAL_FAILED', error, 'the approval failed')
     }
   }
   const closesAt = await devices.openWindow()
@@ -108,6 +123,19 @@ export async function approveDevices(
     if (pending.length > 0 || open === undefined) return { closesAt: open ?? closesAt, pending }
     await wait(PENDING_POLL_MS)
   }
+}
+
+/**
+ * A refusal naming home-auth's code and sentence.
+ * @param refusal - the operation's refusal code.
+ * @param error - what home-auth threw.
+ * @param fallback - the sentence for an error without one.
+ * @returns the refusal.
+ */
+function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED', error: unknown, fallback: string): HomeProcessError {
+  const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR'
+  const detail = error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? error.detail : fallback
+  return new HomeProcessError(refusal, `${code}: ${detail}`)
 }
 
 /**
@@ -127,8 +155,6 @@ export async function removeDevice(request: DevicesRemoveRequest, caller: Channe
   try {
     return await devices.remove(request.args.deviceId)
   } catch (error) {
-    const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR'
-    const detail = error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? error.detail : 'the removal failed'
-    throw new HomeProcessError('REMOVAL_FAILED', `${code}: ${detail}`)
+    throw homeAuthRefusal('REMOVAL_FAILED', error, 'the removal failed')
   }
 }

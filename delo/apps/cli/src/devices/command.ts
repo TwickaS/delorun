@@ -4,8 +4,10 @@
  *
  * - `list` reads the home's records, without key material.
  * - `approve` opens the approval window through the home socket's `devices.approve` (C19), which only the person's own
- *   command may call, waits for a new device's request, shows its name, platform and time, and asks for the 8-digit
- *   code the new device shows. A wrong code may be typed again; the third cancels the request.
+ *   command may call, waits for a new device's request and lists every pending request with its name, platform, time
+ *   and short request id. The person chooses one to approve and types the 8-digit code its device shows, or chooses
+ *   one to cancel, which frees its place when 5 are pending. A wrong code may be typed again; the third cancels that
+ *   request only, and the list is shown again.
  * - `remove` removes a device, ending its sessions at once: through the home socket's `devices.remove` when Delo runs,
  *   so its open connections end too, or on the records when it does not. No command reaches a device route over HTTP.
  * - `code` prints a new owner code, only to a terminal.
@@ -23,6 +25,7 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
+import { printable } from '../terminal-text.ts'
 
 /** What the command runs against. */
 export interface DevicesDependencies {
@@ -56,6 +59,9 @@ const USAGE = 'Usage: delorun devices list | approve | remove <device id> | code
 
 /** How many codes `approve` takes for one request, which is C5's count before the home cancels it. */
 const CODE_ATTEMPTS = 3
+
+/** How many characters of a request id `approve` shows to tell requests apart. */
+const SHORT_REQUEST_ID = 8
 
 /**
  * Build the command over its dependencies.
@@ -128,9 +134,19 @@ function records(home: string): HomeAuth {
  * @returns the line.
  */
 function deviceLine(device: DeviceSummary): string {
-  const approved = device.approvedBy === 'local' ? 'approved at this computer' : device.approvedBy === null ? 'claimed this home' : `approved by ${device.approvedBy}`
+  const approved = device.approvedBy === 'local' ? 'approved at this computer' : device.approvedBy === null ? 'claimed this home' : `approved by ${printable(device.approvedBy)}`
   const signIn = device.lastSignInAt === null ? 'never signed in' : `last signed in ${new Date(device.lastSignInAt).toISOString()}`
-  return `${device.id}  ${device.label}${device.platform === '' ? '' : ` (${device.platform})`}\n    ${device.address}, ${approved} ${new Date(device.approvedAt).toISOString()}, ${signIn}`
+  return `${printable(device.id)}  ${deviceName(device)}\n    ${printable(device.address)}, ${approved} ${new Date(device.approvedAt).toISOString()}, ${signIn}`
+}
+
+/**
+ * A device's label and platform as the terminal shows them, with every character a terminal acts on escaped: the home
+ * refuses such characters in a request, but reads its device records as written.
+ * @param device - the label and platform.
+ * @returns the label, followed by the platform in parentheses when there is one.
+ */
+function deviceName(device: { readonly label: string; readonly platform: string }): string {
+  return `${printable(device.label)}${device.platform === '' ? '' : ` (${printable(device.platform)})`}`
 }
 
 /**
@@ -153,6 +169,23 @@ async function list(where: Where): Promise<ExitCode> {
   return EXIT.ok
 }
 
+/** A pending request as `devices.approve` lists it. */
+interface PendingRequest {
+  readonly requestId: string
+  readonly label: string
+  readonly platform: string
+  readonly createdAt: number
+}
+
+/** What the person chose: a request to approve or to cancel. */
+interface Choice {
+  readonly action: 'approve' | 'cancel'
+  readonly request: PendingRequest
+}
+
+/** How a chosen request ended: the command's exit code, or `again` to show the pending requests again. */
+type Outcome = ExitCode | 'again'
+
 /**
  * `delorun devices approve`.
  * @param where - the invocation.
@@ -162,29 +195,131 @@ async function approve(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
   if (!dependencies.running(home, profile)) return failed(context, 'Delo is not running. Start it with delorun start, then run delorun devices approve again')
   context.stdout('Waiting for a new device for up to 5 minutes. Open this home\'s address on it and choose Ask for approval.\n')
-  const opened = final(await dependencies.send(home, profile, { op: 'devices.approve', args: {} }))
-  if (opened.ok !== true) return failed(context, `the home refused: ${String(opened.error)}${typeof opened.detail === 'string' ? ` (${opened.detail})` : ''}`)
-  const pending: readonly unknown[] = Array.isArray(opened.pending) ? opened.pending : []
-  const request = pending[0]
-  if (typeof request !== 'object' || request === null) return failed(context, 'No device asked for approval before the window closed. Run delorun devices approve again')
-  const requestId = String(Reflect.get(request, 'requestId'))
-  const platform = String(Reflect.get(request, 'platform'))
-  context.stdout(`A device asks for approval: ${String(Reflect.get(request, 'label'))}${platform === '' ? '' : ` (${platform})`}, at ${new Date(Number(Reflect.get(request, 'createdAt'))).toISOString()}.\n`)
+  for (;;) {
+    const opened = final(await dependencies.send(home, profile, { op: 'devices.approve', args: {} }))
+    if (opened.ok !== true) return failed(context, `the home refused: ${refusal(opened)}`)
+    const pending = pendingOf(opened.pending)
+    if (pending === undefined) return failed(context, 'the home answered with a list of requests this command cannot read')
+    if (pending.length === 0) return failed(context, 'No device asked for approval before the window closed. Run delorun devices approve again')
+    context.stdout(`Devices asking for approval:\n${pending.map((request, index) => `  ${String(index + 1)}. ${pendingLine(request)}`).join('\n')}\n`)
+    const choice = await choose(where, pending)
+    if (choice === undefined) return failed(context, 'cancelled; no device was approved')
+    const outcome = choice.action === 'approve' ? await typeCode(where, choice.request) : await cancel(where, choice.request)
+    if (outcome !== 'again') return outcome
+  }
+}
+
+/**
+ * One pending request as a line.
+ * @param request - the request.
+ * @returns its label, platform, time and short id.
+ */
+function pendingLine(request: PendingRequest): string {
+  return `${deviceName(request)}, asked at ${new Date(request.createdAt).toISOString()}, request ${printable(request.requestId.slice(0, SHORT_REQUEST_ID))}`
+}
+
+/**
+ * Read the pending requests of a `devices.approve` answer.
+ * @param value - the answer's `pending` field.
+ * @returns the requests, oldest first; empty without the field; undefined when an entry is not a request.
+ */
+function pendingOf(value: unknown): readonly PendingRequest[] | undefined {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) return undefined
+  const entries: readonly unknown[] = value
+  const requests: PendingRequest[] = []
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null) return undefined
+    const requestId: unknown = Reflect.get(entry, 'requestId')
+    const label: unknown = Reflect.get(entry, 'label')
+    const platform: unknown = Reflect.get(entry, 'platform')
+    const createdAt: unknown = Reflect.get(entry, 'createdAt')
+    if (typeof requestId !== 'string' || typeof label !== 'string' || typeof platform !== 'string') return undefined
+    if (typeof createdAt !== 'number' || Number.isNaN(new Date(createdAt).getTime())) return undefined
+    requests.push({ requestId, label, platform, createdAt })
+  }
+  return requests
+}
+
+/**
+ * Ask which request to approve or cancel, until the answer names one or the person cancels.
+ * @param where - the invocation.
+ * @param pending - the listed requests.
+ * @returns the choice, or undefined when the person cancelled.
+ */
+async function choose(where: Where, pending: readonly PendingRequest[]): Promise<Choice | undefined> {
+  for (;;) {
+    const answer = await where.dependencies.ask('Type the number of the device to approve, or c and its number to cancel its request')
+    if (answer === undefined) return undefined
+    const match = /^(c(?:ancel)?\s*)?(\d+)$/i.exec(answer.trim())
+    const request = match === null ? undefined : pending[Number(match[2]) - 1]
+    if (match !== null && request !== undefined) return { action: match[1] === undefined ? 'approve' : 'cancel', request }
+    where.context.stderr(`Type a number from 1 to ${String(pending.length)}, or c and a number.\n`)
+  }
+}
+
+/**
+ * Approve the chosen request with the code its device shows.
+ * @param where - the invocation.
+ * @param request - the chosen request.
+ * @returns the exit code, or `again` when the request ended before it was approved.
+ */
+async function typeCode(where: Where, request: PendingRequest): Promise<Outcome> {
+  const { home, profile, context, dependencies } = where
   for (let attempt = 1; attempt <= CODE_ATTEMPTS; attempt += 1) {
-    const typed = await dependencies.ask('Type the 8-digit code the new device shows')
-    if (typed === undefined) return failed(context, 'cancelled; the device was not approved')
-    const answer = final(await dependencies.send(home, profile, { op: 'devices.approve', args: { requestId, typedCode: typed } }))
+    const typed = await dependencies.ask(`Type the 8-digit code ${printable(request.label)} shows`)
+    if (typed === undefined) return failed(context, 'cancelled; no device was approved')
+    const answer = final(await dependencies.send(home, profile, { op: 'devices.approve', args: { requestId: request.requestId, typedCode: typed } }))
     if (answer.ok === true) {
-      const device: unknown = answer.device
-      const label: unknown = typeof device === 'object' && device !== null ? Reflect.get(device, 'label') : undefined
-      context.stdout(`Approved ${String(label)}. It signs in on its own now.\n`)
+      context.stdout(`Approved ${printable(request.label)}. It signs in on its own now.\n`)
       return EXIT.ok
     }
-    const detail = typeof answer.detail === 'string' ? answer.detail : String(answer.error)
+    const detail = refusal(answer)
+    if (detail.startsWith('APPROVAL_EXPIRED')) return noLongerWaiting(context)
     if (!detail.startsWith('APPROVAL_CODE_MISMATCH')) return failed(context, `the device was not approved: ${detail}`)
-    context.stderr(`That code is not the one the device shows.${attempt < CODE_ATTEMPTS ? ' Try again.' : ''}\n`)
+    context.stderr(attempt < CODE_ATTEMPTS
+      ? 'That code is not the one the device shows. Try again.\n'
+      : 'That code is not the one the device shows. Three wrong codes cancelled this request; any other request still waits.\n')
   }
-  return failed(context, 'three wrong codes cancelled the request; ask the device again')
+  return 'again'
+}
+
+/**
+ * Cancel the chosen request, which frees its place among the pending requests.
+ * @param where - the invocation.
+ * @param request - the chosen request.
+ * @returns `again`, or the exit code of a refusal.
+ */
+async function cancel(where: Where, request: PendingRequest): Promise<Outcome> {
+  const { home, profile, context, dependencies } = where
+  const answer = final(await dependencies.send(home, profile, { op: 'devices.approve', args: { cancelRequestId: request.requestId } }))
+  if (answer.ok === true) {
+    context.stdout(`Cancelled the request of ${printable(request.label)}. Waiting for a new device.\n`)
+    return 'again'
+  }
+  const detail = refusal(answer)
+  if (detail.startsWith('APPROVAL_EXPIRED')) return noLongerWaiting(context)
+  return failed(context, `the request was not cancelled: ${detail}`)
+}
+
+/**
+ * Say that the chosen request ended on its own, before the pending requests are shown again.
+ * @param context - the output.
+ * @returns `again`.
+ */
+function noLongerWaiting(context: CommandContext): Outcome {
+  context.stderr('That request is no longer waiting.\n')
+  return 'again'
+}
+
+/**
+ * A refused answer's code and sentence.
+ * @param answer - the final line.
+ * @returns the sentence home-auth wrote, which starts with its code, or the channel's code with its detail.
+ */
+function refusal(answer: ResponseLine): string {
+  if (answer.error === 'APPROVAL_FAILED' && typeof answer.detail === 'string') return answer.detail
+  return `${String(answer.error)}${typeof answer.detail === 'string' ? ` (${answer.detail})` : ''}`
 }
 
 /**
@@ -202,7 +337,7 @@ async function remove(where: Where, positional: readonly string[]): Promise<Exit
   // open connections close at once; a stopped home's records are changed directly.
   if (dependencies.running(home, profile)) {
     const answer = final(await dependencies.send(home, profile, { op: 'devices.remove', args: { deviceId } }))
-    if (answer.ok !== true) return failed(context, `the home refused: ${String(answer.error)}${typeof answer.detail === 'string' ? ` (${answer.detail})` : ''}`)
+    if (answer.ok !== true) return failed(context, `the home refused: ${refusal(answer)}`)
     sessions = Number(answer.sessions)
   } else {
     try {

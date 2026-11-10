@@ -8,7 +8,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
-import { DEFAULT_SERVE_PORT } from '@delo/contract-reach-providers'
+import { DEFAULT_SERVE_CHECK_INTERVAL_MS, DEFAULT_SERVE_PORT, LISTENER_PORT_RANGE } from '@delo/contract-reach-providers'
+import { chooseListenerPort, isPortFree } from '@delo/reach'
 import { profileDirectory } from '../profile.ts'
 import { setPatchRow } from '../setup/writes.ts'
 
@@ -20,10 +21,13 @@ export interface TailscalePrivateRow {
   readonly enabled: boolean
   readonly address: string
   readonly servePort: number
+  /** The fixed port on `127.0.0.1` the serve target names; `0` until `delorun reach on tailscale` chooses one. */
+  readonly listenerPort: number
+  readonly serveCheckIntervalMs: number
 }
 
 /** The option of a profile that has no row of its own: off. */
-export const REACH_OFF: TailscalePrivateRow = { enabled: false, address: '', servePort: DEFAULT_SERVE_PORT }
+export const REACH_OFF: TailscalePrivateRow = { enabled: false, address: '', servePort: DEFAULT_SERVE_PORT, listenerPort: 0, serveCheckIntervalMs: DEFAULT_SERVE_CHECK_INTERVAL_MS }
 
 /**
  * The profile's patch file.
@@ -42,7 +46,15 @@ function patchPath(home: string, profile: string): string {
  * @returns the option, or {@link REACH_OFF} when the profile sets none.
  */
 export function readReachRow(home: string, profile: string): TailscalePrivateRow {
-  const path = patchPath(home, profile)
+  return readReachRowAt(patchPath(home, profile))
+}
+
+/**
+ * Read the Tailscale private option from a profile patch file.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @returns the option, or {@link REACH_OFF} when the file sets none.
+ */
+export function readReachRowAt(path: string): TailscalePrivateRow {
   if (!existsSync(path)) return REACH_OFF
   const rows: unknown = parse(readFileSync(path, 'utf8'))
   if (!Array.isArray(rows)) return REACH_OFF
@@ -54,10 +66,14 @@ export function readReachRow(home: string, profile: string): TailscalePrivateRow
   const enabled: unknown = Reflect.get(option, 'enabled')
   const address: unknown = Reflect.get(option, 'address')
   const servePort: unknown = Reflect.get(option, 'servePort')
+  const listenerPort: unknown = Reflect.get(option, 'listenerPort')
+  const interval: unknown = Reflect.get(option, 'serveCheckIntervalMs')
   return {
     enabled: enabled === true,
     address: typeof address === 'string' ? address : '',
     servePort: typeof servePort === 'number' ? servePort : DEFAULT_SERVE_PORT,
+    listenerPort: typeof listenerPort === 'number' ? listenerPort : 0,
+    serveCheckIntervalMs: typeof interval === 'number' ? interval : DEFAULT_SERVE_CHECK_INTERVAL_MS,
   }
 }
 
@@ -79,6 +95,24 @@ export function writeReachRow(home: string, profile: string, option: TailscalePr
 export function writeReachRowAt(path: string, option: TailscalePrivateRow): void {
   setPatchRow(path, {
     id: REACH_ROW_ID,
-    config: { enabled: true, tailscalePrivate: { enabled: option.enabled, address: option.address, servePort: option.servePort } },
+    config: {
+      enabled: true,
+      tailscalePrivate: {
+        enabled: option.enabled, address: option.address, servePort: option.servePort, listenerPort: option.listenerPort, serveCheckIntervalMs: option.serveCheckIntervalMs,
+      },
+    },
   })
+}
+
+/**
+ * The fixed listener port to record: the row's own, chosen once, unless it is unset or, while Delo is stopped, another
+ * program holds it; then a free port chosen at random from {@link LISTENER_PORT_RANGE}.
+ * @param current - the row's `listenerPort`.
+ * @param running - whether the profile's home runs, holding the row's port itself.
+ * @returns the port.
+ */
+export async function listenerPortFor(current: number, running: boolean): Promise<number> {
+  const valid = Number.isInteger(current) && current >= 1 && current <= 65_535
+  if (valid && (running || await isPortFree(current))) return current
+  return chooseListenerPort(LISTENER_PORT_RANGE)
 }

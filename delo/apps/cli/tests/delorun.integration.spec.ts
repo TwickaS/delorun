@@ -468,6 +468,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
         approved.push(`${requestId} ${typedCode}`)
         return Promise.resolve({ id: 'device', label: 'Phone', address: 'https://home.example.ts.net' })
       },
+      cancel: () => undefined,
       remove: () => Promise.resolve({ removed: true, sessions: 0, connections: 0 }),
     }
     const base = recording([])

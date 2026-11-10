@@ -16,6 +16,8 @@ export const REPORT_ID_PATTERN = /^[0-9a-f]{32}$/
 
 const version = z.string().max(RUNTIME_VERSION_MAX_LENGTH).regex(new RegExp(RUNTIME_VERSION_PATTERN))
 const base = { v: z.literal(UPDATE_PROTOCOL_VERSION), token: z.string() }
+/** An approval request id: 16 random bytes as base64url without padding. */
+const approvalRequestId = z.string().regex(/^[A-Za-z0-9_-]{22}$/)
 const drain = { wait: z.enum(['drain', 'abort-if-busy', 'cancel']), drainTimeoutS: z.number().int().min(DRAIN_TIMEOUT_MIN_S).max(DRAIN_TIMEOUT_MAX_S).optional() }
 
 const request = z.discriminatedUnion('op', [
@@ -29,7 +31,11 @@ const request = z.discriminatedUnion('op', [
   z.strictObject({
     ...base,
     op: z.literal('devices.approve'),
-    args: z.strictObject({ requestId: z.string().regex(/^[A-Za-z0-9_-]{22}$/).optional(), typedCode: z.string().regex(/^[0-9 -]{8,12}$/).optional() }),
+    args: z.strictObject({
+      requestId: approvalRequestId.optional(),
+      typedCode: z.string().regex(/^[0-9 -]{8,12}$/).optional(),
+      cancelRequestId: approvalRequestId.optional(),
+    }),
   }),
   z.strictObject({
     ...base,

@@ -3,6 +3,7 @@
  * what each action checks, writes and prints, and what it refuses.
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,13 +15,15 @@ import type { Base64Url } from '@delo/contract-device-approval'
 import { HomeAuth, type DeviceSummary } from '@delo/home-auth'
 import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
 import type { ResponseLine, UnsignedRequest } from '@delo/home-process'
-import type { TailscaleResult, TailscaleRunner } from '@delo/reach'
+import { chooseListenerPort, type TailscaleResult, type TailscaleRunner } from '@delo/reach'
+import { LISTENER_PORT_RANGE } from '@delo/contract-reach-providers'
+import { fakeTailscale, ownRule } from '../../../../packages/reach/tests/fake-tailscale.ts'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
 import { createReachCommand, homeRuns, type ReachDependencies } from '../../src/reach/command.ts'
 import { createDevicesCommand, type DevicesDependencies } from '../../src/devices/command.ts'
 import { localDeviceApproval } from '../../src/devices/host.ts'
-import { readReachRow, REACH_OFF } from '../../src/reach/row.ts'
+import { listenerPortFor, readReachRow, REACH_OFF, writeReachRow } from '../../src/reach/row.ts'
 import { reachSection } from '../../src/reach/setup-section.ts'
 import { TRUST_STATEMENT } from '../../src/reach/trust.ts'
 import { BACK } from '../../src/setup/steps.ts'
@@ -53,6 +56,7 @@ function tailscale(answers: Partial<Record<string, TailscaleResult>> = {}, calls
     const key = args[0] === 'serve' ? `serve ${args[1] ?? ''}` : args[0] ?? ''
     if (answers[key] !== undefined) return Promise.resolve(answers[key])
     if (args[0] === 'status') return { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: `${HOST}.` }, CertDomains: [HOST] }), stderr: '' }
+    if (key === 'serve status') return { code: 0, stdout: '{}\n', stderr: '' }
     return { code: 0, stdout: '', stderr: '' }
   }
 }
@@ -66,15 +70,20 @@ function patchRows(): unknown {
 }
 
 describe('delorun reach', () => {
-  it('turns Tailscale private on with this machine\'s address, and prints the trust statement', async () => {
+  it('turns Tailscale private on with this machine\'s address and a fixed listener port, and prints the trust statement', async () => {
     const calls: string[][] = []
     await expect(reach({ tailscale: tailscale({}, calls) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
-    expect(patchRows()).toEqual([{ id: 'delo-reach', config: { enabled: true, tailscalePrivate: { enabled: true, address: `https://${HOST}`, servePort: 443 } } }])
+    const row = readReachRow(deloHome, 'default')
+    expect(patchRows()).toEqual([{ id: 'delo-reach', config: { enabled: true, tailscalePrivate: { enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: row.listenerPort, serveCheckIntervalMs: 60_000 } } }])
+    expect(row.listenerPort).toBeGreaterThanOrEqual(LISTENER_PORT_RANGE.min)
+    expect(row.listenerPort).toBeLessThanOrEqual(LISTENER_PORT_RANGE.max)
     for (const line of TRUST_STATEMENT) expect(out.stdout).toContain(line)
     expect(out.stdout).toContain('It starts with Delo')
     expect(calls.flat()).not.toContain('sudo')
+    // Pins the choice made once: turning it on again keeps the recorded port.
     await reach({ running: () => true }).run(['on', 'tailscale'], context)
     expect(out.stdout).toContain('Restart Delo to apply it')
+    expect(readReachRow(deloHome, 'default').listenerPort).toBe(row.listenerPort)
   })
 
   it('prints the one operator command and turns nothing on when the user may not configure serve', async () => {
@@ -82,8 +91,42 @@ describe('delorun reach', () => {
     await expect(reach({ tailscale: refused }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('sudo tailscale set --operator=$USER')
     expect(existsSync(join(deloHome, 'profiles', 'default', 'cordis.patch.yml'))).toBe(false)
+    // Pins the serve status check: a status it cannot read turns nothing on.
     const other = tailscale({ 'serve status': { code: 1, stdout: '', stderr: 'no serve config' } })
-    await expect(reach({ tailscale: other }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    await expect(reach({ tailscale: other }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('tailscale serve status failed: no serve config (TAILSCALE_NOT_LOGGED_IN)')
+    expect(existsSync(join(deloHome, 'profiles', 'default', 'cordis.patch.yml'))).toBe(false)
+  })
+
+  it('refuses while Funnel is on, and removes a rule it does not own, or any rule while Delo is stopped', async () => {
+    // Pins the Funnel refusal: remote access is not turned on for an address on the public internet.
+    const funnel = fakeTailscale(HOST)
+    funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
+    await expect(reach({ tailscale: funnel.run }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('tailscale funnel --https=443 off, then run delorun reach on tailscale again (TAILSCALE_FUNNEL_ON)')
+    expect(existsSync(join(deloHome, 'profiles', 'default', 'cordis.patch.yml'))).toBe(false)
+    // Pins the removal at reach on: a stale rule of a stopped home forwards to a port no program of this home holds.
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    writeReachRow(deloHome, 'default', { ...REACH_OFF, listenerPort: port })
+    const stale = fakeTailscale(HOST)
+    stale.config = ownRule(HOST, 443, port)
+    await expect(reach({ tailscale: stale.run }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    expect(stale.config).toEqual({ TCP: {}, Web: {} })
+    expect(readReachRow(deloHome, 'default').listenerPort).toBe(port)
+    // A running home keeps its own rule and loses a foreign one.
+    const own = fakeTailscale(HOST)
+    own.config = ownRule(HOST, 443, port)
+    await expect(reach({ tailscale: own.run, running: () => true }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    expect(own.config).toEqual(ownRule(HOST, 443, port))
+    const foreign = fakeTailscale(HOST)
+    foreign.config = ownRule(HOST, 443, 1234)
+    await expect(reach({ tailscale: foreign.run, running: () => true }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    expect(foreign.config).toEqual({ TCP: {}, Web: {} })
+    // Pins the removal's result check: a rule that stays is reported, and the command fails.
+    const stuck = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: 'denied' } })
+    stuck.config = ownRule(HOST, 443, 1234)
+    await expect(reach({ tailscale: stuck.run }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('(TAILSCALE_SERVE_CONFLICT)')
   })
 
   it('names a failed Tailscale check and refuses a wrong command line or a missing profile', async () => {
@@ -96,15 +139,31 @@ describe('delorun reach', () => {
     await expect(reach().run(['off', '--profile', 'work'], context)).rejects.toMatchObject({ exit: EXIT.failed })
   })
 
-  it('turns it off, removes the serve target and keeps the address', async () => {
+  it('turns it off, removes the serve target, confirms it is gone and keeps the address', async () => {
     await reach().run(['on', 'tailscale'], context)
-    const calls: string[][] = []
-    await expect(reach({ tailscale: tailscale({}, calls), running: () => true }).run(['off'], context)).resolves.toBe(EXIT.ok)
-    expect(calls).toEqual([['serve', '--https=443', 'off']])
-    expect(readReachRow(deloHome, 'default')).toEqual({ enabled: false, address: `https://${HOST}`, servePort: 443 })
+    const row = readReachRow(deloHome, 'default')
+    const live = fakeTailscale(HOST)
+    live.config = ownRule(HOST, 443, row.listenerPort)
+    await expect(reach({ tailscale: live.run, running: () => true }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(live.calls).toEqual([['serve', 'status', '--json'], ['serve', '--https=443', 'off'], ['serve', 'status', '--json']])
+    expect(live.config).toEqual({ TCP: {}, Web: {} })
+    expect(readReachRow(deloHome, 'default')).toEqual({ ...row, enabled: false })
+    expect(out.stdout).toContain('Tailscale no longer serves this computer\'s studio.')
     expect(out.stdout).toContain('Restart Delo to close the remote listener now')
-    await reach({ tailscale: tailscale({ 'serve --https=443': { code: 1, stdout: '', stderr: '' } }) }).run(['off'], context)
-    expect(out.stdout).toContain('Tailscale did not confirm')
+    // Pins the confirmation: a rule still served after the removal fails the command with the reason.
+    const stuck = fakeTailscale(HOST, { 'serve off': { code: 0, stdout: '', stderr: '' } })
+    stuck.config = { Foreground: { session: ownRule(HOST, 443, row.listenerPort) } }
+    out.stderr = ''
+    await expect(reach({ tailscale: stuck.run }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('Tailscale may still serve this computer\'s studio. Tailscale still serves home.example.ts.net:443')
+    // Without Tailscale nothing serves; a row without an address asks Tailscale for this machine's name.
+    await expect(reach({ tailscale: tailscale({ version: { code: null, stdout: '', stderr: '' }, 'serve status': { code: null, stdout: '', stderr: '' } }) }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Tailscale is not installed')
+    writeReachRow(deloHome, 'default', REACH_OFF)
+    const calls: string[][] = []
+    await expect(reach({ tailscale: tailscale({}, calls) }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(calls.map(call => call[0])).toEqual(['version', 'status', 'serve'])
+    await expect(reach({ tailscale: () => Promise.reject(new Error('broken runner')) }).run(['off'], context)).rejects.toThrow('broken runner')
   })
 
   it('reports the row, and the running home\'s state', async () => {
@@ -150,6 +209,7 @@ function devices(overrides: Partial<DevicesDependencies> & { readonly lines?: Re
 }
 
 const PENDING = { requestId: 'AAAAAAAAAAAAAAAAAAAAAA', label: 'Phone', platform: 'iOS', address: `https://${HOST}`, createdAt: 0, expiresAt: 1 }
+const SECOND = { requestId: 'BBBBBBBBBBBBBBBBBBBBBB', label: 'Tablet', platform: '', address: `https://${HOST}`, createdAt: 1000, expiresAt: 2 }
 
 describe('delorun devices', () => {
   it('approves the waiting device with the typed code, giving a wrong code another try', async () => {
@@ -159,7 +219,7 @@ describe('delorun devices', () => {
         [{ ok: false, error: 'APPROVAL_FAILED', detail: 'APPROVAL_CODE_MISMATCH: wrong' }],
         [{ ok: true, device: { id: 'd', label: 'Phone', address: PENDING.address } }],
       ],
-      answers: ['0000 0000', '1234 5678'],
+      answers: ['1', '0000 0000', '1234 5678'],
     })
     await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
     expect(sent).toEqual([
@@ -167,12 +227,99 @@ describe('delorun devices', () => {
       { op: 'devices.approve', args: { requestId: PENDING.requestId, typedCode: '0000 0000' } },
       { op: 'devices.approve', args: { requestId: PENDING.requestId, typedCode: '1234 5678' } },
     ])
-    expect(out.stdout).toContain('A device asks for approval: Phone (iOS)')
-    expect(out.stdout).toContain('Approved Phone')
+    expect(out.stdout).toContain('  1. Phone (iOS), asked at 1970-01-01T00:00:00.000Z, request AAAAAAAA\n')
+    expect(out.stdout).toContain('Approved Phone.')
     expect(out.stderr).toContain('Try again.')
   })
 
-  it('refuses an approval without a running home, a closed window, a refusal, a cancel and three wrong codes', async () => {
+  it('lists every pending request and approves the one the person chooses', async () => {
+    const asked: string[] = []
+    const answers = ['3', 'abc', ' 2 ', '1234 5678']
+    const { command, sent } = devices({
+      lines: [[{ ok: true, closesAt: 1, pending: [PENDING, SECOND] }], [{ ok: true, device: { id: 'd' } }]],
+      ask: (message) => { asked.push(message); return Promise.resolve(answers.shift()) },
+    })
+    await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('  1. Phone (iOS)')
+    expect(out.stdout).toContain('  2. Tablet, asked at 1970-01-01T00:00:01.000Z, request BBBBBBBB\n')
+    // Pins the choice: without it the first request, which any tailnet device may have sent, is the one approved.
+    expect(sent.at(-1)).toEqual({ op: 'devices.approve', args: { requestId: SECOND.requestId, typedCode: '1234 5678' } })
+    expect(out.stderr).toContain('Type a number from 1 to 2, or c and a number.')
+    expect(asked.at(-1)).toBe('Type the 8-digit code Tablet shows')
+    expect(out.stdout).toContain('Approved Tablet.')
+  })
+
+  it('cancels the request the person chooses and shows the requests again', async () => {
+    const { command, sent } = devices({
+      lines: [
+        [{ ok: true, closesAt: 1, pending: [PENDING, SECOND] }],
+        [{ ok: true, cancelled: PENDING.requestId }],
+        [{ ok: true, closesAt: 1, pending: [SECOND] }],
+        [{ ok: true, device: { id: 'd' } }],
+      ],
+      answers: ['c 1', '1', '1234 5678'],
+    })
+    await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
+    // Pins the cancel: the person frees the place of a request they do not know, and only that one.
+    expect(sent).toEqual([
+      { op: 'devices.approve', args: {} },
+      { op: 'devices.approve', args: { cancelRequestId: PENDING.requestId } },
+      { op: 'devices.approve', args: {} },
+      { op: 'devices.approve', args: { requestId: SECOND.requestId, typedCode: '1234 5678' } },
+    ])
+    expect(out.stdout).toContain('Cancelled the request of Phone.')
+    for (const answer of ['cancel 2', 'C2']) {
+      const other = devices({ lines: [[{ ok: true, pending: [PENDING, SECOND] }], [{ ok: true }]], answers: [answer] })
+      await other.command.run(['approve'], context)
+      expect(other.sent[1]).toEqual({ op: 'devices.approve', args: { cancelRequestId: SECOND.requestId } })
+    }
+  })
+
+  it('after three wrong codes for one request, shows the others still waiting', async () => {
+    const wrong = { ok: false, error: 'APPROVAL_FAILED', detail: 'APPROVAL_CODE_MISMATCH: wrong' }
+    const { command, sent } = devices({
+      lines: [[{ ok: true, pending: [PENDING, SECOND] }], [wrong], [wrong], [wrong], [{ ok: true, pending: [SECOND] }], [{ ok: true }]],
+      answers: ['1', '1', '2', '3', '1', '1234 5678'],
+    })
+    await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stderr).toContain('Three wrong codes cancelled this request; any other request still waits.')
+    expect(sent.at(-1)).toEqual({ op: 'devices.approve', args: { requestId: SECOND.requestId, typedCode: '1234 5678' } })
+  })
+
+  it('shows the requests again when the chosen one ended on its own', async () => {
+    const expired = { ok: false, error: 'APPROVAL_FAILED', detail: 'APPROVAL_EXPIRED: gone' }
+    const approving = devices({ lines: [[{ ok: true, pending: [PENDING] }], [expired], [{ ok: true, pending: [SECOND] }], [{ ok: true }]], answers: ['1', '1234 5678', '1', '1234 5678'] })
+    await expect(approving.command.run(['approve'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stderr).toContain('That request is no longer waiting.')
+    expect(out.stdout).toContain('Approved Tablet.')
+    const cancelling = devices({ lines: [[{ ok: true, pending: [PENDING] }], [expired], [{ ok: true, pending: [] }]], answers: ['c1'] })
+    await expect(cancelling.command.run(['approve'], context)).resolves.toBe(EXIT.failed)
+    expect(cancelling.sent.at(-1)).toEqual({ op: 'devices.approve', args: {} })
+    expect(out.stderr).toContain('No device asked for approval')
+  })
+
+  it('escapes the control and bidirectional characters a request or a record carries', async () => {
+    const planted = { ...PENDING, label: 'Ph\u001b[2Jone\u202e', platform: 'iOS\r\n\u2066', requestId: '\u001b]0;x\u0007AAAAAAAAAAAAAA' }
+    const asked: string[] = []
+    const answers = ['1', '1234 5678']
+    const { command } = devices({ lines: [[{ ok: true, pending: [planted] }], [{ ok: true }]], ask: (message) => { asked.push(message); return Promise.resolve(answers.shift()) } })
+    await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
+    // Pins the escape on print: without it the label clears the screen and reverses the text that follows it.
+    expect(out.stdout).toContain('Ph\\u001b[2Jone\\u202e (iOS\\u000d\\u000a\\u2066), asked at 1970-01-01T00:00:00.000Z, request \\u001b]0;x\\u0007')
+    expect(out.stdout).toContain('Approved Ph\\u001b[2Jone\\u202e.')
+    expect(asked).toContain('Type the 8-digit code Ph\\u001b[2Jone\\u202e shows')
+    const base: DeviceSummary = { id: brandString<DeviceId>('dev\u009b1'), label: 'Ph\u2067one', platform: 'i\u0000OS', address: brandString<StudioAddress>(`https://${HOST}\u0008`), approvedAt: 0, approvedBy: brandString<DeviceId>('dev\u007f2'), lastSignInAt: null }
+    const listed = vi.spyOn(HomeAuth.prototype, 'devices').mockResolvedValue({ owner: { claimedAt: 0, firstDeviceId: 'local' }, devices: [base] })
+    try {
+      out.stdout = ''
+      await expect(devices().command.run(['list'], context)).resolves.toBe(EXIT.ok)
+      expect(out.stdout).toBe(`dev\\u009b1  Ph\\u2067one (i\\u0000OS)\n    https://${HOST}\\u0008, approved by dev\\u007f2 1970-01-01T00:00:00.000Z, never signed in\n`)
+    } finally {
+      listed.mockRestore()
+    }
+  })
+
+  it('refuses an approval without a running home, a closed window, a refusal, a cancel and an unreadable list', async () => {
     await expect(devices({ running: () => false }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('Delo is not running')
     await expect(devices({ lines: [[{ ok: true, closesAt: 1, pending: [] }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
@@ -182,12 +329,16 @@ describe('delorun devices', () => {
     await expect(devices({ lines: [[{ ok: false, error: 'APPROVALS_UNAVAILABLE' }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     await expect(devices({ lines: [] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     await expect(devices({ lines: [[{ ok: true, pending: [{ ...PENDING, platform: '' }] }]], answers: [undefined] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('cancelled')
-    await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }], [{ ok: false, error: 'APPROVAL_FAILED', detail: 'APPROVAL_EXPIRED: gone' }]], answers: ['1'] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
-    await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }], [{ ok: false, error: 'SCHEMA_VIOLATION' }]], answers: ['x'] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
-    const wrong = { ok: false, error: 'APPROVAL_FAILED', detail: 'APPROVAL_CODE_MISMATCH: wrong' }
-    await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }], [wrong], [wrong], [wrong]], answers: ['1', '2', '3'] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('three wrong codes')
+    expect(out.stderr).toContain('cancelled; no device was approved')
+    await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }]], answers: ['1', undefined] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
+    await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }], [{ ok: false, error: 'SCHEMA_VIOLATION' }]], answers: ['1', 'x'] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('the device was not approved: SCHEMA_VIOLATION')
+    await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }], [{ ok: false, error: 'APPROVAL_FAILED', detail: 'NO_OWNER: none' }]], answers: ['c1'] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('the request was not cancelled: NO_OWNER: none')
+    for (const pending of [{}, [null], [{ ...PENDING, label: 7 }], [{ ...PENDING, createdAt: '0' }], [{ ...PENDING, createdAt: Number.NaN }]]) {
+      await expect(devices({ lines: [[{ ok: true, pending }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
+    }
+    expect(out.stderr).toContain('a list of requests this command cannot read')
   })
 
   it('lists the home\'s devices from its records, and says when there is none', async () => {
@@ -222,12 +373,6 @@ describe('delorun devices', () => {
     } finally {
       listed.mockRestore()
     }
-  })
-
-  it('names the approved device even when the home answers without it', async () => {
-    const { command } = devices({ lines: [[{ ok: true, pending: [PENDING] }], [{ ok: true }]], answers: ['1234 5678'] })
-    await expect(command.run(['approve'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).toContain('Approved undefined.')
   })
 
   it('passes on a failure of the records that is not the home\'s own', async () => {
@@ -284,12 +429,30 @@ describe('the pieces the commands share', () => {
   it('reads the reach row, or off', () => {
     const path = join(deloHome, 'profiles', 'default', 'cordis.patch.yml')
     expect(readReachRow(deloHome, 'default')).toEqual(REACH_OFF)
-    for (const text of ['just: a map\n', '- 1\n- ~\n- id: delo-reach\n', '- id: delo-reach\n  config: {}\n', '- id: delo-reach\n  config:\n    tailscalePrivate: 1\n']) {
+    for (const text of ['just: a map\n', '- 1\n- ~\n- id: delo-reach\n', '- id: delo-reach\n  config: {}\n', '- id: delo-reach\n  config: ~\n', '- id: other\n', '- id: delo-reach\n  config:\n    tailscalePrivate: 1\n']) {
       writeFileSync(path, text)
       expect(readReachRow(deloHome, 'default')).toEqual(REACH_OFF)
     }
     writeFileSync(path, '- id: delo-reach\n  config:\n    tailscalePrivate:\n      enabled: yes\n')
     expect(readReachRow(deloHome, 'default')).toEqual(REACH_OFF)
+    writeFileSync(path, '- id: delo-reach\n  config:\n    tailscalePrivate:\n      listenerPort: 23456\n      serveCheckIntervalMs: 5000\n')
+    expect(readReachRow(deloHome, 'default')).toEqual({ ...REACH_OFF, listenerPort: 23_456, serveCheckIntervalMs: 5000 })
+  })
+
+  it('keeps a recorded listener port unless it is unset, or held by another program while Delo is stopped', async () => {
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    await expect(listenerPortFor(port, false)).resolves.toBe(port)
+    const held = createServer()
+    await new Promise<void>((resolve) => { held.listen(port, '127.0.0.1', () => { resolve() }) })
+    try {
+      // A running home holds the port itself.
+      await expect(listenerPortFor(port, true)).resolves.toBe(port)
+      // Pins the re-choice: a port another program holds would refuse every start.
+      await expect(listenerPortFor(port, false)).resolves.not.toBe(port)
+    } finally {
+      await new Promise<void>((resolve) => { held.close(() => { resolve() }) })
+    }
+    for (const unset of [0, 70_000, 1.5]) await expect(listenerPortFor(unset, true)).resolves.toBeGreaterThanOrEqual(LISTENER_PORT_RANGE.min)
   })
 
   it('gives the home process the Host\'s local approval, or nothing without home-auth', async () => {
@@ -300,6 +463,7 @@ describe('the pieces the commands share', () => {
       approvalWindowOpenUntil: () => 5,
       pendingApprovals: () => [],
       approveLocally: (id: string, code: string) => { calls.push(`${id} ${code}`); return Promise.resolve({ id: 'd', label: 'Phone', address: 'a', platform: '' }) },
+      cancelApproval: (id: string) => { calls.push(`cancel ${id}`) },
       revokeDevice: (id: string) => { calls.push(`remove ${id}`); return Promise.resolve({ removed: true, sessions: 2, connections: 1, extra: 'dropped' }) },
     }
     const approval = localDeviceApproval({ get: (name: string) => (name === 'homeAuth' ? homeAuth : undefined) } as never)
@@ -307,8 +471,9 @@ describe('the pieces the commands share', () => {
     expect(approval?.windowOpenUntil()).toBe(5)
     expect(approval?.pending()).toEqual([])
     await expect(approval?.approve('r', '1')).resolves.toEqual({ id: 'd', label: 'Phone', address: 'a' })
+    approval?.cancel('r')
     await expect(approval?.remove('d')).resolves.toEqual({ removed: true, sessions: 2, connections: 1 })
-    expect(calls).toEqual(['open', 'r 1', 'remove d'])
+    expect(calls).toEqual(['open', 'r 1', 'cancel r', 'remove d'])
   })
 })
 
@@ -330,7 +495,11 @@ describe('setup\'s reach section', () => {
     const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } } as never
     expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale')
     await expect(section.apply({ home: deloHome, directory, secret: undefined }, answers)).resolves.toContain('delorun devices approve')
-    expect(readReachRow(deloHome, 'default')).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443 })
+    const row = readReachRow(deloHome, 'default')
+    expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000 })
+    // Applying again keeps the port chosen once.
+    await section.apply({ home: deloHome, directory, secret: undefined }, answers)
+    expect(readReachRow(deloHome, 'default').listenerPort).toBe(row.listenerPort)
   })
 
   it('leaves remote access off when the person says no, goes back, or a check fails', async () => {
@@ -340,6 +509,11 @@ describe('setup\'s reach section', () => {
     await expect(reachSection(tailscale()).ask(io([BACK], notes), draft, {} as never)).resolves.toBe(BACK)
     await expect(reachSection(tailscale({ version: { code: null, stdout: '', stderr: '' } })).ask(io([true], notes), draft, {} as never)).resolves.toEqual(off)
     expect(notes.at(-1)).toContain('Remote access stays off')
+    // Pins setup's Funnel check: an address on the public internet is not offered.
+    const funnel = fakeTailscale(HOST)
+    funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
+    await expect(reachSection(funnel.run).ask(io([true], notes), draft, {} as never)).resolves.toEqual(off)
+    expect(notes.at(-1)).toContain('tailscale funnel --https=443 off, then try again\nRemote access stays off')
     await expect(reachSection(() => Promise.reject(new Error('broken'))).ask(io([true], notes), draft, {} as never)).rejects.toThrow('broken')
     const none = { reach: { option: 'none', identityFactor: null } } as never
     expect(reachSection(tailscale()).review?.(none)).toBe('Remote access: off')

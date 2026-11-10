@@ -179,7 +179,8 @@ export interface StudioOpenTokenRequest extends RequestBase {
 /**
  * The `devices.approve` request: C5's local approval at the home's own computer. Without arguments it opens the approval
  * window and answers once a request is pending or the window closed; with `requestId` and `typedCode` it approves that
- * request. Accepted only with the token the person's own `delorun` reads from the token file, and refused with
+ * request; with `cancelRequestId` alone it cancels that pending request, which frees its place among the 5 pending.
+ * Accepted only with the token the person's own `delorun` reads from the token file, and refused with
  * `LOOPBACK_REQUIRED` for the Host's channel token, which acts for studio sessions on every listener.
  */
 export interface DevicesApproveRequest extends RequestBase {
@@ -191,6 +192,8 @@ export interface DevicesApproveRequest extends RequestBase {
     readonly requestId?: string
     /** The 8-digit match code the person typed from the new device's screen. */
     readonly typedCode?: string
+    /** The pending request to cancel; it comes without `requestId` and `typedCode`. */
+    readonly cancelRequestId?: string
   }
 }
 
