@@ -8,6 +8,8 @@ Delo has one maintainer today. That person decides what merges, holds the releas
 
 The maintainer decides which changes Delo merges. A decision about Delo's direction is recorded as an Agent Note in [.agents/notes/](.agents/notes/README.md), which states the decision, its reason, what it gives up and how it is verified. Mechanical and local changes need no Agent Note. A change that would break loading stock DeepSeek Harness plugins, profiles or sessions needs such a decision.
 
+Delo's [security fundamentals](delo/docs/security/fundamentals.md) change only by a maintainer decision recorded as an Agent Note, together with a changelog fragment in the Security section. Later work may make a fundamental stricter; nothing weakens or removes one without that decision.
+
 Pull requests merge by rebase, with authors and sign-offs kept and a linear history ([CONTRIBUTING.md](CONTRIBUTING.md#pull-requests)).
 
 ## Becoming a maintainer

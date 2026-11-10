@@ -45,7 +45,7 @@ The first screen asks for **Quick** (preselected) or **Full**. Each topic is a r
 
 Every question after the first can return to the one before it: a select or yes-or-no question offers "← Back", and a text or key question takes an empty entry as "go back". A review screen lists the answers before anything is written.
 
-A terminal run ends by offering to install the `delorun` command (it runs `npm install -g delorun`, and prints that line when the person declines or the install fails), then starts Delorun in the background or in the terminal, as the `background` answer says, and opens the studio. It prints that Delorun keeps running after the terminal closes, the studio's address, and `delorun status`, `delorun logs --follow` and `delorun stop`. On a computer with no display, or in an SSH session, it prints the address and the SSH port-forward line instead of opening a browser. `--yes` and `--config` start nothing and print the command to run.
+A terminal run ends by offering to install the `delorun` command (it runs `npm install -g delorun`, and prints that line when the person declines or the install fails), then starts Delorun in the background or in the terminal, as the `background` answer says, and opens the studio. It prints whether Delorun keeps running after the terminal closes, the studio's address, and `delorun status`, `delorun logs --follow` and `delorun stop`. On a computer with no display, or in an SSH session, it prints the address and the SSH port-forward line instead of opening a browser. `--yes` and `--config` start nothing and print the command to run.
 
 <a id="questions"></a>
 ### Questions
@@ -145,13 +145,13 @@ The statements about recovery and Docker belong to the sections that add those t
 
 - `delo/apps/cli/src/setup/`: the setup flow, its sections and its `--yes` and `--config` forms.
 - `delo/packages/bundle-local`: the upstream opt-in rows and their consent screen in the studio, and the rows the prompts answer sets.
-- `delo/packages/plugin-onboarding/`: the studio onboarding, which reads `sections`.
+- The studio's onboarding, which reads `sections`, is not built; its rules are in the [first-run design](../design/first-run.md).
 - `delo/packages/contract-setup-answers/`: the answer types, the defaults and the profile row names.
 
 <a id="compatibility"></a>
 ## Compatibility
 
-The answers schema is versioned by `schemaVersion`, which is `1`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Setup refuses an answers document whose version it does not know.
+The answers schema is versioned by `schemaVersion`, which is `2`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Setup refuses an answers document whose version it does not know.
 
 A new upstream opt-in is added as a question with a default of off, in the same change that adds its profile row to the mapping.
 

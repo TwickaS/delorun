@@ -47,6 +47,8 @@ Delo is a fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 - [Delo documentation](delo/docs/README.md)
 - [Architecture](delo/docs/architecture/README.md)
 - [Security and threat model](delo/docs/security/README.md)
+- [Security fundamentals](delo/docs/security/fundamentals.md)
+- [Designs of features not built yet](delo/docs/design/README.md)
 
 ## Community
 

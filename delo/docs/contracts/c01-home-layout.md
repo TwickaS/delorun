@@ -60,23 +60,28 @@ Delo adds the entries marked Delo at the top of the home. Every other entry is u
   status/                        0700  Delo: each installation's update status record (C3)
   catalogue/                     0700  Delo: the verified catalogue index and revocation list (C13)
   secrets/                       0700  Delo: secret files, 0600 each
-  run/<profile>/                 0700  Delo: home lock, start token, sockets, update record
+  run/<profile>/                 0700  Delo: home lock, start token, sockets, update record, setup progress, start overlays
   data-copies/                   0700  Delo: the session-data copy an update took, and a restore's journal (C3)
   data-set-aside/                0700  Delo: chat data a rollback set aside (C3)
   supervisor/                    0700  Delo: the Docker supervisor's roots file (C9)
   bin/                           0700  Delo: the launcher copy used by the install script and login items
   alerts/                        0700  Delo: signed certificate-alert files (C5)
+  trash/                         0700  Delo: deleted chats and workspaces until a purge, and the retention record (C8)
+  archive/                       0700  Delo: imports in progress and imported workspaces (C8)
 ```
 
 The operational logs that [C20](c20-operational-logs.md) defines live in per-surface directories under upstream's `logs/`, beside upstream's `startup-*.log` reports.
 
 - **`trust/`.** `root.json` is the newest root that verified, `timestamp.json` the newest timestamp that verified, whose `version` is the highest one stored ([C2](c02-release-manifest.md)), `checkpoint.json` the latest log checkpoint that verified ([C18](c18-release-log.md)), and `release-log.json` the release-log check state of each installed release, `verified` or `unchecked` with the reason, which an install writes once the runtime store has installed the release and the start check updates ([C18](c18-release-log.md#check-states)). Each is replaced atomically and never with an older version; the CLI launcher and the desktop updater share them. `roots/<n>.root.json` holds one file per root version an install walked, oldest first, which is the proof a start holds a stored root newer than every root the launcher ships to ([C2](c02-release-manifest.md#key-rotation)).
 - **`status/`.** `cli-home.json` and `desktop-host.json` are the status records of [C3](c03-update-report.md); each installation writes only its own record and reads the other.
+- **`run/<profile>/`.** Besides the lock, the token and the sockets, it holds `setup-progress.json`, the record that lets an interrupted setup resume ([C11](c11-setup-answers.md)), and the overlays a start passes to upstream's profile runner: `sandbox.patch.yml`, the confinement rules of [this contract](#confinement-rules), and `safe-mode.patch.yml` while safe mode is on. A start rewrites the overlays; they are not the person's configuration.
 - **`run/<profile>/update.json`.** The update record of [C19](c19-home-process.md#interrupted-updates) and [C3](c03-update-report.md#rollback): the two versions, whether the chat data differs, whether a copy was taken and `targetStarted`, written at mode 0600 and synced before the target's process is spawned. It stays with phase `committed` after an update commits, so a later rollback reads it, and goes when a rollback completes.
 - **`run/<profile>/update.previous.json`.** The committed record of the previous update while a newer update runs: it goes back to `update.json` when the newer update ends before switching or is rolled back, and is removed when the newer update commits.
 - **`run/data-users/<pid>`.** One file per process outside a home process that uses the shared stores, at mode 0600, holding `{"mode":"shared"|"exclusive","command":"<name>"}`: `delorun headless` registers as `shared`, and `delorun trash`, `export` and `import` as `exclusive` while they also hold the home lock of every profile. An exclusive user refuses while any other live process is listed, a shared user refuses while an exclusive one is, and a session-data copy, a restore and a rollback refuse while any other live process is listed; a file that cannot be read counts as an exclusive use. `data-users` is never a profile's run directory.
 - **`data-copies/`.** `<version>/` holds the session-data copy the update to that version took: real copies of `sessions/` and `storages/` beside `copy.json`. An older copy is removed when a newer update commits, and a copy of an update that ended before switching is removed with it. `restore.json` is the journal of a restore in progress, completed before any Host starts.
 - **`data-set-aside/`.** `<version>-<time>/` holds the `sessions/` and `storages/` a rollback replaced with a copy. Nothing removes it but the person, through `delorun recover discard`.
+- **`trash/`.** `items/<id>/` holds one deleted chat or workspace with its record, and `retention.json` the time of the last retention pass ([C8](c08-archive-and-trash.md)). The first move to the trash creates it.
+- **`archive/`.** `staging/` holds an import while it is validated and published, and `imported/` the workspaces an import published, which no row of the shipped composition reads ([C8](c08-archive-and-trash.md)). The first `delorun import` creates it.
 - **`catalogue/`.** `index.json` and `revocations.json` are the newest catalogue index and revocation list that verified, and `state.json` holds each one's `sequence` and fetch time ([C13](c13-catalogue-revocation.md)).
 
 ## Modes and the refusal rule

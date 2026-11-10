@@ -60,6 +60,7 @@ Do not skip the pre-push hook. Real-API tests (`pnpm run test:e2e`) need a `DEEP
 
 - New or changed source files have 100% coverage of statements, branches, functions and lines.
 - Anything that enforces a refusal or asks for consent has denial tests that fail when the check is removed.
+- A change keeps the [security fundamentals](delo/docs/security/fundamentals.md) true, and a change that builds a [design](delo/docs/design/README.md) moves its rules into the owning contract page.
 - A visible change has a recording. For a small fix, a maintainer records it at merge, so you need no model key.
 - Write documentation in English only. The maintainers' translation pass writes the Chinese counterparts.
 

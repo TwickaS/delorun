@@ -32,4 +32,4 @@ Delo does not audit plugins before you install them. A catalogue entry shows wha
 
 ## Goal and threat model
 
-Delo aims never to be less safe than stock DeepSeek Harness (DSH). Delo's [threat model](delo/docs/security/threat-model.md) states what each party can see and do.
+Delo aims never to be less safe than stock DeepSeek Harness (DSH). Delo's [threat model](delo/docs/security/threat-model.md) states what each party can see and do. The [security fundamentals](delo/docs/security/fundamentals.md) list the rules Delo holds itself to, each with the code that enforces it and the test that proves it.
