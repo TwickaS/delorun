@@ -55,12 +55,14 @@ import { registerSessionMenus } from './session-actions/context-menus.tsx'
 import { PinSessionRowButton } from './session-actions/PinSession.tsx'
 import { SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
+import { createNoticeHold } from './notice-hold.ts'
 import { registerToasts } from './toast/register.ts'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
 import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 
 export type { SessionShelf, SessionShelfView, StartSessionOptions, UiWorkspace, WorkspaceViewDefaults } from './navigation.ts'
 export { DEFAULT_VIEW } from './navigation.ts'
+export type { NoticeHoldOutcome, NoticeHoldRelease } from './notice-hold.ts'
 export type { SessionGroupBy } from './stores.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
@@ -123,9 +125,14 @@ export function apply(ctx: Context): void {
   const viewStore: typeof viewHandle = { ...viewHandle, create: () => viewInstance }
   const rowToast = createSnapshotStore<RowToastState | null>(null)
   let toastSeq = 0
-  const notify = (toast: RowToast): void => { rowToast.set({ ...toast, seq: ++toastSeq }) }
+  const notices = createNoticeHold(
+    (toast) => { rowToast.set({ ...toast, seq: ++toastSeq }) },
+    () => rowToast.getSnapshot(),
+    () => { rowToast.set(null) },
+  )
+  const notify = (toast: RowToast): void => { notices.notify(toast) }
   const uiWorkspace = new UiWorkspaceService(
-    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify,
+    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify, () => notices.hold(),
   )
   ctx.slots.provideRoot({
     hooks: { workspaces: workspaces.list },

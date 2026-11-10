@@ -22,6 +22,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { DraftInitializationOptions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RowToast } from './contract/slots.ts'
+import type { NoticeHoldRelease } from './notice-hold.ts'
 import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
 import type { SessionGroupBy, WorkspaceViewStoreActions } from './stores.ts'
 
@@ -177,6 +178,12 @@ export interface UiWorkspace {
    */
   pickDirectory(): Promise<string | null>
   /**
+   * Keep the "Unable to create default workspace" notice back while a first-run flow explains the missing default
+   * Workspace itself. With no hold registered the notice shows as it is raised.
+   * @returns the release; once the last hold ends the kept notice shows, unless the release says the person was told.
+   */
+  holdDefaultWorkspaceNotice(): NoticeHoldRelease
+  /**
    * List one Host directory level.
    * @param path - directory path; absent selects the Host home.
    * @param signal - cancellation for a superseded scan.
@@ -250,6 +257,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
    * @param sessions - pure Session Controller.
    * @param view - the browser's viewing-store write set (one instance shared with its registration).
    * @param notify - show one notice through the Workspace notice channel.
+   * @param holdNotice - registers a hold on the default Workspace notice in that channel.
    */
   constructor(
     ctx: Context,
@@ -258,6 +266,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     private readonly sessions: ISessions,
     private readonly view: Pick<WorkspaceViewStoreActions, 'pinSessionOrder'>,
     private readonly notify: (toast: RowToast) => void,
+    private readonly holdNotice: () => NoticeHoldRelease,
   ) {
     super(ctx, 'uiWorkspace')
     ctx.effect(() => {
@@ -514,6 +523,10 @@ class UiWorkspaceService extends Service implements UiWorkspace {
 
   async unpinSession(sessionId: SessionId): Promise<void> {
     await this.workspaces.unpinSession(sessionId)
+  }
+
+  holdDefaultWorkspaceNotice(): NoticeHoldRelease {
+    return this.holdNotice()
   }
 
   async pickDirectory(): Promise<string | null> {

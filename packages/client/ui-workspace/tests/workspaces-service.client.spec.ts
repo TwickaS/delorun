@@ -302,6 +302,8 @@ function bench(options: BenchOptions = {}) {
   options.configureSessions?.(sessions)
   const view = createWorkspaceViewStore().create()
   const notify = vi.fn<(toast: RowToast) => void>()
+  const release = vi.fn()
+  const holdNotice = vi.fn(() => release)
   const uiWorkspace = new UiWorkspaceService(
     ctx,
     directoryPicker.remote,
@@ -309,8 +311,12 @@ function bench(options: BenchOptions = {}) {
     sessions,
     view.actions,
     notify,
+    holdNotice,
   )
-  return { ctx, directoryPicker, sessions, uiWorkspace, workspaces, layout, selectPanel, view, notify, requestDraftInitialization }
+  return {
+    ctx, directoryPicker, sessions, uiWorkspace, workspaces, layout, selectPanel, view,
+    notify, holdNotice, release, requestDraftInitialization,
+  }
 }
 
 function lastOpening(open: MockInstance<UiWorkspaceService['openWorkspace']>): Promise<void> {
@@ -320,6 +326,14 @@ function lastOpening(open: MockInstance<UiWorkspaceService['openWorkspace']>): P
 }
 
 describe('UiWorkspaceService', () => {
+  it('registers a hold on the default Workspace notice through the notice channel', () => {
+    const b = bench()
+    const release = b.uiWorkspace.holdDefaultWorkspaceNotice()
+    expect(b.holdNotice).toHaveBeenCalledOnce()
+    release({ told: true })
+    expect(b.release).toHaveBeenCalledWith({ told: true })
+  })
+
   it('hides a Session from the sidebar until every hide of it is disposed, each disposer counting once', () => {
     const b = bench()
     const first = b.uiWorkspace.hideSession(sid('main'))
