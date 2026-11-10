@@ -27,6 +27,7 @@ function repository(directory: string): string {
     '.gitignore': 'lib/\nnode_modules/\ndist/\n',
     'packages/group/built/package.json': '{"name":"@x/built","main":"lib/index.js"}\n',
     'packages/group/built/src/index.ts': 'export {}\n',
+    'packages/group/built/src/nested/deep.ts': 'export {}\n',
     'packages/group/untyped/package.json': '{"name":"@x/untyped","main":"src/index.ts"}\n',
     'packages/group/untyped/src/index.ts': 'export {}\n',
     'packages/group/nameless/package.json': '{"main":"lib/index.js"}\n',
@@ -91,6 +92,18 @@ describe('artifactProblems', () => {
     writeFileSync(join(directory, 'vendor/stray.txt'), 'edited\n')
     expect(artifactProblems(directory, commit)).toEqual(['tracked files differ from the commit; commit or restore them before building from existing artifacts'])
     expect(artifactProblems(directory, 'b'.repeat(40))[0]).toContain(`the worktree is at ${commit}, not at ${'b'.repeat(40)}`)
+  })
+})
+
+describe('a repository without every package group', () => {
+  it('has the groups it holds checked and the others skipped', (test) => {
+    const directory = scratch(test)
+    const git = (...args: string[]): string => execFileSync('git', args, { cwd: directory, env: ENV, encoding: 'utf8' }).trim()
+    git('init', '-q', '-b', 'main')
+    writeTree(directory, { 'packages/g/a/package.json': '{"name":"@x/a","main":"lib/index.js"}\n', 'packages/g/a/src/index.ts': 'export {}\n' })
+    git('add', '-A')
+    git('commit', '-q', '-m', 'fixture')
+    expect(artifactProblems(directory, git('rev-parse', 'HEAD'))).toEqual(['@x/a has no lib/index.js; run the artifact build'])
   })
 })
 

@@ -4,9 +4,9 @@
  * publishes for this machine is the one it installs. The channel's origin and the log's origin are build constants
  * (contract C1, "Download"): a build passes them to the bundler, which replaces {@link BUILD_CONSTANTS}, and no
  * setting, argument or environment variable moves them afterwards. A build that passes neither gets the production
- * channel and the public log. The log's origin and the distributor's are the hosts the online check asks, under a
- * host list of their own: contract C1's release-file list does not name the log, and the log's list does not name a
- * release host. The root metadata names the log's identity, so a client never takes a new log from the network.
+ * channel and reads the log the trusted root names: the root's `log.origin` is the log's host, and the log's address is
+ * that host under {@link RELEASE_LOG_API_PREFIX}. The log is read under a host rule of its own, which names only that
+ * host: contract C1's release-file list does not name the log, and the log's rule does not name a release host.
  *
  * @module @delo/npm-launcher/platform
  */
@@ -14,34 +14,11 @@ import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delo/contract-release-
 import { RELEASE_SOURCE, RELEASE_HOSTS, type HostRule, type ReleaseSource } from '@delo/install'
 
 /**
- * The public Rekor host the online check reads its checkpoint and consistency proof from (contract C18). The root
- * metadata names the log's origin and verifier key, so this host can answer only for the log the root names.
+ * The path below a Rekor v2 log's host that serves its checkpoint and tiles (`/api/v2/checkpoint`,
+ * `/api/v2/tile/<L>/<N>`), which the public log's own reads confirm. The log's host is not a constant here: it is the
+ * `log.origin` of the root the launcher trusts, so the address the check reads and the log the root names cannot differ.
  */
-export const RELEASE_LOG_TILES_ORIGIN = 'https://rekor.sigstore.dev'
-
-/**
- * The witness network's checkpoint distributor, which publishes the latest witnessed checkpoint (contract C18, step 1).
- * The launcher reads the checkpoint from the log's own origin, whose note carries the witness cosignatures, and asks the
- * distributor for nothing else; its host is in {@link RELEASE_LOG_HOSTS} so that a checkpoint a distributor answers is
- * read under the log's rule rather than refused for a host contract C1's release-file list does not name.
- */
-export const RELEASE_LOG_DISTRIBUTOR_ORIGIN = 'https://witness.sigstore.dev'
-
-/**
- * The host of an origin, as a host rule names it.
- * @param origin - the origin.
- * @returns the lowercase host name, without a port.
- */
-function hostOf(origin: string): string {
-  return new URL(origin).hostname.toLowerCase()
-}
-
-/**
- * The only hosts the release-log check may reach (contract C18): the log's origin and the checkpoint distributor's.
- * This list is the log's own, and contract C1's `RELEASE_DOWNLOAD_HOSTS` is the release files' own: no install can pass
- * the online check when the log's host is missing from the rule the log is read under.
- */
-export const RELEASE_LOG_HOSTS = [hostOf(RELEASE_LOG_TILES_ORIGIN), hostOf(RELEASE_LOG_DISTRIBUTOR_ORIGIN)] as const
+export const RELEASE_LOG_API_PREFIX = '/api/v2'
 
 /**
  * The runtime platform of this machine, as contract C2 names it.
@@ -131,20 +108,35 @@ export function channelPlan(constants: BuildConstants = BUILD_CONSTANTS): Channe
 
 /** Where a build's release-log check reads, and the hosts it may reach. */
 export interface LogPlan {
-  /** The log shard's `tlog-tiles` origin. */
+  /** The log's tlog-tiles prefix. */
   readonly origin: string
   /** The hosts the check may reach, redirects included. */
   readonly hosts: readonly string[]
 }
 
 /**
- * The release log of a build: the public log and its witness distributor, or the one origin the build names.
+ * The release log a trusted root names. A build for a local log passes the log's origin as a build constant, which wins;
+ * every other build reads `https://<root.log.origin>` below {@link RELEASE_LOG_API_PREFIX}, so the log it asks is the log
+ * the root names.
+ * @param logOrigin - the root's `log.origin`: the log's host, with a port when it has one.
  * @param constants - the build's origins.
- * @returns the origin and its host list.
- * @throws {Error} when the log origin breaks {@link buildOrigin}'s rule.
+ * @returns the log's prefix and its one host.
+ * @throws {Error} when the build's log origin breaks {@link buildOrigin}'s rule, or the root's `log.origin` is not a host.
  */
-export function logPlan(constants: BuildConstants = BUILD_CONSTANTS): LogPlan {
-  if (constants.logOrigin === undefined) return { origin: RELEASE_LOG_TILES_ORIGIN, hosts: RELEASE_LOG_HOSTS }
-  const origin = buildOrigin(constants.logOrigin, 'log origin')
-  return { origin, hosts: [new URL(origin).hostname] }
+export function logPlan(logOrigin: string, constants: BuildConstants = BUILD_CONSTANTS): LogPlan {
+  if (constants.logOrigin !== undefined) {
+    const origin = buildOrigin(constants.logOrigin, 'log origin')
+    return { origin, hosts: [new URL(origin).hostname] }
+  }
+  let url: URL
+  try {
+    url = new URL(`https://${logOrigin}`)
+  } catch {
+    // The URL constructor's own message names no origin, so the refusal below is the one reported.
+    throw new Error(`the root names the log ${JSON.stringify(logOrigin)}, which is not a host`)
+  }
+  if (url.host !== logOrigin.toLowerCase() || url.username !== '' || url.password !== '') {
+    throw new Error(`the root names the log ${JSON.stringify(logOrigin)}, which is not a host with an optional port`)
+  }
+  return { origin: `https://${url.host}${RELEASE_LOG_API_PREFIX}`, hosts: [url.hostname] }
 }

@@ -23,7 +23,7 @@ import { RELEASE_REPOSITORY_URL } from '@delo/contract-release-manifest'
 import { messageOf } from '@delo/install'
 import { readRoot } from '@delo/release/sign/verify'
 import { MINIMUM_NODE, NODE_ENGINES_RANGE } from './node-version.ts'
-import { channelPlan, logPlan, type BuildConstants } from './platform.ts'
+import { buildOrigin, channelPlan, logPlan, type BuildConstants } from './platform.ts'
 import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
 
 const run = promisify(execFile)
@@ -87,9 +87,10 @@ function publishedManifest(version: string, constants: BuildConstants): string {
  * Copy the root files into a package's `roots/` directory, named by each root's own version.
  * @param paths - the root files.
  * @param stage - the staged package.
+ * @returns the root files as the launcher will read them, oldest first, after they verified as a chain.
  * @throws {Error} when no root is given, a root does not verify, or two roots share a version.
  */
-async function stageRoots(paths: readonly string[], stage: string): Promise<void> {
+async function stageRoots(paths: readonly string[], stage: string): Promise<readonly Uint8Array[]> {
   if (paths.length === 0) throw new Error('pass at least one --root <root file>: a launcher without a root refuses every install')
   const directory = join(stage, ROOTS_DIRECTORY)
   await mkdir(directory, { recursive: true })
@@ -101,7 +102,7 @@ async function stageRoots(paths: readonly string[], stage: string): Promise<void
     seen.add(version)
     await writeFile(join(directory, `${String(version)}.root.json`), bytes)
   }
-  await readEmbeddedRoots(stage)
+  return readEmbeddedRoots(stage)
 }
 
 /**
@@ -115,7 +116,7 @@ export async function buildLauncher(options: BuildOptions): Promise<BuiltLaunche
   const constants = options.constants ?? {}
   // The same functions the launcher runs at start refuse a bad origin here, before anything is written.
   channelPlan(constants)
-  logPlan(constants)
+  if (constants.logOrigin !== undefined) buildOrigin(constants.logOrigin, 'log origin')
   const version = options.version ?? (JSON.parse(await readFile(join(PACKAGE_DIRECTORY, 'package.json'), 'utf8')) as { version: string }).version
   const out = resolve(options.out)
   const stage = join(out, 'package')
@@ -125,7 +126,9 @@ export async function buildLauncher(options: BuildOptions): Promise<BuiltLaunche
   } catch (error) {
     throw new Error(`${stage} exists; build into a new directory`, { cause: error })
   }
-  await stageRoots(options.roots.map(path => resolve(path)), stage)
+  const shipped = await stageRoots(options.roots.map(path => resolve(path)), stage)
+  // The log a production build reads is the one the newest root names, so that name has to be a host.
+  logPlan(readRoot(shipped.at(-1)!).metadata.log.origin, constants)
   await build({
     config: false,
     cwd: REPOSITORY_ROOT,

@@ -75,7 +75,8 @@ export async function serveLog(test: TestContext, trusted: Trust, options: { rea
         polls++
         response.end(polls <= (options.uncosignedPolls ?? 0) ? trusted.log.checkpoint() : trusted.witness.cosign(trusted.log.checkpoint(), Math.floor(Date.now() / 1000)))
       } else {
-        const tile = url.pathname.startsWith('/tiles/') ? trusted.log.tile(url.pathname.slice('/tiles/'.length)) : undefined
+        // `/tiles/` is the prefix the release workflow's client reads below; `/tile/` is where a launcher reads tlog-tiles.
+        const tile = url.pathname.startsWith('/tiles/') ? trusted.log.tile(url.pathname.slice('/tiles/'.length)) : url.pathname.startsWith('/tile/') ? trusted.log.tile(url.pathname.slice(1)) : undefined
         response.writeHead(tile === undefined ? 404 : 200, { 'content-type': 'application/octet-stream' })
         response.end(tile)
       }
@@ -133,15 +134,16 @@ else process.stdout.write('arguments: ' + JSON.stringify(process.argv.slice(2)) 
  * release's version stamped into its package, and the archive with its unsigned file list.
  * @param test - the running test.
  * @param version - the release version.
+ * @param change - `entrySuffix`, text added to the entry file, so two closures of one version differ by it.
  * @returns a function that writes the two files into a directory, for `LocalReleaseRequest.closures`.
  */
-export function fixtureClosure(test: TestContext, version: string): (directory: string) => Promise<void> {
+export function fixtureClosure(test: TestContext, version: string, change: { readonly entrySuffix?: string } = {}): (directory: string) => Promise<void> {
   return async (directory) => {
     const stage = join(scratch(test), 'stage')
     writeTree(stage, {
       'node/bin/node': { data: `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, executable: true },
       'app/node_modules/@delo/cli/package.json': '{"name":"@delo/cli","version":"0.0.0","type":"module"}\n',
-      'app/node_modules/@delo/cli/src/bin.js': ENTRY,
+      'app/node_modules/@delo/cli/src/bin.js': `${ENTRY}${change.entrySuffix ?? ''}`,
     })
     await stampDeloVersion(join(stage, 'app', 'node_modules'), version)
     await archiveClosure({ stage, outDir: directory, version, platform: 'linux-x64', epoch: 1_793_981_656, pins: undefined, requireLaunchFiles: true })

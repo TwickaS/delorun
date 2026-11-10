@@ -35,23 +35,39 @@ export type InstallErrorCode =
   | 'TRUST_STATE_INVALID'
   | 'NO_TRUSTED_ROOT'
 
+/** What an {@link InstallError} records beyond its cause. */
+export interface InstallErrorOptions extends ErrorOptions {
+  /** The HTTP status a host answered, when the failure is an answer other than 200. */
+  readonly status?: number
+  /** Whether the failure is a body that passed its size limit. */
+  readonly oversize?: boolean
+}
+
 /** A refusal or failure of one step of an install. */
 export class InstallError extends Error {
   override readonly name = 'InstallError'
+
+  /** The HTTP status a host answered, when the failure is an answer other than 200. */
+  readonly status: number | undefined
+
+  /** Whether the failure is a body that passed its size limit. */
+  readonly oversize: boolean
 
   /**
    * @param code - the failure's code.
    * @param source - the URL or path the failure concerns.
    * @param detail - what is wrong, naming the host, file or version; the message is the code and this.
-   * @param options - the underlying error.
+   * @param options - the underlying error, the HTTP status and whether a body passed its limit.
    */
   constructor(
     readonly code: InstallErrorCode,
     readonly source: string,
     readonly detail: string,
-    options?: ErrorOptions,
+    options: InstallErrorOptions = {},
   ) {
-    super(`${code}: ${detail}`, options)
+    super(`${code}: ${detail}`, options.cause === undefined ? undefined : { cause: options.cause })
+    this.status = options.status
+    this.oversize = options.oversize === true
   }
 }
 

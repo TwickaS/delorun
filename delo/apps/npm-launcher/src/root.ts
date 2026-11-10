@@ -10,6 +10,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ROOT_FILE_NAME_PATTERN } from '@delo/contract-home-layout'
 import { InstallError, messageOf, newestRootVersion } from '@delo/install'
+import { walkRootChain } from '@delo/release/sign/verify'
 
 /** The directory of a launcher package that holds its roots, relative to the package. */
 export const ROOTS_DIRECTORY = 'roots'
@@ -22,7 +23,8 @@ const ROOT_FILE = new RegExp(ROOT_FILE_NAME_PATTERN, 'u')
  * @param packageDirectory - the launcher package's directory.
  * @returns the root files, oldest first; never empty.
  * @throws {InstallError} `NO_TRUSTED_ROOT` when the directory holds none; `INSTALL_VERIFY_FAILED` when the versions
- *   are not contiguous from the first, or when a file's own root signature does not verify.
+ *   are not contiguous from the first, a file's own root signature does not verify, or a root is not signed by the
+ *   root before it (contract C2, "Key rotation").
  */
 export async function readEmbeddedRoots(packageDirectory: string): Promise<readonly Uint8Array[]> {
   const directory = join(packageDirectory, ROOTS_DIRECTORY)
@@ -50,6 +52,11 @@ export async function readEmbeddedRoots(packageDirectory: string): Promise<reado
       throw new InstallError('INSTALL_VERIFY_FAILED', join(directory, entry.name), `the launcher ships root ${String(entry.version)} without root ${String(first + position)}, so no rotation can be verified`)
     }
     roots.push(await readFile(join(directory, entry.name)))
+  }
+  try {
+    walkRootChain(roots)
+  } catch (error) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', directory, `the roots this launcher ships are not a chain: ${messageOf(error)}`, { cause: error })
   }
   const newest = newestRootVersion(roots)
   if (newest !== versions.at(-1)!.version) {

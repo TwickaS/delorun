@@ -2,9 +2,13 @@
  * The launcher's Node requirement: an older Node gets one plain line and exit status 1 before the launcher's main
  * module is loaded, and the published package declares the same range.
  */
-import { readFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildLauncher } from '../src/build.ts'
+import { fixtureRelease } from '../../install/tests/support.ts'
 import { MINIMUM_NODE, NODE_ENGINES_RANGE, nodeIsSupported, nodeRefusal } from '../src/node-version.ts'
 
 afterEach(() => {
@@ -63,6 +67,29 @@ describe('the entry the package’s bin runs', () => {
     await vi.waitFor(() => expect(process.exitCode).toBe(3))
     expect(main).toHaveBeenCalledWith(['--profile', 'work'])
   })
+
+  it('refuses on an older Node in the built package: one line, exit 1, nothing read or written', async () => {
+    const work = await mkdtemp(join(tmpdir(), 'delo-launcher-node-'))
+    try {
+      const fixture = await fixtureRelease()
+      await writeFile(join(work, 'root.json'), fixture.roots[0]!)
+      const built = await buildLauncher({ roots: [join(work, 'root.json')], out: join(work, 'out'), version: '0.0.1-node' })
+      // The preload makes the built entry see an older Node, as `npx` on that Node would.
+      await writeFile(join(work, 'old-node.cjs'), "Object.defineProperty(process.versions, 'node', { value: '20.11.1' })\n")
+      const home = join(work, 'home')
+      const finished = spawnSync(process.execPath, ['--require', join(work, 'old-node.cjs'), join(built.directory, 'dist', 'bin.js'), '--version'], { encoding: 'utf8', env: { PATH: process.env.PATH ?? '', DELO_HOME: home } })
+      expect(finished.status).toBe(1)
+      expect(finished.stdout).toBe('')
+      expect(finished.stderr).toBe(`${nodeRefusal('20.11.1')}\n`)
+      await expect(readdir(home)).rejects.toMatchObject({ code: 'ENOENT' })
+      // The entry is a file of its own: the launcher's main module is a chunk that the refusal never loads.
+      const entry = await readFile(join(built.directory, 'dist', 'bin.js'), 'utf8')
+      expect(entry.match(/^import .*$/gmu) ?? []).toEqual([])
+      expect(entry).toMatch(/import\("\.\/bin-[^"]+\.js"\)/u)
+    } finally {
+      await rm(work, { recursive: true, force: true })
+    }
+  }, 120_000)
 
   it('imports only the version check statically, so an older Node refuses before it reads anything newer', async () => {
     const entry = await readFile(join(import.meta.dirname, '..', 'src', 'entry.ts'), 'utf8')

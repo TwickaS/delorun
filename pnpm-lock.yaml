@@ -1441,6 +1441,9 @@ importers:
       '@delo/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
+      '@delo/runtime-closure':
+        specifier: workspace:*
+        version: link:../runtime-closure
       '@delo/tools':
         specifier: workspace:*
         version: link:../tools

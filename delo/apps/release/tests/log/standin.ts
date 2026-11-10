@@ -14,7 +14,7 @@ import { checkpointBody, NOTE_COSIGNATURE, NOTE_ED25519, signatureLine, verifier
 
 /** An in-memory log. */
 export class LogStandIn {
-  readonly origin = 'log.example.test/release-log'
+  readonly origin = 'log.example.test'
   readonly key: KeyObject = generateKeyPairSync('ed25519').privateKey
   readonly vkey = verifierKey(this.origin, NOTE_ED25519, this.key)
   private readonly leaves: Buffer[] = []

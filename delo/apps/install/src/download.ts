@@ -40,6 +40,8 @@ export interface DownloadTimings {
   readonly connectMs: number
   /** How long the body may deliver no byte. */
   readonly stallMs: number
+  /** How long one download may take in all, redirects and body included; unbounded when absent. */
+  readonly totalMs?: number
 }
 
 /** Contract C1's timings: 30 seconds to connect, 60 seconds without a byte. */
@@ -70,6 +72,8 @@ interface Open {
   readonly response: FetchResponse
   readonly url: string
   readonly controller: AbortController
+  /** Aborts when the download's total deadline passes. */
+  readonly whole: AbortSignal
 }
 
 /**
@@ -109,10 +113,12 @@ export class Downloader {
    * Another service's downloader: this one's fetch, timings and file opener, under the given host rule. The rule is a
    * value rather than a widening, so the downloader this was taken from keeps refusing the hosts the new rule names.
    * @param hosts - the rule the derived downloader applies.
+   * @param options - `totalMs`, the total deadline of each download of the derived downloader; none by default.
    * @returns a downloader whose rule is the one given and whose fetch and timeouts are this one's.
    */
-  withHosts(hosts: HostRule): Downloader {
-    return new Downloader({ hosts, timings: this.timings, fetch: this.fetch, openFile: this.openFile })
+  withHosts(hosts: HostRule, options: { readonly totalMs?: number } = {}): Downloader {
+    const timings = options.totalMs === undefined ? this.timings : { ...this.timings, totalMs: options.totalMs }
+    return new Downloader({ hosts, timings, fetch: this.fetch, openFile: this.openFile })
   }
 
   /**
@@ -124,12 +130,29 @@ export class Downloader {
    *   connection, stall, status or size failure.
    */
   async bytes(url: string, limit: number): Promise<Downloaded> {
-    const open = await this.open(url)
+    const total = this.deadline()
     try {
-      return { url: open.url, bytes: await this.read(open, limit) }
+      const open = await this.open(url, total.signal)
+      try {
+        return { url: open.url, bytes: await this.read(open, limit) }
+      } finally {
+        open.controller.abort()
+      }
     } finally {
-      open.controller.abort()
+      total.clear()
     }
+  }
+
+  /**
+   * Start the total deadline of one download.
+   * @returns a signal that aborts when {@link DownloadTimings.totalMs} passes, and the function that stops the clock.
+   */
+  private deadline(): { readonly signal: AbortSignal, readonly clear: () => void } {
+    const controller = new AbortController()
+    const totalMs = this.timings.totalMs
+    if (totalMs === undefined) return { signal: controller.signal, clear: () => undefined }
+    const timer = setTimeout(() => controller.abort(new Error(`the download did not finish within ${String(totalMs)} ms`)), totalMs)
+    return { signal: controller.signal, clear: () => { clearTimeout(timer) } }
   }
 
   /**
@@ -143,7 +166,24 @@ export class Downloader {
    *   cannot be created, written to completion or closed is the same `DOWNLOAD_FAILED`.
    */
   async file(url: string, limit: number, path: string): Promise<{ readonly url: string, readonly length: number, readonly sha256: string }> {
-    const open = await this.open(url)
+    const total = this.deadline()
+    try {
+      return await this.fileUnder(url, limit, path, total.signal)
+    } finally {
+      total.clear()
+    }
+  }
+
+  /**
+   * {@link Downloader.file} under a total deadline.
+   * @param url - the file's URL.
+   * @param limit - its largest allowed length in bytes.
+   * @param path - the file to write.
+   * @param whole - aborts when the total deadline passes.
+   * @returns the answering URL, the length and the SHA-256 of what was written.
+   */
+  private async fileUnder(url: string, limit: number, path: string, whole: AbortSignal): Promise<{ readonly url: string, readonly length: number, readonly sha256: string }> {
+    const open = await this.open(url, whole)
     const hash = createHash('sha256')
     // The file is opened before its body is read, so a failure that arrives while the body is read removes a file this
     // call created, and a file another call already wrote is never removed.
@@ -185,11 +225,12 @@ export class Downloader {
   /**
    * Open a URL, following redirects as long as each hop is allowed.
    * @param url - the URL.
+   * @param whole - aborts when the download's total deadline passes.
    * @returns the response, its URL and the controller that aborts its body.
    * @throws {InstallError} `DOWNLOAD_REFUSED` for a hop outside the rule; `DOWNLOAD_FAILED` for a failed connection or
    *   a response other than 200.
    */
-  private async open(url: string): Promise<Open> {
+  private async open(url: string, whole: AbortSignal): Promise<Open> {
     let current = url
     for (let hop = 0; hop <= this.hosts.maxRedirects; hop++) {
       this.allow(current)
@@ -197,7 +238,7 @@ export class Downloader {
       const timer = setTimeout(() => controller.abort(new Error(`the connection did not open within ${String(this.timings.connectMs)} ms`)), this.timings.connectMs)
       let response: FetchResponse
       try {
-        response = await this.fetch(current, { redirect: 'manual', signal: controller.signal })
+        response = await this.fetch(current, { redirect: 'manual', signal: AbortSignal.any([controller.signal, whole]) })
       } catch (error) {
         throw new InstallError('DOWNLOAD_FAILED', current, `the connection did not open: ${messageOf(error)}`, { cause: error })
       } finally {
@@ -214,9 +255,9 @@ export class Downloader {
       if (response.status !== 200) {
         await response.body?.cancel().catch(() => undefined)
         controller.abort()
-        throw new InstallError('DOWNLOAD_FAILED', current, `the host answered ${String(response.status)}`)
+        throw new InstallError('DOWNLOAD_FAILED', current, `the host answered ${String(response.status)}`, { status: response.status })
       }
-      return { response, url: current, controller }
+      return { response, url: current, controller, whole }
     }
     throw new InstallError('DOWNLOAD_REFUSED', url, `the download followed more than ${String(this.hosts.maxRedirects)} redirects`)
   }
@@ -269,7 +310,7 @@ export class Downloader {
   private async *chunks(open: Open, limit: number): AsyncGenerator<Buffer> {
     const declared = open.response.headers.get('content-length')
     if (declared !== null && Number(declared) > limit) {
-      throw new InstallError('DOWNLOAD_FAILED', open.url, `the file is ${declared} bytes, above its limit of ${String(limit)}`)
+      throw new InstallError('DOWNLOAD_FAILED', open.url, `the file is ${declared} bytes, above its limit of ${String(limit)}`, { oversize: true })
     }
     const body = open.response.body
     if (body === null) return
@@ -286,13 +327,14 @@ export class Downloader {
         try {
           result = await reader.read()
         } catch (error) {
+          if (open.whole.aborted) throw new InstallError('DOWNLOAD_FAILED', open.url, messageOf(open.whole.reason), { cause: error })
           if (stalled) throw new InstallError('DOWNLOAD_FAILED', open.url, `the download delivered no byte for ${String(this.timings.stallMs)} ms`, { cause: error })
           throw new InstallError('DOWNLOAD_FAILED', open.url, `the download stopped: ${messageOf(error)}`, { cause: error })
         }
         clearTimeout(timer)
         if (result.done) return
         total += result.value.byteLength
-        if (total > limit) throw new InstallError('DOWNLOAD_FAILED', open.url, `the file passed its limit of ${String(limit)} bytes`)
+        if (total > limit) throw new InstallError('DOWNLOAD_FAILED', open.url, `the file passed its limit of ${String(limit)} bytes`, { oversize: true })
         timer = setTimeout(() => {
           stalled = true
           open.controller.abort()

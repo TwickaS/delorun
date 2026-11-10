@@ -18,6 +18,7 @@ import { describe, expect, it, type TestContext } from 'vitest'
 import { buildLauncher } from '../../../npm-launcher/src/build.ts'
 import { copyClosureFiles } from '../../src/local/release.ts'
 import { scratch } from '../support.ts'
+import { LogStandIn } from '../log/standin.ts'
 import { closedPort, fixtureClosure, keyFile, runEntryAsync, serveChannel, serveLog, trust, type Trust } from './support.ts'
 
 /** The progress lines for an install that could not reach the log. */
@@ -185,6 +186,86 @@ describe('the built launcher against a local release', LIMIT, () => {
     expect(finished.stderr).not.toContain('Warning:')
     expect(readdirSync(join(home, 'runtimes'))).toEqual([])
     expect(() => readFileSync(join(home, 'trust', 'release-log.json'))).toThrow('ENOENT')
+  })
+
+  it('verifies the release against a log that has grown since, computing the consistency proof from its tiles', async (test) => {
+    const served = await servedRelease(test)
+    served.trusted.log.grow(5)
+    const log = await serveLog(test, served.trusted)
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: log.origin }, version: '0.0.1-e2e' })
+    const home = join(served.directory, 'home')
+    const finished = await node(built.tarball, home, ['--version'], served.directory)
+    expect(finished.stderr).toContain('Checking the release log: verified.')
+    expect(finished.stderr).not.toContain('Warning:')
+    expect(finished.status).toBe(0)
+    const state = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
+    expect(state.releases[VERSION]?.state).toBe('verified')
+    expect(JSON.parse(readFileSync(join(home, 'trust', 'checkpoint.json'), 'utf8'))).toMatchObject({ treeSize: 6 })
+  })
+
+  it('refuses a well-formed, signed and cosigned checkpoint of a log that never held the release', async (test) => {
+    const served = await servedRelease(test)
+    // A fork of the log: the same key signs a tree whose first entry is not the release's.
+    const fork = Object.assign(new LogStandIn(), { key: served.trusted.log.key })
+    fork.append(Buffer.from('another entry'))
+    fork.append(Buffer.from('and one more'))
+    const log = await serveLog(test, { ...served.trusted, log: fork })
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: log.origin }, version: '0.0.1-e2e' })
+    const home = join(served.directory, 'home')
+    const finished = await node(built.tarball, home, ['--version'], served.directory)
+    expect(finished.status).toBe(1)
+    expect(finished.stderr).toContain('because its release-log check failed')
+    expect(finished.stderr).toContain('consistency proof from 1 to 2 entries does not verify')
+    expect(readdirSync(join(home, 'runtimes'))).toEqual([])
+    expect(() => readFileSync(join(home, 'trust', 'release-log.json'))).toThrow('ENOENT')
+  })
+
+  it('refuses a log that answers 404 for its checkpoint, as the wrong address it is, and not as an unreachable log', async (test) => {
+    const served = await servedRelease(test)
+    const missing = createServer((_, response) => response.writeHead(404).end())
+    await new Promise<void>(resolve => missing.listen(0, '127.0.0.1', resolve))
+    test.onTestFinished(() => new Promise<void>(resolve => missing.close(() => resolve())))
+    const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String((missing.address() as AddressInfo).port)}` }, version: '0.0.1-e2e' })
+    const finished = await node(built.tarball, join(served.directory, 'home'), ['--version'], served.directory)
+    expect(finished.status).toBe(1)
+    expect(finished.stderr).toContain('the log answered 404 for its checkpoint')
+    expect(finished.stderr).not.toContain('Warning:')
+  })
+
+  it('refuses an archive whose file content differs from the signed file list by one byte, before anything is installed', async (test) => {
+    const directory = scratch(test)
+    test.onTestFinished(() => { execFileSync('chmod', ['-R', 'u+rwX', directory]) })
+    const trusted = trust()
+    const log = await serveLog(test, trusted)
+    const closures = join(directory, 'closures')
+    mkdirSync(closures)
+    // The archive is built from a tree whose entry file differs by one byte; the file list is the original tree's.
+    const original = join(directory, 'original')
+    const altered = join(directory, 'altered')
+    mkdirSync(original)
+    mkdirSync(altered)
+    await fixtureClosure(test, VERSION)(original)
+    await fixtureClosure(test, VERSION, { entrySuffix: ' ' })(altered)
+    for (const name of readdirSync(original)) writeFileSync(join(closures, name), readFileSync(join(name.endsWith('.json') ? original : altered, name)))
+    const rootPath = join(directory, 'root.json')
+    writeFileSync(rootPath, trusted.root)
+    const channel = join(directory, 'channel')
+    const signed = await runEntryAsync('local-release.ts', [
+      '--version', VERSION, '--out', channel, '--root', rootPath,
+      '--targets-key', keyFile(directory, 'targets.pem', trusted.keys.targets),
+      '--timestamp-key', keyFile(directory, 'timestamp.pem', trusted.keys.timestamp),
+      '--state', join(directory, 'state.json'),
+      '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles,
+      '--closures-from', closures,
+    ])
+    expect(signed.status).toBe(0)
+    const origin = await serveChannel(test, channel)
+    const built = await buildLauncher({ roots: [rootPath], out: join(directory, 'launcher'), constants: { channelOrigin: origin, logOrigin: `http://127.0.0.1:${String(await closedPort())}` }, version: '0.0.1-e2e' })
+    const home = join(directory, 'home')
+    const finished = await node(built.tarball, home, ['--version'], directory)
+    expect(finished.status).toBe(1)
+    expect(finished.stderr).toMatch(/bin\.js .*(length|SHA-256|differs)|refused the runtime archive/u)
+    expect(readdirSync(join(home, 'runtimes'))).toEqual([])
   })
 
   it('refuses every install when the package ships no root', async (test) => {

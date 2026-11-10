@@ -201,3 +201,103 @@ describe('contract C1’s published rule', () => {
     await refusal(downloader.bytes('https://registry.npmjs.org/delorun', 1_024), 'DOWNLOAD_REFUSED')
   })
 })
+
+describe('a download that takes too long in all', () => {
+  /** A host that sends the status line and then one byte every 50 ms, so no stall timeout ever fires. */
+  async function dripping(): Promise<string> {
+    return standIn((_, response) => {
+      response.writeHead(200)
+      const timer = setInterval(() => response.write('x'), 50)
+      response.on('close', () => { clearInterval(timer) })
+    })
+  }
+
+  it('fails in memory and into a file once the total deadline passes, though bytes keep arriving', async () => {
+    const origin = await dripping()
+    const downloader = new Downloader({ hosts: LOOPBACK, timings: { ...TIMINGS, stallMs: 5_000, totalMs: 300 } })
+    const error = await refusal(downloader.bytes(`${origin}/x`, 1_000_000), 'DOWNLOAD_FAILED')
+    expect(error.detail).toContain('the download did not finish within 300 ms')
+    const directory = await scratch()
+    const toFile = await refusal(downloader.file(`${origin}/x`, 1_000_000, join(directory, 'x')), 'DOWNLOAD_FAILED')
+    expect(toFile.detail).toContain('the download did not finish within 300 ms')
+    expect(await readdir(directory)).toEqual([])
+  })
+
+  it('applies the deadline a derived downloader is given, and keeps its own timings when it is given none', async () => {
+    const origin = await dripping()
+    const base = new Downloader({ hosts: LOOPBACK, timings: { ...TIMINGS, stallMs: 5_000 } })
+    const derived = base.withHosts(LOOPBACK, { totalMs: 250 })
+    await refusal(derived.bytes(`${origin}/x`, 1_000_000), 'DOWNLOAD_FAILED')
+    const same = base.withHosts(LOOPBACK)
+    const stalled = await standIn(() => undefined)
+    const quick = new Downloader({ hosts: LOOPBACK, timings: TIMINGS }).withHosts(LOOPBACK)
+    expect((await refusal(quick.bytes(`${stalled}/x`, 1_000), 'DOWNLOAD_FAILED')).detail).toContain('the connection did not open')
+    expect(same).toBeInstanceOf(Downloader)
+  })
+})
+
+describe('the other ways a download ends badly', () => {
+  /** A downloader over a fetch that answers what a spec chooses. */
+  function over(answer: () => Promise<Response>): Downloader {
+    return new Downloader({ hosts: LOOPBACK, timings: TIMINGS, fetch: () => answer() })
+  }
+
+  it('records the status a host answered, and refuses a redirect that names no location', async () => {
+    const error = await refusal(over(() => Promise.resolve(new Response('gone', { status: 410 }))).bytes('http://127.0.0.1/x', 10), 'DOWNLOAD_FAILED')
+    expect(error.status).toBe(410)
+    const redirect = await refusal(over(() => Promise.resolve(new Response(null, { status: 302 }))).bytes('http://127.0.0.1/x', 10), 'DOWNLOAD_FAILED')
+    expect(redirect.detail).toContain('answered 302 without a location')
+    expect(redirect.status).toBeUndefined()
+  })
+
+  it('marks a body over its limit, declared or counted', async () => {
+    const declared = await refusal(over(() => Promise.resolve(new Response('x', { status: 200, headers: { 'content-length': '999' } }))).bytes('http://127.0.0.1/x', 10), 'DOWNLOAD_FAILED')
+    expect(declared.oversize).toBe(true)
+    const origin = await standIn((_, response) => response.writeHead(200).end('x'.repeat(100)))
+    const counted = await refusal(new Downloader({ hosts: LOOPBACK, timings: TIMINGS }).bytes(`${origin}/x`, 10), 'DOWNLOAD_FAILED')
+    expect(counted.oversize).toBe(true)
+    const other = await refusal(over(() => Promise.resolve(new Response('x', { status: 503 }))).bytes('http://127.0.0.1/x', 10), 'DOWNLOAD_FAILED')
+    expect(other.oversize).toBe(false)
+  })
+
+  it('reads an empty body, and refuses a URL that does not parse', async () => {
+    expect((await over(() => Promise.resolve(new Response(null, { status: 200 }))).bytes('http://127.0.0.1/x', 10)).bytes.byteLength).toBe(0)
+    await refusal(over(() => Promise.resolve(new Response('x'))).bytes('http://[', 10), 'DOWNLOAD_REFUSED')
+  })
+
+  it('fails a connection that never opens within the connect timeout, and a body that never begins within the stall timeout', async () => {
+    const silent = await standIn(() => undefined)
+    const connect = await refusal(new Downloader({ hosts: LOOPBACK, timings: { connectMs: 150, stallMs: 150 } }).bytes(`${silent}/x`, 10), 'DOWNLOAD_FAILED')
+    expect(connect.detail).toContain('the connection did not open')
+    const headersOnly = await standIn((_, response) => { response.writeHead(200).flushHeaders() })
+    const stalled = await refusal(new Downloader({ hosts: LOOPBACK, timings: TIMINGS }).bytes(`${headersOnly}/x`, 10), 'DOWNLOAD_FAILED')
+    expect(stalled.detail).toContain('delivered no byte for 150 ms')
+  })
+
+  it('fails a body whose connection drops, as a download that stopped', async () => {
+    const origin = await standIn((_, response) => {
+      response.writeHead(200, { 'content-length': '100' })
+      response.write('x')
+      setTimeout(() => { response.destroy() }, 20)
+    })
+    const error = await refusal(new Downloader({ hosts: LOOPBACK, timings: { ...TIMINGS, stallMs: 5_000 } }).bytes(`${origin}/x`, 1_000), 'DOWNLOAD_FAILED')
+    expect(error.detail).toContain('the download stopped')
+  })
+
+  it('refuses with the download refusal when the file cannot be created, written to completion or closed', async () => {
+    const origin = await standIn((_, response) => response.writeHead(200).end('body'))
+    const directory = await scratch()
+    const denied = new Downloader({ hosts: LOOPBACK, timings: TIMINGS, openFile: () => Promise.reject(new Error('EACCES: denied')) })
+    expect((await refusal(denied.file(`${origin}/x`, 100, join(directory, 'a')), 'DOWNLOAD_FAILED')).detail).toContain('cannot be written: EACCES')
+    const unclosable = new Downloader({
+      hosts: LOOPBACK,
+      timings: TIMINGS,
+      openFile: (async (target: string, flags: string, mode: number) => {
+        const real = await openFile(target, flags, mode)
+        return { write: (chunk: Uint8Array) => real.write(chunk), close: async () => { await real.close(); throw new Error('EIO: close failed') } } as unknown as FileHandle
+      }) as unknown as typeof openFile,
+    })
+    expect((await refusal(unclosable.file(`${origin}/x`, 100, join(directory, 'b')), 'DOWNLOAD_FAILED')).detail).toContain('EIO')
+    expect(await readdir(directory)).toEqual([])
+  })
+})

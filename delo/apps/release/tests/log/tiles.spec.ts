@@ -4,8 +4,8 @@
  * partial tiles with the full-tile fallback, and refusals of missing or malformed tiles.
  */
 import { describe, expect, it } from 'vitest'
-import { inclusionProof, leafHash, rootFromInclusionProof, treeRoot } from '../../src/log/merkle.ts'
-import { inclusionProofFromTiles, tilePath } from '../../src/log/tiles.ts'
+import { consistencyProof, inclusionProof, leafHash, rootFromInclusionProof, treeRoot, verifyConsistency } from '../../src/log/merkle.ts'
+import { consistencyProofFromTiles, inclusionProofFromTiles, tilePath, TileError } from '../../src/log/tiles.ts'
 import { LogStandIn } from './standin.ts'
 
 function served(log: LogStandIn): (path: string) => Promise<Uint8Array | undefined> {
@@ -69,5 +69,43 @@ describe('inclusion proofs from tiles', () => {
     log.grow(5)
     await expect(inclusionProofFromTiles(2, 5, path => Promise.resolve(log.tile(path)?.subarray(1)))).rejects.toThrow('tile/0/000.p/5 holds 159 bytes, not 160')
     await expect(inclusionProofFromTiles(5, 5, served(log))).rejects.toThrow('leaf 5 is not in a tree of size 5')
+  })
+})
+
+describe('consistency proofs from tiles', () => {
+  it('equal RFC 6962\'s consistency proof for every pair of tree sizes up to 40 leaves', async () => {
+    const log = new LogStandIn()
+    log.grow(40)
+    const leaves = Array.from({ length: 40 }, (_, index) => leafHash(Buffer.from(String(index))))
+    for (let second = 1; second <= 40; second++) {
+      for (let first = 1; first <= second; first++) {
+        const proof = await consistencyProofFromTiles(first, second, served(log))
+        expect(proof, `${String(first)} to ${String(second)}`).toEqual(consistencyProof(first, leaves.slice(0, second)))
+      }
+    }
+  })
+
+  it('verify across three tile levels, from a tree size that is no multiple of a tile', async () => {
+    const log = new LogStandIn()
+    log.grow(70_000)
+    const leaves = Array.from({ length: 70_000 }, (_, index) => leafHash(Buffer.from(String(index))))
+    const proof = await consistencyProofFromTiles(40_321, 70_000, served(log))
+    expect(verifyConsistency(40_321, 70_000, treeRoot(leaves.slice(0, 40_321)), treeRoot(leaves), proof)).toBe(true)
+  })
+
+  it('reads no tile for equal sizes, and refuses sizes that are not a tree and a larger tree', async () => {
+    const log = new LogStandIn()
+    expect(await consistencyProofFromTiles(5, 5, served(log))).toEqual([])
+    expect(log.tileRequests).toEqual([])
+    await expect(consistencyProofFromTiles(0, 5, served(log))).rejects.toThrow('not a prefix')
+    await expect(consistencyProofFromTiles(6, 5, served(log))).rejects.toThrow('not a prefix')
+  })
+
+  it('refuses a tile the log does not serve or serves at the wrong length, as an answer that does not hold together', async () => {
+    const log = new LogStandIn()
+    log.grow(40)
+    await expect(consistencyProofFromTiles(10, 40, () => Promise.resolve(undefined))).rejects.toThrow('the log serves neither tile/0/000.p/40 nor tile/0/000')
+    await expect(consistencyProofFromTiles(10, 300, () => Promise.resolve(undefined))).rejects.toThrow(/^the log serves neither tile\/0\/000$/u)
+    await expect(consistencyProofFromTiles(10, 40, () => Promise.resolve(new Uint8Array(33)))).rejects.toBeInstanceOf(TileError)
   })
 })

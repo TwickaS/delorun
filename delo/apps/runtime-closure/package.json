@@ -10,8 +10,7 @@
     "dsh-python-runtime-closure": "workspace:*"
   },
   "delo": {
-    "state": "shipped",
-    "unreached": "release"
+    "state": "shipped"
   },
   "devDependencies": {
     "@delo/contract-release-manifest": "workspace:*",

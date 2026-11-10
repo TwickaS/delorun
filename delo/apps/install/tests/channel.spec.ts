@@ -7,18 +7,18 @@
  */
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { Downloader } from '../src/download.ts'
 import { isInstallError, type InstallError } from '../src/errors.ts'
-import { LauncherChannel, RELEASE_SOURCE, type LauncherChannelOptions, type ReleaseSource } from '../src/channel.ts'
+import { LauncherChannel, MAX_ROOT_ROTATIONS, RELEASE_SOURCE, type LauncherChannelOptions, type ReleaseSource } from '../src/channel.ts'
 import { leafHash, treeRoot } from '@delo/release/log/merkle'
 import { checkpointBody, signatureLine } from '@delo/release/log/note'
 import { readCheckState } from '@delo/release-verify/state'
 import type { InstallProgress } from '../src/progress.ts'
-import { envelope, fixtureRelease, LOG_ORIGIN, logService, WITNESS_NAME, nextRoot, NOW, releasePaths, sha256, standIn, unreachableLog, VERSION, type Fixture, type StandIn } from './support.ts'
+import { envelope, fixtureKeys, fixtureRelease, LOG_ORIGIN, logService, WITNESS_NAME, nextRoot, NOW, releasePaths, sha256, standIn, unreachableLog, VERSION, type Fixture, type StandIn } from './support.ts'
 
 /** The download rule the specs use: plain HTTP, so a stand-in server on loopback answers as a release host does. */
 const LOOPBACK = { scheme: 'http:', hosts: ['127.0.0.1'], maxRedirects: 5 }
@@ -171,14 +171,46 @@ describe('an artifact that is not the one the release signs', () => {
     await expect(readdir(directory)).resolves.toEqual([])
   })
 
-  it('refuses an archive whose length differs from the manifest’s, naming both lengths', async () => {
+  it('stops an archive longer than the manifest’s length as it arrives, holding the download to the signed length', async () => {
     const fixture = await fixtureRelease()
     const { channel, server } = await harness(fixture)
     const archive = server.files.get(`/releases/${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`)!
     server.files.set(`/releases/${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`, Buffer.concat([archive, Buffer.from('extra')]))
     const release = await channel.resolve()
-    const error = await refusal(channel.fill(release, await staging()), 'INSTALL_VERIFY_FAILED')
-    expect(error.detail).toContain('bytes')
+    const error = await refusal(channel.fill(release, await staging()), 'DOWNLOAD_FAILED')
+    expect(error.detail).toContain(`above its limit of ${String(archive.byteLength)}`)
+  })
+
+  it('refuses an archive shorter than the manifest’s length, naming both lengths', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, server } = await harness(fixture)
+    const archive = server.files.get(`/releases/${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`)!
+    server.files.set(`/releases/${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`, archive.subarray(0, archive.byteLength - 1))
+    const error = await refusal(channel.fill(await channel.resolve(), await staging()), 'INSTALL_VERIFY_FAILED')
+    expect(error.detail).toContain(`has ${String(archive.byteLength - 1)} bytes; the manifest lists ${String(archive.byteLength)}`)
+  })
+
+  it('holds the manifest and the file list to the lengths the signed files give them', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, server } = await harness(fixture)
+    server.files.set(`/releases/${VERSION}/delorun-${VERSION}.manifest.json`, Buffer.concat([fixture.manifestBytes, Buffer.from(' ')]))
+    const manifestError = await refusal(channel.resolve(), 'DOWNLOAD_FAILED')
+    expect(manifestError.detail).toContain(`above its limit of ${String(fixture.manifestBytes.byteLength)}`)
+    const other = await harness(fixture)
+    other.server.files.set(`/releases/${VERSION}/delorun-${VERSION}-${fixture.platform}.files.json`, Buffer.concat([fixture.filesBytes, Buffer.from(' ')]))
+    const filesError = await refusal(other.channel.fill(await other.channel.resolve(), await staging()), 'DOWNLOAD_FAILED')
+    expect(filesError.detail).toContain(`above its limit of ${String(fixture.filesBytes.byteLength)}`)
+  })
+
+  it('removes the download directories an earlier run left under staging before it downloads', async () => {
+    const fixture = await fixtureRelease()
+    const { channel } = await harness(fixture)
+    const directory = await staging()
+    const left = join(dirname(directory), '.download-abandoned')
+    await mkdir(left)
+    await writeFile(join(left, 'delorun.tar.gz'), 'half')
+    await channel.fill(await channel.resolve(), directory)
+    expect((await readdir(dirname(directory))).filter(name => name.startsWith('.download-'))).toEqual([])
   })
 
   it('refuses a file list whose bytes are not the manifest’s', async () => {
@@ -206,6 +238,8 @@ describe('the release log', () => {
       { step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the release log did not answer: the distributor refused the connection' },
     ])
     await channel.fill(release, await staging())
+    await expect(readFile(join(home, 'trust', 'release-log.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await channel.recordInstalled(release)
     // The release-verify package reads the record the install wrote, so the start check continues from it.
     expect(readCheckState(await readFile(join(home, 'trust', 'release-log.json'))).get(VERSION)).toEqual({ release: VERSION, state: 'unchecked', detail: 'the release log did not answer: the distributor refused the connection', lastAttempt: NOW })
     const state = JSON.parse(await readFile(join(home, 'trust', 'release-log.json'), 'utf8')) as { schema: string, releases: Record<string, unknown> }
@@ -242,7 +276,9 @@ describe('the release log', () => {
     const body = checkpointBody(LOG_ORIGIN, 1, treeRoot([...fixture.leaves]))
     const events: InstallProgress[] = []
     const { channel, home } = await harness(fixture, { log: logService(`${body}\n${signatureLine(LOG_ORIGIN, fixture.keys.log, body)}`), progress: event => events.push(event) })
-    await channel.fill(await channel.resolve(), await staging())
+    const release = await channel.resolve()
+    await channel.fill(release, await staging())
+    await channel.recordInstalled(release)
     expect(events.at(-2)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the latest checkpoint has 0 of the 1 witness cosignatures a check needs' })
     const state = JSON.parse(await readFile(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
     expect(state.releases[VERSION]?.state).toBe('unchecked')
@@ -262,7 +298,9 @@ describe('the release log', () => {
   it('records a passing check as verified', async () => {
     const fixture = await fixtureRelease()
     const { channel, home } = await harness(fixture)
-    await channel.fill(await channel.resolve(), await staging())
+    const release = await channel.resolve()
+    await channel.fill(release, await staging())
+    await channel.recordInstalled(release)
     const state = JSON.parse(await readFile(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, unknown> }
     expect(state.releases[VERSION]).toEqual({ release: VERSION, state: 'verified', lastAttempt: NOW })
   })
@@ -272,19 +310,30 @@ describe('the release log', () => {
     const { channel, home } = await harness(fixture)
     await mkdir(join(home, 'trust'), { recursive: true, mode: 0o700 })
     await writeFile(join(home, 'trust', 'release-log.json'), `${JSON.stringify({ schema: 'delo.release-log-state/1', releases: { '0.0.9': { release: '0.0.9', state: 'verified', lastAttempt: 1 } } })}\n`, { mode: 0o600 })
-    await channel.fill(await channel.resolve(), await staging())
+    const release = await channel.resolve()
+    await channel.fill(release, await staging())
+    await channel.recordInstalled(release)
     const state = JSON.parse(await readFile(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, unknown> }
     expect(Object.keys(state.releases)).toEqual(['0.0.9', VERSION])
   })
 
-  it('refuses to record over a check state that does not read, and installs nothing', async () => {
+  it('refuses to record over a check state that does not read', async () => {
     const fixture = await fixtureRelease()
     const { channel, home } = await harness(fixture)
     await mkdir(join(home, 'trust'), { recursive: true, mode: 0o700 })
     await writeFile(join(home, 'trust', 'release-log.json'), 'not json', { mode: 0o600 })
     const release = await channel.resolve()
-    const directory = await staging()
-    await refusal(channel.fill(release, directory), 'TRUST_STATE_INVALID')
+    await channel.fill(release, await staging())
+    await refusal(channel.recordInstalled(release), 'TRUST_STATE_INVALID')
+  })
+
+  it('records nothing for a release it never resolved, and nothing for a release whose fill refused', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, home, server } = await harness(fixture)
+    await refusal(channel.recordInstalled({ version: brandString<RuntimeVersion>(VERSION), root: fixture.rootMetadata }), 'INSTALL_VERIFY_FAILED')
+    server.files.set(`/releases/${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`, Buffer.from('not the archive'))
+    await refusal(channel.fill(await channel.resolve(), await staging()), 'INSTALL_VERIFY_FAILED')
+    await expect(readFile(join(home, 'trust', 'release-log.json'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('reports each step it finishes, in order, with the archive’s size', async () => {
@@ -377,6 +426,69 @@ describe('a root the launcher does not ship yet', () => {
     await channel.resolve()
     expect(server.requests).toContain('/root/2.root.json')
     expect(await readdir(join(home, 'trust', 'roots'))).toEqual(['1.root.json', '2.root.json'])
+  })
+
+  it('starts the walk at the root the home adopted, so a timestamp signed under an older root cannot move the home back', async () => {
+    const fixture = await fixtureRelease()
+    const second = nextRoot(fixture.rootMetadata, fixture.keys, [fixture.keys.root])
+    const forward = envelope({ ...fixture.timestamp, root: { version: 2, sha256: sha256(second) } }, [fixture.keys.timestamp])
+    const { channel, server, home } = await harness(fixture)
+    server.files.set('/timestamp.json', forward)
+    server.files.set('/root/2.root.json', second)
+    await channel.resolve()
+    expect(await readFile(join(home, 'trust', 'root.json'))).toEqual(second)
+    server.requests.length = 0
+    // The same timestamp again: the home trusts root 2, so it asks for no root file.
+    await channel.resolve()
+    expect(server.requests).not.toContain('/root/2.root.json')
+    // The compromised root 1 signs a timestamp that names root 1.
+    server.files.set('/timestamp.json', fixture.timestampBytes)
+    const error = await refusal(channel.resolve(), 'INSTALL_VERIFY_FAILED')
+    expect(error.detail).toContain('older than root 2, which this home trusts; a root never moves backwards')
+    expect(await readFile(join(home, 'trust', 'root.json'))).toEqual(second)
+  })
+
+  it('walks from the shipped roots when the stored root is not one they lead to', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, server, home } = await harness(fixture)
+    await mkdir(join(home, 'trust'), { recursive: true, mode: 0o700 })
+    await writeFile(join(home, 'trust', 'root.json'), 'not a root', { mode: 0o600 })
+    expect(String((await channel.resolve()).version)).toBe(VERSION)
+    expect(await readFile(join(home, 'trust', 'root.json'))).toEqual(Buffer.from(fixture.roots[0]!))
+    expect(server.requests).not.toContain('/root/2.root.json')
+  })
+
+  it('stops, rather than walk from the shipped roots, when the chain beside the stored root cannot be read', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, home } = await harness(fixture)
+    await channel.resolve()
+    await rm(join(home, 'trust', 'roots'), { recursive: true })
+    await writeFile(join(home, 'trust', 'roots'), 'in the way')
+    await refusal(channel.resolve(), 'TRUST_STATE_INVALID')
+  })
+
+  it('refuses a timestamp that names a root many versions ahead before it asks for any root file', async () => {
+    const fixture = await fixtureRelease()
+    const far = envelope({ ...fixture.timestamp, root: { version: 1 + MAX_ROOT_ROTATIONS + 1, sha256: sha256(Buffer.from('x')) } }, [fixture.keys.timestamp])
+    const { channel, server } = await harness(fixture)
+    server.files.set('/timestamp.json', far)
+    const error = await refusal(channel.resolve(), 'INSTALL_VERIFY_FAILED')
+    expect(error.detail).toContain(`${String(MAX_ROOT_ROTATIONS + 1)} versions past root 1, which this home trusts; an install walks at most ${String(MAX_ROOT_ROTATIONS)}`)
+    expect(server.requests.filter(path => path.startsWith('/root/'))).toEqual([])
+  })
+
+  it('verifies each root as it arrives, and asks for no root past one that does not verify', async () => {
+    const fixture = await fixtureRelease()
+    const stranger = fixtureKeys()
+    const forged = nextRoot(fixture.rootMetadata, fixture.keys, [stranger.root])
+    const far = envelope({ ...fixture.timestamp, root: { version: 5, sha256: sha256(forged) } }, [fixture.keys.timestamp])
+    const { channel, server } = await harness(fixture)
+    server.files.set('/timestamp.json', far)
+    server.files.set('/root/2.root.json', forged)
+    const error = await refusal(channel.resolve(), 'INSTALL_VERIFY_FAILED')
+    expect(error.source).toContain('/root/2.root.json')
+    expect(error.detail).toContain('root 2 does not follow root 1')
+    expect(server.requests.filter(path => path.startsWith('/root/'))).toEqual(['/root/2.root.json'])
   })
 
   it('refuses a timestamp that names a root older than the one the launcher ships', async () => {

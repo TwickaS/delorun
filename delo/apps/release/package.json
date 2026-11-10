@@ -14,6 +14,7 @@
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@delo/contract-release-log": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*",
+    "@delo/runtime-closure": "workspace:*",
     "@delo/tools": "workspace:*",
     "@noble/curves": "^2.4.0",
     "extract-zip": "^2.0.1",

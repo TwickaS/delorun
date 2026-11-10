@@ -61,7 +61,7 @@ export function fixtureKeys(): FixtureKeys {
 }
 
 /** The log's origin line and key name. */
-export const LOG_ORIGIN = 'log.example.test/release-log'
+export const LOG_ORIGIN = 'log.example.test'
 
 /** The witness's key name. */
 export const WITNESS_NAME = 'witness.example.test'

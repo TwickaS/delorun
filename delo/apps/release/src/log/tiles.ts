@@ -1,16 +1,21 @@
 /**
- * Inclusion proofs read from a log's tiles (C2SP `tlog-tiles`), which is how Rekor v2 serves its Merkle tree: it has
- * no proof endpoint. A tile at level `L` holds up to 256 consecutive node hashes of tree level `8L`; level 0 holds leaf
+ * Inclusion and consistency proofs read from a log's tiles (C2SP `tlog-tiles`), which is how Rekor v2 serves its Merkle
+ * tree: it has no proof endpoint. A tile at level `L` holds up to 256 consecutive node hashes of tree level `8L`; level 0 holds leaf
  * hashes. The tile `N` of a level is at `tile/<L>/<N>`, with `N` in zero-padded three-digit path elements of which all
  * but the last begin with `x`, and the rightmost tile of a tree size that does not fill it is the partial tile
  * `tile/<L>/<N>.p/<W>` of width `W`. A log may delete a partial tile once its full tile exists, so a missing partial
- * tile is read from the full tile's first `W` hashes. The proof computed here is the RFC 6962 audit path; whether it
- * reproduces a checkpoint's root is what the bundle verification checks.
+ * tile is read from the full tile's first `W` hashes. The proofs computed here are the RFC 6962 audit path and the RFC 6962
+ * consistency proof; whether they reproduce a checkpoint's root is what the bundle verification and the online check
+ * verify.
  *
  * @module @delo/release/log/tiles
  */
-import { MAX_PROOF_HASHES } from '@delo/contract-release-log'
 import { nodeHash } from './merkle.ts'
+
+/** A log answer that does not hold together: a tile the log's checkpoint says exists but it does not serve, or a tile of the wrong length. */
+export class TileError extends Error {
+  override readonly name = 'TileError'
+}
 
 /** Hashes in a full tile. */
 export const TILE_WIDTH = 256
@@ -68,7 +73,7 @@ class TileTree {
     }
     const full = await this.fetchTile(tilePath(level, index))
     if (full === undefined) {
-      throw new Error(`the log serves neither ${width < TILE_WIDTH ? `${tilePath(level, index, width)} nor ` : ''}${tilePath(level, index)}`)
+      throw new TileError(`the log serves neither ${width < TILE_WIDTH ? `${tilePath(level, index, width)} nor ` : ''}${tilePath(level, index)}`)
     }
     return checkedTile(tilePath(level, index), full, TILE_WIDTH).subarray(0, width * HASH_SIZE)
   }
@@ -106,6 +111,19 @@ class TileTree {
     return nodeHash(await this.range(start, start + split), await this.range(start + split, end))
   }
 
+  /**
+   * The RFC 6962 consistency proof (section 2.1.2) of the leaves `[start, end)` from their first `first` leaves, as
+   * `SUBPROOF(first, D[start:end], complete)` defines it.
+   */
+  async consistency(first: number, start: number, end: number, complete: boolean): Promise<Buffer[]> {
+    const count = end - start
+    if (first === count) return complete ? [] : [await this.range(start, end)]
+    const split = 2 ** Math.floor(Math.log2(count - 1))
+    return first <= split
+      ? [...await this.consistency(first, start, start + split, complete), await this.range(start + split, end)]
+      : [...await this.consistency(first - split, start + split, end, false), await this.range(start, start + split)]
+  }
+
   /** The audit path of a leaf within the leaves `[start, end)`, leaf level first. */
   async path(leaf: number, start: number, end: number): Promise<Buffer[]> {
     if (end - start <= 1) return []
@@ -117,7 +135,7 @@ class TileTree {
 }
 
 function checkedTile(path: string, bytes: Uint8Array, width: number): Buffer {
-  if (bytes.byteLength !== width * HASH_SIZE) throw new Error(`${path} holds ${String(bytes.byteLength)} bytes, not ${String(width * HASH_SIZE)}`)
+  if (bytes.byteLength !== width * HASH_SIZE) throw new TileError(`${path} holds ${String(bytes.byteLength)} bytes, not ${String(width * HASH_SIZE)}`)
   return Buffer.from(bytes)
 }
 
@@ -131,7 +149,21 @@ function checkedTile(path: string, bytes: Uint8Array, width: number): Buffer {
  */
 export async function inclusionProofFromTiles(index: number, size: number, fetchTile: TileFetcher): Promise<Buffer[]> {
   if (!Number.isSafeInteger(index) || !Number.isSafeInteger(size) || index < 0 || index >= size) throw new Error(`leaf ${String(index)} is not in a tree of size ${String(size)}`)
-  const proof = await new TileTree(size, fetchTile).path(index, 0, size)
-  if (proof.length > MAX_PROOF_HASHES) throw new Error(`the proof has ${String(proof.length)} hashes, above ${String(MAX_PROOF_HASHES)}`)
-  return proof
+  return new TileTree(size, fetchTile).path(index, 0, size)
+}
+
+/**
+ * The consistency proof that the tree of `first` leaves is a prefix of the tree of `second` leaves, computed from the
+ * log's tiles.
+ * @param first - the older tree size.
+ * @param second - the newer tree size, at least `first`.
+ * @param fetchTile - reads a tile below the log's tile prefix.
+ * @returns the proof's hashes, oldest subtree first; empty when the sizes are equal.
+ * @throws TileError when a tile the proof needs is not served or has the wrong length.
+ * @throws Error when the sizes are not a tree and a larger tree.
+ */
+export async function consistencyProofFromTiles(first: number, second: number, fetchTile: TileFetcher): Promise<Buffer[]> {
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(second) || first < 1 || first > second) throw new Error(`a tree of size ${String(first)} is not a prefix of a tree of size ${String(second)}`)
+  if (first === second) return []
+  return new TileTree(second, fetchTile).consistency(first, 0, second, true)
 }

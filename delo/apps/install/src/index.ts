@@ -11,7 +11,7 @@ export { Downloader, RELEASE_HOSTS, RELEASE_TIMINGS, type Downloaded, type Downl
 export { InstallError, isInstallError, messageOf, type InstallErrorCode, type InstallLayoutCode } from './errors.ts'
 export type { InstallProgress } from './progress.ts'
 export { extractArchive, extractionPath, type ExtractRequest } from './extract.ts'
-export { CHECKPOINT_MAX_BYTES, COSIGNATURE_CLOCK_SKEW_SECONDS, createTilesLogService, LOG_MAX_REDIRECTS, refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckRequest, type OnlineCheckResult, type TilesLogOptions } from './log.ts'
+export { CHECKPOINT_MAX_BYTES, COSIGNATURE_CLOCK_SKEW_SECONDS, createTilesLogService, LOG_CHECK_DEADLINE_MS, LOG_MAX_REDIRECTS, LOG_REQUEST_DEADLINE_MS, LogContradiction, refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckRequest, type OnlineCheckResult, type TilesLogOptions } from './log.ts'
 export {
   readStoredCheckpoint,
   readStoredRootBytes,

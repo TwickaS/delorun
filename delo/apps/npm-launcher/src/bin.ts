@@ -31,13 +31,16 @@ export const RELEASE_FLAG = '--release'
 export const TERMINATOR = '--'
 
 /**
- * The variables a launch never inherits: Node's own module hooks, its trust settings and the dynamic loader's, which a
- * process could use to install code into the runtime's Node before it starts or to stand between it and every HTTPS
- * connection. `NODE_EXTRA_CA_CERTS` and `NODE_TLS_REJECT_UNAUTHORIZED` decide what the runtime's Node trusts, so an
- * inherited value would let the parent process read every release check the runtime makes. None of them is a launch
- * protocol variable, so the runtime's environment is the inherited one without these.
+ * The variables a launch never inherits, matched without regard to case because a Windows environment is case
+ * insensitive: Node's own module hooks and caches (`NODE_OPTIONS`, `NODE_PATH`, `NODE_COMPILE_CACHE`, `NODE_V8_COVERAGE`,
+ * `NODE_ICU_DATA`), its trust settings (`NODE_EXTRA_CA_CERTS`, `NODE_TLS_REJECT_UNAUTHORIZED`), OpenSSL's configuration
+ * and module directories (`OPENSSL_CONF`, `OPENSSL_MODULES`, `OPENSSL_ENGINES`, which load code), and the dynamic loader's
+ * and C library's (`LD_*`, `DYLD_*`, `GCONV_PATH`, `LOCPATH`). A process could use any of them to install code into the
+ * runtime's Node before it starts or to stand between it and every HTTPS connection. The rest of the environment passes:
+ * the runtime runs the person's commands and tools, which need `PATH`, credentials, agents and toolchain variables that
+ * an allowlist would remove. None of the dropped variables is a launch protocol variable.
  */
-const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|LD_.*|DYLD_.*)$/u
+const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*)$/iu
 
 /**
  * The environment a runtime starts with: this process's, without the variables that would load code into the
@@ -212,7 +215,6 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     const home = await resolveDeloHome(context.env)
     await ensureHomeTree(home.path, profile)
     const channel = channelPlan(context.constants)
-    const log = logPlan(context.constants)
     const downloader = new Downloader({ hosts: channel.rule })
     // The roots this launcher ships anchor both halves of a run: an install walks from them, and a start trusts the
     // root this home stored only when it is one of them.
@@ -229,9 +231,12 @@ export async function main(argv: readonly string[], context: LauncherContext = {
         platform,
         roots,
         channel: 'stable',
-        // The log reads under its own host list, the log's origin and the distributor's: the downloader keeps
-        // contract C1's release-file rule, and neither list has to name the other's hosts.
-        log: createTilesLogService({ origin: log.origin, hosts: log.hosts, downloader }),
+        // The log is the one the trusted root names, read under a host rule of its own: the downloader keeps contract
+        // C1's release-file rule, and neither rule has to name the other's hosts.
+        log: (root) => {
+          const log = logPlan(root.log.origin, context.constants)
+          return createTilesLogService({ origin: log.origin, hosts: log.hosts, downloader })
+        },
         source: channel.source,
         downloader,
         progress: report,

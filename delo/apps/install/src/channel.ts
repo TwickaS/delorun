@@ -9,15 +9,17 @@
  *
  * @module @delo/install/channel
  */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { ARCHIVE_MAX_BYTES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { RELEASE_LOG_BUNDLE_SIZE_LIMIT } from '@delo/contract-release-log'
 import {
   RELEASE_FILE_SIZE_LIMITS,
   RELEASE_METADATA_ORIGIN,
   RELEASE_REPOSITORY_URL,
   type ReleaseChannel as ChannelName,
+  type RootMetadata,
   type RuntimePlatform,
   type SemanticVersion,
 } from '@delo/contract-release-manifest'
@@ -25,13 +27,14 @@ import type { ReleaseFileBytes } from '@delo/runtime-store'
 import type { RuntimeChannel, ChannelRelease } from '@delo/runtime-store'
 import { parseRuntimeVersion } from '@delo/runtime-store'
 import { archiveFormat } from '@delo/release/archive/entry'
+import { walkRootChain } from '@delo/release/sign/verify'
 import { Downloader } from './download.ts'
-import { InstallError } from './errors.ts'
+import { InstallError, isInstallError, messageOf } from './errors.ts'
 import { extractArchive } from './extract.ts'
 import { refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckResult } from './log.ts'
 import type { InstallProgress } from './progress.ts'
-import { readStoredCheckpoint, readStoredTimestamp, writeReleaseLogCheck, writeStoredCheckpoint, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot, type StoredCheckpoint } from './state.ts'
-import { newestRootVersion, rootVersionOf, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyTimestampUnderRoots, type VerifiedChannelRelease } from './verify.ts'
+import { readStoredCheckpoint, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, writeReleaseLogCheck, writeStoredCheckpoint, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot, type StoredCheckpoint } from './state.ts'
+import { newestRootVersion, rootVersionOf, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyStoredRoot, verifyTimestampUnderRoots, type VerifiedChannelRelease } from './verify.ts'
 
 /**
  * Where a release's files are published: contract C2's metadata host for `root/<n>.root.json` and `timestamp.json`,
@@ -55,6 +58,9 @@ export const RELEASE_SOURCE: ReleaseSource = {
   files: (version, name) => `${RELEASE_REPOSITORY_URL}/releases/download/v${version}/${name}`,
 }
 
+/** The most root versions one install walks past the root this home trusts; a timestamp that names more is refused unread. */
+export const MAX_ROOT_ROTATIONS = 32
+
 /** What a {@link LauncherChannel} needs. */
 export interface LauncherChannelOptions {
   /** The resolved Delo home, whose `trust/` records what verified. */
@@ -65,8 +71,11 @@ export interface LauncherChannelOptions {
   readonly roots: readonly Uint8Array[]
   /** The person's channel. */
   readonly channel: ChannelName
-  /** The log and its checkpoint distributor. */
-  readonly log: LogService
+  /**
+   * The release log, or the function that makes it from the root being trusted: the log's address derives from the
+   * root's `log.origin`, which a root rotation can change, so a launcher passes the function.
+   */
+  readonly log: LogService | ((root: RootMetadata) => LogService)
   /** Where the files are published; {@link RELEASE_SOURCE} by default. */
   readonly source?: ReleaseSource
   /** The downloader; contract C1's rule over this process's `fetch` by default. */
@@ -110,10 +119,13 @@ export class LauncherChannel implements RuntimeChannel {
   }
 
   /**
-   * Name, verify and log-check a release: walk the root chain from the embedded root to the one the timestamp names,
+   * Name, verify and log-check a release: walk the root chain from the newest root this home trusts (the stored root
+   * when the launcher's shipped roots lead to it, the newest shipped root otherwise) to the one the timestamp names,
    * verify the timestamp's signature, lifetime, expiry and version, verify the channel's manifest and contract C18's
-   * bundle, run the online log check, and record what verified under `trust/`. Nothing downloads a runtime until all
-   * of it passes. A log check that could not run (the log or its witness is unreachable, or its newest witnessed
+   * bundle, run the online log check, and record what verified under `trust/`: the roots and the timestamp once they
+   * verify, and the checkpoint once the log check verifies, because a later install holds the root, the timestamp and
+   * the log to what they proved even when this install ends before the runtime lands. The check state of the release
+   * is recorded only by {@link LauncherChannel.recordInstalled}. Nothing downloads a runtime until all of it passes. A log check that could not run (the log or its witness is unreachable, or its newest witnessed
    * checkpoint is stale) does not stop the install: it continues on the release's signature, and the home records
    * that the check did not run (contract C18, "Behaviour per client"). A log that answers and contradicts the
    * release refuses.
@@ -134,9 +146,9 @@ export class LauncherChannel implements RuntimeChannel {
     const pointer = timestamp.channels[this.options.channel]
     const version = asVersion(pointer.release)
     this.options.progress?.({ step: 'resolved', channel: this.options.channel, version: pointer.release })
-    const manifest = await this.downloader.bytes(this.source.files(pointer.release, pointer.manifest.name), RELEASE_FILE_SIZE_LIMITS.manifest)
+    const manifest = await this.downloader.bytes(this.source.files(pointer.release, pointer.manifest.name), pointer.manifest.length)
     const bundleName = bundleFileName(pointer.release)
-    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleName), RELEASE_FILE_SIZE_LIMITS.manifest)
+    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleName), RELEASE_LOG_BUNDLE_SIZE_LIMIT)
     const verified = verifyChannelRelease({
       root: root.metadata,
       timestamp,
@@ -146,7 +158,7 @@ export class LauncherChannel implements RuntimeChannel {
       ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
     })
     this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
-    const online = await runOnlineCheck({ root: root.metadata, release: pointer.release, log: verified.log, service: this.options.log, now, ...await this.storedCheckpoint() })
+    const online = await runOnlineCheck({ root: root.metadata, release: pointer.release, log: verified.log, service: this.logFor(root.metadata), now, ...await this.storedCheckpoint() })
     refuseFailedLog(online, `release ${pointer.release}`)
     if (online.checkpoint !== undefined) await writeStoredCheckpoint(this.options.home, online.checkpoint)
     this.options.progress?.({ step: 'log-checked', version: pointer.release, state: online.check.state === 'verified' ? 'verified' : 'unchecked', ...online.detail === undefined ? {} : { detail: online.detail } })
@@ -160,11 +172,10 @@ export class LauncherChannel implements RuntimeChannel {
    * and extract the archive into the staging directory with contract C1's path checks.
    * @param release - the release {@link LauncherChannel.resolve} returned.
    * @param directory - a new, empty `staging/<16 hex>/` directory.
-   * @returns the manifest, the file list and the release-log bundle, to keep beside the installation. The release's
-   *   log check state, `verified` or `unchecked` with the reason, is recorded in the home once the archive verified.
+   * @returns the manifest, the file list and the release-log bundle, to keep beside the installation. Each download
+   *   is held to the length the signed manifest gives it.
    * @throws {InstallError} `INSTALL_VERIFY_FAILED` when a file is not the manifest's or the archive is not the list's;
-   *   `ARCHIVE_REFUSED` when the archive holds an entry it may not; `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`;
-   *   `TRUST_STATE_INVALID` when the check state cannot be recorded.
+   *   `ARCHIVE_REFUSED` when the archive holds an entry it may not; `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`.
    */
   async fill(release: ChannelRelease, directory: string): Promise<ReleaseFileBytes> {
     const resolved = this.resolved.get(release.version)
@@ -172,16 +183,17 @@ export class LauncherChannel implements RuntimeChannel {
     const { manifest } = resolved.verified
     const artifacts = manifest.runtime[this.options.platform]
     const format = archiveFormat(this.options.platform)
-    const scratch = await mkdtemp(join(dirname(directory), '.download-'))
+    // The store holds its lock while it fills, so no other install owns a download directory of a past run.
+    await sweepDownloads(dirname(directory))
+    const scratch = await mkdtemp(join(dirname(directory), DOWNLOAD_PREFIX))
     try {
       const archivePath = join(scratch, artifacts.archive.name)
       this.options.progress?.({ step: 'downloading', name: artifacts.archive.name, bytes: artifacts.archive.length })
-      await this.downloader.file(this.source.files(manifest.version, artifacts.archive.name), ARCHIVE_MAX_BYTES, archivePath)
+      await this.downloader.file(this.source.files(manifest.version, artifacts.archive.name), Math.min(artifacts.archive.length, ARCHIVE_MAX_BYTES), archivePath)
       await verifyDownloadedFile(artifacts.archive, archivePath)
-      const list = await this.downloader.bytes(this.source.files(manifest.version, artifacts.files.name), RELEASE_FILE_SIZE_LIMITS.files)
+      const list = await this.downloader.bytes(this.source.files(manifest.version, artifacts.files.name), Math.min(artifacts.files.length, RELEASE_FILE_SIZE_LIMITS.files))
       const files = verifyPlatformFiles({ root: release.root, manifest, platform: this.options.platform, bytes: list.bytes })
       await extractArchive({ archive: archivePath, format, files, directory })
-      await writeReleaseLogCheck(this.options.home, resolved.online.check, resolved.online.detail)
       return { manifest: resolved.manifestBytes, files: list.bytes, bundle: resolved.bundleBytes }
     } finally {
       await rm(scratch, { recursive: true, force: true })
@@ -189,21 +201,74 @@ export class LauncherChannel implements RuntimeChannel {
   }
 
   /**
-   * The root chain from the embedded root to the version a timestamp names: each later root file, exactly one version
-   * above the one before, which `@delo/release` then verifies with both thresholds.
-   * @param target - the root version the timestamp names.
+   * Record the release-log check state of a release the store installed: `verified`, or `unchecked` with the reason, in
+   * `trust/release-log.json`. A caller runs it after the store's install returned, so a release the store refused
+   * leaves no record.
+   * @param release - the release {@link LauncherChannel.resolve} returned and the store installed.
+   * @throws {InstallError} `TRUST_STATE_INVALID` when the record cannot be written; `INSTALL_VERIFY_FAILED` when the
+   *   release was never resolved.
+   */
+  async recordInstalled(release: ChannelRelease): Promise<void> {
+    const resolved = this.resolved.get(release.version)
+    if (resolved === undefined) throw new InstallError('INSTALL_VERIFY_FAILED', String(release.version), `${NO_RELEASE}: ${release.version} was not resolved before it was recorded`)
+    await writeReleaseLogCheck(this.options.home, resolved.online.check, resolved.online.detail)
+  }
+
+  /**
+   * The log service for the root being trusted.
+   * @param root - that root.
+   * @returns the service the options give, or the one they make for the root.
+   */
+  private logFor(root: RootMetadata): LogService {
+    return typeof this.options.log === 'function' ? this.options.log(root) : this.options.log
+  }
+
+  /**
+   * The root files this install walks forward from: the stored root once the launcher's shipped roots lead to it, so a
+   * home that adopted a newer root never walks back to an older one; otherwise the shipped roots. A stored root that
+   * no shipped root leads to is ignored here, as the launcher's remedy for it is to install again from the shipped
+   * roots.
+   * @returns the root files, oldest first, whose last file is the newest root trusted.
+   */
+  private async anchor(): Promise<readonly Uint8Array[]> {
+    const shipped = this.options.roots
+    const stored = await readStoredRootBytes(this.options.home)
+    if (stored === undefined) return shipped
+    try {
+      const trusted = verifyStoredRoot({ stored, shipped, walked: await readStoredRootChain(this.options.home), source: 'trust/root.json' })
+      return trusted.metadata.version > newestRootVersion(shipped) ? [stored] : shipped
+    } catch (error) {
+      if (!isInstallError(error, 'INSTALL_VERIFY_FAILED')) throw error
+      return shipped
+    }
+  }
+
+  /**
+   * The root chain from the newest root this home trusts to the version a timestamp names: each later root file, exactly
+   * one version above the one before, verified as it arrives and before the next is asked for.
+   * @param target - the root version the timestamp names, which no signature has yet vouched for.
    * @returns the root files, oldest first.
-   * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the timestamp names a root older than the embedded one;
+   * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the timestamp names a root older than the one this home trusts,
+   *   or more than {@link MAX_ROOT_ROTATIONS} past it, or a root file does not verify as the next one;
    *   `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED` for a root file that cannot be fetched.
    */
   private async rootChain(target: number): Promise<readonly Uint8Array[]> {
-    const newest = newestRootVersion(this.options.roots)
+    const roots = [...await this.anchor()]
+    const newest = newestRootVersion(roots)
     if (target < newest) {
-      throw new InstallError('INSTALL_VERIFY_FAILED', 'timestamp.json', `the timestamp names root ${String(target)}, older than root ${String(newest)}, which this launcher trusts; a root never moves backwards`)
+      throw new InstallError('INSTALL_VERIFY_FAILED', 'timestamp.json', `the timestamp names root ${String(target)}, older than root ${String(newest)}, which this home trusts; a root never moves backwards`)
     }
-    const roots = [...this.options.roots]
+    if (target - newest > MAX_ROOT_ROTATIONS) {
+      throw new InstallError('INSTALL_VERIFY_FAILED', 'timestamp.json', `the timestamp names root ${String(target)}, ${String(target - newest)} versions past root ${String(newest)}, which this home trusts; an install walks at most ${String(MAX_ROOT_ROTATIONS)}`)
+    }
     for (let version = newest + 1; version <= target; version++) {
-      const root = await this.downloader.bytes(`${this.source.metadata}/root/${String(version)}.root.json`, RELEASE_FILE_SIZE_LIMITS.root)
+      const source = `${this.source.metadata}/root/${String(version)}.root.json`
+      const root = await this.downloader.bytes(source, RELEASE_FILE_SIZE_LIMITS.root)
+      try {
+        walkRootChain([...roots.slice(-1), root.bytes])
+      } catch (error) {
+        throw new InstallError('INSTALL_VERIFY_FAILED', source, `root ${String(version)} does not follow root ${String(version - 1)}: ${messageOf(error)}`, { cause: error })
+      }
       roots.push(root.bytes)
     }
     return roots
@@ -239,4 +304,18 @@ function asVersion(version: SemanticVersion): RuntimeVersion {
  */
 export function bundleFileName(version: SemanticVersion): string {
   return `delorun-${version}.manifest.log.json`
+}
+
+/** The prefix of a download directory under `staging/`. */
+const DOWNLOAD_PREFIX = '.download-'
+
+/**
+ * Remove the download directories that earlier installs left under `staging/`. The caller holds the store's lock, so
+ * none of them belongs to a running install; one survives only when a run ended before it could clean up.
+ * @param staging - the store's `staging/` directory.
+ */
+async function sweepDownloads(staging: string): Promise<void> {
+  for (const name of await readdir(staging)) {
+    if (name.startsWith(DOWNLOAD_PREFIX)) await rm(join(staging, name), { recursive: true, force: true })
+  }
 }

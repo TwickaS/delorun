@@ -1,17 +1,14 @@
 /**
- * The launcher's build facts: which runtime closure a machine installs, and the two host lists its release-log check
- * reads under. Contract C1's release-file list and contract C18's log list are separate, and the service the launcher
- * composes in `bin.ts` reads the log's origin through the log's list — the install path refuses every log answer when
- * the log's host is missing from the rule the log is read under, and an install needs a passing online check.
+ * The launcher's build facts: which runtime closure a machine installs, where its channel is, and which log its
+ * release-log check reads. The log is the one the trusted root names, read under a host rule of its own: contract C1's
+ * release-file list and contract C18's log rule are separate, so the install path refuses a log answer from a host the
+ * log's rule does not name, and a release file from the log's host.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RELEASE_DOWNLOAD_HOSTS } from '@delo/contract-home-layout'
 import { Downloader, createTilesLogService, isInstallError } from '@delo/install'
 import { RELEASE_SOURCE, RELEASE_HOSTS } from '@delo/install'
-import { BUILD_CONSTANTS, buildOrigin, channelPlan, logPlan, RELEASE_LOG_DISTRIBUTOR_ORIGIN, RELEASE_LOG_HOSTS, RELEASE_LOG_TILES_ORIGIN, platformOf } from '../src/platform.ts'
-
-/** The note a stand-in log answers with; the service returns it unchanged. */
-const NOTE = 'rekor.sigstore.dev - 1\n42\n' + 'AA==\n'
+import { BUILD_CONSTANTS, buildOrigin, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREFIX } from '../src/platform.ts'
 
 describe('the platform a machine installs', () => {
   it('names the closure of a pair contract C2 publishes, and refuses one it does not', () => {
@@ -20,32 +17,50 @@ describe('the platform a machine installs', () => {
   })
 })
 
-describe('the release-log host list', () => {
-  it('names the log’s own origin and the witness distributor, and no release-file host', () => {
-    expect(RELEASE_LOG_HOSTS).toContain(new URL(RELEASE_LOG_TILES_ORIGIN).hostname)
-    expect(RELEASE_LOG_HOSTS).toContain(new URL(RELEASE_LOG_DISTRIBUTOR_ORIGIN).hostname)
-    expect(RELEASE_LOG_HOSTS).toHaveLength(2)
-    for (const host of RELEASE_DOWNLOAD_HOSTS) expect(RELEASE_LOG_HOSTS).not.toContain(host)
-    for (const host of RELEASE_LOG_HOSTS) expect(RELEASE_DOWNLOAD_HOSTS).not.toContain(host)
+describe('the release log a build reads', () => {
+  it('is the log the trusted root names, at the Rekor v2 path of that host, and no other host', () => {
+    expect(logPlan('log2025-1.rekor.sigstore.dev')).toEqual({ origin: 'https://log2025-1.rekor.sigstore.dev/api/v2', hosts: ['log2025-1.rekor.sigstore.dev'] })
+    expect(logPlan('Log.Example.test:8443')).toEqual({ origin: 'https://log.example.test:8443/api/v2', hosts: ['log.example.test'] })
+    expect(RELEASE_LOG_API_PREFIX).toBe('/api/v2')
   })
 
-  it('lets the launcher’s composed service read the log’s checkpoint from the log’s origin', async () => {
+  it('has no log host of its own in the production build, so no constant can differ from the root', () => {
+    expect(BUILD_CONSTANTS).toEqual({})
+    for (const host of RELEASE_DOWNLOAD_HOSTS) expect(logPlan('log2025-1.rekor.sigstore.dev').hosts).not.toContain(host)
+    const root = { log: { origin: 'log2025-1.rekor.sigstore.dev' } }
+    expect(new URL(logPlan(root.log.origin).origin).hostname).toBe(root.log.origin)
+  })
+
+  it('refuses a root whose log origin is not a host', () => {
+    expect(() => logPlan('log.example.test/release-log')).toThrow('which is not a host with an optional port')
+    expect(() => logPlan('https://log.example.test')).toThrow('is not a host')
+    const login = ['someone', 'something'].join(':')
+    expect(() => logPlan(`${login}@log.example.test`)).toThrow('is not a host')
+    expect(() => logPlan('')).toThrow('is not a host')
+  })
+
+  it('reads the one origin a local build names instead, with no path rule from the root', () => {
+    expect(logPlan('log.example.test/release-log', { logOrigin: 'http://127.0.0.1:8124' })).toEqual({ origin: 'http://127.0.0.1:8124', hosts: ['127.0.0.1'] })
+  })
+
+  it('lets the launcher’s composed service read the log’s checkpoint from the host the root names', async () => {
     const asked: string[] = []
     const downloader = new Downloader({
       fetch: (url) => {
         asked.push(String(url))
-        return Promise.resolve(new Response(NOTE, { status: 200 }))
+        return Promise.resolve(new Response('note', { status: 200 }))
       },
     })
-    const service = createTilesLogService({ origin: RELEASE_LOG_TILES_ORIGIN, hosts: RELEASE_LOG_HOSTS, downloader })
-    expect(await service.checkpoint()).toBe(NOTE)
-    expect(asked).toEqual([`${RELEASE_LOG_TILES_ORIGIN}/checkpoint`])
+    const plan = logPlan('log2025-1.rekor.sigstore.dev')
+    const service = createTilesLogService({ origin: plan.origin, hosts: plan.hosts, downloader })
+    expect(await service.checkpoint()).toBe('note')
+    expect(asked).toEqual(['https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint'])
   })
 
-  it('refuses the log’s host under the release-file rule, so no install passes the online check while the two are one list', async () => {
-    const error: unknown = await new Downloader().bytes(`${RELEASE_LOG_TILES_ORIGIN}/checkpoint`, 1_024).then(() => undefined, (failure: unknown) => failure)
+  it('refuses the log’s host under the release-file rule, so the two rules stay apart', async () => {
+    const error: unknown = await new Downloader().bytes('https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint', 1_024).then(() => undefined, (failure: unknown) => failure)
     expect(isInstallError(error, 'DOWNLOAD_REFUSED')).toBe(true)
-    expect(error instanceof Error ? error.message : String(error)).toContain(`${new URL(RELEASE_LOG_TILES_ORIGIN).hostname} is not an allowed host`)
+    expect(error instanceof Error ? error.message : String(error)).toContain('log2025-1.rekor.sigstore.dev is not an allowed host')
   })
 })
 
@@ -53,7 +68,6 @@ describe('the origins a build fixes', () => {
   it('uses the production channel and the public log when the build names none, as a source run does', () => {
     expect(BUILD_CONSTANTS).toEqual({})
     expect(channelPlan()).toEqual({ source: RELEASE_SOURCE, rule: RELEASE_HOSTS })
-    expect(logPlan()).toEqual({ origin: RELEASE_LOG_TILES_ORIGIN, hosts: RELEASE_LOG_HOSTS })
   })
 
   it('serves every file of a built channel below its origin, in the layout GitHub Releases gives, and allows that host only', () => {
@@ -61,10 +75,6 @@ describe('the origins a build fixes', () => {
     expect(plan.source.metadata).toBe('http://127.0.0.1:8123')
     expect(plan.source.files('0.1.0' as never, 'delorun-0.1.0.manifest.json')).toBe('http://127.0.0.1:8123/releases/download/v0.1.0/delorun-0.1.0.manifest.json')
     expect(plan.rule).toEqual({ scheme: 'http:', hosts: ['127.0.0.1'], maxRedirects: RELEASE_HOSTS.maxRedirects })
-  })
-
-  it('reads the built log from its one origin, and no distributor', () => {
-    expect(logPlan({ logOrigin: 'https://log.example.test' })).toEqual({ origin: 'https://log.example.test', hosts: ['log.example.test'] })
   })
 
   it('accepts https and loopback http origins and nothing else', () => {
@@ -93,6 +103,6 @@ describe('a build that fixed its origins', () => {
     const built = await import('../src/platform.ts')
     expect(built.BUILD_CONSTANTS).toEqual({ channelOrigin: 'http://127.0.0.1:8123', logOrigin: 'http://127.0.0.1:8124' })
     expect(built.channelPlan().source.metadata).toBe('http://127.0.0.1:8123')
-    expect(built.logPlan().origin).toBe('http://127.0.0.1:8124')
+    expect(built.logPlan('log.example.test').origin).toBe('http://127.0.0.1:8124')
   })
 })

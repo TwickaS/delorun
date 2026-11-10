@@ -75,8 +75,11 @@ export interface LauncherOptions {
   readonly mode: VerificationMode
   /** The store, this home's `RuntimeStore` in a real run. */
   readonly store: LauncherStore
-  /** The release channel, `@delo/install`'s `LauncherChannel` in a real run. */
-  readonly channel: RuntimeChannel
+  /**
+   * The release channel, `@delo/install`'s `LauncherChannel` in a real run. A channel that has `recordInstalled` is told
+   * of each release the store installed, so it records the release's log check only for a release that landed.
+   */
+  readonly channel: RuntimeChannel & { readonly recordInstalled?: (release: ChannelRelease) => Promise<void> }
   /** The root files this launcher ships, oldest first: the only roots a start trusts. */
   readonly roots: readonly Uint8Array[]
   /** Where a removal the store could not finish is reported. */
@@ -211,6 +214,7 @@ async function install(options: LauncherOptions): Promise<void> {
       return files
     },
   })
+  await options.channel.recordInstalled?.(release)
   await options.store.retain().catch((error: unknown) => {
     options.logger.warn('the runtime store could not finish its retention after an install; the next run retries it', { err: error })
   })

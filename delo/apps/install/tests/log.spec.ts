@@ -9,12 +9,13 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ReleaseLogCheck } from '@delo/contract-release-log'
-import { leafHash, treeRoot } from '@delo/release/log/merkle'
+import { consistencyProof, leafHash, treeRoot } from '@delo/release/log/merkle'
 import { checkpointBody, signatureLine } from '@delo/release/log/note'
 import { generateKeyPairSync } from 'node:crypto'
 import { Downloader, RELEASE_HOSTS } from '../src/download.ts'
 import { InstallError as InstallFailure, isInstallError, messageOf, type InstallError } from '../src/errors.ts'
-import { CHECKPOINT_MAX_BYTES, COSIGNATURE_CLOCK_SKEW_SECONDS, createTilesLogService, refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckRequest } from '../src/log.ts'
+import { CHECKPOINT_MAX_BYTES, COSIGNATURE_CLOCK_SKEW_SECONDS, createTilesLogService, LogContradiction, refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckRequest } from '../src/log.ts'
+import { LogStandIn } from '../../release/tests/log/standin.ts'
 import { fixtureRelease, LOG_ORIGIN, NOW, WITNESS_NAME, logService, type Fixture } from './support.ts'
 
 /** The short timeouts these specs use, so a refusal is reported in milliseconds rather than in contract C1's minute. */
@@ -55,31 +56,31 @@ async function refusal(run: Promise<unknown>, code: InstallError['code']): Promi
 }
 
 describe('the log’s host rule', () => {
-  it('reads the checkpoint and the consistency proof from the log’s own host', async () => {
+  it('reads the checkpoint from the log’s own host and computes the consistency proof from its tiles', async () => {
     const asked: string[] = []
+    const tiles = new LogStandIn()
+    tiles.grow(10)
+    const leaves = Array.from({ length: 10 }, (_, index) => leafHash(Buffer.from(String(index))))
     const origin = await standIn((request, response) => {
       asked.push(request.url ?? '')
       if (request.url === '/checkpoint') {
         response.writeHead(200).end(NOTE)
         return
       }
-      // The older size as eight big-endian bytes, then one 32-byte hash.
-      const proof = Buffer.alloc(8 + 32)
-      proof.writeBigUInt64BE(1n, 0)
-      response.writeHead(200).end(proof)
+      const tile = tiles.tile((request.url ?? '').slice(1))
+      response.writeHead(tile === undefined ? 404 : 200).end(tile)
     })
     // The launcher's own downloader keeps contract C1's rule; the log service reads under the list it is given, so a
     // host the release rule refuses is read here without that rule being widened.
-    const downloader = new Downloader({ timings: TIMINGS })
-    const service = createTilesLogService({ origin, hosts: ['127.0.0.1'], downloader })
+    const service = createTilesLogService({ origin, hosts: ['127.0.0.1'], downloader: new Downloader({ timings: TIMINGS }) })
     expect(await service.checkpoint()).toBe(NOTE)
-    const proof = await service.consistency(1, 42)
-    expect(proof).toHaveLength(1)
-    expect(proof[0]?.byteLength).toBe(32)
-    expect(asked).toEqual(['/checkpoint', '/proof/consistency?first=1&second=42'])
+    expect(await service.consistency(3, 10)).toEqual(consistencyProof(3, leaves))
+    expect(asked[0]).toBe('/checkpoint')
+    expect(asked.slice(1).every(path => path.startsWith('/tile/'))).toBe(true)
+    expect(asked.some(path => path.includes('/proof/'))).toBe(false)
   })
 
-  it('refuses a release host the log’s list does not name, before the redirect is followed', async () => {
+  it('counts a redirect to a host the log’s list does not name as an answer that is wrong, before the redirect is followed', async () => {
     const asked: string[] = []
     // The hop keeps the log's scheme, so the host rule is what refuses it rather than the scheme.
     const release = 'http://releases.delorun.com/checkpoint'
@@ -88,9 +89,9 @@ describe('the log’s host rule', () => {
       response.writeHead(302, { location: release }).end()
     })
     const service = createTilesLogService({ origin, hosts: ['127.0.0.1'], downloader: new Downloader({ timings: TIMINGS }) })
-    const error = await refusal(service.checkpoint(), 'DOWNLOAD_REFUSED')
-    expect(error.source).toBe(release)
-    expect(error.detail).toContain('releases.delorun.com is not an allowed host')
+    const error: unknown = await service.checkpoint().then(() => undefined, (failure: unknown) => failure)
+    expect(error).toBeInstanceOf(LogContradiction)
+    expect((error as Error).message).toContain('releases.delorun.com is not an allowed host')
     expect(asked).toEqual(['/checkpoint'])
   })
 
@@ -217,6 +218,19 @@ describe('the online check', () => {
     expect((await runOnlineCheck(request(fixture, logService(note(fixture, two))))).check.failure).toBe('consistency-proof-invalid')
   })
 
+  it('fails a log whose answer does not hold together, and counts a log that does not answer in time as unchecked', async () => {
+    const fixture = await fixtureRelease()
+    const wrongCheckpoint = await runOnlineCheck(request(fixture, { checkpoint: () => Promise.reject(new LogContradiction('the log answered 404 for its checkpoint')), consistency: () => Promise.reject(new Error('unused')) }))
+    expect(wrongCheckpoint).toMatchObject({ check: { state: 'failed', failure: 'log-signature-invalid' }, detail: 'the log answered 404 for its checkpoint' })
+    const two = [...fixture.leaves, leafHash(Buffer.from('second'))]
+    const wrongTile = await runOnlineCheck(request(fixture, { checkpoint: () => Promise.resolve(note(fixture, two)), consistency: () => Promise.reject(new LogContradiction('the log serves no tile')) }))
+    expect(wrongTile).toMatchObject({ check: { state: 'failed', failure: 'consistency-proof-invalid' }, detail: 'the log serves no tile' })
+    const silent = await runOnlineCheck(request(fixture, { checkpoint: () => new Promise(() => undefined), consistency: () => Promise.reject(new Error('unused')) }, { deadlineMs: 20 }))
+    expect(silent).toMatchObject({ check: { state: 'unchecked' }, detail: 'the release log did not answer: no answer within 20 ms' })
+    const slowProof = await runOnlineCheck(request(fixture, { checkpoint: () => Promise.resolve(note(fixture, two)), consistency: () => new Promise(() => undefined) }, { deadlineMs: 20 }))
+    expect(slowProof).toMatchObject({ check: { state: 'unchecked' }, detail: 'the release log gave no consistency proof: no answer within 20 ms' })
+  })
+
   it('refuses an install only for a failed check, naming the reason, and lets a verified or unchecked one go on', () => {
     const verified: ReleaseLogCheck = { release: '0.1.0' as ReleaseLogCheck['release'], state: 'verified', lastAttempt: 1 }
     expect(() => refuseFailedLog({ check: verified }, 'release 0.1.0')).not.toThrow()
@@ -226,17 +240,84 @@ describe('the online check', () => {
   })
 })
 
-describe('the consistency proof a tiles log serves', () => {
-  it('reads hashes with or without the older size in front, and refuses a body that is not a list of hashes', async () => {
-    const withoutSize = Buffer.alloc(64, 7)
-    const origin = await standIn((request, response) => {
-      if (request.url?.includes('first=2')) response.writeHead(200).end(withoutSize)
-      else response.writeHead(200).end(Buffer.alloc(33))
+describe('what a tiles log answers wrongly', () => {
+  /**
+   * A log service over a stand-in server.
+   * @param handler - what the server answers.
+   * @param change - what the service changes.
+   * @returns the service.
+   */
+  async function serviceOver(handler: Parameters<typeof createServer>[1], change: { readonly requestDeadlineMs?: number } = {}): Promise<LogService> {
+    const origin = await standIn(handler)
+    return createTilesLogService({ origin, hosts: ['127.0.0.1'], downloader: new Downloader({ timings: TIMINGS }), ...change })
+  }
+
+  /**
+   * Expect a call to fail as an answer that is wrong.
+   * @param call - the call.
+   * @returns the error's message.
+   */
+  async function contradiction(call: Promise<unknown>): Promise<string> {
+    const error: unknown = await call.then(() => undefined, (failure: unknown) => failure)
+    expect(error).toBeInstanceOf(LogContradiction)
+    return (error as Error).message
+  }
+
+  it('is a client bug, not an unreachable log, when the log answers 404 or 410 for its checkpoint', async () => {
+    expect(await contradiction((await serviceOver((_, response) => response.writeHead(404).end())).checkpoint())).toBe('the log answered 404 for its checkpoint')
+    expect(await contradiction((await serviceOver((_, response) => response.writeHead(410).end())).checkpoint())).toBe('the log answered 410 for its checkpoint')
+  })
+
+  it('is the network’s, not the log’s, when the log answers a server error, so the check cannot tell and stays unchecked', async () => {
+    const service = await serviceOver((_, response) => response.writeHead(503).end())
+    const error: unknown = await service.checkpoint().then(() => undefined, (failure: unknown) => failure)
+    expect(error).not.toBeInstanceOf(LogContradiction)
+    expect(isInstallError(error, 'DOWNLOAD_FAILED')).toBe(true)
+  })
+
+  it('passes on a failure that is not a download failure, as the network’s, not an answer of the log', async () => {
+    const service = await serviceOver((_, response) => response.writeHead(302, { location: 'http://[' }).end())
+    const error: unknown = await service.checkpoint().then(() => undefined, (failure: unknown) => failure)
+    expect(error).not.toBeInstanceOf(LogContradiction)
+    expect(error).toBeInstanceOf(TypeError)
+  })
+
+  it('fails a checkpoint over the size cap', async () => {
+    const service = await serviceOver((_, response) => response.writeHead(200).end('x'.repeat(CHECKPOINT_MAX_BYTES + 1)))
+    expect(await contradiction(service.checkpoint())).toContain('larger than the log\'s format allows')
+  })
+
+  it('fails a tile that the checkpoint says exists but the log does not serve, and a tile of the wrong length', async () => {
+    const missing = await serviceOver((_, response) => response.writeHead(404).end())
+    expect(await contradiction(missing.consistency(3, 10))).toContain('the log\'s checkpoint says it holds 10 entries, but the log serves neither')
+    const short = await serviceOver((_, response) => response.writeHead(200).end(Buffer.alloc(33)))
+    expect(await contradiction(short.consistency(3, 10))).toContain('holds 33 bytes')
+    const huge = await serviceOver((_, response) => response.writeHead(200).end(Buffer.alloc(8193)))
+    expect(await contradiction(huge.consistency(3, 10))).toContain('larger than the log\'s format allows')
+  })
+
+  it('reads a partial tile the log no longer serves from its full tile', async () => {
+    const tiles = new LogStandIn()
+    tiles.grow(300)
+    tiles.keepsReplacedPartials = false
+    const leaves = Array.from({ length: 300 }, (_, index) => leafHash(Buffer.from(String(index))))
+    const service = await serviceOver((request, response) => {
+      const tile = tiles.tile((request.url ?? '').slice(1))
+      response.writeHead(tile === undefined ? 404 : 200).end(tile)
     })
-    const service = createTilesLogService({ origin, hosts: ['127.0.0.1'], downloader: new Downloader({ timings: TIMINGS }) })
-    expect(await service.consistency(2, 4)).toHaveLength(2)
-    const error = await refusal(service.consistency(3, 4), 'DOWNLOAD_FAILED')
-    expect(error.detail).toContain('33 bytes, which is not a list of 32-byte hashes')
+    expect(await service.consistency(100, 300)).toEqual(consistencyProof(100, leaves))
+  })
+
+  it('counts a log that drips its answer as unreachable once the request’s total deadline passes', async () => {
+    const service = await serviceOver((_, response) => {
+      response.writeHead(200)
+      const timer = setInterval(() => response.write('x'), 100)
+      response.on('close', () => { clearInterval(timer) })
+    }, { requestDeadlineMs: 400 })
+    const error: unknown = await service.checkpoint().then(() => undefined, (failure: unknown) => failure)
+    expect(error).not.toBeInstanceOf(LogContradiction)
+    expect(isInstallError(error, 'DOWNLOAD_FAILED')).toBe(true)
+    expect((error as Error).message).toContain('did not finish within 400 ms')
   })
 })
 

@@ -7,7 +7,7 @@
  */
 export { LAUNCHER_EXIT, installRemedies, refusalFor, storeRemedies, type LauncherExit, type Refusal, type RemedyContext } from './refusals.ts'
 export { launcherProfile, runLauncher, PROFILE_NAME, type LauncherOptions, type LauncherOutput, type LauncherStore, type SpawnRuntime } from './launcher.ts'
-export { BUILD_CONSTANTS, buildOrigin, channelPlan, logPlan, platformOf, RELEASE_LOG_DISTRIBUTOR_ORIGIN, RELEASE_LOG_HOSTS, RELEASE_LOG_TILES_ORIGIN, type BuildConstants, type ChannelPlan, type LogPlan } from './platform.ts'
+export { BUILD_CONSTANTS, buildOrigin, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREFIX, type BuildConstants, type ChannelPlan, type LogPlan } from './platform.ts'
 export { formatSize, progressLines, type LauncherProgress } from './progress.ts'
 export { MINIMUM_NODE, NODE_ENGINES_RANGE, nodeIsSupported, nodeRefusal } from './node-version.ts'
 export { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'

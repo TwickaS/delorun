@@ -178,7 +178,7 @@ async function unlock(directory: string): Promise<void> {
 function launch(options: {
   readonly home: string
   readonly store: LauncherStore
-  readonly channel: RuntimeChannel
+  readonly channel: LauncherOptions['channel']
   readonly roots: readonly Uint8Array[]
   readonly target?: RuntimeVersion
   readonly spawn?: (command: LaunchCommand) => Promise<number>
@@ -273,6 +273,44 @@ describe('a home whose stored trust cannot be read', () => {
     expect(printed).toContain('the root chain stored beside')
     expect(printed).toContain('cannot be checked')
     expect(started).toBe(false)
+  })
+})
+
+describe('the record of a release’s log check', () => {
+  it('is made once the store has installed the release, and not before', async () => {
+    const fixture = await fixtureRelease()
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const directory = await home()
+    const order: string[] = []
+    const store = recordingStore(recorded)
+    const channel = fixtureChannel(directory, fixture)
+    const status = await runLauncher(launch({
+      home: directory,
+      store: { ...store, install: async (request) => { const result = await store.install(request); order.push('installed'); return result } },
+      channel: { ...channel, recordInstalled: (release) => { order.push(`recorded ${String(release.version)}`); return Promise.resolve() } },
+      roots: fixture.roots,
+    }))
+    expect(status).toBe(0)
+    expect(order).toEqual(['installed', `recorded ${VERSION}`])
+  })
+
+  it('is not made when the store refuses the release it downloaded', async () => {
+    const fixture = await fixtureRelease()
+    const directory = await home()
+    let recordedCalls = 0
+    const store: LauncherStore = {
+      prepareLaunch: () => Promise.reject(new RuntimeStoreError('NO_ACTIVE_RUNTIME', '/home/.delo/runtimes', 'no runtime is installed')),
+      install: () => Promise.reject(new RuntimeStoreError('INSTALL_VERIFY_FAILED', '/home/.delo/staging', 'the archive is not the manifest’s', ['reinstall'])),
+      retain: () => Promise.resolve({ removed: [], failed: [] }),
+    }
+    const status = await runLauncher(launch({
+      home: directory,
+      store,
+      channel: { ...fixtureChannel(directory, fixture), recordInstalled: () => { recordedCalls++; return Promise.resolve() } },
+      roots: fixture.roots,
+    }))
+    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(recordedCalls).toBe(0)
   })
 })
 
@@ -520,6 +558,24 @@ describe('the environment the runtime starts with', () => {
       { DELO_HOME: '/home', DELO_PROFILE: 'work' },
     )
     expect(environment).toEqual({ PATH: '/bin', DELO_HOME: '/home', DELO_PROFILE: 'work' })
+  })
+
+  it('drops the variables whatever their case, since a Windows environment does not tell the cases apart', () => {
+    const environment = launchEnvironment(
+      { node_options: '--require x', Node_Path: '/x', ld_preload: '/x.so', Dyld_Library_Path: '/x', Node_Extra_Ca_Certs: '/x.pem', HOME: '/home' },
+      {},
+    )
+    expect(environment).toEqual({ HOME: '/home' })
+  })
+
+  it('drops the variables that load OpenSSL modules and Node’s compile cache, and the C library’s module paths', () => {
+    const names = ['OPENSSL_CONF', 'OPENSSL_MODULES', 'OPENSSL_ENGINES', 'NODE_COMPILE_CACHE', 'NODE_V8_COVERAGE', 'NODE_ICU_DATA', 'GCONV_PATH', 'LOCPATH']
+    expect(launchEnvironment(Object.fromEntries(names.map(name => [name, '/x'])), {})).toEqual({})
+  })
+
+  it('keeps the variables the runtime’s tools need, such as the person’s PATH, proxies, credentials and agents, because it runs their commands', () => {
+    const kept = { PATH: '/bin', HOME: '/home', HTTPS_PROXY: 'http://proxy.example.test', SSL_CERT_FILE: '/etc/ssl/cert.pem', SSH_AUTH_SOCK: '/run/agent', DEEPSEEK_API_KEY: 'k', LANG: 'C', DISPLAY: ':0', GOPATH: '/go', WSL_DISTRO_NAME: 'Ubuntu' }
+    expect(launchEnvironment(kept, {})).toEqual(kept)
   })
 
   it('drops a parent’s extra certificate authority and its TLS check switch, which would intercept every HTTPS connection the runtime makes', () => {
