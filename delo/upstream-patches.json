@@ -1661,14 +1661,14 @@
     {
       "path": "packages/client/connection/src/api-request-trust.ts",
       "class": "security",
-      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "f25242318b9f949281fa0edc438ace05835c30d6367cfb3d66ab51d61ea05621"
+      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. A state-changing /api request that carries neither Origin nor Sec-Fetch-Site is accepted toward a loopback Host or an HTTPS listener, where a Fetch-Metadata browser always sends a marker, and refused toward any other plain-HTTP destination; a marker that is present and not same-origin or none is refused. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "b8c4c47175962921f930f71e7fcf2fce9e6fbb0a00f2cc31f5dc2b0a1d46f90b"
     },
     {
       "path": "packages/client/connection/tests/api-request-trust.host.spec.ts",
       "class": "security",
       "reason": "Specs of the tightened /api trust fence: every Host spelling the URL parser would repair, a repeated Host line node:http keeps only the first of, a state-changing /api request that states no origin, and the cross-site arrival a route declares for a navigation only. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "237ffe3e55b08c580503af1a742371783491098aaf37a7fad5f68378a5db424e"
+      "sha256": "73c586a044f6399810be457c8491ef99574384be9525a885945e5c25d44777db"
     },
     {
       "path": "packages/client/connection/tests/fetch-routes.host.spec.ts",
