@@ -17,5 +17,6 @@ export { checkProtectedFile, checkProtectedFileSync, readProtectedFile, writePro
 export { checkHolder, currentHolder, darwinProcessStart, holderAlive, holderIdentity, holderOf, linuxProcessStart, parseHolder, processExists, readPidNamespace, readProcessStart, SYSTEM_PROCESS_TABLE, type HolderCheck, type HolderIdentity, type ProcessHolder, type ProcessTable, type UnconfirmedHolder } from './holder.ts'
 export { isLockId, LockFile, randomLockId, type LockFileKind } from './lock-file.ts'
 export { acquireHomeLock, adoptHomeLock, newStartId, readHomeLock, removeStaleLock, type AcquireOptions, type HolderAnswer, type HolderProbe, type HomeLock } from './lock.ts'
+export { workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem, type WorkspaceLocationHomes, type WorkspaceLocationProblem } from './workspace-location.ts'
 export { newStartToken, parseStartToken, readStartTokenFile, removeStartTokenFile, StartTokenCheck, startTokenFile, writeNewStartToken } from './start-token.ts'
 export { authenticateLine, listenTokenSocket, type ChannelLimits, type ChannelLogDetails, type ChannelLogger, type ChannelRefusal, type ListenerRefusal, type TokenSocket, type TokenSocketOptions } from './token-socket.ts'

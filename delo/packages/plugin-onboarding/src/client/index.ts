@@ -4,7 +4,8 @@
  * show. The steps are the preview notice, language and look, agents, recommended plugins and, where `ctx.deloReach`
  * says reach is available and not set up, reach; the last button opens a new chat in the default workspace, whose empty
  * state offers starter prompts that write into the message box. Where no default workspace resolves, the button
- * chooses a folder first.
+ * chooses a folder first: the host's native chooser where it has one, otherwise a chooser in the Start step, and the
+ * folder is added through the harness's route ({@link addWorkspaceFolder}), which refuses the folders Delo never adds.
  * It loads only while the Delo look is on (the `deloStudio` service exists), so the stock look keeps the preview
  * notice's own step. `ctx.deloOnboarding` lets other Delo plugins add steps.
  * @module @delo/plugin-onboarding/client
@@ -35,18 +36,17 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@delo/bundle-local/client'
 // Type-only: the ctx.deloStudio merge and the 'settings.deloAppearance' dictionary.
 import type {} from '@delo/plugin-theme/client'
-// Type-only: the ctx.deloSidebar merge.
-import type {} from '@delo/plugin-sidebar/client'
 import type { ThemeSettings } from '@delo/plugin-theme'
-import { ONBOARDING_ROW_ID, PENDING_STARTERS, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
-import { NO_RECORD, SETUP_RECORD_PATH, SetupRecord } from '../wire.ts'
+import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
+import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
-  DeloOnboarding, DeloReach, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, ReachFace, ReachState, SchemePreference, SidebarWorkspaceAdder, StartFace, StartTarget, StaticServices,
+  AddOutcome, DeloOnboarding, DeloReach, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, ReachFace, ReachState, SchemePreference, StartFace, StartTarget,
+  StaticServices,
 } from './types.ts'
 
 export { createBundleInstaller, stateOf } from './bundles.ts'
@@ -56,7 +56,7 @@ export type { OnboardingLocaleKey } from './locales.ts'
 export type { ShowAgainInjected, ShowAgainRowProps } from './ShowAgainRow.tsx'
 export type { StarterInjected, StarterPromptsProps } from './StarterPrompts.tsx'
 export type {
-  AppearanceTranslate, DeloOnboarding, DeloReach, FolderChoice, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep, OnboardingStepProps, ReachFace, ReachState,
+  AddOutcome, AppearanceTranslate, DeloOnboarding, DeloReach, FolderBrowse, FolderChoice, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep, OnboardingStepProps, ReachFace, ReachState,
   SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
 } from './types.ts'
 
@@ -91,6 +91,10 @@ export const STARTER_ENTRY = { id: 'delo-onboarding.starters', order: 10 } as co
 const CHECKING: StartTarget = { kind: 'checking' }
 const OTHER: StartTarget = { kind: 'other' }
 const NONE: StartTarget = { kind: 'none' }
+const CANCELLED: FolderChoice = { kind: 'cancelled' }
+const IN_STEP: FolderChoice = { kind: 'in-step' }
+const UNAVAILABLE: FolderChoice = { kind: 'unavailable' }
+const FAILED: AddOutcome = { kind: 'failed' }
 
 /**
  * Services every registration needs. `settingsShell` is the Settings shell's, which also hosts the onboarding step and
@@ -112,6 +116,46 @@ export async function loadSetupRecord(): Promise<SetupRecord> {
     console.warn('delo onboarding: the setup record was not read; every step shows', error)
     return NO_RECORD
   }
+}
+
+/**
+ * Ask the harness to add a folder as a workspace. The harness refuses the folders Delo never adds and registers nothing
+ * for them.
+ * @param path - the folder's absolute path.
+ * @returns what adding it came to; `failed`, with a warning, when the harness cannot be asked or answers something else.
+ */
+export async function addWorkspaceFolder(path: string): Promise<AddOutcome> {
+  let answer: AddWorkspaceAnswer
+  try {
+    const response = await fetch(ADD_WORKSPACE_PATH.slice(1), {
+      method: 'POST',
+      headers: { 'accept': 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({ path } satisfies AddWorkspaceRequest),
+    })
+    answer = AddWorkspaceAnswer.parse(await response.json())
+  } catch (error) {
+    console.warn('delo onboarding: the folder was not added', error)
+    return FAILED
+  }
+  switch (answer.result) {
+    // The route's JSON validation is where the id is trusted; the brand names it.
+    case 'added': return { kind: 'chosen', workspaceId: answer.workspaceId as WorkspaceId }
+    case 'refused': return { kind: 'refused', problem: answer.problem }
+    case 'failed': return FAILED
+    /* v8 ignore next 2 -- closed-union default only defends a future widening of AddWorkspaceAnswer */
+    default: return assertNever(answer)
+  }
+}
+
+/**
+ * Close a union the compiler has narrowed to nothing.
+ * @param value - the value that cannot occur.
+ * @returns never.
+ * @throws always.
+ */
+/* v8 ignore next 3 -- reached only when AddWorkspaceAnswer widens without this switch */
+function assertNever(value: never): never {
+  throw new Error(`unhandled add-workspace answer ${JSON.stringify(value)}`)
 }
 
 /**
@@ -209,38 +253,34 @@ export function applyStudio(ctx: Context): void {
     void run.then((target) => { if (resolution === run) startTarget.set(target) })
     return run
   }
-  // Delo's sidebar provides `ctx.deloSidebar` while its list is mounted; onboarding needs only its add-workspace flow.
-  const sidebar = (): SidebarWorkspaceAdder | undefined => ctx.get('deloSidebar')
-  const inPage = (): FolderChoice => (sidebar()?.canAddWorkspace() === true ? { kind: 'in-page' } : { kind: 'unavailable' })
+  const uiWorkspace = (): Context['uiWorkspace'] => {
+    const service = ctx.get('uiWorkspace')
+    if (service === undefined) throw new Error('delo onboarding: the studio has no workspace navigation')
+    return service
+  }
   const chooseFolder = async (): Promise<FolderChoice> => {
     const workspace = ctx.get('uiWorkspace')
-    const workspaces = ctx.get('workspaces')
-    if (workspace === undefined || workspaces === undefined) return inPage()
+    if (workspace === undefined) return UNAVAILABLE
     let path: string | null
     try {
       path = await workspace.pickDirectory()
     } catch (error) {
-      // A host that picks folders in a page dialog has no native chooser; the sidebar's add-workspace flow has that dialog.
+      // A host that picks folders in a page dialog has no native chooser; the Start step shows its own.
       console.warn('delo onboarding: the native folder chooser did not open', error)
-      return inPage()
+      return IN_STEP
     }
-    if (path === null) return { kind: 'cancelled' }
-    try {
-      return { kind: 'chosen', workspaceId: (await workspaces.create({ path })).workspaceId }
-    } catch (error) {
-      console.warn('delo onboarding: the folder was not added', error)
-      return { kind: 'unavailable' }
-    }
+    if (path === null) return CANCELLED
+    return addWorkspaceFolder(path)
   }
-  const openInPage = (): void => {
-    writeProgress('starterSession', PENDING_STARTERS)
-    sidebar()?.addWorkspace()
+  const browse: FolderBrowse = {
+    list: async (path, signal) => uiWorkspace().listDirectory(path, signal),
+    create: async (path, folder) => uiWorkspace().createDirectory(path, folder),
   }
   const holdNotice = (): ((told: boolean) => void) => {
     const release = ctx.get('uiWorkspace')?.holdDefaultWorkspaceNotice()
     return (told) => { release?.({ told }) }
   }
-  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, openInPage, holdNotice }
+  const start: StartFace = { target: startTarget, resolve: () => { void resolve() }, chooseFolder, addFolder: addWorkspaceFolder, browse, holdNotice }
 
   /**
    * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person
@@ -267,7 +307,14 @@ export function applyStudio(ctx: Context): void {
   }
 
   const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat })
-  const showAgain: ShowAgainInjected = { show: () => { ctx.settingsShell.openOnboarding(ONBOARDING_STEP.id) } }
+  const showAgain: ShowAgainInjected = {
+    show: () => {
+      // Unfinished from its first screen, so a reload shows the guide again, as the explicit opening does now.
+      writeProgress('done', false)
+      writeProgress('step', '')
+      ctx.settingsShell.openOnboarding(ONBOARDING_STEP.id)
+    },
+  }
   const starters: StarterInjected = {
     starter: { getSnapshot: () => progress.getSnapshot().value?.starterSession ?? '', subscribe: listener => progress.subscribe(listener) },
     prefill: (sessionId, text) => {

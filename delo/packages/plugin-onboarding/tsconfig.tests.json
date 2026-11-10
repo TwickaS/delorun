@@ -13,6 +13,7 @@
     "src/config.ts",
     "src/wire.ts",
     "src/answers.ts",
+    "src/workspace-route.ts",
     "tests"
   ],
   "exclude": [
@@ -34,6 +35,15 @@
     },
     {
       "path": "../../../packages/settings/settings"
+    },
+    {
+      "path": "../../../packages/util/brand"
+    },
+    {
+      "path": "../../../packages/util/home-paths"
+    },
+    {
+      "path": "../../../packages/workspace/workspace"
     }
   ]
 }

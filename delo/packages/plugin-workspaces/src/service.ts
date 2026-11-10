@@ -38,8 +38,11 @@ export const ImportRequest = z.strictObject({ url: repositoryUrl, directory: fol
 /** {@link ImportRequest}'s parsed value. */
 export type ImportRequest = z.output<typeof ImportRequest>
 
-/** Why the workspaces service refused a request. */
-export type WorkspaceRefusalCode = 'invalid' | 'not-found' | 'taken' | 'outside' | 'conflict' | 'too-large' | 'failed' | 'unavailable'
+/**
+ * Why the workspaces service refused a request. `location` names a folder Delo never adds as a workspace: the filesystem
+ * root, the home directory itself, or a folder that is, lies inside or contains the Delo home or the stock home.
+ */
+export type WorkspaceRefusalCode = 'invalid' | 'location' | 'not-found' | 'taken' | 'outside' | 'conflict' | 'too-large' | 'failed' | 'unavailable'
 
 /** A refusal of the workspaces service, with an English message for the person. */
 export class WorkspaceRefusedError extends Error {

@@ -15,7 +15,10 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import { WorkspaceUnknownSessionError, type Workspace, type WorkspaceId } from '@deepseek-ai/dsh-workspace'
 import schema from '@deepseek-ai/schemastery'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
-import { checkProtectedFile, HomeLayoutError, readProtectedFile, resolveDeloHome } from '@delo/home'
+import {
+  checkProtectedFile, HomeLayoutError, readProtectedFile, resolveDeloHome, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem,
+  type WorkspaceLocationHomes,
+} from '@delo/home'
 import { cloneRepository } from './clone.ts'
 import { INSTRUCTIONS, InstructionsRefusedError, readInstructions, writeInstructions } from './files.ts'
 import { cloneUrlProblem, redactClone } from './git.ts'
@@ -93,10 +96,12 @@ export const Config: schema<Config> = schema.object({
 /** A chat's id, as the workspace registry brands it. */
 type SessionId = Workspace['sessionIds'][number]
 
-/** The state a mounted plugin holds: its canonical root and the two tables. */
+/** The state a mounted plugin holds: its canonical root, the homes a new folder is held against, and the two tables. */
 interface Mounted {
   /** The root's canonical path; every workspace folder is a direct child of it. */
   readonly root: string
+  /** The homes a new workspace folder is held against, so the service never adds a folder Delo refuses as a workspace. */
+  readonly homes: WorkspaceLocationHomes
   readonly imports: KvTable<string, ImportRecord>
   readonly trash: KvTable<string, TrashRecord>
 }
@@ -145,8 +150,8 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
       await Promise.allSettled([...this.running.values()])
       await domain.close()
     }, `${PLUGIN}: clones and storage`)
-    const root = await this.prepareRoot()
-    this.mounted = { root, imports: domain.table('imports'), trash: domain.table('trash') }
+    const { root, homes } = await this.prepareRoot()
+    this.mounted = { root, homes, imports: domain.table('imports'), trash: domain.table('trash') }
     void this.serial(() => this.sweep()).catch((error: unknown) => {
       this.warn(`the sweep at start failed: ${reasonOf(error)}`)
     })
@@ -168,13 +173,14 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
    * Create a workspace as a new, empty folder of the root.
    * @param request - the folder name and the title, the folder name by default.
    * @returns the new workspace's id.
-   * @throws WorkspaceRefusedError `invalid` for a name that is not a folder name, `taken` for a folder that exists, and `failed` when the registry refuses the folder, after which the folder is removed.
+   * @throws WorkspaceRefusedError `invalid` for a name that is not a folder name, `location` for a folder Delo never adds as a workspace (see `workspaceLocationProblem` in `@delo/home`), `taken` for a folder that exists, and `failed` when the registry refuses the folder, after which the folder is removed. A refusal makes no folder and registers nothing.
    */
   create(request: CreateRequest): Promise<{ readonly workspaces: readonly WorkspaceId[] }> {
     return this.call('creating the workspace', () => this.serial(async () => {
       const { root } = this.state()
       const directory = validFolder(request.directory)
       const path = join(root, directory)
+      await this.checkLocation(path)
       await this.claim(path)
       let workspace: Workspace
       try {
@@ -193,7 +199,7 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
    * Start cloning a repository into a new folder. The import shows in {@link list} until it ends, and a failed one leaves no folder.
    * @param request - the repository's https URL, and the folder, named after the repository by default.
    * @returns the import's id and its folder.
-   * @throws WorkspaceRefusedError `invalid` for a URL git may not clone or a name that is not a folder name, and `taken` for a folder that exists.
+   * @throws WorkspaceRefusedError `invalid` for a URL git may not clone or a name that is not a folder name, `location` for a folder Delo never adds as a workspace, and `taken` for a folder that exists. A refusal makes no folder and starts nothing.
    */
   startImport(request: ImportRequest): Promise<{ readonly import: string, readonly directory: string }> {
     return this.call('starting the import', () => this.serial(async () => {
@@ -202,6 +208,7 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
       if (problem !== undefined) throw new WorkspaceRefusedError('invalid', problem)
       const directory = validFolder(request.directory ?? folderOfUrl(request.url) ?? '')
       const path = join(root, directory)
+      await this.checkLocation(path)
       await this.claim(path)
       const id = randomUUID()
       try {
@@ -315,21 +322,37 @@ export class DeloWorkspacesService extends Service implements DeloWorkspaces {
   }
 
   /**
-   * Resolve the Delo home, refuse a root that is the home, lies inside it or contains it, normalise and check the credential, and
-   * create the root.
-   * @returns the root's canonical path.
-   * @throws Error when the root overlaps the home, the credential host is not a bare host or host:port, or the credential file is outside the home's secrets directory; HomeLayoutError when a path is refused.
+   * Resolve the Delo home, refuse a root that Delo would refuse as a workspace (the filesystem root, the home directory, a
+   * folder that is, lies inside or contains the Delo home or the stock home), normalise and check the credential, and create
+   * the root.
+   * @returns the root's canonical path and the homes new folders are held against.
+   * @throws Error naming the root's problem when Delo refuses the root, when the credential host is not a bare host or
+   * host:port, or when the credential file is outside the home's secrets directory; HomeLayoutError when a path is refused.
    */
-  private async prepareRoot(): Promise<string> {
+  private async prepareRoot(): Promise<{ readonly root: string, readonly homes: WorkspaceLocationHomes }> {
     const home = await canonicalOf((await resolveDeloHome(process.env)).path)
+    const homes = workspaceLocationHomes(home)
+    const problem = await workspaceLocationProblem(this.config.root, homes)
+    if (problem !== undefined) {
+      throw new Error(`${PLUGIN}: the workspaces root ${this.config.root} is refused (${problem}): ${workspaceLocationMessage(problem)}`)
+    }
     const root = await canonicalOf(this.config.root)
-    if (overlaps(root, home)) throw new Error(`${PLUGIN}: the workspaces root ${this.config.root} cannot be the Delo home, lie inside it or contain it`)
     if (this.config.credential !== undefined) {
       this.credential = { host: credentialHost(this.config.credential.host), file: this.config.credential.file }
       await this.checkCredential(home, this.credential.file)
     }
     await mkdir(root, { recursive: true, mode: FOLDER_MODE })
-    return root
+    return { root, homes }
+  }
+
+  /**
+   * Refuse a new workspace folder that Delo never adds as a workspace, before anything is made.
+   * @param path - the folder's absolute path.
+   * @throws WorkspaceRefusedError `location`, with the sentence that names the problem and what to do instead.
+   */
+  private async checkLocation(path: string): Promise<void> {
+    const problem = await workspaceLocationProblem(path, this.state().homes)
+    if (problem !== undefined) throw new WorkspaceRefusedError('location', workspaceLocationMessage(problem))
   }
 
   /**
@@ -790,16 +813,6 @@ function isWithin(parent: string, path: string): boolean {
   const base = comparable(parent)
   const key = comparable(path)
   return key === base || key.startsWith(base.endsWith(sep) ? base : `${base}${sep}`)
-}
-
-/**
- * Whether one canonical path is the other or lies inside it.
- * @param left - a canonical path.
- * @param right - a canonical path.
- * @returns true when either path contains the other.
- */
-function overlaps(left: string, right: string): boolean {
-  return isWithin(left, right) || isWithin(right, left)
 }
 
 /**

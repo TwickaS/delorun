@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OnboardingStepEntry, type OnboardingStepEntryProps } from '../src/client/Onboarding.tsx'
 import { en } from '../src/client/locales.ts'
-import type { OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
+import type { FolderChoice, OnboardingStep, ReachState, StartTarget } from '../src/client/types.ts'
 import type { OnboardingSettings } from '../src/config.ts'
 import { NO_RECORD, type SetupRecord } from '../src/wire.ts'
 import { DEFAULT_WORKSPACE, liveForm, noticeFace, reachFace, settings, startFace, stepServices, t } from './fixtures.client.ts'
@@ -22,7 +22,7 @@ beforeEach(() => {
   document.body.appendChild(root)
 })
 
-const settle = async () => { await act(async () => { await Promise.resolve() }) }
+const settle = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
 const button = (name: string) => screen.getByRole('button', { name })
 
@@ -334,15 +334,39 @@ describe('the last button', () => {
     expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE)
   })
 
-  it('closes the dialog and hands over to the sidebar\'s in-page folder flow where the host has no native chooser', async () => {
-    const start = startFace({ kind: 'none' }, { kind: 'in-page' })
+  it('shows its own chooser in the Start step where the host has no native chooser, and starts a chat in the folder added there', async () => {
+    const start = startFace({ kind: 'none' }, { kind: 'in-step' })
     const { startChat, complete, progress } = await mountEntry({ start })
     await toStart()
     await click(button(en.chooseFolder))
+    await settle()
+    expect(complete).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: en.chooseFolder })).toBeNull()
+    expect(screen.getByRole('listbox', { name: 'Folders in person' })).toBeTruthy()
+    expect((button(en['chooser.add']) as HTMLButtonElement).disabled).toBe(true)
+    await click(screen.getByRole('option', { name: 'projects' }))
+    await click(button(en['chooser.add']))
+    expect(start.addFolder).toHaveBeenCalledExactlyOnceWith('/home/person/projects')
     expect(progress.value()).toMatchObject({ done: true, step: '' })
     expect(complete).toHaveBeenCalled()
-    expect(start.openInPage).toHaveBeenCalledOnce()
-    expect(startChat).not.toHaveBeenCalled()
+    expect(startChat).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE)
+  })
+
+  it.each<readonly [string, FolderChoice, string]>([
+    ['refuses the home directory', { kind: 'refused', problem: 'home-directory' }, en['problem.home-directory']],
+    ['refuses the Delo home', { kind: 'refused', problem: 'delo-home' }, en['problem.delo-home']],
+    ['cannot add the folder', { kind: 'failed' }, en['problem.failed']],
+  ])('keeps the dialog open and says why when the harness %s that the native chooser picked', async (_, choice, text) => {
+    const start = startFace({ kind: 'none' }, choice)
+    const { startChat, complete, progress } = await mountEntry({ start })
+    await toStart()
+    await click(button(en.chooseFolder))
+    expect(screen.getByRole('alert').textContent).toBe(text)
+    expect([startChat.mock.calls.length, complete.mock.calls.length, progress.value()?.done]).toEqual([0, 0, false])
+    expect((button(en.chooseFolder) as HTMLButtonElement).disabled).toBe(false)
+    await click(button(en.back))
+    await click(button(en.continue))
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('keeps the dialog open and the button ready when the chooser is closed without a folder', async () => {
@@ -356,7 +380,7 @@ describe('the last button', () => {
     expect((button(en.chooseFolder) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('opens the workspace UI\'s own New Session when the chooser cannot run, and disables the button while it is open', async () => {
+  it('opens the workspace UI\'s own New Session where the studio has no workspace navigation, and disables the button while it asks', async () => {
     const start = startFace({ kind: 'none' })
     let release: (choice: { kind: 'unavailable' }) => void = () => {}
     start.chooseFolder.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
@@ -365,7 +389,7 @@ describe('the last button', () => {
     await click(button(en.chooseFolder))
     expect((button(en.chooseFolder) as HTMLButtonElement).disabled).toBe(true)
     await act(async () => { release({ kind: 'unavailable' }) })
-    expect(startChat).toHaveBeenCalledExactlyOnceWith(undefined)
+    expect(startChat).toHaveBeenCalledExactlyOnceWith()
   })
 
   it('holds the default-workspace notice while it shows and drops it once the Start step said there is no default workspace', async () => {
@@ -398,5 +422,45 @@ describe('the last button', () => {
     await act(async () => { start.set({ kind: 'none' }) })
     expect(button(en.chooseFolder)).toBeTruthy()
     expect(screen.getByText(en['start.lead.none'])).toBeTruthy()
+  })
+})
+
+describe('closing the dialog', () => {
+  /** A message box in the page behind the dialog, as upstream's composer renders it. */
+  const composer = () => {
+    const box = document.createElement('div')
+    box.setAttribute('data-composer-input', '')
+    box.setAttribute('contenteditable', 'true')
+    box.tabIndex = -1
+    document.getElementById('root')?.append(box)
+    return box
+  }
+
+  it('puts focus in the message box after Skip for now, instead of leaving it on the page body', async () => {
+    const box = composer()
+    await mountEntry()
+    expect((document.getElementById('root') as HTMLElement).inert).toBe(true)
+    await click(button(en.skip))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect((document.getElementById('root') as HTMLElement).inert).toBe(false)
+    expect(document.activeElement).toBe(box)
+  })
+
+  it('puts focus on the page\'s first control when the page has no message box', async () => {
+    const control = document.createElement('button')
+    document.getElementById('root')?.append(control)
+    await mountEntry()
+    await click(button(en.skip))
+    expect(document.activeElement).toBe(control)
+  })
+
+  it('leaves focus where the page put it back', async () => {
+    composer()
+    const opener = document.createElement('button')
+    document.getElementById('root')?.append(opener)
+    opener.focus()
+    await mountEntry()
+    await click(button(en.skip))
+    expect(document.activeElement).toBe(opener)
   })
 })

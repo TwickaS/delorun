@@ -7,11 +7,11 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  apply, inject, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  addWorkspaceFolder, apply, inject, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type StarterInjected, type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { NO_RECORD, SETUP_RECORD_PATH } from '../src/wire.ts'
+import { ADD_WORKSPACE_PATH, NO_RECORD, SETUP_RECORD_PATH } from '../src/wire.ts'
 import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../src/config.ts'
 import { liveForm, settings, t, THEME } from './fixtures.client.ts'
 
@@ -299,26 +299,26 @@ describe('the default workspace and the first chat', () => {
     readonly workspaces?: unknown
     readonly uiWorkspace?: unknown | null
     readonly items?: readonly unknown[]
-    readonly sidebar?: { readonly canAdd: boolean }
   }
 
   async function chat(options: ChatOptions = {}) {
     const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
     const startSession = vi.fn()
     const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
+    const listDirectory = vi.fn(async (_path?: string, _signal?: AbortSignal) => ({ path: '/home/person' }))
+    const createDirectory = vi.fn(async (path: string, name: string) => `${path}/${name}`)
     const initializeDefault = vi.fn(async () => ({ workspaceId: WORKSPACE }))
-    const create = vi.fn(async (_input: { path: string }) => ({ workspaceId: 'workspace-7' }))
     const provide: Record<string, unknown> = {}
-    const addWorkspace = vi.fn()
-    if (options.sidebar !== undefined) provide.deloSidebar = { canAddWorkspace: () => options.sidebar?.canAdd === true, addWorkspace }
-    if (options.uiWorkspace !== null) provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession, pickDirectory, holdDefaultWorkspaceNotice: () => () => {} }
+    if (options.uiWorkspace !== null) {
+      provide.uiWorkspace = options.uiWorkspace ?? { openWorkspace, startSession, pickDirectory, listDirectory, createDirectory, holdDefaultWorkspaceNotice: () => () => {} }
+    }
     const list = { getSnapshot: () => ({ items: options.items ?? [] }) }
-    if (options.workspaces === undefined) provide.workspaces = { initializeDefault, create, list }
+    if (options.workspaces === undefined) provide.workspaces = { initializeDefault, list }
     else if (options.workspaces !== 'absent') provide.workspaces = { list, ...options.workspaces as object }
     const made = await harness({ provide })
     made.served.on()
     const injected = face<OnboardingInjected>(made.entries, STEP_KEY)
-    return { ...made, injected, startChat: injected.startChat, start: injected.services.start, openWorkspace, startSession, pickDirectory, initializeDefault, create, addWorkspace }
+    return { ...made, injected, startChat: injected.startChat, start: injected.services.start, openWorkspace, startSession, pickDirectory, listDirectory, createDirectory, initializeDefault }
   }
 
   it('opens a new chat in the default workspace and remembers it as the one that offers starter prompts', async () => {
@@ -409,72 +409,79 @@ describe('the default workspace and the first chat', () => {
   })
 
   describe('choosing a folder', () => {
-    it('adds the folder the host\'s chooser returns as a workspace', async () => {
-      const { start, pickDirectory, create } = await chat()
+    /** The harness's add-workspace route, answering as given, and recording what it is asked. */
+    const route = (answer: () => Response | Promise<Response> = () => new Response(JSON.stringify({ result: 'added', workspaceId: 'workspace-7' }), { status: 200 })) => {
+      const fetch = vi.fn(async (_path: string, _init?: RequestInit) => answer())
+      vi.stubGlobal('fetch', fetch)
+      return fetch
+    }
+
+    it('adds the folder the host\'s chooser returns through the harness\'s route, relative to the document', async () => {
+      const fetch = route()
+      const { start, pickDirectory } = await chat()
       expect(await start.chooseFolder()).toEqual({ kind: 'chosen', workspaceId: 'workspace-7' })
       expect(pickDirectory).toHaveBeenCalledOnce()
-      expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/work/folder' })
+      expect(fetch).toHaveBeenCalledExactlyOnceWith(ADD_WORKSPACE_PATH.slice(1), {
+        method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' }, body: JSON.stringify({ path: '/work/folder' }),
+      })
     })
 
     it('changes nothing when the chooser is closed', async () => {
-      const { start, pickDirectory, create } = await chat()
+      const fetch = route()
+      const { start, pickDirectory } = await chat()
       pickDirectory.mockResolvedValueOnce(null)
       expect(await start.chooseFolder()).toEqual({ kind: 'cancelled' })
-      expect(create).not.toHaveBeenCalled()
+      expect(fetch).not.toHaveBeenCalled()
     })
 
-    it.each<readonly [string, (made: Awaited<ReturnType<typeof chat>>) => void]>([
-      ['the chooser cannot run', made => made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))],
-      ['the folder cannot be added', made => made.create.mockRejectedValueOnce(new Error('not a directory'))],
-    ])('reports the choice as unavailable, with a warning, when %s', async (_, fail) => {
+    it('asks the Start step for its own chooser, with a warning, where the host has no native chooser', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const fetch = route()
       const made = await chat()
-      fail(made)
-      expect(await made.start.chooseFolder()).toEqual({ kind: 'unavailable' })
+      made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))
+      expect(await made.start.chooseFolder()).toEqual({ kind: 'in-step' })
       expect(warn).toHaveBeenCalledOnce()
+      expect(fetch).not.toHaveBeenCalled()
     })
 
-    it.each<readonly [string, ChatOptions]>([
-      ['workspace navigation', { uiWorkspace: null }],
-      ['the workspace service', { workspaces: 'absent' }],
-    ])('is unavailable without %s', async (_, options) => {
-      const { start } = await chat(options)
+    it('is unavailable without workspace navigation', async () => {
+      const { start } = await chat({ uiWorkspace: null })
       expect(await start.chooseFolder()).toEqual({ kind: 'unavailable' })
     })
 
-    it('uses the native chooser when the host has one, even when the sidebar could add a workspace', async () => {
-      const { start, addWorkspace } = await chat({ sidebar: { canAdd: true } })
-      expect(await start.chooseFolder()).toEqual({ kind: 'chosen', workspaceId: 'workspace-7' })
-      expect(addWorkspace).not.toHaveBeenCalled()
-    })
-
-    it.each<readonly [string, ChatOptions, (made: Awaited<ReturnType<typeof chat>>) => void]>([
-      ['the native chooser cannot pick', { sidebar: { canAdd: true } }, made => made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))],
-      ['there is no workspace navigation', { sidebar: { canAdd: true }, uiWorkspace: null }, () => {}],
-    ])('hands over to the sidebar\'s in-page flow when %s', async (_, options, setup) => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const made = await chat(options)
-      setup(made)
-      expect(await made.start.chooseFolder()).toEqual({ kind: 'in-page' })
-    })
-
-    it('stays unavailable when the native chooser cannot pick and the sidebar cannot add a workspace', async () => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const made = await chat({ sidebar: { canAdd: false } })
-      made.pickDirectory.mockRejectedValueOnce(new Error('directory picker failed'))
-      expect(await made.start.chooseFolder()).toEqual({ kind: 'unavailable' })
-    })
-
-    it('keeps the starter prompts pending, then starts the sidebar\'s add-workspace flow', async () => {
-      const { start, addWorkspace, progress } = await chat({ sidebar: { canAdd: true } })
-      start.openInPage()
-      expect(progress.value()?.starterSession).toBe('pending')
-      expect(addWorkspace).toHaveBeenCalledOnce()
-    })
-
-    it('does not fail where the sidebar went away before the flow could start', async () => {
+    it.each<readonly [string, () => Response, unknown]>([
+      ['refuses the folder', () => new Response(JSON.stringify({ result: 'refused', problem: 'home-directory' }), { status: 422 }), { kind: 'refused', problem: 'home-directory' }],
+      ['cannot add it', () => new Response(JSON.stringify({ result: 'failed' }), { status: 500 }), { kind: 'failed' }],
+    ])('passes on that the harness %s', async (_, answer, outcome) => {
+      route(answer)
       const { start } = await chat()
-      expect(() => { start.openInPage() }).not.toThrow()
+      expect(await start.addFolder('/home/person')).toEqual(outcome)
+    })
+
+    it.each<readonly [string, () => Response | Promise<Response>]>([
+      ['an answer that is not JSON', () => new Response('<html>', { status: 404 })],
+      ['an answer it does not know', () => new Response(JSON.stringify({ result: 'added' }), { status: 200 })],
+      ['no answer', () => Promise.reject(new Error('offline'))],
+    ])('reports a failure, with a warning, after %s', async (_, answer) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      route(answer)
+      expect(await addWorkspaceFolder('/home/person/projects')).toEqual({ kind: 'failed' })
+      expect(warn).toHaveBeenCalledOnce()
+    })
+
+    it('lists and creates folders through the workspace navigation for the Start step\'s own chooser', async () => {
+      const { start, listDirectory, createDirectory } = await chat()
+      const signal = new AbortController().signal
+      expect(await start.browse.list('/home', signal)).toEqual({ path: '/home/person' })
+      expect(listDirectory).toHaveBeenCalledExactlyOnceWith('/home', signal)
+      expect(await start.browse.create('/home/person', 'work')).toBe('/home/person/work')
+      expect(createDirectory).toHaveBeenCalledExactlyOnceWith('/home/person', 'work')
+    })
+
+    it('fails to list or create folders where the studio has no workspace navigation', async () => {
+      const { start } = await chat({ uiWorkspace: null })
+      await expect(start.browse.list()).rejects.toThrow(/no workspace navigation/)
+      await expect(start.browse.create('/home/person', 'work')).rejects.toThrow(/no workspace navigation/)
     })
   })
 })
@@ -482,13 +489,16 @@ describe('the default workspace and the first chat', () => {
 describe('a fresh home with no default workspace', () => {
   it('says so on the Start step instead of the workspace UI\'s notice, lets the person choose a folder, and then opens a chat there that offers the starter prompts', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ reachSetUp: false }), { status: 200 })))
+    const fetch = vi.fn(async (path: string, _init?: RequestInit) => new Response(
+      JSON.stringify(path === SETUP_RECORD_PATH.slice(1) ? { reachSetUp: false } : { result: 'added', workspaceId: 'workspace-7' }),
+      { status: 200 },
+    ))
+    vi.stubGlobal('fetch', fetch)
     const openWorkspace = vi.fn(async (_id: string, beforeOpen?: (sessionId: string) => void) => { beforeOpen?.('session-9') })
     const pickDirectory = vi.fn(async (): Promise<string | null> => '/work/folder')
-    const create = vi.fn(async () => ({ workspaceId: 'workspace-7' }))
     const workspaces = {
       initializeDefault: async () => { throw new Error('system Documents directory is unavailable') },
-      create, list: { getSnapshot: () => ({ items: [] }) },
+      list: { getSnapshot: () => ({ items: [] }) },
     }
     const release = vi.fn()
     const holdDefaultWorkspaceNotice = vi.fn(() => release)
@@ -504,7 +514,7 @@ describe('a fresh home with no default workspace', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.chooseFolder })) })
     await act(async () => { await flush() })
     expect(pickDirectory).toHaveBeenCalledOnce()
-    expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/work/folder' })
+    expect(fetch).toHaveBeenCalledWith(ADD_WORKSPACE_PATH.slice(1), expect.objectContaining({ method: 'POST', body: JSON.stringify({ path: '/work/folder' }) }))
     expect(openWorkspace).toHaveBeenCalledExactlyOnceWith('workspace-7', expect.any(Function))
     expect(made.progress.value()).toMatchObject({ done: true, starterSession: 'session-9' })
     expect(holdDefaultWorkspaceNotice).toHaveBeenCalledOnce()
@@ -543,6 +553,37 @@ describe('Show again', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['row.show'] })) })
     await act(async () => { await flush() })
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.look'])
+  })
+
+  it('keeps the reopened guide unfinished, so it shows again after a reload until it is finished or skipped', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ reachSetUp: false }), { status: 200 })))
+    const { service } = shell()
+    const { entries, served, progress } = await harness({ progress: settings({ done: true, step: 'agents' }), late: { settingsShell: service } })
+    served.on()
+    face<ShowAgainInjected>(entries, ROW_KEY).show()
+    expect(progress.value()).toMatchObject({ done: false, step: '' })
+    // A reload: the Settings shell no longer opens the step explicitly, and the profile's settings decide.
+    const Step = entries.get(STEP_KEY)?.component as ComponentType<OnboardingStepEntryProps>
+    const complete = vi.fn()
+    render(<Step t={t} {...face<OnboardingInjected>(entries, STEP_KEY)} complete={complete} />)
+    await act(async () => { await flush() })
+    expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe(en['step.look'])
+    expect(complete).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.skip })) })
+    expect(progress.value()).toMatchObject({ done: true, step: '' })
+    expect(complete).toHaveBeenCalled()
+  })
+
+  it('warns when the reopened state cannot be saved, and still opens the guide', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { requested, service } = shell()
+    const { entries, served, progress } = await harness({ progress: settings({ done: true }), late: { settingsShell: service } })
+    served.on()
+    progress.set.mockRejectedValue(new Error('transport'))
+    face<ShowAgainInjected>(entries, ROW_KEY).show()
+    await flush()
+    expect(requested.getSnapshot()).toBe(ONBOARDING_STEP.id)
+    expect(warn).toHaveBeenCalledWith('delo onboarding: progress was not saved', expect.any(Error))
   })
 })
 

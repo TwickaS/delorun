@@ -2407,6 +2407,9 @@ importers:
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -2483,12 +2486,12 @@ importers:
       '@deepseek-ai/dsh-util-crypto':
         specifier: workspace:*
         version: link:../../../packages/util/crypto
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
-      '@delo/plugin-sidebar':
-        specifier: workspace:*
-        version: link:../plugin-sidebar
       '@delo/plugin-theme':
         specifier: workspace:*
         version: link:../plugin-theme

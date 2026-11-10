@@ -370,6 +370,101 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* The Start step's own folder chooser: a bar with Up, the location and New folder, the list of folders, and its actions. */
+.chooser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-5);
+  min-width: 0;
+}
+
+.chooserBar,
+.newFolder,
+.chooserFailure,
+.chooserActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--delo-space-4);
+}
+
+.location {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.path {
+  overflow-wrap: anywhere;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.nameInput {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.folders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-1);
+  max-height: 240px;
+  margin: 0;
+  padding: var(--delo-space-2);
+  overflow-y: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  list-style: none;
+}
+
+.folders:empty {
+  display: none;
+}
+
+.folder {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 0 var(--delo-space-5);
+  border-radius: var(--dsw-radius-sm);
+  overflow-wrap: anywhere;
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .folder:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+@media (pointer: coarse) {
+  .folder {
+    min-height: 44px;
+  }
+}
+
+.folder[aria-selected='true'] {
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.folder:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.chooserActions {
+  justify-content: flex-end;
+}
+
 /* The command to run in a terminal. */
 .command {
   padding: var(--delo-space-1) var(--delo-space-3);

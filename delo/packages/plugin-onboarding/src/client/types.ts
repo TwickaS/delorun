@@ -2,6 +2,7 @@
  * What the onboarding's pieces share: the step type other plugins add, and the services the built-in steps draw with.
  * @module @delo/plugin-onboarding/client/types
  */
+import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { LocaleRuntime, LocaleSnapshot, TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -9,7 +10,7 @@ import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import type { ThemeSettings } from '@delo/plugin-theme'
 import type { ComponentType } from 'react'
 import type { OnboardingSettings } from '../config.ts'
-import type { SetupRecord } from '../wire.ts'
+import type { LocationProblem, SetupRecord } from '../wire.ts'
 import type { BundleInstaller } from './bundles.ts'
 
 /** What a step added by another plugin draws with. */
@@ -130,27 +131,44 @@ export type StartTarget =
   /** No default workspace and no other: the person chooses a folder first. */
   | { readonly kind: 'none' }
 
-/**
- * The part of the sidebar's `ctx.deloSidebar` that onboarding uses: upstream's add-workspace flow, which picks a folder
- * in the page and starts a chat there.
- */
-export interface SidebarWorkspaceAdder {
-  /** @returns whether the sidebar can start the add-workspace flow now. */
-  canAddWorkspace(): boolean
-  /** Start the add-workspace flow. */
-  addWorkspace(): void
-}
+/** What adding a folder through the harness's route came to. */
+export type AddOutcome =
+  /** The folder was added as this workspace, or already was one. */
+  | { readonly kind: 'chosen'; readonly workspaceId: WorkspaceId }
+  /** The folder is one Delo never adds as a workspace; nothing was registered. */
+  | { readonly kind: 'refused'; readonly problem: LocationProblem }
+  /** The harness could not add the folder, or could not be asked; nothing was registered. */
+  | { readonly kind: 'failed' }
 
 /** What choosing a folder came to. */
 export type FolderChoice =
-  /** A folder was chosen and added as this workspace. */
-  | { readonly kind: 'chosen'; readonly workspaceId: WorkspaceId }
+  | AddOutcome
   /** The person closed the chooser; nothing changed. */
   | { readonly kind: 'cancelled' }
-  /** The host has no native chooser but the sidebar's in-page add-workspace flow can run; see {@link StartFace.openInPage}. */
-  | { readonly kind: 'in-page' }
-  /** No chooser can run or the folder could not be added; the workspace UI's own New Session applies. */
+  /** The host has no native chooser, so the Start step shows its own; see {@link StartFace.browse}. */
+  | { readonly kind: 'in-step' }
+  /** The studio has no workspace navigation; the workspace UI's own New Session applies. */
   | { readonly kind: 'unavailable' }
+
+/** The host's folders, as the Start step's own chooser lists and creates them. */
+export interface FolderBrowse {
+  /**
+   * List one folder's child folders.
+   * @param path - the folder; absent lists the home directory.
+   * @param signal - cancels a listing a newer one replaced.
+   * @returns the folder, its ancestors and its child folders.
+   * @throws when the host cannot list the folder.
+   */
+  readonly list: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>
+  /**
+   * Create a child folder.
+   * @param path - the existing parent folder.
+   * @param name - the new folder's name.
+   * @returns the new folder's absolute path.
+   * @throws when the host cannot create the folder.
+   */
+  readonly create: (path: string, name: string) => Promise<string>
+}
 
 /** The Start step's workspace: where the chat opens and how a folder is chosen when there is no default. */
 export interface StartFace {
@@ -159,15 +177,18 @@ export interface StartFace {
   /** Begin resolving the default workspace, which the host reuses if it already exists; the dialog calls it when it opens. */
   readonly resolve: () => void
   /**
-   * Open the host's directory chooser and add the chosen folder as a workspace.
-   * @returns what the choice came to; it never rejects.
+   * Open the host's native folder chooser and add the chosen folder through the harness's route.
+   * @returns what the choice came to; `in-step` where the host has no native chooser. It never rejects.
    */
   readonly chooseFolder: () => Promise<FolderChoice>
   /**
-   * After {@link FolderChoice} `in-page`: keep the starter prompts for the next empty chat that opens, then start the
-   * sidebar's add-workspace flow, which starts a chat in the folder the person picks.
+   * Add a folder through the harness's route, which refuses the folders Delo never adds.
+   * @param path - the folder's absolute path.
+   * @returns what adding it came to; it never rejects.
    */
-  readonly openInPage: () => void
+  readonly addFolder: (path: string) => Promise<AddOutcome>
+  /** The host's folders, for the Start step's own chooser. */
+  readonly browse: FolderBrowse
   /**
    * Keep the workspace UI's "Unable to create default workspace" notice back while the dialog shows.
    * @returns the release; `told` true says the Start step told the person there is no default workspace, which drops

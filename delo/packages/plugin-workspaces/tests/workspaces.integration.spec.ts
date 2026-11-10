@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import type { Readable } from 'node:stream'
 import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import Storage from '@deepseek-ai/dsh-storage'
@@ -17,6 +17,7 @@ import * as storageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as storageJson from '@deepseek-ai/dsh-storage-json'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessRuntime, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import WorkspaceRegistry, { WorkspaceId, type Workspace } from '@deepseek-ai/dsh-workspace'
+import { workspaceLocationMessage, type WorkspaceLocationProblem } from '@delo/home'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeloWorkspacesService } from '../src/index.ts'
 import type { DeloWorkspaces, ImportRow } from '../src/service.ts'
@@ -198,14 +199,44 @@ describe.skipIf(process.platform !== 'linux')('AGENTS.md through the provider', 
   })
 })
 
+/**
+ * Point the OS home at a scratch folder three levels down, with its stock home `~/.dsh`, so a folder between the scratch
+ * directory and the OS home contains the stock home and not the Delo home.
+ * @returns the OS home and its stock home.
+ */
+async function scratchOsHome(): Promise<{ readonly person: string, readonly stock: string }> {
+  const person = join(scratch, 'a', 'b', 'person')
+  const stock = join(person, '.dsh')
+  await mkdir(stock, { recursive: true })
+  process.env.HOME = person
+  return { person, stock }
+}
+
+/** The locations Delo never adds as a workspace, each with the problem code it names, under {@link scratchOsHome}. */
+const REFUSED_LOCATIONS: readonly (readonly [string, WorkspaceLocationProblem, () => string])[] = [
+  ['the OS home directory', 'home-directory', () => join(scratch, 'a', 'b', 'person')],
+  ['the Delo home', 'delo-home', () => home],
+  ['a folder inside the Delo home', 'delo-home', () => join(home, 'workspaces')],
+  ['a folder that contains the Delo home', 'contains-delo-home', () => scratch],
+  ['the stock home', 'stock-home', () => join(scratch, 'a', 'b', 'person', '.dsh')],
+  ['a folder inside the stock home', 'stock-home', () => join(scratch, 'a', 'b', 'person', '.dsh', 'inside')],
+  ['a folder that contains the stock home', 'contains-stock-home', () => join(scratch, 'a', 'b')],
+]
+
 describe('the configuration at load', () => {
-  it.each([
-    ['is the Delo home', (): string => home],
-    ['lies inside the Delo home', (): string => join(home, 'workspaces')],
-    ['contains the Delo home', (): string => dirname(home)],
-  ])('refuses a root that %s, and creates nothing in it', async (_label, pick) => {
-    await expect(mount({ config: { root: pick(), caFile: fixture.caFile } })).rejects.toThrow(/cannot be the Delo home/)
-    expect(await exists(join(home, 'workspaces'))).toBe(false)
+  it.each(REFUSED_LOCATIONS)('refuses a root that is %s, naming %s, and creates nothing in it', async (_label, problem, pick) => {
+    await scratchOsHome()
+    await mkdir(join(home, 'workspaces'), { recursive: true })
+    const location = pick()
+    // The storage backend of the composition makes its own directory in the scratch directory before the provider loads.
+    const entries = async (): Promise<string[]> => (await readdir(location).catch(() => [])).filter(name => name !== 'storage')
+    const before = await entries()
+    await expect(mount({ config: { root: location, caFile: fixture.caFile } })).rejects.toThrow(`is refused (${problem})`)
+    expect(await entries()).toEqual(before)
+  })
+
+  it('refuses the filesystem root as a root', async () => {
+    await expect(mount({ config: { root: '/', caFile: fixture.caFile } })).rejects.toThrow()
   })
 
   it('refuses a root that is not absolute', async () => {
@@ -249,6 +280,47 @@ describe('the configuration at load', () => {
     const failure: unknown = await mount({ config: { ...base(), credential: { host, file } } }).then(() => undefined, (error: unknown) => error)
     expect(String(failure)).toContain('credential.host')
     expect(String(failure)).not.toContain(host)
+  })
+})
+
+describe('locations Delo never adds as a workspace', () => {
+  /**
+   * Mount over the scratch OS home and put a link in the root that leads to a location, so the folder a request names is
+   * that location.
+   * @param target - where the link leads.
+   * @returns the mounted composition.
+   */
+  async function linked(target: string): Promise<Mount> {
+    const mounted = await mount({ config: base() })
+    await mkdir(target, { recursive: true })
+    await symlink(target, join(root, 'linked'))
+    return mounted
+  }
+
+  it.each(REFUSED_LOCATIONS)('refuses to create a workspace that is %s as location, and registers nothing', async (_label, problem, pick) => {
+    await scratchOsHome()
+    const mounted = await linked(pick())
+    const refusal: unknown = await mounted.service.create({ directory: 'linked' }).then(() => undefined, (error: unknown) => error)
+    expect(refusal).toBeInstanceOf(WorkspaceRefusedError)
+    expect(refusal).toMatchObject({ code: 'location' })
+    expect((refusal as Error).message).toBe(workspaceLocationMessage(problem))
+    expect(mounted.registry.list()).toEqual([])
+  })
+
+  it('refuses the filesystem root through a link as location, and registers nothing', async () => {
+    const mounted = await mount({ config: base() })
+    await symlink('/', join(root, 'linked'))
+    await expect(mounted.service.create({ directory: 'linked' })).rejects.toMatchObject({ code: 'location', message: workspaceLocationMessage('filesystem-root') })
+    expect(mounted.registry.list()).toEqual([])
+  })
+
+  it.each(REFUSED_LOCATIONS)('refuses to import into a folder that is %s as location, starts nothing and registers nothing', async (_label, _problem, pick) => {
+    await scratchOsHome()
+    const mounted = await linked(pick())
+    await expect(mounted.service.startImport({ url: publicUrl(), directory: 'linked' })).rejects.toMatchObject({ code: 'location' })
+    expect(mounted.spawns).toHaveLength(0)
+    expect(mounted.registry.list()).toEqual([])
+    expect((await mounted.service.list()).imports).toEqual([])
   })
 })
 

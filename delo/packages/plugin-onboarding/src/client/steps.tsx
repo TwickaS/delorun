@@ -2,10 +2,12 @@
  * Onboarding's built-in step bodies: the preview notice, language and look, agents, recommended plugins, reach and
  * start. The dialog draws each step's heading, Back and Continue around its body.
  */
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import type { BundleView } from './bundles.ts'
+import { FolderChooser, problemText, type FolderProblem } from './FolderChooser.tsx'
 import { ACCENT_PRESETS, ACCENT_PREVIEWS, PALETTE_CHOICES, PALETTE_PREVIEWS, type SchemeColours } from './previews.ts'
 import type { SchemePreference, StepServices } from './types.ts'
 import css from './Onboarding.module.css'
@@ -39,28 +41,61 @@ export function NoticeStep({ services }: StepProps): ReactNode {
   )
 }
 
-/** The group label and the group of a set of choices. */
-function Choices({ label, children }: { readonly label: string; readonly children: ReactNode }): ReactNode {
+/** One choice of a set of chips. */
+interface ChipOption {
+  /** Unique within the set. */
+  readonly key: string
+  /** Whether it is the chosen one. */
+  readonly checked: boolean
+  /** Whether it cannot be chosen now. */
+  readonly disabled?: boolean
+  /** Choose it. */
+  readonly onSelect: () => void
+  /** What the chip shows; its text is its name. */
+  readonly content: ReactNode
+}
+
+/** How each key moves within a radio group: a step forward or back, wrapping, or to the first or last choice. */
+const RADIO_KEYS: Readonly<Record<string, -1 | 1 | 'first' | 'last'>> = {
+  ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 'first', End: 'last',
+}
+
+/**
+ * A labelled set of chips as one radio group: one tab stop, on the chosen chip or else the first that can be chosen,
+ * and the arrow keys, Home and End move to a chip and choose it, skipping chips that cannot be chosen. A group whose
+ * choice has a large effect, such as leaving Delo's look, is `manual`: the keys only move focus, and Space or Enter
+ * chooses.
+ * @param props - the group's label, its choices and whether moving focus leaves the choice alone.
+ * @returns the group.
+ */
+function Choices({ label, options, manual = false }: { readonly label: string; readonly options: readonly ChipOption[]; readonly manual?: boolean }): ReactNode {
   const id = useId()
+  const enabled = options.filter(option => option.disabled !== true)
+  const stop = enabled.find(option => option.checked) ?? enabled[0]
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const move = RADIO_KEYS[event.key]
+    if (move === undefined) return
+    const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)')]
+    const from = radios.indexOf(event.target as HTMLButtonElement)
+    if (from < 0) return
+    event.preventDefault()
+    const to = move === 'first' ? 0 : move === 'last' ? radios.length - 1 : (from + move + radios.length) % radios.length
+    const radio = radios[to] as HTMLButtonElement
+    radio.focus()
+    if (!manual && radio.getAttribute('aria-checked') !== 'true') radio.click()
+  }
   return (
     <div className={css.field}>
       <span id={id} className={css.label}>{label}</span>
-      <div className={css.chips} role="radiogroup" aria-labelledby={id}>{children}</div>
+      <div className={css.chips} role="radiogroup" aria-labelledby={id} onKeyDown={onKeyDown}>
+        {options.map(option => (
+          <button key={option.key} type="button" role="radio" aria-checked={option.checked} disabled={option.disabled}
+            tabIndex={option === stop ? 0 : -1} className={css.chip} onClick={option.onSelect}>
+            {option.content}
+          </button>
+        ))}
+      </div>
     </div>
-  )
-}
-
-/** One choice of a radio group. */
-function Chip({ checked, disabled, onSelect, children }: {
-  readonly checked: boolean
-  readonly disabled?: boolean
-  readonly onSelect: () => void
-  readonly children: ReactNode
-}): ReactNode {
-  return (
-    <button type="button" role="radio" aria-checked={checked} disabled={disabled} className={css.chip} onClick={onSelect}>
-      {children}
-    </button>
   )
 }
 
@@ -98,58 +133,65 @@ export function LookStep({ services }: StepProps): ReactNode {
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t('look.lead')}</p>
-      <Choices label={t('look.language')}>
-        {locale.locales.map(each => (
-          <Chip key={each.id} checked={locale.active === each.id} onSelect={() => { language.setLocale(each.id) }}>{each.label}</Chip>
-        ))}
-      </Choices>
-      <Choices label={appearance('mode')}>
-        {SCHEMES.map(value => (
-          <Chip key={value} checked={preference === value} onSelect={() => { scheme.set(value) }}>{appearance(`mode.${value}`)}</Chip>
-        ))}
-      </Choices>
-      <Choices label={appearance('palette')}>
-        {PALETTE_CHOICES.map(value => (
-          <Chip key={value} checked={palette === value} disabled={disabled}
-            onSelect={() => { if (palette !== value) save(look.settings.set('palette', value)) }}>
+      <Choices label={t('look.language')} options={locale.locales.map(each => ({
+        key: each.id, checked: locale.active === each.id, onSelect: () => { language.setLocale(each.id) }, content: each.label,
+      }))} />
+      <Choices label={appearance('mode')} options={SCHEMES.map(value => ({
+        key: value, checked: preference === value, onSelect: () => { scheme.set(value) }, content: appearance(`mode.${value}`),
+      }))} />
+      <Choices label={appearance('palette')} options={PALETTE_CHOICES.map(value => ({
+        key: value, checked: palette === value, disabled,
+        onSelect: () => { if (palette !== value) save(look.settings.set('palette', value)) },
+        content: (
+          <>
             <PaletteSwatch light={PALETTE_PREVIEWS[value].light} dark={PALETTE_PREVIEWS[value].dark} />
             {appearance(`palette.${value}`)}
-          </Chip>
-        ))}
-      </Choices>
+          </>
+        ),
+      }))} />
       {palette === 'soft'
         ? (
-          <Choices label={appearance('accent')}>
-            {ACCENT_PRESETS.map(value => (
-              <Chip key={value} checked={accent === value} disabled={disabled}
-                onSelect={() => { if (accent !== value) save(look.settings.set('accent', value)) }}>
+          <Choices label={appearance('accent')} options={ACCENT_PRESETS.map(value => ({
+            key: value, checked: accent === value, disabled,
+            onSelect: () => { if (accent !== value) save(look.settings.set('accent', value)) },
+            content: (
+              <>
                 <span className={css.accentDot} aria-hidden="true"
                   style={{ '--accent-light': ACCENT_PREVIEWS[value].light, '--accent-dark': ACCENT_PREVIEWS[value].dark } as CSSProperties} />
                 {appearance(`accent.${value}`)}
-              </Chip>
-            ))}
-          </Choices>
+              </>
+            ),
+          }))} />
         )
         : <p className={css.hint}>{appearance('accent.byTheme')}</p>}
-      <Choices label={t('look.studio')}>
-        <Chip checked disabled={disabled} onSelect={() => {}}>{appearance('look.delo')}</Chip>
-        <Chip checked={false} disabled={disabled} onSelect={() => { save(look.useStockLook()) }}>{appearance('look.stock')}</Chip>
-      </Choices>
+      <Choices label={t('look.studio')} manual options={[
+        { key: 'delo', checked: true, disabled, onSelect: () => {}, content: appearance('look.delo') },
+        { key: 'stock', checked: false, disabled, onSelect: () => { save(look.useStockLook()) }, content: appearance('look.stock') },
+      ]} />
       <p className={css.hint}>{t('look.studio.lead')}</p>
       {failed && <p className={css.failure} role="alert">{t('saveFailed')}</p>}
     </div>
   )
 }
 
-/** What a bundle card's button and status show for one state. */
-function BundleAction({ view, services, name }: { readonly view: BundleView | undefined; readonly services: StepServices; readonly name: string }): ReactNode {
+/** What a bundle card's button and status show for one state; the Add button's name says what it adds. */
+function BundleAction({ view, services, name, title }: {
+  readonly view: BundleView | undefined
+  readonly services: StepServices
+  readonly name: string
+  readonly title: string
+}): ReactNode {
   const { t, bundles } = services
   const state = view?.state ?? 'checking'
   switch (state) {
     case 'checking':
       return <span className={css.status}>{t('bundle.checking')}</span>
     case 'available':
-      return <Button variant="outline" size="sm" onClick={() => { void bundles.install(name) }}>{t('bundle.add')}</Button>
+      return (
+        <Button variant="outline" size="sm" aria-label={t('bundle.addNamed', { name: title })} onClick={() => { void bundles.install(name) }}>
+          {t('bundle.add')}
+        </Button>
+      )
     case 'installing':
       return <span className={css.status}>{t('bundle.adding')}</span>
     case 'installed':
@@ -205,7 +247,7 @@ function BundleCard({ name, title, description, services }: {
         <h4 className={css.cardTitle}>{title}</h4>
         {description !== undefined && <p className={css.cardLead}>{description}</p>}
       </div>
-      <BundleAction view={view} services={services} name={name} />
+      <BundleAction view={view} services={services} name={name} title={title} />
     </li>
   )
 }
@@ -285,20 +327,41 @@ export function ReachStep({ services }: StepProps): ReactNode {
   )
 }
 
+/** The Start step's folder choice: nothing yet, its own chooser, or why the chosen folder was not added. */
+export type FolderView =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'browse' }
+  | { readonly kind: 'problem'; readonly problem: FolderProblem }
+
+/** The Start step's folder choice and what follows a folder added from its own chooser. */
+export interface StartFolder {
+  /** What the step shows below its copy. */
+  readonly view: FolderView
+  /**
+   * Finish onboarding and open a chat in the workspace just added.
+   * @param workspaceId - the workspace.
+   */
+  readonly added: (workspaceId: WorkspaceId) => void
+}
+
 /**
  * The last screen: where its button opens the chat, and what the chat offers. With no default workspace it says so and
- * the button chooses a folder.
- * @param props - the services.
+ * the button chooses a folder; where the host has no native chooser the step shows its own, and a folder that was not
+ * added shows why.
+ * @param props - the services and the folder choice.
  * @returns the step body.
  */
-export function StartStep({ services }: StepProps): ReactNode {
+export function StartStep({ services, folder }: StepProps & { readonly folder: StartFolder }): ReactNode {
   const { t, start } = services
   const target = useSyncExternalStore(start.target.subscribe, start.target.getSnapshot)
   const point = target.kind === 'default' ? t('start.point.default') : target.kind === 'none' ? t('start.point.none') : undefined
+  const { view } = folder
   return (
     <div className={css.stack}>
       <p className={css.lead}>{t(`start.lead.${target.kind}`)}</p>
       {point !== undefined && <p className={css.text}>{point}</p>}
+      {view.kind === 'problem' && <p className={css.failure} role="alert">{problemText(t, view.problem)}</p>}
+      {view.kind === 'browse' && <FolderChooser services={services} onAdded={folder.added} />}
       <p className={css.hint}>{t('start.later')}</p>
     </div>
   )

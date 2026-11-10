@@ -9,7 +9,10 @@ import type { BundleInstaller, BundleView } from '../src/client/bundles.ts'
 import { en } from '../src/client/locales.ts'
 import type { ThemeSettings } from '@delo/plugin-theme'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { FolderChoice, LanguageFace, NoticeFace, ReachFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices } from '../src/client/types.ts'
+import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
+import type {
+  AddOutcome, FolderBrowse, FolderChoice, LanguageFace, NoticeFace, ReachFace, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StepServices,
+} from '../src/client/types.ts'
 
 /** This plugin's copy. */
 export const t: StepServices['t'] = makeTranslate(en)
@@ -111,16 +114,46 @@ export function reachFace(initial: ReachState = 'unavailable') {
   return { face, set: store.set }
 }
 
-/** A start face over a store, recording the dialog opening it, the folder chosen and the notice hold. */
-export function startFace(initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE }, choice: FolderChoice = { kind: 'cancelled' }) {
+/** The home directory the folder listings start at. */
+export const HOME = '/home/person'
+
+/**
+ * One folder's listing as the host gives it: its ancestors from the filesystem root, and its child folders.
+ * @param path - the folder, absolute, without a trailing separator except for the root.
+ * @param names - the child folders' names; a dot-led name is hidden.
+ * @param truncated - whether the host cut the list.
+ * @returns the listing.
+ */
+export function listingOf(path: string, names: readonly string[], truncated = false): DirectoryListing {
+  const parts = path.split('/').filter(part => part !== '')
+  const crumbs = [{ name: '/', path: '/', hidden: false }, ...parts.map((part, index) => ({ name: part, path: `/${parts.slice(0, index + 1).join('/')}`, hidden: false }))]
+  const base = path === '/' ? '' : path
+  return { path, home: HOME, crumbs, entries: names.map(name => ({ name, path: `${base}/${name}`, hidden: name.startsWith('.') })), truncated }
+}
+
+/** A host's folders: the home directory with a few folders, each folder empty unless listed here. */
+export function browseFake(listings: Readonly<Record<string, DirectoryListing>> = { [HOME]: listingOf(HOME, ['.config', 'notes', 'projects']) }) {
+  const list = vi.fn(async (path?: string, _signal?: AbortSignal): Promise<DirectoryListing> => listings[path ?? HOME] ?? listingOf(path ?? HOME, []))
+  const create = vi.fn(async (path: string, name: string): Promise<string> => `${path}/${name}`)
+  const browse: FolderBrowse = { list, create }
+  return { browse, list, create }
+}
+
+/** A start face over a store, recording the dialog opening it, the folder chosen or added, and the notice hold. */
+export function startFace(
+  initial: StartTarget = { kind: 'default', workspaceId: DEFAULT_WORKSPACE },
+  choice: FolderChoice = { kind: 'cancelled' },
+  outcome: AddOutcome = { kind: 'chosen', workspaceId: DEFAULT_WORKSPACE },
+) {
   const store = createSnapshotStore<StartTarget>(initial)
   const resolve = vi.fn()
   const chooseFolder = vi.fn((): Promise<FolderChoice> => Promise.resolve(choice))
-  const openInPage = vi.fn()
+  const addFolder = vi.fn((_path: string): Promise<AddOutcome> => Promise.resolve(outcome))
+  const folders = browseFake()
   const release = vi.fn((_told: boolean) => {})
   const holdNotice = vi.fn(() => release)
-  const face: StartFace = { target: store, resolve, chooseFolder, openInPage, holdNotice }
-  return { face, set: store.set, resolve, chooseFolder, openInPage, holdNotice, release }
+  const face: StartFace = { target: store, resolve, chooseFolder, addFolder, browse: folders.browse, holdNotice }
+  return { face, set: store.set, resolve, chooseFolder, addFolder, folders, holdNotice, release }
 }
 
 /** Step services with every part faked; each can be replaced. */

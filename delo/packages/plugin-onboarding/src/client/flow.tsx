@@ -3,7 +3,7 @@
  */
 import type { ReactNode } from 'react'
 import type { SetupRecord } from '../wire.ts'
-import { AgentsStep, LookStep, NoticeStep, PluginsStep, ReachStep, StartStep } from './steps.tsx'
+import { AgentsStep, LookStep, NoticeStep, PluginsStep, ReachStep, StartStep, type StartFolder } from './steps.tsx'
 import type { NoticeFace, OnboardingStep, ReachState, StepServices } from './types.ts'
 
 /** One step of the flow, built-in or added by a plugin. */
@@ -48,6 +48,8 @@ export interface FlowInput {
   readonly reach: ReachState
   /** The preview notice when its screen applies: it exists, this browser has not acknowledged it and onboarding was not reopened. */
   readonly notice: NoticeFace | undefined
+  /** The Start step's folder choice. */
+  readonly folder: StartFolder
 }
 
 /**
@@ -55,7 +57,7 @@ export interface FlowInput {
  * @param input - the services and what decides which steps apply.
  * @returns the steps, ascending by order.
  */
-export function buildSteps({ services, record, extra, reach, notice }: FlowInput): FlowStep[] {
+export function buildSteps({ services, record, extra, reach, notice, folder }: FlowInput): FlowStep[] {
   const { t, plugins } = services
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const built: FlowStep[] = []
@@ -74,7 +76,7 @@ export function buildSteps({ services, record, extra, reach, notice }: FlowInput
     built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep services={services} /> })
   }
   if (reach === 'available' && !record.reachSetUp) built.push({ ...STEPS.reach, title: () => t('step.reach'), render: () => <ReachStep services={services} /> })
-  built.push({ ...STEPS.start, title: () => t('step.start'), render: () => <StartStep services={services} /> })
+  built.push({ ...STEPS.start, title: () => t('step.start'), render: () => <StartStep services={services} folder={folder} /> })
   const added = extra.map((step): FlowStep => ({ id: step.id, order: step.order, title: step.title, render: next => { const Body = step.component; return <Body next={next} /> } }))
   return [...built, ...added].sort((a, b) => a.order - b.order)
 }

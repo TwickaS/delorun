@@ -1,0 +1,91 @@
+/**
+ * The host half of the guide's folder choice: the {@link ADD_WORKSPACE_PATH} route, which holds a folder against the
+ * locations Delo never adds as a workspace and only then registers it through upstream's workspace registry. A refusal
+ * registers nothing. The Delo home is resolved as `@delo/home` resolves it for every Delo plugin; `delorun` gives the
+ * harness the same directory as `DSH_HOME` and `DELO_HOME`.
+ * @module @delo/plugin-onboarding/workspace-route
+ */
+import { resolveDeloHome, workspaceLocationHomes, workspaceLocationProblem, type WorkspaceLocationProblem } from '@delo/home'
+// Type-only: the ctx.workspaceRegistry merge.
+import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
+import { AddWorkspaceRequest, MAX_ADD_BODY_BYTES, type AddWorkspaceAnswer } from './wire.ts'
+
+/** What the route needs from the harness. */
+export interface AddWorkspaceDeps {
+  /** Upstream's workspace registry, which keeps the workspaces. */
+  readonly registry: Pick<WorkspaceRegistry, 'create'>
+  /** The environment the Delo home is resolved from. */
+  readonly env: Readonly<Record<string, string | undefined>>
+  /**
+   * Write one line to the harness's log.
+   * @param message - the line, which names no path.
+   */
+  readonly warn: (message: string) => void
+}
+
+/**
+ * Answer one JSON message with its status.
+ * @param status - the HTTP status.
+ * @param answer - the message.
+ * @returns the response, never cached.
+ */
+function reply(status: number, answer: AddWorkspaceAnswer | { readonly error: string }): Response {
+  return new Response(JSON.stringify(answer), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+}
+
+/**
+ * Read the request's folder, refusing a body over {@link MAX_ADD_BODY_BYTES} and anything that is not one path.
+ * @param request - the request.
+ * @returns the path, or undefined when the request cannot be read.
+ */
+async function requestedPath(request: Request): Promise<string | undefined> {
+  const bytes = await request.arrayBuffer()
+  if (bytes.byteLength > MAX_ADD_BODY_BYTES) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes))
+  } catch {
+    // The parser's message quotes the body, so the request is only refused.
+    return undefined
+  }
+  const body = AddWorkspaceRequest.safeParse(parsed)
+  return body.success ? body.data.path : undefined
+}
+
+/**
+ * Handle one request to add a folder: refuse a folder Delo never adds, and register any other through the registry.
+ * @param request - the `POST` request carrying {@link AddWorkspaceRequest}.
+ * @param deps - the registry, the environment and the log.
+ * @returns 200 `added` with the workspace's id, 422 `refused` with the problem, 400 for a request that cannot be read,
+ * or 500 `failed` when the Delo home cannot be resolved or the registry refuses the folder.
+ */
+export async function addWorkspace(request: Request, deps: AddWorkspaceDeps): Promise<Response> {
+  const path = await requestedPath(request)
+  if (path === undefined) return reply(400, { error: 'the request must be JSON with one path' })
+  let problem: WorkspaceLocationProblem | undefined
+  try {
+    problem = await workspaceLocationProblem(path, workspaceLocationHomes((await resolveDeloHome(deps.env)).path))
+  } catch (error) {
+    deps.warn(`the Delo home could not be resolved, so no folder is added: ${codeOf(error)}`)
+    return reply(500, { result: 'failed' })
+  }
+  if (problem !== undefined) return reply(422, { result: 'refused', problem })
+  try {
+    const workspace = await deps.registry.create(path)
+    return reply(200, { result: 'added', workspaceId: workspace.id })
+  } catch (error) {
+    // The registry's message names the path, so the log keeps only its code.
+    deps.warn(`the folder could not be added as a workspace: ${codeOf(error)}`)
+    return reply(500, { result: 'failed' })
+  }
+}
+
+/**
+ * The code a failure gives without naming a path: its system or layout code, or its name.
+ * @param error - the failure.
+ * @returns the code.
+ */
+function codeOf(error: unknown): string {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') return error.code
+  return error instanceof Error ? error.name : 'unexpected failure'
+}
