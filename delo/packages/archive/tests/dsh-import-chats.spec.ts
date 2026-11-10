@@ -8,7 +8,7 @@
  * to since.
  */
 import { randomBytes } from 'node:crypto'
-import { chmodSync, existsSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { zstdCompressSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -161,6 +161,32 @@ describe('a chat\'s working folder', () => {
     expect((await plan(homes)).registry?.listed.map(workspace => workspace.held)).toEqual(['the root of the file system', undefined])
     const { sensitiveFolder } = await import('../src/dsh-import/workspaces.ts')
     expect(sensitiveFolder('relative/folder', { personHome: undefined, stockHome: homes.source, deloHome: homes.target })).toBe('not an absolute folder')
+  })
+
+  it('holds back a workspace or a chat whose folder is a link into a sensitive place, judged by where the link leads', async () => {
+    const person = join(homes.root, 'person')
+    mkdirSync(join(person, '.secret'), { recursive: true })
+    mkdirSync(join(person, 'code'), { recursive: true })
+    symlinkSync(join(person, '.secret'), join(person, 'code', 'innocent'))
+    symlinkSync(homes.target, join(person, 'code', 'delo-link'))
+    symlinkSync(join(person, 'missing'), join(person, 'code', 'dangling'))
+    homes.write('storages/workspace.json', registry({ linked: { path: join(person, 'code', 'innocent'), sessionIds: [] }, delo: { path: join(person, 'code', 'delo-link'), sessionIds: [] }, dangling: { path: join(person, 'code', 'dangling'), sessionIds: [] } }))
+    homes.write('sessions/--loose--/loose/session.v4.jsonl.zstd', chatLog('loose', join(person, 'code', 'innocent', 'keys')))
+    const planned = await plan(homes, { personHome: person })
+    expect(planned.registry?.listed.map(workspace => [workspace.id, workspace.held])).toEqual([
+      ['linked', 'a hidden folder of your home folder, where settings and keys live'],
+      ['delo', 'inside the Delo home'],
+      ['dangling', undefined],
+    ])
+    expect(planned.chats).toEqual([])
+    expect(planned.skipped).toContainEqual({ path: 'sessions/--loose--/loose', reason: 'sensitive-folder', detail: `its folder ${JSON.stringify(join(person, 'code', 'innocent', 'keys'))} is a hidden folder of your home folder, where settings and keys live` })
+  })
+
+  it('compares a folder with homes that do not exist by their written paths', async () => {
+    const { sensitiveFolder } = await import('../src/dsh-import/workspaces.ts')
+    const gone = join(homes.root, 'gone')
+    expect(sensitiveFolder(join(gone, 'stock', 'x'), { personHome: join(gone, 'person'), stockHome: join(gone, 'stock'), deloHome: join(gone, 'delo') })).toBe('inside the DeepSeek Harness home')
+    expect(sensitiveFolder(join(homes.root, 'elsewhere'), { personHome: join(gone, 'person'), stockHome: join(gone, 'stock'), deloHome: join(gone, 'delo') })).toBeUndefined()
   })
 
   it('refuses a stock list interrupted while it changed', async () => {

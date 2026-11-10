@@ -9,7 +9,9 @@
  * what looks dangerous. A row lands only when it is an `id` with a `config`
  * whose every setting is a pair of that id and a setting path in
  * {@link CARRIED_SETTINGS}, with a plain value: the looks and layout of the
- * studio, the language, and the default model chosen by name. Every other row
+ * studio, the language, and the default model chosen by name. A font family
+ * holds letters, digits, spaces, commas, hyphens and quotes alone, because the
+ * studio writes it into its styles. Every other row
  * is held back: a row or section the list does not name, a setting the list
  * does not name for that row, a `disabled` flag, a plugin swap, an inserted
  * row of any package, an expression or a loader tag anywhere, and any value
@@ -101,6 +103,15 @@ export const CARRIED_SETTINGS: Readonly<Record<string, readonly string[]>> = {
 const MAX_SETTING_TEXT = 200
 
 /**
+ * The text a carried font family may hold, which the studio writes into its styles: letters, digits, spaces, commas,
+ * hyphens and quotes, at most 100 characters, so it names fonts and can carry nothing a style sheet would read as more.
+ */
+const FONT_FAMILY = /^[A-Za-z0-9 ,'"-]{0,100}$/u
+
+/** The settings whose text the studio writes into its styles, by row id and setting path. */
+const STYLE_SETTINGS: ReadonlySet<string> = new Set(['ui-theme.textFontFamily', 'ui-theme.codeFontFamily', 'ui-theme.terminalFontFamily'])
+
+/**
  * Whether one setting of one row is on the allow list.
  * @param id - the row id or settings section.
  * @param path - the setting's `.`-separated path inside the row's `config`.
@@ -124,7 +135,7 @@ function uncarriedSetting(id: string, config: unknown, prefix = ''): string | un
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
       const inner = uncarriedSetting(id, value, path)
       if (inner !== undefined) return inner
-    } else if (!isCarriedSetting(id, path) || !isPlainValue(value)) {
+    } else if (!isCarriedSetting(id, path) || !isPlainValue(value) || (STYLE_SETTINGS.has(`${id}.${path}`) && !FONT_FAMILY.test(String(value)))) {
       return path
     }
   }

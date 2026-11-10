@@ -15,7 +15,8 @@
  *
  * @module @delo/archive/dsh-import/workspaces
  */
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { realpathSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { workspaceDomainSpec, workspaceDomainState, workspaceRecord, type WorkspaceDomainState, type WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
 import { DshImportError } from './errors.ts'
 
@@ -105,12 +106,47 @@ export interface SensitiveFolders {
  * Why a folder is one a workspace or a chat from another installation must not be carried into: the filesystem's
  * root, the person's home directory itself, a dot-directory directly under it or anything inside one, and either
  * Harness home or anything inside it. Each would give a chat that runs there access to what the person keeps there.
+ * The rules apply to the folder as written and to its real path too, resolved through its nearest existing ancestor,
+ * so a folder that is a link into a sensitive place, or lies below one, is held as that place is; the person's home and the Harness homes are compared by their real
+ * paths as well.
  * @param folder - an absolute folder from the stock home.
  * @param folders - the person's home and the two Harness homes.
  * @returns a phrase that names why, or `undefined` for any other folder.
  */
 export function sensitiveFolder(folder: string, folders: SensitiveFolders): string | undefined {
   if (!isAbsolute(folder)) return 'not an absolute folder'
+  const homes = { personHome: folders.personHome === undefined ? undefined : realFolder(folders.personHome), stockHome: realFolder(folders.stockHome), deloHome: realFolder(folders.deloHome) }
+  return lexicalSensitive(folder, folders) ?? lexicalSensitive(realFolder(folder), homes)
+}
+
+/**
+ * The real path of a folder, resolved through its nearest existing ancestor when it does not exist itself, so a link
+ * on the way is followed whether or not the folder below it was created.
+ * @param folder - an absolute folder.
+ * @returns its real path; the root always resolves, so every folder has one.
+ */
+function realFolder(folder: string): string {
+  let path = resolve(folder)
+  const below: string[] = []
+  for (;;) {
+    try {
+      return join(realpathSync.native(path), ...below)
+    } catch (error: unknown) {
+      // ENOENT, ENOTDIR, EACCES or ELOOP: resolve the parent and keep this segment as written.
+      void error
+      below.unshift(basename(path))
+      path = dirname(path)
+    }
+  }
+}
+
+/**
+ * The rules of {@link sensitiveFolder} over one path, compared as written.
+ * @param folder - an absolute folder.
+ * @param folders - the person's home and the two Harness homes.
+ * @returns a phrase that names why, or `undefined` for any other folder.
+ */
+function lexicalSensitive(folder: string, folders: SensitiveFolders): string | undefined {
   const path = resolve(folder)
   if (path === resolve(sep)) return 'the root of the file system'
   if (inside(folders.stockHome, path)) return 'inside the DeepSeek Harness home'

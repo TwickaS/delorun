@@ -4,6 +4,7 @@
  * entry it knows stays or goes, and the sentences a person reads.
  */
 import { describe, expect, it } from 'vitest'
+import { stringify } from 'yaml'
 import {
   attachmentAddress,
   carryRefusalNotes,
@@ -136,6 +137,18 @@ describe('the layer splitter', () => {
     expect(value(JSON.stringify('x'.repeat(201)))).toEqual([])
     expect(value('"a\\u001bb"')).toEqual([])
     expect(splitPatchLayer('- id: ui-chat\n  config:\n    customDisplay:\n      thinking: hidden\n      extra: 1\n').held).toEqual([{ label: 'ui-chat', reason: 'not-understood', detail: 'customDisplay.extra' }])
+  })
+
+  it('carries a font family only in letters, digits, spaces, commas, hyphens and quotes, because the studio writes it into its styles', () => {
+    const family = (text: string): readonly string[] => splitPatchLayer(stringify([{ id: 'ui-theme', config: { codeFontFamily: text } }])).carriedLabels
+    expect(family('Inter, "Fira Code", \'JetBrains Mono\', monospace')).toEqual(['ui-theme'])
+    expect(family('')).toEqual(['ui-theme'])
+    for (const text of ['Inter; } body { background: url(https://collector.invalid) }', 'a</style><script>', 'Inter\\', 'x/*y*/', 'Ünïcode', 'a'.repeat(101)]) {
+      expect([text, family(text)]).toEqual([text, []])
+    }
+    expect(splitPatchLayer(stringify([{ id: 'ui-theme', config: { textFontFamily: 'a;b' } }])).held).toEqual([{ label: 'ui-theme', reason: 'not-understood', detail: 'textFontFamily' }])
+    // A setting that is not written into styles keeps the general rule.
+    expect(splitPatchLayer(stringify([{ id: 'agent-default-model', config: { model: 'deepseek/chat:v3.1' } }])).carriedLabels).toEqual(['agent-default-model'])
   })
 
   it('names a settings section without a string name as one it does not read, and holds an empty section', () => {
