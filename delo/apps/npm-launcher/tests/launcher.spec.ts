@@ -26,7 +26,8 @@ import {
   type RuntimeChannel,
   type VerifiedRuntime,
 } from '@delo/runtime-store'
-import { launcherProfile, runLauncher, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
+import { failedStartText, launcherProfile, runLauncher, runtimeCommand, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
+import type { StartCheckResult } from '@delo/release-verify/start'
 import { installRemedies, LAUNCHER_EXIT, refusalFor } from '../src/refusals.ts'
 import { launchEnvironment, parseCommandLine, spawnRuntime, usage } from '../src/bin.ts'
 import { fixtureRelease, nextRoot, VERSION, type Fixture } from '../../install/tests/support.ts'
@@ -183,12 +184,14 @@ function launch(options: {
   readonly target?: RuntimeVersion
   readonly spawn?: (command: LaunchCommand) => Promise<number>
   readonly stderr?: (text: string) => void
+  readonly args?: readonly string[]
+  readonly startCheck?: LauncherOptions['startCheck']
 }): LauncherOptions {
   return {
     home: options.home,
     profile: 'default',
     platform: 'linux-x64',
-    args: [],
+    args: options.args ?? [],
     mode: 'enforce',
     store: options.store,
     channel: options.channel,
@@ -197,6 +200,7 @@ function launch(options: {
     spawn: options.spawn ?? (() => Promise.resolve(0)),
     output: { stdout: () => undefined, stderr: options.stderr ?? (() => undefined) },
     ...options.target === undefined ? {} : { target: options.target },
+    ...options.startCheck === undefined ? {} : { startCheck: options.startCheck },
   }
 }
 
@@ -712,5 +716,70 @@ describe('the command line', () => {
   it('documents the launcher’s own options and passes the rest through', () => {
     expect(usage()).toContain('--release <version>')
     expect(usage()).toContain('Every other argument is passed to delorun unchanged.')
+  })
+})
+
+describe('the release-log check at a start', () => {
+  /**
+   * Start the installed fixture runtime with a start check that answers as given.
+   * @param result - what the check answers.
+   * @param args - the runtime's arguments.
+   * @returns the exit status, what was printed and whether the runtime started.
+   */
+  async function startWith(result: StartCheckResult, args: readonly string[] = []): Promise<{ readonly status: number, readonly printed: string, readonly started: boolean, readonly checked: RuntimeVersion[] }> {
+    const fixture = await fixtureRelease()
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const checked: RuntimeVersion[] = []
+    let printed = ''
+    let started = false
+    const status = await runLauncher(launch({
+      home: await home({ root: fixture.roots[0]! }),
+      store: recordingStore(recorded, { installed: true }),
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+      args,
+      spawn: () => { started = true; return Promise.resolve(0) },
+      stderr: (text) => { printed += text },
+      startCheck: (checkedVersion, root) => {
+        expect(root.version).toBe(1)
+        checked.push(checkedVersion)
+        return Promise.resolve(result)
+      },
+    }))
+    return { status, printed, started, checked }
+  }
+
+  it('starts a verified release and prints nothing', async () => {
+    const run = await startWith({ state: 'verified', stop: false })
+    expect(run).toMatchObject({ status: 0, printed: '', started: true, checked: [version('0.1.0')] })
+  })
+
+  it('starts an unchecked release with the warning and its reason, and never blocks it', async () => {
+    const run = await startWith({ state: 'unchecked', stop: false, warning: 'Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.', detail: 'the release log gave no checkpoint (offline)', notices: ['the stored checkpoint does not read'] })
+    expect(run.started).toBe(true)
+    expect(run.printed).toBe('Release log: the stored checkpoint does not read\nRelease 0.1.0 has not been checked against the release log; Delo checks it at the next connection. (the release log gave no checkpoint (offline))\n')
+    const bare = await startWith({ state: 'unchecked', stop: false, warning: 'Release 0.1.0 has not been checked.' })
+    expect(bare.printed).toBe('Release 0.1.0 has not been checked.\n')
+  })
+
+  it('stops a release whose release-log check failed, saying how to proceed and that deleting state is no remedy', async () => {
+    const run = await startWith({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'the proof does not verify' })
+    expect(run.status).toBe(LAUNCHER_EXIT.failed)
+    expect(run.started).toBe(false)
+    expect(run.printed).toBe(failedStartText(version('0.1.0'), { state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'the proof does not verify' }))
+    expect(run.printed).toContain('Run delorun verify')
+    expect(run.printed).toContain('Deleting files under the home\'s trust/ directory does not repair this')
+  })
+
+  it('still runs delorun verify for a failed release, so the person can see every check', async () => {
+    const run = await startWith({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'x' }, ['--profile', 'default', 'verify'])
+    expect(run.started).toBe(true)
+    expect(run.printed).toContain('Delo did not start release 0.1.0')
+  })
+
+  it('names the runtime command, skipping the profile option', () => {
+    expect(runtimeCommand([])).toBeUndefined()
+    expect(runtimeCommand(['--profile', 'work', 'verify', '--json'])).toBe('verify')
+    expect(runtimeCommand(['--json', 'status'])).toBe('status')
   })
 })

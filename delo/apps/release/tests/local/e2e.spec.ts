@@ -137,7 +137,7 @@ describe('the built launcher against a local release', LIMIT, () => {
     expect(first.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))).toEqual([
       'Resolving the release: the stable channel names 0.1.0.',
       'Checking the signature: 0.1.0 is signed under release root 1.',
-      expect.stringMatching(/^Checking the release log: not checked \(the release log did not answer: .+\)\.$/u),
+      expect.stringMatching(/^Checking the release log: not checked \(the release log gave no checkpoint \(.+ could not be fetched: .+\)\)\.$/u),
       'Warning: Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.',
       expect.stringMatching(/^Downloading delorun-0\.1\.0-linux-x64\.tar\.gz \(\d+(\.\d)? (kB|MB)\)\.$/u),
       'Installing release 0.1.0.',
@@ -147,11 +147,13 @@ describe('the built launcher against a local release', LIMIT, () => {
     expect(readdirSync(join(home, 'runtimes'))).toEqual(expect.arrayContaining([VERSION, 'current', 'store.json', `delorun-${VERSION}.manifest.json`, `delorun-${VERSION}.manifest.log.json`]))
     const state = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string, detail?: string }> }
     expect(state.releases[VERSION]?.state).toBe('unchecked')
-    expect(state.releases[VERSION]?.detail).toContain('the release log did not answer')
-    // A start needs no network and prints none of the install lines.
+    expect(state.releases[VERSION]?.detail).toContain('could not be fetched')
+    // A start needs no network: it prints none of the install lines, only the start check's warning, and starts.
     const second = await node(built.tarball, home, ['--version'], served.directory)
     expect(second.stdout).toBe('Delo 0.1.0\n')
-    expect(second.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))).toEqual([])
+    expect(second.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))).toEqual([
+      expect.stringMatching(/^Release 0\.1\.0 has not been checked against the release log; Delo checks it at the next connection\. \(the release log gave no checkpoint \(.+\)\)$/u),
+    ])
     expect(second.status).toBe(0)
   })
 
@@ -172,20 +174,20 @@ describe('the built launcher against a local release', LIMIT, () => {
     expect(readdirSync(join(home, 'staging'))).toEqual([])
   })
 
-  it('refuses when the log answers and contradicts the release, and records nothing', async (test) => {
+  it('installs on the signature with the warning when the log answers with no checkpoint its key signed, as an answer before any signed data', async (test) => {
     const served = await servedRelease(test)
-    const contradicting = createServer((_, response) => response.writeHead(200).end('not a signed checkpoint\n'))
-    await new Promise<void>(resolve => contradicting.listen(0, '127.0.0.1', resolve))
-    test.onTestFinished(() => new Promise<void>(resolve => contradicting.close(() => resolve())))
-    const logOrigin = `http://127.0.0.1:${String((contradicting.address() as AddressInfo).port)}`
+    const unsigned = createServer((_, response) => response.writeHead(200).end('not a signed checkpoint\n'))
+    await new Promise<void>(resolve => unsigned.listen(0, '127.0.0.1', resolve))
+    test.onTestFinished(() => new Promise<void>(resolve => unsigned.close(() => resolve())))
+    const logOrigin = `http://127.0.0.1:${String((unsigned.address() as AddressInfo).port)}`
     const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin }, version: '0.0.1-e2e' })
     const home = join(served.directory, 'home')
     const finished = await node(built.tarball, home, ['--version'], served.directory)
-    expect(finished.status).toBe(1)
-    expect(finished.stderr).toContain('because its release-log check failed')
-    expect(finished.stderr).not.toContain('Warning:')
-    expect(readdirSync(join(home, 'runtimes'))).toEqual([])
-    expect(() => readFileSync(join(home, 'trust', 'release-log.json'))).toThrow('ENOENT')
+    expect(finished.status).toBe(0)
+    expect(finished.stderr).toContain('Warning: Release 0.1.0 has not been checked against the release log')
+    expect(finished.stderr).not.toContain('release-log check failed')
+    const state = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
+    expect(state.releases[VERSION]?.state).toBe('unchecked')
   })
 
   it('verifies the release against a log that has grown since, computing the consistency proof from its tiles', async (test) => {
@@ -215,21 +217,22 @@ describe('the built launcher against a local release', LIMIT, () => {
     const finished = await node(built.tarball, home, ['--version'], served.directory)
     expect(finished.status).toBe(1)
     expect(finished.stderr).toContain('because its release-log check failed')
-    expect(finished.stderr).toContain('consistency proof from 1 to 2 entries does not verify')
+    expect(finished.stderr).toContain('the consistency proof from tree size 1 to 2 does not verify')
     expect(readdirSync(join(home, 'runtimes'))).toEqual([])
     expect(() => readFileSync(join(home, 'trust', 'release-log.json'))).toThrow('ENOENT')
   })
 
-  it('refuses a log that answers 404 for its checkpoint, as the wrong address it is, and not as an unreachable log', async (test) => {
+  it('installs on the signature with the warning when the log answers 404 for its checkpoint, as an answer before any signed data', async (test) => {
     const served = await servedRelease(test)
     const missing = createServer((_, response) => response.writeHead(404).end())
     await new Promise<void>(resolve => missing.listen(0, '127.0.0.1', resolve))
     test.onTestFinished(() => new Promise<void>(resolve => missing.close(() => resolve())))
     const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String((missing.address() as AddressInfo).port)}` }, version: '0.0.1-e2e' })
     const finished = await node(built.tarball, join(served.directory, 'home'), ['--version'], served.directory)
-    expect(finished.status).toBe(1)
-    expect(finished.stderr).toContain('the log answered 404 for its checkpoint')
-    expect(finished.stderr).not.toContain('Warning:')
+    expect(finished.status).toBe(0)
+    expect(finished.stderr).toContain('the log does not serve its checkpoint at')
+    expect(finished.stderr).toContain('Warning: Release 0.1.0 has not been checked against the release log')
+    expect(finished.stderr).not.toContain('release-log check failed')
   })
 
   it('refuses an archive whose file content differs from the signed file list by one byte, before anything is installed', async (test) => {

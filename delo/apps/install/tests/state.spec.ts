@@ -6,17 +6,12 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ReleaseLogCheck } from '@delo/contract-release-log'
-import type { SemanticVersion } from '@delo/contract-release-manifest'
 import { isInstallError } from '../src/errors.ts'
 import {
-  readStoredCheckpoint,
   readStoredRootBytes,
   readStoredRootChain,
   readStoredTimestamp,
   trustFile,
-  writeReleaseLogCheck,
-  writeStoredCheckpoint,
   writeStoredRootChain,
   writeStoredTimestamp,
   writeTrustedRoot,
@@ -139,40 +134,5 @@ describe('the stored root chain', () => {
     await mkdir(join(home, 'trust', 'roots'), { recursive: true, mode: 0o700 })
     await chmod(join(home, 'trust', 'roots'), 0o500)
     expect(await invalid(writeStoredRootChain(home, fixture.roots))).toContain('cannot be written')
-  })
-})
-
-describe('the stored checkpoint', () => {
-  const HASH = 'ab'.repeat(32)
-
-  it('is absent before an install, and reads back what was written', async () => {
-    const home = await scratchHome()
-    expect(await readStoredCheckpoint(home)).toBeUndefined()
-    await writeStoredCheckpoint(home, { treeSize: 9, rootHash: HASH })
-    expect(await readStoredCheckpoint(home)).toEqual({ treeSize: 9, rootHash: HASH })
-  })
-
-  it('refuses a file that is not JSON or not a checkpoint record', async () => {
-    expect(await invalid(readStoredCheckpoint(await homeWith('checkpoint.json', 'not json')))).toContain('is not JSON')
-    for (const record of ['5', '{"treeSize":1}', `{"treeSize":0,"rootHash":"${HASH}"}`, `{"treeSize":1.5,"rootHash":"${HASH}"}`, '{"treeSize":1,"rootHash":"zz"}', `{"treeSize":1,"rootHash":"${HASH}","extra":true}`, `{"treeSize":"1","rootHash":"${HASH}"}`]) {
-      expect(await invalid(readStoredCheckpoint(await homeWith('checkpoint.json', record))), record).toContain('is not a {treeSize, rootHash} record')
-    }
-  })
-})
-
-describe('the release-log check state', () => {
-  const CHECK: ReleaseLogCheck = { release: '0.1.0' as SemanticVersion, state: 'verified', lastAttempt: 5 }
-
-  it('refuses to be written when trust is a file', async () => {
-    const home = await scratchHome()
-    await writeFile(join(home, 'trust'), 'in the way')
-    expect(await invalid(writeReleaseLogCheck(home, CHECK))).toContain('cannot be read')
-    await rm(join(home, 'trust'))
-    await mkdir(join(home, 'trust'), { mode: 0o500 })
-    expect(await invalid(writeReleaseLogCheck(home, CHECK))).toContain('cannot be written')
-  })
-
-  it('refuses a record in another release’s file that does not read', async () => {
-    expect(await invalid(writeReleaseLogCheck(await homeWith('release-log.json', '{"schema":"other"}'), CHECK))).toContain('does not read')
   })
 })

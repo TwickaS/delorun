@@ -22,7 +22,7 @@ import type { RootMetadata } from '@delo/contract-release-manifest'
 import { checkBundle } from './bundle.ts'
 import type { StoredCheckpoint } from './checkpoint.ts'
 import type { ReleaseLogRefusal } from './errors.ts'
-import { checkOnline, type ReleaseLogTransport } from './online.ts'
+import { checkOnline, type LegacyCheckpoint, type ReleaseLogTransport } from './online.ts'
 
 /** What the start check reads. */
 export interface StartCheckInput {
@@ -38,8 +38,12 @@ export interface StartCheckInput {
   readonly now: number
   /** The verified checkpoint the client stored, when it holds one. */
   readonly stored: StoredCheckpoint | undefined
-  /** The transport to the log and the distributor; `undefined` when the client has no network. */
+  /** A stored checkpoint of the installer's earlier record format, which the online check proves or replaces. */
+  readonly legacy?: LegacyCheckpoint
+  /** The transport to the log; `undefined` when the client has no network. */
   readonly transport: ReleaseLogTransport | undefined
+  /** The deadline of the online check; contract C18's 90 seconds by default. */
+  readonly signal?: AbortSignal
   /** Contract C15's `integrity.mode`. */
   readonly mode: VerificationMode
 }
@@ -58,6 +62,8 @@ export interface StartCheckResult {
   readonly stop: boolean
   /** The verified checkpoint to store, when the online check verified one. */
   readonly checkpoint?: StoredCheckpoint
+  /** What the check noticed that a person should know without it being a failure, such as a stored floor it replaced. */
+  readonly notices?: readonly string[]
 }
 
 /**
@@ -91,10 +97,20 @@ export async function checkAtStart(input: StartCheckInput): Promise<StartCheckRe
   if (input.transport === undefined) {
     return { state: 'unchecked', warning: uncheckedWarning(input.version), stop: false }
   }
-  const online = await checkOnline({ root: input.root, bundle: verdict.bundle, stored: input.stored, transport: input.transport, now: input.now })
-  if (online.ok) return { state: 'verified', checkpoint: online.checkpoint, stop: false }
-  if (online.kind === 'failed') return { state: 'failed', refusal: online.refusal, detail: online.detail, stop: true }
-  return { state: 'unchecked', detail: online.detail, warning: uncheckedWarning(input.version), stop: false }
+  const online = await checkOnline({
+    root: input.root,
+    bundle: verdict.bundle,
+    stored: input.stored,
+    transport: input.transport,
+    now: input.now,
+    ...input.legacy === undefined ? {} : { legacy: input.legacy },
+    ...input.signal === undefined ? {} : { signal: input.signal },
+  })
+  const notices = online.notices.length === 0 ? {} : { notices: online.notices }
+  if (online.ok) return { state: 'verified', checkpoint: online.checkpoint, stop: false, ...notices }
+  // Only a verifiable failure stops a start; a check that did not complete never does, in any mode.
+  if (online.kind === 'failed') return { state: 'failed', refusal: online.refusal, detail: online.detail, stop: true, ...notices }
+  return { state: 'unchecked', detail: online.detail, warning: uncheckedWarning(input.version), stop: false, ...notices }
 }
 
 /**

@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { VERIFICATION_MODES, VERIFICATION_MODE_SETTING, type VerificationMode } from '@delo/contract-verification-checks'
 import { storedCheckpoint } from '../src/checkpoint.ts'
+import { LogUnreachableError } from '../src/online.ts'
 import { checkAtStart, INTEGRITY_MODE_SETTING, onlineCheckEnabled, uncheckedWarning, type StartCheckInput } from '../src/start.ts'
 import { consistencyProof, COSIGNED_AT, FixtureTransport, MANIFEST, scenario, VERSION, type Scenario } from './fixtures.ts'
 
@@ -100,7 +101,8 @@ describe('a verifiable failure', () => {
   it('c18-inconsistent-log-fails-start: a latest checkpoint whose proof does not verify stops the start', async () => {
     const fixture = scenario()
     fixture.log.append(Buffer.from('a later entry'))
-    const stored = storedCheckpoint(fixture.log.origin, fixture.bundle.inclusion.treeSize, Buffer.from(fixture.bundle.inclusion.rootHash, 'hex'), 'a stored note', COSIGNED_AT)
+    const rootHash = Buffer.from(fixture.bundle.inclusion.rootHash, 'hex')
+    const stored = storedCheckpoint(fixture.log.origin, fixture.bundle.inclusion.treeSize, rootHash, fixture.log.note(fixture.bundle.inclusion.treeSize, rootHash), COSIGNED_AT)
     const transport = new FixtureTransport()
     transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
     transport.proof = consistencyProof(3, [Buffer.alloc(32, 1), Buffer.alloc(32, 2), Buffer.alloc(32, 3), Buffer.alloc(32, 4)]).map(hash => hash.toString('hex'))
@@ -114,7 +116,7 @@ describe('a verifiable failure', () => {
 
   it('c18-checkpoint-rollback-refused: a witnessed checkpoint smaller than the stored one stops the start', async () => {
     const fixture = scenario()
-    const stored = storedCheckpoint(fixture.log.origin, 9, Buffer.alloc(32, 3), 'a stored note', COSIGNED_AT)
+    const stored = storedCheckpoint(fixture.log.origin, 9, Buffer.alloc(32, 3), fixture.log.note(9, Buffer.alloc(32, 3)), COSIGNED_AT)
     const result = await checkAtStart(input(fixture, { transport: reachable(fixture), stored }))
     expect(result.state).toBe('failed')
     expect(result.stop).toBe(true)
@@ -135,7 +137,7 @@ describe('a verifiable failure', () => {
   it('records `unchecked` when the distributor is unreachable, which is not a failure', async () => {
     const fixture = scenario()
     const transport = new FixtureTransport()
-    transport.distributorFailure = new Error('the distributor answered 503')
+    transport.distributorFailure = new LogUnreachableError('the log answered 503')
     const result = await checkAtStart(input(fixture, { transport }))
     expect(result.state).toBe('unchecked')
     expect(result.stop).toBe(false)
@@ -153,5 +155,15 @@ describe('the online check\'s setting', () => {
   it('warns in the contract\'s words, naming the release and the next connection', () => {
     expect(uncheckedWarning('0.2.0')).toContain('0.2.0')
     expect(uncheckedWarning('0.2.0')).toContain('release log')
+  })
+})
+
+describe('the online check\'s deadline at a start', () => {
+  it('leaves the release unchecked when the deadline the caller passes has already passed', async () => {
+    const fixture = scenario()
+    const controller = new AbortController()
+    controller.abort()
+    const result = await checkAtStart(input(fixture, { transport: reachable(fixture), signal: controller.signal }))
+    expect(result).toMatchObject({ state: 'unchecked', stop: false })
   })
 })

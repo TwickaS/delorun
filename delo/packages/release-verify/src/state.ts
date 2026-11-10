@@ -22,8 +22,12 @@ export const RELEASE_LOG_STATE_SIZE_LIMIT = 32 * 1024
 export interface RecordedCheck extends ReleaseLogCheck {
   /** Present when the state is `failed`: which check refused. */
   readonly refusal?: ReleaseLogRefusal
-  /** Present when the state is `failed`: what the check saw. */
+  /** Present when the state is `failed` or `unchecked`: what the check saw, or why it did not complete. */
   readonly detail?: string
+  /** Present when the state is `unchecked`: Unix seconds since which the release has stayed `unchecked`. */
+  readonly uncheckedSince?: number
+  /** What the attempt noticed without it being a failure, such as a stored floor it replaced. */
+  readonly notices?: readonly string[]
 }
 
 /**
@@ -37,6 +41,8 @@ interface DraftRecord {
   failure?: ReleaseLogFailure
   refusal?: ReleaseLogRefusal
   detail?: string
+  uncheckedSince?: number
+  notices?: readonly string[]
 }
 
 const REFUSALS: ReadonlySet<string> = new Set(RELEASE_LOG_REFUSALS)
@@ -50,6 +56,8 @@ const RecordedSchema = z.strictObject({
   refusal: RefusalSchema.optional(),
   detail: z.string().optional(),
   lastAttempt: z.number().int().min(0),
+  uncheckedSince: z.number().int().min(0).optional(),
+  notices: z.array(z.string()).optional(),
 })
 
 const StateSchema = z.strictObject({
@@ -74,6 +82,8 @@ export function readCheckState(bytes: Uint8Array): Map<string, RecordedCheck> {
     if (entry.failure !== undefined) record.failure = entry.failure as ReleaseLogFailure
     if (entry.refusal !== undefined) record.refusal = entry.refusal
     if (entry.detail !== undefined) record.detail = entry.detail
+    if (entry.uncheckedSince !== undefined) record.uncheckedSince = entry.uncheckedSince
+    if (entry.notices !== undefined) record.notices = entry.notices
     state.set(release, record)
   }
   return state
@@ -90,20 +100,33 @@ export function serializeCheckState(state: ReadonlyMap<string, RecordedCheck>): 
   return `${JSON.stringify({ schema: RELEASE_LOG_STATE_SCHEMA, releases }, null, 2)}\n`
 }
 
+/** What one attempt found beyond its state. */
+export interface AttemptFindings {
+  /** The refusal, when the attempt failed. */
+  readonly refusal?: ReleaseLogRefusal
+  /** What the check saw, when it failed or did not complete. */
+  readonly detail?: string
+  /** What the attempt noticed without it being a failure. */
+  readonly notices?: readonly string[]
+}
+
 /**
- * The record of one attempt.
+ * The record of one attempt. A release that stays `unchecked` keeps the time it first became so, which is how long the
+ * online check has not completed.
  * @param release - the release's version.
  * @param state - what the attempt found.
  * @param lastAttempt - Unix seconds of the attempt.
- * @param refusal - the refusal, when the attempt failed.
- * @param detail - what the check saw, when the attempt failed.
+ * @param findings - the refusal, the detail and the notices.
+ * @param previous - the release's record before this attempt, when there is one.
  * @returns the record, carrying the contract's failure class when the refusal has one.
  */
-export function recorded(release: string, state: ReleaseLogCheckState, lastAttempt: number, refusal?: ReleaseLogRefusal, detail?: string): RecordedCheck {
-  const failure = refusal === undefined ? undefined : contractFailureOf(refusal)
+export function recorded(release: string, state: ReleaseLogCheckState, lastAttempt: number, findings: AttemptFindings = {}, previous?: RecordedCheck): RecordedCheck {
+  const failure = findings.refusal === undefined ? undefined : contractFailureOf(findings.refusal)
   const record: DraftRecord = { release: release as SemanticVersion, state, lastAttempt }
   if (failure !== undefined) record.failure = failure
-  if (refusal !== undefined) record.refusal = refusal
-  if (detail !== undefined) record.detail = detail
+  if (findings.refusal !== undefined) record.refusal = findings.refusal
+  if (findings.detail !== undefined) record.detail = findings.detail
+  if (state === 'unchecked') record.uncheckedSince = previous?.state === 'unchecked' ? previous.uncheckedSince ?? previous.lastAttempt : lastAttempt
+  if (findings.notices !== undefined && findings.notices.length > 0) record.notices = findings.notices
   return record
 }

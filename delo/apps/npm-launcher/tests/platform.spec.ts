@@ -6,7 +6,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RELEASE_DOWNLOAD_HOSTS } from '@delo/contract-home-layout'
-import { Downloader, createTilesLogService, isInstallError } from '@delo/install'
+import { Downloader, isInstallError } from '@delo/install'
+import { logEndpoints, tilesTransport } from '@delo/release-verify/transport'
 import { RELEASE_SOURCE, RELEASE_HOSTS } from '@delo/install'
 import { BUILD_CONSTANTS, buildOrigin, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREFIX } from '../src/platform.ts'
 
@@ -22,6 +23,14 @@ describe('the release log a build reads', () => {
     expect(logPlan('log2025-1.rekor.sigstore.dev')).toEqual({ origin: 'https://log2025-1.rekor.sigstore.dev/api/v2', hosts: ['log2025-1.rekor.sigstore.dev'] })
     expect(logPlan('Log.Example.test:8443')).toEqual({ origin: 'https://log.example.test:8443/api/v2', hosts: ['log.example.test'] })
     expect(RELEASE_LOG_API_PREFIX).toBe('/api/v2')
+  })
+
+  it('derives the production endpoints only from the trusted root\'s log origin, as delorun verify does', () => {
+    for (const origin of ['log2025-1.rekor.sigstore.dev', 'log.example.test:8443']) {
+      const root = { log: { origin, vkey: '' } } as Parameters<typeof logEndpoints>[0]
+      expect(logPlan(origin).origin).toBe(logEndpoints(root).tiles)
+      expect(`${logPlan(origin).origin}/checkpoint`).toBe(logEndpoints(root).checkpoint)
+    }
   })
 
   it('has no log host of its own in the production build, so no constant can differ from the root', () => {
@@ -43,17 +52,11 @@ describe('the release log a build reads', () => {
     expect(logPlan('log.example.test/release-log', { logOrigin: 'http://127.0.0.1:8124' })).toEqual({ origin: 'http://127.0.0.1:8124', hosts: ['127.0.0.1'] })
   })
 
-  it('lets the launcher’s composed service read the log’s checkpoint from the host the root names', async () => {
+  it('lets the launcher’s composed transport read the log’s checkpoint from the host the root names', async () => {
     const asked: string[] = []
-    const downloader = new Downloader({
-      fetch: (url) => {
-        asked.push(String(url))
-        return Promise.resolve(new Response('note', { status: 200 }))
-      },
-    })
     const plan = logPlan('log2025-1.rekor.sigstore.dev')
-    const service = createTilesLogService({ origin: plan.origin, hosts: plan.hosts, downloader })
-    expect(await service.checkpoint()).toBe('note')
+    const transport = tilesTransport({ fetch: url => { asked.push(String(url)); return Promise.resolve(new Response('note', { status: 200 })) }, checkpoint: `${plan.origin}/checkpoint`, tiles: plan.origin })
+    expect(await transport.latestCheckpoint(new AbortController().signal)).toBe('note')
     expect(asked).toEqual(['https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint'])
   })
 

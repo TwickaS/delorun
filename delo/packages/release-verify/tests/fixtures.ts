@@ -277,7 +277,7 @@ export function entryBody(options: EntryBodyOptions): Buffer {
 /** An in-memory log that serves the entries it accepted and the checkpoints it signs. */
 export class FixtureLog {
   /** The origin line the trusted root names. */
-  readonly origin = 'log.example.test/release-log'
+  readonly origin = 'log.example.test'
 
   /** The log's note key. */
   readonly key: KeyObject = generateKeyPairSync('ed25519').privateKey
@@ -344,7 +344,18 @@ export class FixtureLog {
    * @returns the note text.
    */
   checkpoint(): string {
-    const body = `${this.origin}\n${String(this.size)}\n${this.rootHash.toString('base64')}\n`
+    return this.note(this.size, this.rootHash)
+  }
+
+  /**
+   * A checkpoint this log's key signs for any tree, without cosignatures: the tree of its first `size` entries, or a
+   * tree it never held when a spec names another root hash.
+   * @param size - the tree size.
+   * @param rootHash - the root hash; the root of the first `size` entries by default.
+   * @returns the note text.
+   */
+  note(size: number, rootHash: Buffer = treeRoot(this.hashes.slice(0, size))): string {
+    const body = `${this.origin}\n${String(size)}\n${rootHash.toString('base64')}\n`
     return `${body}\n${signatureLine(this.origin, NOTE_SIGNATURE, this.key, body)}`
   }
 
@@ -500,4 +511,59 @@ export function scenario(): Scenario {
   const root = rootMetadata(keys, log, [witness])
   const bundle = log.bundle(index, 'delorun-0.1.0.manifest.json', createHash('sha256').update(MANIFEST).digest('hex'), witness.cosign(log.checkpoint(), COSIGNED_AT))
   return { keys, log, witness, root, bundle }
+}
+
+/**
+ * A `fetch` that answers as a tlog-tiles log over a fixture log: `<prefix>/checkpoint` serves a note the spec sets, and
+ * `<prefix>/tile/<L>/<N>[.p/<W>]` serves the hashes of the tree at the size the spec sets, computed by RFC 6962 §2.1
+ * from the log's leaf hashes. Every request is recorded, and a spec can replace any answer by URL.
+ */
+export class FixtureTiles {
+  /** Every URL fetched, in order. */
+  readonly requested: string[] = []
+
+  /** The init each request carried. */
+  readonly inits: (RequestInit | undefined)[] = []
+
+  /** Answers that replace the computed ones, by URL. */
+  readonly answers = new Map<string, () => Response>()
+
+  /** The cosigned note `/checkpoint` serves. */
+  note = ''
+
+  /**
+   * @param prefix - the tiles prefix, `https://<origin>`.
+   * @param hashes - the leaf hashes of the log's tree.
+   * @param size - the tree size the tiles are served for; every leaf by default.
+   */
+  constructor(readonly prefix: string, readonly hashes: readonly Buffer[], public size: number = hashes.length) {}
+
+  /** The fetch to inject. */
+  readonly fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = String(input)
+    this.requested.push(url)
+    this.inits.push(init)
+    const answer = this.answers.get(url)
+    if (answer !== undefined) return answer()
+    if (url === `${this.prefix}/checkpoint`) return new Response(this.note)
+    const match = new RegExp(`^${this.prefix.replaceAll('.', '\\.')}/tile/(\\d+)/((?:x\\d{3}/)*\\d{3})(?:\\.p/(\\d+))?$`, 'u').exec(url)
+    if (match === null) return new Response('not found', { status: 404 })
+    const level = Number(match[1])
+    const index = Number(match[2]!.replaceAll('x', '').replaceAll('/', ''))
+    const span = 256 ** level
+    const filled = Math.min(256, Math.floor(this.size / span) - index * 256)
+    const width = match[3] === undefined ? 256 : Number(match[3])
+    if (filled < width || (match[3] === undefined && filled < 256)) return new Response('not found', { status: 404 })
+    const tile = Array.from({ length: width }, (_, at) => treeRoot(this.hashes.slice((index * 256 + at) * span, (index * 256 + at + 1) * span)))
+    return new Response(Buffer.concat(tile))
+  }
+}
+
+/**
+ * Leaf hashes for a tree of any size, without entry bodies: the hash of each index.
+ * @param count - the number of leaves.
+ * @returns the hashes.
+ */
+export function syntheticLeaves(count: number): Buffer[] {
+  return Array.from({ length: count }, (_, at) => createHash('sha256').update(Buffer.from([0x00])).update(`leaf ${String(at)}`).digest())
 }

@@ -43,6 +43,8 @@ export interface NoteVerifier {
   readonly keyHash: Buffer
   /** The Ed25519 public key. */
   readonly key: KeyObject
+  /** The 32-byte raw public key, by which two listed keys are told apart whatever names they are listed under. */
+  readonly raw: Buffer
 }
 
 /** A checkpoint's parsed body. */
@@ -102,6 +104,7 @@ export function parseVerifierKey(vkey: string): NoteVerifier {
     type,
     keyHash: Buffer.from(match[2]!, 'hex'),
     key: createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: raw.toString('base64url') }, format: 'jwk' }),
+    raw: Buffer.from(raw),
   }
 }
 
@@ -183,4 +186,38 @@ export function verifySignature(verifier: NoteVerifier, body: string, line: Note
   if (line.signature.byteLength !== COSIGNATURE_BYTES) return false
   const time = line.signature.readBigUInt64BE(0)
   return verify(null, cosignedMessage(body, time), verifier.key, line.signature.subarray(8)) ? Number(time) : false
+}
+
+/** The keys a trusted root names for the log: one note-signature key for the log and the cosignature keys of its witnesses. */
+export interface TrustedLogKeys {
+  /** The log's key, of signature type {@link NOTE_SIGNATURE}. */
+  readonly log: NoteVerifier
+  /** Each listed witness's key, of signature type {@link NOTE_COSIGNATURE}, each raw key once. */
+  readonly witnesses: readonly NoteVerifier[]
+}
+
+/**
+ * The log and witness keys of a trusted root. A witness is counted by its raw key, not by the name or the text it is
+ * listed under, because a cosignature's signed message does not include the witness's name: one key listed twice
+ * would count as two witnesses.
+ * @param root - the trusted root's `log` and `witnesses` fields.
+ * @param root.log - the log's origin and verifier key.
+ * @param root.witnesses - the listed witnesses.
+ * @returns the parsed keys.
+ * @throws ReleaseLogRefusalError `log-origin-untrusted` when a key does not read, the log key is not a note-signature
+ * key, a witness key is not a cosignature key, or the root lists one raw witness key twice.
+ */
+export function trustedLogKeys(root: { readonly log: { readonly vkey: string }, readonly witnesses: { readonly keys: readonly { readonly vkey: string }[] } }): TrustedLogKeys {
+  const log = parseVerifierKey(root.log.vkey)
+  if (log.type !== NOTE_SIGNATURE) throw refuse('log-origin-untrusted', `the trusted root's log key ${log.name} is not a checkpoint signature key`)
+  const seen = new Set<string>()
+  const witnesses = root.witnesses.keys.map((witness) => {
+    const verifier = parseVerifierKey(witness.vkey)
+    if (verifier.type !== NOTE_COSIGNATURE) throw refuse('log-origin-untrusted', `the trusted root's witness key ${verifier.name} is not a cosignature key`)
+    const raw = verifier.raw.toString('hex')
+    if (seen.has(raw)) throw refuse('log-origin-untrusted', `the trusted root lists the witness key of ${verifier.name} more than once, which would count one witness twice`)
+    seen.add(raw)
+    return verifier
+  })
+  return { log, witnesses }
 }

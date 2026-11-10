@@ -8,17 +8,23 @@
  */
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { dirname } from 'node:path'
-import { CLI_PROFILE, type RuntimeVersion } from '@delo/contract-home-layout'
+import { readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, type RuntimeVersion } from '@delo/contract-home-layout'
+import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { ensureHomeTree, resolveDeloHome } from '@delo/home'
-import { Downloader, createTilesLogService, LauncherChannel } from '@delo/install'
+import { Downloader, LauncherChannel } from '@delo/install'
+import type { ReleaseLogTransport } from '@delo/release-verify/online'
+import { checkAndRecord } from '@delo/release-verify/record'
+import type { StartCheckResult } from '@delo/release-verify/start'
+import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
-import { parseRuntimeVersion, RuntimeStore, type LaunchCommand } from '@delo/runtime-store'
+import { parseRuntimeVersion, RuntimeStore, StorePaths, type LaunchCommand } from '@delo/runtime-store'
 import { runLauncher, launcherProfile, type LauncherOutput, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
-import { readEmbeddedRoots } from './root.ts'
+import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
 import { channelPlan, logPlan, platformOf, type BuildConstants } from './platform.ts'
 
 /** The launcher's own flag for the CLI profile, which it also passes to the runtime. */
@@ -175,6 +181,43 @@ export interface LauncherContext {
   readonly constants?: BuildConstants | undefined
   /** Starts the installed runtime; {@link spawnRuntime} by default. */
   readonly spawn?: SpawnRuntime | undefined
+  /** The fetch the release-log check reads through; this process's by default. */
+  readonly fetch?: typeof globalThis.fetch | undefined
+  /** The clock, in milliseconds; `Date.now` by default. */
+  readonly now?: (() => number) | undefined
+}
+
+/** What a start check reads. */
+export interface StartCheckRequest {
+  /** The resolved Delo home. */
+  readonly home: string
+  /** The platform whose release files the store keeps. */
+  readonly platform: RuntimePlatform
+  /** The installed release `current` names. */
+  readonly version: RuntimeVersion
+  /** The root the store's start check verified the release with. */
+  readonly root: RootMetadata
+  /** The transport to the log the root names. */
+  readonly transport: ReleaseLogTransport
+  /** The clock, in Unix seconds. */
+  readonly now: number
+}
+
+/**
+ * Contract C18's start check of an installed release ("Behaviour per client", the CLI launcher): its stored bundle
+ * offline, then the online check, with the checkpoint and the state recorded under `trust/`. The manifest was already
+ * verified by the store's start check under the same root.
+ * @param request - the home, the platform, the release, the root, the transport and the clock.
+ * @returns what the start does: go on, go on with the warning, or stop.
+ */
+export async function startCheck(request: StartCheckRequest): Promise<StartCheckResult> {
+  const files = new StorePaths(request.home, request.platform).releaseFiles(request.version)
+  const manifest = await readFile(files.manifest)
+  const bundle = await readFile(files.bundle).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  })
+  return checkAndRecord(request.home, { root: request.root, version: request.version, manifest, bundle, now: request.now, transport: request.transport, mode: LAUNCHER_MODE })
 }
 
 /**
@@ -218,7 +261,16 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     const downloader = new Downloader({ hosts: channel.rule })
     // The roots this launcher ships anchor both halves of a run: an install walks from them, and a start trusts the
     // root this home stored only when it is one of them.
-    const roots = await readEmbeddedRoots(context.packageDirectory ?? dirname(dirname(fileURLToPath(import.meta.url))))
+    const packageDirectory = context.packageDirectory ?? dirname(dirname(fileURLToPath(import.meta.url)))
+    const roots = await readEmbeddedRoots(packageDirectory)
+    const fetch = context.fetch ?? globalThis.fetch.bind(globalThis)
+    // The log is the one the trusted root names, read through `@delo/release-verify`'s transport; a build for a local
+    // log names its own origin instead (`logPlan`).
+    const transportFor = (root: RootMetadata): ReleaseLogTransport => {
+      const log = logPlan(root.log.origin, context.constants)
+      return tilesTransport({ fetch, checkpoint: `${log.origin}/checkpoint`, tiles: log.origin })
+    }
+    const spawn = context.spawn ?? spawnRuntime
     return await runLauncher({
       home: home.path,
       profile,
@@ -233,17 +285,16 @@ export async function main(argv: readonly string[], context: LauncherContext = {
         channel: 'stable',
         // The log is the one the trusted root names, read under a host rule of its own: the downloader keeps contract
         // C1's release-file rule, and neither rule has to name the other's hosts.
-        log: (root) => {
-          const log = logPlan(root.log.origin, context.constants)
-          return createTilesLogService({ origin: log.origin, hosts: log.hosts, downloader })
-        },
+        log: transportFor,
         source: channel.source,
         downloader,
         progress: report,
       }),
       roots,
       logger,
-      spawn: context.spawn ?? spawnRuntime,
+      // The runtime anchors `delorun verify` on the roots this launcher ships, as this launcher's start does.
+      spawn: command => spawn({ ...command, env: { ...command.env, [DELO_LAUNCHER_ROOTS_ENV]: join(packageDirectory, ROOTS_DIRECTORY) } }),
+      startCheck: (version, root) => startCheck({ home: home.path, platform, version, root, transport: transportFor(root), now: Math.floor((context.now ?? Date.now)() / 1000) }),
       output: context.output,
       report,
       ...target === undefined ? {} : { target },

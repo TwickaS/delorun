@@ -23,6 +23,13 @@ export const DELO_PROFILE_ENV = 'DELO_PROFILE'
 /** Upstream's harness-home variable, set to the resolved Delo home for every runtime process. */
 export const DSH_HOME_ENV = 'DSH_HOME'
 
+/**
+ * Environment variable through which the launcher tells the runtime it starts where its shipped release roots are: the
+ * absolute path of the launcher package's `roots/` directory. `delorun verify` anchors the home's stored root on those
+ * roots, as the launcher's own start does; a runtime that finds it unset anchors on the stored root only, and says so.
+ */
+export const DELO_LAUNCHER_ROOTS_ENV = 'DELO_LAUNCHER_ROOTS'
+
 /** Upstream's default harness-home directory name; Delo never reads or writes `~/.dsh`. */
 export const UPSTREAM_HOME_DIR_NAME = '.dsh'
 

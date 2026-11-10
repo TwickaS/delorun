@@ -20,7 +20,7 @@ import { checkpointBody, NOTE_COSIGNATURE, NOTE_ED25519, signatureLine, verifier
 import { publicKeyEntry, signEnvelope } from '@delo/release/sign/envelope'
 import { toJsonValue } from '@delo/release/sign/json'
 import type { ReleaseLogBundle } from '@delo/contract-release-log'
-import type { LogService } from '../src/log.ts'
+import { LogUnreachableError, type ReleaseLogTransport } from '@delo/release-verify/online'
 
 /** The fixture release's version. */
 export const VERSION = '0.1.0'
@@ -321,23 +321,23 @@ export function bundleWith(fixture: Fixture, change: Partial<ReleaseLogBundle>):
  * accepts.
  * @param checkpoint - the checkpoint note to serve.
  * @param proof - the consistency proof to serve; empty by default.
- * @returns the service.
+ * @returns the transport.
  */
-export function logService(checkpoint: string, proof: readonly Uint8Array[] = []): LogService {
+export function logService(checkpoint: string, proof: readonly Uint8Array[] = []): ReleaseLogTransport {
   return {
-    checkpoint: () => Promise.resolve(checkpoint),
-    consistency: () => Promise.resolve(proof),
+    latestCheckpoint: () => Promise.resolve(checkpoint),
+    consistencyProof: () => Promise.resolve(proof.map(hash => Buffer.from(hash).toString('hex'))),
   }
 }
 
 /**
- * A log service that answers nothing, as an unreachable log does.
- * @returns the service.
+ * A log that answers nothing, as an unreachable log does.
+ * @returns the transport.
  */
-export function unreachableLog(): LogService {
+export function unreachableLog(): ReleaseLogTransport {
   return {
-    checkpoint: () => Promise.reject(new Error('the distributor refused the connection')),
-    consistency: () => Promise.reject(new Error('the log refused the connection')),
+    latestCheckpoint: () => Promise.reject(new LogUnreachableError('the log refused the connection')),
+    consistencyProof: () => Promise.reject(new LogUnreachableError('the log refused the connection')),
   }
 }
 

@@ -12,7 +12,7 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { ARCHIVE_MAX_BYTES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { ARCHIVE_MAX_BYTES, DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { RELEASE_LOG_BUNDLE_SIZE_LIMIT } from '@delo/contract-release-log'
 import {
   RELEASE_FILE_SIZE_LIMITS,
@@ -28,12 +28,15 @@ import type { RuntimeChannel, ChannelRelease } from '@delo/runtime-store'
 import { parseRuntimeVersion } from '@delo/runtime-store'
 import { archiveFormat } from '@delo/release/archive/entry'
 import { walkRootChain } from '@delo/release/sign/verify'
+import { HomeLayoutError } from '@delo/home'
+import { ReleaseLogInternalError, type ReleaseLogTransport } from '@delo/release-verify/online'
+import { checkAndStore, recordResult } from '@delo/release-verify/record'
+import type { StartCheckResult } from '@delo/release-verify/start'
 import { Downloader } from './download.ts'
 import { InstallError, isInstallError, messageOf } from './errors.ts'
 import { extractArchive } from './extract.ts'
-import { refuseFailedLog, runOnlineCheck, type LogService, type OnlineCheckResult } from './log.ts'
 import type { InstallProgress } from './progress.ts'
-import { readStoredCheckpoint, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, writeReleaseLogCheck, writeStoredCheckpoint, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot, type StoredCheckpoint } from './state.ts'
+import { readStoredRootBytes, readStoredRootChain, readStoredTimestamp, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot } from './state.ts'
 import { newestRootVersion, rootVersionOf, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyStoredRoot, verifyTimestampUnderRoots, type VerifiedChannelRelease } from './verify.ts'
 
 /**
@@ -72,10 +75,10 @@ export interface LauncherChannelOptions {
   /** The person's channel. */
   readonly channel: ChannelName
   /**
-   * The release log, or the function that makes it from the root being trusted: the log's address derives from the
-   * root's `log.origin`, which a root rotation can change, so a launcher passes the function.
+   * The transport to the release log, or the function that makes it from the root being trusted: the log's address
+   * derives from the root's `log.origin`, which a root rotation can change, so a launcher passes the function.
    */
-  readonly log: LogService | ((root: RootMetadata) => LogService)
+  readonly log: ReleaseLogTransport | ((root: RootMetadata) => ReleaseLogTransport)
   /** Where the files are published; {@link RELEASE_SOURCE} by default. */
   readonly source?: ReleaseSource
   /** The downloader; contract C1's rule over this process's `fetch` by default. */
@@ -92,8 +95,10 @@ interface Resolved {
   readonly verified: VerifiedChannelRelease
   readonly manifestBytes: Buffer
   readonly bundleBytes: Buffer
-  /** What the online log check found, for the record the install keeps once the archive verified. */
-  readonly online: OnlineCheckResult
+  /** What contract C18's check found, for the record the install keeps once the store installed the release. */
+  readonly log: StartCheckResult
+  /** Unix seconds of the check. */
+  readonly checkedAt: number
 }
 
 /** A release the channel resolved but has not filled, for its own error messages. */
@@ -125,14 +130,16 @@ export class LauncherChannel implements RuntimeChannel {
    * bundle, run the online log check, and record what verified under `trust/`: the roots and the timestamp once they
    * verify, and the checkpoint once the log check verifies, because a later install holds the root, the timestamp and
    * the log to what they proved even when this install ends before the runtime lands. The check state of the release
-   * is recorded only by {@link LauncherChannel.recordInstalled}. Nothing downloads a runtime until all of it passes. A log check that could not run (the log or its witness is unreachable, or its newest witnessed
-   * checkpoint is stale) does not stop the install: it continues on the release's signature, and the home records
-   * that the check did not run (contract C18, "Behaviour per client"). A log that answers and contradicts the
-   * release refuses.
+   * is recorded only by {@link LauncherChannel.recordInstalled}. The release-log check is `@delo/release-verify`'s.
+   * Nothing downloads a runtime until all of it passes. A log check that could not run does not stop the install: it
+   * continues on the release's signature, and the home records that the check did not run (contract C18, "Behaviour
+   * per client"). A log whose signed checkpoint contradicts the release refuses.
    * @param target - the version a person asked for, or `undefined` for the channel's current release.
    * @returns the release's version and the root it verified with.
    * @throws {InstallError} `DOWNLOAD_REFUSED`, `DOWNLOAD_FAILED`, `INSTALL_VERIFY_FAILED`, `RELEASE_NOT_OFFERED`,
-   *   `RELEASE_LOG_FAILED` or `TRUST_STATE_INVALID`; no file appears under `runtimes/` on any of them.
+   *   `RELEASE_LOG_FAILED` or `TRUST_STATE_INVALID`; no file appears under `runtimes/` on any of them. A log that does
+   *   not answer, answers with no checkpoint its key signed, or whose checkpoint the witnesses have not cosigned is
+   *   `unchecked`, which never refuses.
    */
   async resolve(target?: RuntimeVersion): Promise<ChannelRelease> {
     const now = Math.floor(this.now() / 1000)
@@ -158,12 +165,13 @@ export class LauncherChannel implements RuntimeChannel {
       ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
     })
     this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
-    const online = await runOnlineCheck({ root: root.metadata, release: pointer.release, log: verified.log, service: this.logFor(root.metadata), now, ...await this.storedCheckpoint() })
-    refuseFailedLog(online, `release ${pointer.release}`)
-    if (online.checkpoint !== undefined) await writeStoredCheckpoint(this.options.home, online.checkpoint)
-    this.options.progress?.({ step: 'log-checked', version: pointer.release, state: online.check.state === 'verified' ? 'verified' : 'unchecked', ...online.detail === undefined ? {} : { detail: online.detail } })
+    const log = await this.checkLog({ root: root.metadata, version: pointer.release, manifest: manifest.bytes, bundle: bundle.bytes, now, transport: this.logFor(root.metadata), mode: 'enforce' })
+    if (log.state === 'failed') {
+      throw new InstallError('RELEASE_LOG_FAILED', `release ${pointer.release}`, `the release log failed its check (${String(log.refusal)}: ${String(log.detail)}); nothing was installed`)
+    }
+    this.options.progress?.({ step: 'log-checked', version: pointer.release, state: log.state, ...log.detail === undefined ? {} : { detail: log.detail } })
     const release: ChannelRelease = { version, root: root.metadata }
-    this.resolved.set(version, { release, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes, online })
+    this.resolved.set(version, { release, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes, log, checkedAt: now })
     return release
   }
 
@@ -211,15 +219,39 @@ export class LauncherChannel implements RuntimeChannel {
   async recordInstalled(release: ChannelRelease): Promise<void> {
     const resolved = this.resolved.get(release.version)
     if (resolved === undefined) throw new InstallError('INSTALL_VERIFY_FAILED', String(release.version), `${NO_RELEASE}: ${release.version} was not resolved before it was recorded`)
-    await writeReleaseLogCheck(this.options.home, resolved.online.check, resolved.online.detail)
+    try {
+      await recordResult(this.options.home, release.version, resolved.checkedAt, resolved.log)
+    } catch (error) {
+      throw new InstallError('TRUST_STATE_INVALID', this.options.home, `the release-log check state cannot be recorded: ${messageOf(error)}`, { cause: error })
+    }
   }
 
   /**
-   * The log service for the root being trusted.
-   * @param root - that root.
-   * @returns the service the options give, or the one they make for the root.
+   * Run contract C18's check through `@delo/release-verify`, the one implementation of it, which also stores the
+   * checkpoint the online check verified: a later install holds the log to it even when this install ends before the
+   * runtime lands.
+   * @param input - the check's input.
+   * @returns the check's result.
+   * @throws {InstallError} `TRUST_STATE_INVALID` when a record under `trust/` is refused or cannot be read or written;
+   *   `RELEASE_LOG_FAILED` when this client's own check fails.
    */
-  private logFor(root: RootMetadata): LogService {
+  private async checkLog(input: Parameters<typeof checkAndStore>[1]): Promise<StartCheckResult> {
+    try {
+      return await checkAndStore(this.options.home, input)
+    } catch (error) {
+      if (error instanceof ReleaseLogInternalError) throw new InstallError('RELEASE_LOG_FAILED', `release ${input.version}`, `the release-log check failed in this client: ${error.message}; nothing was installed`, { cause: error })
+      // What else the check throws is a record under `trust/` that is refused or cannot be read or written.
+      const path = error instanceof HomeLayoutError ? error.path : join(this.options.home, DELO_HOME_ENTRIES.trust)
+      throw new InstallError('TRUST_STATE_INVALID', path, `a release-log record under trust/ cannot be used: ${messageOf(error)}`, { cause: error })
+    }
+  }
+
+  /**
+   * The log transport for the root being trusted.
+   * @param root - that root.
+   * @returns the transport the options give, or the one they make for the root.
+   */
+  private logFor(root: RootMetadata): ReleaseLogTransport {
     return typeof this.options.log === 'function' ? this.options.log(root) : this.options.log
   }
 
@@ -272,16 +304,6 @@ export class LauncherChannel implements RuntimeChannel {
       roots.push(root.bytes)
     }
     return roots
-  }
-
-  /**
-   * The stored log checkpoint, when one reads, for the online check's starting point.
-   * @returns the field to pass to {@link runOnlineCheck}, which is absent when nothing was stored.
-   * @throws {InstallError} `TRUST_STATE_INVALID` when the stored checkpoint does not read.
-   */
-  private async storedCheckpoint(): Promise<{ readonly stored?: StoredCheckpoint }> {
-    const stored = await readStoredCheckpoint(this.options.home)
-    return stored === undefined ? {} : { stored }
   }
 }
 

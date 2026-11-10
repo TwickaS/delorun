@@ -5,7 +5,7 @@
  * C1 or C18 code, and none of them installs anything. A release log that cannot be reached or is stale does not
  * refuse: the install warns through its progress events and records that the check did not run.
  */
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -16,6 +16,7 @@ import { isInstallError, type InstallError } from '../src/errors.ts'
 import { LauncherChannel, MAX_ROOT_ROTATIONS, RELEASE_SOURCE, type LauncherChannelOptions, type ReleaseSource } from '../src/channel.ts'
 import { leafHash, treeRoot } from '@delo/release/log/merkle'
 import { checkpointBody, signatureLine } from '@delo/release/log/note'
+import { LogUnreachableError } from '@delo/release-verify/online'
 import { readCheckState } from '@delo/release-verify/state'
 import type { InstallProgress } from '../src/progress.ts'
 import { envelope, fixtureKeys, fixtureRelease, LOG_ORIGIN, logService, WITNESS_NAME, nextRoot, NOW, releasePaths, sha256, standIn, unreachableLog, VERSION, type Fixture, type StandIn } from './support.ts'
@@ -235,18 +236,16 @@ describe('the release log', () => {
     const { channel, home } = await harness(fixture, { log: unreachableLog(), progress: event => events.push(event) })
     const release = await channel.resolve()
     expect(events.filter(event => event.step === 'log-checked')).toEqual([
-      { step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the release log did not answer: the distributor refused the connection' },
+      { step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the release log gave no checkpoint (the log refused the connection)' },
     ])
     await channel.fill(release, await staging())
     await expect(readFile(join(home, 'trust', 'release-log.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     await channel.recordInstalled(release)
     // The release-verify package reads the record the install wrote, so the start check continues from it.
-    expect(readCheckState(await readFile(join(home, 'trust', 'release-log.json'))).get(VERSION)).toEqual({ release: VERSION, state: 'unchecked', detail: 'the release log did not answer: the distributor refused the connection', lastAttempt: NOW })
+    const entry = { release: VERSION, state: 'unchecked', detail: 'the release log gave no checkpoint (the log refused the connection)', lastAttempt: NOW, uncheckedSince: NOW }
+    expect(readCheckState(await readFile(join(home, 'trust', 'release-log.json'))).get(VERSION)).toEqual(entry)
     const state = JSON.parse(await readFile(join(home, 'trust', 'release-log.json'), 'utf8')) as { schema: string, releases: Record<string, unknown> }
-    expect(state).toEqual({
-      schema: 'delo.release-log-state/1',
-      releases: { [VERSION]: { release: VERSION, state: 'unchecked', detail: 'the release log did not answer: the distributor refused the connection', lastAttempt: NOW } },
-    })
+    expect(state).toEqual({ schema: 'delo.release-log-state/1', releases: { [VERSION]: entry } })
     await expect(readFile(join(home, 'trust', 'checkpoint.json'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
@@ -254,11 +253,11 @@ describe('the release log', () => {
     const fixture = await fixtureRelease()
     const events: InstallProgress[] = []
     const { channel } = await harness(fixture, {
-      log: { checkpoint: () => Promise.resolve(fixture.checkpoint), consistency: () => Promise.reject(new Error('the log answered 503')) },
+      log: { latestCheckpoint: () => Promise.resolve(fixture.checkpoint), consistencyProof: () => Promise.reject(new LogUnreachableError('the log answered 503')) },
       progress: event => events.push(event),
     })
     await channel.resolve()
-    expect(events.at(-1)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the release log gave no consistency proof: the log answered 503' })
+    expect(events.at(-1)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the log\'s consistency proof could not be read (the log answered 503)' })
   })
 
   it('continues when the log’s newest witnessed checkpoint is stale, naming its age', async () => {
@@ -268,7 +267,7 @@ describe('the release log', () => {
     // which lives three days, still verifies.
     const { channel } = await harness(fixture, { now: () => (NOW + 2 * 24 * 3600) * 1000, progress: event => events.push(event) })
     await channel.resolve()
-    expect(events.at(-1)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the log\'s newest witnessed checkpoint is 48 hours old, and a check needs one from the last 24 hours' })
+    expect(events.at(-1)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the newest witness cosignature is 172860 seconds old, over the 86400-second limit' })
   })
 
   it('continues and records unchecked when the log’s latest checkpoint has no witness cosignature', async () => {
@@ -317,13 +316,16 @@ describe('the release log', () => {
     expect(Object.keys(state.releases)).toEqual(['0.0.9', VERSION])
   })
 
-  it('refuses to record over a check state that does not read', async () => {
+  it('replaces a check state that does not read, and refuses one other users can read', async () => {
     const fixture = await fixtureRelease()
     const { channel, home } = await harness(fixture)
     await mkdir(join(home, 'trust'), { recursive: true, mode: 0o700 })
     await writeFile(join(home, 'trust', 'release-log.json'), 'not json', { mode: 0o600 })
     const release = await channel.resolve()
     await channel.fill(release, await staging())
+    await channel.recordInstalled(release)
+    expect(readCheckState(await readFile(join(home, 'trust', 'release-log.json'))).get(VERSION)?.state).toBe('verified')
+    await chmod(join(home, 'trust', 'release-log.json'), 0o644)
     await refusal(channel.recordInstalled(release), 'TRUST_STATE_INVALID')
   })
 
@@ -352,16 +354,20 @@ describe('the release log', () => {
   it('reports nothing about the log and installs nothing when the log contradicts the release', async () => {
     const fixture = await fixtureRelease()
     const events: InstallProgress[] = []
-    const { channel, home } = await harness(fixture, { log: logService('not a signed checkpoint\n'), progress: event => events.push(event) })
-    await refusal(channel.resolve(), 'RELEASE_LOG_FAILED')
+    // The log's signed checkpoint, with a consistency proof that does not hold.
+    const { channel, home } = await harness(fixture, { log: logService(fixture.checkpoint, [Buffer.alloc(32, 7)]), progress: event => events.push(event) })
+    const error = await refusal(channel.resolve(), 'RELEASE_LOG_FAILED')
+    expect(error.detail).toContain('consistency-proof-invalid')
     expect(events.map(event => event.step)).toEqual(['resolved', 'signature-checked'])
     await expect(readFile(join(home, 'trust', 'release-log.json'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('refuses the install when the checkpoint is not the log’s signature', async () => {
+  it('continues unchecked when the log answers with something that is not its signed checkpoint, such as a proxy\'s page', async () => {
     const fixture = await fixtureRelease()
-    const { channel } = await harness(fixture, { log: logService('not a signed checkpoint\n') })
-    await refusal(channel.resolve(), 'RELEASE_LOG_FAILED')
+    const events: InstallProgress[] = []
+    const { channel } = await harness(fixture, { log: logService('not a signed checkpoint\n'), progress: event => events.push(event) })
+    await channel.resolve()
+    expect(events.at(-1)).toMatchObject({ step: 'log-checked', state: 'unchecked' })
   })
 
   it('refuses the install when the bundle’s inclusion proof does not verify', async () => {
@@ -395,7 +401,77 @@ describe('the channel’s defaults', () => {
   })
 })
 
+describe('the log transport', () => {
+  it('is made for the root being trusted when the options give a function', async () => {
+    const fixture = await fixtureRelease()
+    const roots: string[] = []
+    const { channel } = await harness(fixture, {
+      log: (root) => {
+        roots.push(root.log.origin)
+        return logService(fixture.checkpoint)
+      },
+    })
+    await channel.resolve()
+    expect(roots).toEqual([LOG_ORIGIN])
+  })
+})
+
 describe('a home that has installed before', () => {
+  it('reads the checkpoint an earlier install stored in the earlier format, and replaces it with a notice when the log cannot prove it', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, home } = await harness(fixture)
+    await mkdir(join(home, 'trust'), { recursive: true, mode: 0o700 })
+    await writeFile(join(home, 'trust', 'checkpoint.json'), `${JSON.stringify({ treeSize: 9, rootHash: 'ab'.repeat(32) })}\n`, { mode: 0o600 })
+    const release = await channel.resolve()
+    await channel.fill(release, await staging())
+    await channel.recordInstalled(release)
+    // No refusal and no manual removal: the verified checkpoint replaced the earlier record, and the state says so.
+    expect(JSON.parse(await readFile(join(home, 'trust', 'checkpoint.json'), 'utf8'))).toMatchObject({ schema: 'delo.release-log-checkpoint/1', treeSize: 1 })
+    const state = readCheckState(await readFile(join(home, 'trust', 'release-log.json'))).get(VERSION)
+    expect(state?.state).toBe('verified')
+    expect(state?.notices).toEqual(['the checkpoint an earlier install stored, tree size 9, could not be proved against the log\'s latest checkpoint, so it sets no floor and is replaced'])
+  })
+
+  it('refuses the install when a release-log record under trust/ is one other users can read', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, home } = await harness(fixture)
+    await mkdir(join(home, 'trust'), { recursive: true, mode: 0o700 })
+    await writeFile(join(home, 'trust', 'checkpoint.json'), '{}', { mode: 0o644 })
+    await chmod(join(home, 'trust', 'checkpoint.json'), 0o644)
+    await refusal(channel.resolve(), 'TRUST_STATE_INVALID')
+  })
+
+  it('refuses the install when the verified checkpoint cannot be written under trust/', async () => {
+    const fixture = await fixtureRelease()
+    let home = ''
+    const log = logService(fixture.checkpoint)
+    const harnessed = await harness(fixture, {
+      log: {
+        latestCheckpoint: async (signal) => {
+          // The roots and timestamp are stored by now; the directory then refuses the checkpoint.
+          await chmod(join(home, 'trust'), 0o500)
+          return log.latestCheckpoint(signal)
+        },
+        consistencyProof: log.consistencyProof,
+      },
+    })
+    home = harnessed.home
+    try {
+      const error = await refusal(harnessed.channel.resolve(), 'TRUST_STATE_INVALID')
+      expect(error.source).toBe(join(home, 'trust'))
+    } finally {
+      await chmod(join(home, 'trust'), 0o700)
+    }
+  })
+
+  it('refuses the install when this client\'s own release-log check fails, and records nothing', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, home } = await harness(fixture, { log: { latestCheckpoint: () => Promise.reject(new TypeError('a defect')), consistencyProof: () => Promise.resolve([]) } })
+    const error = await refusal(channel.resolve(), 'RELEASE_LOG_FAILED')
+    expect(error.detail).toContain('failed in this client')
+    await expect(readFile(join(home, 'trust', 'release-log.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('holds a later timestamp to the stored one and proves the log from the stored checkpoint', async () => {
     const fixture = await fixtureRelease()
     const { channel, home, server } = await harness(fixture)
@@ -411,7 +487,7 @@ describe('a home that has installed before', () => {
       now: () => NOW * 1000,
     })
     expect(String((await again.resolve()).version)).toBe(VERSION)
-    expect(JSON.parse(await readFile(join(home, 'trust', 'checkpoint.json'), 'utf8'))).toEqual({ rootHash: fixture.bundle.inclusion.rootHash, treeSize: 1 })
+    expect(JSON.parse(await readFile(join(home, 'trust', 'checkpoint.json'), 'utf8'))).toMatchObject({ schema: 'delo.release-log-checkpoint/1', origin: LOG_ORIGIN, rootHash: fixture.bundle.inclusion.rootHash, treeSize: 1, checkpoint: fixture.checkpoint })
   })
 })
 

@@ -13,9 +13,10 @@ import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manif
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { messageOf, readStoredRootBytes, readStoredRootChain, trustFile, verifyStoredRoot } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
+import type { StartCheckResult } from '@delo/release-verify/start'
 import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type VerifiedRuntime } from '@delo/runtime-store'
 import type { LauncherProgress } from './progress.ts'
-import { refusalFor, type RemedyContext } from './refusals.ts'
+import { LAUNCHER_EXIT, refusalFor, type RemedyContext } from './refusals.ts'
 
 /** The runtime-store operations the launcher drives; `RuntimeStore` satisfies it. */
 export interface LauncherStore {
@@ -92,6 +93,12 @@ export interface LauncherOptions {
   readonly target?: RuntimeVersion
   /** Told of the step the launcher itself reports, `installing`; the channel reports the others. Nothing by default. */
   readonly report?: (event: LauncherProgress) => void
+  /**
+   * Contract C18's start check of the installed runtime's release: its stored release-log bundle offline and, with a
+   * network, the online check, with the state recorded. A start of a runtime the launcher just installed runs none,
+   * because the install checked the release. No check runs when this is absent.
+   */
+  readonly startCheck?: (version: RuntimeVersion, root: RootMetadata) => Promise<StartCheckResult>
 }
 
 /**
@@ -117,7 +124,7 @@ export async function runLauncher(options: LauncherOptions): Promise<number> {
  * @throws when a start, install or a named release refuses, for {@link runLauncher} to print.
  */
 async function startOrInstall(options: LauncherOptions): Promise<number> {
-  let plan: LaunchPlan | undefined
+  let plan: (LaunchPlan & { readonly root: RootMetadata }) | undefined
   try {
     plan = await prepare(options)
   } catch (error) {
@@ -131,18 +138,58 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
   // runtime: it never replaces the runtime a person already has. Starting the installed runtime instead would
   // silently drop what was asked for, so the run stops and names both versions.
   if (options.target !== undefined) throw installedRefusal(options, plan.version)
+  if (options.startCheck !== undefined) {
+    const check = await options.startCheck(plan.version, plan.root)
+    for (const notice of check.notices ?? []) options.output.stderr(`Release log: ${notice}\n`)
+    if (check.warning !== undefined) options.output.stderr(`${check.warning}${check.detail === undefined ? '' : ` (${check.detail})`}\n`)
+    // Contract C18 R5: a verifiable release-log failure stops the start in every mode; a check that did not complete
+    // never does. `delorun verify` itself still runs, so the person can see every check.
+    if (check.stop) {
+      options.output.stderr(failedStartText(plan.version, check))
+      if (runtimeCommand(options.args) !== 'verify') return LAUNCHER_EXIT.failed
+    }
+  }
   return options.spawn(plan)
+}
+
+/**
+ * What a start stopped by a release-log failure prints: the refusal and how to proceed.
+ * @param version - the release.
+ * @param check - the failed check.
+ * @returns the text, ending with a newline.
+ */
+export function failedStartText(version: RuntimeVersion, check: StartCheckResult): string {
+  return [
+    `Delo did not start release ${String(version)}: its release-log check failed (${String(check.refusal)}): ${String(check.detail)}`,
+    '  Run delorun verify to see every check of this release, and reinstall Delo from its release page if the failure stays.',
+    '  Deleting files under the home\'s trust/ directory does not repair this: the next check finds the same failure, or starts without the record that caught it.',
+    '',
+  ].join('\n')
+}
+
+/**
+ * The runtime command the arguments name: the first argument that is not an option, skipping `--profile`'s value.
+ * @param args - the runtime's arguments.
+ * @returns the command, or `undefined` for a bare `delorun`.
+ */
+export function runtimeCommand(args: readonly string[]): string | undefined {
+  for (let at = 0; at < args.length; at++) {
+    const argument = args[at]!
+    if (argument === '--profile') at++
+    else if (!argument.startsWith('-')) return argument
+  }
+  return undefined
 }
 
 /**
  * Run contract C2's start check through the store and build the command it names, writing nothing.
  * @param options - the launch's inputs.
- * @returns the command that starts `current`.
+ * @returns the command that starts `current`, with the root it was checked under.
  * @throws {RuntimeStoreError} `NO_ACTIVE_RUNTIME`, `RUNTIME_CHANGED`, `RUNTIME_INCOMPATIBLE`, `STORE_BUSY`.
  */
-async function prepare(options: LauncherOptions): Promise<LaunchPlan> {
+async function prepare(options: LauncherOptions): Promise<LaunchPlan & { readonly root: RootMetadata }> {
   const root = await storedRoot(options.home, options.roots)
-  return options.store.prepareLaunch({ launcher: SUPPORTED, root, mode: options.mode, profile: options.profile, args: options.args })
+  return { ...await options.store.prepareLaunch({ launcher: SUPPORTED, root, mode: options.mode, profile: options.profile, args: options.args }), root }
 }
 
 /**

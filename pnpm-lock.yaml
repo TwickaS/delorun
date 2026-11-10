@@ -1290,18 +1290,33 @@ importers:
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../../packages/contract-setup-answers
+      '@delo/contract-verification-checks':
+        specifier: workspace:*
+        version: link:../../packages/contract-verification-checks
       '@delo/home':
         specifier: workspace:*
         version: link:../../packages/home
       '@delo/home-process':
         specifier: workspace:*
         version: link:../../packages/home-process
+      '@delo/install':
+        specifier: workspace:*
+        version: link:../install
       '@delo/logs':
         specifier: workspace:*
         version: link:../../packages/logs
       '@delo/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../release
+      '@delo/release-verify':
+        specifier: workspace:*
+        version: link:../../packages/release-verify
+      '@delo/runtime-store':
+        specifier: workspace:*
+        version: link:../../packages/runtime-store
       '@delo/supervisor':
         specifier: workspace:*
         version: link:../../packages/supervisor
@@ -2319,6 +2334,15 @@ importers:
       '@delo/contract-verification-checks':
         specifier: workspace:*
         version: link:../contract-verification-checks
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../logs
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../../apps/release
       '@noble/curves':
         specifier: ^2.4.0
         version: 2.4.0

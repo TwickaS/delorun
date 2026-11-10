@@ -8,7 +8,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { LaunchCommand } from '@delo/runtime-store'
+import { parseRuntimeVersion, StorePaths, type LaunchCommand } from '@delo/runtime-store'
 import { main, stderrLogger, type LauncherContext } from '../src/bin.ts'
 import { platformOf } from '../src/platform.ts'
 import { fixtureRelease, NOW, releasePaths, standIn, VERSION, type Fixture, type StandIn } from '../../install/tests/support.ts'
@@ -91,7 +91,7 @@ describe('the launcher’s main function', () => {
     expect(world.stderr.join('').split('\n').filter(Boolean)).toEqual([
       `Resolving the release: the stable channel names ${VERSION}.`,
       `Checking the signature: ${VERSION} is signed under release root 1.`,
-      expect.stringMatching(/^Checking the release log: not checked \(the release log did not answer: .+\)\.$/u),
+      expect.stringMatching(/^Checking the release log: not checked \(the release log gave no checkpoint \(.+\)\)\.$/u),
       `Warning: Release ${VERSION} has not been checked against the release log; Delo checks it at the next connection.`,
       expect.stringMatching(new RegExp(`^Downloading delorun-${VERSION.replaceAll('.', '\\.')}-${platformOf(process.platform, process.arch)}\\.tar\\.gz \\(\\d+ kB\\)\\.$`, 'u')),
       `Installing release ${VERSION}.`,
@@ -102,13 +102,33 @@ describe('the launcher’s main function', () => {
     expect(state.releases[VERSION]?.state).toBe('unchecked')
   })
 
-  it('starts the installed runtime on a later run, with no network and no install lines', async () => {
+  it('starts the installed runtime on a later run with no network, warning that the release log was not reached', async () => {
     const world = await surroundings()
     await main([], world.context())
     world.stderr.length = 0
     expect(await main(['status'], world.context({ constants: { channelOrigin: 'http://127.0.0.1:1', logOrigin: 'http://127.0.0.1:1' } }))).toBe(0)
-    expect(world.stderr).toEqual([])
+    expect(world.stderr.join('')).toMatch(new RegExp(`^Release ${VERSION.replaceAll('.', '\\.')} has not been checked against the release log; Delo checks it at the next connection\\. \\(the release log gave no checkpoint \\(.+\\)\\)\\n$`, 'u'))
     expect(world.started.at(-1)!.args.at(-1)).toBe('status')
+    // The runtime is told where this launcher's shipped roots are, so delorun verify anchors on them.
+    expect(world.started.at(-1)!.env.DELO_LAUNCHER_ROOTS).toBe(join(world.package, 'roots'))
+    const state = JSON.parse(await readFile(join(world.home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string, uncheckedSince?: number }> }
+    expect(state.releases[VERSION]?.state).toBe('unchecked')
+  })
+
+  it('warns about an installed release whose stored log bundle is missing, and stops on one whose bundle path is not a file', async () => {
+    const world = await surroundings()
+    await main([], world.context())
+    const files = new StorePaths(world.home, platformOf(process.platform, process.arch)).releaseFiles(parseRuntimeVersion(VERSION)!)
+    await rm(files.bundle)
+    world.stderr.length = 0
+    expect(await main(['status'], world.context())).toBe(0)
+    expect(world.stderr).toEqual([`Release ${VERSION} has not been checked against the release log; Delo checks it at the next connection. (no release-log bundle is stored for this release yet)\n`])
+    expect(world.started).toHaveLength(2)
+    await mkdir(files.bundle)
+    world.stderr.length = 0
+    expect(await main(['status'], world.context())).toBe(1)
+    expect(world.stderr).toEqual(['Delo stopped: EISDIR: illegal operation on a directory, read\n'])
+    expect(world.started).toHaveLength(2)
   })
 
   it('starts the runtime it installed with a real process, and returns the runtime’s own status', async () => {

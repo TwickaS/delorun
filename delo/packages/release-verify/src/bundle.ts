@@ -34,7 +34,7 @@ import { refuse, ReleaseLogRefusalError, type ReleaseLogRefusal } from './errors
 import { readEntryBody, requireReleaseVersion, verifyEntryIdentity } from './entry.ts'
 import { parseStrictJson } from './json.ts'
 import { leafHash, rootFromInclusionProof } from './merkle.ts'
-import { parseCheckpoint, parseVerifierKey, splitNote, verifySignature, type Checkpoint } from './note.ts'
+import { parseCheckpoint, splitNote, trustedLogKeys, verifySignature, type Checkpoint } from './note.ts'
 
 /** A lowercase hex SHA-256 digest. */
 const hex = z.string().regex(/^[0-9a-f]{64}$/u)
@@ -119,14 +119,13 @@ export function verifyBundle(root: RootMetadata, version: string, manifest: Uint
   if (checkpoint.size !== bundle.inclusion.treeSize || checkpoint.rootHash.toString('hex') !== bundle.inclusion.rootHash) {
     throw refuse('log-origin-untrusted', 'the checkpoint names another tree than the inclusion proof')
   }
-  const log = parseVerifierKey(root.log.vkey)
-  if (!note.signatures.some(line => verifySignature(log, note.body, line) === true)) throw refuse('log-signature-invalid', 'the checkpoint has no valid signature from the trusted root\'s log key')
+  const keys = trustedLogKeys(root)
+  if (!note.signatures.some(line => verifySignature(keys.log, note.body, line) === true)) throw refuse('log-signature-invalid', 'the checkpoint has no valid signature from the trusted root\'s log key')
   const cosigned = new Map<string, number>()
-  for (const witness of root.witnesses.keys) {
-    const verifier = parseVerifierKey(witness.vkey)
+  for (const verifier of keys.witnesses) {
     for (const line of note.signatures) {
       const time = verifySignature(verifier, note.body, line)
-      if (typeof time === 'number') cosigned.set(witness.vkey, Math.max(time, cosigned.get(witness.vkey) ?? 0))
+      if (typeof time === 'number') cosigned.set(verifier.raw.toString('hex'), Math.max(time, cosigned.get(verifier.raw.toString('hex')) ?? 0))
     }
   }
   // The contract fixes the client's witness threshold at 1, so a root that carries none requires one cosignature

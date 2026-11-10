@@ -7,9 +7,9 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 // The log side's own verifier, read by path: a differential against the implementation the log serves proofs with, not
-// a second copy of the client's walk. It is a spec-only import, so the package keeps no dependency on the release app.
+// a second copy of the client's walk.
 import { verifyConsistency as referenceVerify } from '../../../apps/release/src/log/merkle.ts'
-import { leafHash, nodeHash, rootFromInclusionProof, verifyConsistencyProof } from '../src/merkle.ts'
+import { isPowerOfTwo, leafHash, nodeHash, rootFromInclusionProof, verifyConsistencyProof } from '../src/merkle.ts'
 import { consistencyProof, inclusionProof, treeRoot } from './fixtures.ts'
 
 /** The leaf hashes of a tree of `count` leaves, each the hash of its index's decimal text. */
@@ -142,5 +142,39 @@ describe('the consistency proof against RFC 6962 PROOF', () => {
     const hashes = leaves(8)
     const proof = consistencyProof(4, hashes)
     expect(verifyConsistencyProof(4, treeRoot(hashes.slice(0, 4)), 8, treeRoot(hashes), [...Array.from({ length: 65 }, () => proof[0]!)])).toBe(false)
+  })
+})
+
+describe('trees beyond 32 bits', () => {
+  it('tells powers of two apart by arithmetic exact for every safe integer, refusing 2^53 and beyond, where a 32-bit mask reads 2^32 + 2^31 as one', () => {
+    for (const exponent of [0, 1, 31, 32, 40, 52]) expect(isPowerOfTwo(2 ** exponent), String(exponent)).toBe(true)
+    for (const size of [0, -4, 3, 2 ** 32 + 2 ** 31, 2 ** 40 + 2 ** 39, 2 ** 53, 1.5]) expect(isPowerOfTwo(size), String(size)).toBe(false)
+  })
+
+  it('verifies a one-leaf extension of a tree of 2^32 + 2^31 and of 2^40 + 2^39 leaves', () => {
+    for (const exponent of [32, 40]) {
+      const whole = Buffer.alloc(32, 1)
+      const half = Buffer.alloc(32, 2)
+      const leaf = Buffer.alloc(32, 3)
+      const first = 2 ** exponent + 2 ** (exponent - 1)
+      // PROOF(m, D[m+1]) for m = 2^k + 2^(k-1): the right half of the older tree, the new leaf, then the left subtree.
+      expect(verifyConsistencyProof(first, nodeHash(whole, half), first + 1, nodeHash(whole, nodeHash(half, leaf)), [half, leaf, whole]), String(exponent)).toBe(true)
+      expect(verifyConsistencyProof(first, nodeHash(whole, half), first + 1, nodeHash(whole, nodeHash(half, Buffer.alloc(32, 4))), [half, leaf, whole])).toBe(false)
+    }
+  })
+
+  it('verifies a one-leaf extension of a tree of exactly 2^32 and 2^40 leaves, and refuses sizes beyond 2^53', () => {
+    for (const exponent of [32, 40]) {
+      const old = Buffer.alloc(32, 5)
+      const leaf = Buffer.alloc(32, 6)
+      expect(verifyConsistencyProof(2 ** exponent, old, 2 ** exponent + 1, nodeHash(old, leaf), [leaf])).toBe(true)
+    }
+    expect(verifyConsistencyProof(1, Buffer.alloc(32), 2 ** 53 + 2, Buffer.alloc(32), [])).toBe(false)
+  })
+})
+
+describe('a proof that is empty where the tree needs one', () => {
+  it('refuses an empty proof from a tree whose size is not a power of two', () => {
+    expect(verifyConsistencyProof(3, Buffer.alloc(32, 1), 5, Buffer.alloc(32, 2), [])).toBe(false)
   })
 })

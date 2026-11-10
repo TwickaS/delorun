@@ -35,6 +35,16 @@ export function nodeHash(left: Uint8Array, right: Uint8Array): Buffer {
 }
 
 /**
+ * Whether a size is a power of two, by arithmetic exact for every safe integer: a 32-bit `&` would read `2^32 + 2^31`
+ * as one.
+ * @param size - a positive safe integer.
+ * @returns `true` for 1, 2, 4, …
+ */
+export function isPowerOfTwo(size: number): boolean {
+  return Number.isSafeInteger(size) && size > 0 && 2 ** Math.round(Math.log2(size)) === size
+}
+
+/**
  * The root hash an inclusion proof reproduces (RFC 9162, the inclusion-proof check).
  * @param index - the leaf's index in the tree.
  * @param size - the tree size the proof is against.
@@ -90,7 +100,7 @@ export function verifyConsistencyProof(firstSize: number, firstRoot: Uint8Array,
   // A tree against itself needs no proof, only the same root.
   if (firstSize === secondSize) return proof.length === 0 && Buffer.from(firstRoot).equals(Buffer.from(secondRoot))
   // A power-of-two older tree's root is the start of the proof the client already holds; the log leaves it out.
-  const path = (firstSize & (firstSize - 1)) === 0 ? [Buffer.from(firstRoot), ...proof] : [...proof]
+  const path = isPowerOfTwo(firstSize) ? [Buffer.from(firstRoot), ...proof] : [...proof]
   const seed = path[0]
   if (seed === undefined) return false
   // The walking indices are the last leaf of each tree: an odd one means both roots take one more left child.

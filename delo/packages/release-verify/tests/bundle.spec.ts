@@ -5,24 +5,30 @@
  * witnesses did not make, an untrusted root, and a bundle or note that does not read at all. Each case removes one
  * check, so a spec fails whenever that check goes away.
  */
-import { createHash } from 'node:crypto'
+import { createHash, createPrivateKey, createPublicKey } from 'node:crypto'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { describe, expect, it } from 'vitest'
 import { RELEASE_LOG_BUNDLE_SIZE_LIMIT, type ReleaseLogBundle } from '@delo/contract-release-log'
 import type { SemanticVersion, Sha256Hex } from '@delo/contract-release-manifest'
 import { BundleSchema, checkBundle, readBundle, verifyBundle } from '../src/bundle.ts'
 import { RELEASE_LOG_REFUSALS, ReleaseLogRefusalError, type ReleaseLogRefusal } from '../src/errors.ts'
-import { keyIdOf } from '../src/entry.ts'
+import { keyIdOf, verifyEd25519ph } from '../src/entry.ts'
+import { checkpointBody, parseCheckpoint, parseVerifierKey, splitNote, verifySignature } from '../src/note.ts'
 import {
   COSIGNED_AT,
   entryBody,
+  FixtureLog,
   FixtureWitness,
+  inclusionProof,
   MANIFEST,
   NOTE_COSIGNATURE,
   NOTE_SIGNATURE,
   rawPublic,
   scenario,
+  rootMetadata,
   signatureLine,
+  throwawayKeys,
+  treeRoot,
   verifierKey,
   VERSION,
   type Scenario,
@@ -358,5 +364,231 @@ describe('the refusals', () => {
   it('carries a verifier key a trusted root can name for the log and every witness', () => {
     const fixture = scenario()
     expect(verifierKey(fixture.log.origin, NOTE_SIGNATURE, fixture.log.key)).toBe(fixture.log.vkey)
+  })
+})
+
+/**
+ * A bundle of an entry body the fixture log accepted, at the log's current tree.
+ * @param fixture - the fixture.
+ * @param body - the entry body's bytes.
+ * @returns the bundle, with a cosigned checkpoint.
+ */
+function committed(fixture: Scenario, body: Buffer): ReleaseLogBundle {
+  const index = fixture.log.append(body)
+  return fixture.log.bundle(index, 'delorun-0.1.0.manifest.json', SHA256, fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT))
+}
+
+describe('the leaf is the entry body\'s exact bytes', () => {
+  it('refuses the same body pretty-printed, because the log committed other bytes', () => {
+    const fixture = scenario()
+    const compact = fixture.log.body(fixture.bundle.entry.logIndex)
+    const pretty = Buffer.from(JSON.stringify(JSON.parse(compact.toString('utf8')), null, 2))
+    // The pretty body reads and its signature still verifies; only the leaf it hashes to differs.
+    expect(refusal(fixture, { ...fixture.bundle, entry: { ...fixture.bundle.entry, body: pretty.toString('base64') } })).toBe('inclusion-proof-invalid')
+  })
+
+  it('verifies the pretty-printed body when the log committed exactly those bytes', () => {
+    const fixture = scenario()
+    const pretty = Buffer.from(JSON.stringify(JSON.parse(fixture.log.body(fixture.bundle.entry.logIndex).toString('utf8')), null, 2))
+    expect(refusal(fixture, committed(fixture, pretty))).toBeUndefined()
+  })
+
+  it('refuses an extra field in an entry body the log accepted', () => {
+    const fixture = scenario()
+    const body = JSON.parse(fixture.log.body(fixture.bundle.entry.logIndex).toString('utf8')) as Record<string, unknown>
+    expect(refusal(fixture, committed(fixture, Buffer.from(JSON.stringify({ ...body, extra: 1 }))))).toBe('entry-malformed')
+  })
+
+  it('refuses a removed field in an entry body the log accepted', () => {
+    const fixture = scenario()
+    const body = JSON.parse(fixture.log.body(fixture.bundle.entry.logIndex).toString('utf8')) as { spec: { hashedRekordV002: { signature: { verifier: { keyDetails?: string } } } } }
+    delete body.spec.hashedRekordV002.signature.verifier.keyDetails
+    expect(refusal(fixture, committed(fixture, Buffer.from(JSON.stringify(body))))).toBe('entry-malformed')
+  })
+
+  it('fixes the digest algorithm and the key details: no other hash, no pure Ed25519, no `none`', () => {
+    const fixture = scenario()
+    for (const [algorithm, keyDetails] of [['NONE', 'PKIX_ED25519_PH'], ['ED25519', 'PKIX_ED25519_PH'], ['SHA2_512', 'PKIX_ED25519'], ['SHA2_512', 'none']] as const) {
+      const bundle = committed(fixture, entryBody({ manifest: MANIFEST, signer: fixture.keys.targets, algorithm, keyDetails }))
+      expect(refusal(fixture, bundle), `${algorithm} with ${keyDetails}`).toBe('entry-type-refused')
+    }
+  })
+
+  it('refuses another key\'s valid signature under the targets key\'s identity', () => {
+    const fixture = scenario()
+    const foreign = JSON.parse(entryBody({ manifest: MANIFEST, signer: fixture.keys.other }).toString('utf8')) as { spec: { hashedRekordV002: { signature: { content: string } } } }
+    const mixed = entryBody({ manifest: MANIFEST, signer: fixture.keys.targets, signature: Buffer.from(foreign.spec.hashedRekordV002.signature.content, 'base64') })
+    expect(refusal(fixture, committed(fixture, mixed))).toBe('entry-signature-invalid')
+  })
+})
+
+describe('the entry signature is RFC 8032 Ed25519ph', () => {
+  it('verifies the RFC 8032 §7.3 test vector, and refuses it over another message', () => {
+    const seed = Buffer.from('833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42', 'hex')
+    const publicKey = Buffer.from('ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf', 'hex')
+    const signature = Buffer.from('98a70222f0b8121aa9d30f813d683f809e462b469c7ff87639499bb94e6dae4131f85042463c2a355a2003d062adf5aaa10b8c61e636062aaad11c2a26083406', 'hex')
+    // The vector's key pair is consistent: the RFC's secret key derives the RFC's public key.
+    const pkcs8 = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed])
+    const derived = createPublicKey(createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' })).export({ format: 'jwk' }).x
+    expect(Buffer.from(derived!, 'base64url').equals(publicKey)).toBe(true)
+    expect(verifyEd25519ph(publicKey, Buffer.from('abc'), signature)).toBe(true)
+    expect(verifyEd25519ph(publicKey, Buffer.from('abd'), signature)).toBe(false)
+    expect(verifyEd25519ph(publicKey, Buffer.from('abc'), Buffer.alloc(3))).toBe(false)
+  })
+})
+
+describe('the inclusion proof\'s length and tree', () => {
+  it('refuses an empty proof at a tree size above one', () => {
+    const fixture = scenario()
+    expect(refusal(fixture, { ...fixture.bundle, inclusion: { ...fixture.bundle.inclusion, hashes: [] } })).toBe('inclusion-proof-invalid')
+  })
+
+  it('verifies a one-leaf tree with no proof, whose root is the leaf hash itself', () => {
+    const keys = throwawayKeys()
+    const log = new FixtureLog()
+    const witness = new FixtureWitness()
+    const index = log.submit(MANIFEST, keys.targets)
+    const bundle = log.bundle(index, 'delorun-0.1.0.manifest.json', SHA256, witness.cosign(log.checkpoint(), COSIGNED_AT))
+    expect(bundle.inclusion.hashes).toEqual([])
+    const verified = verifyBundle(rootMetadata(keys, log, [witness]), VERSION, MANIFEST, bundle)
+    expect(verified.treeSize).toBe(1)
+    expect(verified.rootHash.equals(createHash('sha256').update(Buffer.of(0x00)).update(log.body(index)).digest())).toBe(true)
+  })
+
+  it('refuses a proof of another leaf', () => {
+    const fixture = scenario()
+    const other = inclusionProof(0, fixture.log.leafHashes).map(hash => hash.toString('hex'))
+    expect(refusal(fixture, { ...fixture.bundle, inclusion: { ...fixture.bundle.inclusion, hashes: other } })).toBe('inclusion-proof-invalid')
+  })
+
+  it('refuses a proof that holds at another tree size than the bundle names', () => {
+    const fixture = scenario()
+    const twoRoot = treeRoot(fixture.log.leafHashes.slice(0, 2))
+    const bundle: ReleaseLogBundle = {
+      ...fixture.bundle,
+      inclusion: { ...fixture.bundle.inclusion, treeSize: 2, rootHash: twoRoot.toString('hex'), hashes: inclusionProof(1, fixture.log.leafHashes).map(hash => hash.toString('hex')) },
+      checkpoint: fixture.witness.cosign(fixture.log.note(2), COSIGNED_AT),
+    }
+    expect(refusal(fixture, bundle)).toBe('inclusion-proof-invalid')
+  })
+})
+
+describe('the keys a checkpoint is signed with', () => {
+  it('refuses a checkpoint that carries a witness cosignature and no log signature', () => {
+    const fixture = scenario()
+    const body = `${fixture.log.origin}\n3\n${fixture.log.rootHash.toString('base64')}\n`
+    const witnessOnly = `${body}\n${signatureLine(fixture.witness.name, NOTE_COSIGNATURE, fixture.witness.key, body, COSIGNED_AT)}`
+    expect(refusal(fixture, { ...fixture.bundle, checkpoint: witnessOnly })).toBe('log-signature-invalid')
+  })
+
+  it('refuses a root that names a witness\'s cosignature key as the log key', () => {
+    const fixture = scenario()
+    const root = { ...fixture.root, log: { origin: fixture.log.origin, vkey: fixture.witness.vkey } }
+    expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('log-origin-untrusted')
+  })
+
+  it('refuses every checkpoint under a root that lists no witness', () => {
+    const fixture = scenario()
+    const root = { ...fixture.root, witnesses: { keys: [], threshold: 1 } }
+    expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('witness-cosignature-missing')
+  })
+})
+
+describe('the witnesses a root lists', () => {
+  it('refuses a root that lists one witness key twice, under two names, which would count one witness as two', () => {
+    const fixture = scenario()
+    const raw = fixture.witness.vkey.split('+')[2]!
+    const again = verifierKey('another-name.example.test', NOTE_COSIGNATURE, fixture.witness.key)
+    expect(again.split('+')[2]).toBe(raw)
+    const root = { ...fixture.root, witnesses: { keys: [{ name: fixture.witness.name, vkey: fixture.witness.vkey }, { name: 'another-name.example.test', vkey: again }], threshold: 2 } }
+    expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('log-origin-untrusted')
+  })
+
+  it('refuses a root that lists a checkpoint signature key as a witness', () => {
+    const fixture = scenario()
+    const root = { ...fixture.root, witnesses: { keys: [{ name: fixture.witness.name, vkey: verifierKey(fixture.witness.name, NOTE_SIGNATURE, fixture.witness.key) }], threshold: 1 } }
+    expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('log-origin-untrusted')
+  })
+
+  it('does not count a valid cosignature under a line whose key hash is not the listed key\'s', () => {
+    const fixture = scenario()
+    const cosigned = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
+    const lines = cosigned.split('\n')
+    const [dash, name, encoded] = lines.at(-2)!.split(' ')
+    const bytes = Buffer.from(encoded!, 'base64')
+    bytes[0] = bytes[0]! ^ 0xff
+    lines[lines.length - 2] = `${dash!} ${name!} ${bytes.toString('base64')}`
+    // C2SP signed notes bind a line to a key by name and key hash; the signature bytes alone do not select a key.
+    expect(refusal(fixture, { ...fixture.bundle, checkpoint: lines.join('\n') })).toBe('witness-cosignature-missing')
+  })
+})
+
+describe('a non-canonical entry signature', () => {
+  it('is refused, as RFC 8032 requires, though ZIP-215 would accept it', async () => {
+    const { ed25519ph } = await import('@noble/curves/ed25519.js')
+    // The identity point as the public key, and as R encoded with y = p + 1 instead of 1, with S = 0: under ZIP-215
+    // the non-canonical encoding is accepted and the equation holds for any message; RFC 8032 refuses the encoding.
+    const identity = Buffer.alloc(32)
+    identity[0] = 1
+    const nonCanonicalR = Buffer.alloc(32, 0xff)
+    nonCanonicalR[0] = 0xee
+    nonCanonicalR[31] = 0x7f
+    const signature = Buffer.concat([nonCanonicalR, Buffer.alloc(32)])
+    expect(ed25519ph.verify(signature, MANIFEST, identity, { zip215: true })).toBe(true)
+    expect(verifyEd25519ph(identity, MANIFEST, signature)).toBe(false)
+  })
+
+  it('is refused when S is not reduced below the group order', () => {
+    const fixture = scenario()
+    const body = JSON.parse(fixture.log.body(fixture.bundle.entry.logIndex).toString('utf8')) as { spec: { hashedRekordV002: { signature: { content: string } } } }
+    const signature = Buffer.from(body.spec.hashedRekordV002.signature.content, 'base64')
+    const order = 2n ** 252n + 27742317777372353535851937790883648493n
+    let s = 0n
+    for (let at = 63; at >= 32; at--) s = (s << 8n) | BigInt(signature[at]!)
+    let unreduced = s + order
+    const raised = Buffer.from(signature)
+    for (let at = 32; at < 64; at++) {
+      raised[at] = Number(unreduced & 0xffn)
+      unreduced >>= 8n
+    }
+    expect(verifyEd25519ph(rawPublic(fixture.keys.targets), MANIFEST, signature)).toBe(true)
+    expect(verifyEd25519ph(rawPublic(fixture.keys.targets), MANIFEST, raised)).toBe(false)
+  })
+})
+
+describe('a checkpoint body', () => {
+  it('is an origin line, a tree size and a root hash, as the client writes and reads it', () => {
+    const fixture = scenario()
+    expect(checkpointBody(fixture.log.origin, 3, fixture.log.rootHash)).toBe(`${fixture.log.origin}\n3\n${fixture.log.rootHash.toString('base64')}\n`)
+    for (const body of [`${fixture.log.origin}\n`, '\n3\nAAAA\n', `${fixture.log.origin}\nthree\nAAAA\n`, `${fixture.log.origin}\n3`]) {
+      const note = `${body}\n${signatureLine(fixture.log.origin, NOTE_SIGNATURE, fixture.log.key, body)}`
+      expect(refusal(fixture, { ...fixture.bundle, checkpoint: fixture.witness.cosign(note, COSIGNED_AT) }), JSON.stringify(body)).toBe('checkpoint-malformed')
+    }
+  })
+})
+
+describe('the signed-note format', () => {
+  it('refuses a key of a signature type the log and its witnesses do not use', () => {
+    const fixture = scenario()
+    expect(refusalOf(() => parseVerifierKey(verifierKey('other.example.test', 0x02, fixture.keys.other)))).toBe('log-origin-untrusted')
+  })
+
+  it('refuses a signature line that is not one, and a root hash in base64 that is not canonical', () => {
+    const fixture = scenario()
+    expect(refusalOf(() => splitNote(`${fixture.log.origin}\n3\nAAAA\n\nnot a signature line\n`))).toBe('checkpoint-malformed')
+    const canonical = fixture.log.rootHash.toString('base64')
+    // The last character of 32 bytes in base64 carries four padding bits; setting one keeps the bytes and breaks the form.
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    const loose = `${canonical.slice(0, 42)}${alphabet[alphabet.indexOf(canonical[42]!) ^ 1]!}=`
+    expect(Buffer.from(loose, 'base64').equals(fixture.log.rootHash)).toBe(true)
+    expect(Buffer.from(loose, 'base64').byteLength).toBe(32)
+    expect(refusalOf(() => parseCheckpoint(`${fixture.log.origin}\n3\n${loose}\n`))).toBe('checkpoint-malformed')
+  })
+
+  it('does not count a cosignature line of the wrong length', () => {
+    const fixture = scenario()
+    const body = `${fixture.log.origin}\n3\n${fixture.log.rootHash.toString('base64')}\n`
+    const verifier = parseVerifierKey(fixture.witness.vkey)
+    expect(verifySignature(verifier, body, { name: verifier.name, keyHash: verifier.keyHash, signature: Buffer.alloc(64) })).toBe(false)
   })
 })

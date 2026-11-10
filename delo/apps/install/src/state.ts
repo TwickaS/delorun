@@ -1,20 +1,18 @@
 /**
- * What the launcher remembers between installs, under contract C1's `trust/`: the newest root that verified, the
- * newest timestamp that verified, and the newest release-log checkpoint that verified. Contract C2 refuses a lower
- * timestamp version than the stored one and contract C18 refuses a checkpoint smaller than the stored one, so these
- * three files are the rollback protection a client keeps. Every one of them is a protected file: written at mode 0600
- * through a temporary file, and refused by `@delo/home` when it is a link, another user's or laxer than 0600.
+ * What the launcher remembers between installs, under contract C1's `trust/`: the newest root that verified, the chain
+ * an install walked to it, and the newest timestamp that verified. Contract C2 refuses a lower timestamp version than
+ * the stored one, so these files are the rollback protection of the release metadata. The release log's checkpoint and
+ * check state are `@delo/release-verify`'s records, in the one format that package reads and writes. Every file here is
+ * a protected file: written at mode 0600 through a temporary file, and refused by `@delo/home` when it is a link,
+ * another user's or laxer than 0600.
  *
  * @module @delo/install/state
  */
 import { mkdir, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE, ROOT_FILE_NAME_PATTERN, TRUST_FILES, TRUST_ROOTS_DIRECTORY } from '@delo/contract-home-layout'
-import type { ReleaseLogCheck } from '@delo/contract-release-log'
 import { readProtectedFile, writeProtectedFile } from '@delo/home'
 import { readRoot } from '@delo/release/sign/verify'
-import { checkStatePath } from '@delo/release-verify/paths'
-import { readCheckState, recorded, serializeCheckState } from '@delo/release-verify/state'
 import { InstallError, messageOf } from './errors.ts'
 
 /** The newest timestamp a client verified: its version and its bytes, which an equal version must repeat. */
@@ -24,20 +22,6 @@ export interface StoredTimestamp {
   /** That timestamp file's bytes. */
   readonly bytes: Uint8Array
 }
-
-/** The newest release-log checkpoint a client verified (contract C18). */
-export interface StoredCheckpoint {
-  /** The tree size the checkpoint names. */
-  readonly treeSize: number
-  /** The checkpoint's root hash, lowercase hex. */
-  readonly rootHash: string
-}
-
-/** The two fields a stored checkpoint holds, in the sorted order `Object.keys(record).sort()` gives them. */
-const CHECKPOINT_FIELDS = ['rootHash', 'treeSize'] as const
-
-/** The shape a stored checkpoint's root hash has. */
-const HEX = /^[0-9a-f]{64}$/u
 
 /**
  * The path of one of `trust/`'s files.
@@ -213,68 +197,5 @@ export async function writeStoredRootChain(home: string, roots: readonly Uint8Ar
     } catch (error) {
       throw new InstallError('TRUST_STATE_INVALID', path, `the walked root chain cannot be written: ${messageOf(error)}`, { cause: error })
     }
-  }
-}
-
-/**
- * Read the newest verified release-log checkpoint.
- * @param home - the resolved Delo home.
- * @returns the checkpoint, or `undefined` when none was stored.
- * @throws {InstallError} `TRUST_STATE_INVALID` when the file is not a checkpoint record.
- */
-export async function readStoredCheckpoint(home: string): Promise<StoredCheckpoint | undefined> {
-  const path = trustFile(home, TRUST_FILES.checkpoint)
-  const bytes = await readTrustFile(path)
-  if (bytes === undefined) return undefined
-  let record: unknown
-  try {
-    record = JSON.parse(bytes.toString('utf8'))
-  } catch (error) {
-    throw new InstallError('TRUST_STATE_INVALID', path, `the stored checkpoint is not JSON: ${messageOf(error)}`, { cause: error })
-  }
-  const fields = typeof record === 'object' && record !== null ? Object.keys(record).sort() : []
-  const value = record as { readonly treeSize?: unknown, readonly rootHash?: unknown }
-  if (fields.join(',') !== CHECKPOINT_FIELDS.join(',')
-    || typeof value.treeSize !== 'number' || !Number.isSafeInteger(value.treeSize) || value.treeSize < 1
-    || typeof value.rootHash !== 'string' || !HEX.test(value.rootHash)) {
-    throw new InstallError('TRUST_STATE_INVALID', path, 'the stored checkpoint is not a {treeSize, rootHash} record, so the log cannot be checked from it')
-  }
-  return { treeSize: value.treeSize, rootHash: value.rootHash }
-}
-
-/**
- * Store the newest verified release-log checkpoint, so the next check proves consistency from it.
- * @param home - the resolved Delo home.
- * @param checkpoint - the checkpoint a verified online check named.
- */
-export async function writeStoredCheckpoint(home: string, checkpoint: StoredCheckpoint): Promise<void> {
-  await writeTrustFile(home, TRUST_FILES.checkpoint, Buffer.from(`${JSON.stringify(checkpoint)}\n`))
-}
-
-/**
- * Record what the release-log check found for a release in `trust/release-log.json`, the per-release check state that
- * `@delo/release-verify` keeps (contract C18, "Check states"): `verified` when the online check passed, and `unchecked`
- * with the reason when it could not run. The record of any other release in the file is kept as it is.
- * @param home - the resolved Delo home.
- * @param check - the check's record for the release being installed.
- * @param detail - why the check did not run, when it did not.
- * @throws {InstallError} `TRUST_STATE_INVALID` when the file exists and does not read as a check state record, or
- *   cannot be written.
- */
-export async function writeReleaseLogCheck(home: string, check: ReleaseLogCheck, detail?: string): Promise<void> {
-  const path = checkStatePath(home)
-  const existing = await readTrustFile(path)
-  let state: ReturnType<typeof readCheckState>
-  try {
-    state = existing === undefined ? new Map() : readCheckState(existing)
-  } catch (error) {
-    throw new InstallError('TRUST_STATE_INVALID', path, `the stored release-log check state does not read: ${messageOf(error)}`, { cause: error })
-  }
-  state.set(check.release, recorded(check.release, check.state, check.lastAttempt, undefined, detail))
-  try {
-    await mkdir(join(home, DELO_HOME_ENTRIES.trust), { recursive: true, mode: PRIVATE_DIR_MODE })
-    await writeProtectedFile(path, Buffer.from(serializeCheckState(state)))
-  } catch (error) {
-    throw new InstallError('TRUST_STATE_INVALID', path, `the release-log check state cannot be written: ${messageOf(error)}`, { cause: error })
   }
 }

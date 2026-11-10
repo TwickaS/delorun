@@ -148,7 +148,7 @@ runtimes/
 A launcher runs the active runtime only when it understands both the store and the runtime's launch interface.
 
 - `store.json` carries the store layout number, which is 1. The layout number changes only when an entry of the store moves or changes meaning.
-- Each runtime's signed manifest ([C2](c02-release-manifest.md)) carries its launch protocol number, which is 1. The launch protocol fixes the runtime's entry file, the arguments the launcher passes and the environment variables it sets (`DSH_HOME`, `DELO_HOME`, `DELO_PROFILE`).
+- Each runtime's signed manifest ([C2](c02-release-manifest.md)) carries its launch protocol number, which is 1. The launch protocol fixes the runtime's entry file, the arguments the launcher passes and the environment variables it sets (`DSH_HOME`, `DELO_HOME`, `DELO_PROFILE`, and `DELO_LAUNCHER_ROOTS`, the directory of the release roots the launcher ships, which `delorun verify` anchors the stored root on; a runtime started without it holds the stored root to its own signatures only and says so).
 - The launcher runs `current` when it supports the store's layout number and the runtime's launch protocol number. Otherwise it stops with `RUNTIME_INCOMPATIBLE`, names both numbers and offers the update flow when the runtime is the older side, or a launcher update when the launcher is the older side. It changes neither `current` nor any other file of the store.
 
 ## The npm launcher and the install script

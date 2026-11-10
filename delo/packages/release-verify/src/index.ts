@@ -7,9 +7,9 @@
  * installed release, and answers what a start does: go on, go on with a warning that names the unchecked release, or
  * stop.
  *
- * The package holds no network code. Its online check takes a {@link ReleaseLogTransport}, so the specs drive every
- * answer from recorded fixtures, and the transport the launcher passes is the part contract C18's owner gates. It also
- * never signs: nothing here can mint a checkpoint or an entry.
+ * The online check takes a {@link ReleaseLogTransport}; {@link tilesTransport} is the one over an injected `fetch` and
+ * the log's tlog-tiles, so the specs drive every answer from recorded fixtures and no module here reaches the network
+ * on its own. The package never signs: nothing here can mint a checkpoint or an entry.
  *
  * @module @delo/release-verify
  */
@@ -32,7 +32,7 @@ export {
   type ReleaseLogRefusal,
 } from './errors.ts'
 export { parseStrictJson, type JsonValue } from './json.ts'
-export { leafHash, nodeHash, rootFromInclusionProof, verifyConsistencyProof } from './merkle.ts'
+export { isPowerOfTwo, leafHash, nodeHash, rootFromInclusionProof, verifyConsistencyProof } from './merkle.ts'
 export {
   checkpointBody,
   NOTE_COSIGNATURE,
@@ -40,14 +40,30 @@ export {
   parseCheckpoint,
   parseVerifierKey,
   splitNote,
+  trustedLogKeys,
   verifySignature,
   type Checkpoint,
   type NoteSignature,
   type NoteVerifier,
+  type TrustedLogKeys,
 } from './note.ts'
-export { checkOnline, LogUnreachableError, type OnlineCheckInput, type OnlineVerdict, type ReleaseLogTransport } from './online.ts'
+export {
+  checkOnline,
+  COSIGNATURE_CLOCK_SKEW_SECONDS,
+  LogContradictionError,
+  LogUnreachableError,
+  ONLINE_CHECK_DEADLINE_SECONDS,
+  ReleaseLogInternalError,
+  storedCheckpointSigned,
+  type LegacyCheckpoint,
+  type OnlineCheckInput,
+  type OnlineVerdict,
+  type ReleaseLogTransport,
+} from './online.ts'
 export { checkStatePath, checkpointPath, RELEASE_LOG_STATE_FILE } from './paths.ts'
+export { checkAndRecord, checkAndStore, readCheckpointFile, readCheckpointRecord, readCheckRecords, recordResult, type CheckInput, type CheckpointFile } from './record.ts'
 export { ReleaseVerification, type ReleaseVerificationOptions, type RetryTimers } from './service.ts'
 export { checkAtStart, INTEGRITY_MODE_SETTING, onlineCheckEnabled, uncheckedWarning, type StartCheckInput, type StartCheckResult } from './start.ts'
-export { readCheckState, recorded, RELEASE_LOG_STATE_SCHEMA, RELEASE_LOG_STATE_SIZE_LIMIT, serializeCheckState, type RecordedCheck } from './state.ts'
+export { readCheckState, recorded, type AttemptFindings, RELEASE_LOG_STATE_SCHEMA, RELEASE_LOG_STATE_SIZE_LIMIT, serializeCheckState, type RecordedCheck } from './state.ts'
 export { readProtectedFile, writeProtectedFile } from './store.ts'
+export { CHECKPOINT_SIZE_LIMIT, logEndpoints, MAX_REDIRECTS, RELEASE_LOG_API_PREFIX, tilesTransport, type Fetch, type LogEndpoints, type TilesTransportOptions } from './transport.ts'
