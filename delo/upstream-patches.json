@@ -1290,7 +1290,7 @@
       "path": "packages/sandbox/sandbox/src/escalation.ts",
       "class": "security",
       "reason": "Container denial marker: adds `environmentDenialMarker()` and `denialMarkers(facts, escalationModes, subject)`, which return upstream's marker and escalation hint for a policy denial and only the environment's marker, with no hint, for an environment denial. Lead verdict: kept; stricter (fewer escalation invitations; the approval prompt is unchanged), permitted by A84.",
-      "sha256": "83242c8268362c8c5ce9ed47bf4d5287e383493edebff2cd72ed91208453e45d"
+      "sha256": "9fcbd4fa2051a1fd37abf8f56ac1753c1fe7174729f043afcd47c21ad0fa24b4"
     },
     {
       "path": "packages/sandbox/sandbox/src/index.ts",
@@ -1915,6 +1915,24 @@
       "class": "delo-feature",
       "feature": "studio-seams",
       "reason": "The browser preview's worker mounts an authenticator that admits the browser Peer for requests that already passed the unchanged Host and Origin fence, so Delorun's fenced plugin bundles and client event stream load in the preview. The preview worker only, never the Host."
+    },
+    {
+      "path": "packages/api/gateway/src/index.ts",
+      "class": "security",
+      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; absent, behaviour is upstream's.",
+      "sha256": "955ef80226e34821963485ca2bc9974496006e1552b4608b16d0be26973ea4bc"
+    },
+    {
+      "path": "packages/api/gateway/src/types.ts",
+      "class": "security",
+      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; absent, behaviour is upstream's.",
+      "sha256": "0223ecfecca3e551141cd1a81aeab6513aa326676c41f863d408e07db3dd2b45"
+    },
+    {
+      "path": "packages/interaction/user-approval/src/types.ts",
+      "class": "security",
+      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's.",
+      "sha256": "f3623d79dcffe879835bf5765240c8c43f32f29526706c8626d85c0f2f73214b"
     }
   ],
   "retired": []
