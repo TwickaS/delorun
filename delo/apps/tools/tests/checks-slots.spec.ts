@@ -1,11 +1,12 @@
 /**
  * The machine-wide slot budget against an in-memory file system and process table: grants beside other runs, first come
- * first served, the disk-heavy places, the trunk's priority, dead holders reclaimed, overfilled claims stepping back,
+ * first served, the disk-heavy places, the trunk's priority, dead holders and reused process ids reclaimed, claims that
+ * overfill the slots, the memory or the disk-heavy places stepping back,
  * old worktrees' queue and lock, and the position messages.
  */
 import { describe, expect, it } from 'vitest'
 import type { QueueFs, QueueHost } from '../src/checks/run-queue.ts'
-import { decide, describeSlots, grantFromEnv, grantToEnv, readSlots, SLOT_POLL_MILLISECONDS, takeSlots, WAIT_REPORT_MILLISECONDS, type SlotBudget, type SlotDemand, type SlotGrant, type SlotPaths } from '../src/checks/slots.ts'
+import { decide, describeSlots, grantFromEnv, grantToEnv, readSlots, SLOT_POLL_MILLISECONDS, stepsBack, takeSlots, WAIT_REPORT_MILLISECONDS, type SlotBudget, type SlotDemand, type SlotGrant, type SlotPaths } from '../src/checks/slots.ts'
 
 const GIB = 1024 ** 3
 const paths: SlotPaths = { dir: '/s', oldQueue: '/q', oldLock: '/old.lock' }
@@ -16,6 +17,8 @@ const demand = (extra: Partial<SlotDemand> = {}): SlotDemand => ({ want: 20, min
 class Machine {
   readonly files = new Map<string, string>()
   readonly live = new Set<number>()
+  /** The start time each process reports; a process absent here reports none. */
+  readonly starts = new Map<number, string>()
   readonly said: string[] = []
   readonly releases = new Map<number, () => void>()
   time = 1000
@@ -52,6 +55,7 @@ class Machine {
       now: () => this.time,
       pid,
       alive: other => this.live.has(other),
+      startOf: other => this.starts.get(other),
       sleep: async (milliseconds) => {
         expect(milliseconds).toBe(SLOT_POLL_MILLISECONDS)
         this.sleeps += 1
@@ -279,6 +283,40 @@ describe('the order of requests', () => {
     const read = machine.fs.read
     machine.fs.read = path => path === '/s/req-gone.json' ? undefined : read(path)
     expect(readSlots(host, paths).waiting).toEqual([])
+    // Its process may have replaced it in the meantime, so the reader leaves the path alone.
+    expect(machine.files.has('/s/req-gone.json')).toBe(true)
+  })
+
+  it('records its start time, and reclaims a holder whose process id a later process reuses', async () => {
+    const machine = new Machine()
+    machine.starts.set(1, '100')
+    machine.hold(7, { slots: 20, start: 'before' })
+    machine.starts.set(7, 'after')
+    machine.hold(8, { slots: 1, start: '5' })
+    machine.starts.set(8, '5')
+    machine.hold(9, { slots: 1 })
+    const host = machine.host(1)
+    expect(readSlots(host, paths).holders.map(holder => holder.pid)).toEqual([8, 9])
+    expect(machine.files.has('/s/held-7.json')).toBe(false)
+    await takeSlots(host, paths, budget, demand({ want: 2, min: 2 }))
+    expect(JSON.parse(machine.files.get('/s/held-1.json') ?? '{}')).toMatchObject({ pid: 1, start: '100' })
+  })
+
+  it('steps back when a claim in the same instant overfills the memory, and waits until it fits', async () => {
+    const machine = new Machine()
+    const rename = machine.fs.rename
+    let injected = false
+    machine.fs.rename = (from, to) => {
+      rename(from, to)
+      if (!injected && to === '/s/held-1.json') {
+        injected = true
+        machine.hold(2, { slots: 1, memoryBytes: 10 * GIB, requested: 0 })
+      }
+    }
+    machine.onSleep = (count) => { if (count === 1) machine.live.delete(2) }
+    const grant = await takeSlots(machine.host(1), paths, budget, demand())
+    expect(machine.sleeps).toBe(1)
+    expect(grant).toMatchObject({ slots: 15, memoryBytes: 15 * GIB })
   })
 
   it('keeps the claim of the lower process id when two claims carry the same request time', async () => {
@@ -294,6 +332,22 @@ describe('the order of requests', () => {
     }
     await takeSlots(machine.host(1), paths, budget, demand())
     expect(machine.sleeps).toBe(0)
+  })
+})
+
+describe('a claim that overfills the machine', () => {
+  const holder = (pid: number, requested: number, extra: Partial<{ slots: number, memoryBytes: number, disk: boolean, priority: 0 | 1 }> = {}) => ({ pid, slots: 1, memoryBytes: GIB, disk: false, priority: 1 as const, label: '', since: 0, requested, file: `held-${String(pid)}.json`, ...extra })
+
+  it('gives back the latest grant among the holders of each overfilled resource, and no other', () => {
+    const memory = { waiting: [], oldWaiting: [], holders: [holder(1, 0, { memoryBytes: 15 * GIB }), holder(2, 5, { memoryBytes: 10 * GIB })] }
+    expect([stepsBack(memory, 1, budget), stepsBack(memory, 2, budget)]).toEqual([false, true])
+    const disk = { waiting: [], oldWaiting: [], holders: [holder(1, 0, { disk: true }), holder(2, 5, { disk: true }), holder(3, 7, { disk: true }), holder(4, 9)] }
+    expect([1, 2, 3, 4].map(pid => stepsBack(disk, pid, budget))).toEqual([false, false, true, false])
+    const slots = { waiting: [], oldWaiting: [], holders: [holder(1, 0, { slots: 15 }), holder(2, 5, { slots: 15, priority: 0 })] }
+    expect([stepsBack(slots, 1, budget), stepsBack(slots, 2, budget)]).toEqual([true, false])
+    const fits = { waiting: [], oldWaiting: [], holders: [holder(1, 0, { slots: 10, disk: true }), holder(2, 5, { slots: 10, disk: true })] }
+    expect([stepsBack(fits, 1, budget), stepsBack(fits, 2, budget)]).toEqual([false, false])
+    expect(stepsBack({ ...fits, oldHolder: 9 }, 1, budget)).toBe(true)
   })
 })
 

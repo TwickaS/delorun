@@ -32,6 +32,11 @@ export interface QueueHost {
   readonly pid: number
   /** Whether a process with this id is running. */
   alive(pid: number): boolean
+  /**
+   * When the process with this id started, as the kernel reports it, so a recorded holder whose id a later process reuses
+   * is not taken for that process; undefined when the process is gone or the system does not report it.
+   */
+  startOf(pid: number): string | undefined
   /** Resolve after the milliseconds. */
   sleep(milliseconds: number): Promise<void>
   /** Print a line to the run's error output. */

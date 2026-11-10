@@ -62,7 +62,7 @@ import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, rem
 import { catalog, criticalPath, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
-import { machineBudget, nodeSlotHost, slotPaths } from './checks/slot-host.ts'
+import { machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-host.ts'
 import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, readSlots, takeSlots, type SlotGrant } from './checks/slots.ts'
 import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
@@ -541,7 +541,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
 
   if (values.queue) {
     const budgetNow = machineBudget(cpus, memory, env)
-    for (const line of describeSlots(readSlots(nodeSlotHost(text => process.stderr.write(text)), slotPaths()), budgetNow, Date.now())) console.log(line)
+    for (const line of describeSlots(readSlots(nodeSlotHost(text => process.stderr.write(text)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1)), budgetNow, Date.now())) console.log(line)
     return 0
   }
   const workers = workerCounts(cpus, memory)
@@ -661,7 +661,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   let grant: SlotGrant | undefined = inherited
   if (!light && !preflight && inherited === undefined && running.length > 0 && !isLightPlan(running)) {
     const demand = runDemand(running, slotBudget.slots, gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)), `${relative(dirname(root), root)}: ${running.map(check => check.id).slice(0, 6).join(', ')}${running.length > 6 ? ', ...' : ''}`)
-    grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), slotPaths(), slotBudget, demand)
+    grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1), slotBudget, demand)
   }
   if (!light && !preflight && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
     const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)

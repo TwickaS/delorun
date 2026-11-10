@@ -2,7 +2,7 @@
  * The slot budget on this machine, what a run asks of it, a plan fitted to its grant, the wrapper for ad-hoc commands,
  * and the disk pressure the run reports.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -10,7 +10,7 @@ import type { PassCache } from '../src/checks/cache.ts'
 import { checksToRun, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand, withoutIdleNeeds } from '../src/checks/demand.ts'
 import { ioPressure } from '../src/checks/machine.ts'
 import type { Planned } from '../src/checks/plan.ts'
-import { machineBudget, nodeSlotHost, processAlive, slotPaths } from '../src/checks/slot-host.ts'
+import { machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processStart, slotPaths } from '../src/checks/slot-host.ts'
 import { takeSlots } from '../src/checks/slots.ts'
 import type { Unit } from '../src/checks/units.ts'
 import { runInherited, withSlots, type WrapperHost } from '../src/with-slots.ts'
@@ -32,8 +32,31 @@ describe('the machine\'s budget', () => {
     expect(() => machineBudget(22, GIB, { DELO_CHECKS_DISK_RUNS: 'two' })).toThrow('DELO_CHECKS_DISK_RUNS must be a positive whole number, got two')
   })
 
-  it('lives under the temporary directory beside the previous queue and lock', () => {
-    expect(slotPaths('/t')).toEqual({ dir: '/t/delo-run-checks.slots', oldQueue: '/t/delo-run-checks.queue', oldLock: '/t/delo-run-checks.lock' })
+  it('lives in the user\'s own directory under the temporary directory, beside the previous queue and lock', () => {
+    expect(slotPaths('/t', 1000)).toEqual({ dir: '/t/delo-run-checks-1000.slots', oldQueue: '/t/delo-run-checks.queue', oldLock: '/t/delo-run-checks.lock' })
+  })
+
+  it('creates the user\'s directory with mode 0700, and refuses one other users can reach, a link, or another user\'s', () => {
+    const base = mkdtempSync(join(tmpdir(), 'delo-slot-dir-'))
+    temporary.push(base)
+    const uid = process.getuid?.() ?? -1
+    const { dir } = privateSlotPaths(base, uid)
+    expect(statSync(dir).mode & 0o777).toBe(0o700)
+    chmodSync(dir, 0o755)
+    expect(() => privateSlotPaths(base, uid)).toThrow(`the slot budget ${dir} has mode 755, which other users can reach; remove ${dir} while no run holds or waits for slots`)
+    expect(() => privateSlotPaths(base, uid + 1)).toThrow(/is not a directory|belongs to user/)
+    const linked = mkdtempSync(join(tmpdir(), 'delo-slot-link-'))
+    temporary.push(linked)
+    mkdirSync(join(linked, 'target'), { mode: 0o700 })
+    symlinkSync(join(linked, 'target'), slotPaths(linked, uid).dir)
+    expect(() => privateSlotPaths(linked, uid)).toThrow('is not a directory (a symbolic link is refused)')
+  })
+
+  it('reads a process\'s start time past a command name with spaces and parentheses, and none for a gone process', () => {
+    expect(processStart(1, () => `1 (a ) b) S ${Array.from({ length: 18 }, (_, index) => String(index + 1)).join(' ')} 4242 99`)).toBe('4242')
+    expect(processStart(process.pid)).toMatch(/^\d+$/)
+    expect(processStart(process.pid)).toBe(nodeSlotHost(() => undefined).startOf(process.pid))
+    expect(processStart(2 ** 22 + 1)).toBeUndefined()
   })
 
   it('takes and releases a grant on the real file system', async () => {
@@ -41,9 +64,9 @@ describe('the machine\'s budget', () => {
     temporary.push(base)
     const said: string[] = []
     const host = nodeSlotHost(line => { said.push(line) })
-    const grant = await takeSlots({ ...host, guard: () => undefined }, slotPaths(base), { slots: 4, memoryBytes: 4 * GIB, diskRuns: 1 }, { want: 2, min: 2, memoryBytes: 0, disk: true, priority: 1, label: 'spec' })
+    const grant = await takeSlots({ ...host, guard: () => undefined }, slotPaths(base, process.getuid?.() ?? -1), { slots: 4, memoryBytes: 4 * GIB, diskRuns: 1 }, { want: 2, min: 2, memoryBytes: 0, disk: true, priority: 1, label: 'spec' })
     expect(grant.slots).toBe(2)
-    expect(existsSync(join(base, 'delo-run-checks.slots', `held-${String(process.pid)}.json`))).toBe(true)
+    expect(existsSync(join(slotPaths(base, process.getuid?.() ?? -1).dir, `held-${String(process.pid)}.json`))).toBe(true)
     expect(host.fs.read(join(base, 'missing'))).toBeUndefined()
     expect(host.fs.list(join(base, 'missing'))).toEqual([])
     host.say('x')
@@ -140,7 +163,7 @@ describe('the wrapper for ad-hoc commands', () => {
       said,
       host: {
         slots: { ...real, guard: () => undefined, now: () => (clock += 1500) },
-        paths: slotPaths(base),
+        paths: slotPaths(base, process.getuid?.() ?? -1),
         budget: { slots: 8, memoryBytes: 8 * GIB, diskRuns: 1 },
         env: { KEEP: '1' },
         run: async (argv, env) => { ran.push({ argv, slots: env['DELO_SLOTS'] }); return 3 },

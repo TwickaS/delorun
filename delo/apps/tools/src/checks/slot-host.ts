@@ -1,12 +1,14 @@
 /**
  * The machine-wide slot budget's place on this machine: its directories under the system's temporary directory, the budget
- * from the machine and the environment, and the file system, clock and process table that `slots.ts` reads through.
+ * from the machine and the environment, and the file system, clock and process table that `slots.ts` reads through. The
+ * budget's directory belongs to the user and only the user can reach it; the previous queue's directory and lock file keep
+ * the shared names that old worktrees use.
  *
  * @module @delo/tools/checks/slot-host
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { ensurePrivateDir } from './private-dir.ts'
 import { processGuard, type QueueHost } from './run-queue.ts'
 import type { SlotBudget, SlotPaths } from './slots.ts'
 
@@ -18,12 +20,28 @@ export const DISK_RUNS_ENV = 'DELO_CHECKS_DISK_RUNS'
 const DEFAULT_DISK_RUNS = 2
 
 /**
- * The directories: the budget's, and the previous queue's directory and lock file, which old worktrees still take.
+ * The directories: the user's budget directory, and the previous queue's directory and lock file, which old worktrees
+ * still take.
  * @param base - the system's temporary directory.
+ * @param uid - the user whose budget it is.
  * @returns the paths.
  */
-export function slotPaths(base: string = tmpdir()): SlotPaths {
-  return { dir: join(base, 'delo-run-checks.slots'), oldQueue: join(base, 'delo-run-checks.queue'), oldLock: join(base, 'delo-run-checks.lock') }
+export function slotPaths(base: string, uid: number): SlotPaths {
+  return { dir: join(base, `delo-run-checks-${String(uid)}.slots`), oldQueue: join(base, 'delo-run-checks.queue'), oldLock: join(base, 'delo-run-checks.lock') }
+}
+
+/**
+ * This user's directories under the system's temporary directory, with the budget's directory created with mode 0700.
+ * @param base - the system's temporary directory.
+ * @param uid - the user, `process.getuid()`.
+ * @returns the paths.
+ * @throws Error when the budget's directory is a symbolic link or not a directory, belongs to another user, or grants any
+ * access to the group or others.
+ */
+export function privateSlotPaths(base: string, uid: number): SlotPaths {
+  const paths = slotPaths(base, uid)
+  ensurePrivateDir(paths.dir, uid, 'the slot budget', `remove ${paths.dir} while no run holds or waits for slots, or run \`chmod 700 ${paths.dir}\` as its owner`)
+  return paths
 }
 
 /**
@@ -71,6 +89,25 @@ export function processAlive(pid: number): boolean {
 }
 
 /**
+ * When a process started: field 22 of `/proc/<pid>/stat`, in clock ticks since boot.
+ * @param pid - the process id.
+ * @param read - reads a file's text; it throws for a file that does not exist.
+ * @returns the start time, or undefined when the process is gone or the system has no `/proc`.
+ */
+export function processStart(pid: number, read: (path: string) => string = path => readFileSync(path, 'utf8')): string | undefined {
+  let text: string
+  try {
+    text = read(`/proc/${String(pid)}/stat`)
+  } catch (gone) {
+    // ENOENT: the process is gone, or the system has no /proc.
+    void gone
+    return undefined
+  }
+  // The command name in field 2 may hold spaces and parentheses; the fields after its closing parenthesis start at field 3.
+  return text.slice(text.lastIndexOf(')') + 2).split(' ')[19]
+}
+
+/**
  * This process as the budget sees it, on the real file system.
  * @param say - prints a line to the run's error output.
  * @returns the host.
@@ -88,6 +125,7 @@ export function nodeSlotHost(say: (line: string) => void): QueueHost {
     now: () => Date.now(),
     pid: process.pid,
     alive: processAlive,
+    startOf: pid => processStart(pid),
     sleep: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
     say,
     guard: processGuard(process),

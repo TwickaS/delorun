@@ -13,14 +13,14 @@
  * @module @delo/tools/with-slots
  */
 import { spawn } from 'node:child_process'
-import { availableParallelism, totalmem } from 'node:os'
+import { availableParallelism, tmpdir, totalmem } from 'node:os'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { cgroupBudget, runMemoryBytes } from './checks/machine.ts'
 import { gatePriority, type QueueHost } from './checks/run-queue.ts'
-import { machineBudget, nodeSlotHost, slotPaths } from './checks/slot-host.ts'
+import { machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-host.ts'
 import { takeSlots, type SlotBudget, type SlotPaths } from './checks/slots.ts'
 
 const GIB = 1024 ** 3
@@ -83,7 +83,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
   const budget = cgroupBudget(availableParallelism(), totalmem(), name => readFileSync(join('/sys/fs/cgroup', name), 'utf8'))
   process.exitCode = await withSlots(process.argv.slice(2), {
     slots: nodeSlotHost(line => process.stderr.write(line)),
-    paths: slotPaths(),
+    paths: privateSlotPaths(tmpdir(), process.getuid?.() ?? -1),
     budget: machineBudget(budget.cpus, runMemoryBytes(budget.memoryBytes), process.env),
     env: process.env,
     run: runInherited,

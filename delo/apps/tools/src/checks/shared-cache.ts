@@ -12,10 +12,11 @@
  * @module @delo/tools/checks/shared-cache
  */
 import { randomBytes } from 'node:crypto'
-import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { z } from 'zod'
+import { ensurePrivateDir } from './private-dir.ts'
 
 /** The variable that names the store's directory, overriding the user's cache directory. */
 export const SHARED_CACHE_ENV = 'DELO_CHECKS_SHARED_CACHE'
@@ -92,12 +93,7 @@ export function openSharedStore(dir: string, owner: StoreOwner): SharedStore {
   if (inside === '' || (inside !== '..' && !inside.startsWith(`..${sep}`) && !isAbsolute(inside))) {
     throw new Error(`the shared pass cache ${dir} lies inside the repository; set ${SHARED_CACHE_ENV} to a directory outside it, or run with --no-shared-cache`)
   }
-  mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const stat = lstatSync(dir)
-  const fix = `run \`chmod 700 ${dir}\` as its owner, set ${SHARED_CACHE_ENV} to another directory, or run with --no-shared-cache`
-  if (!stat.isDirectory()) throw new Error(`the shared pass cache ${dir} is not a directory (a symbolic link is refused); ${fix}`)
-  if (stat.uid !== owner.uid) throw new Error(`the shared pass cache ${dir} belongs to user ${String(stat.uid)}, not to this user; ${fix}`)
-  if ((stat.mode & 0o077) !== 0) throw new Error(`the shared pass cache ${dir} has mode ${(stat.mode & 0o777).toString(8)}, which other users can reach; ${fix}`)
+  ensurePrivateDir(dir, owner.uid, 'the shared pass cache', `run \`chmod 700 ${dir}\` as its owner, set ${SHARED_CACHE_ENV} to another directory, or run with --no-shared-cache`)
   const passes = join(dir, 'passes')
   const entry = (key: string): string => join(passes, key.slice(0, 2), `${key}.json`)
   prune(dir, passes, owner.now())

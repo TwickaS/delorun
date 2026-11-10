@@ -11,7 +11,9 @@
  * The grant is elastic: the run gets what it asks for up to the free slots, and at most the machine less a reserve of a
  * quarter of the slots, so a small run can always start beside a large one; a trunk push may take the reserve. A grant is
  * recorded as `held-<pid>.json` and removed when the process ends; the files of dead processes are removed by whichever run
- * notices them. Two runs that claim at once and overfill the machine are resolved by the later request stepping back.
+ * notices them. Each file records its process's start time, so a later process that reuses the id is not taken for it. Two
+ * runs that claim at once and overfill the slots, the memory or the disk-heavy places are resolved by the later request
+ * among those using the overfilled resource stepping back.
  *
  * Runs of old worktrees take a ticket in the previous queue directory and the single lock file; a held ticket or the lock
  * of a live process that holds no grant counts as holding the whole machine, and an earlier waiting ticket there is served
@@ -90,8 +92,9 @@ export interface SlotGrant {
   readonly waitedMs: number
 }
 
-const Request = z.strictObject({ pid: z.number().int(), want: z.number().int().positive(), min: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number() })
-const Held = z.strictObject({ pid: z.number().int(), slots: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number(), requested: z.number() })
+// `start` is the process's start time from QueueHost.startOf; a file without one is checked by the process id alone.
+const Request = z.strictObject({ pid: z.number().int(), start: z.string().optional(), want: z.number().int().positive(), min: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number() })
+const Held = z.strictObject({ pid: z.number().int(), start: z.string().optional(), slots: z.number().int().positive(), memoryBytes: z.number().nonnegative(), disk: z.boolean(), priority: z.union([z.literal(0), z.literal(1)]), label: z.string(), since: z.number(), requested: z.number() })
 
 /** A waiting request, as read from its file. */
 export type SlotRequest = z.infer<typeof Request> & { readonly file: string }
@@ -120,8 +123,7 @@ export interface SlotState {
  * @param text - the text.
  * @returns the value.
  */
-function json(text: string | undefined): unknown {
-  if (text === undefined) return undefined
+function json(text: string): unknown {
   try {
     return JSON.parse(text)
   } catch (error) {
@@ -132,7 +134,8 @@ function json(text: string | undefined): unknown {
 }
 
 /**
- * The live requests and holders, removing the files of dead processes and files that are not requests.
+ * The live requests and holders, removing the files of dead processes and files that are not requests. A file that is gone
+ * by the time it is read is skipped, not removed, since its process may have just replaced it.
  * @param host - the process and file system.
  * @param paths - the directories.
  * @returns the waiting requests in serving order, the holders, and an old worktree's holder.
@@ -141,17 +144,20 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
   const { fs } = host
   const waiting: SlotRequest[] = []
   const holders: SlotHolder[] = []
+  // A process is the one that wrote the file when it runs and, where both are known, started when the file says.
+  const live = (entry: { readonly pid: number, readonly start?: string | undefined }): boolean => entry.pid === host.pid
+    || (host.alive(entry.pid) && (entry.start === undefined || host.startOf(entry.pid) === entry.start))
   for (const file of fs.list(paths.dir)) {
     const path = `${paths.dir}/${file}`
-    if (file.startsWith('req-')) {
-      const parsed = Request.safeParse(json(fs.read(path)))
-      if (parsed.success && (parsed.data.pid === host.pid || host.alive(parsed.data.pid))) waiting.push({ ...parsed.data, file })
-      else if (parsed.success || !file.endsWith('.tmp')) fs.remove(path)
-    } else if (file.startsWith('held-')) {
-      const parsed = Held.safeParse(json(fs.read(path)))
-      if (parsed.success && (parsed.data.pid === host.pid || host.alive(parsed.data.pid))) holders.push({ ...parsed.data, file })
-      else if (parsed.success || !file.endsWith('.tmp')) fs.remove(path)
-    }
+    const schema = file.startsWith('req-') ? Request : file.startsWith('held-') ? Held : undefined
+    if (schema === undefined) continue
+    const text = fs.read(path)
+    if (text === undefined) continue
+    const parsed = schema.safeParse(json(text))
+    if (parsed.success && live(parsed.data)) {
+      if ('slots' in parsed.data) holders.push({ ...parsed.data, file })
+      else waiting.push({ ...parsed.data, file })
+    } else if (parsed.success || !file.endsWith('.tmp')) fs.remove(path)
   }
   waiting.sort((a, b) => a.priority - b.priority || a.since - b.since || a.pid - b.pid)
   // A new run holds a ticket in the previous queue too, waiting or held, so an old run keeps its place; it is not an old run.
@@ -219,6 +225,27 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
 }
 
 /**
+ * Whether a process that has just recorded its grant gives it back: an old worktree's run holds the machine, or the
+ * holders overfill the slots, the memory or the disk-heavy places and the process holds the latest grant among those
+ * that use the overfilled resource.
+ * @param state - the machine's state read after the grant was recorded.
+ * @param pid - the process.
+ * @param budget - the machine's budget.
+ * @returns true when the process must wait again.
+ */
+export function stepsBack(state: SlotState, pid: number, budget: SlotBudget): boolean {
+  if (state.oldHolder !== undefined) return true
+  const latest = (holders: readonly SlotHolder[]): number | undefined => [...holders].sort((a, b) => a.priority - b.priority || a.requested - b.requested || a.pid - b.pid).at(-1)?.pid
+  const disk = state.holders.filter(holder => holder.disk)
+  const overfilled = [
+    state.holders.reduce((sum, holder) => sum + holder.slots, 0) > budget.slots ? state.holders : [],
+    state.holders.reduce((sum, holder) => sum + holder.memoryBytes, 0) > budget.memoryBytes ? state.holders : [],
+    disk.length > budget.diskRuns ? disk : [],
+  ]
+  return overfilled.some(holders => latest(holders) === pid)
+}
+
+/**
  * Wait for a grant and hold it until the process ends.
  * @param host - the process and file system.
  * @param paths - the directories.
@@ -238,12 +265,15 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
   const held = `${paths.dir}/held-${String(host.pid)}.json`
   const waitingTicket = `${paths.oldQueue}/${stamp}`
   const ticket = `${waitingTicket}.held`
+  // The rename replaces the file in one step, so a reader never finds it missing while it is rewritten.
   const write = (path: string, value: object): void => {
-    fs.remove(path)
+    fs.remove(`${path}.tmp`)
     fs.create(`${path}.tmp`, JSON.stringify(value))
     fs.rename(`${path}.tmp`, path)
   }
-  write(request, { pid: host.pid, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since })
+  const start = host.startOf(host.pid)
+  const asked = { pid: host.pid, ...start === undefined ? {} : { start }, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since }
+  write(request, asked)
   // The same ticket in the previous queue keeps an old run that arrived later behind this one.
   fs.create(waitingTicket, '')
   host.guard(() => { fs.remove(request); fs.remove(held); fs.remove(waitingTicket); fs.remove(ticket) })
@@ -253,18 +283,16 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
     const state = readSlots(host, paths)
     const decision = decide(state, host.pid, budget)
     if ('slots' in decision) {
-      write(held, { pid: host.pid, slots: decision.slots, memoryBytes: decision.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since: host.now(), requested: since })
+      write(held, { pid: host.pid, ...start === undefined ? {} : { start }, slots: decision.slots, memoryBytes: decision.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since: host.now(), requested: since })
       fs.remove(request)
-      // Another run may have claimed in the same instant; the later request of an overfilled machine steps back.
+      // Another run may have claimed in the same instant: the later claim on each overfilled resource steps back.
       const after = readSlots(host, paths)
-      const total = after.holders.reduce((sum, holder) => sum + holder.slots, 0)
-      const latest = [...after.holders].sort((a, b) => a.priority - b.priority || a.requested - b.requested || a.pid - b.pid).at(-1)
-      if ((total <= budget.slots || latest?.pid !== host.pid) && after.oldHolder === undefined) {
+      if (!stepsBack(after, host.pid, budget)) {
         fs.rename(waitingTicket, ticket)
         return { slots: decision.slots, memoryBytes: decision.memoryBytes, waitedMs: host.now() - since }
       }
       fs.remove(held)
-      write(request, { pid: host.pid, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since })
+      write(request, asked)
     } else {
       const position = state.waiting.findIndex(each => each.pid === host.pid) + 1
       const now = host.now()
