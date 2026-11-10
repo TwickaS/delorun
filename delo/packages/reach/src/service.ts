@@ -10,7 +10,9 @@
  *
  * @module @delo/reach/service
  */
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Context, Service } from '@deepseek-ai/cordis'
+import { isLoopbackHost } from '@delo/home-auth'
 import schema from '@deepseek-ai/schemastery'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
@@ -35,6 +37,12 @@ declare module '@deepseek-ai/cordis' {
 
 /** The plugin's configuration: C7's rows for the options this home builds. */
 export interface Config {
+  /**
+   * C16 switch `reach`: whether the reach service mounts at all. Off, which is the parity value and the schema's
+   * default, it registers no provider, opens no listener and answers no route. Delo's composition turns it on; each
+   * option stays off until the person turns it on.
+   */
+  readonly enabled: boolean
   readonly tailscalePrivate: {
     readonly enabled: boolean
     readonly address: string
@@ -44,12 +52,27 @@ export interface Config {
 
 /** The plugin's configuration schema. */
 export const Config: schema<Config> = schema.object({
+  enabled: schema.boolean().default(false).description('C16 switch reach: whether the reach service mounts at all.'),
   tailscalePrivate: schema.object({
     enabled: schema.boolean().default(false).description('Whether this home is reachable on its Tailscale private address.'),
     address: schema.string().default('').description('This machine\'s https ts.net address, as delorun reach on tailscale writes it.'),
     servePort: schema.natural().default(DEFAULT_SERVE_PORT).description('The port Tailscale serves HTTPS on.'),
   }).default({ enabled: false, address: '', servePort: DEFAULT_SERVE_PORT }),
 })
+
+/**
+ * The path of the reach status, which the studio's settings and onboarding read: `GET` answers {@link ReachSummary}.
+ * A profile without the reach service answers it 404, which a reader takes as "no reach in this profile".
+ */
+export const REACH_STATUS_PATH = '/delo/reach/status' as const
+
+/** What `GET /delo/reach/status` answers. */
+export interface ReachSummary {
+  /** Always true: the route exists only where the reach service runs. */
+  readonly available: true
+  /** Each option this home builds, with its state; `ready` means it is set up and reachable. */
+  readonly options: readonly ReachStatus[]
+}
 
 /** One option's state as the studio and the commands show it. */
 export interface ReachStatus {
@@ -62,7 +85,7 @@ export interface ReachStatus {
 
 /** The `reach` service. */
 export class ReachService extends Service {
-  static inject = ['homeAuth', 'connection']
+  static inject = ['homeAuth', 'connection', 'webServer']
   static Config = Config
 
   private readonly providers = new Map<ReachOptionId, ReachProvider>()
@@ -111,6 +134,8 @@ export class ReachService extends Service {
    * @throws {ReachError} at load for an enabled row that is invalid.
    */
   protected async [Service.init](): Promise<void> {
+    if (!this.config.enabled) return
+    this.ctx.effect(() => this.ctx.webServer.register({ kind: 'exact', path: REACH_STATUS_PATH, handler: (request, response) => { this.answerStatus(request, response) } }), 'reach status route')
     this.ctx.effect(() => this.register(new TailscalePrivateProvider(this.tailscale())), 'reach tailscale-private provider')
     const rows: ReachConfigRows = {
       tailscalePrivate: { ...this.config.tailscalePrivate, address: brandString<StudioAddress>(this.config.tailscalePrivate.address) },
@@ -119,6 +144,32 @@ export class ReachService extends Service {
       const spec = provider.resolve(rows)
       if (spec !== undefined) await this.startOption(provider, spec)
     }
+  }
+
+  /**
+   * Answer `GET /delo/reach/status` with {@link ReachSummary}: on the loopback listener under a loopback `Host`, and to a
+   * session a reach listener admitted. Any other arrival is refused with `421 HOST_MISMATCH`.
+   * @param request - the request.
+   * @param response - the response.
+   */
+  private answerStatus(request: IncomingMessage, response: ServerResponse): void {
+    const arrival = this.ctx.homeAuth.arrivalOf(request)
+    const loopback = arrival.listener === 'loopback' && isLoopbackHost(arrival.host)
+    response.setHeader('content-type', 'application/json; charset=utf-8')
+    response.setHeader('cache-control', 'no-store')
+    if (!loopback && (arrival.listener === undefined || arrival.listener === 'loopback')) {
+      response.statusCode = 421
+      response.end(JSON.stringify({ error: 'HOST_MISMATCH', message: 'The reach status answers the studio only' }))
+      return
+    }
+    if (request.method !== 'GET') {
+      response.statusCode = 405
+      response.end(JSON.stringify({ error: 'METHOD_NOT_ALLOWED', message: 'Read the reach status with a GET' }))
+      return
+    }
+    const summary: ReachSummary = { available: true, options: this.status() }
+    response.statusCode = 200
+    response.end(JSON.stringify(summary))
   }
 
   /**

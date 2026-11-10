@@ -13,6 +13,7 @@
     "@deepseek-ai/dsh-api-gateway": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "@delo/contract-admission": "workspace:*",
     "@delo/contract-oidc-passkeys": "workspace:*",
@@ -21,9 +22,11 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-app-boot": "workspace:*",
-    "@deepseek-ai/dsh-host-webserver": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
     "@delo/bundle-local": "workspace:*",
     "@delo/tools": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
   }
 }

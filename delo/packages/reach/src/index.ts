@@ -6,7 +6,7 @@
  *
  * @module @delo/reach
  */
-export { ReachService, Config as ReachConfig, type Config, type ReachStatus } from './service.ts'
+export { REACH_STATUS_PATH, ReachService, Config as ReachConfig, type Config, type ReachStatus, type ReachSummary } from './service.ts'
 export { TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachProvider, type ReachSpec } from './provider.ts'
 export {
   isPermissionRefusal, ReachError, readTailscale, serve, systemTailscale, unserve, type TailscaleFacts, type TailscaleResult, type TailscaleRunner,

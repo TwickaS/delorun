@@ -6,7 +6,7 @@ description: "The @delo/reach package, for maintainers of reach: contract C7's r
 
 ## Summary
 
-This package is the Service Definition and the first Service Provider of [contract C7](../../docs/contracts/c07-reach-providers.md). The `reach` service holds one provider per reach option and starts each option whose configuration row is on: it asks `@delo/home-auth` to serve the option's reach listener with the identity factor the provider declares, opens the listener through upstream's `ctx.connection.openReachListener` on a port the operating system assigns, and starts the provider on that port. The `reach-tailscale-private` provider declares `tailnet-membership` ([C14](../../docs/contracts/c14-oidc-passkeys.md#tailnet-membership)) and configures `tailscale serve` to the listener. Every option is off by default, and no shipped profile loads this package yet.
+This package is the Service Definition and the first Service Provider of [contract C7](../../docs/contracts/c07-reach-providers.md). The `reach` service holds one provider per reach option and starts each option whose configuration row is on: it asks `@delo/home-auth` to serve the option's reach listener with the identity factor the provider declares, opens the listener through upstream's `ctx.connection.openReachListener` on a port the operating system assigns, and starts the provider on that port. The `reach-tailscale-private` provider declares `tailnet-membership` ([C14](../../docs/contracts/c14-oidc-passkeys.md#tailnet-membership)) and configures `tailscale serve` to the listener. The service mounts behind the C16 switch `reach` (`Config.enabled`), which `@delo/bundle-local`'s row `delo-reach` turns on; every option stays off until the person runs `delorun reach on tailscale` or answers yes in setup's Full mode.
 
 ## Contents
 
@@ -16,6 +16,8 @@ This package is the Service Definition and the first Service Provider of [contra
 - [Tests](#tests)
 
 ## The reach service
+
+`GET /delo/reach/status` answers the studio, on the loopback listener and to an admitted reach session, with `{ "available": true, "options": [...] }`: each option's id, state, address and, when blocked or failed, its code and sentence (`REACH_STATUS_PATH`, `ReachSummary`). A profile without the service answers 404. The studio's Devices section and its onboarding read it.
 
 `src/service.ts` registers the Tailscale private provider inside `ctx.effect()` and reads the `tailscalePrivate` row: `enabled` (default `false`), `address` (this machine's `https://<machine>.<tailnet>.ts.net` address) and `servePort` (default 443). An enabled row that is not an `https` `ts.net` address fails at load with `TAILSCALE_ADDRESS_MISMATCH`. Starting an option moves it to `starting`, then to `ready`, or to `blocked` with C7's code when a check fails, or to `failed` for any other error; a `blocked` or `failed` option has closed its listener and stopped serving it. Disposing the plugin stops the provider, closes the listener and stops serving it, in that order, even when the provider's stop fails. Every change emits `reach/state`.
 
@@ -35,7 +37,7 @@ This package is the Service Definition and the first Service Provider of [contra
 
 ## What is not built
 
-The Funnel and self-hosted relay providers, the `delorun reach` command, the studio's reach screens and the profile row that loads this package. No real tailnet or phone has exercised this package: the specs fake `tailscale`.
+The Funnel and self-hosted relay providers. No real tailnet or phone has exercised this package: the specs fake `tailscale`.
 
 ## Tests
 

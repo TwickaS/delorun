@@ -65,6 +65,7 @@ Delo changes the following upstream defaults on purpose. The parity composition 
 | `web_fetch` guard (`fetch_guard`) | On | Off | Recorded fetch scenarios call loopback fixtures, which the guard refuses. |
 | `preset_inspect` (`preset_inspect`) | On in the registry; no shipped row sets it, so the CLI profile runs it off | Off | The tool is model-visible and absent from the base tag. |
 | Doctor (`doctor`) | On, and switchable | Off | The doctor is a command the person runs, not a model-visible tool; it is absent from the base tag. |
+| Remote access (`reach`) | On: the reach service mounts with every option off until the person turns one on | Off: neither `@delo/home-auth` nor the reach service mounts | Recorded scenarios run on upstream's own authenticator and open no reach listener. |
 
 DeepSeek session-log upload is off in every profile that mounts `@delo/bundle-local`: `delorun`'s CLI profile, and any other profile that adds the bundle. A profile that does not mount it keeps the plugin's own default, on: upstream's bare `dsh` launcher on the `web` profile, which Delo also ships, still uploads the session log, and the recorded-session replay keeps upstream's value for the corpora whose replay layer does not turn it off. The difference is the entry point, not a switch — Delo writes the row from a bundle it delivers, and edits no upstream default for a profile it does not run.
 
@@ -83,6 +84,7 @@ The registry has these entries.
 | `fetch_guard` | `@delo/plugin-fetch-guard` | On | Off | Refusal of loopback, link-local and private targets by `web_fetch` and the HTTP fetch provider, with a typed reason. |
 | `preset_inspect` | Delo's edit of upstream's preset tools | On | Off | The `preset_inspect` tool. |
 | `doctor` | `packages/boot/doctor`, launched by `apps/cli` | On | Off | None: a feature switch for the doctor command. |
+| `reach` | `@delo/reach` | On | Off | None: a feature switch for remote access over the person's tailnet; each option stays off until the person turns it on. |
 | `plugin_manager_read_exemption` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The escalation exemption for the read actions `list_plugins`, `list_bundles`, `list_version_exemptions`, `history` and `read_config`, and the tool description that states it. |
 | `profile_history` | Delo's edit of upstream's `plugin_manager` tool | On | Off | The actions `history`, `read_config`, `configure`, `undo` and `restore`, and the audit of plugins, builds and exemptions that `undo` and `restore` bring back. |
 | `scheduled_task_consent` | Delo's edit of upstream's schedule tools | On | Off | The consent for `schedule_create` and `schedule_edit`, which names the recurrence, the target session and its permission preset. |

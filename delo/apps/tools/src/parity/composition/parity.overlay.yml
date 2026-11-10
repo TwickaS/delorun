@@ -115,3 +115,19 @@
         attachmentsRoot: !!js dshHomePath('attachments', 'v1')
         logsHome: !!js dshHomePath()
       disabled: true
+
+    - id: delo-home-auth
+      name: '@delo/home-auth'
+      config:
+        secretsDirectory: !!js dshHomePath('secrets', 'home-auth')
+      disabled: true
+
+    - id: delo-reach
+      name: '@delo/reach'
+      config:
+        enabled: true
+        tailscalePrivate:
+          enabled: false
+          address: ''
+          servePort: 443
+      disabled: true

@@ -70,6 +70,8 @@ The capability seam has three roles. The Service Definition is the Cordis servic
 - **`provider.stop()`** disconnects and resolves when the provider reaches `off`.
 - **`provider.visibility(spec)`** returns the option's [visibility note](#visibility-notes) for that spec.
 - **`reach/state`** is the event each state change emits, with the option id, the state and its cause.
+- **`GET /delo/reach/status`** answers `{ "available": true, "options": [{ "option", "state", "address"?, "cause"?, "detail"? }] }` to the studio on the loopback listener and to an admitted reach session, and `421 HOST_MISMATCH` to any other arrival. The studio's settings and onboarding read it; a profile without the reach service answers `404`, which a reader takes as no remote access in this profile.
+- **The C16 switch `reach`** (`Config.enabled`) mounts the service. Off, the parity value, it registers no provider, opens no listener and answers no route.
 
 `start` runs only when every precondition holds: the home has an owner ([C5](c05-device-approval.md#owner-claim)), or gains one by C5's local claim when the person opens the first approval window; an identity factor that [C14](c14-oidc-passkeys.md) allows for the address is enrolled, is enrolled as part of turning the option on, or is `tailnet-membership`, which needs no enrolment; the person turned the option on interactively, never through `--yes` or `--config` ([C11](c11-setup-answers.md)); and the option's own checks below pass.
 

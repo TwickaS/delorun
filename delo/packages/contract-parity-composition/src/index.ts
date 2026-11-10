@@ -230,6 +230,20 @@ export const PARITY_SWITCHES = [
     sources: [],
   },
   {
+    id: 'reach',
+    state: 'built',
+    registeredBy: '@delo/reach',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: false,
+    field: {
+      module: '@delo/reach',
+      source: 'delo/packages/reach/src/service.ts',
+      key: 'enabled',
+    },
+    sources: [],
+  },
+  {
     id: 'plugin_manager_read_exemption',
     state: 'built',
     registeredBy: 'Delo edit of upstream plugin_manager tool',

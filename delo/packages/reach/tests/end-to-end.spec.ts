@@ -123,7 +123,7 @@ beforeAll(async () => {
   studio = await bootStudio()
   secrets = await mkdtemp(join(tmpdir(), 'delo-reach-e2e-'))
   await studio.ctx.plugin(HomeAuthService, { secretsDirectory: join(secrets, 'home-auth') })
-  const config: Config = { tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443 } }
+  const config: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443 } }
   await studio.ctx.plugin(FakeReach, config)
   await new Promise<void>((resolve) => { studio.ctx.inject(['reach'], () => { resolve() }) })
   const served = calls.find(call => call[0] === 'serve')?.at(-1) ?? ''
