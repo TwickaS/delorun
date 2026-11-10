@@ -149,11 +149,19 @@ function removeIfPresent(path: string): void {
 
 /** One lock file and its takeover guards. */
 export class LockFile<R extends ProcessHolder> {
+  /** The lock file's path, which also names every takeover guard. */
+  readonly path: string
+  /** The record, the messages and the record's id. */
+  private readonly kind: LockFileKind<R>
+
   /**
    * @param path - the lock file's path, which also names every takeover guard.
    * @param kind - the record, the messages and the record's id.
    */
-  constructor(readonly path: string, private readonly kind: LockFileKind<R>) {}
+  constructor(path: string, kind: LockFileKind<R>) {
+    this.path = path
+    this.kind = kind
+  }
 
   /**
    * Create the lock with a record unless a lock exists.

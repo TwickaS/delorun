@@ -194,14 +194,17 @@ function soleDataUser(home: string): void {
 class CliHomeRuntimeStore extends HomeRuntimeStore {
   /** The CLI profile, which a refusal's remedies name. */
   private readonly profile: string
+  /** The resolved Delo home whose data users are checked. */
+  private readonly dataHome: string
 
   /**
    * @param options - the store's options.
    * @param dataHome - the resolved Delo home whose data users are checked.
    */
-  constructor(options: ConstructorParameters<typeof HomeRuntimeStore>[0], private readonly dataHome: string) {
+  constructor(options: ConstructorParameters<typeof HomeRuntimeStore>[0], dataHome: string) {
     super(options)
     this.profile = options.profile
+    this.dataHome = dataHome
   }
 
   /** @inheritdoc */
