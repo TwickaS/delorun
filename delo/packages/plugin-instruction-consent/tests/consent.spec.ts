@@ -67,6 +67,7 @@ describe('the classifier', () => {
       '/work/app/presets-backup/reviewer.patch.yml',
       '/work/app/.dsh/config.json',
       '/work/app/.agents',
+      '/home/person',
       'src/index.ts',
       '/home/person/.delo/runtimes/v1.2.3/lib/index.js',
       '',

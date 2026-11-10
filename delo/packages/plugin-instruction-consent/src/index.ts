@@ -25,14 +25,15 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { Service } from '@deepseek-ai/cordis'
 import { loadProfileDirectory, PROFILE_PATCH_FILENAME, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
+import { resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { WriteConsentRequest, WriteConsentReview, WriteConsentService } from '@deepseek-ai/dsh-tool-fs/src/consent.ts'
 import z from '@deepseek-ai/schemastery'
-import { type CaseProbe, classifyTarget, type CompositionFile, createCaseProbe, reviewNote } from './classify.ts'
+import { type CaseProbe, classifyTarget, type CompositionFile, createCaseProbe, type Homes, reviewNote } from './classify.ts'
 
 export {
   classifyTarget, createCaseProbe, INSTRUCTION_FILE_NAMES, probeCaseInsensitive, PROJECT_SKILLS_DIRS, reviewNote,
 } from './classify.ts'
-export type { CaseProbe, ClassifyOptions, CompositionFile, CompositionLayer, InstructionLayerTarget } from './classify.ts'
+export type { CaseProbe, ClassifyOptions, CompositionFile, CompositionLayer, Homes, InstructionLayerTarget } from './classify.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'instruction-consent'
@@ -94,6 +95,12 @@ export class InstructionConsent extends Service implements WriteConsentService {
   private readonly caseProbe: CaseProbe = createCaseProbe()
 
   /**
+   * The homes as the workspace instruction loader resolves them: once, when it mounts, from the environment its row
+   * cannot override. The review counts them beside the homes the environment names when it runs.
+   */
+  private readonly mountHomes: Homes = { dshHome: resolveDshHome(), agentsHome: resolveAgentsHome() }
+
+  /**
    * @param ctx - the plugin context.
    */
   constructor(ctx: Context) {
@@ -114,6 +121,7 @@ export class InstructionConsent extends Service implements WriteConsentService {
     const target = classifyTarget(request.path, {
       skillRoots: this.ctx.get('skills')?.configuredRoots() ?? [],
       ...profile === undefined ? {} : { compositionFiles: compositionFiles(profile) },
+      homes: [this.mountHomes],
       caseInsensitive: this.caseProbe,
     })
     if (target === undefined) return undefined

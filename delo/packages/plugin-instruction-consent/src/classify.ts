@@ -11,14 +11,16 @@
  * The classifier compares the target against the locations the harness reads
  * instructions from — the instruction loader's own file names, the skill
  * provider's own roots and directory names, and the composition files the
- * profile launcher reads — never a restatement of them. It compares both the
- * spelling the tool received and the physical path the local filesystem
- * backend writes: the real path of the nearest existing ancestor plus the
+ * profile launcher reads — never a restatement of them. Every path, target and
+ * root alike, resolves to the nearest existing ancestor's real path plus the
  * missing tail, the resolution `@deepseek-ai/dsh-fs-local` uses for its target
- * key. Every root is resolved the same way, so a link on either side cannot
- * move a write out of the comparison. A comparison folds letter case when the
- * directory holding the target or the root sits on a case-insensitive volume,
- * which a probe of that directory decides; the platform decides nothing.
+ * key. A target lies at or below a root when one of the target's existing
+ * ancestors is the root's existing part by device and inode and the remaining
+ * names begin with the root's missing tail, so links, letter case, Unicode
+ * normalization, short names and hard links resolve to one identity. Only a
+ * missing tail and the name rules compare text, folding letter case when the
+ * directory holding the name sits on a case-insensitive volume, which a probe
+ * of that directory decides; the platform decides nothing.
  *
  * The classification reads the filesystem when the review runs. A link
  * created or swapped between the review and the write is outside what one
@@ -26,7 +28,7 @@
  *
  * @module @delo/plugin-instruction-consent/classify
  */
-import { type BigIntStats, lstatSync, opendirSync, realpathSync, statSync } from 'node:fs'
+import { type BigIntStats, lstatSync, opendirSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, sep } from 'node:path'
 import { DEFAULT_INSTRUCTION_FILE_NAMES } from '@deepseek-ai/dsh-agent-instructions'
 import { resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -76,10 +78,23 @@ export type InstructionLayerTarget =
  */
 export type CaseProbe = (directory: string) => boolean
 
+/** The harness home and the shared agent root of one resolution. */
+export interface Homes {
+  /** The harness home (`DSH_HOME`). */
+  readonly dshHome: string
+  /** The shared agent root (`DSH_AGENTS_HOME`). */
+  readonly agentsHome: string
+}
+
 /** The environment the homes resolve from, the roots the mounted loaders name, and the case-sensitivity probe. */
 export interface ClassifyOptions {
   /** The environment read for `DSH_HOME` and `DSH_AGENTS_HOME`; defaults to `process.env`. */
   readonly env?: Readonly<Record<string, string | undefined>>
+  /**
+   * Homes the loaders resolved earlier — the instruction loader resolves its homes once, when it mounts — which count
+   * beside the homes `env` resolves to now.
+   */
+  readonly homes?: readonly Homes[]
   /**
    * The skill roots the mounted providers resolve without a workspace (`ctx.skills.configuredRoots()`), so a
    * deployment's own skill directory — a `customSkillDirs` entry, say — classifies as a skill. Omitted, the default
@@ -95,17 +110,42 @@ export interface ClassifyOptions {
   readonly caseInsensitive?: CaseProbe
 }
 
-/** One spelling of a path, and whether a comparison against it folds letter case. */
+/** One existing path component by real path and identity. */
+interface Node {
+  readonly path: string
+  readonly dev: bigint
+  readonly ino: bigint
+}
+
+/** One resolved path: its existing part, the names below it that do not exist, and whether those names fold case. */
+interface Location {
+  /** The existing real ancestors, the nearest first and the filesystem root last. */
+  readonly chain: readonly [Node, ...Node[]]
+  /** The missing names below `chain[0]`, outermost first. */
+  readonly tail: readonly string[]
+  /** Whether the directory that holds the first name below the existing part folds letter case. */
+  readonly fold: boolean
+}
+
+/** One textual spelling of the target, for the name rules. */
 interface Spelling {
   readonly path: string
   readonly fold: boolean
 }
 
+/** The resolved forms of one target. */
+interface Target {
+  /** The locations a write reaches: through a final link, and at the link itself when the last name is one. */
+  readonly locations: readonly Location[]
+  /** The spellings the name rules read: each location's path and the path as given. */
+  readonly spellings: readonly Spelling[]
+}
+
 /**
  * Classify one write target as an instruction-layer file.
  * @param path - the target path, absolute as the consent seam resolves it; a path that is not absolute (a remote
- *   backend's display path) is compared as spelled, without resolution or case folding.
- * @param options - the environment the homes resolve from, the roots the mounted loaders name, and the case probe.
+ *   backend's display path) meets only the name rules, as spelled, without case folding.
+ * @param options - the environment and earlier homes, the roots the mounted loaders name, and the case probe.
  * @returns the target's kind and scope, or undefined when the target is no
  *   instruction-layer file and its write needs no consent.
  * @throws the filesystem error when a path or root cannot be resolved for a reason other than absence (a link loop,
@@ -116,38 +156,37 @@ export function classifyTarget(path: string, options: ClassifyOptions = {}): Ins
   if (path === '') return undefined
   const env = options.env ?? process.env
   const probe = options.caseInsensitive ?? probeCaseInsensitive
-  const spell = (candidate: string): Spelling[] => spellings(candidate, probe)
-  const target = spell(path)
-  const homes: readonly [string, string] = [resolveDshHome(undefined, env), resolveAgentsHome(undefined, env)]
-  const skill = classifySkill(target, homes, options.skillRoots ?? [], spell)
+  const locate = (candidate: string): Location => locatePath(candidate, probe)
+  const target = resolveTarget(path, probe)
+  const homes = [{ dshHome: resolveDshHome(undefined, env), agentsHome: resolveAgentsHome(undefined, env) }, ...options.homes ?? []]
+  const skill = classifySkill(target, homes, options.skillRoots ?? [], locate)
   if (skill !== undefined) return skill
-  const composition = (options.compositionFiles ?? []).find(file => same(spell(file.path), target))
+  const composition = (options.compositionFiles ?? []).find(file => matches(locate(file.path), target, 'same'))
   if (composition !== undefined) return { kind: 'preset', layer: composition.layer }
-  return classifyInstructions(target, homes, spell)
+  return classifyInstructions(target, homes, locate)
 }
 
 /**
- * Classify a skill target: a file below the skill store of the harness home or
- * of the shared agent root (the provider's `HOME_SKILL_DIR` in each), below a project's `.dsh/skills` or `.agents/skills`
- * directory, or below a configured skill root — the roots the skill provider reads.
- * @param target - the target's spellings.
- * @param homes - the harness home and the shared agent root, as configured.
+ * Classify a skill target: a file below the skill store of the harness home or of the shared agent root (the
+ * provider's `HOME_SKILL_DIR` in each), below a project's `.dsh/skills` or `.agents/skills` directory, or below a
+ * configured skill root — the roots the skill provider reads.
+ * @param target - the resolved target.
+ * @param homes - each resolution of the harness home and the shared agent root.
  * @param configuredRoots - the roots the mounted providers resolved from their configuration.
- * @param spell - resolves one root into its spellings.
+ * @param locate - resolves one root.
  * @returns the skill target with the root it sits in, or undefined.
  */
 function classifySkill(
-  target: readonly Spelling[],
-  homes: readonly [string, string],
+  target: Target,
+  homes: readonly Homes[],
   configuredRoots: readonly string[],
-  spell: (path: string) => Spelling[],
+  locate: (path: string) => Location,
 ): InstructionLayerTarget | undefined {
-  const [dshHome, agentsHome] = homes
-  if (within(spell(join(dshHome, HOME_SKILL_DIR)), target)) return { kind: 'skill', root: 'home' }
-  if (within(spell(join(agentsHome, HOME_SKILL_DIR)), target)) return { kind: 'skill', root: 'shared' }
-  const project = target.some(spelling => PROJECT_SKILLS_DIRS.some(directory => hasSegments(spelling, directory.split('/'))))
+  if (homes.some(home => matches(locate(join(home.dshHome, HOME_SKILL_DIR)), target, 'inside'))) return { kind: 'skill', root: 'home' }
+  if (homes.some(home => matches(locate(join(home.agentsHome, HOME_SKILL_DIR)), target, 'inside'))) return { kind: 'skill', root: 'shared' }
+  const project = target.spellings.some(spelling => PROJECT_SKILLS_DIRS.some(directory => hasSegments(spelling, directory.split('/'))))
   if (project) return { kind: 'skill', root: 'project' }
-  if (configuredRoots.some(root => within(spell(root), target))) return { kind: 'skill', root: 'custom' }
+  if (configuredRoots.some(root => matches(locate(root), target, 'inside'))) return { kind: 'skill', root: 'custom' }
   return undefined
 }
 
@@ -156,19 +195,19 @@ function classifySkill(
  * a home, or the file such a path resolves to wherever it lives, is the user-global instruction file whose text loads
  * in every future chat (the loader reads the home's `AGENTS.md`). Any other file with one of those names is a folder's
  * standing instructions, which load in every future chat that works in that folder.
- * @param target - the target's spellings.
- * @param homes - the harness home and the shared agent root, as configured.
- * @param spell - resolves one home file into its spellings.
+ * @param target - the resolved target.
+ * @param homes - each resolution of the harness home and the shared agent root.
+ * @param locate - resolves one home file.
  * @returns the instructions target with its scope, or undefined.
  */
 function classifyInstructions(
-  target: readonly Spelling[],
-  homes: readonly string[],
-  spell: (path: string) => Spelling[],
+  target: Target,
+  homes: readonly Homes[],
+  locate: (path: string) => Location,
 ): InstructionLayerTarget | undefined {
-  const homeFiles = homes.flatMap(home => INSTRUCTION_FILE_NAMES.map(name => join(home, name)))
-  if (homeFiles.some(file => same(spell(file), target))) return { kind: 'instructions', scope: 'global' }
-  const named = target.some(spelling => INSTRUCTION_FILE_NAMES.some(name => equal(name, basename(spelling.path), spelling.fold)))
+  const homeFiles = homes.flatMap(home => [home.dshHome, home.agentsHome]).flatMap(home => INSTRUCTION_FILE_NAMES.map(name => join(home, name)))
+  if (homeFiles.some(file => matches(locate(file), target, 'same'))) return { kind: 'instructions', scope: 'global' }
+  const named = target.spellings.some(spelling => INSTRUCTION_FILE_NAMES.some(name => equal(name, basename(spelling.path), spelling.fold)))
   return named ? { kind: 'instructions', scope: 'folder' } : undefined
 }
 
@@ -238,38 +277,60 @@ function diffText(diff: WriteConsentDiff | undefined): string {
 }
 
 /**
- * The spellings one path is compared under: its physical path first, then the spelling as given when that differs.
- * Both fold letter case when the directory holding the physical path is case-insensitive.
- * @param path - the path.
+ * Resolve one target: where a write reaches through a final link, where the link itself sits when the last name is
+ * one, and the spellings the name rules read.
+ * @param path - the target path.
  * @param probe - the case-sensitivity probe.
- * @returns the spellings; a path that is not absolute keeps its one spelling and compares exactly.
+ * @returns the resolved target; a path that is not absolute has no locations and its one spelling compares exactly.
  */
-function spellings(path: string, probe: CaseProbe): Spelling[] {
-  if (!isAbsolute(path)) return [{ path, fold: false }]
-  const physical = resolvePhysical(path)
-  const fold = probe(physical.directory)
-  return physical.path === path ? [{ path, fold }] : [{ path: physical.path, fold }, { path, fold }]
+function resolveTarget(path: string, probe: CaseProbe): Target {
+  if (!isAbsolute(path)) return { locations: [], spellings: [{ path, fold: false }] }
+  const reached = locatePath(path, probe)
+  const locations = [reached]
+  // A missing tail means the last name does not resolve; a write there replaces the name itself, which `reached` is.
+  if (reached.tail.length === 0 && lstatSync(path).isSymbolicLink()) {
+    const parent = locatePath(dirname(path), probe)
+    locations.push({ ...parent, tail: [...parent.tail, basename(path)] })
+  }
+  const spellings = locations.map(location => ({ path: locationPath(location), fold: location.fold }))
+  return { locations, spellings: [...spellings, { path, fold: reached.fold }] }
 }
 
 /**
- * Resolve the physical path a write to `path` reaches: the real path of the whole path when it exists, otherwise the
- * real path of the nearest existing ancestor joined with the missing tail.
+ * Resolve one absolute path to its existing real ancestors and its missing tail.
  * @param path - an absolute path.
- * @returns the physical path, and the existing directory whose volume holds it.
+ * @param probe - the case-sensitivity probe, asked about the directory that holds the first missing name.
+ * @returns the location.
  * @throws the filesystem error when a component fails to resolve for a reason other than absence.
  */
-function resolvePhysical(path: string): { path: string; directory: string } {
-  const missing: string[] = []
-  for (let current = path; ; current = dirname(current)) {
-    const real = existingRealPath(current)
-    if (real !== undefined) {
-      const directory = statSync(real).isDirectory() ? real : dirname(real)
-      return { path: missing.length === 0 ? real : join(real, ...missing), directory }
-    }
+function locatePath(path: string, probe: CaseProbe): Location {
+  const tail: string[] = []
+  let current = path
+  let real = existingRealPath(current)
+  while (real === undefined) {
     /* v8 ignore next -- a POSIX filesystem root always resolves; only an absent Windows drive root does not. */
     if (dirname(current) === current) throw new Error(`no ancestor of "${path}" exists`)
-    missing.unshift(basename(current))
+    tail.unshift(basename(current))
+    current = dirname(current)
+    real = existingRealPath(current)
   }
+  const first = lstatSync(real, { bigint: true })
+  const chain: [Node, ...Node[]] = [{ path: real, dev: first.dev, ino: first.ino }]
+  for (let node = real; dirname(node) !== node;) {
+    node = dirname(node)
+    const info = lstatSync(node, { bigint: true })
+    chain.push({ path: node, dev: info.dev, ino: info.ino })
+  }
+  return { chain, tail, fold: probe(first.isDirectory() ? real : dirname(real)) }
+}
+
+/**
+ * The path one location names.
+ * @param location - the location.
+ * @returns the existing real path joined with the missing tail.
+ */
+function locationPath(location: Location): string {
+  return location.tail.length === 0 ? location.chain[0].path : join(location.chain[0].path, ...location.tail)
 }
 
 /**
@@ -288,24 +349,36 @@ function existingRealPath(path: string): string | undefined {
 }
 
 /**
- * Probe whether the volume holding one existing directory compares names case-insensitively. The probe takes the
- * first entry of the directory whose name holds an ASCII letter, or, in a directory without one, the nearest name on
- * the path that holds one, and asks whether its case-flipped spelling names the same inode. A volume where no name up
- * to its root holds a letter reports case-insensitive, the answer that asks more often.
+ * Whether one target is the same location as a root, or lies inside it. One of the target's existing ancestors must be
+ * the root's existing part by device and inode; the names from there to the target must then begin with the root's
+ * missing tail, compared as text that folds case when either side's directory folds.
+ * @param root - the resolved root.
+ * @param target - the resolved target.
+ * @param relation - `'same'` for the root itself, `'inside'` for a path below it.
+ * @returns whether one of the target's locations stands in that relation.
+ */
+function matches(root: Location, target: Target, relation: 'same' | 'inside'): boolean {
+  const anchor = root.chain[0]
+  return target.locations.some((location) => {
+    const index = location.chain.findIndex(node => node.dev === anchor.dev && node.ino === anchor.ino)
+    if (index < 0) return false
+    const names = [...location.chain.slice(0, index).map(node => basename(node.path)).reverse(), ...location.tail]
+    const fold = root.fold || location.fold
+    if (!root.tail.every((name, offset) => equal(name, names[offset] ?? '', fold))) return false
+    return relation === 'same' ? names.length === root.tail.length : names.length > root.tail.length
+  })
+}
+
+/**
+ * Probe whether the volume holding one existing directory compares names case-insensitively: the first entry of the
+ * directory whose name holds an ASCII letter answers by whether its case-flipped spelling names the same inode. A
+ * directory without such an entry answers case-insensitive, the answer that asks more often.
  * @param directory - an existing directory, as a real path.
- * @returns true when the case-flipped spelling names the same entry.
+ * @returns true when the case-flipped spelling names the same entry, or when no entry can tell.
  */
 export function probeCaseInsensitive(directory: string): boolean {
-  const device = lstatSync(directory, { bigint: true }).dev
   const entry = firstLetteredEntry(directory)
-  if (entry !== undefined) return flippedIsSame(directory, entry)
-  for (let current = directory; ; current = dirname(current)) {
-    const parent = dirname(current)
-    /* v8 ignore next -- needs a volume on which every name from the directory up to the volume root is letterless. */
-    if (parent === current || lstatSync(parent, { bigint: true }).dev !== device) return true
-    const name = basename(current)
-    if (hasLetter(name)) return flippedIsSame(parent, name)
-  }
+  return entry === undefined || flippedIsSame(directory, entry)
 }
 
 /**
@@ -373,56 +446,14 @@ function flipCase(name: string): string {
 }
 
 /**
- * The comparison key of one path.
- * @param path - the path.
+ * Whether two names or paths are equal.
+ * @param left - one name.
+ * @param right - the other name.
  * @param fold - whether the comparison folds letter case.
- * @returns the path, lower-cased when folding.
- */
-function comparable(path: string, fold: boolean): string {
-  return fold ? path.toLowerCase() : path
-}
-
-/**
- * Whether two paths name the same location.
- * @param left - one path.
- * @param right - the other path.
- * @param fold - whether the comparison folds letter case.
- * @returns whether the comparison keys are equal.
+ * @returns whether they are equal, lower-cased first when folding.
  */
 function equal(left: string, right: string, fold: boolean): boolean {
-  return comparable(left, fold) === comparable(right, fold)
-}
-
-/**
- * Whether any spelling of the target names the same location as any spelling of a file.
- * @param file - the file's spellings.
- * @param target - the target's spellings.
- * @returns whether one pair is equal, folding when either side's volume folds.
- */
-function same(file: readonly Spelling[], target: readonly Spelling[]): boolean {
-  return file.some(left => target.some(right => equal(left.path, right.path, left.fold || right.fold)))
-}
-
-/**
- * Whether any spelling of the target lies below any spelling of a directory.
- * @param directory - the directory's spellings.
- * @param target - the target's spellings.
- * @returns whether one pair nests, folding when either side's volume folds.
- */
-function within(directory: readonly Spelling[], target: readonly Spelling[]): boolean {
-  return directory.some(root => target.some(spelling => under(root.path, spelling.path, root.fold || spelling.fold)))
-}
-
-/**
- * Whether one path lies below a directory.
- * @param directory - the directory, absolute.
- * @param path - the candidate path.
- * @param fold - whether the comparison folds letter case.
- * @returns whether `path` is a path inside `directory`.
- */
-function under(directory: string, path: string, fold: boolean): boolean {
-  const base = directory.endsWith(sep) ? directory : `${directory}${sep}`
-  return comparable(path, fold).startsWith(comparable(base, fold))
+  return fold ? left.toLowerCase() === right.toLowerCase() : left === right
 }
 
 /**
@@ -434,8 +465,5 @@ function under(directory: string, path: string, fold: boolean): boolean {
  */
 function hasSegments(spelling: Spelling, names: readonly string[]): boolean {
   const parts = spelling.path.split(sep)
-  return parts.some((_, index) => names.every((name, offset) => {
-    const part = parts[index + offset]
-    return part !== undefined && equal(part, name, spelling.fold)
-  }))
+  return parts.some((_, index) => names.every((name, offset) => equal(parts[index + offset] ?? '', name, spelling.fold)))
 }

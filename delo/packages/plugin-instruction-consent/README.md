@@ -12,11 +12,13 @@ The `sandboxModeGuard` of the session-mode seam is not this plugin's to provide:
 
 The service ignores the permission preset: the consent applies on every preset, full access included. A write the person makes in the studio's own editor asks nothing new — the seam sees writes through the model's file tools only.
 
+The consent is a prompt for file-tool writes, not a boundary against a model that has a shell. It reviews every write the `fs/write-intent`, `fs/edit-intent` and `fs/delete-intent` waterfalls carry, which `write`, `edit` and `apply_patch` emit, and `str_replace_editor` too whenever `@deepseek-ai/dsh-tool-fs` is mounted beside it, because that package registers the gate on those intents. A shell command that writes an instruction file passes no such intent and no review.
+
 ## Classification
 
-The review compares each target under two spellings: the path the write tool resolved, and its physical path, the real path of the nearest existing ancestor joined with the missing tail, which is the path `@deepseek-ai/dsh-fs-local` writes. Every root and file named below is resolved the same way, so a symbolic link on either side (a linked directory in the target path, a linked home or skill root, an instruction file that links elsewhere) does not move a write out of the comparison. A path that is not absolute, as a remote backend may report, is compared as spelled.
+Every target and every root named below resolves to the real path of its nearest existing ancestor joined with the missing tail, which is the path `@deepseek-ai/dsh-fs-local` writes; a target whose last name is a symbolic link also resolves to the link's own location. A target matches a root when one of the target's existing ancestors is the root's existing part by device and inode, and the names from there down to the target begin with the root's missing tail. Identity covers symbolic links on either side, letter case and Unicode normalization of existing names, short names, and hard links; text compares only the missing tail and the name rules below. A path that is not absolute, as a remote backend may report, meets only the name rules, as spelled.
 
-A comparison folds letter case when the existing directory that holds the target, or the one that holds the root, sits on a case-insensitive volume. The probe takes the first entry of that directory whose name holds an ASCII letter, or the nearest such name on the directory's own path, and checks whether its case-flipped spelling names the same inode; a volume without such a name counts as case-insensitive. Each consent instance remembers the answer per directory; the platform decides nothing.
+Text folds letter case when the existing directory that holds the target's or the root's first missing name sits on a case-insensitive volume. The probe takes the first entry of that directory whose name holds an ASCII letter and checks whether its case-flipped spelling names the same inode; a directory without such an entry counts as case-insensitive. Each consent instance remembers the answer per directory; the platform decides nothing.
 
 The roots come from the code that reads them, on every review. A target classifies by the first rule it meets:
 
@@ -25,9 +27,9 @@ The roots come from the code that reads them, on every review. A target classifi
 3. The home instructions: a file named in `DEFAULT_INSTRUCTION_FILE_NAMES` of `@deepseek-ai/dsh-agent-instructions` directly in the harness home or the shared agent root, or the file such a path resolves to.
 4. A folder's instructions: any other file with one of those names.
 
-The homes resolve from `DSH_HOME` and `DSH_AGENTS_HOME`. A target or root that fails to resolve for a reason other than absence, such as a link loop or a denied search permission, makes the review throw, and the seam refuses the write.
+The homes resolve from `DSH_HOME` and `DSH_AGENTS_HOME` when the review runs, and also as they resolved when the consent mounted, which is when the workspace instruction loader resolves its own; a skill provider row that configures other homes reports their skill stores through `configuredRoots()`. A target or root that fails to resolve for a reason other than absence, such as a link loop or a denied search permission, makes the review throw, and the seam refuses the write.
 
-The review reads the filesystem when it runs, so a link created or swapped between the review and the write is not seen. The seam carries no workspace, so a write addressed directly to the directory a project's linked `.agents/skills` points at, or to the file a folder's linked `AGENTS.md` points at, and a hard link to an instruction file, do not classify. Instruction file names a deployment adds through `instructionFileCandidates`, and `--patch` overlay files, do not classify either. Shell commands that write files are outside this review.
+The review reads the filesystem when it runs, so a link created or swapped between the review and the write is not seen. The seam carries no workspace, so a write addressed directly to the directory a project's linked `.agents/skills` points at, or to the file a folder's linked `AGENTS.md` points at, or to a hard link of a folder's `AGENTS.md`, does not classify. Instruction file names a deployment adds through `instructionFileCandidates`, and `--patch` overlay files, do not classify either. Shell commands that write files are outside this review.
 
 ## Configuration
 
@@ -37,4 +39,4 @@ The review reads the filesystem when it runs, so a link created or swapped betwe
 
 ## Tests
 
-`tests/consent.spec.ts` covers the classification rules, the review notes with the diff, the asked flow, resolution failures, and the switch. `tests/denial.spec.ts` covers writes through symbolic links and in another letter case, each of which asks, and the case-sensitivity probe against the temporary directory's volume. `tests/loader-roots.spec.ts` runs the instruction loader's discovery, the filesystem skill provider and the profile launcher over a fixture and requires the consent to ask about every file they read.
+`tests/consent.spec.ts` covers the classification rules, the review notes with the diff, the asked flow, resolution failures, and the switch. `tests/denial.spec.ts` covers writes through symbolic links, to hard links, in another letter case, and into a home resolved before the environment changed, each of which asks, and the case-sensitivity probe against the temporary directory's volume. `tests/loader-roots.spec.ts` runs the instruction loader's discovery, the filesystem skill provider and the profile launcher over a fixture and requires the consent to ask about every file they read.

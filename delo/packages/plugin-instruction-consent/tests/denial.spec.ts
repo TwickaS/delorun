@@ -1,13 +1,16 @@
 /**
  * Denial specs of `@delo/plugin-instruction-consent`'s path classification: a write that reaches an instruction-layer
- * file through a symbolic link, a different letter case on a case-insensitive volume, or a link at the instruction
- * root itself asks for consent, and the same spelling on a case-sensitive volume asks nothing.
+ * file through a symbolic link, a hard link, a different letter case on a case-insensitive volume, a link at the
+ * instruction root itself, or a home the loader resolved before the environment changed asks for consent, and the same
+ * spelling on a case-sensitive volume asks nothing.
  */
 import { linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import { classifyTarget, probeCaseInsensitive } from '../src/classify.ts'
+import { InstructionConsent } from '../src/index.ts'
 
 let root: string
 let env: { DSH_HOME: string; DSH_AGENTS_HOME: string }
@@ -92,10 +95,16 @@ describe('a write spelled in a different letter case', () => {
   })
 
   it('a case variant of a home skill store path on a case-insensitive volume asks for consent', () => {
-    const variant = join(root, 'home', '.DELO', 'Skills', 'review', 'SKILL.md')
-    expect(classifyTarget(variant, { env, caseInsensitive: insensitive })).toEqual({ kind: 'skill', root: 'home' })
-    expect(classifyTarget(join(root, 'home', '.Delo', 'agents.md'), { env, caseInsensitive: insensitive }))
+    // A case-insensitive volume resolves an existing directory under any case, so identity decides there; the case
+    // spelling matters for the names that do not exist yet, which this home's empty store directory leaves.
+    const fresh = { DSH_HOME: join(root, 'fresh', '.delo'), DSH_AGENTS_HOME: join(root, 'fresh', '.agents') }
+    mkdirSync(fresh.DSH_HOME, { recursive: true })
+    expect(classifyTarget(join(fresh.DSH_HOME, 'SKILLS', 'review', 'SKILL.md'), { env: fresh, caseInsensitive: insensitive }))
+      .toEqual({ kind: 'skill', root: 'home' })
+    expect(classifyTarget(join(fresh.DSH_HOME, 'Agents.MD'), { env: fresh, caseInsensitive: insensitive }))
       .toEqual({ kind: 'instructions', scope: 'global' })
+    expect(classifyTarget(join(fresh.DSH_HOME, 'SKILLS', 'review', 'SKILL.md'), { env: fresh, caseInsensitive: sensitive }))
+      .toBeUndefined()
   })
 
   it('a case variant of a project skill directory on a case-insensitive volume asks for consent', () => {
@@ -104,7 +113,6 @@ describe('a write spelled in a different letter case', () => {
   })
 
   it('a case variant of a configured skill root on a case-insensitive volume asks for consent', () => {
-    mkdirSync(join(root, 'Company', 'Skills'), { recursive: true })
     expect(classifyTarget(join(root, 'company', 'skills', 'lint', 'SKILL.md'), {
       env, skillRoots: [join(root, 'Company', 'Skills')], caseInsensitive: insensitive,
     })).toEqual({ kind: 'skill', root: 'custom' })
@@ -120,17 +128,61 @@ describe('a write spelled in a different letter case', () => {
 
   it('the same case variants on a case-sensitive volume ask nothing', () => {
     expect(classifyTarget(join(root, 'work', 'agents.md'), { env, caseInsensitive: sensitive })).toBeUndefined()
-    expect(classifyTarget(join(root, 'home', '.DELO', 'Skills', 'review', 'SKILL.md'), { env, caseInsensitive: sensitive })).toBeUndefined()
+    expect(classifyTarget(join(root, 'company', 'skills', 'lint', 'SKILL.md'), {
+      env, skillRoots: [join(root, 'Company', 'Skills')], caseInsensitive: sensitive,
+    })).toBeUndefined()
     expect(classifyTarget(join(root, 'work', '.Agents', 'SKILLS', 'lint', 'SKILL.md'), { env, caseInsensitive: sensitive })).toBeUndefined()
   })
 
   it('a case variant asks for consent when only the instruction root sits on a case-insensitive volume', () => {
     // The probe answers per directory: the root's volume folds the comparison even when the target's does not.
-    mkdirSync(join(root, 'Company', 'Skills'), { recursive: true })
-    const rootOnly = (directory: string): boolean => directory === join(root, 'Company', 'Skills')
-    expect(classifyTarget(join(root, 'company', 'skills', 'lint', 'SKILL.md'), {
+    mkdirSync(join(root, 'Company', 'skills'), { recursive: true })
+    const rootOnly = (directory: string): boolean => directory === join(root, 'Company')
+    expect(classifyTarget(join(root, 'Company', 'skills', 'lint', 'SKILL.md'), {
       env, skillRoots: [join(root, 'Company', 'Skills')], caseInsensitive: rootOnly,
     })).toEqual({ kind: 'skill', root: 'custom' })
+  })
+})
+
+describe('a write to another name of an instruction-layer file', () => {
+  it('a write to a hard link of the profile patch file asks for consent', () => {
+    const profilePatch = join(env.DSH_HOME, 'profiles', 'default', 'cordis.patch.yml')
+    mkdirSync(join(profilePatch, '..'), { recursive: true })
+    writeFileSync(profilePatch, '[]\n')
+    linkSync(profilePatch, join(root, 'work', 'rows.yml'))
+    expect(classifyTarget(join(root, 'work', 'rows.yml'), {
+      env, compositionFiles: [{ path: profilePatch, layer: 'profile' }], caseInsensitive: sensitive,
+    })).toEqual({ kind: 'preset', layer: 'profile' })
+  })
+
+  it('a write to a hard link of the home AGENTS.md asks for consent', () => {
+    linkSync(join(env.DSH_HOME, 'AGENTS.md'), join(root, 'work', 'src', 'rules.md'))
+    expect(classifyTarget(join(root, 'work', 'src', 'rules.md'), { env, caseInsensitive: sensitive }))
+      .toEqual({ kind: 'instructions', scope: 'global' })
+  })
+})
+
+describe('the homes the loader resolved', () => {
+  it('a write to the skill store of the home the loader resolved at mount asks after the environment names another', async () => {
+    const saved = { home: process.env['DSH_HOME'], agents: process.env['DSH_AGENTS_HOME'] }
+    process.env['DSH_HOME'] = env.DSH_HOME
+    process.env['DSH_AGENTS_HOME'] = env.DSH_AGENTS_HOME
+    const ctx = new Context()
+    try {
+      const consent = new InstructionConsent(ctx)
+      process.env['DSH_HOME'] = join(root, 'other', '.delo')
+      process.env['DSH_AGENTS_HOME'] = join(root, 'other', '.agents')
+      expect(consent.review({ tool: 'write', path: join(env.DSH_HOME, 'skills', 'review', 'SKILL.md') }))
+        .toMatchObject({ required: true })
+      expect(consent.review({ tool: 'write', path: join(env.DSH_AGENTS_HOME, 'skills', 'review', 'SKILL.md') }))
+        .toMatchObject({ required: true })
+    } finally {
+      for (const [key, value] of [['DSH_HOME', saved.home], ['DSH_AGENTS_HOME', saved.agents]] as const) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+      await ctx.fiber.dispose()
+    }
   })
 })
 
@@ -176,14 +228,13 @@ describe('the case-sensitivity probe', () => {
     expect(probeCaseInsensitive(directory)).toBe(true)
   })
 
-  it('probes the nearest name with letters when the directory holds none', () => {
+  it('reports a directory without a lettered entry case-insensitive, so its names compare folded', () => {
     const directory = join(root, 'numbers', '123')
     mkdirSync(join(directory, '456'), { recursive: true })
     const empty = join(root, 'empty-dir')
     mkdirSync(empty)
-    const folds = probeCaseInsensitive(root)
-    expect(probeCaseInsensitive(directory)).toBe(folds)
-    expect(probeCaseInsensitive(join(directory, '456'))).toBe(folds)
-    expect(probeCaseInsensitive(empty)).toBe(folds)
+    expect(probeCaseInsensitive(directory)).toBe(true)
+    expect(probeCaseInsensitive(join(directory, '456'))).toBe(true)
+    expect(probeCaseInsensitive(empty)).toBe(true)
   })
 })
