@@ -63,7 +63,7 @@ describe('a runtime store refusal', () => {
     const error = new RuntimeStoreError('RUNTIME_CHANGED', '/home/.delo/runtimes', 'what is wrong', remedies)
     expect(storeRemedies(error, CONTEXT)).toEqual([
       'Install the release again: delorun update --profile work',
-      'Switch back to the version kept for rollback: delorun recover --runtime previous --profile work',
+      'Go back to the version before the last update: delorun recover rollback --profile work',
       'Update the runtime: delorun update --profile work',
       'Update the launcher to a version that reads this runtime.',
     ])

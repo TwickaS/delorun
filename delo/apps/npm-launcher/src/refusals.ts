@@ -77,7 +77,7 @@ export function storeRemedies(error: RuntimeStoreError, context: RemedyContext):
       case 'reinstall':
         return `Install the release again: delorun update ${profile}`
       case 'rollback':
-        return `Switch back to the version kept for rollback: delorun recover --runtime previous ${profile}`
+        return `Go back to the version before the last update: delorun recover rollback ${profile}`
       case 'update':
         return `Update the runtime: delorun update ${profile}`
       case 'launcher-update':
