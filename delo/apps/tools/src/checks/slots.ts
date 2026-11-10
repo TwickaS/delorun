@@ -14,8 +14,9 @@
  * notices them. Two runs that claim at once and overfill the machine are resolved by the later request stepping back.
  *
  * Runs of old worktrees take a ticket in the previous queue directory and the single lock file; a held ticket or the lock
- * of a live process that holds no grant counts as holding the whole machine, and every grant here also holds a ticket there,
- * so an old run waits for new runs as it did for one holder.
+ * of a live process that holds no grant counts as holding the whole machine, and an earlier waiting ticket there is served
+ * first. Every request here also holds a waiting ticket there, held once granted, so an old run keeps first come, first
+ * served with new runs and waits for new holders as it did for one holder.
  *
  * The file system, clock, process table and signals are injected, so the specs start no process.
  *
@@ -153,7 +154,8 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
     }
   }
   waiting.sort((a, b) => a.priority - b.priority || a.since - b.since || a.pid - b.pid)
-  const granted = new Set(holders.map(holder => holder.pid))
+  // A new run holds a ticket in the previous queue too, waiting or held, so an old run keeps its place; it is not an old run.
+  const granted = new Set([...holders, ...waiting].map(each => each.pid))
   const tickets = fs.list(paths.oldQueue).flatMap((file) => {
     const match = /^([01])-(\d+)-(\d+)(\.held)?$/.exec(file)
     const pid = Number(match?.[3])
@@ -234,14 +236,17 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
   const stamp = `${String(demand.priority)}-${String(since).padStart(MILLISECONDS_WIDTH, '0')}-${String(host.pid)}`
   const request = `${paths.dir}/req-${stamp}.json`
   const held = `${paths.dir}/held-${String(host.pid)}.json`
-  const ticket = `${paths.oldQueue}/${stamp}.held`
+  const waitingTicket = `${paths.oldQueue}/${stamp}`
+  const ticket = `${waitingTicket}.held`
   const write = (path: string, value: object): void => {
     fs.remove(path)
     fs.create(`${path}.tmp`, JSON.stringify(value))
     fs.rename(`${path}.tmp`, path)
   }
   write(request, { pid: host.pid, want, min, memoryBytes: demand.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since })
-  host.guard(() => { fs.remove(request); fs.remove(held); fs.remove(ticket) })
+  // The same ticket in the previous queue keeps an old run that arrived later behind this one.
+  fs.create(waitingTicket, '')
+  host.guard(() => { fs.remove(request); fs.remove(held); fs.remove(waitingTicket); fs.remove(ticket) })
   let said: string | undefined
   let lastReport = since
   for (;;) {
@@ -255,7 +260,7 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
       const total = after.holders.reduce((sum, holder) => sum + holder.slots, 0)
       const latest = [...after.holders].sort((a, b) => a.priority - b.priority || a.requested - b.requested || a.pid - b.pid).at(-1)
       if ((total <= budget.slots || latest?.pid !== host.pid) && after.oldHolder === undefined) {
-        fs.create(ticket, '')
+        fs.rename(waitingTicket, ticket)
         return { slots: decision.slots, memoryBytes: decision.memoryBytes, waitedMs: host.now() - since }
       }
       fs.remove(held)

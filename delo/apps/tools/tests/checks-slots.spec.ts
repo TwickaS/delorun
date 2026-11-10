@@ -297,6 +297,30 @@ describe('the order of requests', () => {
   })
 })
 
+describe('the previous queue', () => {
+  it('holds a waiting ticket there while the request waits, so an old run that arrived later waits behind it, and holds it once granted', async () => {
+    const machine = new Machine()
+    machine.hold(7, { slots: 20 })
+    let seen: string[] = []
+    machine.onSleep = (count) => {
+      if (count === 1) seen = machine.fs.list('/q')
+      if (count === 2) machine.live.delete(7)
+    }
+    await takeSlots(machine.host(1), paths, budget, demand())
+    expect(seen).toEqual(['1-000000000001000-1'])
+    expect(machine.fs.list('/q')).toEqual(['1-000000000001000-1.held'])
+  })
+
+  it('does not count a new run\'s ticket there as an old run\'s', () => {
+    const machine = new Machine()
+    const host = machine.host(1)
+    machine.live.add(2)
+    machine.files.set('/s/req-2.json', JSON.stringify({ pid: 2, want: 1, min: 1, memoryBytes: 0, disk: false, priority: 1, label: '', since: 5 }))
+    machine.files.set('/q/1-000000000000005-2', '')
+    expect(readSlots(host, paths).oldWaiting).toEqual([])
+  })
+})
+
 describe('the files', () => {
   it('ignore a file being written, and remove one that is not a request or a holder and one of a dead process', () => {
     const machine = new Machine()
