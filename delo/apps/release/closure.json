@@ -5,6 +5,6 @@
   "clientTitle": "Delo",
   "anchor": {
     "package": "@deepseek-ai/dsh",
-    "bundles": ["@delo/bundle-local"]
+    "bundles": ["@delo/bundle-local", "@delo/bundle-studio"]
   }
 }

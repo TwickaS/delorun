@@ -49,9 +49,9 @@ The row `delo-chat-states` has three volatile fields ([`src/config.ts`](src/conf
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `snoozePresets` | T3 Code's five: in 1 hour, in 3 hours, today 18:00, tomorrow 09:00, Monday 09:00 | One to eight presets, each `{ kind: after, minutes }` (1 to 43,200) or `{ kind: at, day, time }` with a day from `today` through `sunday` and a `HH:MM` time. |
+| `snoozePresets` | T3 Code's five: in 1 hour, in 3 hours, the same day at 18:00, the next day at 09:00, Monday at 09:00 | One to eight presets, each `{ kind: after, minutes }` (1 to 43,200) or `{ kind: at, day, time }` with a day from `today` through `sunday` and a `HH:MM` time. |
 | `autoSettleDays` | `0` | Idle days (0 to 90) after which a chat counts as settled until it changes or is returned; 0 is off. |
-| `refreshSeconds` | `30` | Seconds (5 to 3600) between the studio's reads of the states. |
+| `refreshSeconds` | `30` | Seconds (5 to 3600) the studio waits between its reads of the states. |
 
 The longest snooze, one year, is a limit of the routes and not a setting.
 
