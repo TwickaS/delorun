@@ -23,6 +23,7 @@ Choose the evidence with `dsh-pre-push-checks`, then run it through Delo's check
 | While working | `pnpm check`: the agent tier, which leaves out the replays, the web lane and the Docker lane |
 | The selection and its reasons, without running it | `pnpm check -- --plan` |
 | One package or file | `node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts <path>…` |
+| Coverage of the files you changed, every file listed | `node_modules/.bin/tsx delo/apps/tools/src/coverage.ts <package directory or spec>…` (each run writes its own report directory) |
 | One check, such as a lane that failed | `node_modules/.bin/tsx delo/apps/tools/src/run-checks.ts --only <id>` |
 | Before the lead fast-forwards the trunk | `pnpm check:merge`: the merge tier, with the merge-only checks; a lane's agent never needs it, and a push of the trunk runs it |
 | Before asking for the base to be called green | `pnpm check:full`, or `DELO_FULL_GATE=1 git push` |
