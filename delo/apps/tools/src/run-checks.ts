@@ -385,7 +385,7 @@ function budgetText(check: Check): string {
  * @returns the command line, or the reason it is declined.
  */
 function commandText(check: Check): string {
-  return check.declined !== undefined ? `declined: ${check.declined}` : `runs: ${check.command.join(' ')}`
+  return check.declined !== undefined ? `declined: ${check.declined}` : `runs: ${check.command.join(' ')}${check.bounded === undefined ? '' : ` (${check.bounded})`}`
 }
 
 /**
@@ -429,9 +429,10 @@ export function cacheCounts(results: readonly Result[]): { readonly local: numbe
  * @param milliseconds - the run's wall time.
  * @param root - the repository root, for the paths printed.
  * @param tier - the run's gate tier, which decides whether a declined merge-only check fails it.
+ * @param bounded - one line per check that ran a bounded selection, naming what it left out.
  * @returns 0 when no check failed, otherwise 1.
  */
-function summarize(results: readonly Result[], milliseconds: number, root: string, tier: GateTier | undefined): number {
+function summarize(results: readonly Result[], milliseconds: number, root: string, tier: GateTier | undefined, bounded: readonly string[]): number {
   const failures = results.filter(result => gateFailure(result, tier))
   const declined = results.filter(result => result.outcome === 'declined' && !failures.includes(result))
   for (const failure of failures) {
@@ -452,6 +453,7 @@ function summarize(results: readonly Result[], milliseconds: number, root: strin
   const peak = memory?.peakBytes === undefined ? '' : `, peak memory ${(memory.peakBytes / GIB).toFixed(1)} GiB`
   const oom = memory !== undefined && memory.oomKills > 0 ? `, ${String(memory.oomKills)} process(es) stopped at the memory ceiling` : ''
   for (const each of declined) console.log(`\n── ${each.id} declined: ${each.detail ?? 'this host cannot run it'}`)
+  for (const line of bounded) console.log(`\n── ${line}`)
   const named = failures.length === 0 ? '' : ` (${failures.map(failure => failure.id).join(', ')})`
   console.log(`\ndelo checks: ${String(passed)} passed, ${String(cached)} cached (${String(sources.local)} in this worktree, ${String(sources.shared)} shared), ${String(failures.length)} failed${named}, ${String(declined.length)} declined, ${String(skipped)} skipped in ${formatSeconds(milliseconds / 1000)}${peak}${oom}; report: ${REPORT}`)
   return failures.length === 0 ? 0 : 1
@@ -727,7 +729,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const tierSeconds = values['pre-commit'] ? budgets.tiers['pre-commit']?.seconds : undefined
   if (tierSeconds !== undefined && elapsed > tierSeconds) console.log(`  the pre-commit tier took ${formatSeconds(elapsed)}, over its ${String(tierSeconds)} s budget (budgets.json)`)
   if (grant !== undefined || ioAtStart !== undefined) console.log(`delo checks: waited ${formatSeconds(machine.waitedSeconds)} for slots${ioAtStart === undefined ? '' : `; disk pressure (some, avg10) ${String(ioAtStart)}% at the start and ${String(ioAtEnd ?? '?')}% at the end`}`)
-  return summarize(results, performance.now() - started, root, gateTier)
+  return summarize(results, performance.now() - started, root, gateTier, plan.flatMap(check => check.bounded === undefined ? [] : [`${check.id}: ${check.bounded}`]))
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {

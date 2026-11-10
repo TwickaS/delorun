@@ -104,6 +104,8 @@ export interface Check {
   readonly history?: boolean
   /** What a narrowed check runs over: the paths or package directories its command appends. Absent when the command is whole. */
   readonly scope?: readonly string[]
+  /** What a bounded selection ran in place of everything the change reached, which `--plan` and the run's summary print. */
+  readonly bounded?: string
   /** The budget the memory and exclusivity came from; the cache key includes it. */
   readonly budget: BudgetEntry
 }
@@ -813,7 +815,7 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
   }
   const paths = selection.changed?.paths ?? selection.targets
   const everything = paths.length === 0 && selection.changed === undefined
-  const web = selectWebLane(tree.webSpecs ?? [], paths, tree.upstream, everything)
+  const web = selectWebLane(tree.webSpecs ?? [], paths, tree.upstream, everything, selection.tier !== 'agent' && selection.tier !== 'lane')
   // An upstream package's code reaches only the fork packages that depend on it, directly or through other upstream packages. Any other code outside delo/ (root configuration, scripts, vendor) reaches everything; upstream's documentation, notes and recorded scenarios reach no fork check.
   const upstreamOf = (path: string): UpstreamPackage | undefined => tree.upstream.find(pkg => path.startsWith(`${pkg.dir}/`))
   const upstreamTouched = new Set(paths.filter(path => !path.startsWith('delo/') && affectsUpstreamRuntime(path)).flatMap(path => upstreamOf(path)?.name ?? []))
@@ -951,7 +953,7 @@ export function selectPreCommit(checks: readonly Check[], staged: readonly strin
  * @returns the check, with its command and scope narrowed where the selection narrows it.
  */
 function narrowed(check: Check, selection: Selection, paths: readonly string[], reachedDirs: readonly string[] | undefined, upstream: readonly UpstreamPackage[], web: WebSelection): Check {
-  if (check.id === WEB_CHECK_ID) return web.declined !== undefined ? { ...check, declined: web.declined } : { ...check, command: [...check.command, ...web.specs], scope: web.specs }
+  if (check.id === WEB_CHECK_ID) return web.declined !== undefined ? { ...check, declined: web.declined } : { ...check, command: [...check.command, ...web.specs], scope: web.specs, ...web.bounded === undefined ? {} : { bounded: web.bounded } }
   if (check.id === 'tests:upstream-changed') {
     const { dirs } = upstreamSpecDirs(upstream, paths.filter(path => !path.startsWith('delo/')), selection.tier)
     // With no directory it would run every upstream spec, which the full gate does not run in this lane.

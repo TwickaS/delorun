@@ -1,13 +1,15 @@
 /**
- * The web browser lane: which inventory specs a change reaches, the cap above which the lane is declined, the WebKit
- * exclusion, the lane's steps and environment, and its wall-clock budget.
+ * The web browser lane: which inventory specs a change reaches, the cap above which a lighter tier declines the lane
+ * and the merge tier runs a bounded selection, the WebKit exclusion, the lane's steps and environment, and its
+ * wall-clock budget.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { catalog, select, type Budgets, type ForkTree, type Host, type Planned } from '../src/checks/plan.ts'
-import { laneEnvironment, readSpecImports, readWebSpecs, refusal, selectWebLane, WEB_BUILD_COMMAND, WEB_CHECK_ID, WEB_LANE_MODULE, WEB_SPEC_CAP, webLaneSteps, type WebSpec, type WorkspacePackage } from '../src/checks/web.ts'
+import { laneEnvironment, readSpecImports, readWebSpecs, refusal, selectWebLane, WEB_BUILD_COMMAND, WEB_CHECK_ID, WEB_LANE_MODULE, WEB_SMOKE_SPECS, WEB_SPEC_CAP, webLaneSteps, type WebSpec, type WorkspacePackage } from '../src/checks/web.ts'
 
 const BUDGETS = JSON.parse(readFileSync(new URL('../src/checks/budgets.json', import.meta.url), 'utf8')) as Budgets
 const PACKAGES: WorkspacePackage[] = [
@@ -125,67 +127,150 @@ describe('the web lane selection', () => {
   })
 
   it('selects the specs mapped to a changed client package', () => {
-    expect(selectWebLane(inventory(), ['packages/client/ui-status/src/panel.ts'], PACKAGES, false).specs).toEqual(['apps/web/tests/status-panel.e2e.ts'])
+    expect(selectWebLane(inventory(), ['packages/client/ui-status/src/panel.ts'], PACKAGES, false, false).specs).toEqual(['apps/web/tests/status-panel.e2e.ts'])
   })
 
   it('reaches a client package no spec maps to, but selects nothing, and a documentation-only client change reaches nothing', () => {
-    const quiet = selectWebLane(inventory(), ['packages/client/ui-quiet/src/index.ts'], PACKAGES, false)
+    const quiet = selectWebLane(inventory(), ['packages/client/ui-quiet/src/index.ts'], PACKAGES, false, false)
     expect(quiet).toMatchObject({ reached: true, specs: [] })
     expect(quiet.declined).toContain('no web e2e spec maps to the change')
-    expect(selectWebLane(inventory(), ['packages/client/ui-status/README.md'], PACKAGES, false)).toMatchObject({ reached: false, specs: [] })
+    expect(selectWebLane(inventory(), ['packages/client/ui-status/README.md'], PACKAGES, false, false)).toMatchObject({ reached: false, specs: [] })
   })
 
   it('selects nothing and does not reach the lane for a change to an unrelated package', () => {
-    expect(selectWebLane(inventory(), ['packages/core/unrelated/src/index.ts'], PACKAGES, false)).toMatchObject({ reached: false, specs: [] })
+    expect(selectWebLane(inventory(), ['packages/core/unrelated/src/index.ts'], PACKAGES, false, false)).toMatchObject({ reached: false, specs: [] })
     expect(planFor(['packages/core/unrelated/src/index.ts'], inventory())).toBeUndefined()
   })
 
   it('selects the specs that import a changed package, and no other spec', () => {
-    const selected = selectWebLane(inventory(), ['packages/core/session/src/index.ts'], PACKAGES, false).specs
+    const selected = selectWebLane(inventory(), ['packages/core/session/src/index.ts'], PACKAGES, false, false).specs
     expect(selected).toEqual(['apps/web/tests/session-replay.e2e.ts'])
     expect(selected).not.toContain('apps/web/tests/plain-load.e2e.ts')
   })
 
   it('selects a changed spec itself, even when no package maps to it, and no sibling spec', () => {
-    const selected = selectWebLane(inventory(), ['apps/web/tests/unmapped-probe.e2e.ts'], PACKAGES, false).specs
+    const selected = selectWebLane(inventory(), ['apps/web/tests/unmapped-probe.e2e.ts'], PACKAGES, false, false).specs
     expect(selected).toEqual(['apps/web/tests/unmapped-probe.e2e.ts'])
-    expect(selectWebLane(inventory(), ['apps/web/tests/plain-load.e2e.ts'], PACKAGES, false).specs).toEqual(['apps/web/tests/plain-load.e2e.ts'])
+    expect(selectWebLane(inventory(), ['apps/web/tests/plain-load.e2e.ts'], PACKAGES, false, false).specs).toEqual(['apps/web/tests/plain-load.e2e.ts'])
   })
 
   it('selects every spec that imports a changed helper under apps/web, and no spec that imports none of it', () => {
-    const selected = selectWebLane(inventory(), ['apps/web/tests/scaffold.ts'], PACKAGES, false).specs
+    const selected = selectWebLane(inventory(), ['apps/web/tests/scaffold.ts'], PACKAGES, false, false).specs
     expect(selected).toEqual(['apps/web/tests/plain-load.e2e.ts', 'apps/web/tests/session-replay.e2e.ts', 'apps/web/tests/status-panel.e2e.ts'])
     expect(selected).not.toContain('apps/web/tests/ui-other-badge.e2e.ts')
   })
 
   it('never selects a WebKit spec, even when its own file changed or its package changed', () => {
-    expect(selectWebLane(inventory(), ['apps/web/tests/engine-matrix.e2e.ts'], PACKAGES, false).specs).not.toContain('apps/web/tests/engine-matrix.e2e.ts')
-    expect(selectWebLane(inventory(), ['apps/web/tests/plain-load.e2e.ts'], PACKAGES, false).specs).toContain('apps/web/tests/plain-load.e2e.ts')
+    expect(selectWebLane(inventory(), ['apps/web/tests/engine-matrix.e2e.ts'], PACKAGES, false, false).specs).not.toContain('apps/web/tests/engine-matrix.e2e.ts')
+    expect(selectWebLane(inventory(), ['apps/web/tests/plain-load.e2e.ts'], PACKAGES, false, false).specs).toContain('apps/web/tests/plain-load.e2e.ts')
   })
 
   it('runs a selection at the cap, and declines one above it with the count, instead of running part of it', () => {
-    const atCap = selectWebLane(capped(WEB_SPEC_CAP), ['packages/client/ui-cap/src/a.ts'], PACKAGES, false)
+    const atCap = selectWebLane(capped(WEB_SPEC_CAP), ['packages/client/ui-cap/src/a.ts'], PACKAGES, false, false)
     expect(atCap.specs).toHaveLength(WEB_SPEC_CAP)
-    const above = selectWebLane(capped(WEB_SPEC_CAP + 1), ['packages/client/ui-cap/src/a.ts'], PACKAGES, false)
+    const above = selectWebLane(capped(WEB_SPEC_CAP + 1), ['packages/client/ui-cap/src/a.ts'], PACKAGES, false, false)
     expect(above.specs).toEqual([])
     expect(above.declined).toContain(`${String(WEB_SPEC_CAP + 1)} web e2e specs reach the change, above the cap of ${String(WEB_SPEC_CAP)}`)
   })
 
   it('runs the whole small inventory for a run that names no change, and declines a large one', () => {
-    const small = selectWebLane(inventory(), [], PACKAGES, true)
+    const small = selectWebLane(inventory(), [], PACKAGES, true, false)
     expect(small.declined).toBeUndefined()
     expect(small.specs).not.toContain('apps/web/tests/engine-matrix.e2e.ts')
-    const large = selectWebLane(capped(WEB_SPEC_CAP + 1), [], PACKAGES, true)
+    const large = selectWebLane(capped(WEB_SPEC_CAP + 1), [], PACKAGES, true, false)
     expect(large.specs).toEqual([])
     expect(large.declined).toContain('name a change with --changed or a target')
   })
 
   it('does not treat an empty change set as a run that names nothing', () => {
-    expect(selectWebLane(inventory(), [], PACKAGES, false)).toMatchObject({ reached: false, specs: [] })
+    expect(selectWebLane(inventory(), [], PACKAGES, false, false)).toMatchObject({ reached: false, specs: [] })
   })
 
   it('declines a run that names no change while the inventory is empty', () => {
-    expect(selectWebLane([], [], PACKAGES, true).declined).toContain('no web e2e spec in the inventory')
+    expect(selectWebLane([], [], PACKAGES, true, false).declined).toContain('no web e2e spec in the inventory')
+  })
+})
+
+/** The smoke specs as inventory entries, each mapped to `apps/web` as every spec importing the helpers is. */
+const SMOKE: readonly WebSpec[] = WEB_SMOKE_SPECS.map(path => ({ path, packages: ['apps/web'], webkit: false }))
+
+/**
+ * A wide inventory: the smoke specs, 20 specs of one client package, one spec named for that package, one spec of a
+ * package only it maps to, and one spec that maps to `apps/web` only.
+ * @returns the specs.
+ */
+function wide(): WebSpec[] {
+  const many = Array.from({ length: 20 }, (_, index) => ({ path: `apps/web/tests/cap-${String(index).padStart(2, '0')}.e2e.ts`, packages: ['apps/web', 'packages/client/ui-cap'], webkit: false }))
+  return [
+    ...SMOKE,
+    ...many,
+    { path: 'apps/web/tests/zz-ui-cap.e2e.ts', packages: ['apps/web', 'packages/client/ui-cap'], webkit: false },
+    { path: 'apps/web/tests/zz-narrow.e2e.ts', packages: ['packages/client/ui-status'], webkit: false },
+    { path: 'apps/web/tests/zz-changed.e2e.ts', packages: ['apps/web'], webkit: false },
+  ]
+}
+const WIDE_CHANGE = ['packages/client/ui-cap/src/a.ts', 'packages/client/ui-status/src/b.ts', 'apps/web/tests/zz-changed.e2e.ts', 'apps/web/src/main.ts']
+
+describe('the web lane in the merge tier', () => {
+  it('runs a non-empty bounded selection for a change above the cap, where a lighter tier declines it', () => {
+    const merge = selectWebLane(wide(), WIDE_CHANGE, PACKAGES, false, true)
+    expect(merge.declined).toBeUndefined()
+    expect(merge.specs).toHaveLength(WEB_SPEC_CAP)
+    expect(merge.specs).toEqual(expect.arrayContaining([...WEB_SMOKE_SPECS]))
+    expect(merge.bounded).toContain(`bounded selection of ${String(WEB_SPEC_CAP)} spec(s)`)
+    expect(merge.bounded).toContain(`${String(27 - WEB_SPEC_CAP)} of the 27 reached spec(s) left out`)
+    const lighter = selectWebLane(wide(), WIDE_CHANGE, PACKAGES, false, false)
+    expect(lighter.specs).toEqual([])
+    expect(lighter.bounded).toBeUndefined()
+    expect(lighter.declined).toContain('the merge tier runs a bounded selection of them')
+  })
+
+  it('fills the bounded selection with a changed spec, then a spec named for a changed package, then the narrowest, then by path', () => {
+    const ranked = selectWebLane(wide(), WIDE_CHANGE, PACKAGES, false, true).specs.filter(path => !WEB_SMOKE_SPECS.includes(path))
+    expect(ranked).toEqual([
+      'apps/web/tests/cap-00.e2e.ts', 'apps/web/tests/cap-01.e2e.ts', 'apps/web/tests/cap-02.e2e.ts', 'apps/web/tests/cap-03.e2e.ts', 'apps/web/tests/cap-04.e2e.ts',
+      'apps/web/tests/zz-changed.e2e.ts', 'apps/web/tests/zz-narrow.e2e.ts', 'apps/web/tests/zz-ui-cap.e2e.ts',
+    ])
+    expect(selectWebLane([...wide()].reverse(), [...WIDE_CHANGE].reverse(), PACKAGES, false, true).specs).toEqual(selectWebLane(wide(), WIDE_CHANGE, PACKAGES, false, true).specs)
+  })
+
+  it('runs the smoke specs for a change that reaches the lane while no spec maps to it', () => {
+    const quiet = selectWebLane([...inventory(), ...SMOKE], ['packages/client/ui-quiet/src/index.ts'], PACKAGES, false, true)
+    expect(quiet.declined).toBeUndefined()
+    expect(quiet.specs).toEqual([...WEB_SMOKE_SPECS].sort())
+    expect(quiet.bounded).toContain('0 of the 0 reached spec(s) left out')
+  })
+
+  it('declines a change that reaches the lane while the inventory is empty, in any tier', () => {
+    for (const merge of [true, false]) expect(selectWebLane([], ['packages/client/ui-quiet/src/index.ts'], PACKAGES, false, merge).declined).toContain('no web e2e spec in the inventory')
+  })
+
+  it('keeps a selection within the cap as it is, without the smoke specs', () => {
+    const narrow = selectWebLane([...inventory(), ...SMOKE], ['packages/client/ui-status/src/panel.ts'], PACKAGES, false, true)
+    expect(narrow.specs).toEqual(['apps/web/tests/status-panel.e2e.ts'])
+    expect(narrow.bounded).toBeUndefined()
+  })
+
+  it('refuses a bounded selection when a smoke spec is missing from the inventory or runs WebKit', () => {
+    expect(() => selectWebLane(capped(WEB_SPEC_CAP + 1), ['packages/client/ui-cap/src/a.ts'], PACKAGES, false, true)).toThrow(/smoke spec\(s\) .* are not Chromium specs/)
+    const webkit = wide().map(spec => spec.path === WEB_SMOKE_SPECS[0] ? { ...spec, webkit: true } : spec)
+    expect(() => selectWebLane(webkit, WIDE_CHANGE, PACKAGES, false, true)).toThrow(WEB_SMOKE_SPECS[0])
+  })
+
+  it('names smoke specs that exist in this repository as Chromium specs', () => {
+    const root = fileURLToPath(new URL('../../../../', import.meta.url))
+    const chromium = readWebSpecs(root, []).filter(spec => !spec.webkit).map(spec => spec.path)
+    expect(chromium).toEqual(expect.arrayContaining([...WEB_SMOKE_SPECS]))
+  })
+
+  it('plans the bounded selection as the lane command in the merge tier, and says what it left out', () => {
+    const tree = treeOf(wide())
+    const planned = select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'v5', paths: WIDE_CHANGE }, tier: 'merge', only: [], skip: [] }).find(check => check.id === WEB_CHECK_ID)
+    expect(planned?.declined).toBeUndefined()
+    expect(planned?.command.slice(2)).toHaveLength(WEB_SPEC_CAP)
+    expect(planned?.bounded).toContain('left out')
+    const agent = select(catalog(tree, HOST), tree, { targets: [], changed: { base: 'v5', paths: WIDE_CHANGE }, tier: 'agent', only: [WEB_CHECK_ID], skip: [] }).find(check => check.id === WEB_CHECK_ID)
+    expect(agent?.declined).toContain('above the cap')
   })
 })
 

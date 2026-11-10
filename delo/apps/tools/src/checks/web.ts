@@ -19,12 +19,23 @@ export const WEB_CHECK_ID = 'tests:web-changed'
 /** The directory whose `*.e2e.ts` files form the lane's inventory: the files `vitest.web.config.ts` includes there. */
 export const WEB_SPEC_DIR = 'apps/web/tests'
 /**
- * The most specs one run selects. Above it the lane is declined rather than run in part: a change to `apps/web` outside
- * its specs reaches every spec, since each one imports the directory's helpers, and CI's web snapshot gate runs the whole
- * inventory. At the measured 53 s average per spec, 12 specs and a cold artifact build (about 3 minutes) fit the lane's
- * 1200-second budget.
+ * The most specs one run selects. A change to `apps/web` outside its specs reaches every spec, since each one imports the
+ * directory's helpers. Above the cap the merge tier runs a bounded selection ({@link WEB_SMOKE_SPECS} and the reached specs
+ * the change names most closely), and a lighter tier declines the lane. At the measured 53 s average per spec, 12 specs and
+ * a cold artifact build (about 3 minutes) fit the lane's 1200-second budget.
  */
 export const WEB_SPEC_CAP = 12
+/**
+ * The specs a bounded selection always runs, one per core journey: boot to a selected conversation, DeepSeek account
+ * sign-in, opening a recorded conversation, and the settings surface. Each must be a Chromium spec of the inventory;
+ * a bounded selection that misses one throws instead of running without it.
+ */
+export const WEB_SMOKE_SPECS: readonly string[] = [
+  'apps/web/tests/startup-auto-selection.e2e.ts',
+  'apps/web/tests/account-login.e2e.ts',
+  'apps/web/tests/seeded-history.e2e.ts',
+  'apps/web/tests/settings-chrome.e2e.ts',
+]
 /** The build the lane runs first; its environment carries the official client profile. */
 export const WEB_BUILD_COMMAND: readonly string[] = ['pnpm', 'run', '--silent', 'build:artifacts']
 /** This module, which is the check's command after the tsx launcher. */
@@ -65,8 +76,10 @@ export interface WebSelection {
   readonly reason: string
   /** The specs the lane runs, in path order; empty exactly when `declined` is set. */
   readonly specs: readonly string[]
-  /** Why the lane runs nothing although it was picked: no spec maps, or the count is above {@link WEB_SPEC_CAP}. */
+  /** Why the lane runs nothing although it was picked: no spec maps, or the count is above {@link WEB_SPEC_CAP} outside the merge tier. */
   readonly declined?: string | undefined
+  /** What a bounded selection ran and how many reached specs it left out; set only for one. */
+  readonly bounded?: string | undefined
 }
 
 /**
@@ -191,14 +204,18 @@ export function readWebSpecs(root: string, packages: readonly WorkspacePackage[]
 /**
  * What a change selects for the lane. The lane is reached by a non-documentation path under `packages/client` or
  * `apps/web`, or under a package that an inventory spec maps to. A spec is selected when it is itself changed or
- * maps to a changed package. With no change set and no target, the selection is the whole inventory.
+ * maps to a changed package. With no change set and no target, the selection is the whole inventory. In the merge tier a
+ * change that reaches the lane runs specs whenever the inventory has any: above {@link WEB_SPEC_CAP}, or when no spec
+ * maps to the change, it runs the bounded selection of {@link boundedWebSelection} instead of declining.
  * @param specs - the inventory.
  * @param paths - the changed paths, or the targets; empty for a run that names neither.
  * @param packages - the workspace packages.
  * @param everything - true when the run names no change set and no target, so `paths` is not a change.
+ * @param merge - true in the merge tier, which runs a bounded selection where a lighter tier declines.
  * @returns the selection; `specs` is empty exactly when `declined` is set.
+ * @throws Error from {@link boundedWebSelection} when a smoke spec is not in the inventory.
  */
-export function selectWebLane(specs: readonly WebSpec[], paths: readonly string[], packages: readonly WorkspacePackage[], everything: boolean): WebSelection {
+export function selectWebLane(specs: readonly WebSpec[], paths: readonly string[], packages: readonly WorkspacePackage[], everything: boolean, merge: boolean): WebSelection {
   const inventory = specs.filter(spec => !spec.webkit)
   const leftOut = specs.length - inventory.length
   const note = leftOut === 0 ? '' : `; ${String(leftOut)} WebKit spec(s) left out`
@@ -217,11 +234,54 @@ export function selectWebLane(specs: readonly WebSpec[], paths: readonly string[
   const changedDirs = new Set(changes.filter(path => !isSpecFile(path)).flatMap(path => containingPackage(path, packages) ?? []))
   const selected = inventory.filter(spec => changes.includes(spec.path) || spec.packages.some(dir => changedDirs.has(dir)))
   const reason = `${String(selected.length)} of ${String(inventory.length)} web e2e spec(s) reached${note}`
+  if (inventory.length === 0) return { reached, reason, specs: [], declined: `no web e2e spec in the inventory${note}` }
+  if (merge && (selected.length === 0 || selected.length > WEB_SPEC_CAP)) {
+    const bounded = boundedWebSelection(inventory, selected, changes, changedDirs)
+    const leftOut = selected.filter(spec => !bounded.includes(spec.path)).length
+    return {
+      reached, reason, specs: bounded,
+      bounded: `the merge tier runs a bounded selection of ${String(bounded.length)} spec(s): the ${String(WEB_SMOKE_SPECS.length)} smoke specs and the ${String(bounded.length - WEB_SMOKE_SPECS.length)} reached spec(s) the change names most closely; ${String(leftOut)} of the ${String(selected.length)} reached spec(s) left out`,
+    }
+  }
   if (selected.length === 0) return { reached, reason, specs: [], declined: `no web e2e spec maps to the change${note}` }
   if (selected.length > WEB_SPEC_CAP) {
-    return { reached, reason, specs: [], declined: `${String(selected.length)} web e2e specs reach the change, above the cap of ${String(WEB_SPEC_CAP)}; CI's web snapshot gate runs the whole inventory, WebKit legs included${note}` }
+    return { reached, reason, specs: [], declined: `${String(selected.length)} web e2e specs reach the change, above the cap of ${String(WEB_SPEC_CAP)}; the merge tier runs a bounded selection of them${note}` }
   }
   return { reached, reason, specs: selected.map(spec => spec.path) }
+}
+
+/**
+ * A bounded selection of at most {@link WEB_SPEC_CAP} specs: every {@link WEB_SMOKE_SPECS} spec, then the reached specs
+ * in this order until the cap: a changed spec; a spec whose file name contains a changed package's directory name; a
+ * spec that maps to a changed package fewer inventory specs map to; then by path. The result depends only on its arguments.
+ * @param inventory - the Chromium specs of the inventory.
+ * @param selected - the reached specs.
+ * @param changes - the changed paths, documentation left out.
+ * @param changedDirs - the changed packages' directories, specs left out.
+ * @returns the spec paths, sorted.
+ * @throws Error when a smoke spec is not a Chromium spec of the inventory.
+ */
+export function boundedWebSelection(inventory: readonly WebSpec[], selected: readonly WebSpec[], changes: readonly string[], changedDirs: ReadonlySet<string>): string[] {
+  const missing = WEB_SMOKE_SPECS.filter(path => !inventory.some(spec => spec.path === path))
+  if (missing.length > 0) {
+    throw new Error(`${WEB_CHECK_ID}: smoke spec(s) ${missing.join(', ')} are not Chromium specs of ${WEB_SPEC_DIR}; name existing specs in WEB_SMOKE_SPECS (delo/apps/tools/src/checks/web.ts)`)
+  }
+  const users = (dir: string): number => inventory.filter(spec => spec.packages.includes(dir)).length
+  const named = (spec: WebSpec): boolean => {
+    const stem = posix.basename(spec.path).slice(0, -SPEC_SUFFIX.length)
+    return [...changedDirs].some(dir => `-${stem}-`.includes(`-${posix.basename(dir)}-`))
+  }
+  // One number per spec: a changed spec, then a named one, then by how few inventory specs map to its changed package.
+  const rank = (spec: WebSpec): number => {
+    const reach = Math.min(inventory.length, ...spec.packages.filter(dir => changedDirs.has(dir)).map(users))
+    return ((changes.includes(spec.path) ? 0 : 2) + (named(spec) ? 0 : 1)) * (inventory.length + 1) + reach
+  }
+  const order = (left: WebSpec, right: WebSpec): number => {
+    const difference = rank(left) - rank(right)
+    return difference !== 0 ? difference : left.path.localeCompare(right.path)
+  }
+  const ranked = selected.filter(spec => !WEB_SMOKE_SPECS.includes(spec.path)).sort(order)
+  return [...WEB_SMOKE_SPECS, ...ranked.slice(0, WEB_SPEC_CAP - WEB_SMOKE_SPECS.length).map(spec => spec.path)].sort()
 }
 
 /**
