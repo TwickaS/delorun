@@ -1819,6 +1819,30 @@
       "class": "security",
       "reason": "One-time launch tokens (C4, C16 switch `one_time_launch_tokens`): the store of launch tokens that each work once, expire after 60 seconds, are bound to the protocol and host they were minted for and number at most 5, held as SHA-256 digests compared in constant time; a request with more than 4 `token` values is refused before any is hashed, and a token presented at another host reports the host it was minted for. Lead verdict: approved, after an independent review of the change and its fixes (2026-11-10).",
       "sha256": "1fe7ec4fabb98d249b8beec673fe30463740e0a2da7a23e75c347ae24099644d"
+    },
+    {
+      "path": "packages/deliverables/workspace-changes/src/git.ts",
+      "class": "security",
+      "reason": "Every Host git command over a Session's repository runs with the hardened environment of hardening.ts, the snapshot's add and write-tree with every filter and diff driver switched off, and, when the runner carries a Session confinement, inside that Session's sandbox with a runner failure reported as an unavailable sandbox, so repository state a confined command writes (.git/config, .gitattributes, hooks, a gitfile) starts no program with the Host's authority; output is unchanged.",
+      "sha256": "49be095997adbb8010c9ae6fb1d9b4236430f172ac2fffe5950f6e1d363779fc"
+    },
+    {
+      "path": "packages/deliverables/workspace-changes/src/index.ts",
+      "class": "security",
+      "reason": "Binds each Session's git runner to that Session's sandbox through confinement.ts and treats a git older than 2.31, which ignores the command-scope overrides, as absent, so the change summary never runs repository-named programs unconfined where the Session's own commands are confined.",
+      "sha256": "17c0d3f85571ee0fd83cbfcb1b67cfcd7a01b7de784fe7a234fe224c86364044"
+    },
+    {
+      "path": "packages/deliverables/workspace-changes/src/confinement.ts",
+      "class": "security",
+      "reason": "New: wraps each repository git command through ctx.sandbox under the Session's resolved ctx.sandboxPolicy plus the private snapshot directory (only that directory writable for a read-only Session), unconfined only under danger-full-access or without a mounted sandbox, and rejects rather than running unconfined when the sandbox cannot confine.",
+      "sha256": "e39cf9c5a87e84b71a7b9e4cf9caedfd6e239c70b579ca300f345d890f398df2"
+    },
+    {
+      "path": "packages/deliverables/workspace-changes/src/hardening.ts",
+      "class": "security",
+      "reason": "New: the one environment builder every Host git command of the package uses: inherited GIT_* names removed, command-scope configuration that switches off the file-system monitor, hooks, pager, editors, external diff, credential helpers, askpass, SSH and proxy commands, alternate-refs and pack-objects hooks and transports, every listed filter and diff driver switched off, and a git version gate at 2.31.",
+      "sha256": "6cfe9e174cca63818ca3192dda62010df80d302dba20a1b7813bf082a97c9d9f"
     }
   ],
   "retired": []

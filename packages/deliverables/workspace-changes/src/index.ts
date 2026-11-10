@@ -6,17 +6,21 @@
  * announced by a `workspace/changes` Session event that carries only the turn
  * number; summaries and comparisons are served through the `workspaceChanges`
  * service until the Session is disposed. Outside a git repository, or without
- * git, the summary lists file-tool edits only.
+ * git, the summary lists file-tool edits only. Every git command runs with the
+ * hardened environment of `hardening.ts` and, where the composition mounts a
+ * sandbox, inside the calling Session's sandbox (`confinement.ts`).
  */
 import { homedir, tmpdir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-subprocess'
+import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
+import { sessionConfinement } from './confinement.ts'
 import { GitRunner } from './git.ts'
+import { gitVersionProblem } from './hardening.ts'
 import { TurnRecorder } from './recorder.ts'
 import type { WorkspaceChanges } from './types.ts'
 
@@ -27,7 +31,10 @@ export type {
 /** Stable Loader identity. */
 export const name = 'workspace-changes'
 
-/** Services used to run git, resolve mutation targets, and observe turns. */
+/**
+ * Services used to run git, resolve mutation targets, and observe turns. Each git command also reads `sandbox` and
+ * `sandboxPolicy` when they are mounted, to run in the calling Session's sandbox.
+ */
 export const inject = ['subprocess', 'fs']
 
 /** Snapshot, capture, and comparison bounds. Invalid values fail plugin load. */
@@ -62,27 +69,45 @@ function eligible(session: Session): string | undefined {
 }
 
 /**
+ * Run one probe command outside any repository.
+ * @param ctx - subprocess capability.
+ * @param argv - the probe.
+ * @param signal - plugin lifetime.
+ * @returns the settled handle when the probe exits 0, or null.
+ */
+async function probe(ctx: Context, argv: string[], signal: AbortSignal): Promise<SubprocessHandle | null> {
+  const handle = ctx.subprocess.spawn({
+    argv, cwd: homedir(),
+    stdio: { stdin: 'ignore', stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } }, graceMs: 1_000, signal,
+  })
+  const outcome = await handle.done.catch(() => ({ exitCode: null }))
+  return outcome.exitCode === 0 ? handle : null
+}
+
+/**
  * Resolve the git executable once. On macOS the Xcode stub at `/usr/bin/git`
  * opens an installer dialog instead of running, so it counts as absent until
- * developer tools are selected.
+ * developer tools are selected. A git too old to carry the hardened
+ * configuration ({@link gitVersionProblem}) counts as absent too.
  * @param ctx - subprocess capability.
  * @param signal - plugin lifetime.
- * @returns the executable path, or null when git is unavailable.
+ * @returns the executable path, or the reason git is unavailable.
  */
-async function resolveGit(ctx: Context, signal: AbortSignal): Promise<string | null> {
+async function resolveGit(ctx: Context, signal: AbortSignal): Promise<{ executable: string } | { problem: string }> {
   let executable: string
   try {
     executable = await ctx.subprocess.resolveExecutable('git', undefined, signal)
   } catch {
-    return null
+    return { problem: 'git is unavailable' }
   }
-  if (process.platform !== 'darwin' || executable !== '/usr/bin/git') return executable
-  const probe = ctx.subprocess.spawn({
-    argv: ['/usr/bin/xcode-select', '-p'], cwd: homedir(),
-    stdio: { stdin: 'ignore', stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } }, graceMs: 1_000, signal,
-  })
-  const outcome = await probe.done.catch(() => ({ exitCode: null }))
-  return outcome.exitCode === 0 ? executable : null
+  if (process.platform === 'darwin' && executable === '/usr/bin/git' && await probe(ctx, ['/usr/bin/xcode-select', '-p'], signal) === null) {
+    return { problem: 'git is unavailable' }
+  }
+  const version = await probe(ctx, [executable, 'version'], signal)
+  if (version === null) return { problem: `${executable} version failed` }
+  /* v8 ignore next -- collect-mode stdio always yields the reader. */
+  const problem = gitVersionProblem(version.collected.stdout?.readFrom(0).text ?? '')
+  return problem === undefined ? { executable } : { problem }
 }
 
 /**
@@ -120,12 +145,12 @@ export function apply(ctx: Context, config: Config): void {
   ctx.provide('workspaceChanges', service)
   let runner: Promise<GitRunner | null> | undefined
   const gitRunner = (): Promise<GitRunner | null> => {
-    runner ??= resolveGit(ctx, lifetime.signal).then((executable) => {
-      if (executable === null) {
-        ctx.logger.info('workspace-changes: git is unavailable; only file-tool edits are summarized')
+    runner ??= resolveGit(ctx, lifetime.signal).then((resolved) => {
+      if ('problem' in resolved) {
+        ctx.logger.info(`workspace-changes: ${resolved.problem}; only file-tool edits are summarized`)
         return null
       }
-      return new GitRunner(ctx.subprocess, executable, { timeoutMs: config.timeoutMs, outputMaxBytes: config.outputMaxBytes })
+      return new GitRunner(ctx.subprocess, resolved.executable, { timeoutMs: config.timeoutMs, outputMaxBytes: config.outputMaxBytes })
     })
     return runner
   }
@@ -133,8 +158,8 @@ export function apply(ctx: Context, config: Config): void {
     let recorder = recorders.get(session)
     if (recorder === undefined) {
       recorder = new TurnRecorder(session, cwd, {
-        git: gitRunner(), tempRoot: tmpdir(), maxFiles: config.maxFiles,
-        maxFileBytes: config.maxFileBytes, diffTimeoutMs: config.diffTimeoutMs,
+        git: gitRunner().then(git => git?.confinedBy(sessionConfinement(ctx, session)) ?? null),
+        tempRoot: tmpdir(), maxFiles: config.maxFiles, maxFileBytes: config.maxFileBytes, diffTimeoutMs: config.diffTimeoutMs,
         warn: (message) => { ctx.logger.warn(message) },
       })
       recorders.set(session, recorder)

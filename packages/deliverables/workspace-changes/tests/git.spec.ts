@@ -86,7 +86,7 @@ describe('snapshots and diffs', () => {
     const { git: runnerGit } = await runner()
     const store = objectsIn(await scratchDir('dsh-git-store-', cleanups))
     expect(await locateGitWorkspace(runnerGit, cwd, store, signal)).toBeNull()
-    const broken = { root: cwd, gitDir: join(cwd, 'missing'), scratch: cwd, env: {}, excludes: [] }
+    const broken = { root: cwd, gitDir: join(cwd, 'missing'), scratch: cwd, env: {}, writes: [], excludes: [] }
     await expect(snapshotTree(runnerGit, broken, signal)).rejects.toThrow('git add in')
     await expect(ignoredPaths(runnerGit, broken, ['x'], signal)).rejects.toThrow('git check-ignore failed')
     expect(await ignoredPaths(runnerGit, broken, [], signal)).toEqual(new Set())

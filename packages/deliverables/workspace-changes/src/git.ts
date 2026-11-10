@@ -1,7 +1,9 @@
 /** Git working-tree snapshots, tree diffs, and ignore checks through the subprocess capability. */
 import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
+import { SandboxUnavailableError, classifyRunnerFailure, type ConfinedSandboxMode, type RunnerFailureRule } from '@deepseek-ai/dsh-sandbox'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
+import { DRIVER_LISTING_ARGS, FIXED_GIT_OVERRIDES, driverOverrides, hardenedGitEnvironment } from './hardening.ts'
 import { parseNumstat, type NumstatEntry } from './numstat.ts'
 import { canonicalPath, isInside, toPosix } from './paths.ts'
 
@@ -26,6 +28,10 @@ export interface GitRunOptions {
   stdin?: string | undefined
   /** In-memory stdout cap for this command, replacing the runner's `outputMaxBytes`. */
   maxBytes?: number | undefined
+  /** Directories outside the repository the command writes: the private snapshot directory. */
+  writes?: readonly string[] | undefined
+  /** Overrides from {@link repositoryDrivers}, for a command that reads work-tree files through attributes. */
+  drivers?: readonly (readonly [string, string])[] | undefined
   signal: AbortSignal
 }
 
@@ -37,26 +43,59 @@ export interface GitLimits {
   outputMaxBytes: number
 }
 
-/** Runs one resolved git executable with scrubbed environment, timeout, and bounded output. */
+/** A git argv wrapped to run confined, with the evidence that tells a failed confinement from a failed git. */
+export interface ConfinedGit {
+  argv: readonly string[]
+  /** The mode the command runs confined under. */
+  mode: ConfinedSandboxMode
+  runnerFailureRules: readonly RunnerFailureRule[]
+}
+
+/**
+ * Wraps one git argv to run under a Session's sandbox, or leaves it unconfined when the Session's commands run
+ * unconfined. Rejects when the Session's commands run confined and the sandbox cannot confine this one.
+ * @param argv - the git executable and its arguments.
+ * @param writes - directories outside the repository the command must be able to write.
+ * @param signal - cancellation.
+ * @returns the confined argv, or undefined to run `argv` unconfined.
+ */
+export type GitConfinement = (argv: readonly string[], writes: readonly string[], signal: AbortSignal) => Promise<ConfinedGit | undefined>
+
+/**
+ * Runs one resolved git executable with the hardened environment of {@link hardenedGitEnvironment}, confined by the
+ * runner's {@link GitConfinement} when it has one, with timeout and bounded output.
+ */
 export class GitRunner {
   constructor(
     private readonly subprocess: SubprocessRuntime,
     private readonly executable: string,
     private readonly limits: GitLimits,
+    private readonly confinement?: GitConfinement,
   ) {}
+
+  /**
+   * The same executable and bounds, with every command wrapped by `confinement`.
+   * @param confinement - one Session's wrapper.
+   * @returns a runner for that Session's repository.
+   */
+  confinedBy(confinement: GitConfinement): GitRunner {
+    return new GitRunner(this.subprocess, this.executable, this.limits, confinement)
+  }
 
   /**
    * Run `git <args>` to completion.
    * @param args - git arguments; never shell-interpreted.
-   * @param options - working directory, extra environment, stdin data, and cancellation.
+   * @param options - working directory, extra environment, stdin data, writable directories, driver overrides, and cancellation.
    * @returns exit facts and collected output.
-   * @throws when the command times out, is aborted, or cannot spawn.
+   * @throws when the command times out, is aborted, or cannot spawn, or the sandbox could not confine it.
    */
   async run(args: readonly string[], options: GitRunOptions): Promise<GitRunResult> {
     const timeout = AbortSignal.timeout(this.limits.timeoutMs)
     const signal = AbortSignal.any([options.signal, timeout])
+    const argv = [this.executable, ...args]
+    const confined = await this.confinement?.(argv, options.writes ?? [], signal)
     const handle = this.subprocess.spawn({
-      argv: [this.executable, ...args],
+      argv: confined === undefined ? argv : [...confined.argv],
       cwd: options.cwd,
       stdio: {
         stdin: options.stdin === undefined ? 'ignore' : { data: options.stdin },
@@ -65,8 +104,7 @@ export class GitRunner {
       },
       graceMs: TERMINATE_GRACE_MS,
       signal,
-      // The subprocess credential scrub removes ambient GIT_CONFIG_KEY_n entries.
-      env: { GIT_CONFIG_COUNT: '0', GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C', ...options.env },
+      env: hardenedGitEnvironment(process.env, [...FIXED_GIT_OVERRIDES, ...options.drivers ?? []], options.env),
     })
     const outcome = await handle.done
     if (signal.aborted) {
@@ -76,6 +114,9 @@ export class GitRunner {
     const stdout = handle.collected.stdout?.readFrom(0) ?? { text: '', lossy: false }
     const stderr = handle.collected.stderr?.readFrom(0).text ?? ''
     /* v8 ignore stop */
+    // A failed confinement means git never ran, so its exit status says nothing about the repository.
+    const runnerFailure = confined === undefined ? undefined : classifyRunnerFailure(outcome.exitCode, stderr, confined.runnerFailureRules)
+    if (confined !== undefined && runnerFailure !== undefined) throw new SandboxUnavailableError(confined.mode, runnerFailure.detail)
     return { exitCode: outcome.exitCode, stdout: stdout.text, stderr, truncated: stdout.lossy }
   }
 }
@@ -101,6 +142,8 @@ export interface GitWorkspace {
   scratch: string
   /** Environment that routes object writes to the private store and object reads through the repository's store. */
   env: Readonly<Record<string, string>>
+  /** Directories every command on this repository writes or reads beside it: the private directory. */
+  writes: readonly string[]
   /** Work-tree paths a snapshot must skip: the private directory when a temporary root lies inside the work tree. */
   excludes: readonly string[]
 }
@@ -137,7 +180,25 @@ export async function locateGitWorkspace(
   await mkdir(objects, { recursive: true })
   const excludes = isInside(root, directory) ? [toPosix(relative(root, directory))] : []
   const env = { GIT_OBJECT_DIRECTORY: objects, GIT_ALTERNATE_OBJECT_DIRECTORIES: repositoryObjects }
-  return { root, gitDir, scratch: directory, env, excludes }
+  return { root, gitDir, scratch: directory, env, writes: [directory], excludes }
+}
+
+/**
+ * Overrides that switch off every filter and diff driver the repository's configuration defines in any scope, read
+ * with the same hardened environment, so the command that hashes work-tree files runs none of them. The listing is
+ * read again before each snapshot because confined commands can change the configuration between turns.
+ * @param git - command runner.
+ * @param workspace - addressed repository.
+ * @param signal - cancellation.
+ * @returns the overrides of {@link driverOverrides}.
+ * @throws when the configuration cannot be listed.
+ */
+export async function repositoryDrivers(git: GitRunner, workspace: GitWorkspace, signal: AbortSignal): Promise<Array<[string, string]>> {
+  const listed = await git.run(DRIVER_LISTING_ARGS, { cwd: workspace.root, writes: workspace.writes, signal })
+  // `--get-regexp` exits 1 when no key matches.
+  if (listed.exitCode === 1) return []
+  if (listed.truncated) throw new Error('git config listing exceeded the configured cap')
+  return driverOverrides(ok(listed, 'git config').stdout)
 }
 
 /**
@@ -159,13 +220,14 @@ export async function snapshotTree(git: GitRunner, workspace: GitWorkspace, sign
     await copyFile(join(workspace.gitDir, 'index'), index).catch((error: unknown) => {
       if (!isMissing(error)) throw error
     })
-    const env = { ...workspace.env, GIT_INDEX_FILE: index }
+    const drivers = await repositoryDrivers(git, workspace, signal)
+    const options = { cwd: workspace.root, env: { ...workspace.env, GIT_INDEX_FILE: index }, writes: workspace.writes, drivers, signal }
     // `--ignore-errors` skips unreadable files and reports them through exit code 1; the index is still complete.
     const pathspec = workspace.excludes.length === 0 ? [] : ['--', '.', ...workspace.excludes.map(path => `:(exclude)${path}`)]
-    const added = await git.run(['add', '--all', '--ignore-errors', ...pathspec], { cwd: workspace.root, env, signal })
+    const added = await git.run(['add', '--all', '--ignore-errors', ...pathspec], options)
     /* v8 ignore next -- git reports a skipped unreadable file only on hosts whose permissions the tests can revoke. */
     if (added.exitCode !== 1) ok(added, `git add in ${workspace.root}`)
-    return ok(await git.run(['write-tree'], { cwd: workspace.root, env, signal }), 'git write-tree').stdout.trim()
+    return ok(await git.run(['write-tree'], options), 'git write-tree').stdout.trim()
   } finally {
     await rm(scratch, { recursive: true, force: true })
   }
@@ -192,7 +254,7 @@ export async function treeBlob(
 ): Promise<TreeBlob | null> {
   // The path is a pathspec; literal matching keeps `*`, `?`, and `[` in a file name from selecting another entry.
   const result = ok(await git.run(['ls-tree', '-z', '-l', tree, '--', path], {
-    cwd: workspace.root, env: { ...workspace.env, GIT_LITERAL_PATHSPECS: '1' }, signal,
+    cwd: workspace.root, env: { ...workspace.env, GIT_LITERAL_PATHSPECS: '1' }, writes: workspace.writes, signal,
   }), 'git ls-tree')
   const entry = result.stdout.split('\0')[0] as string
   const match = /^\d+ (\S+) ([0-9a-f]+) +(\d+)\t/.exec(entry)
@@ -212,7 +274,7 @@ export async function treeBlob(
 export async function blobText(
   git: GitRunner, workspace: GitWorkspace, oid: string, maxBytes: number, signal: AbortSignal,
 ): Promise<string> {
-  const result = ok(await git.run(['cat-file', 'blob', oid], { cwd: workspace.root, env: workspace.env, maxBytes, signal }), 'git cat-file')
+  const result = ok(await git.run(['cat-file', 'blob', oid], { cwd: workspace.root, env: workspace.env, writes: workspace.writes, maxBytes, signal }), 'git cat-file')
   /* v8 ignore next -- callers size the blob with treeBlob first; a blob is immutable, so the cap cannot be exceeded here. */
   if (result.truncated) throw new Error(`blob ${oid} exceeds ${maxBytes} bytes`)
   return result.stdout
@@ -232,8 +294,8 @@ export async function diffTrees(
   git: GitRunner, workspace: GitWorkspace, before: string, after: string, signal: AbortSignal,
 ): Promise<NumstatEntry[]> {
   if (before === after) return []
-  const result = ok(await git.run(['diff-tree', '-r', '-M', '-z', '--numstat', before, after], {
-    cwd: workspace.root, env: workspace.env, signal,
+  const result = ok(await git.run(['diff-tree', '--no-ext-diff', '--no-textconv', '-r', '-M', '-z', '--numstat', before, after], {
+    cwd: workspace.root, env: workspace.env, writes: workspace.writes, signal,
   }), 'git diff-tree')
   if (result.truncated) throw new Error('git diff-tree output exceeded the configured cap')
   return parseNumstat(result.stdout)
@@ -249,7 +311,7 @@ export async function diffTrees(
  * @returns slash-separated gitlink paths relative to the repository root.
  */
 export async function gitlinkPaths(git: GitRunner, workspace: GitWorkspace, signal: AbortSignal): Promise<Set<string>> {
-  const result = ok(await git.run(['ls-files', '-z', '--stage'], { cwd: workspace.root, env: workspace.env, signal }), 'git ls-files')
+  const result = ok(await git.run(['ls-files', '-z', '--stage'], { cwd: workspace.root, env: workspace.env, writes: workspace.writes, signal }), 'git ls-files')
   const links = new Set<string>()
   for (const entry of result.stdout.split('\0')) {
     if (entry.startsWith('160000 ')) links.add(entry.slice(entry.indexOf('\t') + 1))
@@ -272,7 +334,7 @@ export async function ignoredPaths(
 ): Promise<Set<string>> {
   if (paths.length === 0) return new Set()
   const result = await git.run(['check-ignore', '-z', '--stdin'], {
-    cwd: workspace.root, env: workspace.env, stdin: `${paths.join('\0')}\0`, signal,
+    cwd: workspace.root, env: workspace.env, writes: workspace.writes, stdin: `${paths.join('\0')}\0`, signal,
   })
   if (result.exitCode === 1) return new Set()
   return new Set(ok(result, 'git check-ignore').stdout.split('\0').filter(path => path !== ''))

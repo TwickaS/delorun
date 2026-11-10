@@ -112,7 +112,8 @@ describe('workspace-changes in a repository', () => {
     expect(ctx.workspaceChanges.summary(session.id, seq)).toBeUndefined()
   })
 
-  it('serves each listed file’s comparison from the snapshots or the captured copies', async () => {
+  // Several snapshots, each running a configuration listing beside its git add and write-tree.
+  it('serves each listed file’s comparison from the snapshots or the captured copies', { timeout: 30_000 }, async () => {
     const cwd = await repository()
     await writeFile(join(cwd, 'long.txt'), `${'0123456789'.repeat(10)}\n`)
     git(cwd, 'add', '-A'); git(cwd, 'commit', '-q', '-m', 'long')
@@ -203,7 +204,8 @@ describe('workspace-changes in a repository', () => {
     expect(await ctx.workspaceChanges.diff(session.id, announcedSeq(session), 2, signal)).toMatchObject({ kind: 'text', before: false, after: true, hunks: [{ lines: ['+one', '+two', '+three'] }] })
   })
 
-  it('records inside the turn when the agent stops, and again after turn/end only when tools settled later', async () => {
+  // Several snapshots, each running a configuration listing beside its git add and write-tree.
+  it('records inside the turn when the agent stops, and again after turn/end only when tools settled later', { timeout: 30_000 }, async () => {
     const cwd = await repository()
     const { ctx } = await boot()
     const session = ctx.sessions.create(SessionId('stopping'), { meta: { cwd } })
@@ -281,7 +283,13 @@ describe('workspace-changes in a repository', () => {
   it('warns and skips the turn when its git work fails', async () => {
     const cwd = await repository()
     const { ctx } = await boot()
-    vi.spyOn(ctx.subprocess, 'resolveExecutable').mockResolvedValue(join(cwd, 'missing-git'))
+    const missing = join(cwd, 'missing-git')
+    const realGit = await ctx.subprocess.resolveExecutable('git')
+    vi.spyOn(ctx.subprocess, 'resolveExecutable').mockResolvedValue(missing)
+    // The version probe passes, so the executable that vanishes afterwards fails the turn's git work.
+    const real = ctx.subprocess.spawn.bind(ctx.subprocess)
+    vi.spyOn(ctx.subprocess, 'spawn').mockImplementation(spec =>
+      real(spec.argv[0] === missing && spec.argv[1] === 'version' ? { ...spec, argv: [realGit, 'version'] } : spec))
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => undefined)
     const session = ctx.sessions.create(SessionId('warn'), { meta: { cwd } })
     startTurn(session, 1)
@@ -503,6 +511,28 @@ describe('workspace-changes without git', () => {
     expect(info.mock.calls[0]![0]).toContain('git is unavailable')
   })
 
+  it.skipIf(process.platform === 'win32')('treats a git whose version cannot carry the hardened configuration as absent', async () => {
+    for (const [version, reason] of [['echo "git version 2.30.2"', 'older than 2.31'], ['exit 1', 'version failed']] as const) {
+      const cwd = await repository()
+      const { ctx } = await boot()
+      const real = ctx.subprocess.spawn.bind(ctx.subprocess)
+      vi.spyOn(ctx.subprocess, 'spawn').mockImplementation(spec =>
+        real(spec.argv[1] === 'version' ? { ...spec, argv: ['/bin/sh', '-c', version] } : spec))
+      const info = vi.spyOn(ctx.logger, 'info').mockImplementation(() => undefined)
+      const session = ctx.sessions.create(SessionId('old'), { meta: { cwd } })
+      startTurn(session, 1)
+      await settle(ctx, session)
+      await writeFile(join(cwd, 'shell.txt'), 'x\n')
+      toolCall(session, 1, 'bash', { command: 'x' })
+      await mutate(ctx, session, 1, 'write', { file_path: 'w.txt', content: 'w\n' }, 'w.txt', () => writeFile(join(cwd, 'w.txt'), 'w\n'))
+      endTurn(session, 1)
+      await settle(ctx, session)
+      expect(changes(ctx, session).map(summary => summary.files.map(file => file.path))).toEqual([['w.txt']])
+      expect(info.mock.calls.map(call => String(call[0]))).toEqual([expect.stringContaining(reason)])
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('treats the macOS developer-tools stub as absent until a developer directory is selected', async () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
@@ -517,10 +547,13 @@ describe('workspace-changes without git', () => {
       probe.done.catch(() => undefined)
       const cwd = await scratchDir('dsh-workspace-changes-stub-', cleanups)
       const { ctx } = await boot()
+      const realGit = await ctx.subprocess.resolveExecutable('git')
       vi.spyOn(ctx.subprocess, 'resolveExecutable').mockResolvedValue(probe.executable ?? '/usr/bin/git')
       const real = ctx.subprocess.spawn.bind(ctx.subprocess)
+      // The resolved path stands for the host's real git, which runs the version probe and every later command.
       const spawn = vi.spyOn(ctx.subprocess, 'spawn').mockImplementation(spec =>
-        spec.argv[0] === '/usr/bin/xcode-select' ? { done: probe.done } as never : real(spec))
+        spec.argv[0] === '/usr/bin/xcode-select' ? { done: probe.done } as never
+          : real(spec.argv[0] === (probe.executable ?? '/usr/bin/git') ? { ...spec, argv: [realGit, ...spec.argv.slice(1)] } : spec))
       const info = vi.spyOn(ctx.logger, 'info').mockImplementation(() => undefined)
       vi.spyOn(ctx.logger, 'warn').mockImplementation(() => undefined)
       const session = ctx.sessions.create(SessionId('stub'), { meta: { cwd } })
