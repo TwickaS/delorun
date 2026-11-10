@@ -526,7 +526,9 @@ describe('rolling a session', () => {
   })
 })
 
-describe('a session\'s reach connections end when its token stops admitting', () => {
+// Each test signs devices in with real key operations and store writes, which take longer than the default 5 s on a
+// loaded machine; a test that timed out would leave its home's work running into the next.
+describe('a session\'s reach connections end when its token stops admitting', { timeout: 30_000 }, () => {
   const HOUR = 60 * 60 * 1000
   const LISTENER = 'reach-tailscale-private'
 

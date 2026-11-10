@@ -157,6 +157,7 @@ describe('the device list of a claimed home', () => {
 })
 
 describe('the records one home keeps', () => {
+  // Filling the list takes 32 whole-file writes, each made safe on disk, which a loaded machine spreads past 5 s.
   it('refuses a device past the bound of a home\'s device list', async () => {
     const home = await homeFixture()
     try {
@@ -171,5 +172,5 @@ describe('the records one home keeps', () => {
     } finally {
       await home.dispose()
     }
-  })
+  }, 30_000)
 })
