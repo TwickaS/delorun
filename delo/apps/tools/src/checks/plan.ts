@@ -222,8 +222,10 @@ export const FORK_INTEGRATION_ID = 'tests:fork:integration'
 /** Both phases of the fork suite, which the selection narrows alike. */
 const FORK_SUITE_IDS: ReadonlySet<string> = new Set([FORK_UNIT_ID, FORK_INTEGRATION_ID])
 /**
- * The integration phase's most workers. Each worker's specs start git, Node and `tsx` children, so a worker uses
- * more than one CPU; at this bound a fully loaded 22-CPU host ran the phase without a timeout, where 20 workers did not.
+ * The integration phase's most workers. Each worker's specs start git, Node and `tsx` children or write real file
+ * trees, so a worker uses more than one CPU and much of the disk. At this bound, three runs of the phase on a 22-CPU
+ * host with eight CPUs kept busy and the disk at up to 48 % IO pressure had no test timeout, where the same specs
+ * among 20 workers timed out.
  */
 export const FORK_INTEGRATION_WORKERS = 4
 // The web lane's CPUs: the artifact build runs eight gate workers, and the specs one browser at a time. The lane runs alone, so the figure sizes only its CPU budget.

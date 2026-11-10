@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { DELO_HOME_ENTRIES, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
-import { ensureHomeTree, newStartId } from '@delo/home'
+import { ensureHomeTree, newStartId, processExists, readHomeLock, runDirectory } from '@delo/home'
 import { CountingChatGate, HomeProcess, journalPath, readJournal, updateChannelProbe, type RunningHost } from '@delo/home-process'
 import { Redactor, type DeloLogger } from '@delo/logs'
 import { RuntimeStore } from '@delo/runtime-store'
@@ -95,6 +95,12 @@ function host(): RunningHost {
  * @returns the process's exit codes and its stop.
  */
 async function startHome(): Promise<Running> {
+  // The previous round's successor holds the lock until it has exited and this process has reaped it; a start before
+  // then meets a live holder that no longer answers.
+  await until(() => {
+    const holder = readHomeLock(runDirectory(home, PROFILE))
+    return holder === undefined || !processExists(holder.pid)
+  }, 'the previous successor\'s exit')
   const { current } = await store.pointers()
   const exits: number[] = []
   const listeners: (() => void)[] = []
