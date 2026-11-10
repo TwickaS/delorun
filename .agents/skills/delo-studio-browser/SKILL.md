@@ -40,6 +40,16 @@ node_modules/.bin/tsx delo/apps/tools/src/studio-browser.ts run --url http://127
 
 Add `--record /tmp/studio/run.webm` to record the run as a WebM at 15 frames per second. A recorded run opens the studio origin's root page before the recording starts, because a recording needs an open tab; the script then begins on that page. Encode it to a GIF with the encoder that [`record-browser-gif`](../record-browser-gif/SKILL.md) describes.
 
+### Opening a link that carries a sign-in token
+
+A script that navigates straight to a sign-in link (`page.goto(link)`) gets a 401. The tool's navigation sends `Sec-Fetch-Site: cross-site`, and the studio's sign-in route refuses that by design. Load the studio origin's root first, then navigate from inside the page, so the request is same-origin:
+
+```js
+await page.goto('http://127.0.0.1:5173/')
+await page.evaluate((link) => { location.href = link }, link)
+await page.waitForSelector('main')
+```
+
 ## Add another adapter
 
 Implement `StudioBrowser` (`id`, `check()`, `run(spec)`), add it to `ADAPTERS` in `adapter.ts`, and select it with `--adapter <id>` or the `DELO_STUDIO_BROWSER` environment variable. The default is `browse`.
