@@ -149,7 +149,9 @@
         enabled: true
         holdUntilChecked: true
 
-# Plugin management protects the guard rows above and the sandbox rows as it
+# Plugin management protects the guard rows above, remote access and the home's
+# sign-in (so no chat turns remote access on or points its records elsewhere),
+# and the sandbox rows, as it
 # protects its own components: the `plugin_manager` tool, which runs without a
 # prompt in full access, cannot disable a protected row, change its settings,
 # or deselect or remove a bundle that carries one, this bundle included, so no
@@ -164,6 +166,8 @@
       - '@delo/plugin-schedule-consent'
       - '@delo/plugin-fetch-guard'
       - '@delo/bundle-local/update-gate'
+      - '@delo/reach'
+      - '@delo/home-auth'
       - '@deepseek-ai/dsh-sandbox-local'
       - '@deepseek-ai/dsh-sandbox-policy'
 

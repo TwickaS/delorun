@@ -494,11 +494,11 @@ describe('setup\'s reach section', () => {
     const directory = join(deloHome, 'profiles', 'default')
     const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } } as never
     expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale')
-    await expect(section.apply({ home: deloHome, directory, secret: undefined }, answers)).resolves.toContain('delorun devices approve')
+    await expect(section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('delorun devices approve')
     const row = readReachRow(deloHome, 'default')
     expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000 })
     // Applying again keeps the port chosen once.
-    await section.apply({ home: deloHome, directory, secret: undefined }, answers)
+    await section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)
     expect(readReachRow(deloHome, 'default').listenerPort).toBe(row.listenerPort)
   })
 
@@ -517,6 +517,6 @@ describe('setup\'s reach section', () => {
     await expect(reachSection(() => Promise.reject(new Error('broken'))).ask(io([true], notes), draft, {} as never)).rejects.toThrow('broken')
     const none = { reach: { option: 'none', identityFactor: null } } as never
     expect(reachSection(tailscale()).review?.(none)).toBe('Remote access: off')
-    await expect(reachSection(tailscale()).apply({ home: deloHome, directory: deloHome, secret: undefined }, none)).resolves.toBeUndefined()
+    await expect(reachSection(tailscale()).apply({ home: deloHome, env: {}, directory: deloHome, secret: undefined }, none)).resolves.toBeUndefined()
   })
 })
