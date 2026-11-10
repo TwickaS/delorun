@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chooseWalk, INSTRUCTIONS, InstructionsRefusedError, InvalidPathError, probeProcFd, readInstructions, repositoryOf, revisionOf, UnsupportedHostError, unavailableReason, writeInstructions, type Walk, type WalkOptions } from '../src/files.ts'
 
 // Records the open calls, so a spec can read the flags and mode a temporary file is created with. Calls pass through.
@@ -63,6 +63,57 @@ function gitDirectory(head: string, config: string): void {
  */
 function remoteConfig(url: string): string {
   return `[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = ${url}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`
+}
+
+// The real open, which the mocked open delegates to.
+let actualOpen: typeof open
+
+beforeAll(async () => {
+  actualOpen = (await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')).open
+})
+
+afterAll(() => {
+  vi.mocked(open).mockImplementation(actualOpen)
+})
+
+/**
+ * Make a change to the workspace at one point of the module's walk, so a spec fixes the interleaving instead of racing for it.
+ * The first open of a path that `matches` runs `change` before the open, or once the descriptor is opened and before its first `stat`.
+ * @param matches - whether an opened path is the one to stop at.
+ * @param when - `before-open` for a name that changes after the module checked it, `after-open` for a file that changes while the module holds it.
+ * @param change - the change.
+ */
+function changeAt(matches: (path: string) => boolean, when: 'before-open' | 'after-open', change: () => void): void {
+  let done = false
+  vi.mocked(open).mockImplementation(async (...args) => {
+    const hit = !done && matches(String(args[0]))
+    if (hit) done = true
+    if (hit && when === 'before-open') change()
+    const handle = await actualOpen(...args)
+    if (hit && when === 'after-open') {
+      const stat = handle.stat.bind(handle)
+      Object.defineProperty(handle, 'stat', { value: () => { change(); return stat() } })
+    }
+    return handle
+  })
+}
+
+/**
+ * Whether an opened path names the instructions file, whether by the checked path or through a held descriptor.
+ * @param path - the path the module opens.
+ * @returns true for `AGENTS.md` itself, false for a directory or a temporary file.
+ */
+function isInstructionsPath(path: string): boolean {
+  return path.endsWith(`/${INSTRUCTIONS}`)
+}
+
+/**
+ * Whether an opened path is the temporary file a write creates beside `AGENTS.md`.
+ * @param path - the path the module opens.
+ * @returns true for the temporary file.
+ */
+function isTemporaryPath(path: string): boolean {
+  return path.includes(`/.${INSTRUCTIONS}.delo-`)
 }
 
 /**
@@ -398,6 +449,69 @@ describe.skipIf(process.platform === 'win32')('instructions files', () => {
         writeFileSync(join(real, 'config'), remoteConfig('https://github.com/acme/widgets.git'))
         symlinkSync(real, join(dir, '.git'))
         expect(await repositoryOf(root, WORKSPACE, options)).toEqual({ origin: null, branch: null })
+      })
+    })
+
+    describe('a name that changes while a call runs', () => {
+      afterEach(() => {
+        vi.mocked(open).mockImplementation(actualOpen)
+      })
+
+      it('reads the file it opened, not the file that takes its name after the open', async () => {
+        writeFileSync(join(dir, INSTRUCTIONS), 'original')
+        changeAt(isInstructionsPath, 'after-open', () => {
+          renameSync(join(dir, INSTRUCTIONS), join(dir, 'moved.md'))
+          writeFileSync(join(dir, INSTRUCTIONS), 'swapped')
+        })
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual({ text: 'original', revision: revisionOf(Buffer.from('original')) })
+        expect(onDisk(INSTRUCTIONS)).toBe('swapped')
+      })
+
+      it('reads no file when a symbolic link takes the name after the name was checked', async () => {
+        const outside = join(root, 'outside.md')
+        writeFileSync(outside, 'secret')
+        writeFileSync(join(dir, INSTRUCTIONS), 'original')
+        changeAt(isInstructionsPath, 'before-open', () => {
+          rmSync(join(dir, INSTRUCTIONS))
+          symlinkSync(outside, join(dir, INSTRUCTIONS))
+        })
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual(NONE)
+        expect(readFileSync(outside, 'utf8')).toBe('secret')
+      })
+
+      it('replaces a symbolic link that takes the name after the revision check, and leaves the file it points to unchanged', async () => {
+        const outside = join(root, 'outside.md')
+        writeFileSync(outside, 'secret')
+        writeFileSync(join(dir, INSTRUCTIONS), 'original')
+        changeAt(isTemporaryPath, 'before-open', () => {
+          rmSync(join(dir, INSTRUCTIONS))
+          symlinkSync(outside, join(dir, INSTRUCTIONS))
+        })
+        await writeInstructions(root, WORKSPACE, 'replacement', revisionOf(Buffer.from('original')), LIMIT, options)
+        expect(readFileSync(outside, 'utf8')).toBe('secret')
+        expect(lstatSync(join(dir, INSTRUCTIONS)).isFile()).toBe(true)
+        expect(onDisk(INSTRUCTIONS)).toBe('replacement')
+        expect(readdirSync(dir)).toEqual([INSTRUCTIONS])
+      })
+
+      it.runIf(walk === 'proc')('reads the workspace it held when a link replaces its directory, and writes there too', async () => {
+        const outside = join(root, 'outside')
+        mkdirSync(outside)
+        writeFileSync(join(outside, INSTRUCTIONS), 'secret')
+        writeFileSync(join(dir, INSTRUCTIONS), 'original')
+        const swapDirectory = (): void => {
+          renameSync(dir, `${dir}-moved`)
+          symlinkSync(outside, dir)
+        }
+        changeAt(isInstructionsPath, 'before-open', swapDirectory)
+        expect(await readInstructions(root, WORKSPACE, LIMIT, options)).toEqual({ text: 'original', revision: revisionOf(Buffer.from('original')) })
+        rmSync(dir)
+        renameSync(`${dir}-moved`, dir)
+        changeAt(isTemporaryPath, 'before-open', swapDirectory)
+        await writeInstructions(root, WORKSPACE, 'replacement', revisionOf(Buffer.from('original')), LIMIT, options)
+        expect(readFileSync(join(`${dir}-moved`, INSTRUCTIONS), 'utf8')).toBe('replacement')
+        expect(readdirSync(outside)).toEqual([INSTRUCTIONS])
+        expect(readFileSync(join(outside, INSTRUCTIONS), 'utf8')).toBe('secret')
       })
     })
   })

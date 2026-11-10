@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -119,6 +119,46 @@ describe.runIf(POSIX)('runDockerVersion', { timeout: 60_000 }, () => {
     fakeDocker(ANSWERING_DOCKER)
     vi.stubEnv('PATH', fakeBin)
     expect(await runDockerVersion(dockerProbeEnvironment(process.env))).toEqual({ kind: 'answered', serverVersion: '27.3.1' })
+  })
+
+  it('gives the engine program the passed environment and nothing else', async () => {
+    const dump = join(base, 'child-environment')
+    fakeDocker(`env > '${dump}'\n${ANSWERING_DOCKER}`)
+    vi.stubEnv('PATH', `${fakeBin}:/usr/bin:/bin`)
+    vi.stubEnv('HOME', '/home/fixture')
+    vi.stubEnv('DOCKER_HOST', 'unix:///run/fixture.sock')
+    vi.stubEnv('XDG_RUNTIME_DIR', '/run/user/fixture')
+    vi.stubEnv('DEEPSEEK_API_KEY', GOOD_KEY)
+    vi.stubEnv('DELO_GIT_TOKEN', 'fixture-git-token-not-a-secret')
+    vi.stubEnv('DELO_HOME', join(base, 'delo'))
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'fixture-aws-value-not-a-secret')
+    vi.stubEnv('GIT_CONFIG_COUNT', '1')
+    expect(await runDockerVersion(dockerProbeEnvironment(process.env))).toEqual({ kind: 'answered', serverVersion: '27.3.1' })
+    const seen = Object.fromEntries(readFileSync(dump, 'utf8').split('\n').filter(line => line.includes('=')).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]))
+    // The shell the fake program runs in adds its own bookkeeping names.
+    for (const shellName of ['PWD', 'OLDPWD', 'SHLVL', '_']) delete seen[shellName]
+    expect(seen).toEqual({ PATH: `${fakeBin}:/usr/bin:/bin`, HOME: '/home/fixture', DOCKER_HOST: 'unix:///run/fixture.sock', XDG_RUNTIME_DIR: '/run/user/fixture' })
+  })
+
+  it.each([
+    ['a shell command after the version', `27.3.1; touch __MARKER__`],
+    ['a command substitution', `27.3.1$(touch __MARKER__)`],
+    ['an escape sequence', '27.3.1\\033[31m'],
+    ['a second line', '27.3.1\\nCONTAINERS: 4'],
+    ['a version that is 65 characters long', `1${'a'.repeat(64)}`],
+    ['text that does not start with a digit', 'v27.3.1'],
+  ])('reports an engine that prints %s as unanswered, and runs nothing it printed', async (_label, printed) => {
+    const marker = join(base, 'marker')
+    fakeDocker(`printf '${printed.replace('__MARKER__', marker)}\\n'\n`)
+    vi.stubEnv('PATH', `${fakeBin}:/usr/bin:/bin`)
+    expect(await runDockerVersion(dockerProbeEnvironment(process.env))).toEqual({ kind: 'unanswered' })
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  it('reports an engine whose output exceeds the read limit as unanswered', async () => {
+    fakeDocker('printf 1\nhead -c 3000000 /dev/zero | tr "\\0" a\n')
+    vi.stubEnv('PATH', `${fakeBin}:/usr/bin:/bin`)
+    expect(await runDockerVersion(dockerProbeEnvironment(process.env))).toEqual({ kind: 'unanswered' })
   })
 
   it('stops a probe that hangs at its timeout and reports the engine as unanswered', async () => {

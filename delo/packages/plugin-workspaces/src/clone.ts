@@ -100,20 +100,22 @@ export type CloneSpec = ({ readonly ok: true } & CloneSpawn) | { readonly ok: fa
 /**
  * Resolve a clone into its spawn: the refusals of {@link cloneUrlProblem} and
  * {@link tokenProblem}, git's arguments with the credential helper when a token
- * is given, and the child's environment entries. It does no I/O and reads no
- * process state, so its result depends on `options` alone.
+ * is given, and the child's environment entries. The URL in git's arguments is the parsed URL, with a lower-case host and no
+ * default port. It does no I/O and reads no process state, so its result depends on `options` alone.
  * @param options - the clone's inputs.
  * @returns the spawn, or a refusal whose reason holds no token.
  */
 export function resolveClone(options: CloneOptions): CloneSpec {
   const refusal = cloneUrlProblem(options.url) ?? (options.token === undefined ? undefined : tokenProblem(options.token))
   if (refusal !== undefined) return { ok: false, reason: refusal }
-  const invocation: GitInvocation = options.token === undefined ? { options: GIT_OPTIONS, env: GIT_ENV } : tokenGit(options.url, options.token)
+  // git sends the host and path of the URL it is given as written, and the token helper compares them with the parsed URL's, so git gets the parsed URL.
+  const url = new URL(options.url).href
+  const invocation: GitInvocation = options.token === undefined ? { options: GIT_OPTIONS, env: GIT_ENV } : tokenGit(url, options.token)
   const caOptions = options.extraCaFile === undefined ? [] : ['-c', `http.sslCAInfo=${options.extraCaFile}`]
   const proxyOptions = options.proxy === undefined ? [] : ['-c', `http.proxy=${options.proxy}`]
   return {
     ok: true,
-    argv: ['git', ...invocation.options, ...caOptions, ...proxyOptions, 'clone', '--progress', '--', options.url, '.'],
+    argv: ['git', ...invocation.options, ...caOptions, ...proxyOptions, 'clone', '--progress', '--', url, '.'],
     cwd: options.directory,
     env: { ...cloneEnvironment(options.env), ...invocation.env },
     graceMs: DRAIN_GRACE_MS,
@@ -269,7 +271,8 @@ class CloneOutput {
   #push(chunk: string): void {
     if (this.#closed) return
     const parts = chunk.split(LINE_END)
-    const last = parts.pop() ?? ''
+    // split returns at least one part, so the last part exists.
+    const last = parts.pop() as string
     for (const part of parts) {
       this.#add(part)
       this.#finish()

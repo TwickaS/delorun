@@ -7,15 +7,16 @@
  * git through a provider that starts each clone in its own process group.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough, type Readable } from 'node:stream'
-import type { SubprocessHandle, SubprocessOutcome, SubprocessRuntime, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { scrubbedParentEnv, type SubprocessHandle, type SubprocessOutcome, type SubprocessRuntime, type SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CloneOptions, type CloneResult, type CloneSpec, cloneRepository, resolveClone } from '../src/clone.ts'
 import { tokenGit } from '../src/git.ts'
 import { type GitFixture, startGitFixture } from './fixtures/git-server.ts'
+import { type RedirectFixture, startRedirectFixture } from './fixtures/redirect-server.ts'
 
 /** A token the checks accept, for the scripted specs; the real-git specs use the fixture's own password. */
 const TOKEN = 'fixture-token-for-clone-specs'
@@ -54,6 +55,12 @@ interface Script {
   readonly hang?: boolean
   /** The error stream stays open after the process exits. */
   readonly openStderr?: boolean
+  /** The error stream receives these texts as separate writes, in place of `stderr`. */
+  readonly stderrChunks?: readonly string[]
+  /** The process ends with neither an exit code nor a signal name. */
+  readonly endWithoutSignal?: boolean
+  /** The spawn throws this value, which is not an Error. */
+  readonly throwValue?: string
   /** The error stream fails with this message, so reading it raises an error. */
   readonly failStderr?: string
   /** The spawn throws this message instead of returning a handle. */
@@ -192,6 +199,13 @@ describe('resolveClone', () => {
     expect(resolved.cwd).toBe(io.options.directory)
     expect(resolved.graceMs).toBe(5000)
     expect(resolved.env).toMatchObject({ DELO_GIT_TOKEN: TOKEN })
+  })
+
+  it('gives git the parsed URL, with a lower-case host and no default port, so the token helper sees the host it was built for', () => {
+    const { runtime } = scripted({})
+    const resolved = resolvedOf(resolveClone(inputs(runtime, { url: 'https://EXAMPLE.Com:443/Owner/Repo.git', token: TOKEN }).options))
+    expect(resolved.argv.slice(-3)).toEqual(['--', 'https://example.com/Owner/Repo.git', '.'])
+    expect(resolved.env).toMatchObject({ DELO_GIT_HOST: 'example.com', DELO_GIT_PATH: 'Owner/Repo.git' })
   })
 
   it('passes the proxy as http.proxy only when one is given', () => {
@@ -338,6 +352,37 @@ describe('failure reasons and progress', () => {
     expect(await cloneRepository(io.options)).toEqual({ ok: true })
     expect(io.warnings).toEqual([expect.stringContaining('stayed open after git exited')])
   }, 15_000)
+
+  it('ignores output that arrives after the clone has finished', async () => {
+    const { runtime, streams } = scripted({ openStderr: true, exitCode: 0 })
+    const io = inputs(runtime, { url: UNREACHED_URL })
+    expect(await cloneRepository(io.options)).toEqual({ ok: true })
+    streams[0]?.write('Receiving objects: 99% (late)\n')
+    await new Promise<void>((resolve) => { setImmediate(resolve) })
+    expect(io.progress).toEqual([])
+  }, 15_000)
+
+  it('drops a line whose length passes the limit across several chunks, and reads the next line', async () => {
+    const { runtime } = scripted({ stderrChunks: [`fatal: ${'a'.repeat(5000)}`, `${'b'.repeat(5000)}\n`], stderr: 'Receiving objects: 9%\n', exitCode: 128 })
+    const io = inputs(runtime, { url: UNREACHED_URL })
+    expect(reasonOf(await cloneRepository(io.options))).toBe('git exited with code 128')
+    expect(io.progress).toEqual(['Receiving objects: 9%'])
+  })
+
+  it('reads progress lines when the caller wants none', async () => {
+    const { runtime } = scripted({ stderr: 'Receiving objects: 50%\nfatal: stopped\n', exitCode: 128 })
+    expect(reasonOf(await cloneRepository(inputs(runtime, { url: UNREACHED_URL, onProgress: undefined }).options))).toBe('git exited with code 128\nfatal: stopped')
+  })
+
+  it('names a process that ended with neither an exit code nor a signal', async () => {
+    const { runtime } = scripted({ endWithoutSignal: true })
+    expect(reasonOf(await cloneRepository(inputs(runtime, { url: UNREACHED_URL }).options))).toBe('git was stopped by a signal')
+  })
+
+  it('reports a spawn that throws something other than an Error as the reason', async () => {
+    const { runtime } = scripted({ throwValue: 'spawn refused' })
+    expect(reasonOf(await cloneRepository(inputs(runtime, { url: UNREACHED_URL }).options))).toBe('git could not run: spawn refused')
+  })
 })
 
 describe('git over the local HTTPS fixture', () => {
@@ -455,6 +500,166 @@ describe('git over the local HTTPS fixture', () => {
     expect(ask(`protocol=https\nhost=127.0.0.1:1\npath=private.git\n\n`)).not.toContain(password)
     expect(ask(`protocol=https\nhost=${host}\npath=other.git\n\n`)).not.toContain(password)
   })
+
+  it('answers `get` only, and prints nothing on its output or error stream for `store` and `erase`', () => {
+    const invocation = tokenGit('https://127.0.0.1:9/private.git', TOKEN)
+    const helper = invocation.options.find((option) => option.startsWith('credential.helper=!'))?.slice('credential.helper=!'.length)
+    if (helper === undefined) throw new Error('the token invocation has no credential helper')
+    // git runs `sh -c '<snippet> <action>' '<snippet> <action>'`: the action follows the snippet, so the snippet's function receives it as $1.
+    const ask = (action: string, input: string): { stdout: string, stderr: string, status: number | null } => {
+      const script = `${helper} ${action}`
+      const { stdout, stderr, status } = spawnSync('sh', ['-c', script, script], { env: applyEnv({ PATH: process.env.PATH }, invocation.env), input, encoding: 'utf8' })
+      return { stdout, stderr, status }
+    }
+    const request = 'protocol=https\nhost=127.0.0.1:9\npath=private.git\n'
+    expect(ask('get', `${request}\n`)).toEqual({ stdout: `username=x-access-token\npassword=${TOKEN}\n`, stderr: '', status: 0 })
+    expect(ask('store', `${request}username=x-access-token\npassword=${TOKEN}\n\n`)).toEqual({ stdout: '', stderr: '', status: 0 })
+    expect(ask('erase', `${request}\n`)).toEqual({ stdout: '', stderr: '', status: 0 })
+  })
+})
+
+describe('git over the local HTTPS fixture, with hostile surroundings', () => {
+  it('reaches the named server, and hands the token to no helper but its own, whatever the ambient git configuration says', async () => {
+    const directory = await emptyDirectory()
+    const { origin, caFile, password, home, requests } = running()
+    const marker = join(scratch, 'ambient-helper-input')
+    const hostileGlobal = join(scratch, 'hostile-gitconfig')
+    await writeFile(hostileGlobal, `[url "https://127.0.0.1:1/"]\n\tinsteadOf = ${origin}/\n[credential]\n\thelper = "!cat >> '${marker}'"\n`)
+    await mkdir(join(home, '.config', 'git'), { recursive: true })
+    await writeFile(join(home, '.config', 'git', 'config'), `[url "https://127.0.0.1:2/"]\n\tinsteadOf = ${origin}/\n`)
+    const ambient = {
+      ...running().env,
+      GIT_CONFIG_GLOBAL: hostileGlobal,
+      GIT_CONFIG_NOSYSTEM: '0',
+      GIT_CONFIG_COUNT: '2',
+      GIT_CONFIG_KEY_0: 'url.https://127.0.0.1:3/.insteadOf',
+      GIT_CONFIG_VALUE_0: `${origin}/`,
+      GIT_CONFIG_KEY_1: 'credential.helper',
+      GIT_CONFIG_VALUE_1: `!cat >> '${marker}'`,
+      GIT_CONFIG_PARAMETERS: `'credential.helper=!cat >> ${marker}'`,
+    }
+    const mark = requests.length
+    try {
+      const result = await cloneRepository(inputs(nodeRuntime(ambient), { url: `${origin}/private.git`, directory, extraCaFile: caFile, token: password, env: ambient }).options)
+      expect(result).toEqual({ ok: true })
+    } finally {
+      await rm(join(home, '.config'), { recursive: true, force: true })
+    }
+    expect(requests.slice(mark).some((request) => request.path === '/private.git/info/refs' && request.credential)).toBe(true)
+    expect(await readFile(marker, 'utf8').catch(() => undefined)).toBeUndefined()
+  })
+
+  describe('the environment git receives', () => {
+    let shims = ''
+    let dump = ''
+
+    beforeEach(async () => {
+      shims = join(scratch, 'shims')
+      dump = join(scratch, 'git-environment')
+      await mkdir(shims)
+      const realGit = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim()
+      await writeFile(join(shims, 'git'), `#!/bin/sh\nenv > '${dump}'\nexec '${realGit}' "$@"\n`, { mode: 0o755 })
+      await chmod(join(shims, 'git'), 0o755)
+    })
+
+    /**
+     * Clone through a provider that gives git the scrubbed process environment and the spawn's entries, as the real provider does,
+     * and report the environment git received.
+     * @param overrides - the clone options the spec sets.
+     * @returns the clone result and the environment names git saw.
+     */
+    async function cloneAndDump(overrides: Partial<CloneOptions>): Promise<{ readonly result: CloneResult, readonly seen: Record<string, string> }> {
+      const base = { ...scrubbedParentEnv(), HOME: running().home, XDG_CONFIG_HOME: join(running().home, '.config'), PATH: `${shims}:${process.env.PATH ?? ''}` }
+      const result = await cloneRepository(inputs(nodeRuntime(base), { directory: await emptyDirectory(), extraCaFile: running().caFile, env: process.env, ...overrides }).options)
+      const lines = (await readFile(dump, 'utf8')).split('\n').filter((line) => line.includes('='))
+      return { result, seen: Object.fromEntries(lines.map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)])) }
+    }
+
+    it('holds no token, and none of the ambient git names, for a clone without a token', async () => {
+      vi.stubEnv('DELO_GIT_TOKEN', 'ambient-token-not-a-credential')
+      vi.stubEnv('GIT_ASKPASS', '/bin/ambient-askpass')
+      vi.stubEnv('GIT_CONFIG_COUNT', '1')
+      vi.stubEnv('GIT_CONFIG_KEY_0', 'core.pager')
+      vi.stubEnv('GIT_CONFIG_VALUE_0', 'cat')
+      vi.stubEnv('GIT_TRACE', '1')
+      vi.stubEnv('GIT_TERMINAL_PROMPT', '1')
+      const { result, seen } = await cloneAndDump({ url: `${running().origin}/public.git` })
+      expect(result).toEqual({ ok: true })
+      expect(Object.keys(seen).filter((name) => /^(DELO_GIT_|GIT_ASKPASS|GIT_TRACE)|^GIT_CONFIG_(COUNT|KEY|VALUE|PARAMETERS)/.test(name))).toEqual([])
+      expect(seen).toMatchObject({ GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' })
+    })
+
+    it('holds the token and the host and path it answers for, for a clone with a token', async () => {
+      const { password, origin } = running()
+      const { result, seen } = await cloneAndDump({ url: `${origin}/private.git`, token: password })
+      expect(result).toEqual({ ok: true })
+      expect(seen).toMatchObject({ DELO_GIT_TOKEN: password, DELO_GIT_HOST: new URL(origin).host, DELO_GIT_PATH: 'private.git' })
+    })
+  })
+
+  it('refuses a target directory that holds a planted .git, and clones nothing into it', async () => {
+    const directory = await emptyDirectory()
+    await mkdir(join(directory, '.git'))
+    const { origin, caFile } = running()
+    const reason = reasonOf(await cloneRepository(inputs(nodeRuntime(), { url: `${origin}/public.git`, directory, extraCaFile: caFile }).options))
+    expect(reason).toContain('already exists and is not an empty directory')
+    expect(await readdir(directory)).toEqual(['.git'])
+    expect(await readdir(join(directory, '.git'))).toEqual([])
+  })
+
+  it('clones a private repository whose URL spells the host in upper case, answering the host the URL parser lower-cases', async () => {
+    const directory = await emptyDirectory()
+    const { origin, caFile, password, requests } = running()
+    const url = `https://LOCALHOST:${new URL(origin).port}/private.git`
+    const mark = requests.length
+    expect(await cloneRepository(inputs(nodeRuntime(), { url, directory, extraCaFile: caFile, token: password }).options)).toEqual({ ok: true })
+    expect(requests.slice(mark).some((request) => request.path === '/private.git/info/refs' && request.credential)).toBe(true)
+    expect(await readFile(join(directory, 'README.md'), 'utf8')).toContain('fixture')
+  })
+
+  it('does not send the token to a request for another path of the same host, which a redirect names', async () => {
+    const directory = await emptyDirectory()
+    const { origin, caFile, password, requests } = running()
+    const mark = requests.length
+    const reason = reasonOf(await cloneRepository(inputs(nodeRuntime(), { url: `${origin}/moved.git`, directory, extraCaFile: caFile, token: password }).options))
+    expect(reason).toContain('fatal:')
+    const sent = requests.slice(mark)
+    expect(sent.some((request) => request.path.startsWith('/private.git'))).toBe(true)
+    expect(sent.filter((request) => request.credential)).toEqual([])
+  })
+})
+
+describe('git over servers that redirect a clone', () => {
+  let redirects: RedirectFixture
+
+  beforeAll(async () => {
+    redirects = await startRedirectFixture()
+  }, 60_000)
+
+  afterAll(async () => {
+    await redirects.close()
+  })
+
+  it('does not send the credential across a redirect to another host, though the token would authenticate there', async () => {
+    const directory = await emptyDirectory()
+    const io = inputs(nodeRuntime(), { url: `${redirects.firstOrigin}/private.git`, directory, extraCaFile: redirects.caFile, token: redirects.targetPassword })
+    const reason = reasonOf(await cloneRepository(io.options))
+    expect(reason).toContain('fatal:')
+    const basic = `Basic ${Buffer.from(`x-access-token:${redirects.targetPassword}`).toString('base64')}`
+    expect(redirects.first.some((request) => request.authorization === basic)).toBe(true)
+    expect(redirects.target.length).toBeGreaterThan(0)
+    expect(redirects.target.filter((request) => request.authorization !== null)).toEqual([])
+    expect([reason, ...io.progress, ...io.warnings].join('\n')).not.toContain(redirects.targetPassword)
+  })
+
+  it('refuses a redirect to a file:// URL and reads nothing from the file', async () => {
+    const directory = await emptyDirectory()
+    const reason = reasonOf(await cloneRepository(inputs(nodeRuntime(), { url: `${redirects.fileOrigin}/repository.git`, directory, extraCaFile: redirects.caFile }).options))
+    expect(redirects.fileRequests()).toBeGreaterThan(0)
+    expect(reason).toContain('fatal:')
+    expect(reason).not.toContain('CANARY-NOT-A-REPOSITORY')
+    expect(await readdir(directory)).toEqual([])
+  })
 })
 
 describe('the process environment', () => {
@@ -539,19 +744,22 @@ function onlySpec(specs: readonly SubprocessSpawnSpec[]): SubprocessSpawnSpec {
  * A subprocess provider that records each spawn and answers from a script
  * instead of starting a process.
  * @param script - what each spawn does.
- * @returns the provider and the recorded spawns.
+ * @returns the provider, the recorded spawns, and the error streams it handed out.
  */
-function scripted(script: Script): { readonly runtime: SubprocessRuntime, readonly specs: SubprocessSpawnSpec[] } {
+function scripted(script: Script): { readonly runtime: SubprocessRuntime, readonly specs: SubprocessSpawnSpec[], readonly streams: PassThrough[] } {
   const specs: SubprocessSpawnSpec[] = []
+  const streams: PassThrough[] = []
   const runtime = {
     spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
       specs.push(spec)
       if (script.throwOnSpawn !== undefined) throw new Error(script.throwOnSpawn)
+      if (script.throwValue !== undefined) throw script.throwValue
       const stderr = script.noErrorPipe === true ? undefined : errorStream(script)
+      if (stderr !== undefined) streams.push(stderr)
       return handleOf(stderr, outcomeOf(script, spec), () => undefined)
     },
   } as SubprocessRuntime
-  return { runtime, specs }
+  return { runtime, specs, streams }
 }
 
 /**
@@ -561,6 +769,13 @@ function scripted(script: Script): { readonly runtime: SubprocessRuntime, readon
  */
 function errorStream(script: Script): PassThrough {
   const stream = new PassThrough()
+  const chunks = script.stderrChunks
+  if (chunks !== undefined) {
+    // One chunk per timer, so the reader receives them as separate chunks.
+    chunks.forEach((chunk, index) => { setTimeout(() => stream.write(chunk), index * 5) })
+    setTimeout(() => stream.end(script.stderr ?? ''), chunks.length * 5)
+    return stream
+  }
   if (script.openStderr === true) stream.write(script.stderr ?? '')
   else stream.end(script.stderr ?? '')
   if (script.failStderr !== undefined) stream.destroy(new Error(script.failStderr))
@@ -580,6 +795,7 @@ function outcomeOf(script: Script, spec: SubprocessSpawnSpec): Promise<Subproces
       spec.signal?.addEventListener('abort', () => { resolve({ exitCode: null, signal: 'SIGTERM' }) }, { once: true })
     })
   }
+  if (script.endWithoutSignal === true) return Promise.resolve({ exitCode: null, signal: null })
   return Promise.resolve({ exitCode: script.exitCode ?? 0, signal: null })
 }
 
@@ -588,13 +804,14 @@ function outcomeOf(script: Script, spec: SubprocessSpawnSpec): Promise<Subproces
  * Each spawn starts from the fixture environment, which stands for the provider's
  * scrubbed base, and leads its own process group: stopping the spawn also stops
  * the helper processes git starts.
+ * @param base - the environment each spawn starts from; the fixture environment by default.
  * @returns the provider.
  */
-function nodeRuntime(): SubprocessRuntime {
+function nodeRuntime(base: NodeJS.ProcessEnv = running().env): SubprocessRuntime {
   return {
     spawn(spec: SubprocessSpawnSpec): SubprocessHandle {
       const [program = '', ...args] = spec.argv
-      const child = spawn(program, args, { cwd: spec.cwd, env: applyEnv(running().env, spec.env ?? {}), detached: true, stdio: ['ignore', 'ignore', 'pipe'] })
+      const child = spawn(program, args, { cwd: spec.cwd, env: applyEnv(base, spec.env ?? {}), detached: true, stdio: ['ignore', 'ignore', 'pipe'] })
       const stop = (): void => {
         if (child.pid === undefined) return
         try {

@@ -88,6 +88,15 @@ describe('tokenGit', () => {
     expect(invocation.env).toMatchObject({ DELO_GIT_TOKEN: TOKEN, DELO_GIT_HOST: '127.0.0.1:8443', DELO_GIT_PATH: 'owner/repo.git' })
   })
 
+  it.each([
+    ['an upper-case host', 'https://EXAMPLE.Com/Owner/Repo.git', 'example.com', 'Owner/Repo.git'],
+    ['the default https port', 'https://example.com:443/owner/repo.git', 'example.com', 'owner/repo.git'],
+    ['another port', 'https://example.com:8443/owner/repo.git', 'example.com:8443', 'owner/repo.git'],
+    ['an upper-case host and the default port', 'https://EXAMPLE.COM:443/owner/repo.git', 'example.com', 'owner/repo.git'],
+  ])('names the host as git sends it, lower-case and without a default port, for %s', (_label, url, host, path) => {
+    expect(tokenGit(url, TOKEN).env).toMatchObject({ DELO_GIT_HOST: host, DELO_GIT_PATH: path })
+  })
+
   it('starts from the fixed options, resets the credential helpers before installing its own, and verifies TLS', () => {
     const { options } = tokenGit(CLONE_URL, TOKEN)
     expect(options.slice(0, GIT_OPTIONS.length)).toEqual([...GIT_OPTIONS])

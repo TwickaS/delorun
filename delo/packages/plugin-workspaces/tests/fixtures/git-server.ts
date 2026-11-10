@@ -1,6 +1,6 @@
 /**
  * A local HTTPS git server for the clone specs: a self-signed certificate for
- * 127.0.0.1 made with openssl, `git http-backend` behind it, a public
+ * 127.0.0.1 and `localhost` made with openssl, `git http-backend` behind it, a public
  * repository, a private repository that needs a Basic credential, a
  * repository whose advertisement never arrives, and a repository that redirects
  * to the private one. It reaches no real host or account.
@@ -90,7 +90,7 @@ export async function startGitFixture(): Promise<GitFixture> {
   const caFile = join(root, 'cert.pem')
   const keyFile = join(root, 'key.pem')
   await run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', keyFile, '-out', caFile, '-days', '2',
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-addext', 'basicConstraints=critical,CA:TRUE'])
+    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1,DNS:localhost', '-addext', 'basicConstraints=critical,CA:TRUE'])
   await buildRepositories(root, repos, env)
   const requests: FixtureRequest[] = []
   const state: ServerState = { repos, home, env, expected: `Basic ${Buffer.from(`${USER}:${PASSWORD}`).toString('base64')}`, requests }

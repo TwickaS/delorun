@@ -48,6 +48,17 @@ function doctor(args: readonly string[], env: Record<string, string> = {}): { st
 }
 
 /**
+ * Run `delorun doctor` in a child process whose whole environment is the given one.
+ * @param args - the arguments after `doctor`.
+ * @param env - the child's complete environment.
+ * @returns its exit status and output.
+ */
+function doctorWithEnvironment(args: readonly string[], env: Record<string, string>): { status: number | null, stdout: string, stderr: string } {
+  const result = spawnSync(process.execPath, ['--import', TSX_LOADER, BIN, 'doctor', ...args], { cwd: osHome, env, encoding: 'utf8', timeout: 60_000 })
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+/**
  * Write a fake `docker` program into the fake binary directory.
  * @param body - the script after its shebang.
  */
@@ -109,6 +120,50 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('fail key: the DeepSeek API key is malformed; check it at the key page (format only; the key was not sent to DeepSeek).\n')
     expect(leaksPartOf(result.stdout + result.stderr, key)).toBe(false)
+  })
+
+  it.runIf(POSIX).each([
+    ['a shell command after the version', "27.3.1; touch hostile-marker"],
+    ['an escape sequence', '27.3.1\\033[31m\\033]0;title\\007'],
+    ['a second line', '27.3.1\\nCONTAINERS: 4'],
+    ['a version of 4000 characters', `1${'a'.repeat(3999)}`],
+  ])('treats an engine that prints %s as not answering, and prints none of it', async (_label, printed) => {
+    fakeDocker(`printf '${printed}\\n'\n`)
+    const port = await freePort()
+    const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY, PATH: fakeBin })
+    expect(result.status).toBe(0)
+    expect(result.stderr).toContain('warn docker: Docker is installed, but its engine does not answer; start Docker, then run delorun doctor again.\n')
+    const output = result.stdout + result.stderr
+    expect(output).not.toMatch(/[\u0000-\u0009\u000b-\u001f]/)
+    for (const hostile of ['hostile-marker', 'CONTAINERS', 'title', '27.3.1', 'aaaa']) expect(output).not.toContain(hostile)
+  })
+
+  it.each([
+    ['an unclosed quote', (key: string) => `refs:\n  DEEPSEEK_API_KEY: "${key}\n`],
+    ['a repeated key', (key: string) => `refs:\n  DEEPSEEK_API_KEY: ${key}\n  DEEPSEEK_API_KEY: ${key}\n`],
+    ['a line that is not YAML', (key: string) => `refs:\n  DEEPSEEK_API_KEY: ${key}\n: [broken\n`],
+  ])('reports a credentials document with %s by its error code, and prints the key nowhere', async (_label, document) => {
+    const key = 'sk-q7Zx41Vb93Lm05Wt82Rk'
+    writeFileSync(join(deloHome, '.credentials.yaml'), document(key), { mode: 0o600 })
+    const port = await freePort()
+    // The same key is in the environment and in the home's .env file too, so every source of it is in play.
+    writeFileSync(join(deloHome, '.env'), `DEEPSEEK_API_KEY=${key}\n`, { mode: 0o600 })
+    const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: key })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(/^fail key: the check could not complete: .*\.credentials\.yaml is not a readable credentials document \([A-Z_]+\)$/m)
+    expect(leaksPartOf(result.stdout + result.stderr, key)).toBe(false)
+  })
+
+  it('runs against an empty environment: one line per check, no crash and no key', () => {
+    // Without HOME the home resolves from the account database, so the verdicts of the home and key checks depend on the machine.
+    const result = doctorWithEnvironment(['--port', '1'], {})
+    const lines = (result.stdout + result.stderr).split('\n').filter(line => line !== '')
+    expect(lines.map(line => /^(?:pass|warn|fail) (home|docker|key|port): /.exec(line)?.[1])).toEqual(['home', 'docker', 'key', 'port'])
+    expect(lines[1]).toMatch(/^(?:pass|warn) docker: /)
+    expect(lines[3]).toMatch(/^(?:pass|fail) port: /)
+    expect(result.status).toBe(lines.some(line => line.startsWith('fail ')) ? 1 : 0)
+    expect(result.stderr).not.toMatch(/\n\s+at /)
+    expect(result.stdout + result.stderr).not.toContain('sk-')
   })
 
   it('fails a port in use, names the port, and exits 1', async () => {
