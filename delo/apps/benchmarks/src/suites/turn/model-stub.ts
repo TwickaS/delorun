@@ -177,7 +177,7 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
   for await (const chunk of request) chunks.push(chunk as Buffer)
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
   } catch (_notJson) {
     // The stub answers a body it cannot read as a side request; the Host never sends one.
     return undefined
