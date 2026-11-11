@@ -17,18 +17,18 @@
 import { spawn, type StdioOptions } from 'node:child_process'
 import { fstatSync, readdirSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
-import { checkComposedTree, composition, isChangesError, prepareComposedTree, retainHarness, type HarnessContext, type SignedFile, type SignedRuntime } from '@delo/changes'
+import { checkComposedTree, composition, isChangesError, prepareComposedTree, retainHarness, type HarnessContext, type SignedRuntime } from '@delo/changes'
 import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { HANDOVER_FD } from '@delo/contract-home-process'
-import type { RuntimeFile } from '@delo/contract-release-manifest'
 import type { DeloLogger } from '@delo/logs'
-import { parseRuntimeVersion, RuntimeStoreError, StorePaths, type TrustedRootSource, type VerifiedRuntime } from '@delo/runtime-store'
+import { parseRuntimeVersion, RuntimeStoreError, StorePaths, type TrustedRootSource } from '@delo/runtime-store'
 import type { CommandOutput, CommandResult } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
 import { otherDataUsers } from '../home-exclusion.ts'
 import { closureRootOf } from '../package-manager.ts'
 import { runtimePlatformOf } from '../update/channel.ts'
 import type { RunningRuntime } from '../update/runtime.ts'
+import { signedRuntimeOf } from '../update/signed-runtime.ts'
 import { checkStoredRuntime } from '../update/store-support.ts'
 import { launcherAnchor } from '../update/trusted-root.ts'
 
@@ -86,24 +86,6 @@ export function startEntry(running: EntryCommand, tree?: string): EntryCommand {
  */
 export async function verifiedSignedRuntime(home: string, version: RuntimeVersion, env: Readonly<Record<string, string | undefined>>, logger: DeloLogger): Promise<SignedRuntime> {
   return signedRuntimeOf(installationOf(home, version), await checkStoredRuntime(home, version, logger, launcherAnchor(home, env).root))
-}
-
-/**
- * @param file - a file of a verified signed file list.
- * @returns it as Changes reads a signed file.
- */
-function signedFileOf(file: RuntimeFile): SignedFile {
-  return { path: file.path, length: file.length, sha256: file.sha256, executable: file.mode === '0755' }
-}
-
-/**
- * A runtime the store's start check verified, as Changes reads a signed installation.
- * @param directory - the installation, `runtimes/<version>/`.
- * @param verified - the runtime with its verified file list.
- * @returns the installation and its signed files.
- */
-export function signedRuntimeOf(directory: string, verified: Pick<VerifiedRuntime, 'files'>): SignedRuntime {
-  return { directory, files: verified.files.files.map(signedFileOf) }
 }
 
 /**

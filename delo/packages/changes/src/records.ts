@@ -342,7 +342,7 @@ const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
   summary: required.string,
   createdAt: required.iso,
   decidedAt: optional.iso,
-  decidedFrom: { test: oneOf(['terminal', 'studio', 'upgrade', 'start']), expected: 'terminal, studio, upgrade or start', optional: true },
+  decidedFrom: { test: oneOf(['terminal', 'studio', 'upgrade', 'start', 'update']), expected: 'terminal, studio, upgrade, start or update', optional: true },
   historyVersion: optional.string,
   leftOut: { ...nested({ at: required.iso, failure: required.string }, 'a failure report'), optional: true },
   shownAt: optional.iso,

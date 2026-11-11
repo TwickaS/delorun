@@ -31,12 +31,19 @@ describe('c03-harness-change-carried', () => {
 })
 
 describe('c03-harness-conflict-keeps-mine', () => {
-  it.each<HarnessMerge>(['edits-overlap', 'binary', 'too-large', 'release-removed', 'release-changed-removed', 'both-added'])('names a %s conflict, says the person\'s file is kept beside the release\'s, and offers to skip the update', (merge) => {
+  it.each<HarnessMerge>(['edits-overlap', 'binary', 'too-large', 'release-removed', 'both-added'])('names a %s conflict, says the person\'s file is kept beside the release\'s, and offers to skip the update', (merge) => {
     const report = reportOf([{ file: FILE, merge }])
 
     expect(report.items).toEqual([{ kind: 'harness', subject: { file: FILE }, reason: 'harness-change-conflicts', effect: 'disabled', verification: 'verified', detail: { merge }, actions: ['skip-update'] }])
     expect(reasonMessage(report.items[0]!, report)).toBe(`Your change to ${FILE} conflicts with Delo 1.0.0's file; the new release's file runs, and yours is kept beside it as ${FILE}.mine.`)
     expect(report.counts).toMatchObject({ disabled: 1, harness: 1 })
+  })
+
+  it('says a file the person removed and the release changed runs again, with nothing kept beside it', () => {
+    const report = reportOf([{ file: FILE, merge: 'release-changed-removed' }])
+
+    expect(report.items).toMatchObject([{ reason: 'harness-change-conflicts', effect: 'disabled', actions: ['skip-update'] }])
+    expect(reasonMessage(report.items[0]!, report)).toBe(`You removed ${FILE}, and Delo 1.0.0 changed it; the new release's file runs.`)
   })
 
   it('keeps `--yes` from confirming a report with a conflicted file, whatever else carries', () => {

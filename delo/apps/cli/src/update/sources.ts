@@ -27,6 +27,7 @@ import { planDataCopy, predictBundleList, readDataFormats, readInstalledPlugin, 
 import semver from 'semver'
 import { z } from 'zod'
 import { bundleAnchors, readBundleLayers, type BundleLayerFacts, type BundleLayerOptions } from './bundle-layers.ts'
+import { signedRuntimeOf } from './signed-runtime.ts'
 import { readHarnessFacts } from './harness-items.ts'
 
 const run = promisify(execFile)
@@ -290,7 +291,7 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
     },
     harness: async version => readHarnessFacts(home, options.running, async () => {
       const runtime = await verified(version)
-      return { runtime, directory: store.paths.version(runtime.version) }
+      return signedRuntimeOf(store.paths.version(runtime.version), runtime)
     }),
     now: () => brandString<UtcTimestamp>(new Date().toISOString()),
   }

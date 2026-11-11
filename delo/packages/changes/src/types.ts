@@ -64,6 +64,8 @@ export type DecidedFrom =
   | 'upgrade'
   /** A start that failed left the change out. */
   | 'start'
+  /** An update the person confirmed carried an approved harness file to the runtime it installed. */
+  | 'update'
 
 /** The protection setting: what happens to content the person did not approve. */
 export type ProtectionLevel =

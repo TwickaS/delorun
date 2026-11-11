@@ -134,9 +134,10 @@ function dataMessage(item: ReportItem & { readonly kind: 'data' }, versions: Mes
  */
 function harnessMessage(item: ReportItem & { readonly kind: 'harness' }, versions: MessageVersions): string {
   const { file } = item.subject
-  return item.reason === 'harness-change-conflicts'
-    ? `Your change to ${file} conflicts with Delo ${versions.to.delo}'s file; the new release's file runs, and yours is kept beside it as ${file}.mine.`
-    : `Your change to ${file} carries over to Delo ${versions.to.delo}.`
+  if (item.reason !== 'harness-change-conflicts') return `Your change to ${file} carries over to Delo ${versions.to.delo}.`
+  // A file the person removed has no content to keep beside the release's.
+  if (item.detail.merge === 'release-changed-removed') return `You removed ${file}, and Delo ${versions.to.delo} changed it; the new release's file runs.`
+  return `Your change to ${file} conflicts with Delo ${versions.to.delo}'s file; the new release's file runs, and yours is kept beside it as ${file}.mine.`
 }
 
 /**

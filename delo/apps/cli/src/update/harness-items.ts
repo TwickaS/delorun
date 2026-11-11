@@ -1,40 +1,16 @@
 /**
- * The harness facts of contract C3's report for the CLI home: each file of the running runtime's harness record
- * (`@delo/changes`), merged with the target release's file as its signed file list names it. The target's files are
- * read from its installation after C1's start check verified the whole tree, and each file read is checked again
- * against the signed list's length and digest, so a file changed after the check is refused instead of merged. A
- * runtime without a record has no harness fact and the target is not read.
+ * The harness facts of contract C3's report for the CLI home: each file the running runtime runs other than its signed
+ * one (`@delo/changes`'s record, without a change a failed start left out), merged with the target release's file as
+ * its signed file list names it. The target's files are read from its installation after C1's start check verified the
+ * whole tree, and each file read is checked again against the signed list's length and digest, so a file changed after
+ * the check is refused instead of merged. A runtime without approved files has no harness fact and the target is not
+ * read.
  *
  * @module @delo/cli/update/harness-items
  */
-import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { planHarnessCarry, readHarnessRecord, type HarnessCarryPlan, type HarnessMergeResult, type ReadSignedHarnessFile } from '@delo/changes'
+import { planHarnessCarry, readHarnessLog, readHarnessRecord, runningHarnessRecord, signedHarnessReader, type HarnessCarryPlan, type HarnessMergeResult, type SignedRuntime } from '@delo/changes'
 import type { HarnessMerge } from '@delo/contract-update-report'
-import { RuntimeStoreError, type VerifiedRuntime } from '@delo/runtime-store'
 import type { HarnessFact } from '@delo/update'
-
-/**
- * Read a verified runtime's signed files by path.
- * @param directory - the runtime's installation directory.
- * @param runtime - the runtime's version and the file list C1's start check verified.
- * @returns the reader; a path the signed list does not name has no file.
- * @throws {RuntimeStoreError} `RUNTIME_CHANGED`, from the reader, when a file's bytes differ from the signed list's.
- */
-export function signedFileReader(directory: string, runtime: Pick<VerifiedRuntime, 'version' | 'files'>): ReadSignedHarnessFile {
-  const listed = new Map(runtime.files.files.map(file => [file.path, file]))
-  return async (path) => {
-    const signed = listed.get(path)
-    if (signed === undefined) return undefined
-    const absolute = join(directory, ...path.split('/'))
-    const bytes = await readFile(absolute)
-    if (bytes.length !== signed.length || createHash('sha256').update(bytes).digest('hex') !== signed.sha256) {
-      throw new RuntimeStoreError('RUNTIME_CHANGED', absolute, `runtime ${runtime.version}'s ${path} differs from its signed file list`)
-    }
-    return { bytes, executable: signed.mode === '0755' }
-  }
-}
 
 /**
  * The report's name for a file's merge.
@@ -65,15 +41,15 @@ export function harnessFacts(plan: HarnessCarryPlan): readonly HarnessFact[] {
  * Read the harness facts of an update from the running runtime to a target.
  * @param home - the resolved Delo home.
  * @param running - the running runtime's version.
- * @param target - checks the target with C1's start check and returns it with its installation directory; called only
- *   when the running runtime has an approved harness file.
+ * @param target - checks the target with C1's start check and returns its signed installation; called only when the
+ *   running runtime runs an approved harness file.
  * @returns one fact per approved file, in path order.
- * @throws {ChangesError} `RECORD_UNREADABLE` or `STORE_CORRUPT` when the record or its versions cannot be read.
- * @throws {RuntimeStoreError} when the target fails its check or a file it reads differs from its signed list.
+ * @throws {ChangesError} `RECORD_UNREADABLE` or `STORE_CORRUPT` when the record, the log or a version cannot be read;
+ *   `RUNTIME_CHANGED` when a target file differs from its signed list.
+ * @throws {RuntimeStoreError} when the target fails its start check.
  */
-export async function readHarnessFacts(home: string, running: string, target: () => Promise<{ readonly runtime: VerifiedRuntime, readonly directory: string }>): Promise<readonly HarnessFact[]> {
-  const record = await readHarnessRecord(home, running)
+export async function readHarnessFacts(home: string, running: string, target: () => Promise<SignedRuntime>): Promise<readonly HarnessFact[]> {
+  const record = runningHarnessRecord(await readHarnessLog(home), await readHarnessRecord(home, running))
   if (Object.keys(record.files).length === 0) return []
-  const { runtime, directory } = await target()
-  return harnessFacts(await planHarnessCarry(home, record, signedFileReader(directory, runtime)))
+  return harnessFacts(await planHarnessCarry(home, record, signedHarnessReader(await target())))
 }

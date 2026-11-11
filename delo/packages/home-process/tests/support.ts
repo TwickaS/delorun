@@ -23,6 +23,7 @@ import {
   HomeProcess,
   HomeProcessError,
   type BootRow,
+  type HarnessCarry,
   type HealthExpectations,
   type HealthVerdict,
   type HomeCommand,
@@ -255,6 +256,33 @@ export class FixtureSnapshots implements ProfileSnapshots {
   async save(from: RuntimeVersion, to: RuntimeVersion): Promise<string> {
     this.calls.push(`save:${from}>${to}`)
     return Promise.resolve(`snapshot-${from}-${to}`)
+  }
+}
+
+/**
+ * A harness carry that records its calls: `check:<from>`, `carry:<from>>to` and `switched` once the switch it runs
+ * returned. A spec makes a change wait for review or the carry fail before the switch.
+ */
+export class FixtureHarness implements HarnessCarry {
+  /** Every call, in order. */
+  readonly calls: string[] = []
+  /** Whether a change waits for review, which `check` and `carry` refuse. */
+  pending = false
+  /** Whether the carry fails before it runs the switch. */
+  failCarry = false
+
+  async check(from: RuntimeVersion): Promise<void> {
+    this.calls.push(`check:${from}`)
+    if (this.pending) throw new HomeProcessError('HARNESS_CHANGES_PENDING', 'app/a.js waits for review')
+    return Promise.resolve()
+  }
+
+  async carry(from: RuntimeVersion, to: RuntimeVersion, switchRuntime: () => Promise<void>): Promise<void> {
+    this.calls.push(`carry:${from}>${to}`)
+    if (this.pending) throw new HomeProcessError('HARNESS_CHANGES_PENDING', 'app/a.js waits for review')
+    if (this.failCarry) throw new Error('the carry failed')
+    await switchRuntime()
+    this.calls.push('switched')
   }
 }
 
@@ -505,6 +533,7 @@ export interface InProcessHome {
   readonly store: FixtureStore | undefined
   readonly snapshots: FixtureSnapshots
   readonly copies: FixtureCopies
+  readonly harness: FixtureHarness
   readonly logger: MemoryLogger
   /** The signals the process listens for. */
   readonly signals: FixtureSignals
@@ -538,6 +567,7 @@ export interface StartHomeOptions {
 /** The fixture parts of a start, which {@link StartHomeOptions.configure} receives before the start runs. */
 export interface StartParts {
   readonly copies: FixtureCopies
+  readonly harness: FixtureHarness
   readonly hosts: FixtureHostRunner
   readonly store: FixtureStore | undefined
   readonly startId: StartId
@@ -559,6 +589,7 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const store = updates ? new FixtureStore(home, PROFILE) : undefined
   const snapshots = new FixtureSnapshots()
   const copies = new FixtureCopies(snapshots)
+  const harness = new FixtureHarness()
   const hostSuspend = options.hostSuspend
   const hosts = new FixtureHostRunner(() => ({ ...behaviourOf(home, running), ...hostSuspend === undefined ? {} : { suspend: hostSuspend } }))
   const logger = new MemoryLogger()
@@ -566,16 +597,16 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const listeners: (() => void)[] = []
   const startId = options.log?.startId ?? newStartId()
   const signals = new FixtureSignals()
-  options.configure?.({ copies, hosts, store, startId, signals, exits })
+  options.configure?.({ copies, harness, hosts, store, startId, signals, exits })
   const homeOptions: HomeProcessOptions = {
     home, profile: PROFILE, running, startId, host: hosts, preStart: () => copies.recover(), probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
-    updates: store === undefined ? undefined : { store, snapshots, copies }, supervisor: options.supervisor,
+    updates: store === undefined ? undefined : { store, snapshots, copies, harness }, supervisor: options.supervisor,
     onExit: (listener) => { listeners.push(listener) },
     onSignal: signals.listen,
     exit: (code) => { exits.push(code) },
   }
   const started = await HomeProcess.start(homeOptions)
-  return { process: started, hosts, store, snapshots, copies, logger, signals, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
+  return { process: started, hosts, store, snapshots, copies, harness, logger, signals, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
 }
 
 /**

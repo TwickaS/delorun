@@ -65,7 +65,7 @@ A version entry is a file (`path`, `digest`, `size`, `executable`) or a link (`p
 | `harness-edit` | A file of the harness itself differs from the signed release's |
 | `guard-weakening` | A setting weakens a consent, a guard or the protection setting |
 
-A change is `pending`, `applied`, `discarded`, `left-out-at-start` or `undone`. Its id is `c` and ten hexadecimal digits of the SHA-256 of its kind, subject and both versions, so an id names exactly the content that was shown. Each applied change is one version of the profile's history.
+A change is `pending`, `applied`, `discarded`, `left-out-at-start` or `undone`. A decision's `decidedFrom` is `terminal` or `studio` for the person's own decision, `upgrade` for the first start under Changes, `start` for a change a failed start left out, and `update` for a harness file an update the person confirmed carried to the runtime it installed. Its id is `c` and ten hexadecimal digits of the SHA-256 of its kind, subject and both versions, so an id names exactly the content that was shown. Each applied change is one version of the profile's history.
 
 ## Loading approved content
 
@@ -115,6 +115,8 @@ The composed tree is `harness/<runtime>/run/<digest>/`, `<digest>` the SHA-256 o
 | Retention | After a hand-off, the runtime's other composed trees are removed, unless a home process of any profile runs, which may run from one; and the `harness/<runtime>/` directory of every runtime the store no longer has installed. Directories are made writable first. A failure is printed and the next start tries again |
 
 **A bad start.** When the newest decision across the profile's change log and the harness's log for the running runtime is an applied `harness-edit` whose content the record still holds, the start's retry ([When a start fails](#when-a-start-fails)) leaves that change out: its harness log entry becomes `left-out-at-start` with the failure, the profile's files are untouched, the relaunched signed entry composes without it, and the words name it as `Delo itself (<file>)` with `delorun changes apply <id>` and `undo <id>`. A harness change has no Loader rows of its own; the start's failure decides it.
+
+**Across an update.** An update carries the files the running runtime runs other than its signed ones to the runtime it installs, by a three-way merge with the target's signed file, as [C3](c03-update-report.md#harness-files-across-an-update) states: it refuses with `HARNESS_CHANGES_PENDING` while a change waits for review in the copy, replaces whatever an earlier install left under `harness/<to>/`, writes the target's record with each carried file and logs it as an applied `harness-edit` of the target runtime with `decidedFrom: "update"`, and keeps the person's content of each conflicted file as `<file>.mine` in the target's writable copy. The running runtime's record, copy and log entries stay, so a rollback runs them again. The library is [`harness-merge.ts`](../../packages/changes/src/harness-merge.ts).
 
 **The studio.** The Changes section lists the harness's logged changes with their diff, read from the store, and the terminal command for each decision; no route decides a harness change ([The studio's Changes section](#the-studios-changes-section)).
 

@@ -1,7 +1,8 @@
 /**
  * The home process's update support for the CLI home (contracts C3 and C19): C1's runtime store with the release
  * channel and C3's report, the profile history through `@delo/profile-safety`, and the session-data copies and the
- * one rollback function of `@delo/update`. `delorun start` passes it to the home process when it runs from the
+ * one rollback function of `@delo/update`, and the person's approved harness files carried across the switch
+ * ([harness carry](./harness-carry.ts)). `delorun start` passes it to the home process when it runs from the
  * runtime store, and `delorun recover rollback` uses the same rollback with no home process running.
  *
  * @module @delo/cli/update/support
@@ -16,6 +17,8 @@ import { assertSoleDataUser, DataInUseError } from '../home-exclusion.ts'
 import { describeFailure, renderRefusal } from '@delo/home'
 import { isInstallError } from '@delo/install'
 import { CLI_DESCRIBERS, cliRedactor } from '../refusals.ts'
+import { storeHarnessCarry } from './harness-carry.ts'
+import { isChangesError } from '@delo/changes'
 import { HomeRuntimeStore, isStoreError, type HomeRuntimeStoreOptions, type OpenUpdateChannel, type RuntimeStore, type TrustedRootSource } from '@delo/runtime-store'
 import { assertCopyFits, buildFromSources, discardCopy, keepOnlyCopy, isDataSafetyError, planDataCopy, readDataFormats, rollbackUpdate, saveDataCopy, type ReportSources, type RollbackResult } from '@delo/update'
 
@@ -191,8 +194,9 @@ function soleDataUser(home: string): void {
 /**
  * C1's store as the home process drives it, with C19's codes for the store refusals the handshake answers with a line
  * a person reads: a prepare whose download did not finish is `CHANNEL_UNREACHABLE`, and one whose release the channel
- * refuses, or whose installed runtime or stored root fails its check, is `VERIFY_FAILED`, each with the refusal
- * `delorun` prints for the same failure as its detail ({@link prepareRefusal}); a version to roll back to that is not
+ * refuses, or whose installed runtime, stored root or a target file the report reads fails its check, is
+ * `VERIFY_FAILED`, each with the refusal `delorun` prints for the same failure as its detail ({@link prepareRefusal}); a
+ * version to roll back to that is not
  * installed, fails its start check or cannot be checked is `ROLLBACK_TARGET_UNUSABLE`. Any other failure reaches the
  * handshake unchanged. A prepare, and the report of a rollback that switches the runtime, refuse with `CHATS_RUNNING`
  * while another process uses the chat data, another profile's home process included, and a prepare refuses with
@@ -224,7 +228,7 @@ class CliHomeRuntimeStore extends HomeRuntimeStore {
     } catch (error) {
       // A download that did not finish is the network's or the disk's, not a release that failed a check.
       if (isInstallError(error, 'DOWNLOAD_FAILED') && !error.oversize) throw new HomeProcessError('CHANNEL_UNREACHABLE', prepareRefusal(error, this.profile))
-      if (isInstallError(error) || isStoreError(error, 'ROOT_NOT_ANCHORED', 'INSTALL_VERIFY_FAILED', 'RUNTIME_CHANGED')) throw new HomeProcessError('VERIFY_FAILED', prepareRefusal(error, this.profile))
+      if (isInstallError(error) || isStoreError(error, 'ROOT_NOT_ANCHORED', 'INSTALL_VERIFY_FAILED', 'RUNTIME_CHANGED') || (isChangesError(error) && error.code === 'RUNTIME_CHANGED')) throw new HomeProcessError('VERIFY_FAILED', prepareRefusal(error, this.profile))
       throw error
     }
   }
@@ -244,7 +248,7 @@ class CliHomeRuntimeStore extends HomeRuntimeStore {
 /**
  * The home process's update support over the store, the channel and the report's sources.
  * @param options - the home, the profile, the store, the anchored root, the channel's opener, the sources and the clock.
- * @returns the support.
+ * @returns the support, whose harness carry reads both runtimes through the store's start check.
  */
 export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport {
   const store = new CliHomeRuntimeStore({
@@ -255,5 +259,10 @@ export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport 
     ...options.preLaunch === undefined ? {} : { preLaunch: options.preLaunch },
     report: { build: async (version, purpose) => buildFromSources('cli-home', options.sources, version, purpose) },
   }, options.home)
-  return { store, snapshots: profileSnapshots(options.home, options.profile, options.now, options.profileLockWaitMs), copies: sessionDataCopies(options) }
+  return {
+    store,
+    snapshots: profileSnapshots(options.home, options.profile, options.now, options.profileLockWaitMs),
+    copies: sessionDataCopies(options),
+    harness: storeHarnessCarry(options),
+  }
 }

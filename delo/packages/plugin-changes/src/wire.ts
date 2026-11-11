@@ -51,7 +51,7 @@ export type ChangeKindView = 'plugin-edit' | 'plugin-install' | 'plugin-update' 
 export type ChangeStateView = 'pending' | 'applied' | 'discarded' | 'left-out-at-start' | 'undone'
 
 /** Where the last decision about a change was made. */
-export type DecidedFromView = 'terminal' | 'studio' | 'upgrade' | 'start'
+export type DecidedFromView = 'terminal' | 'studio' | 'upgrade' | 'start' | 'update'
 
 /** The protection setting. */
 export type ProtectionView = 'block' | 'warn' | 'off'

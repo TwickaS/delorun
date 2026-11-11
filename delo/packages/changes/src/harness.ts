@@ -351,26 +351,58 @@ export async function createHarnessCopy(ctx: HarnessContext, presence: AtCompute
   const copy = harnessCopyDirectory(ctx.home, ctx.runtime)
   return withHarnessLock(ctx.home, async () => {
     if (await pathExists(copy)) return { directory: join(copy, 'app'), created: false }
-    const signed = await ctx.signed()
-    const record = await readHarnessRecord(ctx.home, ctx.runtime)
-    const parent = harnessRuntimeDirectory(ctx.home, ctx.runtime)
-    await mkdir(parent, { recursive: true, mode: PRIVATE_DIR_MODE })
-    const staging = join(parent, `.copy.delo-tmp-${randomBytes(8).toString('hex')}`)
-    await mkdir(staging, { mode: PRIVATE_DIR_MODE })
-    try {
-      for (const file of appFiles(signed).values()) {
-        if (Object.hasOwn(record.files, file.path)) continue
-        await writeCopyFile(join(staging, ...file.path.split('/')), await readSignedFile(signed, file), file.executable)
-      }
-      for (const [path, approved] of Object.entries(record.files)) await putInCopy(ctx.home, staging, path, approved.version)
-      await mkdir(join(staging, 'app'), { recursive: true, mode: PRIVATE_DIR_MODE })
-      await rename(staging, copy)
-    } catch (error) {
-      await rm(staging, { recursive: true, force: true })
-      throw error
-    }
+    await writeHarnessCopy(ctx.home, ctx.runtime, await ctx.signed(), await readHarnessRecord(ctx.home, ctx.runtime))
     return { directory: join(copy, 'app'), created: true }
   })
+}
+
+/**
+ * Write a runtime's writable copy where none exists: the signed installation's `app/` files with the record's approved
+ * files in place and its removed ones absent, staged and renamed into `changes/harness/<runtime>/copy/`. The copy
+ * changes nothing a start runs; its files become changes only when the person applies them. The caller holds
+ * {@link withHarnessLock}; {@link createHarnessCopy} and an update's carry ([harness merge](./harness-merge.ts)) call it.
+ * @param home - the Delo home.
+ * @param runtime - the runtime version.
+ * @param signed - the runtime's signed installation, every byte read from it checked against the list.
+ * @param record - the runtime's harness record.
+ * @returns the copy's `app/` directory.
+ * @throws {ChangesError} `RUNTIME_CHANGED` when a signed file differs from the list; `STORE_CORRUPT` when the store
+ *   does not hold an approved version. Nothing is left behind then.
+ */
+export async function writeHarnessCopy(home: string, runtime: string, signed: SignedRuntime, record: HarnessRecord): Promise<string> {
+  const copy = harnessCopyDirectory(home, runtime)
+  const parent = harnessRuntimeDirectory(home, runtime)
+  await mkdir(parent, { recursive: true, mode: PRIVATE_DIR_MODE })
+  const staging = join(parent, `.copy.delo-tmp-${randomBytes(8).toString('hex')}`)
+  await mkdir(staging, { mode: PRIVATE_DIR_MODE })
+  try {
+    for (const file of appFiles(signed).values()) {
+      if (Object.hasOwn(record.files, file.path)) continue
+      await writeCopyFile(join(staging, ...file.path.split('/')), await readSignedFile(signed, file), file.executable)
+    }
+    for (const [path, approved] of Object.entries(record.files)) await putInCopy(home, staging, path, approved.version)
+    await mkdir(join(staging, 'app'), { recursive: true, mode: PRIVATE_DIR_MODE })
+    await rename(staging, copy)
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true })
+    throw error
+  }
+  return join(copy, 'app')
+}
+
+/**
+ * Keep the person's content of a file an update could not merge beside the file in a runtime's writable copy, as
+ * `<file>.mine`, 0600 and never executable; a `*.mine` file is never a change ({@link KEPT_BESIDE_SUFFIX}).
+ * @param home - the Delo home.
+ * @param runtime - the runtime whose copy holds it.
+ * @param file - the file's path relative to the runtime, under `app/`.
+ * @param bytes - the person's content.
+ * @returns the kept file's path relative to the runtime.
+ */
+export async function keepBeside(home: string, runtime: string, file: string, bytes: Buffer): Promise<string> {
+  const kept = `${file}${KEPT_BESIDE_SUFFIX}`
+  await writeCopyFile(join(harnessCopyDirectory(home, runtime), ...kept.split('/')), bytes, false)
+  return kept
 }
 
 /** How the copy is read. */
@@ -561,7 +593,7 @@ export async function showHarnessChange(ctx: HarnessContext, id: ChangeId): Prom
  * @param change - a harness change.
  * @returns its one line in the person's words.
  */
-function summaryOf(change: Pick<HarnessChange, 'file' | 'runtime'>): string {
+export function harnessChangeSummary(change: Pick<HarnessChange, 'file' | 'runtime'>): string {
   return `Delo ${change.runtime} itself: ${change.file}`
 }
 
@@ -571,7 +603,7 @@ function summaryOf(change: Pick<HarnessChange, 'file' | 'runtime'>): string {
  * @returns its log entry, pending.
  */
 function pendingEntry(change: HarnessChange, at: string): ChangeEntry {
-  return { id: change.id, kind: 'harness-edit', state: 'pending', subject: { file: change.file, runtime: change.runtime }, from: change.from, to: change.to, summary: summaryOf(change), createdAt: at }
+  return { id: change.id, kind: 'harness-edit', state: 'pending', subject: { file: change.file, runtime: change.runtime }, from: change.from, to: change.to, summary: harnessChangeSummary(change), createdAt: at }
 }
 
 /**

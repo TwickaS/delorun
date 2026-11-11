@@ -199,6 +199,7 @@ const CHANGES_STATUS: Readonly<Record<ChangesCode, number>> = {
   CONTENT_TOO_LARGE: 409,
   LOAD_REFUSED: 409,
   HARNESS_CHANGED: 409,
+  HARNESS_CHANGES_PENDING: 409,
 }
 
 /**

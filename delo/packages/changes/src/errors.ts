@@ -30,6 +30,8 @@ import { codedReason, profileOption, refusalDescriber, type RefusalDescriber } f
  *   start or a reload does not load it.
  * - `HARNESS_CHANGED`: the composed tree a start runs, the signed release with the person's approved harness files in
  *   place, holds a file that is not the signed or the approved one, so the start does not run it.
+ * - `HARNESS_CHANGES_PENDING`: changes to the running runtime's harness wait for review in its writable copy, so an
+ *   update, which would leave them behind in that runtime's copy, does not apply.
  */
 export type ChangesCode =
   | 'RECORD_UNREADABLE'
@@ -48,6 +50,7 @@ export type ChangesCode =
   | 'CONTENT_TOO_LARGE'
   | 'LOAD_REFUSED'
   | 'HARNESS_CHANGED'
+  | 'HARNESS_CHANGES_PENDING'
 
 /** A refusal or failure of Changes. */
 export class ChangesError extends Error {

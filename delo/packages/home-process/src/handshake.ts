@@ -33,7 +33,7 @@ import type { DeloLogger } from '@delo/logs'
 import { HomeProcessError, isRollbackRefusal } from './errors.ts'
 import type { HandoverLine, Successor } from './handover.ts'
 import { endUpdateRecord, journalledUpdate, journalRecord, readJournal, removeJournal, stashCommitted, writeJournal, type JournalledUpdate } from './journal.ts'
-import type { BootRow, ChatGate, HealthExpectations, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore, SessionDataCopies } from './seams.ts'
+import type { BootRow, ChatGate, HarnessCarry, HealthExpectations, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore, SessionDataCopies } from './seams.ts'
 
 /** What the handshake needs from the home process it runs in. */
 export interface HandshakeSubject {
@@ -103,6 +103,8 @@ export interface UpdateSupport {
   readonly snapshots: ProfileSnapshots
   /** C3's session-data copies and its one rollback function. */
   readonly copies: SessionDataCopies
+  /** The person's approved harness files, carried to the target as the runtime switches. */
+  readonly harness: HarnessCarry
 }
 
 /** The fields of a final handshake line after `ok: true`. */
@@ -209,12 +211,14 @@ export class UpdateHandshake {
    * @param target - the version, or `undefined` for the newest release.
    * @param progress - writes progress lines.
    * @returns the final line's fields: the report id and the report.
-   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while another update runs; the store's `VERIFY_FAILED`,
-   *   `CHANNEL_UNREACHABLE`, `GIT_UNAVAILABLE` or `CHATS_RUNNING`.
+   * @throws {HomeProcessError} `UPDATE_IN_PROGRESS` while another update runs; `HARNESS_CHANGES_PENDING` while changes
+   *   to the running harness wait for review; the store's `VERIFY_FAILED`, `CHANNEL_UNREACHABLE`, `GIT_UNAVAILABLE` or
+   *   `CHATS_RUNNING`.
    */
   async prepare(target: RuntimeVersion | undefined, progress: Progress): Promise<Readonly<Record<string, unknown>>> {
     this.claim()
     try {
+      await this.support.harness.check(this.subject.running)
       const prepared = await this.support.store.prepare(target, (phase) => {
         this.current = { phase, target: target ?? this.subject.running }
         progress({ phase })
@@ -478,8 +482,12 @@ export class UpdateHandshake {
       }
       let successor: Successor | undefined
       let criterion: string | undefined
+      let switchStarted = false
       try {
-        await store.switchTo(from, to)
+        await this.support.harness.carry(from, to, async () => {
+          switchStarted = true
+          await store.switchTo(from, to)
+        })
         // Written and synced before the spawn: from here a rollback treats the data as opened by `to`.
         update = { ...update, targetStarted: true }
         await this.phase(update, 'health-check', progress)
@@ -498,6 +506,13 @@ export class UpdateHandshake {
         this.subject.logger.warn('the successor failed its health check', { data: { to, reason: answer.reason, criterion: answer.criterion ?? '' } })
         criterion = answer.criterion
       } catch (error) {
+        if (!switchStarted) {
+          // The carry removed what it wrote for the target, and nothing switched: the Host runs again on this runtime.
+          this.subject.logger.error('the harness changes could not be carried; the update stops', { err: error, data: { from, to } })
+          await this.subject.resume()
+          await end({ outcome: 'aborted' })
+          throw error
+        }
         this.subject.logger.error('the switch failed; rolling back', { err: error, data: { from, to } })
         const back = await this.rollBackFailedUpdate(successor, before, update, end)
         if (back.outcome === 'failed') return back

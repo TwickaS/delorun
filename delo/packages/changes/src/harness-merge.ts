@@ -4,16 +4,22 @@
  * change carries when the target left the file as it was or when the person's edit applies to the target's file as it
  * is; anything else is a conflict, and a conflict never keeps either side silently: the target's file runs and the
  * person's is kept beside it. {@link planHarnessCarry} reads one runtime's record and plans every file, writing nothing,
- * and the plan holds all three sides so the update can write the target's record and the kept files from it.
+ * and the plan holds all three sides. {@link carryHarness} is the update's one call: after the person confirmed and
+ * before the runtime switches, it plans again under the harness lock and writes the target runtime's record, its log
+ * entries and the person's kept files, then runs the switch while the lock is held.
  *
  * @module @delo/changes/harness-merge
  */
 import { applyPatch, structuredPatch } from 'diff'
 import { DIFF_FILE_LIMIT, isBinary } from './diff.ts'
 import { ChangesError } from './errors.ts'
-import { readObject, readVersion } from './store.ts'
+import { composedFiles, harnessChangeSummary, harnessChanges, keepBeside, pathExists, readSignedFile, removeTree, writeHarnessCopy, type HarnessContext, type SignedRuntime } from './harness.ts'
+import { changeId } from './ids.ts'
+import { harnessCopyDirectory, harnessRuntimeDirectory } from './paths.ts'
+import { readHarnessLog, readHarnessRecord, withEntry, withHarnessLock, writeHarnessLog, writeHarnessRecord } from './records.ts'
+import { readObject, readVersion, storeEmptyVersion, storeFileVersion } from './store.ts'
 import { compareCodeUnits } from './tree.ts'
-import type { ApprovedHarnessFile, ContentVersion, HarnessRecord } from './types.ts'
+import { HARNESS_RECORD_SCHEMA, type ApprovedHarnessFile, type ChangeEntry, type ChangeLog, type ContentVersion, type HarnessRecord } from './types.ts'
 
 /** One side of a harness file: its bytes and whether the owner execute bit is set. */
 export interface HarnessFileSide {
@@ -204,4 +210,169 @@ export async function planHarnessCarry(home: string, from: HarnessRecord, readSi
     entries.push({ file, approved, base, mine, theirs, merge: mergeHarnessFile({ base, mine, theirs }) })
   }
   return { from: from.runtime, entries }
+}
+
+/**
+ * What a runtime runs of its harness record: the record with each change a failed start left out that stays out
+ * replaced by what runs instead, and an entry dropped when the signed file runs ({@link composedFiles}). An update
+ * carries this, so a change left out after a failed start does not come back with the next release.
+ * @param log - the harness's change log.
+ * @param record - the runtime's harness record.
+ * @returns the record of the files the runtime runs other than the signed ones.
+ */
+export function runningHarnessRecord(log: ChangeLog, record: HarnessRecord): HarnessRecord {
+  const files: Record<string, ApprovedHarnessFile> = {}
+  for (const [path, version] of Object.entries(composedFiles(log, record))) files[path] = { ...record.files[path]!, version }
+  return { ...record, files }
+}
+
+/**
+ * A reader of a runtime's signed files for {@link planHarnessCarry}, each checked against the verified list.
+ * @param signed - the runtime's signed installation.
+ * @returns the reader.
+ */
+export function signedHarnessReader(signed: SignedRuntime): ReadSignedHarnessFile {
+  const listed = new Map(signed.files.map(file => [file.path, file]))
+  return async (path) => {
+    const file = listed.get(path)
+    return file === undefined ? undefined : { bytes: await readSignedFile(signed, file), executable: file.executable }
+  }
+}
+
+/** What an update carries from the running runtime to the one it installs. */
+export interface HarnessCarryRequest {
+  /** The running runtime: the home, its version and its verified signed installation. */
+  readonly from: HarnessContext
+  /** The runtime the update installs. */
+  readonly to: string
+  /**
+   * The target's signed installation, verified with the root the launcher anchors.
+   * @returns the installation and its verified file list.
+   */
+  readonly signed: () => Promise<SignedRuntime>
+}
+
+/** What {@link carryHarness} wrote for the target runtime. */
+export interface HarnessCarried {
+  /** The files the target's record approves, in path order. */
+  readonly carried: readonly string[]
+  /** The person's content of each conflicted file, kept in the target's writable copy, as `<file>.mine` paths. */
+  readonly keptBeside: readonly string[]
+  /** Conflicted files the person had removed: the target's file runs, and there is no content to keep beside it. */
+  readonly removedReturned: readonly string[]
+  /** Whether the target has a writable copy. */
+  readonly copy: boolean
+}
+
+/** The target's record, log entries and kept files, planned before anything is written. */
+interface CarryWrites {
+  readonly record: HarnessRecord
+  readonly entries: readonly ChangeEntry[]
+  readonly kept: readonly { readonly file: string, readonly bytes: Buffer }[]
+  readonly removedReturned: readonly string[]
+}
+
+/**
+ * Turn a plan into the target's record, its applied log entries and the person's files to keep beside, storing every
+ * version they name: a carried file becomes an approved file of the target whose `signed` is the target's one-file
+ * version, unless what it runs is that signed file; a file the target already holds needs nothing; a conflicted file
+ * runs the target's file and the person's content is kept beside it.
+ * @param home - the Delo home.
+ * @param to - the target runtime.
+ * @param plan - the plan.
+ * @param at - when, ISO 8601.
+ * @returns what to write.
+ */
+async function carryWrites(home: string, to: string, plan: HarnessCarryPlan, at: string): Promise<CarryWrites> {
+  const empty = await storeEmptyVersion(home)
+  const files: Record<string, ApprovedHarnessFile> = {}
+  const entries: ChangeEntry[] = []
+  const kept: { file: string, bytes: Buffer }[] = []
+  const removedReturned: string[] = []
+  for (const { file, mine, theirs, merge } of plan.entries) {
+    if (merge.outcome === 'same') continue
+    if (merge.outcome === 'conflict') {
+      if (mine === undefined) removedReturned.push(file)
+      else kept.push({ file, bytes: mine.bytes })
+      continue
+    }
+    const signed = theirs === undefined ? undefined : await storeFileVersion(home, file, theirs.bytes, theirs.executable)
+    const version = merge.result === undefined ? empty : await storeFileVersion(home, file, merge.result.bytes, merge.result.executable)
+    const from = signed ?? empty
+    if (version === from) continue
+    const subject = { file, runtime: to }
+    const id = changeId('harness-edit', subject, from, version)
+    files[file] = { version, ...signed === undefined ? {} : { signed }, change: id, approvedAt: at }
+    entries.push({ id, kind: 'harness-edit', state: 'applied', subject, from, to: version, summary: harnessChangeSummary(subject), createdAt: at, decidedAt: at, decidedFrom: 'update' })
+  }
+  return { record: { schema: HARNESS_RECORD_SCHEMA, runtime: to, files }, entries, kept, removedReturned }
+}
+
+/**
+ * Carry the running runtime's approved harness files to the runtime an update installs, then switch, under
+ * {@link withHarnessLock} throughout. It refuses while changes wait for review in the running runtime's copy. It plans
+ * again against the target's verified files, replaces whatever an earlier install left under
+ * `changes/harness/<to>/` (never merging into it), and writes the target's record and one applied `harness-edit` log
+ * entry per carried file, `decidedFrom: "update"`. When the running runtime has a writable copy, or a file conflicts,
+ * it writes the target's writable copy and keeps the person's content of each conflicted file beside it as
+ * `<file>.mine`. The running runtime's record, copy and log entries are not written, so a rollback runs them again.
+ * When anything fails before `switchRuntime` runs, the target's directory is removed and the error is thrown; an
+ * error of `switchRuntime` reaches the caller with the target's files in place.
+ * @param request - the running runtime, the target and the target's signed installation.
+ * @param switchRuntime - the update's runtime switch, run once everything is written.
+ * @param now - the clock for the records' times.
+ * @returns what was written for the target.
+ * @throws {ChangesError} `HARNESS_CHANGES_PENDING` naming the files that wait for review; `INVALID_REQUEST` when the
+ *   target is the running runtime; `RECORD_UNREADABLE`, `STORE_CORRUPT` or `RUNTIME_CHANGED` as reading the sides does.
+ */
+export async function carryHarness(request: HarnessCarryRequest, switchRuntime: () => Promise<void>, now: () => Date = () => new Date()): Promise<HarnessCarried> {
+  const { from, to } = request
+  const { home } = from
+  if (to === from.runtime) throw new ChangesError('INVALID_REQUEST', to, `An update cannot carry Delo ${to}'s changes to itself.`)
+  return withHarnessLock(home, async () => {
+    const pending = await harnessChanges(from, { cache: false })
+    if (pending.changes.length > 0) {
+      const files = pending.changes.map(change => change.file).join(', ')
+      throw new ChangesError('HARNESS_CHANGES_PENDING', from.runtime, `Your changes to Delo ${from.runtime} itself wait for review (${files}), and an update would leave them behind. Apply or discard them first: delorun changes list`)
+    }
+    const target = harnessRuntimeDirectory(home, to)
+    let carried: HarnessCarried
+    try {
+      await removeTree(target)
+      carried = await writeCarry(request, now().toISOString())
+    } catch (error) {
+      await removeTree(target)
+      throw error
+    }
+    await switchRuntime()
+    return carried
+  })
+}
+
+/**
+ * {@link carryHarness}'s writes, under the lock, into an empty target directory.
+ * @param request - the running runtime, the target and the target's signed installation.
+ * @param at - when, ISO 8601.
+ * @returns what was written.
+ */
+async function writeCarry(request: HarnessCarryRequest, at: string): Promise<HarnessCarried> {
+  const { from, to } = request
+  const { home } = from
+  const log = await readHarnessLog(home)
+  const record = runningHarnessRecord(log, await readHarnessRecord(home, from.runtime))
+  const hasCopy = await pathExists(harnessCopyDirectory(home, from.runtime))
+  if (Object.keys(record.files).length === 0 && !hasCopy) return { carried: [], keptBeside: [], removedReturned: [], copy: false }
+  const signed = await request.signed()
+  const writes = await carryWrites(home, to, await planHarnessCarry(home, record, signedHarnessReader(signed)), at)
+  const carried = Object.keys(writes.record.files)
+  if (carried.length > 0) await writeHarnessRecord(home, writes.record)
+  const copy = hasCopy || writes.kept.length > 0
+  const keptBeside: string[] = []
+  if (copy) {
+    await writeHarnessCopy(home, to, signed, writes.record)
+    for (const { file, bytes } of writes.kept) keptBeside.push(await keepBeside(home, to, file, bytes))
+  }
+  // The log is written last, so a failure before it leaves no entry naming a target directory that is removed.
+  if (writes.entries.length > 0) await writeHarnessLog(home, writes.entries.reduce(withEntry, log))
+  return { carried, keptBeside, removedReturned: writes.removedReturned, copy }
 }
