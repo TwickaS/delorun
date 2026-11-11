@@ -1,5 +1,5 @@
 ---
-description: "Changing what Delo runs: why a plugin you link from a folder runs the copy you approved, how delorun changes lists, shows, applies, discards and undoes changes, the second confirmation, working on a plugin with live reload, changing Delo itself, turning one plugin off, what happens when a change stops Delo from starting, the protection setting, and the studio's Changes section."
+description: "Changing what Delo runs: why a plugin you link from a folder runs a copy kept in your Delo home, what loads without review while protection is off, the default, how delorun changes lists, shows, applies, discards and undoes changes, the second confirmation, working on a plugin with live reload, changing Delo itself, turning one plugin off, what happens when a change stops Delo from starting, the protection setting, and the studio's Changes section."
 ---
 
 # Changing your harness
@@ -8,7 +8,7 @@ Delo has no release yet; this page describes the first release.
 
 ## Summary
 
-Nothing changes what your Delo runs unless you approved it at your computer. A plugin you link from a folder runs from a copy of the content you approved, so edits in the folder, yours or your agent's, wait for your review and break nothing that is running. `delorun changes` lists what waits, shows each change with its files, a diff and a summary of what it can do, and applies, discards or undoes it. While you work on a plugin, `delorun changes work` loads your edits live until you are done. You can change Delo's own files too, in your own copy of the installed release. It also turns one plugin off or on, and sets how Delo treats changes you have not reviewed. A change that stops Delo from starting is left out, and Delo starts without it. The studio's Changes section in Settings does the same at your computer.
+You can change what your Delo runs: plugins you link from a folder, and Delo's own files. By default protection is off, so a change loads without review and is recorded: `delorun changes` lists it, shows it with its files and a diff, and undoes it. Turn protection on and changes wait for your review instead: a plugin you link from a folder runs the copy you approved, so edits in the folder, yours or your agent's, break nothing that is running until you apply them. `delorun changes` then lists what waits, shows each change with a summary of what it can do, and applies, discards or undoes it. While you work on a plugin, `delorun changes work` loads your edits live until you are done. Delo's own files change in your own copy of the installed release. `delorun changes` also turns one plugin off or on, and turns protection on or off. A change that stops Delo from starting is left out, and Delo starts without it. The studio's Changes section in Settings does the same at your computer.
 
 ## Contents
 
@@ -26,11 +26,15 @@ Nothing changes what your Delo runs unless you approved it at your computer. A p
 
 ## Plugins you link from a folder
 
-When you add a plugin with `delorun plugin add link:<folder>`, Delo keeps a copy of the content you approved in your Delo home and runs that copy, not the folder. Edits in the folder appear in `delorun changes list` as a change waiting for your review. Until you apply it, Delo runs the copy you approved; a plugin you linked and never approved does not run at all. That holds while Delo runs too: `delorun plugin add link:<folder>` prints `<plugin> is not loaded until you review it: delorun changes show <id>`, and neither that command nor a restore or undo of an earlier version of your plugins in the studio loads anything from the folder.
+When you add a plugin with `delorun plugin --profile default add link:<folder>`, Delo keeps a copy of the folder's content in your Delo home and runs that copy, not the folder.
 
-The copy includes the installed packages the plugin links to, such as those of a pnpm workspace, so a change to one of them is not what runs until it is part of a change you applied. A copy holds at most 50,000 files and 512 MiB with those packages. Under the default protection, a plugin larger than that does not run, or keeps running the copy you approved, and every start says why; under Warn it runs and loads its installed packages from where they are installed, and every start says so. A folder Delo cannot read, such as one that keeps changing, never stops Delo from starting: the plugin runs the copy you approved and the start names it.
+With protection off, the default, Delo copies the folder again at each start, and while Delo runs, each time you save a file in it: the new content loads at once and is recorded as a change. A start prints `<plugin> loaded changes without review, because protection is off: delorun changes show <id>`, and so does `delorun plugin --profile default add link:<folder>`. If what you saved fails to load, Delo goes back to what ran before and does not try it again until you save something else; `delorun changes list` shows the error. `delorun changes undo <id>` takes a change back, and the content you undid does not load again until the folder holds something else.
 
-Before Delo reloads its plugins, while it runs, it checks that each plugin's copy is the one you approved; when one is not, it does not reload, and what was running keeps running.
+With protection on, edits in the folder appear in `delorun changes list` as a change waiting for your review. Until you apply it, Delo runs the copy you approved; a plugin you linked and never approved does not run at all. That holds while Delo runs too: `delorun plugin --profile default add link:<folder>` prints `<plugin> is not loaded until you review it: delorun changes show <id>`, and neither that command nor a restore or undo of an earlier version of your plugins in the studio loads anything from the folder.
+
+The copy includes the installed packages the plugin links to, such as those of a pnpm workspace, so a change to one of them is not what runs until it is part of a change you applied. A copy holds at most 50,000 files and 512 MiB with those packages. A plugin larger than that keeps running the copy you approved, or does not run, and every start says why; with protection off, a plugin that is larger only with its installed packages runs and loads those packages from where they are installed, and every start says so. A folder Delo cannot read, such as one that keeps changing, never stops Delo from starting: the plugin runs the copy you approved and the start names it.
+
+Before Delo reloads its plugins, while it runs, it checks that each plugin's copy is the one Changes keeps; when one is not, it does not reload, and what was running keeps running.
 
 The first start of a release with this behaviour approves the plugins you already link as they are and says so once, so nothing you run changes.
 
@@ -66,25 +70,27 @@ The summary helps you read the change; it is not a protection. A plugin's code c
 
 ## Working on a plugin
 
-While you write a plugin, reviewing every edit gets in the way. `delorun changes work <plugin>` asks you to confirm, then loads what the plugin's folder holds now and every edit you save after it, without review, until you end the work session or its time is up: two hours, or the minutes you give with `--for`, at most 480. It prints "Working on <plugin>: edits in <folder> load live until delorun changes done <plugin>, at the latest until <time>." Delo has to be running, and only one plugin of a profile is worked on at a time; `delorun status`, `delorun changes list` and `delorun doctor` name it while the session lasts.
+With protection off, your saved edits already load live without a work session. With protection on, reviewing every edit while you write a plugin gets in the way: `delorun changes work <plugin>` asks you to confirm, then loads what the plugin's folder holds now and every edit you save after it, without review, until you end the work session or its time is up: two hours, or the minutes you give with `--for`, at most 480. It prints "Working on <plugin>: edits in <folder> load live until delorun changes done <plugin>, at the latest until <time>." Delo has to be running, and only one plugin of a profile is worked on at a time; `delorun status`, `delorun changes list` and `delorun doctor` name it while the session lasts.
 
 If an edit fails to load, Delo goes back to the last version of the plugin that loaded and keeps running it. The session stays open, so your next edit loads again; `delorun doctor` shows the error until a version loads.
 
 `delorun changes done <plugin>` shows what the folder holds as a version, such as `3f9a2c1`, with its files, the summary of what it can do and the diff against the version you approved before, and asks you to approve that version. Exactly that version becomes the approved one, and everything you changed during the session is one change, which you can undo with `delorun changes undo <id>` like any other. If the folder changes while the question waits, nothing is approved and the session stays open; run `done` again to see what it holds now. If the version fails to load, nothing is approved either.
 
-A session that ends without you approves nothing: when Delo stops, when the next start finds a session Delo left open, and when its time is up. Your plugin then runs the version you approved before the session, and what the folder holds waits for your review in `delorun changes list` like any other edit.
+A session that ends without you approves nothing: when Delo stops, when the next start finds a session Delo left open, and when its time is up. Your plugin then runs the version you approved before the session, and what the folder holds waits for your review in `delorun changes list` like any other edit, or with protection off loads at the next start.
 
 Both commands run only in a terminal on your computer; the studio's Changes section does the same in a browser on that computer ([In the studio](#in-the-studio)). A remote session and your agent cannot start or end a work session.
 
 ## When your agent changes a plugin
 
-The first time the agent writes to the folder of a plugin you approved in a chat, the chat asks you first, names the plugin and shows the diff, because the agent is changing what your harness runs. Once you allow it, the agent's other writes to that plugin in the same chat go ahead; another chat asks again. What it wrote is a change in `delorun changes list` like your own edits, and runs only after you apply it, or at once while you work on the plugin.
+With protection off, the agent's writes to a plugin's folder do not ask: what it writes loads like your own edits and is recorded. Its requests to install, update or remove a plugin run as in DeepSeek Harness, with the full-access approval alone, and a plugin it installs from a folder loads without review and is recorded.
 
-When the agent asks to install, update or remove a plugin, nothing is installed or removed. The request waits in `delorun changes list`, marked as asked in a chat, and the agent is told that it waits for you. `delorun changes show <id>` says what applying it does; `delorun changes apply <id>` runs it as `delorun plugin add` or `remove` would, and `discard` drops it. A plugin from a folder is added with nothing loaded: its content is a second change that you review and apply like any other. The agent cannot turn plugins on or off, change their settings, or bring back an earlier version of your plugins; it is told that you do that yourself.
+With protection on, the first time the agent writes to the folder of a plugin you approved in a chat, the chat asks you first, names the plugin and shows the diff, because the agent is changing what your harness runs. Once you allow it, the agent's other writes to that plugin in the same chat go ahead; another chat asks again. What it wrote is a change in `delorun changes list` like your own edits, and runs only after you apply it, or at once while you work on the plugin.
+
+When the agent asks to install, update or remove a plugin with protection on, nothing is installed or removed. The request waits in `delorun changes list`, marked as asked in a chat, and the agent is told that it waits for you. `delorun changes show <id>` says what applying it does; `delorun changes apply <id>`, or Apply in the studio, runs it as `delorun plugin` would add or remove the plugin, and `discard` drops it. A plugin from a folder is added with nothing loaded: its content is a second change that you review and apply like any other. The agent cannot turn plugins on or off, change their settings, or bring back an earlier version of your plugins; it is told that you do that yourself.
 
 ## Changing Delo itself
 
-`delorun changes edit-harness` makes your own copy of the installed Delo's program files, under `changes/harness/` in your Delo home, and prints its folder. Each file you save there, add or delete becomes a change waiting for your review, listed by `delorun changes list` as a change to Delo itself. You review, apply, discard and undo it with the same commands as a plugin's change, and an applied change runs from Delo's next start. The installed release itself is never edited: Delo checks it as it always does, and runs it with exactly the changes you applied.
+`delorun changes edit-harness` makes your own copy of the installed Delo's program files, under `changes/harness/` in your Delo home, and prints its folder. Each file you save there, add or delete is a change to Delo itself, listed by `delorun changes list`. With protection off, the next `delorun start` applies every such change without review and prints `Delo itself (<file>) changed without review, because protection is off: delorun changes show <id>`; `delorun changes undo <id>` takes one back. With protection on, each waits for your review: you apply, discard and undo it with the same commands as a plugin's change, and an applied change runs from Delo's next start. The installed release itself is never edited: Delo checks it as it always does, and runs it with exactly the changes you applied.
 
 | Command | What happens |
 | --- | --- |
@@ -114,17 +120,18 @@ The plugin runs the version it ran before the change, or does not run when the c
 
 ## The protection setting
 
-| Setting | A plugin whose folder you changed and did not review |
+| Setting | What happens to a change |
 | --- | --- |
-| `block` (the default) | runs the copy you approved; a plugin you never approved does not run |
-| `warn` | runs the folder's content, and every start names it |
-| `off` | runs the folder's content, and nothing says so |
+| `off` (the default) | It loads without review: a plugin's folder at each start and each time you save while Delo runs, your copy of Delo itself at the next start. Each change is listed in `delorun changes list`, named by `delorun verify` and `delorun doctor`, and can be undone. Your agent's plugin installs and removals run as in DeepSeek Harness. |
+| `on` | It waits for your review and loads only once you apply it; a plugin you never approved does not run. Your agent asks before it first changes an approved plugin in a chat, and its plugin installs and removals wait for you. |
 
-`delorun changes protection` prints the setting. `delorun changes protection block`, `warn` or `off` changes it, only in a terminal on your computer; the studio cannot change it. Before it lowers the setting, the command says "Changed plugins will run without your review." and asks you to confirm. The next start uses the new setting.
+With protection off, anything that can write a linked plugin's folder can change what Delo runs before you see it: an agent working with full access, a program you downloaded, any program running as you. Commands in a confined workspace write only where the sandbox allows: a plugin folder inside that workspace, never your Delo home, so they cannot change your copy of Delo itself. Turn protection on when you want to review each change first.
+
+`delorun changes protection` prints the setting and what it means. `delorun changes protection on` or `off` changes it, only in a terminal on your computer; the studio cannot change it. Each says what the new setting means, such as "Changes will load without your review." for `off`, and asks you to confirm; the new setting applies at once, without a restart. Full setup also offers to turn protection on.
 
 ## In the studio
 
-Settings has a Changes section that shows what `delorun changes list` shows: the plugin you are working on, the changes a failed start left out with its error, the changes waiting for your review with their folder, the number of files and what the checks found, your agent's plugin requests, your recent changes, your changes to Delo itself with their diff and the command that decides each in a terminal, and the protection setting.
+Settings has a Changes section that shows what `delorun changes list` shows: the plugin you are working on, the changes a failed start left out with its error, the changes waiting for your review with their folder, the number of files and what the checks found, your agent's plugin requests, your recent changes, your changes to Delo itself with their diff and the command that decides each in a terminal, and the protection setting; with protection off it says that changes load without your review and that a linked plugin reloads live each time you save it.
 
 | Action | What happens |
 | --- | --- |
@@ -135,6 +142,6 @@ Settings has a Changes section that shows what `delorun changes list` shows: the
 | Start working | Asks first, then loads the plugin's edits live for two hours. While the session lasts, a badge at the foot of the sidebar names the plugin. |
 | Done | Shows your folder's version, such as `3f9a2c1`, with its diff, and approves exactly that version; a flagged version asks a second time. |
 
-An agent's request to install, update or remove a plugin shows the command that applies it in a terminal, `delorun changes apply <id>`, and can be discarded in the studio. The protection setting shows with the command that changes it, `delorun changes protection`; the studio has no control for it. Each outcome shows briefly at the bottom of the window, including the error when a change failed to load and Delo went back to what ran before.
+An agent's request to install, update or remove a plugin can be applied, after a second confirmation that says Delo cannot show what it installs before it runs, or discarded. The protection setting shows with the command that changes it, `delorun changes protection on|off`; the studio has no control for it. Each outcome shows briefly at the bottom of the window, including the error when a change failed to load and Delo went back to what ran before.
 
 The section acts only in a browser on the computer Delo runs on. A remote session sees everything, every action is disabled, and the section says "This needs you at your computer."

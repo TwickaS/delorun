@@ -14,8 +14,8 @@ Delo has its own semantic version and builds on one upstream DSH version, so a p
 
 Both axes are checked at install, at every start of a profile `delorun` runs, and in the update report; the Delo-axis exemption, the studio's report and the messages as listed here are not built.
 
-- **Built and reached:** `evaluatePluginCompatibility` in upstream's app-boot checks `engines.delo` against the Delo version `delorun` exports; the plugin manager refuses an install on either axis, upstream's profile preflight disables an unmet row before the Loader imports it, `delorun update`'s report names both axes, and `delorun --version` prints both versions. The upstream-axis exemption works through `delorun plugin allow-version ... --dsh-version`, which passes through to upstream.
-- **Not built:** the Delo-axis exemption: no code writes `delo-compatibility.json`, a Delo mismatch is never exempted, and `delorun plugin allow-version ... --delo-version` is refused by upstream's argument parser although the printed remedy names it; the studio's report with Update, Keep disabled and Roll back, since a row disabled at start is reported by one line on standard error; the message table below, since the built text is upstream's sentence followed by Delo's sentence; the catalogue corpus and its badges; the Verification panel and `delorun status` showing the versions.
+- **Built and reached:** `evaluatePluginCompatibility` in upstream's app-boot checks `engines.delo` against the Delo version `delorun` exports; the plugin manager refuses an install on either axis, upstream's profile preflight disables an unmet row before the Loader imports it, `delorun update`'s report names both axes, and `delorun --version` prints both versions. The upstream-axis exemption works through `delorun plugin --profile default allow-version ... --dsh-version`, which passes through to upstream.
+- **Not built:** the Delo-axis exemption: no code writes `delo-compatibility.json`, a Delo mismatch is never exempted, and `delorun plugin --profile default allow-version ... --delo-version` is refused by upstream's argument parser although the printed remedy names it; the studio's report with Update, Keep disabled and Roll back, since a row disabled at start is reported by one line on standard error; the message table below, since the built text is upstream's sentence followed by Delo's sentence; the catalogue corpus and its badges; the Verification panel and `delorun status` showing the versions.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
 
@@ -94,8 +94,8 @@ The person can accept an unmet requirement for one exact plugin version on one e
 
 | Axis | File in the profile directory | Command |
 | --- | --- | --- |
-| Upstream | `compatibility.json`, upstream's file, unchanged | `delorun plugin allow-version <package>@<version> --dsh-version <dsh> --accept-risk` |
-| Delo | `delo-compatibility.json`, the same record format: exact `package@version` keys mapped to lists of exact Delo versions; not built: nothing writes it, and the start check reads no Delo exemption | `delorun plugin allow-version <package>@<version> --delo-version <delo> --accept-risk`; not built: upstream's parser refuses `--delo-version` |
+| Upstream | `compatibility.json`, upstream's file, unchanged | `delorun plugin --profile default allow-version <package>@<version> --dsh-version <dsh> --accept-risk` |
+| Delo | `delo-compatibility.json`, the same record format: exact `package@version` keys mapped to lists of exact Delo versions; not built: nothing writes it, and the start check reads no Delo exemption | `delorun plugin --profile default allow-version <package>@<version> --delo-version <delo> --accept-risk`; not built: upstream's parser refuses `--delo-version` |
 
 - Both files are written atomically with mode 0600 under the file's lock, as upstream's `setProfileVersionExemption` writes `compatibility.json`.
 - A grant must name the running version of its axis; a revocation may name an earlier one.

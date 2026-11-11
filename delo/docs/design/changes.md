@@ -1,5 +1,5 @@
 ---
-description: "Design of changes to a person's harness: the signed release plus the changes they approved, the Changes surface, work sessions for live reload, the one protection setting, what verify and doctor report, updates that re-apply approved edits, and recovery when a change breaks something."
+description: "Design of changes to a person's harness: the signed release plus the changes they made, each recorded, and with protection on only those they approved, the Changes surface, work sessions for live reload, the one protection setting, what verify and doctor report, updates that re-apply approved edits, and recovery when a change breaks something."
 ---
 
 # Changes to your harness
@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-A person has full control over their own harness, through plugins, which are preferred, or by editing the harness itself. Delo's rule is that nothing changes what the harness runs unless the person approved the change at their computer: their harness is the signed release plus the changes they approved. One place, Changes, reviews every change with its diff and a risk summary, and applies, discards or undoes it. A change the person approved is expected, so a person who edits their harness keeps full protection. When a change breaks the start or the studio, Delo leaves that change out, says so, and offers to apply it again or undo it.
+A person has full control over their own harness, through plugins, which are preferred, or by editing the harness itself. Changing the harness is something people do with it, so Delo records every change and leaves review to the person: their harness is the signed release plus the changes they made, each recorded. With protection off, the default, a change loads without review and the person lists, shows and undoes it; with protection on, nothing changes what the harness runs unless the person approved the change at their computer. One place, Changes, shows every change with its diff and a risk summary, and applies, discards or undoes it. A change the person approved is expected, so a person who edits their harness with protection on keeps full protection. When a change breaks the start or the studio, Delo leaves that change out, says so, and offers to apply it again or undo it.
 
 ## Contents
 
@@ -42,8 +42,8 @@ Delo runs upstream's plugin loading unchanged, so this is also what Delo does to
 3. **Work sessions give live reload.** Built at the terminal ([C21, Work sessions](../contracts/c21-changes.md#work-sessions)); Delo's own watcher copies the folder into the plugin's active directory instead of upstream's source watching, because the folder's files are not the loaded ones. The studio's button and badge are not built yet.
 4. **The approval.** Built ([C21, The risk summary](../contracts/c21-changes.md#the-risk-summary)).
 5. **The agent and plugins.** Built ([C21, The agent and plugins](../contracts/c21-changes.md#the-agent-and-plugins)).
-6. **One protection setting.** Built ([C21, The protection setting](../contracts/c21-changes.md#the-protection-setting)); Warn and Off cover plugin content, and a changed harness file is refused in every setting: a harness edit runs only as an applied harness change ([C21, Harness edits](../contracts/c21-changes.md#harness-edits)).
-7. **A blocked plugin.** When a plugin's files no longer match the approved version, the plugin is not loaded, the rest of the harness keeps working, and the person is offered two actions: put the approved version back, or review the current files as a change and approve them.
+6. **One protection setting, off by default.** Built ([C21, The protection setting](../contracts/c21-changes.md#the-protection-setting)): with protection off, plugin folders and the harness's writable copy load without review and each change is logged as such; with protection on, each waits for the person. A changed file of the signed installation is refused in both settings: a harness edit runs only as an applied harness change ([C21, Harness edits](../contracts/c21-changes.md#harness-edits)).
+7. **A held plugin.** With protection on, when a plugin's files no longer match the approved version, the plugin is not loaded, the rest of the harness keeps working, and the person is offered two actions: put the approved version back, or review the current files as a change and approve them.
 8. **Editing the harness itself.** Built ([C21, Harness edits](../contracts/c21-changes.md#harness-edits)): `delorun changes edit-harness` makes the person's own writable copy of the installed release's `app/` directory. Each saved edit is a pending change against the signed file, applied like any other, and an applied one runs from a composed tree beside the signed installation, which only the signed code starts. The signed original is never edited, and discarding every harness change returns to it. The copy's scan cache reuses a file's digest only while its device, inode, size, modification time and status-change time are unchanged, so a file whose status-change time moved (a `chmod`, a new hard link, a restore that keeps its bytes) is read and hashed again; for a copy of a whole release that can mean reading every one of its files once more.
 9. **What `verify` and `doctor` report.** Built ([C21, What verify and doctor report](../contracts/c21-changes.md#what-verify-and-doctor-report)); doctor's `release-log` line says how long the release-log check has stayed unchecked.
 10. **Updates re-apply approved edits.** The update report lists each approved harness change and whether it applies to the new release. Applying is a three-way merge per file; a conflicted file takes the new release's content, and the person's version is kept beside it as `<file>.mine` and named in the report. Approved plugin versions carry over unchanged. The update's health check and rollback cover the result ([update and rollback](update-and-rollback.md)).
@@ -61,18 +61,18 @@ Delo runs upstream's plugin loading unchanged, so this is also what Delo does to
 
 - **Plugin code has the harness's authority.** An approved plugin can do anything the harness can, and the risk summary is computed from the change's files, not from what the code does at run time.
 - **A work session runs unreviewed code.** During a work session, every edit loads live without review. The extra ask before the agent's first write and the badge are the protections; nothing prompts a review of what the agent wrote before the session ends and its result becomes the approved version.
-- **Protection Off and Warn.** Under Off nothing is checked at start, and under Warn an unapproved change runs.
+- **Protection off, the default.** Nothing reviews a change before it loads: whoever can write a linked plugin's folder, or outside the sandbox the harness's writable copy, changes what runs at the next start or save. The log, `verify` and `doctor` name each such change afterwards, and `undo` takes it back.
 - **A process of the same user.** A program running as the person outside the sandbox can change the approved store and the setting itself, as the [threat model](../security/threat-model.md#other-local-processes-under-the-same-user) states for the whole home.
 
 ## Denial tests
 
-- `a changed harness file is refused under Block`
-- `a changed plugin does not load under Block`
+- `a changed harness file is refused in both protection settings`
+- `a changed plugin does not load with protection on`
 - `no route, tool or remote session can apply a change, start or end a work session, or change the protection setting`
 - `the agent's first write to an approved plugin asks`
 - `a plugin outside a work session never loads from its folder`
 - `a work session's badge is shown while it lasts`
-- `verify never prints passed with unapproved content`
+- `verify never prints passed with content that loaded without review`
 - `a conflicted file never silently keeps either side`
 - `a start that fails on a new plugin starts without it and names it`
 - `the retry writes nothing to the profile`
@@ -82,4 +82,4 @@ Delo runs upstream's plugin loading unchanged, so this is also what Delo does to
 
 ## What is built so far
 
-Rules 1 to 6, 9 and 14 for plugins, and `delorun changes off` and `on` of rule 15, are built ([C21](../contracts/c21-changes.md)); F16 is enforced and F15 stays designed until harness changes, the bad-start retry, the recovery screen and the studio section are built ([fundamentals](../security/fundamentals.md)). Whole-profile safe mode and the profile rollback and restore of `delorun recover` are built.
+Rules 1 to 6, 9 and 14 for plugins, and `delorun changes off` and `on` of rule 15, are built ([C21](../contracts/c21-changes.md)); F15 and F16 stay designed and apply when protection is on ([fundamentals](../security/fundamentals.md)). Whole-profile safe mode and the profile rollback and restore of `delorun recover` are built.

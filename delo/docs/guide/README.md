@@ -18,4 +18,4 @@ The user guide is for people who use Delo. Start with [Delo and stock DeepSeek H
 
 [Where Delo keeps its logs](logs.md) lists every operational log's location, what a log holds and never holds, how long logs are kept and how `delorun logs` shows and clears them.
 
-[Changing your harness](changing-your-harness.md) explains why a plugin you link from a folder runs the copy you approved, how `delorun changes` lists, shows, applies, discards and undoes changes, turning one plugin off, and the protection setting.
+[Changing your harness](changing-your-harness.md) explains why a plugin you link from a folder runs a copy kept in your Delo home, what loads without review while protection is off, the default, how `delorun changes` lists, shows, applies, discards and undoes changes, turning one plugin off, and turning protection on.
