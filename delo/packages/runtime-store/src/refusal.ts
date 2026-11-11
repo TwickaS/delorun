@@ -51,6 +51,8 @@ function storeLead(error: RuntimeStoreError): string {
       return 'Delo did not change which runtime is active.'
     case 'INSTALL_VERIFY_FAILED':
       return 'Delo refused the release it downloaded.'
+    case 'TARGET_LOWER':
+      return 'Delo did not update to a lower version.'
   }
 }
 

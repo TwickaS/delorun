@@ -90,13 +90,12 @@ describe('probe: errors across the seam', () => {
     expect(resolved).toBe(0)
   })
 
-  it('prepare installs what the channel resolves even when it is lower than current (downgrade guard lives in the channel)', async () => {
+  it('prepare refuses what the channel resolves when it is lower than current, with TARGET_LOWER and the rollback remedy', async () => {
     await fixture.install(V1)
     await fixture.install(V2)
     await fixture.store.switchTo(V1, V2)
     const store = seam(channelOf([{ release: '0.1.0' }]))
-    const prepared = await store.prepare(undefined, () => {}, () => {})
-    expect(prepared.version).toBe(V1)
+    await expect(store.prepare(undefined, () => {}, () => {})).rejects.toMatchObject({ code: 'TARGET_LOWER', remedies: ['rollback'] })
     expect(await fixture.store.pointers()).toEqual({ current: V2, previous: V1 })
   })
 })

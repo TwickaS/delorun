@@ -23,6 +23,7 @@ import { queryHomeStatus, sendHomeRequest, type ResponseLine, type UnsignedReque
 import { historyGitProblem } from '@delo/profile-safety'
 import { confirmsWithoutAsking, dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE } from '@delo/update'
 import { UPDATE_CHECK_DEFAULTS } from '@delo/bundle-local/update-check'
+import semver from 'semver'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
 import { runtimePlatformOf } from './channel.ts'
@@ -277,6 +278,9 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   if (report.to.delo === report.from.delo) {
     context.stdout(`Delo ${report.from.delo} is the newest release on the ${report.from.channel} channel.\n`)
     return EXIT.ok
+  }
+  if (semver.valid(report.to.delo) === null || semver.valid(report.from.delo) === null || semver.lt(report.to.delo, report.from.delo)) {
+    throw new CliError(EXIT.failed, `delorun update: the update's target, Delo ${report.to.delo}, is not newer than Delo ${report.from.delo}, which runs now; an update never goes to a lower version, and nothing was applied. delorun recover rollback goes back to the version before the last update`)
   }
   for (const line of reportLines(report)) context.stdout(`${line}\n`)
   if (values.report === true) {

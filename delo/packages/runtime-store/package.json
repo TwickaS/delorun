@@ -15,7 +15,11 @@
     "@delo/contract-verification-checks": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/logs": "workspace:*",
-    "@delo/release-formats": "workspace:*"
+    "@delo/release-formats": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
   },
   "delo": {
     "state": "shipped"

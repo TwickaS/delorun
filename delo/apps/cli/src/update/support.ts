@@ -193,7 +193,8 @@ function soleDataUser(home: string): void {
 /**
  * C1's store as the home process drives it, with C19's codes for the store refusals the handshake answers with a line
  * a person reads: a prepare whose download did not finish is `CHANNEL_UNREACHABLE`, and one whose release the channel
- * refuses, or whose installed runtime or stored root fails its check, is `VERIFY_FAILED`, each with the refusal
+ * refuses, whose target is lower than the running version, or whose installed runtime or stored root fails its check,
+ * is `VERIFY_FAILED`, each with the refusal
  * `delorun` prints for the same failure as its detail ({@link prepareRefusal}); a version to roll back to that is not
  * installed, fails its start check or cannot be checked is `ROLLBACK_TARGET_UNUSABLE`. Any other failure reaches the
  * handshake unchanged. A prepare, and the report of a rollback that switches the runtime, refuse with `CHATS_RUNNING`
@@ -226,7 +227,7 @@ class CliHomeRuntimeStore extends HomeRuntimeStore {
     } catch (error) {
       // A download that did not finish is the network's or the disk's, not a release that failed a check.
       if (isInstallError(error, 'DOWNLOAD_FAILED') && !error.oversize) throw new HomeProcessError('CHANNEL_UNREACHABLE', prepareRefusal(error, this.profile))
-      if (isInstallError(error) || isStoreError(error, 'ROOT_NOT_ANCHORED', 'INSTALL_VERIFY_FAILED', 'RUNTIME_CHANGED')) throw new HomeProcessError('VERIFY_FAILED', prepareRefusal(error, this.profile))
+      if (isInstallError(error) || isStoreError(error, 'ROOT_NOT_ANCHORED', 'INSTALL_VERIFY_FAILED', 'RUNTIME_CHANGED', 'TARGET_LOWER')) throw new HomeProcessError('VERIFY_FAILED', prepareRefusal(error, this.profile))
       throw error
     }
   }

@@ -3133,6 +3133,13 @@ importers:
       '@delo/release-formats':
         specifier: workspace:*
         version: link:../release-formats
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delo/packages/supervisor:
     dependencies:

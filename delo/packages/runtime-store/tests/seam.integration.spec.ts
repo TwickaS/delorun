@@ -240,6 +240,31 @@ describe('prepare', () => {
     expect(existsSync(join(fixture.home, 'runtimes', V2))).toBe(false)
   })
 
+  it('an update to a lower version is refused: a channel naming a lower release installs nothing', async () => {
+    await fixture.install(V2)
+    const channel = new FixtureChannel(offered(V1, closureFiles('0.1.0')))
+    const reporter = new FixtureReporter()
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', root: async () => fixture.root, openChannel: opening(channel), report: reporter })
+    await refused(store.prepare(undefined, () => {}, () => {}), 'TARGET_LOWER')
+    expect(channel.fills).toEqual([])
+    expect(channel.recorded).toEqual([])
+    expect(reporter.reported).toEqual([])
+    expect(existsSync(join(fixture.home, 'runtimes', V1))).toBe(false)
+    expect(await fixture.store.pointers()).toEqual({ current: V2 })
+  })
+
+  it('an update to a lower version is refused: a request naming a lower installed version reports nothing', async () => {
+    await fixture.install(V1)
+    await fixture.install(V2)
+    await fixture.store.switchTo(V1, V2)
+    const channel = new FixtureChannel(offered(V1, closureFiles('0.1.0')))
+    const reporter = new FixtureReporter()
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', root: async () => fixture.root, openChannel: opening(channel), report: reporter })
+    await refused(store.prepare(V1, () => {}, () => {}), 'TARGET_LOWER')
+    expect(reporter.reported).toEqual([])
+    expect(await fixture.store.pointers()).toEqual({ current: V2, previous: V1 })
+  })
+
   it('returns the report and the disabled plugins as the reporter built them', async () => {
     await fixture.install(V1)
     const store = new HomeRuntimeStore({

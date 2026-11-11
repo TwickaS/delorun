@@ -23,8 +23,10 @@ export type StoreLayoutCode = Extract<HomeLayoutErrorCode, 'STORE_BUSY' | 'NO_AC
  *   ships, because the process was not started by the launcher (which names its roots in `DELO_LAUNCHER_ROOTS`), the
  *   shipped roots do not read, or no shipped root leads to the stored one. Nothing is installed, switched to or rolled
  *   back to under such a root.
+ * - `TARGET_LOWER`: an update's target is lower than the version `current` names. An update never goes to a lower
+ *   version; `delorun recover rollback` is the only way back, and it reaches only the version `previous` names.
  */
-export type RuntimeStoreErrorCode = StoreLayoutCode | 'NO_PREVIOUS' | 'RUNTIME_CHANGED' | 'POINTER_CHANGED' | 'NOT_INSTALLED' | 'ROOT_NOT_ANCHORED'
+export type RuntimeStoreErrorCode = StoreLayoutCode | 'NO_PREVIOUS' | 'RUNTIME_CHANGED' | 'POINTER_CHANGED' | 'NOT_INSTALLED' | 'ROOT_NOT_ANCHORED' | 'TARGET_LOWER'
 
 /** What the launcher offers after a refused start. */
 export type RuntimeRemedy = 'reinstall' | 'rollback' | 'update' | 'launcher-update'

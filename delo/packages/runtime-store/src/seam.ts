@@ -9,6 +9,7 @@
  * @module @delo/runtime-store/seam
  */
 import { join } from 'node:path'
+import semver from 'semver'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata } from '@delo/contract-release-manifest'
 import { isStoreError, RuntimeStoreError } from './errors.ts'
@@ -263,8 +264,10 @@ export class HomeRuntimeStore {
    * @param line - writes each line of the release's install progress, as the launcher prints it; nothing is written
    *   when the target is installed and intact.
    * @returns the prepared version.
-   * @throws {RuntimeStoreError} `INSTALL_VERIFY_FAILED` when a check of the fetched release fails; `NO_ACTIVE_RUNTIME`
-   *   when the store has no usable runtime; `STORE_BUSY` while another install, switch or removal holds the lock.
+   * @throws {RuntimeStoreError} `INSTALL_VERIFY_FAILED` when a check of the fetched release fails; `TARGET_LOWER` when
+   *   the target, or the newest release on the channel, is lower than the version `current` names, before anything
+   *   installs; `NO_ACTIVE_RUNTIME` when the store has no usable runtime; `STORE_BUSY` while another install, switch or
+   *   removal holds the lock.
    */
   async prepare(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, line: (text: string) => void): Promise<PreparedRuntime> {
     return this.options.store.shareChecks(() => this.prepareShared(target, phase, line))
@@ -279,12 +282,15 @@ export class HomeRuntimeStore {
    */
   private async prepareShared(target: RuntimeVersion | undefined, phase: (phase: PreparePhase) => void, line: (text: string) => void): Promise<PreparedRuntime> {
     phase('checking')
+    const { current } = await this.options.store.pointers()
     let version: RuntimeVersion
     if (target !== undefined && await this.intact(target)) {
+      this.refuseLower(target, current)
       version = target
     } else {
       const channel = await this.options.openChannel(line)
       const resolved = await channel.resolve(target)
+      this.refuseLower(resolved.version, current)
       if (!await this.intact(resolved.version)) {
         phase('installing')
         await this.options.store.install({
@@ -299,6 +305,23 @@ export class HomeRuntimeStore {
     phase('reporting')
     const report = await this.options.report.build(version)
     return { version, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
+  }
+
+  /**
+   * Refuse an update's target lower than the version `current` names, before anything installs: an update never goes
+   * back, so a channel or a request that names a lower release cannot reach a runtime the person moved past, and
+   * `delorun recover rollback` stays the only way back.
+   * @param target - the update's target.
+   * @param current - the version `current` names.
+   * @throws {RuntimeStoreError} `TARGET_LOWER` when `target` is lower than `current`, or either is not a semantic
+   *   version, so the two cannot be ordered.
+   */
+  private refuseLower(target: RuntimeVersion, current: RuntimeVersion): void {
+    if (semver.valid(target) === null || semver.valid(current) === null) {
+      throw new RuntimeStoreError('TARGET_LOWER', this.options.store.paths.version(target), `the update's target ${target} and ${current}, the version this home runs, cannot be ordered as semantic versions, so the update cannot show it does not go to a lower version; nothing was installed`)
+    }
+    if (!semver.lt(target, current)) return
+    throw new RuntimeStoreError('TARGET_LOWER', this.options.store.paths.version(target), `the update's target ${target} is lower than ${current}, the version this home runs; an update never goes to a lower version, and nothing was installed`, ['rollback'])
   }
 
   /**

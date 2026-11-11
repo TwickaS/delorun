@@ -236,6 +236,15 @@ describe('runUpdate', () => {
     expect(sent('update.apply')).toHaveLength(0)
   })
 
+  it('an update to a lower version is refused: a report whose target is lower than the running version applies nothing, even with --yes', async () => {
+    await homeAnswering({ prepare: prepared(report({ to: versions('0.9.0') })) })
+
+    await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('an update never goes to a lower version') })
+
+    expect(output.stdout).not.toContain('Update from Delo')
+    expect(sent('update.apply')).toHaveLength(0)
+  })
+
   it('prints the report and the phases it passed through, and changes nothing, when the person declines', async () => {
     await homeAnswering({ prepare: prepared(report({ items: [CHANGED_BUNDLE] })) })
 
