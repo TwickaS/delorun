@@ -211,7 +211,9 @@ async getLinked(url: string): Promise<string[]>
 
 /**
  * Recompose the profile from its manifest and patch files, replacing running plugins whose loaded files below the
- * profile directory or its linked package targets changed on disk, and publishing its runtime resolution. Changed
+ * profile directory or its linked package targets changed on disk, and publishing its runtime resolution. The
+ * distribution's {@link ProfileReconcileCheck}, when one is provided, runs first and refuses the recomposition by
+ * throwing before anything stops. Changed
  * modules are evicted and the Loader entries running them stop; app-boot's {@link recomposeProfile} then publishes the
  * resolution, applies the generation, starts the stopped entries with the current files and configuration,
  * imports entries whose import failed again, and judges activation. Afterwards the modules below the mappings the
@@ -220,7 +222,8 @@ async getLinked(url: string): Promise<string[]>
  * @param requiredIds Entry ids whose inactive state is reported as a failure even when it predates this call.
  * @returns Inactive-entry diagnostics, the changed modules that load after a restart, and a profile-wide restart reason.
  * @throws The patch read, publication, preparation, apply, or activation failure of the recomposition, including a
- * replacement plugin that fails to load or start, whose previous code no longer runs.
+ * replacement plugin that fails to load or start, whose previous code no longer runs; the distribution check's
+ * refusal, with everything still running.
  */
 async reconcileProfile(requiredIds: readonly string[] = []): Promise<ProfileReconciliation>
 ```
@@ -549,6 +552,24 @@ Source: [`packages/client/ui-plugin-manager/src/index.ts`](../../packages/client
 Current profile facts; scheduling and mutation belong to their callers.
 
 Source: [`packages/boot/app-boot/src/profile-context.ts`](../../packages/boot/app-boot/src/profile-context.ts)
+
+<a id="ctxprofilereconcilecheck--profilereconcilecheck"></a>
+
+### `ctx.profileReconcileCheck` — `ProfileReconcileCheck`
+
+A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck` service. It runs inside Hmr.runExclusive, before any running plugin stops or any module is evicted, so it may rewrite the profile's files the recomposition reads; a caller such as the plugin manager may hold the profile's `package.json` file lock at that moment, so the check must not wait for that lock while its own process holds it.
+
+```ts cordis-catalog
+/**
+ * Check, and prepare, the profile's files before HMR recomposes the profile from them.
+ * @param profile The profile about to be recomposed.
+ * @throws Any error to refuse the recomposition: nothing stops, nothing loads, and {@link Hmr.reconcileProfile}
+ * rejects with that error.
+ */
+check(profile: ProfileContext): Promise<void>
+```
+
+Source: [`packages/boot/hmr/src/index.ts`](../../packages/boot/hmr/src/index.ts)
 
 <a id="app-boot-events"></a>
 

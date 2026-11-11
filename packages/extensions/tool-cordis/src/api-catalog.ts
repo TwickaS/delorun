@@ -1750,10 +1750,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async reconcileProfile(requiredIds: readonly string[] = []): Promise<ProfileReconciliation>',
-        description: 'Recompose the profile from its manifest and patch files, replacing running plugins whose loaded files below the profile directory or its linked package targets changed on disk, and publishing its runtime resolution. Changed modules are evicted and the Loader entries running them stop; app-boot\'s recomposeProfile then publishes the resolution, applies the generation, starts the stopped entries with the current files and configuration, imports entries whose import failed again, and judges activation. Afterwards the modules below the mappings the recomposition dropped are evicted, so a removed or deselected package is imported afresh when it returns. Callers run inside runExclusive.',
+        description: 'Recompose the profile from its manifest and patch files, replacing running plugins whose loaded files below the profile directory or its linked package targets changed on disk, and publishing its runtime resolution. The distribution\'s ProfileReconcileCheck, when one is provided, runs first and refuses the recomposition by throwing before anything stops. Changed modules are evicted and the Loader entries running them stop; app-boot\'s recomposeProfile then publishes the resolution, applies the generation, starts the stopped entries with the current files and configuration, imports entries whose import failed again, and judges activation. Afterwards the modules below the mappings the recomposition dropped are evicted, so a removed or deselected package is imported afresh when it returns. Callers run inside runExclusive.',
         parameters: [{ name: 'requiredIds', description: 'Entry ids whose inactive state is reported as a failure even when it predates this call.' }],
         returns: 'Inactive-entry diagnostics, the changed modules that load after a restart, and a profile-wide restart reason.',
-        throws: ['The patch read, publication, preparation, apply, or activation failure of the recomposition, including a replacement plugin that fails to load or start, whose previous code no longer runs.'],
+        throws: ['The patch read, publication, preparation, apply, or activation failure of the recomposition, including a replacement plugin that fails to load or start, whose previous code no longer runs; the distribution check\'s refusal, with everything still running.'],
       },
     ],
   },
@@ -2512,6 +2512,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'readonly telemetryDisabledEnv: string | undefined',
         description: 'Launch-time DSH_TELEMETRY_DISABLED value; any non-empty value opts out.',
         parameters: [],
+      },
+    ],
+  },
+  {
+    key: 'profileReconcileCheck',
+    summary: 'A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck` service.',
+    description: 'A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck` service. It runs inside Hmr.runExclusive, before any running plugin stops or any module is evicted, so it may rewrite the profile\'s files the recomposition reads; a caller such as the plugin manager may hold the profile\'s `package.json` file lock at that moment, so the check must not wait for that lock while its own process holds it.',
+    methods: [
+      {
+        signature: 'check(profile: ProfileContext): Promise<void>',
+        description: 'Check, and prepare, the profile\'s files before HMR recomposes the profile from them.',
+        parameters: [{ name: 'profile', description: 'The profile about to be recomposed.' }],
+        throws: ['Any error to refuse the recomposition: nothing stops, nothing loads, and {@link Hmr.reconcileProfile} rejects with that error.'],
       },
     ],
   },
@@ -7826,6 +7839,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProfileChangedBy',
     declaration: 'export type ProfileChangedBy = {\n    readonly kind: \'person\';\n} | {\n    readonly kind: \'agent\';\n    readonly sessionId: string;\n} | {\n    readonly kind: \'outside\';\n};',
+  },
+  {
+    name: 'ProfileContext',
+    declaration: 'export interface ProfileContext {\n    readonly name: string;\n    readonly packageManager?: ProfilePnpmInvocation;\n    readonly dir: string;\n    readonly patchPath: string;\n    readonly installAnchor: string;\n    readonly cwd: string;\n    readonly home: string;\n    readonly startedBundles: readonly string[];\n    readonly overlays: readonly PatchOptions[];\n    readonly telemetryDisabledEnv: string | undefined;\n}',
   },
   {
     name: 'ProfileExemptionChange',

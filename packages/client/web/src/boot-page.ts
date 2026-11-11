@@ -126,6 +126,7 @@ const RECOVERY_TEXT = {
 type RecoveryText = { readonly [K in keyof typeof RECOVERY_TEXT.en]: string }
 
 /**
+ * The recovery screen's words in the browser's language.
  * @param language - the browser's language, such as `zh-CN`.
  * @returns the words for it: Chinese for a `zh` language, English otherwise.
  */
