@@ -11,10 +11,21 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 远程访问（reach）在设备批准（device approval）之外还要求一个身份因子（identity factor）：通行密钥，或在本人（the person）自己的 OpenID Connect 提供方处登录。home 是两者的依赖方（relying party）。本页定义每个远程访问地址可使用哪些因子、每个地址的通行密钥依赖方 ID、home 如何在本人的提供方处注册为客户端、带有 nonce、PKCE 与签发方（issuer）检查的授权流程、home 要求的声明与受众、它固定的所有者身份、它如何获取并轮换签名密钥，以及约束 Delo Run 签发方的规则，该签发方是一项后续功能（fast-follow）。因子从不替代设备批准（[C5](c05-device-approval.zh.md)）。类型包 [`@delo/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.zh.md) 承载这些规则、声明、代码与上限。
 
+<a id="status"></a>
+## 状态
+
+本页的通行密钥与 OpenID Connect 因子尚未构建：home 没有通行密钥依赖方，也没有 OpenID Connect 客户端。Tailscale 私有路由的 `tailnet-membership` 因子已构建。
+
+- **已构建并已接入：** 设置的答案模式指明 `reach.identityFactor`，并在 `--config` 文档中拒绝 `null` 以外的任何值（[C11](c11-setup-answers.zh.md)）。
+- **未构建：** 带用户验证与计数器的通行密钥注册与断言；在本人提供方处的客户端注册；带 `state`、`nonce`、PKCE 与签发方检查的授权流程；ID 令牌检查与签名密钥轮换；固定的所有者主体；重新认证；Delo Run 签发方。
+
+下文中被此列表称为未构建或未被任何部分接入的要求与拒绝测试，在某项变更构建并接入它们之前不保护任何人。[远程访问设计](../design/reach.md)规定私有 tailnet 路由仅凭已批准的设备密钥登录，不使用通行密钥或 OpenID Connect；本页为 `tailscale-private` 列出身份因子之处，以该设计为准。
+
 <a id="contents"></a>
 ## 目录
 
 - [摘要](#summary)
+- [状态](#status)
 - [约定](#contract)
   - [依赖方 ID](#relying-party-ids)
   - [注册](#enrolment)
@@ -26,6 +37,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
   - [重新认证](#re-authentication)
   - [签名密钥](#signing-keys)
   - [tailnet 身份](#tailnet-identity)
+  - [tailnet 成员身份](#tailnet-membership)
   - [上限](#limits)
   - [错误](#errors)
   - [Delo Run 签发方](#delo-run-issuer)
@@ -128,6 +140,13 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 `tailnet` 身份因子只存在于 C7 的套接字变体下（[C7](c07-reach-providers.zh.md#identity-headers)）：serve 套接字上的一个请求，若其 `Tailscale-User-Login` 位于 tailnet 登录允许列表中，即为 `tailscale-private` 证明了该因子。在当前约定下，它以 `TAILNET_IDENTITY_UNAVAILABLE` 被拒绝。恢复套件永远不接受它（[C5](c05-device-approval.zh.md#recovery-kit)）。
 
+<a id="tailnet-membership"></a>
+### tailnet 成员身份
+
+`tailnet-membership` 因子不携带任何证明：它表明一个请求经由声明了该因子的远程访问提供方的 serve 目标到达。只有 `reach-tailscale-private` 提供方可以声明它（[C7](c07-reach-providers.zh.md#provider-service-definition)），对于任何其他监听器以及任何不是 `ts.net` 地址的地址，home 以 `TAILNET_IDENTITY_UNAVAILABLE` 拒绝该声明。在该监听器上，已批准设备的一个新鲜设备密钥签名本身即可创建完整会话（[C5](c05-device-approval.zh.md#sign-in)），会话记录携带该因子（[C4](c04-admission.zh.md#sessions)）。
+
+对于每一项只在 home 自己的电脑上授予的操作，home 以 `403 LOOPBACK_REQUIRED` 拒绝因子为 `tailnet-membership` 的会话：授予完全访问，无论是升级到 `danger-full-access`（包括 `plugin_manager` 的升级）还是某个工作区的完全访问同意；授予标记为 `workspace-management` 的提示（主对话的工作区工具及其其他询问，以及指令层写入）；允许、拒绝或撤销某个 stdio MCP 服务器的启动，设备只能读取等待中服务器的名称以及每个服务器发生了什么变化；打开批准窗口以及批准或移除设备；重置；恢复套件；注册身份因子；以及更改远程访问设置。拒绝发生在授予操作的地方，而不是客户端：授予完全访问的批准提示携带 `grants: "full-access"`，以该因子准入的 Peer 的答复不会被应用，因此该提示保持打开，留给 home 自己电脑上的工作室。远程工作室会提示在电脑上批准该操作。观看、回复、开始对话、答复其他所有提示以及停止运行都是允许的，因此无法从手机安装插件。同一规则适用于工作室调用的每个 Remote 方法：设备的 Peer 代表其 `reach-device` 主体，该主体的远程访问策略允许读取对话、工作区和已脱敏设置、开始对话、发送消息、停止运行以及答复提示的方法和转发事件，并以 `remote-access/denied` 和原因 `loopback-required: <action>` 拒绝其他所有方法；该策略及其表格位于 [`@delo/home-auth`](../../packages/home-auth/README.zh.md)。
+
 <a id="limits"></a>
 ### 上限
 
@@ -168,7 +187,8 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 | `PASSKEY_ASSERTION_INVALID` | 未通过某项检查的断言，包括另一个地址的依赖方 ID 或来源。 |
 | `PASSKEY_USER_VERIFICATION_REQUIRED` | 用户已验证标志未设置。 |
 | `PASSKEY_COUNTER_REGRESSED` | 计数器没有增大。 |
-| `TAILNET_IDENTITY_UNAVAILABLE` | 在 C7 的套接字变体之外使用 `tailnet` 因子。 |
+| `TAILNET_IDENTITY_UNAVAILABLE` | 在 C7 的套接字变体之外使用 `tailnet` 因子，或为 Tailscale 私有地址之外的监听器或地址声明 `tailnet-membership`。 |
+| `LOOPBACK_REQUIRED` | 因子为 `tailnet-membership` 的会话答复提示或发送请求，而该操作只在 home 自己的电脑上授予（[tailnet 成员身份](#tailnet-membership)）。 |
 
 <a id="delo-run-issuer"></a>
 ### Delo Run 签发方
