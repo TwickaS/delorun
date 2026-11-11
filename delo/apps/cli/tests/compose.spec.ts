@@ -250,6 +250,17 @@ describe('a booted Host', { timeout: 60_000 }, () => {
     expect(message).toContain(`${TURN_GATE_SERVICE} is not provided`)
   })
 
+  it('refuses a booted Host whose fetch guard plugin failed to load, so web_fetch never runs unguarded', async () => {
+    const composed = await compose()
+    const failed = booted(composed, [{ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', disabled: false, state: 'failed', config: { enabled: true } }], { fetchGuard: undefined })
+    const message = await refused(() => { assertDeloInvariants(composed, failed) })
+    expect(message).toContain('delo-fetch-guard did not start (failed)')
+    expect(message).toContain('fetchGuard is not provided by delo-fetch-guard')
+    // A row that reports active but registered no service is refused as well.
+    const silent = booted(composed, [], { fetchGuard: undefined })
+    expect(await refused(() => { assertDeloInvariants(composed, silent) })).toContain('fetchGuard is not provided by delo-fetch-guard')
+  })
+
   it('refuses a sandbox row that protects another home, misses a denied socket or an escape directory, or sets the runner', async () => {
     const composed = await compose()
     const message = await refused(() => {
