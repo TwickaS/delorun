@@ -1384,6 +1384,9 @@ importers:
       '@delo/npm-launcher':
         specifier: workspace:*
         version: link:../npm-launcher
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../../packages/plugin-install-check
       '@delo/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../../packages/plugin-mcp-consent
@@ -1779,6 +1782,9 @@ importers:
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../plugin-install-check
       '@delo/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
@@ -1815,6 +1821,9 @@ importers:
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../plugin-install-check
       '@delo/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent

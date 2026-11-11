@@ -51,6 +51,8 @@ import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
+import { checkInstalledPlugins } from './plugin-install-check.ts'
+import { copyImportMigration } from './pnpm-import.ts'
 import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
 import { configSchemasOf, guardSecretFields, reportSecretSettlement, settleSecretValues, type SecretSettlement } from './secret-fields.ts'
 import { secretFieldAdmission, type ConfigSchemasOf } from '@delo/profile-safety'
@@ -143,16 +145,24 @@ export type AddHeadlessBundle = (home: string, output: CommandOutput) => Promise
 
 /**
  * The real pre-start steps: the CLI profile's migration adds Delo's studio bundle to a profile set up before it
- * shipped, and the `headless` profile's links Delo's headless bundle.
+ * shipped, and the `headless` profile's links Delo's headless bundle; both then set the profile's package import method
+ * to copies, and the plugin change check compares the profile's installed plugins with their install records.
  * @param add - links the studio bundle into a CLI profile; upstream's resolution and `dsh plugin add` in a real start.
  * @param addHeadless - links the headless bundle into the `headless` profile, the same way in a real run.
  * @returns the steps.
  */
 export function realPreStartSteps(add: AddStudioBundle, addHeadless: AddHeadlessBundle): readonly PreStartStep[] {
   return preStartSteps({
-    migrations: context => context.kind === 'headless'
-      ? [headlessBundleMigration(() => addHeadless(context.home, context.output), context.output)]
-      : [studioBundleMigration(() => add(context.home, context.profile, context.output), context.output, context.profile)],
+    migrations: context => [
+      context.kind === 'headless'
+        ? headlessBundleMigration(() => addHeadless(context.home, context.output), context.output)
+        : studioBundleMigration(() => add(context.home, context.profile, context.output), context.output, context.profile),
+      copyImportMigration(profileDirectory(context.home, context.profile), context.output),
+    ],
+    pluginChanges: async (context) => {
+      const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
+      await checkInstalledPlugins({ home: context.home, profile: context.profile, profileDir: profileDirectory(context.home, context.profile), installAnchor: INSTALL_ANCHOR, full: false, output: context.output })
+    },
   })
 }
 

@@ -372,7 +372,7 @@
       "path": "packages/boot/plugin-manager/src/types.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: adds the audit, undo, restore, history, version-change and preview types and the new refusal codes and stages. The lockedIncludes `locked` reason (C1) is left out. Secret fields (C1): declares the `plugin-manager/before-record` bail event and `ProfileHistoryInfo.unsaved`, why an edit made outside plugin management was not saved."
+      "reason": "Profile history and safe mode: adds the audit, undo, restore, history, version-change and preview types and the new refusal codes and stages. The lockedIncludes `locked` reason (C1) is left out. Secret fields (C1): declares the `plugin-manager/before-record` bail event and `ProfileHistoryInfo.unsaved`, why an edit made outside plugin management was not saved. An audit finding's `path` may name a file relative to the profile, such as its lockfile, or no file, and its `line` 0 names the whole file, for the install check's findings (`@delo/plugin-install-check`)."
     },
     {
       "path": "packages/boot/plugin-manager/src/version-changes.ts",
@@ -714,7 +714,7 @@
       "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the History view and the audit findings on the install screens. The read-only note style and the distribution-layer listing (C1) are left out; the History introduction has its own style. Secret fields (C1): the History view names why the latest change was not saved, above the versions."
+      "reason": "Profile history and safe mode: the History view and the audit findings on the install screens. The read-only note style and the distribution-layer listing (C1) are left out; the History introduction has its own style. Secret fields (C1): the History view names why the latest change was not saved, above the versions. The done screen lists every finding of an audit that let the installation through, and a finding with no file or line shows none, for the install check's warnings."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/index.ts",
@@ -726,7 +726,7 @@
       "path": "packages/client/ui-plugin-manager/src/client/locales.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the History view, restore, audit and install-terminal labels in every locale. The lockedIncludes `reasonLocked` labels (C1) are left out. Secret fields (C1): the `historyUnsaved` label in every locale."
+      "reason": "Profile history and safe mode: the History view, restore, audit and install-terminal labels in every locale. The lockedIncludes `reasonLocked` labels (C1) are left out. Secret fields (C1): the `historyUnsaved` label in every locale. `installAuditInstalledDescription` in every locale, the done screen's description of the findings listed there."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/manager-store.ts",
@@ -2083,6 +2083,12 @@
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added.",
       "sha256": "bdfe0c5c977d157fb41b2744acfa5e73e8d1c7d3aa349ce97ad105a1726dfb9f"
+    },
+    {
+      "path": "apps/cli/tsdown.config.ts",
+      "class": "delo-feature",
+      "feature": "delorun-launcher",
+      "reason": "The CLI's argument parser (`lib/args.js`) and plugin command (`lib/plugin.js`) are built as entries of their own, which the package's `./lib/*` export already names, so `delorun plugin` runs upstream's `dsh plugin` in its own process and acts on pnpm's exit code before the process ends: it checks and records what the operation installed. The commands are unchanged."
     }
   ],
   "retired": []

@@ -185,16 +185,25 @@
 
 # Plugin management protects the guard rows and the update check above, remote
 # access and the home's sign-in (so no chat turns remote access on or points
-# its records elsewhere), and the sandbox rows, as it protects its own
-# components: the `plugin_manager` tool, which runs without a prompt in full
-# access, cannot disable a protected row, change its settings, or deselect or
-# remove a bundle that carries one, this bundle included, so no chat in one
-# workspace turns a guard off, or silences the update check, for every
+# its records elsewhere), the plugin install check, and the sandbox rows, as it
+# protects its own components: the `plugin_manager` tool, which runs without a
+# prompt in full access, cannot disable a protected row, change its settings, or
+# deselect or remove a bundle that carries one, this bundle included, so no chat
+# in one workspace turns a guard off, or silences the update check, for every
 # workspace. Settings → Privacy writes the update check's switch through the
-# settings service, which this list does not govern. Upstream's base
-# bundle gives the row no config, so `protectedPlugins` is the only key.
+# settings service, which this list does not govern.
+#
+# Plugins install from the registry pnpm's configuration names, or the
+# `registry` set here, and from no mirror: `fallbackRegistries` is empty, where
+# upstream asks npmmirror when the first registry fails. A person who wants the
+# mirror restates this row in the profile's own cordis.patch.yml with
+# `fallbackRegistries: ['https://registry.npmmirror.com/']` and the whole
+# `protectedPlugins` list below, since a patch replaces the row's whole config.
+# `delorun` refuses to start a profile whose row names a registry that is not an
+# https URL, or whose `protectedPlugins` drops a name listed here.
 - id: plugin-manager
   config:
+    fallbackRegistries: []
     protectedPlugins:
       - '@delo/plugin-instruction-consent'
       - '@delo/plugin-mcp-consent'
@@ -203,10 +212,25 @@
       - '@delo/plugin-fetch-guard'
       - '@delo/bundle-local/update-gate'
       - '@delo/bundle-local/update-check'
+      - '@delo/plugin-install-check'
       - '@delo/reach'
       - '@delo/home-auth'
       - '@deepseek-ai/dsh-sandbox-local'
       - '@deepseek-ai/dsh-sandbox-policy'
+
+# The plugin install check: before plugin management selects, enables or
+# restores a bundle, it checks the bundle and every package its installation
+# added to the lockfile (integrity, GitHub advisories, very new versions,
+# lookalike names), shows every finding, refuses a known critical advisory
+# until the person accepts it, and records each installed file, which every
+# start compares. `delorun plugin` and `delorun verify` read this row's
+# settings too. `trustedSources` lists npm scopes and git owners whose plugins
+# show critical advisories only.
+- insert:
+    - id: delo-plugin-install-check
+      name: '@delo/plugin-install-check'
+      config:
+        enabled: true
 
 # Contract C8's trash: deleting a chat or a workspace in the studio moves it to
 # the trash under the home, the Trash section in Settings restores it or

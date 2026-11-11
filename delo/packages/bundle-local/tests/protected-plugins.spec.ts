@@ -36,7 +36,7 @@ describe('the plugin-manager row of @delo/bundle-local', () => {
     const guards = inserted.filter(row => (row['config'] as Patch | undefined)?.['enabled'] === true && row['disabled'] === undefined).map(row => row['name'])
     expect(guards).toEqual([
       '@delo/plugin-instruction-consent', '@delo/plugin-mcp-consent', '@delo/plugin-permission-defaults',
-      '@delo/plugin-schedule-consent', '@delo/plugin-fetch-guard', '@delo/bundle-local/update-gate', '@delo/bundle-local/update-check', '@delo/reach',
+      '@delo/plugin-schedule-consent', '@delo/plugin-fetch-guard', '@delo/bundle-local/update-gate', '@delo/bundle-local/update-check', '@delo/plugin-install-check', '@delo/reach',
     ])
     // home-auth has no switch; it is protected so no chat points the home's device records elsewhere.
     expect(protectedPlugins()).toEqual([...guards, '@delo/home-auth', baseRowName('sandbox'), baseRowName('sandbox-policy')])

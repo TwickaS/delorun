@@ -50,6 +50,7 @@
     "@delo/install": "workspace:*",
     "@delo/logs": "workspace:*",
     "@delo/npm-launcher": "workspace:*",
+    "@delo/plugin-install-check": "workspace:*",
     "@delo/plugin-mcp-consent": "workspace:*",
     "@delo/plugin-permission-defaults": "workspace:*",
     "@delo/profile-safety": "workspace:*",

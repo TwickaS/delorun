@@ -29,24 +29,32 @@
  *   Delo's default, "Same as stock" the parity value), and the guard rows `delo-fetch-guard` and `delo-update-gate`
  *   are on; in the `headless` profile, which has no setup answer, each row of `@delo/bundle-headless` has Delo's
  *   default ({@link HEADLESS_ROW_VALUES});
+ * - each required Delo row's package, and the Delo bundle that declares the row, resolve inside this Delo's own
+ *   packages ({@link deloPackagesRoot}: `runtimes/<version>/app`, or the source checkout), so a same-named package
+ *   elsewhere, such as in the profile's `node_modules`, cannot stand in for it;
+ * - the `plugin-manager` row's `registry` and `fallbackRegistries` are literal https URLs, and its `protectedPlugins`
+ *   keep every name a Delo bundle's patch of the row lists;
  * - after boot, each service a required row provides ({@link ROW_SERVICES}) is provided by that row, by the fiber that
  *   registered it and not by its presence alone, and is present unless the row's switch is off: `sandbox`, `fetchGuard`,
- *   the consent services and `deloTurnGate`, through which an update's or a stop's wait refuses new turns.
+ *   the consent services, `pluginAudit` and `deloPluginTrust`, and `deloTurnGate`, through which an update's or a stop's
+ *   wait refuses new turns.
  *
  * A violation stops the start with one refusal that names each row, the files that set the value, and the remedy.
  *
  * @module @delo/cli/compose
  */
 import { realpathSync } from 'node:fs'
+import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delo/contract-setup-answers'
 import type { CommandOutput } from './command.ts'
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 import { deloRowIds, isDeloPackage, refuseSkippedDeloBundles, type BootedRow } from './delo-bundles.ts'
 import { CliError, EXIT } from './exit.ts'
-import { composedRow, isRecord, patchLayers, rowInserts, sourcesSetting, type PatchLayer } from './patch-layers.ts'
+import { composedRow, isRecord, patchLayers, rowInserts, rowPatches, sourcesSetting, type PatchLayer } from './patch-layers.ts'
+import { deloPackagesRoot } from './package-manager.ts'
 import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.ts'
 import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, startOnlySockets, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
 import { migrationsPath } from './profile-migrations.ts'
@@ -136,7 +144,24 @@ export interface ComposedStart {
   readonly values: ReadonlyMap<string, Readonly<Record<string, unknown>>>
   /** The prompts answer the values follow, in the CLI profile. */
   readonly prompts: PromptsAnswer | undefined
+  /** Where each required Delo row's package resolves, real path, for the rows whose package resolves. */
+  readonly rowPackages: readonly RowPackage[]
+  /** The directory this Delo's own packages lie in ({@link deloPackagesRoot}). */
+  readonly packagesRoot: string
 }
+
+/** Where a required Delo row's package, or the bundle that declares it, resolves. */
+export interface RowPackage {
+  /** The row. */
+  readonly id: string
+  /** The package. */
+  readonly packageName: string
+  /** Its directory, real path. */
+  readonly dir: string
+}
+
+/** The plugin manager's row, whose registries and protected plugins the composition holds. */
+export const PLUGIN_MANAGER_ROW = 'plugin-manager'
 
 /** The guard rows that stay on whatever the prompts answer. */
 const GUARD_ROWS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
@@ -175,6 +200,7 @@ export const ROW_SERVICES: Readonly<Record<string, readonly string[]>> = {
   'delo-mcp-consent': ['mcpAddConsent'],
   'delo-schedule-consent': ['scheduleConsent'],
   'delo-permission-defaults': ['permissionDefaults', 'sandboxModeGuard'],
+  'delo-plugin-install-check': ['pluginAudit', 'deloPluginTrust'],
 }
 
 /**
@@ -214,6 +240,8 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
     ? Object.entries(HEADLESS_ROW_VALUES)
     : [...promptRows(prompts).map(row => [row.id, row.config] as const), ...Object.entries(GUARD_ROWS)])
   const layers = patchLayers(request.home, resolvedProfile.profile, patchFiles)
+  const requiredIds = [SANDBOX_ROW, ...deloRows]
+  const rowPackages = await deloRowPackages(resolvedProfile, layers, requiredIds.filter(id => id !== SANDBOX_ROW))
   const composed: ComposedStart = {
     request,
     resolvedProfile,
@@ -222,9 +250,11 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
     protection,
     startOnlySockets: startOnly,
     layers,
-    required: [SANDBOX_ROW, ...deloRows].map(id => ({ id, name: declaredName(layers, id) })),
+    required: requiredIds.map(id => ({ id, name: declaredName(layers, id) })),
     values,
     prompts,
+    rowPackages,
+    packagesRoot: deloPackagesRoot(),
   }
   assertComposedInvariants(composed)
   return composed
@@ -243,6 +273,80 @@ function refuseHeadlessWithoutBundle(home: string, resolvedProfile: ResolvedProf
     `delorun headless: the ${resolvedProfile.profile.name} profile does not load Delo's headless bundle ${HEADLESS_BUNDLE}, which holds the guards a headless task runs under, so Delo did not start the task.`,
     `To fix it, remove ${record} so that the next delorun headless adds the bundle again, or remove the folder ${resolvedProfile.profile.dir} so that Delo creates the profile again with it.`,
   ].join('\n'))
+}
+
+/**
+ * The package a module name belongs to.
+ * @param moduleName - a row's module, such as `@delo/bundle-local/update-gate`.
+ * @returns the package, such as `@delo/bundle-local`.
+ */
+function packageOfModule(moduleName: string): string {
+  return moduleName.split('/').slice(0, moduleName.startsWith('@') ? 2 : 1).join('/')
+}
+
+/**
+ * Where each required Delo row's package resolves, as the boot's runtime resolution resolves it, and where the bundle
+ * that declares the row was loaded from.
+ * @param resolvedProfile - the prepared profile.
+ * @param layers - the layers.
+ * @param ids - the required Delo rows.
+ * @returns one entry per row and package that resolves.
+ */
+async function deloRowPackages(resolvedProfile: ResolvedProfileRuntime, layers: readonly PatchLayer[], ids: readonly string[]): Promise<RowPackage[]> {
+  const resolution = await createRuntimeResolution({ installAnchor: resolvedProfile.installAnchor, profile: resolvedProfile.profile })
+  const found: RowPackage[] = []
+  for (const id of ids) {
+    const declaring = layers.find(layer => rowInserts(layer.patches, id).length > 0)
+    if (declaring?.packageName !== undefined && declaring.packageDir !== undefined) found.push({ id, packageName: declaring.packageName, dir: realpathSync.native(declaring.packageDir) })
+    const name = composedRow(layers, id)?.name
+    if (typeof name !== 'string') continue
+    const packageName = packageOfModule(name)
+    for (const entry of resolution.entries.filter(each => each.name === packageName)) found.push({ id, packageName, dir: realpathSync.native(entry.packageDir) })
+  }
+  return found
+}
+
+/**
+ * The violations of required Delo rows whose package, or declaring bundle, resolves outside this Delo's packages: a
+ * same-named stand-in, such as a copy in the profile's `node_modules`, would otherwise pass the check by name.
+ * @param composed - the composed start.
+ * @returns one violation per row and package.
+ */
+function standInViolations(composed: ComposedStart): Violation[] {
+  return composed.rowPackages.flatMap((row): Violation[] => {
+    const path = relative(composed.packagesRoot, row.dir)
+    if (path !== '..' && !path.startsWith(`..${sep}`) && !path.startsWith(sep) && !/^[A-Za-z]:/u.test(path)) return []
+    return [{ subject: row.id, problem: `loads ${row.packageName} from ${row.dir}, which is not this Delo's own copy in ${composed.packagesRoot}; a package of that name installed elsewhere, such as in the profile, cannot stand in for it`, sources: [] }]
+  })
+}
+
+/** An https URL, the only registry plugin management may ask. */
+const HTTPS_REGISTRY = /^https:\/\/\S+$/u
+
+/**
+ * The violations of the plugin manager's row: a registry or fallback registry that is not a literal https URL, and a
+ * protected plugin that a Delo bundle's patch of the row lists and the composed row does not.
+ * @param composed - the composed start.
+ * @param row - the plugin manager's row, composed or booted; `undefined` when the profile has none.
+ * @returns the violations.
+ */
+function pluginManagerViolations(composed: ComposedStart, row: { readonly config?: unknown } | undefined): Violation[] {
+  if (row === undefined) return []
+  const config = isRecord(row.config) ? row.config : {}
+  const sources = (key: string): string[] => sourcesSetting(composed.layers, PLUGIN_MANAGER_ROW, patch => isRecord(patch.config) && key in patch.config)
+  const violations: Violation[] = []
+  const registries = [...config.registry === undefined ? [] : [['registry', config.registry] as const], ...(Array.isArray(config.fallbackRegistries) ? config.fallbackRegistries : config.fallbackRegistries === undefined ? [] : [config.fallbackRegistries]).map(value => ['fallbackRegistries', value] as const)]
+  for (const [key, value] of registries) {
+    if (typeof value === 'string' && HTTPS_REGISTRY.test(value)) continue
+    violations.push({ subject: PLUGIN_MANAGER_ROW, problem: `names the ${key === 'registry' ? 'registry' : 'fallback registry'} ${typeof value === 'string' ? JSON.stringify(value) : 'set by an expression'}, which is not an https URL; plugins are installed only over https`, sources: sources(key) })
+  }
+  const kept = new Set(Array.isArray(config.protectedPlugins) ? config.protectedPlugins.filter((name): name is string => typeof name === 'string') : [])
+  const declared = composed.layers.filter(layer => layer.packageName !== undefined && isDeloPackage(layer.packageName))
+    .flatMap(layer => rowPatches(layer.patches, PLUGIN_MANAGER_ROW))
+    .flatMap(patch => isRecord(patch.config) && Array.isArray(patch.config.protectedPlugins) ? patch.config.protectedPlugins.filter((name): name is string => typeof name === 'string') : [])
+  const dropped = [...new Set(declared)].filter(name => !kept.has(name))
+  if (dropped.length > 0) violations.push({ subject: PLUGIN_MANAGER_ROW, problem: `no longer protects ${dropped.join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists`, sources: sources('protectedPlugins') })
+  return violations
 }
 
 /**
@@ -406,7 +510,7 @@ function refusal(profile: string, violations: readonly Violation[], booted: bool
  * @throws {CliError} naming each violation, the files that set it and the remedy.
  */
 export function assertComposedInvariants(composed: ComposedStart): void {
-  const violations = violationsOf(composed, composedRows(composed))
+  const violations = [...violationsOf(composed, composedRows(composed)), ...standInViolations(composed), ...pluginManagerViolations(composed, composedRow(composed.layers, PLUGIN_MANAGER_ROW))]
   if (violations.length > 0) throw refusal(composed.request.profile, violations, false)
 }
 
@@ -459,6 +563,6 @@ function serviceViolations(composed: ComposedStart, host: BootedHost): Violation
  * @throws {CliError} naming each violation, the files that set it and the remedy; the caller stops the Host.
  */
 export function assertDeloInvariants(composed: ComposedStart, host: BootedHost): void {
-  const violations = [...violationsOf(composed, host.rows()), ...serviceViolations(composed, host)]
+  const violations = [...violationsOf(composed, host.rows()), ...serviceViolations(composed, host), ...pluginManagerViolations(composed, host.rows().find(row => row.id === PLUGIN_MANAGER_ROW))]
   if (violations.length > 0) throw refusal(composed.request.profile, violations, true)
 }

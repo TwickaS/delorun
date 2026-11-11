@@ -50,8 +50,12 @@ export interface PluginAuditFinding {
   title: string
   /** `critical` is refused under the distribution's strictest mode; `warning` needs the user's acceptance; `notice` is shown. */
   severity: 'critical' | 'warning' | 'notice'
-  /** The file, relative to the package's directory. */
+  /**
+   * The file, relative to the package's directory, or to the profile's for a finding about the profile's lockfile or
+   * another installed package; empty when the finding names no file.
+   */
   path: string
+  /** The 1-based line of `path`; 0 when the finding names the whole file. */
   line: number
   excerpt: string
 }

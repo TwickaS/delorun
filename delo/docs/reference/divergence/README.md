@@ -52,7 +52,7 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | `container-denial-marker` | The sandbox, shell and PTC fields that mark a denial by the environment | shipped confinement, behind a C16 switch |
 | `custom-chat-display` | The Custom work-details mode and the presentation policy the chat renderers read | the studio lane |
 | `default-workspace-directory` | The operator-named path of the first-use Workspace | no Delo consumer on `v5` |
-| `delorun-launcher` | `runCli` takes its arguments from the launcher | shipped `cli` |
+| `delorun-launcher` | `runCli` takes its arguments from the launcher, and the CLI's argument parser and plugin command are built as entries a launcher imports | shipped `cli` |
 | `doctor` | The doctor checks, app, bundle and profile template | shipped `cli` |
 | `fork-gates` | Upstream's documentation and repository gates run over Delo's tree | repository tooling |
 | `home-process-signals` | `runProfile`'s `signals` and `failLoud` options, which leave the termination-signal handlers and the last-resort error listeners to a caller that owns them, and its `prepare` option, which registers a caller's listeners before the first row mounts | shipped `cli` (the home process, and its secret-field refusals) |

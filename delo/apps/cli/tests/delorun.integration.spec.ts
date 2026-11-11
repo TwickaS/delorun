@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
@@ -19,6 +19,7 @@ import { cliRefusal } from '../src/refusals.ts'
 import { NO_APPROVED_CONTENT } from '../src/compose.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { requestStudioLink } from '../src/open/studio.ts'
+import { deloPackagesRoot } from '../src/package-manager.ts'
 import { realPreStartSteps, startForeground, upstreamAddStudioBundle, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 import type { UpdateWatchOptions } from '../src/update/notice-host.ts'
 import { runtimeOfFile } from '../src/update/runtime.ts'
@@ -642,7 +643,11 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
   it('refuses to start when delo-privacy fails to import, while the bundle\'s privacy rows still apply', () => {
     expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
     // The bundle as an install whose Host half throws on import: the same manifest, patch and client, a broken lib/index.js.
-    const broken = join(osHome, 'bundle-local-broken')
+    // It lies inside this checkout, the Delo packages directory, since a copy elsewhere is refused before boot as a stand-in.
+    const cache = join(deloPackagesRoot(), 'node_modules', '.cache')
+    mkdirSync(cache, { recursive: true })
+    const broken = mkdtempSync(join(cache, 'delorun-bundle-local-broken-'))
+    onTestFinished(() => { rmSync(broken, { recursive: true, force: true }) })
     mkdirSync(join(broken, 'lib'), { recursive: true })
     const real = JSON.parse(readFileSync(join(BUNDLE_LOCAL_DIR, 'package.json'), 'utf8')) as Record<string, unknown>
     writeFileSync(join(broken, 'package.json'), JSON.stringify({ name: real.name, version: real.version, type: 'module', exports: real.exports, dsh: real.dsh }))
