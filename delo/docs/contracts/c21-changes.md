@@ -430,6 +430,7 @@ A profile from before Changes is migrated at its first start without changing wh
 
 ### What this does not prove
 
+- A process of the person's user outside the sandbox: it can write a runtime's approved harness record, the content store and the change logs under `changes/` ([C1](c01-home-layout.md#the-home-tree)), and the next start runs what it wrote from the composed tree with every check passing; only the approved files that `delorun verify` and `delorun changes list` name show it ([threat model](../security/threat-model.md)). The same holds for an approved plugin's content under `changes/store/`.
 - At the computer in the studio: the routes decide it from where a request arrived, so a request through SSH port forwarding to the loopback listener counts as at the computer, as [C5](c05-device-approval.md) counts it for the owner claim, and so does a local program that holds the studio's cookie; no session factor exists yet.
 - Full access: a workspace with full access runs commands with the person's own authority, so a model working there can lower the protection setting and approve changes. Changes protects against a confined model, not against the person's own access.
 - Registry, `file:`, git and tarball plugins: only plugins linked from a folder are under Changes; the others load as upstream installs them.

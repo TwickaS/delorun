@@ -68,7 +68,7 @@ description: "契约 C3：Delo 更新应用之前显示的更新报告，其条�
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `schema` | `delo.update-report/1` | 报告格式。 |
+| `schema` | `delo.update-report/3` | 报告格式。 |
 | `installation` | `cli-home` 或 `desktop-host` | 正在更新的安装。 |
 | `from`、`to` | `{ "delo", "dsh", "channel" }` | 正在运行的版本与目标版本（[C17](c17-plugin-versions.zh.md#the-two-versions)）。 |
 | `release` | `{ "manifest": sha256, "signature", "freshness", "log" }` | 目标的 manifest（元数据清单）摘要与各项检查的结果；凡是显示出来的报告，这三项均为 `passed`。 |
