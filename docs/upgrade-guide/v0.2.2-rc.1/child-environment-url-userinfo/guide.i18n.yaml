@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/child-environment-url-userinfo/guide.md
+/:
+  en: fb611f338f9749c0
+  zh: 5cebe4ffdc44d9db
+/children-no-longer-inherit-urls-with-user-information:
+  en: 0a1a25d8053e8866
+  zh: 5a8e1eb5889f6233
+/children-no-longer-inherit-urls-with-user-information/change:
+  en: 1105cdf904cc8dd9
+  zh: f19caa6ae434f074
+/children-no-longer-inherit-urls-with-user-information/migration:
+  en: 779c0c0f6e7dbb70
+  zh: f54de4817629c723

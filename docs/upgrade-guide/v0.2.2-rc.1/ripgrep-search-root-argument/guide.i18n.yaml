@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/ripgrep-search-root-argument/guide.md
+/:
+  en: 9e30a384ed6738ca
+  zh: bfc83c3c6fdd2d4a
+/runripgrep-takes-the-search-root-and-an-argv-builder:
+  en: 9a348c30518639a1
+  zh: 58789b6bf6175793
+/runripgrep-takes-the-search-root-and-an-argv-builder/change:
+  en: 5138f0616969bab9
+  zh: 7b7b6e2e95dd0674
+/runripgrep-takes-the-search-root-and-an-argv-builder/migration:
+  en: 69722bd145e07d0f
+  zh: 0328f52308b2d102

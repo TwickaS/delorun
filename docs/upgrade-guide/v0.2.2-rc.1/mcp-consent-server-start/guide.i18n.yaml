@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/mcp-consent-server-start/guide.md
+/:
+  en: 3237a40dcc3b8d35
+  zh: 75b43b9f6c841bbc
+/mcp-add-time-consent-judges-the-whole-server-start:
+  en: 23d31a5e6df468e7
+  zh: ef0d6fddc76980a2
+/mcp-add-time-consent-judges-the-whole-server-start/change:
+  en: acf72e5576d4f7dd
+  zh: a715eda57bd79825
+/mcp-add-time-consent-judges-the-whole-server-start/migration:
+  en: b1b68ef36df4f9b3
+  zh: aac267987ec01adb
