@@ -264,19 +264,19 @@
       "path": "packages/boot/app-boot/README.i18n.yaml",
       "class": "security",
       "reason": "Re-records the `/use-this-package/profiles` section hashes of both README sides after the `.env` refusal bullet changed in each, so the bilingual pairing gate reports the pair consistent.",
-      "sha256": "fa99832975f28442fa99d9c8b0d94b0f1c5907c91d50eb57991dc024cffeff90"
+      "sha256": "cdb84198530a79055e83c36c7dfbb808736f234bbd3653e76ba7fb6e8469d438"
     },
     {
       "path": "packages/boot/app-boot/README.md",
       "class": "security",
       "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix.",
-      "sha256": "39062f879e9080cde860b1f40c213eb7c5371ac5db716df8079405bccdc6042a"
+      "sha256": "a721379a0df85f194b8e55fcc563ac3297634c63181701c009a4ae5bfcc81ff8"
     },
     {
       "path": "packages/boot/app-boot/README.zh.md",
       "class": "security",
       "reason": "The Chinese counterpart of the Harness-home `.env` refusal bullet.",
-      "sha256": "5edc142b087ecde22b86dee66873096e06b22582899eb981c492f0cf3d5bc58e"
+      "sha256": "b1676fd278f5322d6368e20a4bb5746f7d8397bad5da4caa7f3907574d30d7da"
     },
     {
       "path": "packages/boot/app-boot/src/index.ts",
@@ -1920,13 +1920,13 @@
       "path": "packages/api/gateway/src/index.ts",
       "class": "security",
       "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's.",
-      "sha256": "049e26a1086be5dcdf2c3d180f47312b02b8b93a29d5f7aa062720ae48e76e55"
+      "sha256": "17e4a1a463826137f142169b9342e07080d6ca7dea60e22e2a8c1412ac4bb100"
     },
     {
       "path": "packages/api/gateway/src/types.ts",
       "class": "security",
       "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's.",
-      "sha256": "415f39cf6b3fd2b11b94361205462715be21a60ca359b0ae5f4bd5bf437adbf8"
+      "sha256": "51b6a708dd5b373dd372c94ac0cd35dd99fdb7a859caaf1430651f72c0411e88"
     },
     {
       "path": "packages/interaction/user-approval/src/types.ts",
