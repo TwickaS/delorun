@@ -19,6 +19,12 @@ class Machine {
   readonly live = new Set<number>()
   /** The start time each process reports; a process absent here reports none. */
   readonly starts = new Map<number, string>()
+  /** When each process started on the shared clock; a process absent here reports none. */
+  readonly startedAt = new Map<number, number>()
+  /** When each file was last written; a file absent here reports none. */
+  readonly modified = new Map<string, number>()
+  /** Ids that are threads of another process. */
+  readonly threads = new Set<number>()
   readonly said: string[] = []
   readonly releases = new Map<number, () => void>()
   time = 1000
@@ -41,6 +47,7 @@ class Machine {
     },
     remove: (path) => { this.files.delete(path) },
     read: path => this.files.get(path),
+    modified: path => this.modified.get(path),
   }
 
   /**
@@ -56,6 +63,8 @@ class Machine {
       pid,
       alive: other => this.live.has(other),
       startOf: other => this.starts.get(other),
+      startedAt: other => this.startedAt.get(other),
+      isThread: other => this.threads.has(other),
       sleep: async (milliseconds) => {
         expect(milliseconds).toBe(SLOT_POLL_MILLISECONDS)
         this.sleeps += 1
@@ -189,6 +198,78 @@ describe('a grant', () => {
     }
     await takeSlots(machine.host(1), paths, budget, demand())
     expect(machine.sleeps).toBe(0)
+  })
+
+  describe('a stale old-queue file whose process id is reused', () => {
+    const state = (setup: (machine: Machine) => void) => {
+      const machine = new Machine()
+      machine.live.add(1)
+      setup(machine)
+      return readSlots(machine.host(1), paths)
+    }
+
+    it('is no holder when the process started after the ticket was written', () => {
+      const result = state((machine) => {
+        machine.live.add(50)
+        machine.files.set('/q/1-000000000000005-50.held', '')
+        machine.modified.set('/q/1-000000000000005-50.held', 100_000)
+        machine.startedAt.set(50, 500_000)
+      })
+      expect(result.oldHolder).toBeUndefined()
+    })
+
+    it('is a holder when the process started before the ticket was written, or its time is unknown', () => {
+      expect(state((machine) => {
+        machine.live.add(50)
+        machine.files.set('/q/1-000000000000005-50.held', '')
+        machine.modified.set('/q/1-000000000000005-50.held', 500_000)
+        machine.startedAt.set(50, 100_000)
+      }).oldHolder).toBe(50)
+      expect(state((machine) => {
+        machine.live.add(50)
+        machine.files.set('/q/1-000000000000005-50.held', '')
+      }).oldHolder).toBe(50)
+    })
+
+    it('is no waiting ticket and no lock holder when the process is newer than the file', () => {
+      const result = state((machine) => {
+        machine.live.add(51)
+        machine.live.add(52)
+        machine.files.set('/q/1-000000000000006-51', '')
+        machine.modified.set('/q/1-000000000000006-51', 100_000)
+        machine.startedAt.set(51, 500_000)
+        machine.files.set('/old.lock', '52')
+        machine.modified.set('/old.lock', 100_000)
+        machine.startedAt.set(52, 500_000)
+      })
+      expect(result.oldWaiting).toEqual([])
+      expect(result.oldHolder).toBeUndefined()
+    })
+
+    it('is no holder when the id is a thread of another process', () => {
+      const result = state((machine) => {
+        machine.live.add(50)
+        machine.threads.add(50)
+        machine.files.set('/q/1-000000000000005-50.held', '')
+      })
+      expect(result.oldHolder).toBeUndefined()
+    })
+
+    it('removes a slot file without a start time that a newer process now carries, and keeps one with a matching start', () => {
+      const machine = new Machine()
+      machine.live.add(1)
+      machine.live.add(60)
+      machine.live.add(61)
+      machine.hold(60)
+      machine.modified.set('/s/held-60.json', 100_000)
+      machine.startedAt.set(60, 500_000)
+      machine.hold(61, { start: '7' })
+      machine.starts.set(61, '7')
+      machine.startedAt.set(61, 500_000)
+      machine.modified.set('/s/held-61.json', 100_000)
+      expect(readSlots(machine.host(1), paths).holders.map(holder => holder.pid)).toEqual([61])
+      expect(machine.files.has('/s/held-60.json')).toBe(false)
+    })
   })
 
   it('waits while an old worktree holds the previous queue or the lock, or arrived earlier in it, and ignores its own and dead ones', async () => {

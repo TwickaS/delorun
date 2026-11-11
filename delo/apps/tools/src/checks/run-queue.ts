@@ -21,6 +21,8 @@ export interface QueueFs {
   remove(path: string): void
   /** A file's text, or undefined when it does not exist. */
   read(path: string): string | undefined
+  /** When a file was last written, in milliseconds on the shared clock, or undefined when it does not exist. */
+  modified(path: string): number | undefined
 }
 
 /** What a run that takes slots needs from its process. */
@@ -37,6 +39,14 @@ export interface QueueHost {
    * is not taken for that process; undefined when the process is gone or the system does not report it.
    */
   startOf(pid: number): string | undefined
+  /**
+   * When the process with this id started, in milliseconds on the shared clock; undefined when the process is gone or the
+   * system does not report it. A file that records no start time is attributed to a process only if the process started
+   * before the file was last written.
+   */
+  startedAt(pid: number): number | undefined
+  /** Whether the id belongs to a thread of another process, which a signal reaches but which holds nothing. */
+  isThread(pid: number): boolean
   /** Resolve after the milliseconds. */
   sleep(milliseconds: number): Promise<void>
   /** Print a line to the run's error output. */

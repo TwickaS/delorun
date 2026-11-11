@@ -10,7 +10,7 @@ import type { PassCache } from '../src/checks/cache.ts'
 import { checksToRun, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand, withoutIdleNeeds } from '../src/checks/demand.ts'
 import { ioPressure } from '../src/checks/machine.ts'
 import type { Planned } from '../src/checks/plan.ts'
-import { machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processStart, slotPaths } from '../src/checks/slot-host.ts'
+import { machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processIsThread, processStart, processStartedAt, slotPaths } from '../src/checks/slot-host.ts'
 import { takeSlots } from '../src/checks/slots.ts'
 import type { Unit } from '../src/checks/units.ts'
 import { runInherited, withSlots, type WrapperHost } from '../src/with-slots.ts'
@@ -24,8 +24,8 @@ afterEach(() => {
 const check = (id: string, extra: Partial<Planned> = {}): Planned => ({ id, group: id.split(':')[0] ?? id, title: id, cwd: '', command: ['x'], needs: [], tiers: ['changed'], cpus: 1, memoryBytes: GIB, budget: { memoryGiB: 1 }, reason: 'test', ...extra })
 
 describe('the machine\'s budget', () => {
-  it('takes the CPUs and two disk-heavy places unless the environment names other counts, and refuses a count that is not one', () => {
-    expect(machineBudget(22, 18 * GIB, {})).toEqual({ slots: 22, memoryBytes: 18 * GIB, diskRuns: 2 })
+  it('takes the CPUs and three disk-heavy places unless the environment names other counts, and refuses a count that is not one', () => {
+    expect(machineBudget(22, 18 * GIB, {})).toEqual({ slots: 22, memoryBytes: 18 * GIB, diskRuns: 3 })
     expect(machineBudget(22, 18 * GIB, { DELO_CHECKS_SLOTS: '8', DELO_CHECKS_DISK_RUNS: '1' })).toEqual({ slots: 8, memoryBytes: 18 * GIB, diskRuns: 1 })
     expect(machineBudget(22, GIB, { DELO_CHECKS_SLOTS: '' }).slots).toBe(22)
     expect(() => machineBudget(22, GIB, { DELO_CHECKS_SLOTS: '0' })).toThrow('DELO_CHECKS_SLOTS must be a positive whole number, got 0')
@@ -57,6 +57,23 @@ describe('the machine\'s budget', () => {
     expect(processStart(process.pid)).toMatch(/^\d+$/)
     expect(processStart(process.pid)).toBe(nodeSlotHost(() => undefined).startOf(process.pid))
     expect(processStart(2 ** 22 + 1)).toBeUndefined()
+  })
+
+  it('places a process\'s start on the shared clock from the boot time, and none without /proc', () => {
+    const stat = `1 (a) S ${Array.from({ length: 18 }, (_, index) => String(index + 1)).join(' ')} 4242 99`
+    expect(processStartedAt(1, path => path === '/proc/stat' ? 'cpu 1\nbtime 1000\n' : stat)).toBe(1_000_000 + 42_420)
+    expect(processStartedAt(1, () => { throw new Error('ENOENT') })).toBeUndefined()
+    const now = Date.now()
+    expect(Math.abs((processStartedAt(process.pid) ?? 0) - now)).toBeLessThan(24 * 3600 * 1000 * 365)
+    expect(nodeSlotHost(() => undefined).startedAt(process.pid)).toBe(processStartedAt(process.pid))
+  })
+
+  it('knows an id that is a thread of another process from its thread group', () => {
+    expect(processIsThread(7, () => 'Name:\tnode\nTgid:\t3\nPid:\t7\n')).toBe(true)
+    expect(processIsThread(7, () => 'Name:\tnode\nTgid:\t7\nPid:\t7\n')).toBe(false)
+    expect(processIsThread(7, () => { throw new Error('ENOENT') })).toBe(false)
+    expect(processIsThread(process.pid)).toBe(false)
+    expect(nodeSlotHost(() => undefined).isThread(process.pid)).toBe(false)
   })
 
   it('takes and releases a grant on the real file system', async () => {

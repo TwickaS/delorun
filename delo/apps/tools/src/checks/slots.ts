@@ -1,7 +1,7 @@
 /**
  * The machine-wide budget that heavy check runs and wrapped commands share, in place of one run at a time. The machine has
  * a number of CPU slots (its parallelism unless `DELO_CHECKS_SLOTS` names another), the memory the runner budgets, and a
- * small number of disk-heavy places (`DELO_CHECKS_DISK_RUNS`, default 2) for installs, builds and the fork suite, because
+ * small number of disk-heavy places (`DELO_CHECKS_DISK_RUNS`, default 3) for installs, builds and the fork suite, because
  * the disk, not the CPU, saturates first on a shared machine.
  *
  * A run asks for slots by writing a request `req-<priority>-<milliseconds>-<pid>.json` into one directory. Requests are
@@ -18,7 +18,9 @@
  * Runs of old worktrees take a ticket in the previous queue directory and the single lock file; a held ticket or the lock
  * of a live process that holds no grant counts as holding the whole machine, and an earlier waiting ticket there is served
  * first. Every request here also holds a waiting ticket there, held once granted, so an old run keeps first come, first
- * served with new runs and waits for new holders as it did for one holder.
+ * served with new runs and waits for new holders as it did for one holder. The old files record no start time, so a ticket,
+ * the lock or a slot file without `start` counts for a process only if that process started before the file was last
+ * written; a reused id of a later process, or the id of a thread of another process, holds nothing.
  *
  * The file system, clock, process table and signals are injected, so the specs start no process.
  *
@@ -133,6 +135,21 @@ function json(text: string): unknown {
   }
 }
 
+/** How much later than a file's last write a process may start and still be taken for the writer: the boot time's resolution. */
+const START_SLACK_MILLISECONDS = 2000
+
+/**
+ * Whether a process started no later than a file was last written, within the clock's resolution.
+ * @param host - the process table.
+ * @param pid - the process.
+ * @param modified - when the file was last written, or undefined when it is gone.
+ * @returns false only when both times are known and the process started after the write.
+ */
+function startedBefore(host: QueueHost, pid: number, modified: number | undefined): boolean {
+  const started = host.startedAt(pid)
+  return started === undefined || modified === undefined || started <= modified + START_SLACK_MILLISECONDS
+}
+
 /**
  * The live requests and holders, removing the files of dead processes and files that are not requests. A file that is gone
  * by the time it is read is skipped, not removed, since its process may have just replaced it.
@@ -144,9 +161,10 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
   const { fs } = host
   const waiting: SlotRequest[] = []
   const holders: SlotHolder[] = []
-  // A process is the one that wrote the file when it runs and, where both are known, started when the file says.
-  const live = (entry: { readonly pid: number, readonly start?: string | undefined }): boolean => entry.pid === host.pid
-    || (host.alive(entry.pid) && (entry.start === undefined || host.startOf(entry.pid) === entry.start))
+  // A process is the one that wrote the file when it runs, is not a thread of another process, and started when the file
+  // says; a file without a start time counts only for a process that started before the file was last written.
+  const holds = (pid: number, path: string, start?: string): boolean => pid === host.pid
+    || (host.alive(pid) && !host.isThread(pid) && (start === undefined ? startedBefore(host, pid, fs.modified(path)) : host.startOf(pid) === start))
   for (const file of fs.list(paths.dir)) {
     const path = `${paths.dir}/${file}`
     const schema = file.startsWith('req-') ? Request : file.startsWith('held-') ? Held : undefined
@@ -154,7 +172,7 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
     const text = fs.read(path)
     if (text === undefined) continue
     const parsed = schema.safeParse(json(text))
-    if (parsed.success && live(parsed.data)) {
+    if (parsed.success && holds(parsed.data.pid, path, parsed.data.start)) {
       if ('slots' in parsed.data) holders.push({ ...parsed.data, file })
       else waiting.push({ ...parsed.data, file })
     } else if (parsed.success || !file.endsWith('.tmp')) fs.remove(path)
@@ -165,12 +183,12 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
   const tickets = fs.list(paths.oldQueue).flatMap((file) => {
     const match = /^([01])-(\d+)-(\d+)(\.held)?$/.exec(file)
     const pid = Number(match?.[3])
-    return match !== null && pid !== host.pid && !granted.has(pid) && host.alive(pid) ? [{ pid, priority: Number(match[1]), since: Number(match[2]), held: match[4] !== undefined }] : []
+    return match !== null && pid !== host.pid && !granted.has(pid) && holds(pid, `${paths.oldQueue}/${file}`) ? [{ pid, priority: Number(match[1]), since: Number(match[2]), held: match[4] !== undefined }] : []
   })
   const old = tickets.filter(ticket => ticket.held).map(ticket => ticket.pid)
   const oldWaiting = tickets.filter(ticket => !ticket.held).map(({ pid, priority, since }) => ({ pid, priority, since }))
   const lock = Number(fs.read(paths.oldLock))
-  const oldHolder = old[0] ?? (Number.isInteger(lock) && lock > 0 && lock !== host.pid && !granted.has(lock) && host.alive(lock) ? lock : undefined)
+  const oldHolder = old[0] ?? (Number.isInteger(lock) && lock > 0 && lock !== host.pid && !granted.has(lock) && holds(lock, paths.oldLock) ? lock : undefined)
   return { waiting, holders, oldWaiting, ...oldHolder === undefined ? {} : { oldHolder } }
 }
 
