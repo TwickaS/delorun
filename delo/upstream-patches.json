@@ -1981,6 +1981,12 @@
       "class": "security",
       "reason": "Protected home, read fence: a read or listing opens the target key and confirms the descriptor is the file or directory the key names before reading through it, so a read tool's protected-read check on the key covers the content when a component of the key is swapped for a link between the check and the open. On Linux the descriptor's `/proc/self/fd` path must equal the key and a listing reads its entries through that descriptor; elsewhere the descriptor's device and inode must equal the key's after the open and the key must still be its own realpath. A mismatch fails with `FS_IO_ERROR`. Reads open with `O_NONBLOCK` outside Windows so a FIFO swapped in after the regular-file check cannot block the open. Content, errors and limits are otherwise upstream's.",
       "sha256": "c9ecfb2f19a574d05d80a0917300c6a72ecbb3d9a7ab9290113dc87c09131d42"
+    },
+    {
+      "path": "scripts/verify-doc-refs.ts",
+      "class": "delo-feature",
+      "feature": "fork-gates",
+      "reason": "Also reads documentation paths under delo/docs/ and delo/.agents/notes/, so an upstream source comment that names a missing Delo document fails the check instead of being read as a root docs/ path."
     }
   ],
   "retired": []
