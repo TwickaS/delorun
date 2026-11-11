@@ -23,6 +23,9 @@ import * as FrontendStatic from '../src/index.ts'
 let root: string | undefined
 let context: Context | undefined
 
+/** The fixture's Web app manifest, which names the install icon. */
+const MANIFEST_TEXT = '{"icons":[{"src":"icon-192.png"}]}'
+
 afterEach(async () => {
   await context?.fiber.dispose()
   context = undefined
@@ -40,7 +43,7 @@ async function loadComposition(): Promise<Context> {
   await writeFile(join(dist, 'app.js'), 'export {}')
   await writeFile(join(dist, 'preview.html'), '<body>preview</body>')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
-  await writeFile(join(dist, 'manifest.webmanifest'), '{}')
+  await writeFile(join(dist, 'manifest.webmanifest'), MANIFEST_TEXT)
   await writeFile(join(dist, 'favicon.svg'), '<svg/>')
   await writeFile(join(dist, 'icon-192.png'), 'PNG')
   await mkdir(join(dist, 'empty'))
@@ -175,7 +178,7 @@ describe('real Loader composition', () => {
     expect(await request(port, '/manifest.webmanifest')).toMatchObject({
       status: 200,
       type: 'application/manifest+json',
-      body: '{}',
+      body: MANIFEST_TEXT,
     })
     expect(await request(port, '/app.js', authenticated())).toMatchObject({ status: 200, type: 'text/javascript; charset=utf-8', body: 'export {}' })
     // The install icons are images; a launcher must not receive them as octet-stream.
@@ -275,6 +278,46 @@ describe('real Loader composition', () => {
     await frontendEntry!.fiber?.dispose()
     expect((await request(port, '/no/such/route')).status).toBe(404)
     expect(() => server.registerFallback(() => {})).not.toThrow()
+  })
+
+  it('keeps public only the exact dist-root install files, so a look-alike chunk or a nested copy stays fenced', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const port = loaded.webServer.port
+    const dist = join(root!, 'dist')
+    await mkdir(join(dist, 'assets'))
+    for (const name of ['icon-evil.js', 'favicon-chunk.js', 'apple-touch-icon-chunk.js', 'icon-512.png', 'assets/icon-192.png', 'assets/favicon.svg', 'assets/manifest.webmanifest']) {
+      await writeFile(join(dist, name), 'BYTES')
+    }
+    const status = async (path: string): Promise<number> => (await request(port, path)).status
+    // A file named like an install file but not one of them, or a copy below the root, needs sign-in.
+    for (const path of ['/icon-evil.js', '/favicon-chunk.js', '/apple-touch-icon-chunk.js', '/icon-512.png', '/assets/icon-192.png', '/assets/favicon.svg', '/assets/manifest.webmanifest']) {
+      expect(await status(path), path).toBe(401)
+    }
+    expect(await status('/icon-192.png')).toBe(200)
+    expect(await status('/favicon.svg')).toBe(200)
+
+    // The manifest decides which icons are public: a root-level src in either
+    // spelling counts, and one in another directory or on another origin does not.
+    await writeFile(join(dist, 'manifest.webmanifest'), JSON.stringify({ icons: [
+      { src: '/icon-512.png' },
+      { src: 'assets/icon-192.png' },
+      { src: 'https://cdn.example/icon-evil.js' },
+      { src: './' },
+      { src: 'http://[' },
+      { src: 7 },
+      'icon-evil.js',
+    ] }))
+    expect(await status('/icon-512.png')).toBe(200)
+    for (const path of ['/icon-192.png', '/assets/icon-192.png', '/icon-evil.js']) expect(await status(path), path).toBe(401)
+
+    // A manifest that names no icon list, is not JSON, or is absent makes no icon public.
+    for (const text of ['null', '{"icons":{}}', 'not json']) {
+      await writeFile(join(dist, 'manifest.webmanifest'), text)
+      expect(await status('/icon-512.png'), text).toBe(401)
+    }
+    await rm(join(dist, 'manifest.webmanifest'))
+    expect(await status('/icon-512.png')).toBe(401)
+    expect(await status('/favicon.svg')).toBe(200)
   })
 
   it('answers in-process reads for the given Peer without browser authentication', { timeout: 60_000 }, async () => {

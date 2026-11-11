@@ -9,8 +9,9 @@
  * for the Peer its caller admitted. An HTTP read of any other dist file first
  * passes the same fence, so a rebound page and an unauthenticated caller
  * cannot read the application's bytes while the index is gated; only the
- * install-time files a launcher fetches before sign-in (the favicons, the Web
- * app manifest and the icons it names, and the touch icons) stay public. Both
+ * install-time files at the dist root a launcher fetches before sign-in (the
+ * favicons, the Web app manifest and the icons it names, and the touch icons)
+ * stay public. Both
  * renders go through the webserver's index render (structured injection rows,
  * then raw taps).
  * Non-index assets carry a weak ETag with `cache-control: no-cache` and answer
@@ -69,18 +70,76 @@ const STATIC_MISS_CODES: ReadonlySet<string | undefined> = new Set([
   'ENOTDIR',
 ])
 
+/** The Web app manifest, at the dist root; the icons it names are public too. */
+const MANIFEST = 'manifest.webmanifest'
+
+/**
+ * Dist-root files a browser requests by a fixed name from a page it has not
+ * authenticated yet: the manifest, the favicons the index links and the one a
+ * browser probes on its own, and the touch icons iOS probes.
+ */
+const PUBLIC_ROOT_FILES: ReadonlySet<string> = new Set([
+  MANIFEST,
+  'favicon.ico',
+  'favicon.svg',
+  'favicon-dark.svg',
+  'apple-touch-icon.png',
+  'apple-touch-icon-precomposed.png',
+])
+
+/**
+ * The dist-root file names the manifest's `icons` list, read at each call so a
+ * rebuilt dist is followed. An icon `src` resolves against the manifest's own
+ * URL, as a launcher resolves it; a `src` that leaves the dist root's top level
+ * (another directory, another origin) names nothing here. An absent,
+ * unreadable or unparsable manifest names no icon.
+ * @param distRoot - absolute dist root directory.
+ * @returns the icon file names directly under the dist root.
+ */
+async function manifestIcons(distRoot: string): Promise<ReadonlySet<string>> {
+  let manifest: unknown
+  try {
+    manifest = JSON.parse(await readFile(join(distRoot, MANIFEST), 'utf8'))
+  } catch {
+    // An unreadable or unparsable manifest names no icon, so its icons stay
+    // fenced; a request for the manifest itself reports the read failure.
+    return new Set()
+  }
+  const icons = typeof manifest === 'object' && manifest !== null && 'icons' in manifest ? manifest.icons : undefined
+  const names = new Set<string>()
+  if (!Array.isArray(icons)) return names
+  const base = new URL(`http://dist.invalid/${MANIFEST}`)
+  for (const icon of icons) {
+    const src: unknown = typeof icon === 'object' && icon !== null && 'src' in icon ? icon.src : undefined
+    if (typeof src !== 'string') continue
+    let url: URL
+    try {
+      url = new URL(src, base)
+    } catch {
+      // An unresolvable src names no file.
+      continue
+    }
+    const name = url.pathname.slice(1)
+    if (url.origin === base.origin && name !== '' && !name.includes('/')) names.add(name)
+  }
+  return names
+}
+
 /**
  * Whether a dist file is served before a caller is signed in. A launcher reads
  * the manifest and the icons it names to install the application, and a browser
- * asks for the favicon from a page it has not authenticated yet; nothing else in
- * the dist is meaningful outside the signed-in application.
- * @param name - the target file's basename.
+ * asks for the favicon and touch icons from a page it has not authenticated
+ * yet; nothing else in the dist is meaningful outside the signed-in
+ * application. Only those exact files at the dist root are public, so a chunk
+ * or a file in a subdirectory with a similar name stays fenced.
+ * @param distRoot - absolute dist root directory.
+ * @param target - absolute path of the requested file, already inside the dist root.
+ * @returns true for a public dist-root file.
  */
-function isPublicAsset(name: string): boolean {
-  return name === 'manifest.webmanifest'
-    || name.startsWith('favicon')
-    || name.startsWith('apple-touch-icon')
-    || name.startsWith('icon-')
+async function isPublicAsset(distRoot: string, target: string): Promise<boolean> {
+  if (dirname(target) !== distRoot) return false
+  const name = basename(target)
+  return PUBLIC_ROOT_FILES.has(name) || (await manifestIcons(distRoot)).has(name)
 }
 
 /** The two fences {@link serveStatic} consults before it reads bytes. */
@@ -138,7 +197,7 @@ async function serveStatic(
     } else {
       // Every dist file but the install-time ones belongs to the signed-in
       // application, so the fence decides before its bytes are read.
-      if (!isPublicAsset(basename(target))) {
+      if (!(await isPublicAsset(distRoot, target))) {
         const refusal = fences.asset()
         if (refusal !== undefined) return refusal
       }
