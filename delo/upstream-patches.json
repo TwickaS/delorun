@@ -1224,7 +1224,7 @@
       "path": "packages/mcp/mcp-client/tests/consent.spec.ts",
       "class": "security",
       "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): covers the seam. A server starts exactly as upstream does with no service mounted, a held review starts no child process and registers no tool until it allows, a refusal leaves the server stopped with the typed reason as the load failure and as the typed error without failing the startup path when not fatal, the service reviews the command at every boot so a changed command reaches it again, and a Streamable HTTP server is never held. Also covers the working directory and environment in the review and the refusal, a server row that starts before the declared consent row, a declared consent row that fails, and a declared row that registers no consent. Also covers start resolution: unresolvable commands and working directories, `PATH` lookup rules, Windows refusal, and the spawn using the reviewed paths.",
-      "sha256": "a9e3a893da02f33483726cb8e7480d6d36b9e7bdd0a4c3788b7aa4e252dbea89"
+      "sha256": "827fdef521118f0e2092c12683eec6405dc91055e1a9381c4df4deb3c3a22524"
     },
     {
       "path": "packages/mcp/mcp-client/tests/mcp-client.spec.ts",
@@ -1991,8 +1991,8 @@
     {
       "path": "packages/mcp/mcp-client/src/server-start.ts",
       "class": "security",
-      "reason": "MCP add-time consent: new module. `resolveServerStart` resolves a stdio start's configured working directory against the Host's (canonical, a directory) and its command to an absolute executable by a POSIX `execvp`-style lookup over the child's `PATH`, so the consent reviews and the transport spawns the same paths; `McpServerStartUnresolvedError` stops a start that cannot be resolved, and every Windows start, without naming a `PATH` value.",
-      "sha256": "ad51decdccb05eb7baaaaf1edc185295ddd96b83cc83b0a6860c3cd3a7f40296"
+      "reason": "MCP add-time consent: new module. `resolveServerStart` resolves a stdio start's configured working directory against the Host's (canonical, a directory) and its command to the absolute file the spawn runs, so the consent reviews and the transport spawns the same paths: on POSIX by an `execvp`-style lookup over the child's `PATH`; on Windows by `PATH` and `PATHEXT` (case-insensitive extensions, working directory not searched first, empty and relative entries skipped), accepting `.exe` and `.com` files and `.bat`/`.cmd` shims that cross-spawn runs through an absolute `COMSPEC`. `McpServerStartUnresolvedError` stops any other start without naming a `PATH` value. File access goes through an injectable `ServerStartHost`, so the Windows rules are tested on any OS.",
+      "sha256": "a4b7b1acd3e591a2eb834ced80692c8d7900231f43b20b12b4602048c57872bc"
     },
     {
       "path": "scripts/verify-doc-refs.ts",

@@ -9,7 +9,7 @@ description: "MCP 添加时同意改为审查解析后的整个服务器启动�
 
 ## 变更
 
-stdio MCP 服务器的添加时同意现在覆盖命令、其参数、其工作目录以及其配置的环境变量，以及它们解析得到的路径。`@deepseek-ai/dsh-mcp-client` 中的 `McpServerCommand` 新增必填字段 `env`、`cwd`、`resolvedCommand`（`PATH` 查找得到的绝对可执行文件）与 `resolvedCwd`（规范工作目录，`cwd` 为空时为 Host 的工作目录）。挂载了同意时，mcp-client 用新的 `resolveServerStart` 解析启动项、审查它，并以完全相同的解析路径启动；无法解析的启动项以及 Windows 上的每个启动项都以 `McpServerStartUnresolvedError` 停止。
+stdio MCP 服务器的添加时同意现在覆盖命令、其参数、其工作目录以及其配置的环境变量，以及它们解析得到的路径。`@deepseek-ai/dsh-mcp-client` 中的 `McpServerCommand` 新增必填字段 `env`、`cwd`、`resolvedCommand`（`PATH` 查找得到的绝对文件，在 Windows 上还会用到 `PATHEXT`，例如 `C:\Program Files\nodejs\npx.cmd`）与 `resolvedCwd`（规范工作目录，`cwd` 为空时为 Host 的工作目录）。挂载了同意时，mcp-client 用新的 `resolveServerStart` 解析启动项、审查它，并以完全相同的解析路径启动；无法解析的启动项以 `McpServerStartUnresolvedError` 停止。在 Windows 上，这包括 `.exe`、`.com`、`.bat` 或 `.cmd` 以外的文件、带 `#!` 行的文件，以及 `COMSPEC` 不是指向文件的绝对路径时的包装脚本；查找也不会先搜索工作目录。
 
 - `new McpConsentRefusedError(serverName, command, args, reason)` 改为 `new McpConsentRefusedError(start, reason)`，其中 `start` 是被拒绝的 `McpServerCommand`。该错误新增 `cwd`、`envNames`、`resolvedCommand` 与 `resolvedCwd`；其消息写明可执行文件与目录，环境变量只列出名称，不含其值。
 - `@delo/plugin-mcp-consent` 中的 `DeloMcpConsent.accept(command, args)` 改为 `accept(start)`，其中 `start` 带有 `command`、`args`、`cwd`、`env` 以及绝对路径 `resolvedCommand` 与 `resolvedCwd`。

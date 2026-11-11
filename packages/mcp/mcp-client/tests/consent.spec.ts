@@ -411,16 +411,6 @@ describe('a start whose executable or working directory cannot be resolved', () 
     await expect(unresolved({ cwd: 'absent' })).resolves.toBe(`the working directory ${JSON.stringify(join(tree.a, 'absent'))} does not exist or cannot be read`)
     await expect(unresolved({ cwd: 'bin/tool' })).resolves.toBe(`the working directory ${JSON.stringify(join(tree.a, 'bin', 'tool'))} is not a directory`)
   })
-
-  it('keeps the server stopped on Windows, whose command resolution the review does not reproduce', async () => {
-    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-    try {
-      await expect(unresolved({})).resolves.toBe('resolving a command as the stdio transport starts it on Windows (PATHEXT, cmd.exe shims, script interpreters) is not supported')
-    } finally {
-      if (platform !== undefined) Object.defineProperty(process, 'platform', platform)
-    }
-  })
 })
 
 describe('the consent lookup under a Loader, whatever the order of its rows', () => {
