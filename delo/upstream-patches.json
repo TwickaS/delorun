@@ -2083,6 +2083,12 @@
       "class": "security",
       "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added.",
       "sha256": "bdfe0c5c977d157fb41b2744acfa5e73e8d1c7d3aa349ce97ad105a1726dfb9f"
+    },
+    {
+      "path": "packages/ptc-runtime/ptc-runtime-node/src/execution.ts",
+      "class": "delo-feature",
+      "feature": "workspace-network",
+      "reason": "Workspace network (C1 rule `network`): a retained PTC process is reused only when the call's policy has the same `network` as the one it was started under (`sameNetwork`), so a changed setting needs the owner's release, as a changed mode or root does, and a retained process never keeps a network the workspace's setting no longer gives. Policies without a network compare equal, so stock behaviour is unchanged."
     }
   ],
   "retired": []

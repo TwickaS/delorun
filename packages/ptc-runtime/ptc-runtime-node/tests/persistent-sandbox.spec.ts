@@ -8,6 +8,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { mountRuntime } from './setup.ts'
+import { sameNetwork } from '../src/execution.ts'
 
 async function setup(mode: 'read-only' | 'workspace-write' = 'read-only', executionMode: 'per-call' | 'persistent-in-memory' = 'persistent-in-memory') {
   const root = await mkdtemp(join(homedir(), '.dsh-persistent-sandbox-'))
@@ -69,6 +70,25 @@ it.skipIf(process.platform === 'win32')('requires release before changing a reta
   expect((await runtime.run(sameRoots)).value).toBe(8)
   const changed = runtime.resolve({ ...spec, sandboxPolicy: { mode: 'workspace-write', workspaceRoot: cwd, additionalWritableRoots: [cwd] } })
   await expect(runtime.run(changed)).rejects.toThrow('release the retained environment')
+})
+
+it('compares networks by mode and, for a proxy, by socket', () => {
+  expect(sameNetwork(undefined, undefined)).toBe(true)
+  expect(sameNetwork({ mode: 'off' }, { mode: 'off' })).toBe(true)
+  expect(sameNetwork({ mode: 'proxy', socket: '/a' }, { mode: 'proxy', socket: '/a' })).toBe(true)
+  expect(sameNetwork({ mode: 'proxy', socket: '/a' }, { mode: 'proxy', socket: '/b' })).toBe(false)
+  expect(sameNetwork({ mode: 'off' }, { mode: 'proxy', socket: '/a' })).toBe(false)
+  expect(sameNetwork(undefined, { mode: 'off' })).toBe(false)
+})
+
+it('requires release before a retained environment runs under another network', async () => {
+  const { cwd, runtime, owner, run } = await setup()
+  expect((await run('var retained = 5; retained')).value).toBe(5)
+  const offSpec = runtime.resolve({ program: 'typeof retained', bindings: [], stateOwner: owner, sandboxPolicy: { mode: 'read-only', workspaceRoot: cwd, network: { mode: 'off' } } })
+  await expect(runtime.run(offSpec)).rejects.toThrow('release the retained environment')
+  const proxySpec = runtime.resolve({ ...offSpec, sandboxPolicy: { mode: 'read-only', workspaceRoot: cwd, network: { mode: 'proxy', socket: '/run/a.sock' } } })
+  await expect(runtime.run(proxySpec)).rejects.toThrow('release the retained environment')
+  expect((await run('retained')).value).toBe(5)
 })
 
 it('fails closed when confinement is unavailable without spawning Node', async () => {

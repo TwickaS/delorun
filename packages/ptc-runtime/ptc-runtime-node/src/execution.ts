@@ -3,6 +3,7 @@ import { stripTypeScriptTypes } from 'node:module'
 import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PtcProgramFormat, PtcRunRequest, PtcRunResult, PtcRunSpec } from '@deepseek-ai/dsh-ptc-runtime'
+import type { SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { clampTimeout } from '@deepseek-ai/dsh-timeout'
 import type { ResolvedConfig } from './config.ts'
@@ -93,7 +94,8 @@ class NodeExecution {
     if (worker && !worker.closed && (worker.policy.mode !== spec.sandboxPolicy.mode
       || worker.policy.workspaceRoot !== spec.sandboxPolicy.workspaceRoot
       || worker.policy.sessionId !== spec.sandboxPolicy.sessionId
-      || !sameAdditionalRoots(worker.policy.additionalWritableRoots, spec.sandboxPolicy.additionalWritableRoots))) {
+      || !sameAdditionalRoots(worker.policy.additionalWritableRoots, spec.sandboxPolicy.additionalWritableRoots)
+      || !sameNetwork(worker.policy.network, spec.sandboxPolicy.network))) {
       throw new Error('persistent PTC: release the retained environment before changing its sandbox policy')
     }
     if (!worker || worker.closed) {
@@ -138,6 +140,18 @@ function sameAdditionalRoots(left: readonly string[] | undefined, right: readonl
   const a = effective(left)
   const b = effective(right)
   return a.length === b.length && a.every((root, index) => root === b[index])
+}
+
+/**
+ * Compare two policies' networks, so a retained process never keeps a network its owner's setting no longer gives.
+ * @param left - one policy's network.
+ * @param right - the other policy's network.
+ * @returns whether both are the host network, both `off`, or both the same proxy socket.
+ */
+export function sameNetwork(left: SandboxNetwork | undefined, right: SandboxNetwork | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right
+  if (left.mode === 'proxy' && right.mode === 'proxy') return left.socket === right.socket
+  return left.mode === right.mode
 }
 
 const STRIP_PREFIX = 'async function __dsh_program__() {\n'
