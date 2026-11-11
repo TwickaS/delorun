@@ -59,7 +59,7 @@ profile 导入插件前，DSH 会将其声明的 DSH 版本要求与 `getDshRunt
 
 你的机器本地偏好同样位于 harness home 中：
 
-- **`.env`**——你的普通环境层：调用目录的文件优先于 harness home 的文件，两者都低于继承环境。在文件中设置的进程启动变量（如 `PATH`、`PATHEXT`、`COMSPEC`、`DSH_*`、`XDG_*`）会被拒绝：请改为导出这些变量。四个代理名（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`）只从 harness home 的文件接受，绝不从调用目录的文件接受——后者随 clone 一起到来。harness home 的文件还必须是当前用户自己的、仅属主可访问的普通文件，每种拒绝都会中止启动并给出各自的修复方法：符号链接提示改用模式为 0600 的普通文件替换它；属于其他 OS 用户的文件提示改用当前用户自己的、模式为 0600 的文件；带有任何 `0o077` 位的文件提示 `chmod 600 <file>`，与 `.credentials.yaml` 相同。符号链接在所有平台上都会被拒绝；属主与模式只在 POSIX 上检查。对于只想加载某个目录 `.env` 的非产品 bin，文件缺失不影响启动，文件无法加载时输出一行带标签的警告。
+- **`.env`**——你的普通环境层：调用目录的文件优先于 harness home 的文件，两者都低于继承环境。在文件中设置的进程启动变量（如 `PATH`、`PATHEXT`、`COMSPEC`、`DSH_*`、`XDG_*`、`LD_*`、`OPENSSL_CONF`、`GCONV_PATH`、`NODE_ICU_DATA`）会被拒绝：请改为导出这些变量。四个代理名（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`）只从 harness home 的文件接受，绝不从调用目录的文件接受——后者随 clone 一起到来。harness home 的文件还必须是当前用户自己的、仅属主可访问的普通文件，每种拒绝都会中止启动并给出各自的修复方法：符号链接提示改用模式为 0600 的普通文件替换它；属于其他 OS 用户的文件提示改用当前用户自己的、模式为 0600 的文件；带有任何 `0o077` 位的文件提示 `chmod 600 <file>`，与 `.credentials.yaml` 相同。符号链接在所有平台上都会被拒绝；属主与模式只在 POSIX 上检查。对于只想加载某个目录 `.env` 的非产品 bin，文件缺失不影响启动，文件无法加载时输出一行带标签的警告。
 - **`cordis.patch.yml`**——你的 tweak 层，应用在所有组合包层之后（先应用逐 profile 的文件，再应用 home 级文件，因此后者优先级更高）：替换某个条目的整个配置（重述你要保留的字段）、插入新条目，或在启动时插值 `!!js` 表达式。patch 指定的条目不存在时输出 stderr 警告；空文件或仅含注释的文件会导致启动失败——如需禁用该层，请改用 `[]`。
 
 启用的 `dsh-hmr` 插件会监视 profile manifest 与两份用户 patch 文件，重新读取按顺序排列的组合包层，并应用[重载失败策略](#startup-and-reload-failures)。[DSH HMR](../hmr/README.zh.md) 将这些重载与[插件管理器](../plugin-manager/README.zh.md)的配置写入串行化；包操作在其队列之外执行。启动器不安装 HMR 或监视器；HMR 被禁用或不存在时，更改需要重启。

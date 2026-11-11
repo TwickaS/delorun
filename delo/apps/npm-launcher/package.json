@@ -27,6 +27,7 @@
     "state": "shipped"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
     "tsdown": "^0.22.2"
   }
 }
