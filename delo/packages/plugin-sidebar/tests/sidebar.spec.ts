@@ -1,5 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
+import Schema from '@deepseek-ai/schemastery'
 import { apply, Config, DEFAULT_SIDEBAR_SETTINGS, MAX_WORKSPACE_ICONS } from '../src/index.ts'
 
 describe('the host half', () => {
@@ -22,17 +23,24 @@ describe('the host half', () => {
     expect(Config({ workspaceIcons: stored }).workspaceIcons.get()).toEqual(stored)
   })
 
-  it('holds at most the bound of Workspace icons and refuses a stored value above it', () => {
+  it('loads with at most the bound of Workspace icons and refuses a stored value above it', () => {
     const icons = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`workspace-${String(index)}`, 'x']))
-    expect(Object.keys(Config({ workspaceIcons: icons(MAX_WORKSPACE_ICONS) }).workspaceIcons.get())).toHaveLength(MAX_WORKSPACE_ICONS)
-    expect(() => Config({ workspaceIcons: icons(MAX_WORKSPACE_ICONS + 1) })).toThrow('$.workspaceIcons holds more than 200 Workspace icons')
+    expect(() => { apply(new Context(), Config({ workspaceIcons: icons(MAX_WORKSPACE_ICONS) })) }).not.toThrow()
+    expect(() => { apply(new Context(), Config({ workspaceIcons: icons(MAX_WORKSPACE_ICONS + 1) })) }).toThrow(RangeError)
+  })
+
+  it('serializes to a schema the studio can rehydrate and validate a stored value with', () => {
+    // The studio's settings form rebuilds the schema from its serialized form, without any callback, and validates the row's value.
+    const rehydrated = new Schema(JSON.parse(JSON.stringify(Config)) as Schema)
+    const stored = { ...DEFAULT_SIDEBAR_SETTINGS, artStyle: 'pill', headerArt: 'waves', workspaceIcons: { 'workspace-1': 'folder' } }
+    expect(() => (rehydrated as (value: unknown) => unknown)(stored)).not.toThrow()
   })
 
   it('keeps its settings without a generated form while the settings service is present', async () => {
     const ctx = new Context()
     const configure = vi.fn(() => () => {})
     ctx.provide('settings', { configure } as never)
-    const fiber = ctx.plugin({ apply })
+    const fiber = ctx.plugin({ apply, Config }, {})
     await fiber.await()
     expect(configure).toHaveBeenCalledWith({ auto: false }, expect.anything())
     await fiber.dispose()
