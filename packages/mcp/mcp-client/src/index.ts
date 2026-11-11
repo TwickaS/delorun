@@ -19,7 +19,7 @@ import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { DEFAULT_MAX_INSTRUCTION_BYTES, RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
-import { McpConsentRefusedError } from './consent.ts'
+import { findMcpAddConsent, McpConsentRefusedError } from './consent.ts'
 import { registerServerContext } from './server-context.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
@@ -27,7 +27,14 @@ import type {} from '@deepseek-ai/dsh-tools'
 export { createMcpToolDefinition } from './tools.ts'
 export type { McpResult, McpToolDefinitionOptions } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
-export { McpAddConsent, McpConsentRefusedError } from './consent.ts'
+export {
+  findMcpAddConsent,
+  MCP_ADD_CONSENT_PROVIDER_EXPORT,
+  McpAddConsent,
+  McpConsentRefusedError,
+  McpConsentUnavailableError,
+  sortedEnvEntries,
+} from './consent.ts'
 export type { McpConsentDecision, McpServerCommand } from './consent.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -162,20 +169,25 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   // Optional add-time consent seam: a stdio server command runs as a local
   // child process outside the agent sandbox, so when a consent service is
-  // mounted, the configured command is reviewed at every boot and the server
-  // does not start until the review allows it. Without the service — or for a
-  // Streamable HTTP server, which starts no local command — startup is
-  // exactly upstream's. A refusal fails THIS instance at load, which leaves
-  // the server stopped with the typed reason.
-  const consent = ctx.get('mcpAddConsent')
-  if (consent !== undefined && config.transport === 'stdio') {
-    const decision = await consent.review({
-      serverName: config.serverName,
-      command: config.command,
-      args: config.args,
-    })
-    if (!decision.allow) {
-      throw new McpConsentRefusedError(config.serverName, config.command, config.args, decision.reason)
+  // mounted, or a loader row declares one, the configured start — command,
+  // arguments, working directory and environment — is reviewed at every boot
+  // and the server does not start until the review allows it. The lookup waits
+  // for declaring rows, so the result does not depend on row order. Without a
+  // provider — or for a Streamable HTTP server, which starts no local command
+  // — startup is exactly upstream's. A refusal fails THIS instance at load,
+  // which leaves the server stopped with the typed reason.
+  if (config.transport === 'stdio') {
+    const consent = await findMcpAddConsent(ctx, config.serverName)
+    if (consent !== undefined) {
+      const start = {
+        serverName: config.serverName,
+        command: config.command,
+        args: config.args,
+        env: config.env,
+        cwd: config.cwd,
+      }
+      const decision = await consent.review(start)
+      if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
     }
   }
 

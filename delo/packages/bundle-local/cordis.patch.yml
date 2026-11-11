@@ -119,10 +119,11 @@
 # composition mounts any of them: a model-authored write to an instruction
 # layer, an added stdio MCP server, a full-access mode switch, a scheduled
 # delivery into a moved workspace and a fetch of a private address each ran
-# unguarded. The rows come after upstream's, and before the profile's own patch
-# and every row a person adds, so an MCP server a person configures boots after
-# the consent service is registered. `permission_defaults` alone provides the
-# sandbox-mode guard (A135): `instruction-consent` takes no part of that slot.
+# unguarded. The Loader starts rows concurrently, so row order does not order
+# their startup: an mcp-client row waits for the `delo-mcp-consent` row, which
+# declares itself the `mcpAddConsent` provider, before it starts a stdio server.
+# `permission_defaults` alone provides the sandbox-mode guard (A135):
+# `instruction-consent` takes no part of that slot.
 - insert:
     - id: delo-instruction-consent
       name: '@delo/plugin-instruction-consent'

@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package is the `mcpAddConsent` provider of Delo's MCP add-time consent, the protection the C16 switch [`mcp_add_consent`](../../docs/contracts/c16-parity-composition.md) turns on. A stdio MCP server command runs as a local child process outside the agent sandbox, so before such a server starts, the mcp-client plugin asks the mounted `mcpAddConsent` service whether the configured command is granted. This package answers from the acceptance store, one JSON file under the home's protected state: a command the person accepted with exactly the arguments under review starts at once, and every other review holds the server stopped with a refusal that names the command. No screen or command records an acceptance ([Recording an acceptance](#recording-an-acceptance)), so in effect every stdio server the store does not already hold stays stopped. Off, or without a mounted provider, an mcp-client starts every configured server exactly as upstream does; `@delo/bundle-local` mounts it on in the CLI profile that `delorun` starts, and `delorun headless` and the desktop app run upstream's profiles, which do not mount it.
+This package is the `mcpAddConsent` provider of Delo's MCP add-time consent, the protection the C16 switch [`mcp_add_consent`](../../docs/contracts/c16-parity-composition.md) turns on. A stdio MCP server command runs as a local child process outside the agent sandbox, so before such a server starts, the mcp-client plugin asks the mounted `mcpAddConsent` service whether the configured command is granted. This package answers from the acceptance store, one JSON file under the home's protected state: a command the person accepted with exactly the arguments, working directory and configured environment under review starts at once, and every other review holds the server stopped with a refusal that names the command. No screen or command records an acceptance ([Recording an acceptance](#recording-an-acceptance)), so in effect every stdio server the store does not already hold stays stopped. Off, or without a mounted provider, an mcp-client starts every configured server exactly as upstream does; `@delo/bundle-local` mounts it on in the CLI profile that `delorun` starts, `@delo/bundle-headless` mounts it on in the profile `delorun headless` runs, and the desktop app runs upstream's profiles, which do not mount it.
 
 ## Contents
 
@@ -23,24 +23,28 @@ This package is the `mcpAddConsent` provider of Delo's MCP add-time consent, the
 
 `DeloMcpConsent` extends the abstract `McpAddConsent` service of the `@deepseek-ai/dsh-mcp-client` seam, whose `review` the mcp-client consults before it starts each configured stdio server. The review never waits for a person: allowing a command starts the server, and refusing one fails the mcp-client's activation with the typed refusal that names the command and its arguments and carries the provider's reason, so the server stays stopped. A refusal repeats at every boot of the server row until the command is accepted, and an acceptance given after a refusal lets the next boot start the server.
 
+A review is shown the server's whole start: the command, its arguments, its working directory and its configured environment entries. The refusal names the working directory and the names of the configured environment variables but none of their values, because a value may be a credential.
+
+The module exports `providesMcpAddConsent` as `true`, the declaration the mcp-client's consent lookup reads under the Loader: an mcp-client row that finds no `mcpAddConsent` service waits until every row has imported its module and this row has started, so a server never starts unreviewed because its row started before this one. If this row fails to start, the server stays stopped with `McpConsentUnavailableError`; with the switch off, the row starts and registers nothing, and the server starts as upstream starts it.
+
 The service resolves the home the process runs with for every review: `resolveDeloHome` of [`@delo/home`](../home/README.md) resolves it from `DELO_HOME` or `~/.delo`, so a home that cannot be resolved is one more review that asks again.
 
 ## The acceptance store
 
 The store is `secrets/mcp-add-consent/acceptances.json` under the resolved home. It is a protected file of contract C1 ([`@delo/home`](../home/README.md)): it is read through the refusal rule and written at mode 0600 into a directory created at mode 0700, under the home's `secrets/` directory, which the sandbox's confinement rules deny to confined commands on Linux and macOS (the Windows runner does not confine reads) — a command an acceptance would let run outside the agent sandbox can neither read the list nor add itself to it.
 
-The file is one JSON object `{ v, acceptances }` whose `v` is the format version and whose `acceptances` maps a command to the argument list accepted with it and the acceptance time. A store that exists but is not this version's format — no JSON document, not an object, another version, an unknown field, a wrong acceptance — is refused as a whole: no review counts anything as accepted, and the provider never adds an acceptance to a refused store, so the person fixes or removes the file first.
+The file is one JSON object `{ v, acceptances }` whose `v` is the format version, 2, and whose `acceptances` maps a command to what was accepted with it: the argument list, the working directory, the sorted names of the configured environment variables, a SHA-256 digest of the environment's name and value pairs sorted by name, and the acceptance time. The store holds no environment value in plain text, and the digest is the same whatever order the environment's keys were written in. A store of version 1, written before an acceptance covered the working directory and the environment, is superseded: no review counts any of its acceptances, and the next acceptance replaces it with a version 2 store that holds only that acceptance. Any other store that exists but is not this version's format — no JSON document, not an object, another version, an unknown field, a wrong acceptance — is refused as a whole: no review counts anything as accepted, and the provider never adds an acceptance to a refused store, so the person fixes or removes the file first.
 
 ## Reviews
 
 `review(command)` answers one configured server start:
 
-- an acceptance for the command with exactly the reviewed arguments allows the command;
-- an absent store, an unreadable or not this version's format store, a command with no acceptance, a changed argument list, and a home that cannot be resolved all refuse with the reason that asks the person again.
+- an acceptance for the command with exactly the reviewed arguments, working directory and environment allows the command;
+- an absent store, an unreadable, superseded or not this version's format store, a command with no acceptance, a changed argument list, a changed working directory, a changed environment variable name or value, and a home that cannot be resolved all refuse with the reason that asks the person again; no reason names an environment value.
 
 ## Recording an acceptance
 
-`accept(command, args)` records that the person accepted a command with an argument list, as the acceptance the reviews allow. Accepting a command again replaces its earlier acceptance, so a changed command is granted by accepting it with the arguments it now carries. The asking surface of Delo's MCP server add flow calls this; until such a surface is mounted, the store only grows through it and every unaccepted command keeps its server stopped.
+`accept(start)` records that the person accepted a server start — the command, its arguments, its working directory and its configured environment — as the acceptance the reviews allow. Accepting a command again replaces its earlier acceptance, so a changed start is granted by accepting it with the arguments, working directory and environment it now carries. The asking surface of Delo's MCP server add flow calls this; until such a surface is mounted, the store only grows through it and every unaccepted command keeps its server stopped.
 
 ## The mcp_add_consent switch
 

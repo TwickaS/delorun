@@ -1205,14 +1205,14 @@
     {
       "path": "packages/mcp/mcp-client/src/consent.ts",
       "class": "security",
-      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): new module. The `McpAddConsent` Service Definition the mcp-client reads through the optional `ctx.get('mcpAddConsent')` lookup, the `McpServerCommand` a review judges (the server's namespace, the executable and its arguments) and the `McpConsentDecision` it returns, and `McpConsentRefusedError`, whose message names the command and arguments being granted, carries the provider's reason and states that a server command runs outside the agent sandbox.",
-      "sha256": "2dd27ed8cadf61716ce451a1441c2472583df72456b53fbad894c4e90bf14b7c"
+      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): new module. The `McpAddConsent` Service Definition the mcp-client reads through the optional `ctx.get('mcpAddConsent')` lookup, the `McpServerCommand` a review judges (the server's namespace, the executable and its arguments) and the `McpConsentDecision` it returns, and `McpConsentRefusedError`, whose message names the command and arguments being granted, carries the provider's reason and states that a server command runs outside the agent sandbox. `McpServerCommand` also carries the configured `env` and `cwd`, the refusal names the working directory and the environment variable names without values, `McpConsentUnavailableError` keeps a server stopped when a row that declares the consent provider (module export `providesMcpAddConsent`) did not start, and `findMcpAddConsent` waits for the Loader's declaring rows instead of depending on row order.",
+      "sha256": "757a4efe65fe4fd059034be67508cbd23a69cc6bbdc9bd9179b60e621960c0e5"
     },
     {
       "path": "packages/mcp/mcp-client/src/index.ts",
       "class": "security",
-      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): before a stdio server starts, the plugin consults the mounted consent with the configured server name, command and arguments, and a refusal throws the typed `McpConsentRefusedError` at load, which leaves the server stopped with the typed reason. Without a mounted service — or for a Streamable HTTP server, which starts no local command — activation is exactly upstream's.",
-      "sha256": "d11ba39523b61cdd041d5eca8174dc56d47e597bbafe7f381df85184a928362e"
+      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): before a stdio server starts, the plugin consults the mounted consent with the configured server name, command and arguments, and a refusal throws the typed `McpConsentRefusedError` at load, which leaves the server stopped with the typed reason. Without a mounted service — or for a Streamable HTTP server, which starts no local command — activation is exactly upstream's. The review also receives the configured environment and working directory, and the lookup goes through `findMcpAddConsent`, so a server row that starts before the consent row waits for it.",
+      "sha256": "6dc0777c959f96aa38aa0fdf04b43cddeaf06caade003cfc4cfa55fbffbbf834"
     },
     {
       "path": "packages/mcp/mcp-client/src/transport.ts",
@@ -1223,8 +1223,8 @@
     {
       "path": "packages/mcp/mcp-client/tests/consent.spec.ts",
       "class": "security",
-      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): covers the seam. A server starts exactly as upstream does with no service mounted, a held review starts no child process and registers no tool until it allows, a refusal leaves the server stopped with the typed reason as the load failure and as the typed error without failing the startup path when not fatal, the service reviews the command at every boot so a changed command reaches it again, and a Streamable HTTP server is never held.",
-      "sha256": "6a75b2382438a2f9a7e3c33b95e26b4b064e260d0d0b576ea9f45ad589a9fa55"
+      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): covers the seam. A server starts exactly as upstream does with no service mounted, a held review starts no child process and registers no tool until it allows, a refusal leaves the server stopped with the typed reason as the load failure and as the typed error without failing the startup path when not fatal, the service reviews the command at every boot so a changed command reaches it again, and a Streamable HTTP server is never held. Also covers the working directory and environment in the review and the refusal, a server row that starts before the declared consent row, a declared consent row that fails, and a declared row that registers no consent.",
+      "sha256": "df0cafafbf6f081015e45183d0d02114d6c859f07071983fcc2f962f80021076"
     },
     {
       "path": "packages/mcp/mcp-client/tests/mcp-client.spec.ts",

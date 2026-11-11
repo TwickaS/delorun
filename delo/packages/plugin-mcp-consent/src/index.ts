@@ -6,16 +6,19 @@
  * `@deepseek-ai/dsh-mcp-client`) whether the configured command is granted.
  * This plugin's service answers from the acceptance store, the JSON file under
  * the home's protected state ([`./store.ts`](./store.ts)): a command the
- * person accepted with exactly the arguments under review starts at once,
- * and every other review — an unknown command, a changed argument list, a
- * store that is missing, unreadable or not this version's format — holds the
- * server stopped and asks the person to accept the command, which the service
- * records with {@link DeloMcpConsent.accept}.
+ * person accepted with exactly the arguments, working directory and configured
+ * environment under review starts at once, and every other review — an
+ * unknown command, a changed argument list, working directory or environment,
+ * a store that is missing, unreadable, superseded or not this version's
+ * format — holds the server stopped and asks the person to accept the command,
+ * which the service records with {@link DeloMcpConsent.accept}.
  *
- * Every registration sits behind the C16 switch `mcp_add_consent`
- * ({@link Config.enabled}), off by default: off, or without a mounted
- * provider, an mcp-client starts every configured server exactly as upstream
- * does.
+ * The module declares itself an `mcpAddConsent` provider
+ * ({@link providesMcpAddConsent}), so an mcp-client row waits for this row
+ * whatever the order in which the loader starts them. Every registration sits
+ * behind the C16 switch `mcp_add_consent` ({@link Config.enabled}), off by
+ * default: off, or without a mounted provider, an mcp-client starts every
+ * configured server exactly as upstream does.
  * @module @delo/plugin-mcp-consent
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -24,14 +27,23 @@ import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-
 import schema from '@deepseek-ai/schemastery'
 import { resolveDeloHome } from '@delo/home'
 import {
+  acceptanceOfStart,
   acceptanceStorePath,
+  mismatchOf,
   readAcceptanceStore,
-  sameArgs,
   writeAcceptanceStore,
 } from './store.ts'
+import type { AcceptedCommand, ServerStart } from './store.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'mcp-consent'
+
+/**
+ * The declaration, under the mcp-client's `MCP_ADD_CONSENT_PROVIDER_EXPORT` name, that this plugin's row may register
+ * the `mcpAddConsent` service: an mcp-client row whose start finds no service yet waits until this row has started,
+ * so a server never starts unreviewed because its row started first.
+ */
+export const providesMcpAddConsent = true
 
 /** The plugin's configuration. */
 export interface Config {
@@ -71,43 +83,49 @@ export class DeloMcpConsent extends McpAddConsent {
   }
 
   /**
-   * Decide one configured server command from the acceptance store. The
+   * Decide one configured server start from the acceptance store. The
    * person's home is resolved for every review, so a review reads the store
    * of the home the process runs with.
    * @param command - the server start under review: the namespace, the
-   *   executable and its arguments.
+   *   executable, its arguments, its working directory and its configured
+   *   environment.
    * @returns `allow: true` when the store holds an acceptance of this
-   *   command with exactly these arguments, and `allow: false` with the
-   *   reason it does not — the command or its arguments are not accepted, or
-   *   the store is missing, unreadable or not this version's format, which
-   *   asks the person again.
+   *   command with exactly these arguments, this working directory and this
+   *   environment, whatever order the environment's keys were written in, and
+   *   `allow: false` with the reason it does not — the command, its arguments,
+   *   its working directory or its environment are not accepted, or the store
+   *   is missing, unreadable, superseded or not this version's format, which
+   *   asks the person again. No reason names an environment value.
    */
   review(command: McpServerCommand): Promise<McpConsentDecision> {
     return this.decide(command)
   }
 
   /**
-   * Record that the person accepted a command with an argument list, as the
-   * acceptance the reviews allow. Accepting a command again replaces its
-   * earlier acceptance, so a changed command is granted by accepting it with
-   * the arguments it now carries. The asking surface of Delo's MCP server add
-   * flow calls this; until such a surface is mounted, the store only grows
-   * through it and every unaccepted command keeps its server stopped.
-   * @param command - the executable the person accepted.
-   * @param args - the argument list the person accepted, in order.
+   * Record that the person accepted a server start, as the acceptance the
+   * reviews allow. Accepting a command again replaces its earlier acceptance,
+   * so a changed start is granted by accepting it with the arguments, working
+   * directory and environment it now carries. Accepting into a superseded
+   * store starts a store of this version that holds only this acceptance. The
+   * asking surface of Delo's MCP server add flow calls this; until such a
+   * surface is mounted, the store only grows through it and every unaccepted
+   * start keeps its server stopped.
+   * @param start - the start the person accepted: the executable, its
+   *   arguments in order, its working directory and its configured
+   *   environment, of which the store keeps the names and a digest.
    * @returns when the store holds the acceptance.
    */
-  accept(command: string, args: readonly string[]): Promise<void> {
+  accept(start: ServerStart): Promise<void> {
     return this.serial(async () => {
-      if (command.length === 0) throw new Error('the command to accept is empty')
+      if (start.command.length === 0) throw new Error('the command to accept is empty')
       const path = await this.path()
       const read = await readAcceptanceStore(path)
       // A store that exists but is not this version's format is never added to: accepting into a refused store would
       // look like the acceptance the file cannot state. The person fixes or removes the store first, and the review
       // keeps asking until then.
       if (read.kind === 'refused') throw new Error(`the acceptance store is refused, so the command stays unaccepted: ${read.problem}`)
-      const entries = read.kind === 'readable' ? new Map(read.entries) : new Map<string, { readonly args: readonly string[], readonly acceptedAt: number }>()
-      entries.set(command, { args: [...args], acceptedAt: Date.now() })
+      const entries = read.kind === 'readable' ? new Map(read.entries) : new Map<string, AcceptedCommand>()
+      entries.set(start.command, acceptanceOfStart(start, Date.now()))
       await writeAcceptanceStore(path, entries)
     })
   }
@@ -141,14 +159,18 @@ export class DeloMcpConsent extends McpAddConsent {
     if (read.kind === 'refused') {
       return { allow: false, reason: `the acceptance store could not be read, so nothing counts as accepted (${read.problem})` }
     }
+    if (read.kind === 'superseded') {
+      return {
+        allow: false,
+        reason: `the acceptance store is of version ${String(read.version)}, recorded before an acceptance covered the working directory and the environment, so nothing counts as accepted until the command is accepted again`,
+      }
+    }
     const accepted = read.entries.get(command.command)
     if (accepted === undefined) {
       return { allow: false, reason: 'the acceptance store holds no acceptance for this command' }
     }
-    if (!sameArgs(accepted.args, command.args)) {
-      return { allow: false, reason: 'the person accepted a different argument list with this command' }
-    }
-    return { allow: true }
+    const mismatch = mismatchOf(accepted, command)
+    return mismatch === undefined ? { allow: true } : { allow: false, reason: mismatch }
   }
 
   /**
@@ -167,9 +189,10 @@ export class DeloMcpConsent extends McpAddConsent {
  * With the `mcp_add_consent` switch on: mount the consent service, whose
  * review the mcp-client plugin consults before it starts a stdio server. The
  * mount is the service's own plugin fiber, and the returned promise is this
- * plugin's startup work, so the service is registered before the mount
- * settles and an mcp-client mounted after this one reads it. Off, register
- * nothing.
+ * plugin's startup work, so the service is registered before this row is
+ * active; an mcp-client row waits for this row to settle
+ * ({@link providesMcpAddConsent}). Off, register nothing, and the waiting
+ * mcp-client rows start their servers as upstream does.
  * @param ctx - the plugin context.
  * @param config - the switch.
  */
