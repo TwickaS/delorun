@@ -11,8 +11,8 @@
  * - `--patch <file>`, repeatable, adds the person's overlays to the composition, as `dsh --patch` does: they apply over
  *   the profile's layers and under Delo's sandbox overlay, the composition's checks hold over them, safe mode refuses
  *   them, and the successor process an update starts runs without them.
- * - `--inspect` opens Node's inspector on 127.0.0.1:9229 in the home process before the profile boots, so a debugger
- *   can attach; while it is open, any program on this computer that reaches that port can run code as Delo.
+ * - `--inspect` opens Node's inspector on 127.0.0.1:9229 in the home process before the profile boots, after the person
+ *   confirms at a terminal or with `--yes`, and never in safe mode ([inspector](./inspector.ts)).
  *
  * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
  * Delo bundle is refused before it boots, and one in which a row of a Delo bundle did not activate is shut down and
@@ -26,7 +26,6 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, rmSync } from 'node:fs'
-import { open as openInspector, url as inspectorUrl } from 'node:inspector'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -41,9 +40,10 @@ import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignal
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
-import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
+import { holderAlive, HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delo-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
+import { inspectorConsent, openDebugger, terminalInspectorConfirm } from './inspector.ts'
 import { announceStudio } from './open/announce.ts'
 import { hostStudioLink } from './open/host-link.ts'
 import { computerOpener, type StudioOpener } from './open/studio.ts'
@@ -672,27 +672,6 @@ export function startsDetached(foreground: boolean, profileDirectory: string): b
   return !foreground && readBackgroundAnswer(profileDirectory)
 }
 
-/** The port `--inspect` opens Node's inspector on: Node's own default, which debuggers look for. */
-export const INSPECTOR_PORT = 9229
-
-/**
- * Open Node's inspector on the loopback address and say what that exposes.
- * @param output - where the warning goes.
- * @param open - opens the inspector; Node's `inspector.open` by default.
- * @returns the inspector's WebSocket address.
- * @throws {CliError} when the inspector cannot open, such as when the port is taken.
- */
-export function openDebugger(output: CommandOutput, open: (port: number, host: string) => void = (port, host) => { openInspector(port, host) }): string {
-  try {
-    open(INSPECTOR_PORT, '127.0.0.1')
-  } catch (error) {
-    throw new CliError(EXIT.failed, `delorun start: the debugger could not listen on 127.0.0.1:${String(INSPECTOR_PORT)}: ${error instanceof Error ? error.message : String(error)}; stop the program using that port and try again`)
-  }
-  const address = inspectorUrl() ?? `ws://127.0.0.1:${String(INSPECTOR_PORT)}`
-  output.stderr(`delorun start: a debugger can attach at ${address} (chrome://inspect, or your editor's Node debugger on port ${String(INSPECTOR_PORT)}). While it listens, any program on this computer that reaches that port, the commands Delo runs for the agent included, can run code as Delo with your access; start without --inspect when you are done.\n`)
-  return address
-}
-
 /**
  * The absolute paths of `--patch` files.
  * @param files - the values given, relative to the working directory or absolute.
@@ -707,19 +686,25 @@ export function patchFilesOf(files: readonly string[]): string[] {
   })
 }
 
-/** `delorun start [--foreground] [--open] [--profile <name>] [--patch <file>]... [--inspect]`. */
+/** `delorun start [--foreground] [--open] [--profile <name>] [--patch <file>]... [--inspect [--yes]]`. */
 export const startCommand: CliCommand = {
   name: 'start',
   summary: 'Start the home process in the background, or in this terminal with --foreground; --patch adds overlays',
   async run(args, context) {
-    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' }, patch: { type: 'string', multiple: true }, inspect: { type: 'boolean', default: false } })
+    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' }, patch: { type: 'string', multiple: true }, inspect: { type: 'boolean', default: false }, yes: { type: 'boolean', default: false } })
+    if (values.yes === true && values.inspect !== true) throw new CliError(EXIT.usage, 'delorun start: --yes confirms --inspect, and is refused without it')
     const { home, profile } = await prepareHome(context, values.profile)
     const patchFiles = patchFilesOf(values.patch ?? [])
+    const inspect = values.inspect === true
+    if (inspect) await inspectorConsent({ home: home.path, profile, yes: values.yes === true, confirm: terminalInspectorConfirm() })
     if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) {
-      const forwarded = [...patchFiles.flatMap(file => ['--patch', file]), ...values.inspect === true ? ['--inspect'] : []]
+      // The person confirmed here, so the detached home process gets --yes.
+      const forwarded = [...patchFiles.flatMap(file => ['--patch', file]), ...inspect ? ['--inspect', '--yes'] : []]
       return startDetached(home.path, profile, context, values.open === true, computerOpener(process.env), forwarded)
     }
-    if (values.inspect === true) openDebugger(context)
+    const holder = readHomeLock(runDirectory(home.path, profile))
+    // A profile whose home process runs already gets no second inspector: this start only reports that process.
+    if (inspect && (holder === undefined || !holderAlive(holder))) openDebugger(home.path, profile, context)
     return startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env, ...patchFiles.length === 0 ? {} : { patchFiles } })
   },
 }

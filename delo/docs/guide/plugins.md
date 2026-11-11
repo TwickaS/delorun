@@ -108,7 +108,7 @@ delorun plugin add github:you/my-plugin#<commit> --allow-build my-plugin
 delorun start --foreground --inspect
 ```
 
-`--inspect` opens Node's inspector on `127.0.0.1:9229` before Delo loads your plugins, and prints its address; attach Chrome's `chrome://inspect` or your editor's Node debugger, then set breakpoints in your plugin's files. While the inspector listens, any program on this computer that reaches that port, the commands Delo runs for the agent included, can run code as Delo with your access, so use it only while you debug, and start without `--inspect` afterwards.
+`--inspect` opens Node's inspector on `127.0.0.1:9229` before Delo loads your plugins, and prints its address; attach Chrome's `chrome://inspect` or your editor's Node debugger, then set breakpoints in your plugin's files. While the inspector listens, any process on this computer, including commands the agent runs inside the sandbox, can run code as Delo outside the sandbox, so Delo asks you to confirm first; without a terminal, `--inspect --yes` confirms it. Safe mode refuses it, and `delorun status` shows the inspector while it is open. Use it only while you debug, and start without `--inspect` afterwards.
 
 ## Overlays for one start
 

@@ -2,7 +2,8 @@
  * `delorun status`: the home, the CLI profile, an inherited `DSH_HOME` that `delorun` ignored (contract C1, "The
  * home directory"), and the home process's own `status` answer over the update channel (contract C19, "Commands"):
  * its state, process id, start id, the `current`, `previous` and running runtime versions, the running chats and
- * the update in progress. `--json` prints the `status` answer alone. It creates nothing. Exit codes follow C19: 0 when
+ * the update in progress, and whether its debugger is open (`delorun start --inspect`, [inspector](./inspector.ts)).
+ * `--json` prints the `status` answer, with an `inspector` field while the debugger is open. It creates nothing. Exit codes follow C19: 0 when
  * a home process runs, 3 when none runs, 1 on an error, such as a live lock holder whose channel does not answer.
  *
  * @module @delo/cli/status
@@ -14,13 +15,15 @@ import { queryHomeStatus } from '@delo/home-process'
 import { EXIT } from './exit.ts'
 import { parseOptions, type CliCommand } from './command.ts'
 import { selectProfile } from './profile.ts'
+import { readInspectorRecord, type InspectorRecord } from './inspector.ts'
 
 /**
  * The lines `delorun status` prints for a home process's answer.
  * @param status - the answer.
+ * @param inspector - the debugger the home process keeps open, if any.
  * @returns the lines.
  */
-function statusLines(status: HomeStatus): string {
+function statusLines(status: HomeStatus, inspector: InspectorRecord | undefined): string {
   return [
     `state: ${status.state}`,
     `pid: ${String(status.pid)}`,
@@ -28,6 +31,7 @@ function statusLines(status: HomeStatus): string {
     `runtime: ${status.runtime.running} (current ${status.runtime.current}${status.runtime.previous === undefined ? '' : `, previous ${status.runtime.previous}`})`,
     `chats: ${String(status.chats)}`,
     ...status.update === undefined ? [] : [`update: ${status.update.phase} to ${status.update.target}`],
+    ...inspector === undefined ? [] : [`inspector: open at ${inspector.url} since ${inspector.openedAt}; any process on this computer, including commands the agent runs inside the sandbox, can run code as Delo outside the sandbox until Delo restarts without --inspect`],
     '',
   ].join('\n')
 }
@@ -64,7 +68,8 @@ export const statusCommand: CliCommand = {
       context.stderr(`delorun status: the home process refused the request: ${String(answer.error)}\n`)
       return EXIT.failed
     }
-    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer })}\n` : statusLines(answer as HomeStatus))
+    const inspector = readInspectorRecord(home.path, profile, record.pid)
+    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, inspector))
     return EXIT.ok
   },
 }
