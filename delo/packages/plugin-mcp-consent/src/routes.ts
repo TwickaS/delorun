@@ -11,7 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { REACH_DEVICE, requireComputer } from '@delo/home-auth'
+import { REACH_DEVICE, requireComputer, routedPathname } from '@delo/home-auth'
 import { z } from 'zod'
 import { MCP_REVIEW_ID_PATTERN, McpReviewError, type McpReviews } from './review.ts'
 import { MAX_MCP_CONSENT_REQUEST_BYTES, MCP_CONSENT_ROUTES, SERVER_NAME_PATTERN, type McpConsentRefusalCode } from './wire.ts'
@@ -86,7 +86,7 @@ async function answered(call: () => object | Promise<object>): Promise<Response>
 export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): void {
   const paths: ReadonlySet<string> = new Set(Object.values(MCP_CONSENT_ROUTES).filter(path => path !== MCP_CONSENT_ROUTES.waiting))
   ctx.on('connection/request', async (request, response, next) => {
-    if (paths.has(request.url?.split('?', 1)[0] ?? '') && !requireComputer(request, response, ctx.get('homeAuth'), ACTION)) return
+    if (paths.has(routedPathname(request.url)) && !requireComputer(request, response, ctx.get('homeAuth'), ACTION)) return
     await next()
   })
   ctx.connection.fetch.register({

@@ -64,7 +64,7 @@ export {
   type RouteHandler,
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from './arrival.ts'
-export { requireComputer, type ComputerRequest } from './computer-only.ts'
+export { requireComputer, routedPathname, type ComputerRequest } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,
   isForeignFetchSite,

@@ -191,6 +191,17 @@ type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener
     expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_ONLY' })
   })
 
+  it('refuses every spelling of the path that the Connection routes to it', async () => {
+    const tail = ADD_WORKSPACE_PATH.slice('/api/'.length)
+    for (const url of [`/api/x/../${tail}`, `/api/x/%2e%2e/${tail}`, `/api\\x\\..\\${tail}`]) {
+      const { ctx } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
+      const { request, response, writeHead } = arrival(url, '127.0.0.1:3080')
+      const next = vi.fn(async () => {})
+      await ctx.waterfall('connection/request', request, response, next)
+      expect({ url, calls: next.mock.calls.length, status: writeHead.mock.calls[0]?.[0] }).toEqual({ url, calls: 0, status: 403 })
+    }
+  })
+
   it('refuses a request under a Host that is no loopback address, and one the service cannot place', async () => {
     for (const [homeAuth, host] of [[homeAuthOn('loopback'), 'studio.example'], [homeAuthOn('loopback'), undefined], [homeAuthOn(undefined), '127.0.0.1:3080']] as const) {
       const { ctx } = await mount(registryFake(), homeAuth)

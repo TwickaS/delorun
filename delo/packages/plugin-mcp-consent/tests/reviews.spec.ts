@@ -260,7 +260,9 @@ describe('an accepted start', () => {
 describe('the routes', () => {
   it('refuse every request from a reach device with LOOPBACK_REQUIRED before any route runs', async () => {
     const remote = routesOver('tailscale-private')
-    for (const path of Object.values(MCP_CONSENT_ROUTES).filter(path => path !== MCP_CONSENT_ROUTES.waiting)) {
+    const guarded = Object.values(MCP_CONSENT_ROUTES).filter(path => path !== MCP_CONSENT_ROUTES.waiting)
+    // Every spelling the Connection routes to the same exact route is refused too.
+    for (const path of guarded.flatMap(path => [path, path.replace('/api/', '/api/x/../'), path.replace('/api/', '/api/x/%2e%2e/'), path.replace('/api/', '/api\\x\\..\\')])) {
       const answered = await remote.hook(path, 'home.example.ts.net')
       expect(answered.reached).toBe(false)
       expect(answered.status).toBe(403)

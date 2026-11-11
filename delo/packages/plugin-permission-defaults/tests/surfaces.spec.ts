@@ -285,7 +285,9 @@ describe('the routes', () => {
   it('refuse a request from a reach device with LOOPBACK_REQUIRED before any route runs', async () => {
     const { defaults } = await mounted()
     const routes = routesOver(defaults, 'tailscale-private')
-    for (const path of Object.values(PERMISSION_ROUTES)) {
+    // Every spelling the Connection routes to the same exact route is refused too.
+    const spellings = Object.values(PERMISSION_ROUTES).flatMap(path => [path, path.replace('/api/', '/api/x/../'), path.replace('/api/', '/api/x/%2e%2e/'), path.replace('/api/', '/api\\x\\..\\')])
+    for (const path of spellings) {
       const { response, answered } = recordingResponse()
       let reached = false
       await routes.hook({ url: path, headers: { host: 'home.example.ts.net' } }, response, async () => { reached = true })

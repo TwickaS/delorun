@@ -10,7 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { requireComputer } from '@delo/home-auth'
+import { requireComputer, routedPathname } from '@delo/home-auth'
 import { z } from 'zod'
 import { FullAccessChangeError, REVIEW_ID_PATTERN } from './review.ts'
 import { MAX_PERMISSION_REQUEST_BYTES, PERMISSION_ROUTES, type PermissionRefusalCode } from './wire.ts'
@@ -101,7 +101,7 @@ async function answered(call: () => object | Promise<object>): Promise<Response>
 export function registerPermissionRoutes(ctx: Context): void {
   const paths: ReadonlySet<string> = new Set(Object.values(PERMISSION_ROUTES))
   ctx.on('connection/request', async (request, response, next) => {
-    if (paths.has(request.url?.split('?', 1)[0] ?? '') && !requireComputer(request, response, ctx.get('homeAuth'), ACTION)) return
+    if (paths.has(routedPathname(request.url)) && !requireComputer(request, response, ctx.get('homeAuth'), ACTION)) return
     await next()
   })
   ctx.connection.fetch.register({

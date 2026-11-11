@@ -6,7 +6,7 @@
  */
 import type { ServerResponse } from 'node:http'
 import { describe, expect, it } from 'vitest'
-import { requireComputer } from '../src/index.ts'
+import { requireComputer, routedPathname } from '../src/index.ts'
 
 /**
  * A response that records what was answered.
@@ -47,5 +47,15 @@ describe('requireComputer', () => {
       expect(answered.status).toBe(403)
       expect(JSON.parse(answered.body ?? '{}')).toEqual({ error: 'LOOPBACK_REQUIRED', message: 'Turning on full access needs you at your computer: open the studio on the home\'s own computer' })
     }
+  })
+})
+
+describe('routedPathname', () => {
+  it('resolves every spelling of a target to the pathname the Connection routes by', () => {
+    for (const target of ['/api/deloPermission.setFullAccess', '/api/x/../deloPermission.setFullAccess', '/api/x/%2e%2e/deloPermission.setFullAccess',
+      '/api/x/%2E%2E/deloPermission.setFullAccess', '/api\\x\\..\\deloPermission.setFullAccess', '/api/./deloPermission.setFullAccess?x=1#y']) {
+      expect({ target, path: routedPathname(target) }).toEqual({ target, path: '/api/deloPermission.setFullAccess' })
+    }
+    expect(routedPathname(undefined)).toBe('/')
   })
 })
