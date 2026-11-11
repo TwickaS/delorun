@@ -59,14 +59,21 @@ describe('checkKey', { timeout: 60_000 }, () => {
     expect(leaksPartOf(result.message, key)).toBe(false)
   })
 
-  it('checks the key of the provider setup chose, by that provider\'s name and variable, without DeepSeek\'s prefix rule', () => {
-    const anthropic = { label: 'Anthropic', variable: 'ANTHROPIC_API_KEY', deepseek: false }
+  it('checks the key of the provider the profile selects, by that provider\'s name and variable, without DeepSeek\'s prefix rule', () => {
+    const anthropic = { label: 'Anthropic', variable: 'ANTHROPIC_API_KEY', format: 'provider' } as const
     expect(checkKey(undefined, anthropic)).toEqual({ name: 'key', status: 'warn', message: 'no Anthropic API key is set; the model cannot answer. Set ANTHROPIC_API_KEY, or run delorun setup key to store one (format only; the key was not sent to Anthropic).' })
     expect(checkKey('pk-fixture0123456789abcdef', anthropic).status).toBe('pass')
+    expect(checkKey('pk-short', anthropic).status).toBe('fail')
     const spaced = 'pk-fixture0123456789 abcdefghij'
     const failed = checkKey(spaced, anthropic)
     expect(failed).toEqual({ name: 'key', status: 'fail', message: 'the Anthropic API key is malformed; check it at the key page (format only; the key was not sent to Anthropic).' })
     expect(leaksPartOf(failed.message, spaced)).toBe(false)
+  })
+
+  it('holds an OpenAI-compatible endpoint\'s key to no length, as a local server may take any text', () => {
+    const endpoint = { label: 'OpenAI-compatible endpoint', variable: 'OPENAI_COMPATIBLE_API_KEY', format: 'endpoint' } as const
+    expect(checkKey('local', endpoint).status).toBe('pass')
+    expect(checkKey('lo cal', endpoint).status).toBe('fail')
   })
 })
 

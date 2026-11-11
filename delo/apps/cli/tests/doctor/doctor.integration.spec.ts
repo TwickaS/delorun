@@ -122,14 +122,21 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     expect(result.stderr).toContain('warn docker: Docker is installed, but its engine does not answer; start Docker, then run delorun doctor again.\n')
   })
 
-  it('checks the key of the provider the profile\'s setup answers name, from its variable', async () => {
+  it('checks the key of the provider the profile\'s default-model row selects, from the variable its route names', async () => {
     const directory = join(deloHome, 'profiles', 'default')
     mkdirSync(directory, { recursive: true, mode: 0o700 })
-    const answer = { id: 'anthropic', credential: { source: 'environment', name: 'WORK_ANTHROPIC_KEY' }, baseURL: null, model: 'claude-sonnet-5' }
-    writeFileSync(join(directory, 'setup-answers.json'), JSON.stringify({ version: 1, ...SETUP_DEFAULTS, modelProvider: answer }), { mode: 0o600 })
+    writeFileSync(join(directory, 'cordis.patch.yml'), [
+      '- id: llm-pi-ai', '  name: "@deepseek-ai/dsh-llm-pi-ai"', '  config:', '    providers:', '      anthropic:', '        apiKeyEnv: WORK_ANTHROPIC_KEY',
+      '      cerebras: {}',
+      '- id: agent-default-model', '  name: "@deepseek-ai/dsh-agent-default-model"', '  config:', '    provider: anthropic', '    model: claude-sonnet-5-5', '',
+    ].join('\n'), { mode: 0o600 })
+    // A setup answers record naming no provider does not hide the provider the profile selects.
+    writeFileSync(join(directory, 'setup-answers.json'), JSON.stringify({ version: 1, ...SETUP_DEFAULTS, modelProvider: null }), { mode: 0o600 })
     const port = await freePort()
     expect(doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY }).stderr).toContain('warn key: no Anthropic API key is set; the model cannot answer. Set WORK_ANTHROPIC_KEY, or run delorun setup key to store one')
     expect(doctor(['--port', String(port)], { WORK_ANTHROPIC_KEY: 'anthropic-fixture-0123456789' }).stdout).toContain('pass key: the Anthropic API key is set and has the expected format (format only; the key was not sent to Anthropic).\n')
+    writeFileSync(join(directory, 'cordis.patch.yml'), readFileSync(join(directory, 'cordis.patch.yml'), 'utf8').replace('provider: anthropic', 'provider: cerebras'))
+    expect(doctor(['--port', String(port)], {}).stderr).toContain('warn key: new chats start on cerebras, whose row names no key variable')
   })
 
   it('warns when no DeepSeek key is set, and exits 0', async () => {

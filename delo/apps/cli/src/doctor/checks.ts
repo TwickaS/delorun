@@ -160,17 +160,20 @@ export interface KeySubject {
   readonly label: string
   /** The variable, or credential reference, its key is read from. */
   readonly variable: string
-  /** Whether it is DeepSeek, whose keys start with `sk-`. */
-  readonly deepseek: boolean
+  /**
+   * The format its keys have: `deepseek` starts with `sk-` and has at least 20 characters, `provider` has at least 20
+   * characters, and `endpoint`, an OpenAI-compatible server that may take any text, has no length rule.
+   */
+  readonly format: 'deepseek' | 'provider' | 'endpoint'
 }
 
-/** DeepSeek, the provider of the profile's default model, which the key check looks at when setup chose no other. */
-export const DEEPSEEK_KEY_SUBJECT: KeySubject = { label: 'DeepSeek', variable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, deepseek: true }
+/** DeepSeek, the provider of the profile's default model, which the key check looks at when the profile selects no other. */
+export const DEEPSEEK_KEY_SUBJECT: KeySubject = { label: 'DeepSeek', variable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, format: 'deepseek' }
 
 /**
- * Check the model key's format offline: it must be set, contain no whitespace or control character and have at least
- * 20 characters; a DeepSeek key must also start with `sk-`. No message contains the key, and the key is never sent
- * anywhere.
+ * Check the model key's format offline: it must be set and contain no whitespace or control character; a key of the
+ * `deepseek` or `provider` format must have at least 20 characters, and a DeepSeek key must also start with `sk-`. No
+ * message contains the key, and the key is never sent anywhere.
  * @param key - the key the model would use, as the caller resolved it; `undefined` or empty when none is set.
  * @param subject - the provider; DeepSeek by default.
  * @returns the check's result.
@@ -180,7 +183,8 @@ export function checkKey(key: string | undefined, subject: KeySubject = DEEPSEEK
   if (key === undefined || key.length === 0) {
     return outcome('key', 'warn', `no ${subject.label} API key is set; the model cannot answer. Set ${subject.variable}, or run delorun setup key to store one (${note}).`)
   }
-  if (/[\s\p{Cc}]/u.test(key) || key.length < MIN_KEY_LENGTH || (subject.deepseek && !key.startsWith('sk-'))) {
+  const short = subject.format !== 'endpoint' && key.length < MIN_KEY_LENGTH
+  if (/[\s\p{Cc}]/u.test(key) || short || (subject.format === 'deepseek' && !key.startsWith('sk-'))) {
     return outcome('key', 'fail', `the ${subject.label} API key is malformed; check it at the key page (${note}).`)
   }
   return outcome('key', 'pass', `the ${subject.label} API key is set and has the expected format (${note}).`)

@@ -40,13 +40,12 @@ import { parseOptions, type CliCommand, type CommandContext } from '../command.t
 import { CliError, EXIT } from '../exit.ts'
 import { applyLaunchEnvironment, loadDeloEnvironment } from '../launch-environment.ts'
 import { profileDirectory, selectProfile } from '../profile.ts'
-import { recordedAnswers } from '../setup/index.ts'
-import { credentialReference, SETUP_PROVIDERS } from '../setup/providers.ts'
+import { isSetupProviderId, profileModelSelection, routeKeyReference, SETUP_PROVIDERS } from '../setup/providers.ts'
 import { profileStudioPort } from '../setup/sections.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { studioAddress } from '../status.ts'
 import { deloVersion } from '../version.ts'
-import { checkDocker, checkHome, checkKey, checkPort, DEEPSEEK_KEY_SUBJECT, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
+import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 import { checkUpdate } from './update.ts'
 import { runtimePlatformOf } from '../update/channel.ts'
@@ -131,17 +130,22 @@ async function resolveKey(context: CommandContext, home: string, profile: string
 }
 
 /**
- * The provider whose key the profile's model uses: the one its setup answers name, or DeepSeek, the provider of the
- * profile's default model, when they name none or the profile has no answers record.
+ * The provider whose key new chats need: the route of the profile's `agent-default-model` row, which setup, Settings →
+ * Models and the model picker write, or DeepSeek's, the base bundle's, when the profile sets none. The variable is the
+ * `apiKeyEnv` the route's row names, or the provider's own.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile.
- * @returns the key check's subject.
+ * @returns the key check's subject, or the route's name when the route names no variable, so its adapter finds the key itself.
+ * @throws {CliError} `EXIT.failed` when the profile's patch is not a YAML patch list.
  */
-function keySubject(home: string, profile: string): KeySubject {
-  const answer = recordedAnswers(profileDirectory(home, profile)).modelProvider
-  if (answer === null) return DEEPSEEK_KEY_SUBJECT
-  const provider = SETUP_PROVIDERS[answer.id]
-  return { label: provider.label, variable: credentialReference(answer), deepseek: provider.adapter === 'deepseek' }
+function keySubject(home: string, profile: string): KeySubject | string {
+  const patchPath = join(profileDirectory(home, profile), 'cordis.patch.yml')
+  const { provider } = profileModelSelection(patchPath, 'delorun doctor')
+  const variable = routeKeyReference(patchPath, provider, 'delorun doctor')
+  if (variable === undefined) return provider
+  if (!isSetupProviderId(provider)) return { label: provider, variable, format: 'provider' }
+  const known = SETUP_PROVIDERS[provider]
+  return { label: known.label, variable, format: known.adapter === 'deepseek' ? 'deepseek' : known.adapter === 'custom' ? 'endpoint' : 'provider' }
 }
 
 /**
@@ -153,6 +157,9 @@ function keySubject(home: string, profile: string): KeySubject {
 async function keyCheck(context: CommandContext, profile: string): Promise<CheckResult> {
   const home = await resolveDeloHome(context.env)
   const subject = keySubject(home.path, profile)
+  if (typeof subject === 'string') {
+    return { name: 'key', status: 'warn', message: `new chats start on ${subject}, whose row names no key variable, so its adapter finds the key itself; doctor checks only a key in a named variable.` }
+  }
   return checkKey(await resolveKey(context, home.path, profile, subject.variable), subject)
 }
 
