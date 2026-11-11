@@ -109,7 +109,7 @@ interface SandboxPolicy extends SandboxExecutionPolicy {
 
 ## 网络
 
-策略可以限制受限命令能到达的网络。没有 `network` 时，每个 runner 都与主机共享网络，即原版行为。`off` 让命令完全没有网络，`proxy` 只给它一个在沙箱外 Unix socket 上监听的 HTTP 代理。本地提供方仅在 bwrap 下表达这两种形式，在 Landlock、Seatbelt 和 Windows ACL runner 上以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝；其 [README](../../packages/sandbox/sandbox-local/README.zh.md#network) 说明实现方式。
+策略可以限制受限命令能到达的网络。没有 `network` 时，每个 runner 都与主机共享网络，即原版行为。`off` 让命令无法自己打开任何网络连接，`proxy` 只给它一个在沙箱外 Unix socket 上监听的 HTTP 代理。本地提供方仅在 bwrap 下表达这两种形式，在 Landlock、Seatbelt 和 Windows ACL runner 上以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝。在这两种形式下，它还会隐藏替程序解析名称或发送流量的守护进程的套接字，例如 systemd-resolved 与系统 D-Bus；本人运行时目录中的套接字，例如 D-Bus 会话总线，仍然可达。其 [README](../../packages/sandbox/sandbox-local/README.zh.md#network) 说明实现方式。
 
 ```ts type-equiv
 /**

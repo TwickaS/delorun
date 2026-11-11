@@ -52,6 +52,8 @@ kind: "package-reference"
 | `deniedSocketDirectories` | `[]` | 只存放受限命令不能连接的套接字的目录的绝对路径，例如 Docker Desktop 的控制套接字目录；bwrap 隐藏整个目录，Seatbelt 拒绝包装时其中存在的每个套接字 |
 | `escapeSocketDirectories` | `[]` | 其中的套接字能在所有隔离之外启动程序的目录的绝对路径，例如 WSL 的互操作目录 `/run/WSL`。每个条目都像 `deniedSocketDirectories` 条目一样被拒绝；只要其中之一存在，在无法拒绝套接字连接的 runner（Landlock、windows-acl）上的包装就以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝而不运行命令，bwrap 则安装 [vsock 过滤器](#escape-socket-directories-and-the-vsock-filter)。包装时不存在的条目不拒绝任何东西。 |
 | `privateTmp` | `false` | bwrap 是否给 `read-only` 命令一个空的只读 `/tmp`（位于 `/tmp` 下的工作区根目录以只读方式绑定回去），如同 `workspace-write` 命令已得到一个空的可写 `/tmp`，并在两种模式下隐藏主机 `/tmp` 的每个其他挂载，例如 WSLg 的 `/mnt/wslg/distro/tmp`。Landlock 与 Seatbelt 不应用它。 |
+| `networkDeniedSockets` | `['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock']` | 策略带有 `network` 的命令无法连接的套接字的绝对路径，因为其后的守护进程会替它解析名称或发送流量。在 bwrap 上仅对这样的命令像 `deniedSockets` 条目一样拒绝。 |
+| `networkDeniedSocketDirectories` | `['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon']` | 对策略带有 `network` 的命令像 `deniedSocketDirectories` 条目一样隐藏的绝对目录：systemd-resolved 的 varlink 目录、nscd 与 avahi 的目录。 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-sandbox-local)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -129,6 +131,8 @@ Landlock 不施加 seccomp 过滤器：在 WSL 下它因 `/run/WSL` 拒绝每次
 在 `proxy` 下，包装启动 `/bin/sh`，由它用 Host 自身的 Node 可执行文件运行桥接程序，再以命令替换自身，因此命令保留其退出状态、标准输入与描述符。桥接程序在命令启动前脱离，把到其端口的每个连接复制到一个新的套接字连接，并在命令退出时随命名空间结束。在监听前失败的桥接程序会写出以 `sandbox-proxy-bridge: ` 开头的一行，命令不会运行；包装的 `runnerFailureRules` 包含该签名。套接字在包装时必须存在，否则 bwrap 会在命令运行前失败。位于受保护主目录下的套接字在主目录的空 tmpfs 变为只读之前绑定在其中，因此命令在那里只能看到自己代理的套接字；位于命令可见的其他任何位置的套接字，对网络为 `off` 的命令仍然可达。
 
 `proxy` 下的命令能到达什么，取决于代理允许什么。忽略代理变量、按地址连接或使用 UDP 的程序什么也到达不了；除非 `/etc/hosts` 能回答，命令也无法自行解析名称。
+
+命名空间之外替程序解析名称或发送流量的守护进程，会把命令的数据带出这两种命名空间。因此，策略带有 `network` 的命令还会在包装时遮蔽已存在的 `networkDeniedSockets`，并隐藏已存在的 `networkDeniedSocketDirectories`：默认是系统 D-Bus（systemd-resolved 也通过它应答查询）、tailscaled 的控制套接字，以及 systemd-resolved 的 varlink 套接字、nscd 与 avahi 的目录。需要系统 D-Bus 的命令，例如 `systemctl`，在带有 `network` 时会失败。本人运行时目录中的套接字，例如 D-Bus 会话总线，仍然可达，而 `systemd-run --user` 会通过会话总线在沙箱之外启动拥有主机网络的程序。
 
 -----
 

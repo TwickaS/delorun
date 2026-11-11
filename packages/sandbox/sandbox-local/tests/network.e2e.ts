@@ -2,19 +2,20 @@
  * The network rules under a real bwrap: a command whose network is `off` reaches no address outside its own
  * namespace, the host's loopback included, while the same command without a rule reaches it; a command whose network
  * is `proxy` reaches the proxy's Unix socket through the bridge on its own loopback port, with its proxy environment
- * set, and nothing else; the bridge keeps the command's exit status and standard input. Only local listeners are
- * used. Skips when bwrap or user namespaces are unavailable.
+ * set, and nothing else; the bridge keeps the command's exit status and standard input; a restricted command cannot
+ * connect to the network-denied sockets, which stand-in listeners play here. Only local listeners are used. Skips
+ * when bwrap or user namespaces are unavailable.
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import { networkInterfaces, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
-import { LocalSandboxProvider, SANDBOX_PROXY_PORT } from '@deepseek-ai/dsh-sandbox-local'
+import { LocalSandboxProvider, SANDBOX_PROXY_PORT, type Config } from '@deepseek-ai/dsh-sandbox-local'
 import { bwrapProfileArgs } from '../src/profiles.ts'
 
 const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/', network: { mode: 'off' } }), '--', 'true'], { timeout: 5_000, stdio: 'ignore' })
@@ -55,15 +56,15 @@ async function echoProxy(): Promise<string> {
   return socket
 }
 
-async function sandbox(): Promise<LocalSandboxProvider> {
+async function sandbox(config: Config = {}): Promise<LocalSandboxProvider> {
   ctx = new Context()
-  await ctx.plugin(LocalSandboxProvider, {})
+  await ctx.plugin(LocalSandboxProvider, config)
   return ctx.sandbox as LocalSandboxProvider
 }
 
 /** Run a Node program confined, without blocking this process's listeners. */
-async function runConfined(program: string, network: SandboxNetwork | undefined, input = ''): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  const confined = await (await sandbox()).confine([process.execPath, '-e', program], { mode: 'read-only', workspaceRoot: '/', ...network === undefined ? {} : { network } })
+async function runConfined(program: string, network: SandboxNetwork | undefined, input = '', config: Config = {}): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  const confined = await (await sandbox(config)).confine([process.execPath, '-e', program], { mode: 'read-only', workspaceRoot: '/', ...network === undefined ? {} : { network } })
   return await new Promise((resolve) => {
     const child = spawn(confined.argv[0] as string, confined.argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] })
     let stdout = ''
@@ -136,5 +137,26 @@ describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap network rules', () => {
     expect(result.status).not.toBe(0)
     expect(result.stdout).toBe('')
     expect(result.stderr).toContain('bwrap: ')
+  })
+
+  it('a restricted command cannot connect to a network-denied socket or a socket in a network-denied directory, which an open command reaches', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-resolver-e2e-'))
+    dirs.push(dir)
+    const resolver = join(dir, 'resolve')
+    mkdirSync(resolver)
+    const sockets = [join(dir, 'system_bus_socket'), join(resolver, 'io.systemd.Resolve')]
+    for (const socket of sockets) {
+      const server = createServer(client => client.end())
+      servers.push(server)
+      await new Promise<void>(resolve => server.listen(socket, resolve))
+    }
+    const config: Config = { networkDeniedSockets: [sockets[0] as string], networkDeniedSocketDirectories: [resolver] }
+    for (const socket of sockets) {
+      const program = `require('node:net').connect(${JSON.stringify(socket)}).on('connect', function () { console.log('connected'); this.destroy() }).on('error', e => console.log('error ' + e.code))`
+      expect((await runConfined(program, undefined, '', config)).stdout).toBe('connected\n')
+      for (const network of [{ mode: 'off' as const }, { mode: 'proxy' as const, socket: await echoProxy() }]) {
+        expect((await runConfined(program, network, '', config)).stdout).toMatch(/^error E[A-Z]+\n$/u)
+      }
+    }
   })
 })

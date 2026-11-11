@@ -109,7 +109,7 @@ interface SandboxPolicy extends SandboxExecutionPolicy {
 
 ## Network
 
-A policy may restrict the network a confined command reaches. Without a `network`, every runner shares the host's network, which is the stock behaviour. `off` gives the command no network at all, and `proxy` gives it only one HTTP proxy that listens on a Unix socket outside the sandbox. The local provider expresses both under bwrap only and refuses them with `SANDBOX_UNSUPPORTED_POLICY` on Landlock, Seatbelt and the Windows ACL runner; its [README](../../packages/sandbox/sandbox-local/README.md#network) states how.
+A policy may restrict the network a confined command reaches. Without a `network`, every runner shares the host's network, which is the stock behaviour. `off` gives the command no network connection of its own, and `proxy` gives it only one HTTP proxy that listens on a Unix socket outside the sandbox. The local provider expresses both under bwrap only and refuses them with `SANDBOX_UNSUPPORTED_POLICY` on Landlock, Seatbelt and the Windows ACL runner. Under both it also hides the sockets of daemons that resolve names or send traffic for a program, such as systemd-resolved and the system D-Bus; sockets in the person's runtime directory, such as the D-Bus session bus, stay reachable. Its [README](../../packages/sandbox/sandbox-local/README.md#network) states how.
 
 ```ts type-equiv
 /**

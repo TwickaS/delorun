@@ -143,7 +143,27 @@ export interface Config {
    * Landlock and Seatbelt cannot express it and leave it out. Off: `read-only` commands read the host's `/tmp`.
    */
   privateTmp?: boolean
+  /**
+   * Absolute paths of Unix sockets that a command whose policy restricts the network cannot connect to, because a
+   * daemon behind them resolves names or sends traffic for the command: the system D-Bus, through which
+   * systemd-resolved answers lookups, and tailscaled's control socket. Denied like {@link deniedSockets} entries, on
+   * bwrap only, and only for such a command; a command with the host's network keeps them. Defaults to
+   * {@link NETWORK_DENIED_SOCKETS}.
+   */
+  networkDeniedSockets?: string[]
+  /**
+   * Absolute paths of directories whose sockets resolve names for a command, hidden like
+   * {@link deniedSocketDirectories} entries from a command whose policy restricts the network: systemd-resolved's
+   * varlink directory, nscd's and avahi's. Defaults to {@link NETWORK_DENIED_SOCKET_DIRECTORIES}.
+   */
+  networkDeniedSocketDirectories?: string[]
 }
+
+/** The default {@link Config.networkDeniedSockets}. */
+export const NETWORK_DENIED_SOCKETS: readonly string[] = ['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock']
+
+/** The default {@link Config.networkDeniedSocketDirectories}. */
+export const NETWORK_DENIED_SOCKET_DIRECTORIES: readonly string[] = ['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon']
 
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
 function defaultProbeBwrap(timeoutMs: number): boolean {
@@ -336,6 +356,32 @@ function protectionSettings(config: Config): ProtectionSettings {
 }
 
 /**
+ * Validate the network-denied sockets and directories at load and add them to the protection a command whose policy
+ * restricts the network gets.
+ * @param config - the schema-defaulted config.
+ * @param protection - the validated protection every command gets.
+ * @returns the protection with the network-denied entries.
+ * @throws {Error} naming the invalid field.
+ */
+function networkProtectionSettings(config: Config, protection: ProtectionSettings): ProtectionSettings {
+  const sockets = config.networkDeniedSockets as string[]
+  const directories = config.networkDeniedSocketDirectories as string[]
+  for (const socket of sockets) {
+    if (!isAbsolute(socket)) throw new Error(`sandbox-local: networkDeniedSockets entries must be absolute paths: ${JSON.stringify(socket)}`)
+  }
+  for (const directory of directories) {
+    if (!isAbsolute(directory) || normalize(join(directory, '..')) === normalize(directory)) {
+      throw new Error(`sandbox-local: networkDeniedSocketDirectories entries must be absolute paths other than the filesystem root: ${JSON.stringify(directory)}`)
+    }
+  }
+  return {
+    ...protection,
+    deniedSockets: [...new Set([...protection.deniedSockets, ...sockets])],
+    deniedSocketDirectories: [...new Set([...protection.deniedSocketDirectories, ...directories])],
+  }
+}
+
+/**
  * Validate `protectedHomeToolReadable` at load: each entry is a relative path inside the home.
  * @param config - the schema-defaulted config.
  * @param home - the canonical protected home, or `undefined` when none is configured.
@@ -417,6 +463,8 @@ export class LocalSandboxProvider extends SandboxProvider {
     deniedSocketDirectories: z.array(z.string()).default([]),
     escapeSocketDirectories: z.array(z.string()).default([]),
     privateTmp: z.boolean().default(false),
+    networkDeniedSockets: z.array(z.string()).default([...NETWORK_DENIED_SOCKETS]),
+    networkDeniedSocketDirectories: z.array(z.string()).default([...NETWORK_DENIED_SOCKET_DIRECTORIES]),
   })
 
   /** Test hook (mirrors the bash executors' `internals`). */
@@ -426,6 +474,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly configuredRunnerFailureSignatures: string[]
   private readonly probeTimeoutMs: number
   private readonly protection: ProtectionSettings
+  /** {@link protection} with the sockets and directories denied to a command whose network is restricted. */
+  private readonly networkProtection: ProtectionSettings
   /** The configured {@link Config.protectedHomeToolReadable}, relative to the home; never part of a profile. */
   private readonly toolReadable: readonly string[]
   /** The configured {@link Config.escapeSocketDirectories}, checked for existence at every wrap. */
@@ -463,6 +513,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     this.probeTimeoutMs = config.probeTimeoutMs as number
     assertPositiveFinite('probeTimeoutMs', this.probeTimeoutMs)
     this.protection = protectionSettings(config)
+    this.networkProtection = networkProtectionSettings(config, this.protection)
     this.toolReadable = toolReadableEntries(config, this.protection.home)
     this.escapeSocketDirectories = config.escapeSocketDirectories as string[]
     // An operator-supplied runner does not use the ACL backend. The registry
@@ -546,7 +597,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     const bridgeRules: readonly RunnerFailureRule[] = policy.network?.mode === 'proxy' ? [{ fatalSignatures: [BRIDGE_DIAGNOSTIC] }] : []
     if (this.runnerCommand !== undefined) {
       return Promise.resolve<ConfinedArgv>({
-        argv: [...this.runnerCommand, ...bwrapProfileArgs(policy, protection), '--', ...command],
+        argv: [...this.runnerCommand, ...bwrapProfileArgs(policy, this.restricted(policy, protection)), '--', ...command],
         enforcement: 'full',
         denialSignatures: DENIAL_SIGNATURES.runnerCommand,
         runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }, ...bridgeRules],
@@ -560,7 +611,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     if (policy.network !== undefined && !RUNNER_NETWORK[selected.runner]) {
       throw new SandboxUnsupportedPolicyError(networkRefusal(selected.runner, policy.network))
     }
-    const profileArgv = this.runnerArgv(selected.runner, policy, protection)
+    const profileArgv = this.runnerArgv(selected.runner, policy, this.restricted(policy, protection))
     // No mount rule hides virtual-machine sockets, the transport between a VM such as WSL and its host.
     const filtered = selected.runner === 'bwrap' && (escape !== undefined || (this.internals.vsockOffered ?? vsockOffered)())
     const runnerArgv = filtered ? withSeccompFilter(profileArgv) : profileArgv
@@ -570,6 +621,17 @@ export class LocalSandboxProvider extends SandboxProvider {
       denialSignatures: DENIAL_SIGNATURES[selected.runner],
       runnerFailureRules: [...RUNNER_FAILURE_RULES[selected.runner], ...bridgeRules],
     })
+  }
+
+  /**
+   * The protection one wrap applies: the resolved protection, or for a policy that restricts the network, which only a
+   * runner that confines the network reaches, the protection with the network-denied sockets and directories.
+   * @param policy - the policy being wrapped.
+   * @param protection - the protection every command gets, resolved for this wrap.
+   * @returns the protection to express.
+   */
+  private restricted(policy: SandboxPolicy, protection: Protection): Protection {
+    return policy.network === undefined ? protection : resolveProtection(this.networkProtection)
   }
 
   /** The selected rung's runner invocation (program + profile arguments) for one policy and protection. */

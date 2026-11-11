@@ -4,13 +4,13 @@
  * refusal on every runner that cannot express a network rule. Real bwrap runs in `network.e2e.ts`.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
-import { BRIDGE_DIAGNOSTIC, LocalSandboxProvider, PROXY_ENVIRONMENT, RUNNER_NETWORK, SANDBOX_PROXY_PORT } from '@deepseek-ai/dsh-sandbox-local'
+import { BRIDGE_DIAGNOSTIC, LocalSandboxProvider, NETWORK_DENIED_SOCKET_DIRECTORIES, NETWORK_DENIED_SOCKETS, PROXY_ENVIRONMENT, RUNNER_NETWORK, SANDBOX_PROXY_PORT } from '@deepseek-ai/dsh-sandbox-local'
 import type { Config } from '@deepseek-ai/dsh-sandbox-local'
 import { bridgedArgv, networkRefusal } from '../src/network.ts'
 import { bwrapProfileArgs, NO_PROTECTION } from '../src/profiles.ts'
@@ -145,6 +145,37 @@ describe('confine() with a network', () => {
     }
     // Without a network rule the same runner wraps as before.
     await expect(sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: '/' })).resolves.toBeDefined()
+  })
+
+  it('hides the network-denied sockets and directories from a restricted command only', async () => {
+    const dir = homeDirectory()
+    const socket = join(dir, 'system_bus_socket')
+    writeFileSync(socket, '')
+    const resolver = join(dir, 'resolve')
+    mkdirSync(resolver)
+    const absent = join(dir, 'absent.sock')
+    const config: Config = { networkDeniedSockets: [socket, absent], networkDeniedSocketDirectories: [resolver, join(dir, 'absent')] }
+    for (const sandbox of [await provider(config, { chain: ['bwrap'] }), await provider({ ...config, runnerCommand: ['my-runner'], runnerFailureSignatures: ['my-runner: '] })]) {
+      for (const network of [{ mode: 'off' as const }, { mode: 'proxy' as const, socket: '/run/p.sock' }]) {
+        const argv = (await sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: '/', network })).argv.join(' ')
+        expect(argv).toContain(`--ro-bind /dev/null ${socket}`)
+        expect(argv).toContain(`--tmpfs ${resolver} --remount-ro ${resolver}`)
+        expect(argv).not.toContain('absent')
+      }
+      const open = (await sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: '/' })).argv
+      expect(open).not.toContain(socket)
+      expect(open).not.toContain(resolver)
+    }
+  })
+
+  it('denies systemd-resolved, nscd, avahi, the system D-Bus and tailscaled by default, and rejects a relative entry', async () => {
+    expect(LocalSandboxProvider.Config({}).networkDeniedSockets).toEqual([...NETWORK_DENIED_SOCKETS])
+    expect(LocalSandboxProvider.Config({}).networkDeniedSocketDirectories).toEqual([...NETWORK_DENIED_SOCKET_DIRECTORIES])
+    expect(NETWORK_DENIED_SOCKETS).toEqual(['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock'])
+    expect(NETWORK_DENIED_SOCKET_DIRECTORIES).toEqual(['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon'])
+    await expect(provider({ networkDeniedSockets: ['run/x.sock'] })).rejects.toThrow('networkDeniedSockets entries must be absolute paths')
+    await expect(provider({ networkDeniedSocketDirectories: ['run/nscd'] })).rejects.toThrow('networkDeniedSocketDirectories entries must be absolute paths')
+    await expect(provider({ networkDeniedSocketDirectories: ['/'] })).rejects.toThrow('networkDeniedSocketDirectories entries must be absolute paths other than the filesystem root')
   })
 
   it('names what the policy asked for in the refusal', () => {
