@@ -3,7 +3,8 @@
  * report through clientModuleHost.rebuilt, and everything dies with the fiber.
  */
 import { EventEmitter } from 'node:events'
-import type { ServerResponse, IncomingMessage } from 'node:http'
+import { IncomingMessage, ServerResponse } from 'node:http'
+import { Socket } from 'node:net'
 import { mkdtempSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,6 +21,33 @@ let dir: string
 
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'dsh-hmr-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
+
+/**
+ * A real ServerResponse that records what the event stream writes instead of
+ * sending it: the status and each line.
+ */
+class RecordingResponse extends ServerResponse {
+  status: number | undefined
+  readonly lines: string[] = []
+
+  constructor() {
+    super(new IncomingMessage(new Socket()))
+  }
+
+  override writeHead(status: number): this {
+    this.status = status
+    return this
+  }
+
+  override write(line: string): boolean {
+    this.lines.push(line)
+    return true
+  }
+
+  override end(): this {
+    return this
+  }
+}
 
 /**
  * Controllable clientModuleHost fake over a mutable id → bundle-path table.
@@ -291,18 +319,11 @@ it('refuses the event stream to an authority the fence rejects and streams to th
   const fiber = await mount(fakeClientModuleHost(new Map([['fence', bundle]])), fakeHttpServer(routes), loopbackFence())
   const route = routes[0]!
   const answer = async (headers: Record<string, string>): Promise<{ status?: number; lines: string[] }> => {
-    const lines: string[] = []
-    const state: { status?: number } = {}
-    const response = Object.assign(new EventEmitter(), {
-      writeHead: vi.fn((status: number) => { state.status = status }),
-      write: (line: string) => { lines.push(line) },
-      destroy: vi.fn(),
-      end: vi.fn(),
-    })
+    const response = new RecordingResponse()
     try {
-      await route.handler({ method: 'GET', headers } as IncomingMessage, response as unknown as ServerResponse)
+      await route.handler({ method: 'GET', headers } as IncomingMessage, response)
     } finally { response.emit('close') }
-    return { ...state, lines }
+    return { ...response.status === undefined ? {} : { status: response.status }, lines: response.lines }
   }
   try {
     // The stream names the module graph, the plugin inventory and the release

@@ -28,7 +28,8 @@ export async function readStoreFile(path: string): Promise<unknown> {
     throw new HomeAuthError('STORE_INVALID', `${basename(path)} is not a protected file this home can read (${systemCode(error) ?? 'unreadable'})`)
   }
   try {
-    return JSON.parse(Buffer.from(bytes).toString('utf8')) as unknown
+    const value: unknown = JSON.parse(Buffer.from(bytes).toString('utf8'))
+    return value
   } catch {
     throw new HomeAuthError('STORE_INVALID', `${basename(path)} is not JSON`)
   }

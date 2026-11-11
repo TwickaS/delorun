@@ -290,7 +290,7 @@ export async function readMessage(request: IncomingMessage, response: ServerResp
   const text = Buffer.concat(chunks).toString('utf8')
   let value: unknown
   try {
-    value = JSON.parse(text) as unknown
+    value = JSON.parse(text)
   } catch {
     sendError(response, new HomeAuthError('BAD_REQUEST', 'a message is a JSON object'))
     return undefined

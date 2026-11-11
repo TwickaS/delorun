@@ -13,8 +13,8 @@ import { readInstalledPlugin, type BundleFacts, type DataFacts, type InstalledPl
  * @param value - the string.
  * @returns the same string, branded.
  */
-function brand<T>(value: string): T {
-  return value as unknown as T
+function brand<T extends string>(value: string): T {
+  return value as T
 }
 
 /**

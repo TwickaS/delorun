@@ -73,7 +73,7 @@ export function readSafeMode(homeDir: string, profile: string): SafeModeMarker |
   if (!existsSync(path)) return undefined
   let parsed: unknown
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown
+    parsed = JSON.parse(readFileSync(path, 'utf8'))
   } catch (error) {
     throw unreadable(path, 'it is not JSON', error)
   }

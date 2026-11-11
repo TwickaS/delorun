@@ -63,7 +63,8 @@ async function readJson(path: string): Promise<unknown> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw error
   }
-  return JSON.parse(text) as unknown
+  const value: unknown = JSON.parse(text)
+  return value
 }
 
 /**

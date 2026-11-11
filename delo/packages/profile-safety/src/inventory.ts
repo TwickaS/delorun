@@ -223,7 +223,8 @@ function readManifest(path: string): unknown {
     throw new ProfileSafetyError('PROFILE_UNREADABLE', path, `${PROFILE_MANIFEST_FILENAME} cannot be read: ${String(error)}`, ['repair-profile'], [{ kind: 'configuration', name: PROFILE_MANIFEST_FILENAME }], { cause: error })
   }
   try {
-    return JSON.parse(text) as unknown
+    const value: unknown = JSON.parse(text)
+    return value
   } catch (error) {
     throw new ProfileSafetyError('PROFILE_UNREADABLE', path, `${PROFILE_MANIFEST_FILENAME} is not JSON: ${String(error)}`, ['repair-profile'], [{ kind: 'configuration', name: PROFILE_MANIFEST_FILENAME }], { cause: error })
   }

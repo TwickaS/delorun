@@ -114,7 +114,7 @@ function readManifest(path: string): Record<string, unknown> {
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(text) as unknown
+    parsed = JSON.parse(text)
   } catch (error) {
     throw new ProfileSafetyError('PROFILE_UNREADABLE', path, `${PROFILE_MANIFEST_FILENAME} is not JSON: ${String(error)}`, ['repair-profile'], [{ kind: 'configuration', name: SAFETY_RECORD_FILENAME }], { cause: error })
   }

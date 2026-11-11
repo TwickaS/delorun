@@ -16,8 +16,9 @@
  * the guard before the first hop, and the provider would correctly (not
  * wrongly) read its absence.
  */
-import dns from 'node:dns'
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import dns, { type LookupAddress, type LookupAllOptions, type LookupOptions } from 'node:dns'
+import type { LookupFunction } from 'node:net'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import { fetch as undiciFetch, type Response as UndiciResponse } from 'undici'
@@ -26,16 +27,16 @@ import { FetchGuardService } from '../src/index.ts'
 import { FetchGuardRefusedError } from '../src/guard.ts'
 
 /** Every pinned agent the provider built, in creation order, and whether it released each. */
-const agents = vi.hoisted(() => [] as Array<{ options: { connect?: { lookup?: (...args: never[]) => void } }, destroyed: boolean }>)
+const agents = vi.hoisted(() => [] as Array<{ options: { connect?: { lookup?: LookupFunction } }, destroyed: boolean }>)
 
 vi.mock('undici', () => ({
   fetch: vi.fn(),
   Agent: class {
-    readonly options: { connect?: { lookup?: (...args: never[]) => void } }
+    readonly options: { connect?: { lookup?: LookupFunction } }
 
     destroyed = false
 
-    constructor(options: { connect?: { lookup?: (...args: never[]) => void } }) {
+    constructor(options: { connect?: { lookup?: LookupFunction } }) {
       this.options = options
       agents.push(this)
     }
@@ -49,10 +50,17 @@ vi.mock('undici', () => ({
 /** The mocked transport: one entry per hop the provider would have connected. */
 const fetchMock = vi.mocked(undiciFetch)
 
-/** The dns resolver as the provider calls it: every address of one hostname. */
-type LookupAll = (hostname: string, options: { all: true, verbatim: true }) => Promise<Array<{ address: string, family: number }>>
+/**
+ * Spy on the resolver the provider calls for every address of one hostname. The typed view of `dns.promises` selects
+ * the all-addresses overload the provider calls, which the spy then takes as its signature.
+ * @returns the spy, which each test answers.
+ */
+function spyOnLookup() {
+  const resolver: { lookup: (hostname: string, options: LookupAllOptions) => Promise<LookupAddress[]> } = dns.promises
+  return vi.spyOn(resolver, 'lookup')
+}
 
-let lookup: Mock<LookupAll>
+let lookup: ReturnType<typeof spyOnLookup>
 
 /** How a test mounts the guard: on with the switch, on with it off, absent, or mounted later in the test. */
 type GuardMount = 'enabled' | 'disabled' | 'absent' | 'later'
@@ -81,7 +89,7 @@ function ok(body: string): UndiciResponse {
 beforeEach(() => {
   fetchMock.mockReset()
   agents.splice(0, agents.length)
-  lookup = vi.spyOn(dns.promises, 'lookup') as unknown as Mock<LookupAll>
+  lookup = spyOnLookup()
 })
 
 afterEach(async () => {
@@ -167,13 +175,12 @@ describe('the provider seam with the guard mounted and on', () => {
     // transport never asks the system resolver a second time. Each call below
     // shapes its answer the way `node:net` asks: the address list under `all`,
     // the single address string plus its family otherwise.
-    type AgentLookup = (hostname: string, options: Record<string, unknown>, callback: (error: Error | null, address?: unknown, family?: number) => void) => void
-    const agentLookup = agent?.options.connect?.lookup as unknown as AgentLookup | undefined
-    const pinned = async (options: Record<string, unknown>, hostname = 'guard-pinned.test'): Promise<unknown> =>
+    const agentLookup = agent?.options.connect?.lookup
+    const pinned = async (options: LookupOptions, hostname = 'guard-pinned.test'): Promise<unknown> =>
       await new Promise((resolve, reject) => {
-        agentLookup?.(hostname, options, (error, address, family) => {
+        agentLookup?.(hostname, options, (error, address) => {
           if (error !== null) reject(error)
-          else resolve(address === undefined ? family : address)
+          else resolve(address)
         })
       })
     expect(await pinned({ all: true })).toEqual([{ address: '203.0.113.10', family: 4 }, { address: '2001:db8::10', family: 6 }])

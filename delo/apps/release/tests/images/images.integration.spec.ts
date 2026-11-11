@@ -125,6 +125,6 @@ describe('image builder pin', () => {
       writeFileSync(join(directory, name, 'delorun-0.1.0.images.json'), `${JSON.stringify({ s2: image, s3: image, builder: { docker: '29.9.2', buildkit } }, undefined, 2)}\n`)
     }
     const comparison = await compareOutputs(join(directory, 'first'), join(directory, 'second'), { ...readRecipe(), images: readImagesRecipe() })
-    expect(comparison.differences).toEqual([{ file: 'delorun-0.1.0.images.json', detail: expect.stringContaining('content differs') as unknown as string }])
+    expect(comparison.differences).toEqual([{ file: 'delorun-0.1.0.images.json', detail: expect.stringContaining('content differs') }])
   })
 })

@@ -6,10 +6,10 @@
  */
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdtemp, open as openFile, readdir, rm, type FileHandle } from 'node:fs/promises'
+import { mkdtemp, open as openFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Downloader, RELEASE_TIMINGS } from '../src/download.ts'
 import { isInstallError, type InstallError } from '../src/errors.ts'
 
@@ -182,10 +182,11 @@ describe('a download into a file', () => {
     const downloader = new Downloader({
       hosts: LOOPBACK,
       timings: TIMINGS,
-      openFile: (async (target: string, flags: string, mode: number) => {
+      openFile: async (target, flags, mode) => {
         const real = await openFile(target, flags, mode)
-        return { write: () => Promise.reject(full), close: () => real.close() } as unknown as FileHandle
-      }) as unknown as typeof openFile,
+        vi.spyOn(real, 'write').mockRejectedValue(full)
+        return real
+      },
     })
     const error = await refusal(downloader.file(`${origin}/archive.tar.gz`, 8_192, path), 'DOWNLOAD_FAILED')
     expect(error.detail).toContain('ENOSPC')
@@ -292,10 +293,12 @@ describe('the other ways a download ends badly', () => {
     const unclosable = new Downloader({
       hosts: LOOPBACK,
       timings: TIMINGS,
-      openFile: (async (target: string, flags: string, mode: number) => {
+      openFile: async (target, flags, mode) => {
         const real = await openFile(target, flags, mode)
-        return { write: (chunk: Uint8Array) => real.write(chunk), close: async () => { await real.close(); throw new Error('EIO: close failed') } } as unknown as FileHandle
-      }) as unknown as typeof openFile,
+        const close = real.close.bind(real)
+        vi.spyOn(real, 'close').mockImplementation(async () => { await close(); throw new Error('EIO: close failed') })
+        return real
+      },
     })
     expect((await refusal(unclosable.file(`${origin}/x`, 100, join(directory, 'b')), 'DOWNLOAD_FAILED')).detail).toContain('EIO')
     expect(await readdir(directory)).toEqual([])

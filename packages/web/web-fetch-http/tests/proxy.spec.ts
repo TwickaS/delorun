@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import dns from 'node:dns'
+import dns, { type LookupAddress, type LookupAllOptions } from 'node:dns'
 import type { AddressInfo } from 'node:net'
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installProxyFromEnvironment } from '@deepseek-ai/dsh-http-proxy'
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http'
 import type { FetchGuardAddress, HttpFetchLimits } from '@deepseek-ai/dsh-web-fetch-http'
@@ -13,9 +13,6 @@ const limits: HttpFetchLimits = {
   maxRedirects: 5,
   userAgent: 'test-agent/1.0',
 }
-
-/** The dns resolver as the provider calls it: every address of one hostname. */
-type LookupAll = (hostname: string, options: { all: true; verbatim: true }) => Promise<Array<{ address: string; family: number }>>
 
 /** Absolute-form targets the fake proxy saw; a populated entry proves the hop was tunnelled. */
 let proxied: string[]
@@ -119,8 +116,9 @@ describe('fetching through a proxy', () => {
     // The proxy resolves the target it tunnels, so the guard's resolution of the
     // name is mocked and the provider keeps the policy's dispatcher: a pinned
     // agent here would bypass the proxy the person installed.
-    const lookup = vi.spyOn(dns.promises, 'lookup') as unknown as Mock<LookupAll>
-    lookup.mockResolvedValue([{ address: '203.0.113.10', family: 4 }])
+    // The provider calls the all-addresses overload; the typed view selects it for the spy.
+    const resolver: { lookup: (hostname: string, options: LookupAllOptions) => Promise<LookupAddress[]> } = dns.promises
+    const lookup = vi.spyOn(resolver, 'lookup').mockResolvedValue([{ address: '203.0.113.10', family: 4 }])
     const checked: Array<[string, readonly FetchGuardAddress[]]> = []
     const guarded = new HttpFetchProvider(limits, () => ({
       async check(url: URL, addresses: readonly FetchGuardAddress[]): Promise<void> { checked.push([url.host, addresses]) },

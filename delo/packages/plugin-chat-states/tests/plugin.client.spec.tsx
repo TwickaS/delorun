@@ -243,7 +243,7 @@ describe('a chat\'s menu entries', () => {
     expect(h.menus.get(MENU.settle.id)!.resolve(target('x'), signal)).toEqual([])
   })
 
-  const posts = (h: ReturnType<typeof harness>) => h.fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([, init]) => JSON.parse(String(init?.body)) as unknown)
+  const posts = (h: ReturnType<typeof harness>) => h.fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([, init]): unknown => JSON.parse(String(init?.body)))
 
   it('open the snooze dialog for a chat that is not snoozed, and wake one that is', async () => {
     const h = harness({ settings: SETTINGS, chats: { z: { snoozedAt: 1, snoozedUntil: NOW + 60_000 } } })

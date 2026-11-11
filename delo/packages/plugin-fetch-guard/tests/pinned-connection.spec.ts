@@ -10,17 +10,24 @@
  * address that no host serves.
  */
 import { createServer, type Server } from 'node:http'
-import dns from 'node:dns'
+import dns, { type LookupAddress, type LookupAllOptions } from 'node:dns'
 import type { AddressInfo } from 'node:net'
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import { LOCAL_FETCH_PROVIDER_ID } from '@deepseek-ai/dsh-web-fetch-http'
 import type { FetchGuard, FetchGuardAddress } from '@deepseek-ai/dsh-web-fetch-http'
 import { FetchGuardRefusedError } from '../src/guard.ts'
 
-/** The dns resolver as the provider calls it: every address of one hostname. */
-type LookupAll = (hostname: string, options: { all: true, verbatim: true }) => Promise<Array<{ address: string, family: number }>>
+/**
+ * Spy on the resolver the provider calls for every address of one hostname. The typed view of `dns.promises` selects
+ * the all-addresses overload the provider calls, which the spy then takes as its signature.
+ * @returns the spy, which each test answers.
+ */
+function spyOnLookup() {
+  const resolver: { lookup: (hostname: string, options: LookupAllOptions) => Promise<LookupAddress[]> } = dns.promises
+  return vi.spyOn(resolver, 'lookup')
+}
 
 /** A public-looking documentation address: what a resolver answers the guard for a name it means to rebind. */
 const PUBLIC_ADDRESS = '203.0.113.10'
@@ -32,7 +39,7 @@ let listener: Server
 let port: number
 /** How many requests the loopback listener accepted: one is a fetch that reached the private service. */
 let served: number
-let lookup: Mock<LookupAll>
+let lookup: ReturnType<typeof spyOnLookup>
 const fibers: Array<Fiber> = []
 
 /**
@@ -60,7 +67,7 @@ beforeEach(async () => {
   })
   await new Promise<void>(resolve => listener.listen(0, '127.0.0.1', resolve))
   port = (listener.address() as AddressInfo).port
-  lookup = vi.spyOn(dns.promises, 'lookup') as unknown as Mock<LookupAll>
+  lookup = spyOnLookup()
 })
 
 afterEach(async () => {

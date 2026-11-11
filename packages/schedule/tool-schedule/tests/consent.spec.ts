@@ -1,7 +1,7 @@
 /** The optional Schedule consent seam: a composed consent names what an approved management call creates. */
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ApprovalService } from '@deepseek-ai/dsh-user-approval'
+import type {} from '@deepseek-ai/dsh-user-approval'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { ScheduleId } from '@deepseek-ai/dsh-schedule'
@@ -90,7 +90,7 @@ type Setup = Awaited<ReturnType<typeof setup>>
 function approving(test: Setup) {
   // The answer type is the union a case may later rewrite with `mockImplementation`, so a rejection is type-safe.
   const request = vi.fn(async (_ask: { readonly toolName: string; readonly reason: string }): Promise<'allowed-once' | 'rejected'> => 'allowed-once')
-  test.ctx.provide('approval', { request } as unknown as ApprovalService)
+  test.ctx.provide('approval', { request })
   return request
 }
 

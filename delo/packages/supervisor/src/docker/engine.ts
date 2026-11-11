@@ -139,7 +139,9 @@ export function engineAt(socketPath: string, timeouts: EngineTimeouts): Engine {
     }, timeouts.callMs)
     const text = Buffer.concat(chunks).toString('utf8')
     if (status >= 400) throw engineError(status, text)
-    return text.length === 0 ? null : JSON.parse(text) as unknown
+    if (text.length === 0) return null
+    const value: unknown = JSON.parse(text)
+    return value
   }
   return {
     call,

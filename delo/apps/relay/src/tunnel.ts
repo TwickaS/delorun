@@ -219,7 +219,7 @@ export class Tunnel {
     }
     let value: unknown
     try {
-      value = JSON.parse(text) as unknown
+      value = JSON.parse(text)
     } catch (_error: unknown) {
       this.fail(new RelayError('PROTOCOL_ERROR', 'the proof is not JSON'))
       return

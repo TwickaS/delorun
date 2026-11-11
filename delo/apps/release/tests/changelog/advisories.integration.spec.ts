@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { acceptedAdvisories, run } from '../../src/changelog/assemble.ts'
 import { capture, fragmentText, LEDGER, scratchRepo, UNRELEASED } from './support.ts'
 
-const signedManifest = vi.hoisted(() => ({ value: undefined as unknown }))
+const signedManifest = vi.hoisted((): { value: unknown } => ({ value: undefined }))
 
 vi.mock('@delo/release-formats/sign/schemas', () => ({ readEnvelope: () => ({ signed: { advisories: signedManifest.value } }) }))
 
