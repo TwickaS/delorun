@@ -39,6 +39,10 @@ function isENOTDIR(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOTDIR'
 }
 
+function isELOOP(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ELOOP'
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
 }
@@ -325,7 +329,7 @@ async function readDirectoryEntries(target: LocalTarget): Promise<Dirent[]> {
 /**
  * List direct children of a directory in stable name order. Each child includes
  * a resolved target plus stat metadata when still available; file contents are
- * never read.
+ * never read. A link that resolves through itself (`ELOOP`) is left out.
  * @param target - the resolved directory to list; a missing or non-directory target throws.
  * @param signal - aborts the listing, checked between children (`FS_ABORTED`).
  * @returns one entry per direct child, sorted by name.
@@ -363,6 +367,8 @@ export async function listDirectory(target: LocalTarget, signal?: AbortSignal): 
         ...(childInfo?.type === 'file' ? { size: childInfo.size } : {}),
       })
     } catch (error: unknown) {
+      // A link that resolves to itself names nothing a listing can show; it is left out instead of failing the listing.
+      if (isELOOP(error)) continue
       throw listingIoError(localDisplayPath(target.displayPath, entry.name), error)
     }
     throwIfAborted(signal, 'list')

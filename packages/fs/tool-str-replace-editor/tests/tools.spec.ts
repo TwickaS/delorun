@@ -754,6 +754,16 @@ describe('the sandbox provider\'s protected home', () => {
     }
   })
 
+  it.skipIf(process.platform === 'win32')('leaves a link that resolves through itself out of a directory listing', async () => {
+    const { ctx, root, owner } = await setup()
+    await mkdir(join(root, 'proj', 'src'), { recursive: true })
+    await symlink(join(root, 'proj', 'loop'), join(root, 'proj', 'loop'))
+    const result = await call(ctx, owner, { command: 'view', path: join(root, 'proj') })
+    expect(result.isError).not.toBe(true)
+    expect(text(result)).toContain(join(root, 'proj', 'src'))
+    expect(text(result)).not.toContain(join(root, 'proj', 'loop'))
+  })
+
   it('leaves out of a directory listing a child that links to the home, with everything below it', async () => {
     const { ctx, root, owner } = await setup({}, { sandboxMode: 'workspace-write' })
     const { home } = await protectedHomeFixture(root)
