@@ -115,6 +115,8 @@ describe('what a run asks for', () => {
     const plan = [native, build, delo, fork, gate]
     // The suite is served from stored passes: its needs do not run.
     expect(withoutIdleNeeds(plan, [native, build, delo, gate]).map(each => each.id)).toEqual(['tests:fork', 'gates:dco'])
+    // The suite no longer waits for the needs that were dropped.
+    expect(withoutIdleNeeds(plan, [native, build, delo, gate]).map(each => each.needs)).toEqual([[], []])
     // The suite runs: so do its needs, and their needs.
     expect(withoutIdleNeeds(plan, plan).map(each => each.id)).toEqual(['generate:native', 'build:artifacts', 'build:delo', 'tests:fork', 'gates:dco'])
     // Two checks that need one build, and a need outside the plan, are walked once each.

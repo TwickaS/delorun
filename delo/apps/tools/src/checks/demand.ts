@@ -46,6 +46,7 @@ export function checksToRun<T extends WithUnits>(plan: readonly T[], cache: Pick
 /**
  * A plan without the checks that were planned only as another check's need when no check that would run needs them, such
  * as the native addon's build beside a fork suite every package of which a stored pass serves: no result depends on them.
+ * The kept checks no longer name a dropped check among their needs, so the runner does not wait for its result.
  * @param plan - the plan.
  * @param running - the checks of the plan that will run, from {@link checksToRun}.
  * @returns the plan, in plan order.
@@ -62,7 +63,9 @@ export function withoutIdleNeeds<T extends Check & { readonly reason: string }>(
     }
   }
   for (const check of running) if (!check.reason.startsWith('needed by ')) visit(check)
-  return plan.filter(check => !runningIds.has(check.id) || !check.reason.startsWith('needed by ') || needed.has(check.id))
+  const kept = plan.filter(check => !runningIds.has(check.id) || !check.reason.startsWith('needed by ') || needed.has(check.id))
+  const dropped = new Set(plan.filter(check => !kept.includes(check)).map(check => check.id))
+  return kept.map(check => check.needs.some(need => dropped.has(need)) ? { ...check, needs: check.needs.filter(need => !dropped.has(need)) } : check)
 }
 
 /**
