@@ -444,7 +444,7 @@
       "path": "packages/client/connection/src/rpc.ts",
       "class": "security",
       "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `HostConnectionHandle.oneTimeLaunchTokens` reports whether `authenticatedUrl` mints a one-time token per call. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). An exact Fetch route may declare `admitPeer(request, peer)`, the hook through which it admits a non-owner Peer; a route without it keeps upstream's owner-only behaviour. Lead verdict (2026-11-11): kept; the unused trust options are removed.",
-      "sha256": "3bf31f7620d956d1dc397121fcb2e04b67316e2ac7e029210dfab21ea06295be"
+      "sha256": "5f542e1965e34e9a2e4ded01552ba56bfe8c13198f88e01f2d89564f47388b27"
     },
     {
       "path": "packages/client/connection/tests/minted.host.spec.ts",
