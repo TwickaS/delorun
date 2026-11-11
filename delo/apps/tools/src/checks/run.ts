@@ -222,8 +222,21 @@ export async function runPlan(plan: readonly WithUnits<Planned>[], options: RunO
   }
 
   const ordered = [...plan].sort((a, b) => (options.priority?.get(b.id) ?? 0) - (options.priority?.get(a.id) ?? 0))
-  await new Promise<void>(resolve => {
+  try {
+    await new Promise<void>((resolve, reject) => {
     const pump = (): void => {
+      // A check settled without a process (cached, skipped, declined) can release a check earlier in this pass, and no
+      // process is left to pump again, so the pass repeats until it settles nothing.
+      let settled: number
+      do {
+        settled = results.size
+        pass()
+      } while (results.size !== settled)
+      if (results.size === plan.length) resolve()
+      else if (running.size === 0) reject(new Error(`run-checks: ${String(plan.length - results.size)} check(s) can neither start nor finish and nothing is running: ${plan.filter(check => !results.has(check.id)).map(check => check.id).join(', ')}`))
+    }
+
+    const pass = (): void => {
       for (const check of ordered) {
         if (results.has(check.id) || running.has(check.id)) continue
         const unmet = check.needs.filter(need => results.get(need)?.outcome !== 'passed')
@@ -262,7 +275,6 @@ export async function runPlan(plan: readonly WithUnits<Planned>[], options: RunO
         if (held > 0 && held + check.memoryBytes > options.memoryBytes) continue
         start(check, keyed.length === 0 ? undefined : { pending, counts })
       }
-      if (results.size === plan.length) resolve()
     }
 
     const start = (check: Planned, units?: { readonly pending: ReadonlyArray<{ readonly unit: Unit, readonly key: string }>, readonly counts: UnitCounts }): void => {
@@ -312,8 +324,10 @@ export async function runPlan(plan: readonly WithUnits<Planned>[], options: RunO
     }
 
     pump()
-  })
-  process.off('SIGINT', stopAll)
-  process.off('SIGTERM', stopAll)
+    })
+  } finally {
+    process.off('SIGINT', stopAll)
+    process.off('SIGTERM', stopAll)
+  }
   return plan.map(check => results.get(check.id) ?? { id: check.id, outcome: 'skipped', seconds: 0 })
 }
