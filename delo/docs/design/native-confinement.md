@@ -86,4 +86,4 @@ English
 
 ## What is built so far
 
-The write and read rules on bwrap, Landlock and Seatbelt, the socket rules on bwrap and Seatbelt, the refusal of a writable root that equals, lies inside or contains the home, the refusal of a lax home, `secrets/` or `run/<profile>/` directory and of a lax protected file on Linux and macOS, and the provider's support for denied socket directories are built, and [C1](../contracts/c01-home-layout.md) describes them. None of the rules above is built.
+The write and read rules on bwrap, Landlock and Seatbelt, the socket rules on bwrap and Seatbelt, the refusal of a writable root that equals, lies inside or contains the home, the refusal of a lax home, `secrets/` or `run/<profile>/` directory and of a lax protected file on Linux and macOS, and the provider's support for denied socket directories are built, and [C1](../contracts/c01-home-layout.md) describes them. Rule 1 is built: `delorun headless` composes `@delo/bundle-headless` under the sandbox overlay or refuses to start, as `delorun` and `delorun start` compose the CLI profile's layer, and `delorun plugin` boots no Host. Rules 2 to 12 are not built.
