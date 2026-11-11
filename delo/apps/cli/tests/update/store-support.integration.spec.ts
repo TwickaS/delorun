@@ -61,15 +61,15 @@ afterAll(() => {
 
 describe('storeChannelOpener', () => {
   it('opens the launcher\'s channel for a running release that passes its start check', async () => {
-    expect(await storeChannelOpener(home, store, v('1.0.0'), launcherAnchor(home, launched))(() => {})).toBeInstanceOf(LauncherChannel)
+    expect(await storeChannelOpener(home, store, v('1.0.0'), launcherAnchor(home, launched), 7)(() => {})).toBeInstanceOf(LauncherChannel)
   })
 
   it('opens no channel when the running release is not installed', async () => {
-    await expect(storeChannelOpener(home, store, v('9.9.9'), launcherAnchor(home, launched))(() => {})).rejects.toMatchObject({ code: 'RUNTIME_CHANGED' })
+    await expect(storeChannelOpener(home, store, v('9.9.9'), launcherAnchor(home, launched), 7)(() => {})).rejects.toMatchObject({ code: 'RUNTIME_CHANGED' })
   })
 
   it('opens no channel when the launcher named no roots', async () => {
-    await expect(storeChannelOpener(home, store, v('1.0.0'), launcherAnchor(home, {}))(() => {})).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED' })
+    await expect(storeChannelOpener(home, store, v('1.0.0'), launcherAnchor(home, {}), 7)(() => {})).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED' })
   })
 })
 
@@ -80,8 +80,8 @@ describe('storeChannelOpener', () => {
  */
 function preparing(openChannel: Parameters<typeof homeUpdateSupport>[0]['openChannel']): ReturnType<ReturnType<typeof homeUpdateSupport>['store']['prepare']> {
   const support = homeUpdateSupport({
-    home, profile: 'default', store, now: () => new Date(), root: launcherAnchor(home, launched).root, openChannel,
-    sources: storeReportSources({ home, profile: 'default', store, running: v('1.0.0'), root: launcherAnchor(home, launched).root }),
+    home, profile: 'default', store, now: () => new Date(), root: launcherAnchor(home, launched).root, fullCheckDays: 7, openChannel,
+    sources: storeReportSources({ home, profile: 'default', store, running: v('1.0.0'), root: launcherAnchor(home, launched).root, fullCheckDays: 7 }),
   })
   return support.store.prepare(undefined, () => {}, () => {})
 }
@@ -106,9 +106,9 @@ describe('the prepare of an update', () => {
   it('reports a release the channel refused as VERIFY_FAILED, with the refusal delorun prints for it', async () => {
     const tampered = new InstallError('INSTALL_VERIFY_FAILED', 'https://releases.example/1.1.0', 'data-formats.json does not match its digest in the signed manifest')
     const support = homeUpdateSupport({
-      home, profile: 'default', store, now: () => new Date(), root: launcherAnchor(home, launched).root,
+      home, profile: 'default', store, now: () => new Date(), root: launcherAnchor(home, launched).root, fullCheckDays: 7,
       openChannel: () => Promise.reject(tampered),
-      sources: storeReportSources({ home, profile: 'default', store, running: v('1.0.0'), root: launcherAnchor(home, launched).root }),
+      sources: storeReportSources({ home, profile: 'default', store, running: v('1.0.0'), root: launcherAnchor(home, launched).root, fullCheckDays: 7 }),
     })
     const refused = support.store.prepare(undefined, () => {}, () => {})
     await expect(refused).rejects.toBeInstanceOf(HomeProcessError)
@@ -194,8 +194,8 @@ describe('storeUpdateSupport', () => {
 
 describe('checkStoredRuntime', () => {
   it('passes an installed runtime and refuses one that is not installed, or one the launcher\'s roots cannot anchor', async () => {
-    await checkStoredRuntime(home, v('1.0.0'), SILENT, launcherAnchor(home, launched).root)
-    await expect(checkStoredRuntime(home, v('9.9.9'), SILENT, launcherAnchor(home, launched).root)).rejects.toMatchObject({ code: 'RUNTIME_CHANGED' })
-    await expect(checkStoredRuntime(home, v('1.0.0'), SILENT, launcherAnchor(home, {}).root)).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED' })
+    await checkStoredRuntime(home, v('1.0.0'), SILENT, launcherAnchor(home, launched).root, 7)
+    await expect(checkStoredRuntime(home, v('9.9.9'), SILENT, launcherAnchor(home, launched).root, 7)).rejects.toMatchObject({ code: 'RUNTIME_CHANGED' })
+    await expect(checkStoredRuntime(home, v('1.0.0'), SILENT, launcherAnchor(home, {}).root, 7)).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED' })
   })
 })

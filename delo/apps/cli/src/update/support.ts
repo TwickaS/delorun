@@ -29,6 +29,8 @@ export interface UpdateSupportOptions {
   readonly store: RuntimeStore
   /** The stored root, anchored on the launcher's roots ([trusted root](./trusted-root.ts)). */
   readonly root: TrustedRootSource
+  /** The interval of the start check's full hash in days, as `resolveFullCheckDays` resolves it. */
+  readonly fullCheckDays: number
   /**
    * Contract C18's release-log start check before a home process starts from an installed version
    * ([release check](./release-check.ts)); none when absent.
@@ -252,6 +254,7 @@ export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport 
     profile: options.profile,
     openChannel: options.openChannel,
     root: options.root,
+    fullCheckDays: options.fullCheckDays,
     ...options.preLaunch === undefined ? {} : { preLaunch: options.preLaunch },
     report: { build: version => buildFromSources('cli-home', options.sources, version) },
   }, options.home)

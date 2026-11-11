@@ -53,7 +53,7 @@ import { studioBundleMigration } from './profile-migrations.ts'
 import { removeSandboxOverlay, sandboxOverlayPath, type SandboxProtection } from './sandbox-protection.ts'
 import { bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
-import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.ts'
+import { checkStoredRuntime, fullCheckDaysOf, storeUpdateSupport } from './update/store-support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
 import { loadDeloEnvironment } from './launch-environment.ts'
 import { registerFatalRelease } from './last-resort.ts'
@@ -552,7 +552,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) }, log: (text) => { logger.warn(text) } })
   }
   return runningHost(booted, request, composed.protection, async () => {
-    if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root)
+    if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env))
   })
 }
 

@@ -20,7 +20,7 @@ import { checkAndRecord } from '@delo/release-verify/record'
 import type { StartCheckResult } from '@delo/release-verify/start'
 import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
-import { parseRuntimeVersion, resolveFullCheckDays, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
+import { FULL_CHECK_DAYS_ENV, parseRuntimeVersion, resolveFullCheckDays, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
 import { runLauncher, launcherProfile, type LauncherOutput, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
@@ -29,12 +29,6 @@ import { BUILD_CONSTANTS, channelPlan, logPlan, platformOf, type BuildConstants 
 
 /** The launcher's own flag for the CLI profile, which it also passes to the runtime. */
 export const PROFILE_FLAG = '--profile'
-
-/**
- * The variable that sets the interval of the start check's full hash, in whole days from 0 to 30; 7 when unset. The
- * launcher reads no settings file, so this is where a person sets it.
- */
-export const FULL_CHECK_DAYS_ENV = 'DELO_RUNTIME_FULL_CHECK_DAYS'
 
 /** The launcher's own flag for the release to install, which it keeps. */
 export const RELEASE_FLAG = '--release'

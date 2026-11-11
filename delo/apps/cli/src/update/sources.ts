@@ -44,6 +44,8 @@ export interface StoreSourcesOptions {
   readonly running: RuntimeVersion
   /** The stored root, anchored on the launcher's roots, which every start check of the report verifies with. */
   readonly root: TrustedRootSource
+  /** The interval of the start check's full hash in days, as `resolveFullCheckDays` resolves it. */
+  readonly fullCheckDays: number
   /**
    * Read the target runtime's bundle tables; {@link readBundleTables} by default.
    * @param runtime - the installed runtime's directory.
@@ -242,7 +244,8 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
   const profileDir = join(home, 'profiles', profile)
   const tables = options.bundleTables ?? readBundleTables
   const bundleLayers = options.bundleLayers ?? readBundleLayers
-  const verified = async (version: string): Promise<VerifiedRuntime> => store.checkRuntime(brandString<RuntimeVersion>(version), await options.root())
+  // The start check, as a launch of the runtime runs it; inside the prepare it shares the check already made there.
+  const verified = async (version: string): Promise<VerifiedRuntime> => store.startCheckRuntime(brandString<RuntimeVersion>(version), await options.root(), options.fullCheckDays)
   const profileFacts = async (): Promise<ProfileFacts> => readProfileFacts(home, profile)
   return {
     running: async () => versionsOf(await verified(options.running)),

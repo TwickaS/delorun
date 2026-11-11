@@ -31,6 +31,13 @@ const TEMPORARY = /\.tmp-[0-9a-f]{16}$/u
 
 const NS_PER_MS = 1_000_000n
 
+/**
+ * The environment variable that sets the interval of the start check's full hash ({@link resolveFullCheckDays}): the
+ * launcher reads no settings file, so this is where a person sets it, and a home process reads the same variable for
+ * the start checks of an update.
+ */
+export const FULL_CHECK_DAYS_ENV = 'DELO_RUNTIME_FULL_CHECK_DAYS'
+
 /** The interval of the start's full hash when the person sets none, in days. */
 const FULL_CHECK_DAYS = 7
 
@@ -160,8 +167,12 @@ export class RuntimeStore {
 
   /** The home, the platform and the logger. */
   private readonly options: RuntimeStoreOptions
-  /** The file checks of the current {@link shareChecks} scope, by version and file list digest. */
-  private readonly shared = new AsyncLocalStorage<Map<string, Promise<void>>>()
+  /**
+   * The file checks of the current {@link shareChecks} scope, by version and file list digest, each with whether it
+   * hashed every file: a full check or an install, which a later start check or full check shares, or a start check,
+   * which only a later start check shares.
+   */
+  private readonly shared = new AsyncLocalStorage<Map<string, { readonly full: boolean, readonly check: Promise<void> }>>()
 
   /**
    * @param options - the home, the platform and the logger.
@@ -227,25 +238,35 @@ export class RuntimeStore {
    */
   async checkRuntime(version: RuntimeVersion, root: RootMetadata): Promise<VerifiedRuntime> {
     const release = await this.storedRelease(version, root)
-    const scope = this.shared.getStore()
-    if (scope === undefined) {
-      await this.fullCheck(version, release, 'changed')
-    } else {
-      const key = `${version}\n${this.listDigest(release)}`
-      let check = scope.get(key)
-      if (check === undefined) {
-        check = this.fullCheck(version, release, 'changed')
-        scope.set(key, check)
-      }
-      await check
-    }
+    await this.sharedCheck(version, release, true, () => this.fullCheck(version, release, 'changed'))
     return { version, ...release }
   }
 
   /**
-   * Run work in which every {@link checkRuntime} of a version, and an install's verification of it, share one file
-   * check: an update's prepare, whose channel opener, install and report readers each check the runtimes they read.
-   * The result is shared only within the work's own calls; a later scope checks again.
+   * Run contract C2's start check on an installed version, as the launcher runs it before it starts the version:
+   * verify its stored manifest and file list with the root, list the installation, and compare each file's identity
+   * with the installation's record, hashing every file the record cannot vouch for, and every file when the record is
+   * missing or unbound, the full hash is due, or change times are not trusted here. It writes nothing but that record,
+   * after a passing hash. Inside a {@link shareChecks} scope it shares a full check, an install or a start check of the
+   * version already made there.
+   * @param version - the installed version.
+   * @param root - the trusted root.
+   * @param fullCheckDays - the interval of the full hash in days, as {@link resolveFullCheckDays} resolves it.
+   * @returns the verified runtime.
+   * @throws {RuntimeStoreError} `RUNTIME_CHANGED`, naming the files that differ and offering reinstall and, when
+   *   another installed version is kept as `previous`, rollback.
+   */
+  async startCheckRuntime(version: RuntimeVersion, root: RootMetadata, fullCheckDays: number): Promise<VerifiedRuntime> {
+    const release = await this.storedRelease(version, root)
+    await this.sharedCheck(version, release, false, () => this.startCheck(version, release, fullCheckDays))
+    return { version, ...release }
+  }
+
+  /**
+   * Run work in which every {@link checkRuntime} and {@link startCheckRuntime} of a version, and an install's
+   * verification of it, share one file check: an update's prepare, whose channel opener, install and report readers
+   * each check the runtimes they read. A start check shares any earlier check of the version; a full check shares only
+   * a full check or an install. The result is shared only within the work's own calls; a later scope checks again.
    * @param work - the work.
    * @returns its result.
    */
@@ -346,7 +367,8 @@ export class RuntimeStore {
         await sealInstallation(installation)
         await syncDirectory(this.paths.root)
         if (fileSystem !== undefined) await this.writeRecord(request.version, release, { identities: examined.identities, capturedAt }, Number(capturedAt / NS_PER_MS), fileSystem)
-        this.shared.getStore()?.set(`${request.version}\n${this.listDigest(release)}`, Promise.resolve())
+        // Every file was hashed from the bytes it was written from, as a full check would hash it.
+        this.shared.getStore()?.set(`${request.version}\n${this.listDigest(release)}`, { full: true, check: Promise.resolve() })
         const current = await readPointerFile(this.paths.pointer(STORE_ENTRIES.current))
         if (current === undefined || current === 'malformed') await writePointers(this.paths, { current: request.version })
         return { version: request.version, ...release }
@@ -422,6 +444,28 @@ export class RuntimeStore {
     } catch (error) {
       throw new RuntimeStoreError('RUNTIME_CHANGED', this.paths.version(version), `runtime ${version}'s stored manifest or file list does not verify: ${(error as Error).message}`, await this.remediesFor(version), { cause: error })
     }
+  }
+
+  /**
+   * Run a file check of a version once per {@link shareChecks} scope: outside a scope it always runs; inside one it
+   * joins an earlier check of the same version and file list that hashed every file, or, for a start check, any earlier
+   * check.
+   * @param version - the installed version.
+   * @param release - its verified release files.
+   * @param full - whether the caller needs every file hashed.
+   * @param run - the check.
+   * @returns once the check, its own or a shared one, has passed.
+   * @throws whatever the check throws.
+   */
+  private async sharedCheck(version: RuntimeVersion, release: VerifiedRelease, full: boolean, run: () => Promise<void>): Promise<void> {
+    const scope = this.shared.getStore()
+    if (scope === undefined) return run()
+    const key = `${version}\n${this.listDigest(release)}`
+    const earlier = scope.get(key)
+    if (earlier !== undefined && (earlier.full || !full)) return earlier.check
+    const check = run()
+    scope.set(key, { full, check })
+    return check
   }
 
   /**

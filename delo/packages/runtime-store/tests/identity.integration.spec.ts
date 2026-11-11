@@ -400,6 +400,57 @@ describe('the documented limit and the full hash', () => {
   })
 })
 
+describe('the start check on request, which an update runs on the running runtime and its target', () => {
+  it('c02-update-start-check-catches-in-place-change: a changed byte with size, mode and modification time restored is refused', async () => {
+    await settledInstall()
+    changeInPlace(TARGET)
+    expect((await refusal(fixture.store.startCheckRuntime(V1, fixture.root, 7))).message).toContain(`${TARGET} (sha256)`)
+  })
+
+  it('compares identities as a launch does: a forged record passes, the documented limit, while the full check refuses', async () => {
+    await settledInstall()
+    forgeRecord()
+    await expect(fixture.store.startCheckRuntime(V1, fixture.root, 7)).resolves.toMatchObject({ version: V1 })
+    await refusal(fixture.store.checkRuntime(V1, fixture.root))
+  })
+
+  it.each([
+    ['no record', () => { rmSync(recordPath()) }, 7],
+    ['a last full pass older than the interval', () => {
+      const record = readRecord()
+      record.fullCheckAt = Date.now() - 8 * DAY_MS
+      writeRecord(record)
+    }, 7],
+    ['an interval of 0', () => undefined, 0],
+  ])('hashes every file with %s, as a launch does', async (_case, change, days) => {
+    await settledInstall()
+    forgeRecord()
+    change()
+    expect((await refusal(fixture.store.startCheckRuntime(V1, fixture.root, days))).message).toContain(`${TARGET} (sha256)`)
+  })
+
+  it('shares an earlier check of the version in one scope, but a full check never shares a start check', async () => {
+    await settledInstall()
+    forgeRecord()
+    await fixture.store.shareChecks(async () => {
+      await expect(fixture.store.startCheckRuntime(V1, fixture.root, 7)).resolves.toMatchObject({ version: V1 })
+      expect((await refusal(fixture.store.checkRuntime(V1, fixture.root))).message).toContain(`${TARGET} (sha256)`)
+    })
+  })
+
+  it('shares an earlier full check in one scope, and checks again in a later scope', async () => {
+    await settledInstall()
+    await fixture.store.shareChecks(async () => {
+      await fixture.store.checkRuntime(V1, fixture.root)
+      changeInPlace(TARGET)
+      await expect(fixture.store.startCheckRuntime(V1, fixture.root, 7)).resolves.toMatchObject({ version: V1 })
+    })
+    await fixture.store.shareChecks(async () => {
+      expect((await refusal(fixture.store.startCheckRuntime(V1, fixture.root, 7))).message).toContain(`${TARGET} (sha256)`)
+    })
+  })
+})
+
 describe('file systems whose change times are not trusted', () => {
   it.each<[string, () => void]>([
     ['NFS', () => { replaceStatfs(() => Promise.resolve({ type: 0x6969 })) }],

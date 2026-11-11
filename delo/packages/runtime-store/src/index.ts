@@ -29,5 +29,5 @@ export {
   type UpdateReport,
   type UpdateReporter,
 } from './seam.ts'
-export { resolveFullCheckDays, RuntimeStore, type FilledRelease, type InstallRequest, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeStoreOptions, type StagedFiles, type VerifiedRuntime } from './store.ts'
+export { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, type FilledRelease, type InstallRequest, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeStoreOptions, type StagedFiles, type VerifiedRuntime } from './store.ts'
 export type { TreeProblem } from './tree.ts'

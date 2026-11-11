@@ -142,7 +142,7 @@ beforeEach(() => {
 
 /** @returns the sources over the shared home, running 1.0.0. */
 const sources = (bundleTables?: (runtime: string, node: string) => Promise<BundleTables>): ReturnType<typeof storeReportSources> =>
-  storeReportSources({ home, profile: PROFILE, store, running: v('1.0.0'), root: async () => Promise.resolve(rootOf.metadata), ...bundleTables === undefined ? {} : { bundleTables } })
+  storeReportSources({ home, profile: PROFILE, store, running: v('1.0.0'), root: async () => Promise.resolve(rootOf.metadata), fullCheckDays: 7, ...bundleTables === undefined ? {} : { bundleTables } })
 
 describe('bundleFactsOf', () => {
   it('reports the retired bundles the profile lists, and no template when its list is no installation-owned list', () => {
@@ -261,7 +261,7 @@ describe('storeReportSources', () => {
       const layers = [{ layer: '@mine/bundle', rows: [] }]
 
       const target = await storeReportSources({
-        home, profile: PROFILE, store, running: v('1.0.0'), root: async () => Promise.resolve(rootOf.metadata),
+        home, profile: PROFILE, store, running: v('1.0.0'), root: async () => Promise.resolve(rootOf.metadata), fullCheckDays: 7,
         bundleTables: async () => Promise.resolve(TABLES),
         bundleLayers: async (bundles, options) => {
           asked.push([bundles, options])

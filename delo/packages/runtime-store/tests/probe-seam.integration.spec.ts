@@ -41,7 +41,7 @@ function channelOf(offers: Array<{ readonly release: string, readonly files?: Re
 const reporter = { build: async (version: unknown) => ({ report: { for: version }, health: { disabledPlugins: [], namedRows: [] }, dataDiffers: false }) }
 
 function seam(channel: ReturnType<typeof channelOf>): HomeRuntimeStore {
-  return new HomeRuntimeStore({ store: fixture.store, profile: 'default', root: async () => fixture.root, openChannel: async () => channel, report: reporter })
+  return new HomeRuntimeStore({ store: fixture.store, profile: 'default', root: async () => fixture.root, fullCheckDays: 7, openChannel: async () => channel, report: reporter })
 }
 
 describe('probe: homeCommand', () => {
@@ -70,7 +70,7 @@ describe('probe: errors across the seam', () => {
     const refusal = new RuntimeStoreError('ROOT_NOT_ANCHORED', join(fixture.home, 'trust/root.json'), 'no launcher roots')
     let opened = 0
     const store = new HomeRuntimeStore({
-      store: fixture.store, profile: 'default', root: () => Promise.reject(refusal), report: reporter,
+      store: fixture.store, profile: 'default', root: () => Promise.reject(refusal), fullCheckDays: 7, report: reporter,
       openChannel: async () => { opened += 1; return channelOf([]) },
     })
     await expect(store.reportRollback(V1)).rejects.toBe(refusal)

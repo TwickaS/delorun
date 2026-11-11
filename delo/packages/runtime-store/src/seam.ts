@@ -131,6 +131,12 @@ export interface HomeRuntimeStoreOptions {
    */
   readonly root: TrustedRootSource
   /**
+   * The interval of the start check's full hash in days, as `resolveFullCheckDays` resolves it from the launcher's
+   * variable: the prepare's checks and the check before a home process starts are start checks, which hash every file
+   * when it is due.
+   */
+  readonly fullCheckDays: number
+  /**
    * Contract C18's release-log start check of a version before a home process starts from it, as the launcher runs it
    * before a start; none by default.
    * @param version - the installed version.
@@ -224,7 +230,8 @@ export class HomeRuntimeStore {
   /**
    * The check before a home process is started from an installed version, an update's or a rollback's successor or the
    * start after an interrupted update, as the launcher checks a version before it starts it: contract C2's start check
-   * of every file under the anchored root, then the options' `preLaunch`, contract C18's release-log start check.
+   * of every file under the anchored root, by its recorded identity or its hash, then the options' `preLaunch`,
+   * contract C18's release-log start check.
    * @param version - the installed version.
    * @throws {RuntimeStoreError} `RUNTIME_CHANGED` when a file or the stored release files do not verify;
    *   `ROOT_NOT_ANCHORED` when the root cannot be anchored; whatever `preLaunch` throws when the release-log check
@@ -232,7 +239,7 @@ export class HomeRuntimeStore {
    */
   async checkLaunch(version: RuntimeVersion): Promise<void> {
     const root = await this.options.root()
-    await this.options.store.checkRuntime(version, root)
+    await this.options.store.startCheckRuntime(version, root, this.options.fullCheckDays)
     await this.options.preLaunch?.(version, root)
   }
 
@@ -248,8 +255,9 @@ export class HomeRuntimeStore {
    * The update's `checking`, `installing` and `reporting` phases: resolve `target`, or the newest release on the
    * person's channel, and install it unless it is installed and its files match its manifest. An installed copy
    * that fails the start check is installed again, and an install never switches `current`. The phases share one
-   * file check per runtime ({@link RuntimeStore.shareChecks}): the channel opener's check of the running runtime, the
-   * install's or the intact check's of the target, and the report readers' checks of both.
+   * file check per runtime ({@link RuntimeStore.shareChecks}): the channel opener's start check of the running runtime,
+   * the install's hash of each file it writes or the start check of an installed target, and the report readers'
+   * checks of both.
    * @param target - the version, or `undefined` for the newest release.
    * @param phase - called as each phase starts; `installing` is skipped when nothing installs.
    * @param line - writes each line of the release's install progress, as the launcher prints it; nothing is written
@@ -335,7 +343,7 @@ export class HomeRuntimeStore {
   }
 
   /**
-   * Whether an installed version is whole: it passes the start check against the stored root.
+   * Whether an installed version is whole: it passes the start check against the stored root, as a launch of it would.
    * @param version - the version.
    * @returns true when it is installed and intact.
    * @throws {RuntimeStoreError} when the store cannot read the version's stored release files for a reason other
@@ -345,7 +353,7 @@ export class HomeRuntimeStore {
     const paths = this.options.store.paths
     if (!await isInstalled(paths, version)) return false
     try {
-      await this.options.store.checkRuntime(version, await this.options.root())
+      await this.options.store.startCheckRuntime(version, await this.options.root(), this.options.fullCheckDays)
       return true
     } catch (error) {
       if (isStoreError(error, 'RUNTIME_CHANGED')) return false
