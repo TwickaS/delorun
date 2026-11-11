@@ -24,7 +24,7 @@ The user guide is for people who install and use Delorun, the community fork of 
 
 [Switching from DeepSeek Harness](switching.md) explains what `delorun import-home` and setup copy from `~/.dsh`, what you choose one by one, what is held back or stays behind and why, what changes when you switch, the switches that return a difference to stock, and how to go back.
 
-[Delo and stock DeepSeek Harness](delo-vs-stock.md) covers why Delorun exists, what stays the same as stock, the differences it plans, and the roadmap.
+[Delorun and stock DeepSeek Harness](delo-vs-stock.md) covers why Delorun exists, what stays the same as stock, every difference, what is not available yet, and the roadmap.
 
 ## Every day
 
