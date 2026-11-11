@@ -142,6 +142,29 @@ export function missingEscapeSocketDirectories(protection: Pick<SandboxProtectio
 }
 
 /**
+ * A sandbox row's settings without what one start set from this computer's state at that time: the protected home and
+ * its read exemptions where they are the start's, and the start's own denied sockets and escape directories. The next
+ * start computes them again, and a Docker socket that appeared, or a Docker context the person switched, changes them
+ * without any layer of the profile changing. Entries a layer lists stay, and so does a value the start did not set.
+ * @param config - the row's config as the Loader mounted it.
+ * @param protection - the settings that start set.
+ * @returns the remaining settings; a config that is not an object as it is.
+ */
+export function settingsBeyondProtection(config: unknown, protection: SandboxProtection): unknown {
+  if (!isRecord(config)) return config
+  const { protectedHome, protectedHomeReadable, deniedSockets, escapeSocketDirectories, ...rest } = config
+  const sameList = (value: unknown, list: readonly string[]): boolean => Array.isArray(value) && value.length === list.length && value.every((entry, at) => entry === list[at])
+  const beyond = (value: unknown, list: readonly string[]): unknown => Array.isArray(value) ? value.filter(entry => typeof entry !== 'string' || !list.includes(entry)) : value
+  return {
+    ...rest,
+    ...protectedHome === protection.protectedHome ? {} : { protectedHome },
+    ...sameList(protectedHomeReadable, protection.protectedHomeReadable) ? {} : { protectedHomeReadable },
+    ...deniedSockets === undefined ? {} : { deniedSockets: beyond(deniedSockets, protection.deniedSockets) },
+    ...escapeSocketDirectories === undefined ? {} : { escapeSocketDirectories: beyond(escapeSocketDirectories, protection.escapeSocketDirectories) },
+  }
+}
+
+/**
  * Whether a value holds only YAML scalars, arrays and plain objects, which the overlay can write again.
  * @param value - the value.
  * @returns false for an expression node or any other object.

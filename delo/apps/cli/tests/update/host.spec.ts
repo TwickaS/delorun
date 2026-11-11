@@ -4,7 +4,7 @@
  * which booted rows count as inactive, and each of C3's health criteria H1 to H5 against local HTTP servers and a
  * profile `package.json` in a temporary directory.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest, type Server } from 'node:http'
 import type { AddressInfo, Socket } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -17,7 +17,11 @@ import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
 import * as UpdateGate from '@delo/bundle-local/update-gate'
 import { CountingChatGate } from '@delo/home-process'
 import type { BootedRow } from '../../src/delo-bundles.ts'
+import { sandboxProtection, type SandboxProtection } from '../../src/sandbox-protection.ts'
 import { arrivedOnLoopbackListener, bootRowsOf, checkHealth, HEALTH_PATH, inactiveRows, serveHealth, STOP_REASON, studioHealthUrl, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
+
+/** A start's sandbox protection, for rows whose settings hash leaves it out. */
+const PROTECTION: SandboxProtection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'] }
 
 /** An agent that records the cancellations it is asked for. */
 interface FakeAgent {
@@ -242,19 +246,19 @@ describe('rows', () => {
       row({ id: 'b08ab057', state: 'failed' }),
     ]
 
-    expect(inactiveRows(rows).map(({ id, generated }) => `${id}${generated ? ' (generated)' : ''}`)).toEqual(['off', 'broken', 'waiting', 'skipped', 'off-and-failed', 'b08ab057 (generated)'])
+    expect(inactiveRows(rows, PROTECTION).map(({ id, generated }) => `${id}${generated ? ' (generated)' : ''}`)).toEqual(['off', 'broken', 'waiting', 'skipped', 'off-and-failed', 'b08ab057 (generated)'])
   })
 
   it('hashes the config of a protected plugin\'s rows, the same config the same way whatever its key order, and no other row\'s', () => {
     const manager = row({ id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } })
     const guard = (config: unknown): BootedRow => row({ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config })
-    const [, first] = bootRowsOf([manager, guard({ block: true, hosts: ['a'] })])
-    const [, reordered] = bootRowsOf([manager, guard({ hosts: ['a'], block: true })])
-    const [, changed] = bootRowsOf([manager, guard({ block: false, hosts: ['a'] })])
+    const [, first] = bootRowsOf([manager, guard({ block: true, hosts: ['a'] })], PROTECTION)
+    const [, reordered] = bootRowsOf([manager, guard({ hosts: ['a'], block: true })], PROTECTION)
+    const [, changed] = bootRowsOf([manager, guard({ block: false, hosts: ['a'] })], PROTECTION)
     expect(first?.configHash).toMatch(/^[0-9a-f]{64}$/u)
     expect(reordered?.configHash).toBe(first?.configHash)
     expect(changed?.configHash).not.toBe(first?.configHash)
-    expect(bootRowsOf([manager, row({ id: 'other', config: { a: 1 } })])[1]).toEqual({ id: 'other', name: 'plugin-a', generated: false })
+    expect(bootRowsOf([manager, row({ id: 'other', config: { a: 1 } })], PROTECTION)[1]).toEqual({ id: 'other', name: 'plugin-a', generated: false })
   })
 })
 
@@ -427,7 +431,7 @@ describe('checkHealth', () => {
    * @returns the facts.
    */
   function facts(port: number, change: Partial<HostHealthFacts> = {}): HostHealthFacts {
-    return { rows: () => [], studio: () => ({ host: '127.0.0.1', port }), profileDir: '/nowhere', verifyRuntime: async () => Promise.resolve(), ...change }
+    return { rows: () => [], studio: () => ({ host: '127.0.0.1', port }), profileDir: '/nowhere', protection: PROTECTION, verifyRuntime: async () => Promise.resolve(), ...change }
   }
 
   const NOTHING_NAMED = { namedRows: [], previousFailures: [], previousRows: [], disabledPlugins: [] }
@@ -610,20 +614,47 @@ describe('checkHealth', () => {
     const target: BootedRow[] = [{ id: 'c19d0a77', name: 'plugin-off', disabled: true, state: 'active' }]
     const previous: BootedRow[] = [{ id: 'b08ab057', name: 'plugin-off', disabled: true, state: 'active' }]
 
-    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousFailures: inactiveRows(previous), previousRows: bootRowsOf(previous) })).toEqual({ passed: true })
+    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousFailures: inactiveRows(previous, PROTECTION), previousRows: bootRowsOf(previous, PROTECTION) })).toEqual({ passed: true })
   })
 
   it('fails H3 when a protected row\'s settings changed and the report did not name it, and passes when it did', async () => {
     const port = await studioAnswering(204)
     const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } }
     const guard = (block: boolean): BootedRow => ({ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', disabled: false, state: 'active', config: { block } })
-    const previous = bootRowsOf([manager, guard(true)])
+    const previous = bootRowsOf([manager, guard(true)], PROTECTION)
 
     expect(await checkHealth(facts(port, { rows: () => [manager, guard(true)] }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({ passed: true })
     expect(await checkHealth(facts(port, { rows: () => [manager, guard(false)] }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({
       passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row delo-fetch-guard changed and the report did not name it',
     })
     expect(await checkHealth(facts(port, { rows: () => [manager, guard(false)] }), { ...NOTHING_NAMED, namedRows: ['delo-fetch-guard'], previousRows: previous })).toEqual({ passed: true })
+  })
+
+  it('passes H3 when the start\'s own sandbox protection changed with the computer: a Docker socket that appeared between the two starts', async () => {
+    const port = await studioAnswering(204)
+    const machine = mkdtempSync(join(tmpdir(), 'dhh-docker-'))
+    directories.push(machine)
+    // `/var/run` and `/run` on Linux: the socket's configured path lies under a link, so its real path is a second spelling.
+    mkdirSync(join(machine, 'run'))
+    symlinkSync(join(machine, 'run'), join(machine, 'var-run'))
+    const env = { DOCKER_HOST: `unix://${join(machine, 'var-run', 'docker.sock')}` }
+    const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@deepseek-ai/dsh-sandbox-local'] } }
+    const sandbox = (protection: SandboxProtection, layerSockets: readonly string[]): BootedRow => ({
+      id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'active',
+      config: { networkAccess: false, protectedHome: protection.protectedHome, protectedHomeReadable: [...protection.protectedHomeReadable], deniedSockets: [...new Set([...layerSockets, ...protection.deniedSockets])], escapeSocketDirectories: [...protection.escapeSocketDirectories] },
+    })
+    // The running Host started before Docker did; the target starts once the socket exists.
+    const before = await sandboxProtection(machine, 'default', env, machine)
+    writeFileSync(join(machine, 'run', 'docker.sock'), '')
+    const after = await sandboxProtection(machine, 'default', env, machine)
+    expect(after.deniedSockets.length).toBe(before.deniedSockets.length + 1)
+    const previous = bootRowsOf([manager, sandbox(before, ['/srv/listed.sock'])], before)
+
+    expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after, ['/srv/listed.sock'])], protection: after }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({ passed: true })
+    // A socket a layer of the profile lists is the profile's setting, not the start's: an update that drops it changed the row.
+    expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after, [])], protection: after }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({
+      passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row sandbox changed and the report did not name it',
+    })
   })
 
   it('passes with no bundle prediction without reading the profile', async () => {

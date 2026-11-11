@@ -138,7 +138,7 @@ description: "契约 C3：Delo 更新应用之前显示的更新报告，其条�
 
 - H1. 目标的运行时文件依据其 manifest 验证通过，且其发布日志状态不是 `failed`（[C2](c02-release-manifest.zh.md#client-verification)、[C18](c18-release-log.zh.md#check-states)）。
 - H2. Host 达到就绪：对于 `cli-home`，home 进程的 Host 已就绪，且其回环监听器对 `GET /delo/health` 返回状态 204（该路由只回答本机发往该监听器且 `Host` 为回环名称的请求，其他请求一律得到 421；绑定到所有地址的监听器经 `127.0.0.1` 询问），该路由仅在 Host 以所有者浏览器的身份在进程内读取 studio 索引并得到状态 200 时才如此回答；该路由不读取 cookie、不返回任何内容，因此 studio 的登录要求保持有效：没有会话 cookie 的每个页面与 API 请求都会得到 401；对于 `desktop-host`，Host 通过 host 协议报告就绪，且主窗口加载 studio。
-- H3. 目标停用、跳过或移除的每个插件、组合包与行，都是报告列出过的。
+- H3. 目标停用、跳过或移除的每个插件、组合包与行，以及 CLI profile 所保护插件的每个设置发生变化的行，都是报告列出过的。比较 sandbox 行的设置时，不计每次启动根据本机当时状态设置的保护（受保护的 home、其读取豁免，以及启动自身拒绝的套接字与逃逸目录），因此两次启动之间出现的 Docker 套接字、或本人切换的 Docker context，都不算变化。
 - H4. 报告未列出的每一行加载时都没有插件加载错误，但上一个发布也记录过其加载错误的行除外。
 - H5. profile 的组合包列表等于报告预测的列表。
 

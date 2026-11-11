@@ -50,7 +50,7 @@ import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
-import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
+import { removeSandboxOverlay, sandboxOverlayPath, type SandboxProtection } from './sandbox-protection.ts'
 import { bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
 import { checkStoredRuntime, storeUpdateSupport } from './update/store-support.ts'
@@ -551,7 +551,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   if (stored !== undefined) {
     await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) }, log: (text) => { logger.warn(text) } })
   }
-  return runningHost(booted, request, async () => {
+  return runningHost(booted, request, composed.protection, async () => {
     if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root)
   })
 }
@@ -564,15 +564,16 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
  * bounds that wait itself, so a slow teardown never ends the process in the middle of a switch.
  * @param booted - the booted profile.
  * @param request - the home and profile.
+ * @param protection - the sandbox protection this start set, which the rows' settings hashes leave out.
  * @param verifyRuntime - C3's H1, the start check of the running version from the store.
  * @returns the Host.
  */
-export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, verifyRuntime: () => Promise<void>): RunningHost {
+export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, protection: SandboxProtection, verifyRuntime: () => Promise<void>): RunningHost {
   const chats = new CountingChatGate()
   booted.watchChats(chats)
   const atBoot = booted.rows()
-  const failed = inactiveRows(atBoot)
-  const atBootRows = bootRowsOf(atBoot)
+  const failed = inactiveRows(atBoot, protection)
+  const atBootRows = bootRowsOf(atBoot, protection)
   return {
     ...withDevices(booted),
     chats,
@@ -583,7 +584,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
     studioLink: booted.studioLink,
     failedRows: () => failed,
     rows: () => atBootRows,
-    check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), verifyRuntime }, expect),
+    check: expect => checkHealth({ rows: booted.rows, studio: booted.studio, profileDir: join(request.home, 'profiles', request.profile), protection, verifyRuntime }, expect),
     close: async () => {
       await booted.shutdown(EXIT.ok)
       await removeSandboxOverlay(request.home, request.profile)
