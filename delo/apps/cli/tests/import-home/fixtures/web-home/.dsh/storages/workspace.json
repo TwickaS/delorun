@@ -1,0 +1,38 @@
+{
+  "unit": {
+    "name": "workspace",
+    "version": 2
+  },
+  "global": {
+    "initialized": true,
+    "workspaceIds": [
+      "917839cf-bf52-4e34-9d9e-c3e1f8e727e6",
+      "09688a9b-a6d2-4895-ad50-d0da24aebf0a"
+    ],
+    "archivedSessionIds": [],
+    "pinnedSessionIds": []
+  },
+  "tables": {
+    "workspaces": {
+      "917839cf-bf52-4e34-9d9e-c3e1f8e727e6": {
+        "path": "/tmp/stock-person-b/projects/site",
+        "title": "site",
+        "sessionIds": [
+          "session-a4ba3ec3-05fe-4e5d-a6b9-686425d62442",
+          "session-78f4e1f0-d9c6-4f7e-9751-735d8a0ad319"
+        ],
+        "createdAt": "2026-11-11T13:37:41.687Z",
+        "updatedAt": "2026-11-11T13:37:41.687Z"
+      },
+      "09688a9b-a6d2-4895-ad50-d0da24aebf0a": {
+        "path": "/tmp/stock-person-b",
+        "title": "stock-person-b",
+        "sessionIds": [
+          "session-cf8e1d33-3b5d-4693-8fce-366e7a722f19"
+        ],
+        "createdAt": "2026-11-11T13:37:11.787Z",
+        "updatedAt": "2026-11-11T13:37:11.787Z"
+      }
+    }
+  }
+}

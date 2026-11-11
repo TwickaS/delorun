@@ -1,0 +1,4 @@
+# Settings for every profile.
+- id: llm-deepseek
+  config:
+    baseURL: https://llm-proxy.example.com/v1

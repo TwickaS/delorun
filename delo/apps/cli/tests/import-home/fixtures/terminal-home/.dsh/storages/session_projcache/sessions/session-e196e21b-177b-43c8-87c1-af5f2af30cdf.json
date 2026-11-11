@@ -1,0 +1,228 @@
+{
+  "version": 7,
+  "record": {
+    "identity": {
+      "formatVersion": 4,
+      "createdAt": 1794403966508,
+      "cwd": "/tmp/stock-person-a/projects/notes-app",
+      "isSeeded": false,
+      "inheritedEventCount": 0
+    },
+    "rows": {
+      "approvalState": {
+        "ver": 1,
+        "seq": 38,
+        "val": {
+          "policy": "ask",
+          "turnOpen": false
+        }
+      },
+      "turnBoundary": {
+        "ver": 2,
+        "seq": 38,
+        "val": {
+          "openTurnStartSeq": null,
+          "lastStepStartSeq": 30,
+          "lastStepBoundary": {
+            "kind": "end",
+            "seq": 37
+          },
+          "lastTurn": 2
+        }
+      },
+      "tokenMeasurement": {
+        "ver": 2,
+        "seq": 38,
+        "val": {
+          "headerSeq": 34,
+          "stepStart": null,
+          "anchor": {
+            "headerSeq": 34,
+            "assistantTokens": 29,
+            "usage": {
+              "inputTokens": 363,
+              "outputTokens": 17,
+              "cacheReadTokens": 5632,
+              "cacheWriteTokens": 0,
+              "totalTokens": 6012
+            }
+          },
+          "invalidSeq": null
+        }
+      },
+      "userQuestions": {
+        "ver": 2,
+        "seq": 38,
+        "val": {
+          "inheritedEventCount": 0,
+          "timed": false,
+          "questions": {
+            "active": [],
+            "settled": []
+          }
+        }
+      },
+      "todos": {
+        "ver": 2,
+        "seq": 38,
+        "val": null
+      },
+      "sandboxMode": {
+        "ver": 1,
+        "seq": 38,
+        "val": "workspace-write"
+      },
+      "tokenUsage": {
+        "ver": 2,
+        "seq": 38,
+        "val": {
+          "totals": {
+            "uncachedInputTokens": 6129,
+            "outputTokens": 80,
+            "cacheReadTokens": 11136,
+            "cacheWriteTokens": 0
+          },
+          "last": {
+            "turn": 2,
+            "step": 1,
+            "buckets": {
+              "uncachedInputTokens": 363,
+              "outputTokens": 17,
+              "cacheReadTokens": 5632,
+              "cacheWriteTokens": 0
+            }
+          }
+        }
+      },
+      "contextPressure": {
+        "ver": 5,
+        "seq": 38,
+        "val": {
+          "surfaceTokens": 1323,
+          "contextWindow": 1048576,
+          "pressureTokens": 5995,
+          "sampledSurfaceTokens": 1294
+        }
+      },
+      "title": {
+        "ver": 1,
+        "seq": 38,
+        "val": "Read README project summary request"
+      },
+      "llmRetry": {
+        "ver": 1,
+        "seq": 38,
+        "val": {}
+      },
+      "goal": {
+        "ver": 6,
+        "seq": 38,
+        "val": {
+          "current": null,
+          "seenGoalIds": [],
+          "failure": null
+        }
+      },
+      "plan": {
+        "ver": 4,
+        "seq": 38,
+        "val": {
+          "active": false,
+          "wanted": null,
+          "running": null,
+          "activeAtLastHeader": false,
+          "entered": false
+        }
+      },
+      "modelSelection": {
+        "ver": 3,
+        "seq": 38,
+        "val": {
+          "lastUsed": {
+            "provider": "deepseek-official",
+            "model": "deepseek-flash"
+          },
+          "pending": null
+        }
+      },
+      "contextBreakdown": {
+        "ver": 6,
+        "seq": 38,
+        "val": {
+          "systems": [
+            {
+              "seq": 7,
+              "tokens": 652
+            }
+          ],
+          "surfaceTokens": 1323,
+          "breakdown": {
+            "systemTokens": 652,
+            "toolsTokens": 4781,
+            "messageTokens": 671
+          }
+        }
+      },
+      "titleInput": {
+        "ver": 3,
+        "seq": 38,
+        "val": {
+          "first": {
+            "seq": 8,
+            "text": "In one short sentence, what is this project according to README.md?"
+          },
+          "count": 2,
+          "lastSeq": 31
+        }
+      },
+      "inbox": {
+        "ver": 1,
+        "seq": 38,
+        "val": {
+          "next-turn": [],
+          "next-step": []
+        }
+      },
+      "workingDirectory": {
+        "ver": 1,
+        "seq": 38,
+        "val": "/tmp/stock-person-a/projects/notes-app"
+      },
+      "permissions": {
+        "ver": 2,
+        "seq": 38,
+        "val": {
+          "preset": "workspace-write",
+          "sandbox": "workspace-write",
+          "approval": "ask",
+          "seeded": true
+        }
+      },
+      "subagentCatalog": {
+        "ver": 6,
+        "seq": 38,
+        "val": {
+          "inheritedEventCount": 0
+        }
+      },
+      "subagentTiming": {
+        "ver": 3,
+        "seq": 38,
+        "val": {
+          "descriptorSeen": false,
+          "settledMs": 0
+        }
+      },
+      "subagent": {
+        "ver": 2,
+        "seq": 38,
+        "val": {}
+      },
+      "subagentModelSelectionPolicy": {
+        "ver": 1,
+        "seq": 38,
+        "val": null
+      }
+    }
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "version": 7,
+  "record": {
+    "identity": {
+      "formatVersion": 4,
+      "createdAt": 1794404261687,
+      "cwd": "/tmp/stock-person-b/projects/site",
+      "isSeeded": false,
+      "inheritedEventCount": 0
+    },
+    "rows": {
+      "approvalState": {
+        "ver": 1,
+        "seq": -1,
+        "val": {
+          "policy": null,
+          "turnOpen": false
+        }
+      },
+      "turnBoundary": {
+        "ver": 2,
+        "seq": -1,
+        "val": {
+          "openTurnStartSeq": null,
+          "lastStepStartSeq": null,
+          "lastStepBoundary": null,
+          "lastTurn": 0
+        }
+      },
+      "tokenMeasurement": {
+        "ver": 2,
+        "seq": -1,
+        "val": {
+          "headerSeq": null,
+          "stepStart": null,
+          "anchor": null,
+          "invalidSeq": null
+        }
+      },
+      "userQuestions": {
+        "ver": 2,
+        "seq": -1,
+        "val": {
+          "inheritedEventCount": 0,
+          "timed": false,
+          "questions": {
+            "active": [],
+            "settled": []
+          }
+        }
+      },
+      "todos": {
+        "ver": 2,
+        "seq": -1,
+        "val": null
+      },
+      "sandboxMode": {
+        "ver": 1,
+        "seq": -1,
+        "val": null
+      },
+      "tokenUsage": {
+        "ver": 2,
+        "seq": -1,
+        "val": {
+          "totals": {
+            "uncachedInputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "last": null
+        }
+      },
+      "contextPressure": {
+        "ver": 5,
+        "seq": -1,
+        "val": {
+          "surfaceTokens": 0
+        }
+      },
+      "title": {
+        "ver": 1,
+        "seq": -1,
+        "val": null
+      },
+      "llmRetry": {
+        "ver": 1,
+        "seq": -1,
+        "val": {}
+      },
+      "goal": {
+        "ver": 6,
+        "seq": -1,
+        "val": {
+          "current": null,
+          "seenGoalIds": [],
+          "failure": null
+        }
+      },
+      "plan": {
+        "ver": 4,
+        "seq": -1,
+        "val": {
+          "active": false,
+          "wanted": null,
+          "running": null,
+          "activeAtLastHeader": null,
+          "entered": false
+        }
+      },
+      "modelSelection": {
+        "ver": 3,
+        "seq": -1,
+        "val": {
+          "lastUsed": null,
+          "pending": null
+        }
+      },
+      "contextBreakdown": {
+        "ver": 6,
+        "seq": -1,
+        "val": {
+          "systems": [],
+          "surfaceTokens": 0,
+          "breakdown": {
+            "systemTokens": 0,
+            "toolsTokens": 0,
+            "messageTokens": 0
+          }
+        }
+      },
+      "titleInput": {
+        "ver": 3,
+        "seq": -1,
+        "val": {
+          "first": null,
+          "count": 0,
+          "lastSeq": null
+        }
+      },
+      "inbox": {
+        "ver": 1,
+        "seq": -1,
+        "val": {
+          "next-turn": [],
+          "next-step": []
+        }
+      },
+      "workingDirectory": {
+        "ver": 1,
+        "seq": -1,
+        "val": "/tmp/stock-person-b/projects/site"
+      },
+      "permissions": {
+        "ver": 2,
+        "seq": -1,
+        "val": {
+          "preset": null,
+          "sandbox": null,
+          "approval": null,
+          "seeded": false
+        }
+      },
+      "subagentCatalog": {
+        "ver": 6,
+        "seq": -1,
+        "val": {
+          "inheritedEventCount": 0
+        }
+      },
+      "subagentTiming": {
+        "ver": 3,
+        "seq": -1,
+        "val": {
+          "descriptorSeen": false,
+          "settledMs": 0
+        }
+      },
+      "subagent": {
+        "ver": 2,
+        "seq": -1,
+        "val": {}
+      },
+      "subagentModelSelectionPolicy": {
+        "ver": 1,
+        "seq": -1,
+        "val": null
+      }
+    }
+  }
+}

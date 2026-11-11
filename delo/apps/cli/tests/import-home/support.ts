@@ -83,13 +83,14 @@ export interface Run {
 /**
  * Run `delorun import-home` with a scripted terminal.
  * @param args - the arguments after `import-home`.
- * @param io - the home, and the environment, answers and profile to change.
+ * @param io - the home, and the environment, answers and profile to change; `answer`, when given, answers each question by its text instead of `answers` in order.
  * @returns the exit code or the failure, what it printed and what it asked.
  */
-export async function runCommand(args: readonly string[], io: { readonly home: string, readonly env?: Record<string, string | undefined>, readonly answers?: readonly string[], readonly profile?: string }): Promise<Run> {
+export async function runCommand(args: readonly string[], io: { readonly home: string, readonly env?: Record<string, string | undefined>, readonly answers?: readonly string[], readonly answer?: (question: string) => string, readonly profile?: string }): Promise<Run> {
   let out = ''
   const asked: string[] = []
   const answers = [...io.answers ?? []]
+  const reply = io.answer ?? ((): string => answers.shift() ?? '')
   const exclusive: ImportHomeIo['exclusive'] = run => withHomeExclusive({ home: io.home, profile: 'default', command: 'import-home', instead: '' }, run, { probe: () => async () => 'answered', runtime: brandString<RuntimeVersion>('0.0.0') })
   try {
     const code = await runImportHome(args, {
@@ -98,7 +99,7 @@ export async function runCommand(args: readonly string[], io: { readonly home: s
       env: io.env ?? {},
       deloBundles: ['@delo/bundle-local'],
       stdout: (text) => { out += text },
-      ask: async (question) => { asked.push(question); return answers.shift() ?? '' },
+      ask: async (question) => { asked.push(question); return reply(question) },
       exclusive,
     })
     return { code, out, asked, error: undefined }

@@ -1,0 +1,24 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: false
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      word-count:
+        specifier: file:/tmp/stock-person-b/plugins/word-count
+        version: file:../../../plugins/word-count
+
+packages:
+
+  word-count@file:../../../plugins/word-count:
+    resolution: {directory: ../../../plugins/word-count, type: directory}
+    peerDependencies:
+      '@deepseek-ai/cordis': '*'
+
+snapshots:
+
+  word-count@file:../../../plugins/word-count: {}

@@ -1,0 +1,228 @@
+{
+  "version": 7,
+  "record": {
+    "identity": {
+      "formatVersion": 4,
+      "createdAt": 1794404231787,
+      "cwd": "/tmp/stock-person-b",
+      "isSeeded": false,
+      "inheritedEventCount": 0
+    },
+    "rows": {
+      "approvalState": {
+        "ver": 1,
+        "seq": 27,
+        "val": {
+          "policy": "ask",
+          "turnOpen": false
+        }
+      },
+      "turnBoundary": {
+        "ver": 2,
+        "seq": 27,
+        "val": {
+          "openTurnStartSeq": null,
+          "lastStepStartSeq": 23,
+          "lastStepBoundary": {
+            "kind": "end",
+            "seq": 26
+          },
+          "lastTurn": 1
+        }
+      },
+      "tokenMeasurement": {
+        "ver": 2,
+        "seq": 27,
+        "val": {
+          "headerSeq": 10,
+          "stepStart": null,
+          "anchor": {
+            "headerSeq": 10,
+            "assistantTokens": 36,
+            "usage": {
+              "inputTokens": 139,
+              "outputTokens": 23,
+              "cacheReadTokens": 5504,
+              "cacheWriteTokens": 0,
+              "totalTokens": 5666
+            }
+          },
+          "invalidSeq": null
+        }
+      },
+      "userQuestions": {
+        "ver": 2,
+        "seq": 27,
+        "val": {
+          "inheritedEventCount": 0,
+          "timed": false,
+          "questions": {
+            "active": [],
+            "settled": []
+          }
+        }
+      },
+      "todos": {
+        "ver": 2,
+        "seq": 27,
+        "val": null
+      },
+      "sandboxMode": {
+        "ver": 1,
+        "seq": 27,
+        "val": "workspace-write"
+      },
+      "tokenUsage": {
+        "ver": 2,
+        "seq": 27,
+        "val": {
+          "totals": {
+            "uncachedInputTokens": 455,
+            "outputTokens": 88,
+            "cacheReadTokens": 10752,
+            "cacheWriteTokens": 0
+          },
+          "last": {
+            "turn": 1,
+            "step": 2,
+            "buckets": {
+              "uncachedInputTokens": 139,
+              "outputTokens": 23,
+              "cacheReadTokens": 5504,
+              "cacheWriteTokens": 0
+            }
+          }
+        }
+      },
+      "contextPressure": {
+        "ver": 5,
+        "seq": 27,
+        "val": {
+          "surfaceTokens": 898,
+          "contextWindow": 1048576,
+          "pressureTokens": 5643,
+          "sampledSurfaceTokens": 862
+        }
+      },
+      "title": {
+        "ver": 1,
+        "seq": 27,
+        "val": "Directory folder listing request"
+      },
+      "llmRetry": {
+        "ver": 1,
+        "seq": 27,
+        "val": {}
+      },
+      "goal": {
+        "ver": 6,
+        "seq": 27,
+        "val": {
+          "current": null,
+          "seenGoalIds": [],
+          "failure": null
+        }
+      },
+      "plan": {
+        "ver": 4,
+        "seq": 27,
+        "val": {
+          "active": false,
+          "wanted": null,
+          "running": null,
+          "activeAtLastHeader": false,
+          "entered": false
+        }
+      },
+      "modelSelection": {
+        "ver": 3,
+        "seq": 27,
+        "val": {
+          "lastUsed": {
+            "provider": "deepseek-official",
+            "model": "deepseek-flash"
+          },
+          "pending": null
+        }
+      },
+      "contextBreakdown": {
+        "ver": 6,
+        "seq": 27,
+        "val": {
+          "systems": [
+            {
+              "seq": 7,
+              "tokens": 652
+            }
+          ],
+          "surfaceTokens": 898,
+          "breakdown": {
+            "systemTokens": 652,
+            "toolsTokens": 4781,
+            "messageTokens": 246
+          }
+        }
+      },
+      "titleInput": {
+        "ver": 3,
+        "seq": 27,
+        "val": {
+          "first": {
+            "seq": 8,
+            "text": "Which folders are in this directory? Answer in one line."
+          },
+          "count": 1,
+          "lastSeq": 8
+        }
+      },
+      "inbox": {
+        "ver": 1,
+        "seq": 27,
+        "val": {
+          "next-turn": [],
+          "next-step": []
+        }
+      },
+      "workingDirectory": {
+        "ver": 1,
+        "seq": 27,
+        "val": "/tmp/stock-person-b"
+      },
+      "permissions": {
+        "ver": 2,
+        "seq": 27,
+        "val": {
+          "preset": "workspace-write",
+          "sandbox": "workspace-write",
+          "approval": "ask",
+          "seeded": false
+        }
+      },
+      "subagentCatalog": {
+        "ver": 6,
+        "seq": 27,
+        "val": {
+          "inheritedEventCount": 0
+        }
+      },
+      "subagentTiming": {
+        "ver": 3,
+        "seq": 27,
+        "val": {
+          "descriptorSeen": false,
+          "settledMs": 0
+        }
+      },
+      "subagent": {
+        "ver": 2,
+        "seq": 27,
+        "val": {}
+      },
+      "subagentModelSelectionPolicy": {
+        "ver": 1,
+        "seq": 27,
+        "val": null
+      }
+    }
+  }
+}

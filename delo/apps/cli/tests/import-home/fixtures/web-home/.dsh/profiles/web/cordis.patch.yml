@@ -1,0 +1,20 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+- id: ui-theme
+  config:
+    preference: dark
+    codeFontFamily: JetBrains Mono, monospace
+- id: ui-chat
+  config:
+    linkOpening: new-tab
+- id: web-search-deepseek
+  config:
+    apiKey: sk-recorded-web-search-not-a-key
+- id: connection
+  config:
+    trustedHosts:
+      - laptop.local:8080
+- insert:
+    - id: word-count
+      name: word-count

@@ -1,0 +1,228 @@
+{
+  "version": 7,
+  "record": {
+    "identity": {
+      "formatVersion": 4,
+      "createdAt": 1794404145775,
+      "cwd": "/tmp/stock-person-a/projects/scripts",
+      "isSeeded": false,
+      "inheritedEventCount": 0
+    },
+    "rows": {
+      "approvalState": {
+        "ver": 1,
+        "seq": 35,
+        "val": {
+          "policy": "ask",
+          "turnOpen": false
+        }
+      },
+      "turnBoundary": {
+        "ver": 2,
+        "seq": 35,
+        "val": {
+          "openTurnStartSeq": null,
+          "lastStepStartSeq": 31,
+          "lastStepBoundary": {
+            "kind": "end",
+            "seq": 34
+          },
+          "lastTurn": 1
+        }
+      },
+      "tokenMeasurement": {
+        "ver": 2,
+        "seq": 35,
+        "val": {
+          "headerSeq": 12,
+          "stepStart": null,
+          "anchor": {
+            "headerSeq": 12,
+            "assistantTokens": 145,
+            "usage": {
+              "inputTokens": 222,
+              "outputTokens": 130,
+              "cacheReadTokens": 5888,
+              "cacheWriteTokens": 0,
+              "totalTokens": 6240
+            }
+          },
+          "invalidSeq": null
+        }
+      },
+      "userQuestions": {
+        "ver": 2,
+        "seq": 35,
+        "val": {
+          "inheritedEventCount": 0,
+          "timed": false,
+          "questions": {
+            "active": [],
+            "settled": []
+          }
+        }
+      },
+      "todos": {
+        "ver": 2,
+        "seq": 35,
+        "val": null
+      },
+      "sandboxMode": {
+        "ver": 1,
+        "seq": 35,
+        "val": "workspace-write"
+      },
+      "tokenUsage": {
+        "ver": 2,
+        "seq": 35,
+        "val": {
+          "totals": {
+            "uncachedInputTokens": 1033,
+            "outputTokens": 239,
+            "cacheReadTokens": 16896,
+            "cacheWriteTokens": 0
+          },
+          "last": {
+            "turn": 1,
+            "step": 3,
+            "buckets": {
+              "uncachedInputTokens": 222,
+              "outputTokens": 130,
+              "cacheReadTokens": 5888,
+              "cacheWriteTokens": 0
+            }
+          }
+        }
+      },
+      "contextPressure": {
+        "ver": 5,
+        "seq": 35,
+        "val": {
+          "surfaceTokens": 1464,
+          "contextWindow": 1048576,
+          "pressureTokens": 6110,
+          "sampledSurfaceTokens": 1319
+        }
+      },
+      "title": {
+        "ver": 1,
+        "seq": 35,
+        "val": "What sizes.sh prints"
+      },
+      "llmRetry": {
+        "ver": 1,
+        "seq": 35,
+        "val": {}
+      },
+      "goal": {
+        "ver": 6,
+        "seq": 35,
+        "val": {
+          "current": null,
+          "seenGoalIds": [],
+          "failure": null
+        }
+      },
+      "plan": {
+        "ver": 4,
+        "seq": 35,
+        "val": {
+          "active": false,
+          "wanted": null,
+          "running": null,
+          "activeAtLastHeader": false,
+          "entered": false
+        }
+      },
+      "modelSelection": {
+        "ver": 3,
+        "seq": 35,
+        "val": {
+          "lastUsed": {
+            "provider": "deepseek-official",
+            "model": "deepseek-flash"
+          },
+          "pending": null
+        }
+      },
+      "contextBreakdown": {
+        "ver": 6,
+        "seq": 35,
+        "val": {
+          "systems": [
+            {
+              "seq": 7,
+              "tokens": 652
+            }
+          ],
+          "surfaceTokens": 1464,
+          "breakdown": {
+            "systemTokens": 652,
+            "toolsTokens": 4781,
+            "messageTokens": 812
+          }
+        }
+      },
+      "titleInput": {
+        "ver": 3,
+        "seq": 35,
+        "val": {
+          "first": {
+            "seq": 8,
+            "text": "What does sizes.sh print? One sentence."
+          },
+          "count": 1,
+          "lastSeq": 8
+        }
+      },
+      "inbox": {
+        "ver": 1,
+        "seq": 35,
+        "val": {
+          "next-turn": [],
+          "next-step": []
+        }
+      },
+      "workingDirectory": {
+        "ver": 1,
+        "seq": 35,
+        "val": "/tmp/stock-person-a/projects/scripts"
+      },
+      "permissions": {
+        "ver": 2,
+        "seq": 35,
+        "val": {
+          "preset": "workspace-write",
+          "sandbox": "workspace-write",
+          "approval": "ask",
+          "seeded": false
+        }
+      },
+      "subagentCatalog": {
+        "ver": 6,
+        "seq": 35,
+        "val": {
+          "inheritedEventCount": 0
+        }
+      },
+      "subagentTiming": {
+        "ver": 3,
+        "seq": 35,
+        "val": {
+          "descriptorSeen": false,
+          "settledMs": 0
+        }
+      },
+      "subagent": {
+        "ver": 2,
+        "seq": 35,
+        "val": {}
+      },
+      "subagentModelSelectionPolicy": {
+        "ver": 1,
+        "seq": 35,
+        "val": null
+      }
+    }
+  }
+}

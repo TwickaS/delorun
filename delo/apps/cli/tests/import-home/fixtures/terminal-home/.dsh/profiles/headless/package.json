@@ -1,0 +1,15 @@
+{
+  "name": "dsh-profile-headless",
+  "private": true,
+  "dependencies": {
+    "word-count": "file:/tmp/stock-person-a/plugins/word-count"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-headless"
+      ]
+    }
+  }
+}
