@@ -31,15 +31,22 @@ export function spawnCommand(command: string, args: readonly string[], stdio: 'i
 }
 
 /**
- * The command that hands an address to the computer's browser.
+ * The command that hands an address to the computer's browser. Under WSL a set `BROWSER` names the program, as Linux
+ * programs read it: the first entry of its colon-separated list runs with the address as its one argument, so a
+ * Linux browser or a stand-in that records the address takes it; with `BROWSER` unset or empty, Windows' `start`
+ * opens the address in the Windows default browser. `xdg-open` reads `BROWSER` itself on Linux.
  * @param platform - `process.platform`.
- * @param env - the environment, read for WSL.
+ * @param env - the environment, read for WSL and `BROWSER`.
  * @param url - the address.
  * @returns the program and arguments.
  */
 export function openerFor(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>, url: string): readonly [string, readonly string[]] {
   if (platform === 'darwin') return ['open', [url]]
-  if (platform === 'win32' || (env['WSL_DISTRO_NAME'] ?? '') !== '') return ['cmd.exe', ['/c', 'start', '""', url]]
+  if (platform === 'win32') return ['cmd.exe', ['/c', 'start', '""', url]]
+  if ((env['WSL_DISTRO_NAME'] ?? '') !== '') {
+    const browser = (env['BROWSER'] ?? '').split(':').find(entry => entry.trim() !== '')
+    return browser === undefined ? ['cmd.exe', ['/c', 'start', '""', url]] : [browser.trim(), [url]]
+  }
   return ['xdg-open', [url]]
 }
 
@@ -113,7 +120,7 @@ export async function requestStudioLink(home: string, profile: string, port?: nu
 
 /**
  * The opener of this computer.
- * @param env - the environment `delorun` inherited, read for WSL and SSH.
+ * @param env - the environment `delorun` inherited, read for WSL, `BROWSER` and SSH.
  * @param run - runs the browser launcher; {@link spawnCommand} by default.
  * @param platform - `process.platform` by default.
  * @returns the opener.

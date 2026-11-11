@@ -292,10 +292,18 @@ describe('the opener', () => {
     expect(await spawnCommand(process.execPath, ['-e', 'process.kill(process.pid, "SIGKILL")'], 'ignore')).toBe(127)
   })
 
+  it('under WSL hands the address to the program BROWSER names, the first entry of its list, instead of Windows', () => {
+    expect(openerFor('linux', { WSL_DISTRO_NAME: 'Ubuntu', BROWSER: '/home/me/bin/record-url' }, 'http://x/')).toEqual(['/home/me/bin/record-url', ['http://x/']])
+    expect(openerFor('linux', { WSL_DISTRO_NAME: 'Ubuntu', BROWSER: ':firefox:wslview' }, 'http://x/')).toEqual(['firefox', ['http://x/']])
+    expect(openerFor('linux', { BROWSER: 'firefox' }, 'http://x/')).toEqual(['xdg-open', ['http://x/']])
+    expect(openerFor('win32', { BROWSER: 'firefox' }, 'http://x/')).toEqual(['cmd.exe', ['/c', 'start', '""', 'http://x/']])
+  })
+
   it('picks the launcher of the platform, going through Windows from WSL', async () => {
     expect(openerFor('darwin', {}, 'http://x/')).toEqual(['open', ['http://x/']])
     expect(openerFor('linux', {}, 'http://x/')).toEqual(['xdg-open', ['http://x/']])
     expect(openerFor('linux', { WSL_DISTRO_NAME: 'Ubuntu' }, 'http://x/')).toEqual(['cmd.exe', ['/c', 'start', '""', 'http://x/']])
+    expect(openerFor('linux', { WSL_DISTRO_NAME: 'Ubuntu', BROWSER: '' }, 'http://x/')).toEqual(['cmd.exe', ['/c', 'start', '""', 'http://x/']])
     expect(openerFor('win32', {}, 'http://x/')).toEqual(['cmd.exe', ['/c', 'start', '""', 'http://x/']])
     const run = vi.fn(() => Promise.resolve(0))
     expect(await computerOpener({}, run, 'darwin').open('http://x/')).toBe(true)
