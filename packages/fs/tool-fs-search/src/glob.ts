@@ -14,7 +14,7 @@ import { sep } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, SearchResultView, ToolResult } from '@deepseek-ai/dsh-tools'
 import type { SpillRef } from '@deepseek-ai/dsh-spill'
-import { runRipgrep, protectedSearchFilter, toWorkdirRelative, trySaveFormattedResult } from './search-core.ts'
+import { runRipgrep, toWorkdirRelative, trySaveFormattedResult } from './search-core.ts'
 import { globSearchMeta, searchViewFromMeta } from './presentation.ts'
 import { acceptedDirectCallValue } from './direct-call.ts'
 
@@ -88,9 +88,11 @@ export function parseGlobArgs(args: { pattern: string; path?: string }): GlobInp
  * the original traversal, since even linear growth can exceed command-line limits.
  *
  * @param input - the validated arguments.
+ * @param root - the search root spelling ripgrep receives: the requested path by default, the canonical root under
+ *   protected reads, or `undefined` to search the working directory.
  * @returns the complete ripgrep argument vector (excluding the binary itself).
  */
-export function buildGlobCommand(input: GlobInput): string[] {
+export function buildGlobCommand(input: GlobInput, root: string | undefined = input.path): string[] {
   const directories = input.pattern.split('/').slice(0, -1)
   const pruning: string[] = []
   if (input.path === undefined && directories.length > 0
@@ -117,7 +119,7 @@ export function buildGlobCommand(input: GlobInput): string[] {
       `--glob=!**/${name}/**`,
     ]),
   ]
-  if (input.path !== undefined) parts.push('--', input.path)
+  if (root !== undefined) parts.push('--', root)
   return parts
 }
 
@@ -350,15 +352,15 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
     },
     async execute(args, exec) {
       const input = parseGlobArgs(args)
-      const run = await runRipgrep(ctx, exec, 'glob', buildGlobCommand(input), caps.rawOutputMaxBytes, caps.graceMs, caps.stderrMaxBytes)
+      const search = { path: input.path, argv: (root: string | undefined) => buildGlobCommand(input, root) }
+      const run = await runRipgrep(ctx, exec, 'glob', search, caps.rawOutputMaxBytes, caps.graceMs, caps.stderrMaxBytes)
       const root = input.path === undefined ? '.' : toWorkdirRelative(input.path, run.workdir)
-      const keep = protectedSearchFilter(ctx, exec, 'glob', run.workdir, input.path)
       if (run.noMatches) return { root, paths: [] }
 
       const all: string[] = []
       for (const line of run.stdout.split('\n')) {
-        if (line.length === 0 || !keep(line)) continue
-        const displayPath = toWorkdirRelative(line, run.workdir)
+        if (line.length === 0 || !run.keep(line)) continue
+        const displayPath = toWorkdirRelative(run.display(line), run.workdir)
         all.push(displayPath)
       }
       return { root, paths: all }

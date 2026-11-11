@@ -483,7 +483,7 @@ describe('workdir derivation and signal forwarding', () => {
     const controller = new AbortController()
     controller.abort()
     const exec = { signal: controller.signal, name: 'glob', callId: ToolCallId('direct-pre-abort') } as unknown as ToolExecution
-    await expect(runRipgrep(ctx, exec, 'glob', ['--files'], 1_000_000, 3_000, 64 * 1024)).rejects
+    await expect(runRipgrep(ctx, exec, 'glob', { path: undefined, argv: () => ['--files'] }, 1_000_000, 3_000, 64 * 1024)).rejects
       .toMatchObject({ name: 'SearchError', code: 'SEARCH_ABORTED' })
   })
 

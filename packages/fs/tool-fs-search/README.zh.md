@@ -73,7 +73,9 @@ kind: "package-reference"
 <a id="protected-reads"></a>
 ### 受保护读取
 
-两个工具都遵循所挂载 `ctx.sandbox` 提供方的受保护读取，与 `read` 和 `read_image` 一样，任何行设置都无法关闭它。以受保护主目录或到达它的其他路径为根的搜索以 `SEARCH_SANDBOX_DENIED` 失败，范围更大的搜索会略去受保护主目录之下、可读条目之外的结果，除非该调用在 `danger-full-access` 下运行。不保护任何主目录的提供方（例如未设置 `protectedHome` 的本地提供方）会让两个工具继续搜索会话可达的任何位置。
+两个工具都遵循所挂载 `ctx.sandbox` 提供方的受保护读取，与 `read` 和 `read_image` 一样，任何行设置都无法关闭它。以受保护主目录或到达它的其他路径为根的搜索以 `SEARCH_SANDBOX_DENIED` 失败，范围更大的搜索会略去受保护主目录之下、可读条目与工具可读条目之外的结果，除非该调用在 `danger-full-access` 下运行。不保护任何主目录的提供方（例如未设置 `protectedHome` 的本地提供方）会让两个工具继续搜索会话可达的任何位置。
+
+在受保护读取下，搜索根目录会在 ripgrep 启动前解析为规范路径，ripgrep 收到的是该路径而不是模型的写法；它在提供方的 `read-only` 约束下运行，因此即使工作区中的目录在搜索期间被替换为指向主目录的链接，内核也会让主目录在任何深度都不可读。ripgrep 结束后根目录解析为其他路径的搜索以 `SEARCH_SANDBOX_DENIED` 失败。位于工具可读条目（例如 spill 目录）之下的根目录不受约束地运行，因为受约束的运行看不到它，而受约束的命令无法在主目录下写入。提供方无法施加约束的主机会以 `SEARCH_FAILED` 让搜索失败，与受约束命令的失败方式相同。在不约束读取的运行器上（例如 Windows ACL 运行器），搜索期间换入又换回的链接不会被发现。
 
 ### 部署要求
 
@@ -81,7 +83,7 @@ Node 部署在受支持的 macOS、Linux 与 Windows 目标上获得 `@vscode/ri
 
 ### 失败与恢复
 
-搜索失败携带本包定义的错误码：`SEARCH_INVALID_PATTERN`（ripgrep 拒绝正则或 glob）、`SEARCH_FAILED`（启动失败、目标不可访问、信号终止或 `--json` 输出格式错误）、`SEARCH_RAW_OUTPUT_OVERFLOW`（原始输出超过上限）与 `SEARCH_ABORTED`（协作式超时或调用方取消）。沙箱提供方的受保护读取会添加 `SEARCH_SANDBOX_DENIED`，并把受保护路径从范围更大的搜索中略去（见[受保护读取](#protected-reads)）。退出 0 表示成功且有结果，退出 1 表示成功的空搜索；模型参数错误仍是普通工具参数错误。
+搜索失败携带本包定义的错误码：`SEARCH_INVALID_PATTERN`（ripgrep 拒绝正则或 glob）、`SEARCH_FAILED`（启动或约束失败、沙箱运行器失败、目标不可访问、信号终止或 `--json` 输出格式错误）、`SEARCH_RAW_OUTPUT_OVERFLOW`（原始输出超过上限）与 `SEARCH_ABORTED`（协作式超时或调用方取消）。沙箱提供方的受保护读取会添加 `SEARCH_SANDBOX_DENIED`，并把受保护路径从范围更大的搜索中略去（见[受保护读取](#protected-reads)）。退出 0 表示成功且有结果，退出 1 表示成功的空搜索；模型参数错误仍是普通工具参数错误。
 
 -----
 
@@ -112,7 +114,7 @@ Node 部署在受支持的 macOS、Linux 与 Windows 目标上获得 `@vscode/ri
 
 未显式提供 `path` 时，如果目录部分的每一项都是普通相对名称且不属于 VCS 元数据目录，`glob` 会为 `packages/core/src/*.ts` 这样的模式跳过无关子树。按顺序添加的 ripgrep glob 先排除目录树，再按前缀中去重后的名称放行目录，最后应用原始文件模式。其他位置的同名目录也可能被遍历，但文件仍只按原模式匹配。新增参数上限为 8 KiB，超过时沿用原遍历方式。搜索根目录、路径分隔符、符号链接处理、匹配规则和修改时间排序保持不变；其他模式仍按原方式遍历。
 
-每次调用解析打包二进制（`@vscode/ripgrep`，或 pkg 单文件运行时中可执行程序的 `-rg` 伴随文件），前置 `--no-config`，使宿主的 `RIPGREP_CONFIG_PATH` 无法向不受约束的 spawn 注入 `--pre` 预处理器，并把每个模型控制的值作为普通 argv 元素传入——不存在 shell 层，因此不涉及 shell 引号处理。collect 模式预算限制完整 stdout 与 stderr 尾部；lossy stdout 读取以 `SEARCH_RAW_OUTPUT_OVERFLOW` 失败，而不是解析静默不完整的流。工具从不读取原始 spill 路径。
+每次调用解析打包二进制（`@vscode/ripgrep`，或 pkg 单文件运行时中可执行程序的 `-rg` 伴随文件），前置 `--no-config`，使宿主的 `RIPGREP_CONFIG_PATH` 无法注入 `--pre` 预处理器，从不传入 `--follow`，并把每个模型控制的值作为普通 argv 元素传入——不存在 shell 层，因此不涉及 shell 引号处理。collect 模式预算限制完整 stdout 与 stderr 尾部；lossy stdout 读取以 `SEARCH_RAW_OUTPUT_OVERFLOW` 失败，而不是解析静默不完整的流。工具从不读取原始 spill 路径。
 
 ### Native 模式 benchmark
 

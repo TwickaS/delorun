@@ -1109,20 +1109,20 @@
     {
       "path": "packages/fs/tool-fs-search/src/glob.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): applies `protectedSearchFilter` to glob results.",
-      "sha256": "f7c67d9e3044969eb1b46f6f9aa8c15d8faca0f97399d07ab864b15ddf1c45a4"
+      "reason": "Protected home, read fence: runs ripgrep through `runRipgrep` with the requested root and an argv builder, keeps each output path through the run's `keep` and respells it through `display`; `buildGlobCommand` takes the root spelling ripgrep receives as an optional second argument, defaulting to the requested path, and still decides pruning from the requested path.",
+      "sha256": "148ad30ed9eacc5797e9ba68a721cf89bdedf07fe69164586116b5191f95775f"
     },
     {
       "path": "packages/fs/tool-fs-search/src/grep.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): applies `protectedSearchFilter` to grep matches.",
-      "sha256": "600b59a36be7dd3d982dca0bb8f88e63dddd02ab8ba7d95d31e9b284c391f624"
+      "reason": "Protected home, read fence: runs ripgrep through `runRipgrep` with the requested root and an argv builder, keeps each match through the run's `keep` and respells its path through `display`; `buildGrepCommand` takes the root spelling ripgrep receives as an optional second argument, defaulting to the requested path.",
+      "sha256": "4bed1a55fec93cb0fbad7d6ed563cc0d48de1acc1d31c0d1df5a2f5c6b24487a"
     },
     {
       "path": "packages/fs/tool-fs-search/src/search-core.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): `protectedSearchFilter` refuses a glob or grep root under the sandbox provider's `protectedReads` with the new `SEARCH_SANDBOX_DENIED` and drops results under it from a wider search, unless the call runs under `danger-full-access`. Without protected reads nothing changes.",
-      "sha256": "4e45cccb1b3b228521bbf5ffbdac85b228b894893e094215f4990eeeb64de9f4"
+      "reason": "Protected home, read fence: when the sandbox provider reports `protectedReads` and the call does not run under `danger-full-access`, `runRipgrep` resolves the search root to its canonical path before ripgrep starts and refuses a protected root with the new `SEARCH_SANDBOX_DENIED`, passes ripgrep the canonical path (or runs it in the canonical directory when no path was given), wraps it through `ctx.sandbox.confine` under a `read-only` policy so the kernel's home rule holds at every depth, classifies a sandbox runner failure as `SEARCH_FAILED` before exit 1 can read as no matches, accepts an exit 2 whose diagnostics are only access denials under protected paths, drops each output path outside the canonical root or under a protected root, and refuses the search when the root resolves differently afterwards. A root under a tool-readable entry runs unconfined. `runRipgrep` takes a `RipgrepSearch` (root plus argv builder) and returns `keep` and `display` with the run. Without protected reads the spawn is upstream's.",
+      "sha256": "6dc56627068b906b8be278faea85d9f920da4c21fbacbeed38ed0082fe2de75c"
     },
     {
       "path": "packages/fs/tool-fs/src/consent.ts",

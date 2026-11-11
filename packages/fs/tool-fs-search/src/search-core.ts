@@ -28,7 +28,8 @@ import type { RetainedItems } from '@deepseek-ai/dsh-output-retention'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessOutputRead, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
-import { canonicalPath, protectedReadGuard } from '@deepseek-ai/dsh-sandbox'
+import { canonicalPath, classifyRunnerFailure, pathWithin, protectedReadGuard, toolReadableOnly } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, RunnerFailureRule, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 
 /**
@@ -108,6 +109,22 @@ export interface RipgrepRun {
   noMatches: boolean
   /** The resolved working directory the command ran in (the display-relativization base). */
   workdir: string
+  /** Whether to keep one path as ripgrep printed it: false for a path under the sandbox provider's protected reads. */
+  keep: (outputPath: string) => boolean
+  /** One path as ripgrep printed it, respelled under the requested search path, as an unprotected search prints it. */
+  display: (outputPath: string) => string
+}
+
+/** The search root of one `rg` run: the model's spelling, and the argv that searches a given root spelling. */
+export interface RipgrepSearch {
+  /** The requested search root, or `undefined` for the working directory. */
+  path: string | undefined
+  /**
+   * Build the ripgrep arguments for one root spelling.
+   * @param path - the root spelling ripgrep receives, or `undefined` to search its working directory.
+   * @returns the ripgrep arguments, excluding the binary.
+   */
+  argv(path: string | undefined): readonly string[]
 }
 
 /**
@@ -187,6 +204,116 @@ export function resolveRgPath(): Promise<string> {
   return rgPathPromise
 }
 
+/** How one `rg` run treats the sandbox provider's protected reads, planned before ripgrep starts. */
+interface SearchTarget {
+  /** The directory ripgrep runs in. */
+  cwd: string
+  /** The root spelling ripgrep receives, or `undefined` to search {@link cwd}. */
+  path: string | undefined
+  /** Wrap ripgrep's argv under the provider's `read-only` confinement, or `undefined` to run it unconfined. */
+  confine: ((argv: readonly string[], signal: AbortSignal) => Promise<ConfinedArgv>) | undefined
+  /** The check for one canonical path; always false when nothing is protected. */
+  refused: (path: string) => boolean
+  /** Whether to report one output path. */
+  keep: (outputPath: string) => boolean
+  /** One output path respelled under the requested root. */
+  display: (outputPath: string) => string
+  /** Refuse the finished search when its root no longer resolves to the path ripgrep searched. */
+  verify: () => void
+}
+
+/** The read-only confinement for a search run on behalf of `exec`: the session's workspace root, or the workdir. */
+function searchPolicy(ctx: Context, exec: ToolExecution, workdir: string): SandboxPolicy {
+  const resolved = ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })
+  return {
+    mode: 'read-only',
+    workspaceRoot: resolved?.workspaceRoot ?? workdir,
+    ...resolved?.sessionId === undefined ? {} : { sessionId: resolved.sessionId },
+  }
+}
+
+/**
+ * Plan the sandbox provider's protected-read check for one search, before ripgrep starts. It applies whenever the
+ * provider reports protected reads, as the `read` tool's check does, so no tool row's config can leave it out; a
+ * provider that protects no home, such as upstream's unconfigured local provider, and a session under
+ * `danger-full-access` make it a pass-through.
+ *
+ * Under protection, the search root is resolved to its canonical path first and refused when that path is protected.
+ * Ripgrep then receives the canonical path rather than the model's spelling, or runs in the canonical directory when
+ * no path was given, and runs confined by the provider under `read-only`, so the kernel keeps the protected home
+ * unreadable at every depth even when a link in the workspace is replaced while the search runs. Each output path,
+ * which ripgrep prints beneath the root without following links below it, is checked as a canonical path, and the
+ * search is refused when its root resolves differently afterwards. On a runner that does not confine reads, such as
+ * the Windows ACL runner, the canonical root and the output check remain and a link replaced during the search and
+ * restored before it ends is not detected. A root under one of the provider's tool-readable entries, such as the spill
+ * directory, runs unconfined over its canonical path, since the kernel would hide it from a confined run and confined
+ * commands cannot write beneath the protected home.
+ */
+function searchTarget(ctx: Context, exec: ToolExecution, toolName: string, workdir: string, searchPath: string | undefined): SearchTarget {
+  const sandbox = ctx.get('sandbox')
+  const reads = sandbox?.protectedReads
+  const mode = reads === undefined
+    ? 'danger-full-access'
+    : ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
+  const refused = protectedReadGuard(reads, mode)
+  if (sandbox === undefined || reads === undefined || mode === 'danger-full-access') {
+    return { cwd: workdir, path: searchPath, confine: undefined, refused, keep: () => true, display: path => path, verify: () => {} }
+  }
+  const root = resolve(workdir, searchPath ?? '.')
+  const canonicalRoot = canonicalPath(root)
+  const shown = searchPath ?? '.'
+  if (refused(canonicalRoot)) {
+    throw new SearchError(`${toolName} cannot search "${shown}": file access denied under the protected home`, 'SEARCH_SANDBOX_DENIED')
+  }
+  const cwd = searchPath === undefined ? canonicalRoot : workdir
+  return {
+    cwd,
+    path: searchPath === undefined ? undefined : canonicalRoot,
+    // A root under a tool-readable entry, such as the spill directory, is hidden from a confined run; it runs
+    // unconfined, which is safe because confined commands cannot write under the protected home to plant a link there.
+    confine: toolReadableOnly(reads, canonicalRoot)
+      ? undefined
+      : (argv, signal) => sandbox.confine(argv, searchPolicy(ctx, exec, workdir), signal),
+    refused,
+    keep: (outputPath) => {
+      const path = resolve(cwd, outputPath)
+      return pathWithin(path, canonicalRoot) && !refused(path)
+    },
+    display: (outputPath) => {
+      if (searchPath === undefined) return outputPath
+      const rest = relative(canonicalRoot, resolve(cwd, outputPath))
+      if (rest === '') return searchPath
+      return searchPath.endsWith(sep) || searchPath.endsWith('/') ? `${searchPath}${rest}` : `${searchPath}${sep}${rest}`
+    },
+    verify: () => {
+      if (canonicalPath(root) !== canonicalRoot || canonicalPath(canonicalRoot) !== canonicalRoot) {
+        throw new SearchError(`${toolName} cannot search "${shown}": the search root changed while the search ran`, 'SEARCH_SANDBOX_DENIED')
+      }
+    },
+  }
+}
+
+/** One ripgrep diagnostic for a file or directory the operating system refused to open. */
+const ACCESS_DENIED_LINE = /^rg: (.+): (?:Permission denied|Operation not permitted) \(os error \d+\)$/u
+
+/**
+ * Whether a confined run's exit 2 reports only paths it could not open under the protected reads: a Landlock or
+ * Seatbelt runner refuses them where bwrap shows an empty directory, and the search outside them is complete.
+ */
+function onlyProtectedDenials(target: SearchTarget, stderr: SubprocessOutputRead): boolean {
+  if (stderr.lossy) return false
+  const lines = stderr.text.split(/\r?\n/u).filter(line => line.trim().length > 0)
+  return lines.length > 0 && lines.every((line) => {
+    const denied = ACCESS_DENIED_LINE.exec(line)?.[1]
+    return denied !== undefined && target.refused(resolve(target.cwd, denied))
+  })
+}
+
+/** The abort failure every stage of a run reports once cancellation is observed. */
+function abortedError(toolName: string): SearchError {
+  return new SearchError(`${toolName} was aborted before completion (tool timeout or caller cancellation)`, 'SEARCH_ABORTED')
+}
+
 /**
  * Run the packaged ripgrep binary with a plain argv vector and return its
  * complete raw stdout. The working directory is the calling agent's session
@@ -195,10 +322,13 @@ export function resolveRgPath(): Promise<string> {
  * (`@deepseek-ai/dsh-tool-call-timeout-policy`) and caller cancellation terminate the
  * process tree.
  *
- * The spawn is unconfined (a plain `ctx.subprocess` call), so `--no-config`
- * is prepended: a host `RIPGREP_CONFIG_PATH` (or `rg.conf` next to the
- * binary) can otherwise inject `--pre` and make ripgrep execute an arbitrary
- * preprocessor for every matched file. The collect dispositions are the
+ * `--no-config` is prepended: a host `RIPGREP_CONFIG_PATH` (or `rg.conf` next
+ * to the binary) can otherwise inject `--pre` and make ripgrep execute an
+ * arbitrary preprocessor for every matched file. The tools never pass
+ * `--follow`, so ripgrep follows a link only when it is the search root. When
+ * the sandbox provider reports protected reads, the root is checked and pinned
+ * and ripgrep runs confined ({@link searchTarget}); otherwise the spawn is a
+ * plain `ctx.subprocess` call. The collect dispositions are the
  * seam's diagnostic-tail shape (no spill files): the tools never read a raw
  * spill path, and truncated stdout fails as `SEARCH_RAW_OUTPUT_OVERFLOW`.
  *
@@ -206,43 +336,55 @@ export function resolveRgPath(): Promise<string> {
  * success with zero results (`noMatches`), anything else throws a
  * {@link SearchError} (abort/timeout → `SEARCH_ABORTED`, invalid pattern →
  * `SEARCH_INVALID_PATTERN`, the rest → `SEARCH_FAILED` /
- * `SEARCH_RAW_OUTPUT_OVERFLOW`). Both launch-time failure domains are
+ * `SEARCH_RAW_OUTPUT_OVERFLOW`). A confined run whose exit 2 reports only
+ * protected paths it could not open is a success, and one whose runner failed
+ * before ripgrep ran is `SEARCH_FAILED` whatever its exit code. Both
+ * launch-time failure domains are
  * classified: a synchronous throw at spawn CREATION (a NUL in argv, an abort
- * racing the pre-check, a rejected `@vscode/ripgrep` resolution) reports that
+ * racing the pre-check, a rejected `@vscode/ripgrep` resolution, a sandbox
+ * that cannot confine the run) reports that
  * the command could not start, while a rejection of `handle.done` reports a
  * provider failure without claiming whether execution began. Both become
  * `SEARCH_FAILED` with the original as `cause`; an abort already observed by
  * creation time becomes `SEARCH_ABORTED` instead.
  *
- * @param ctx - the plugin context; execution uses its `subprocess` service.
+ * @param ctx - the plugin context; execution uses its `subprocess` service, and its optional `sandbox` and
+ *   `sandboxPolicy` services decide the protected-read check.
  * @param exec - the tool-execution context; supplies the owning Agent and the abort signal.
  * @param toolName - `glob` or `grep`, used in error messages.
- * @param argv - the ripgrep arguments (every model value an unquoted argv element; no shell layer exists).
+ * @param search - the requested root and the argv builder (every model value an unquoted argv element; no shell layer exists).
  * @param rawOutputMaxBytes - cap on the complete raw stdout the tool will parse.
  * @param graceMs - the seam's terminate-escalation grace period.
  * @param stderrMaxBytes - cap on the retained stderr diagnostic tail.
- * @returns the complete stdout, the zero-result flag, and the resolved workdir.
+ * @returns the complete stdout, the zero-result flag, the resolved workdir and the output-path filter.
+ * @throws {SearchError} `SEARCH_SANDBOX_DENIED` when the root is protected or changed while the search ran.
  */
 export async function runRipgrep(
   ctx: Context,
   exec: ToolExecution,
   toolName: string,
-  argv: readonly string[],
+  search: RipgrepSearch,
   rawOutputMaxBytes: number,
   graceMs: number,
   stderrMaxBytes: number,
 ): Promise<RipgrepRun> {
-  if (exec.signal.aborted) {
-    throw new SearchError(`${toolName} was aborted before completion (tool timeout or caller cancellation)`, 'SEARCH_ABORTED')
-  }
+  if (exec.signal.aborted) throw abortedError(toolName)
   const workdir = exec.agent === undefined
     ? process.cwd()
     : await ctx.workingDirectory.ensure(exec.agent, exec.signal)
+  const target = searchTarget(ctx, exec, toolName, workdir, search.path)
   let handle: SubprocessHandle
+  let runnerFailureRules: readonly RunnerFailureRule[] = []
   try {
+    let argv = [await resolveRgPath(), '--no-config', ...search.argv(target.path)]
+    if (target.confine !== undefined) {
+      const confined = await target.confine(argv, exec.signal)
+      argv = confined.argv
+      runnerFailureRules = confined.runnerFailureRules
+    }
     handle = ctx.subprocess.spawn({
-      argv: [await resolveRgPath(), '--no-config', ...argv],
-      cwd: workdir,
+      argv,
+      cwd: target.cwd,
       stdio: {
         stdin: 'ignore',
         stdout: { maxBytes: rawOutputMaxBytes },
@@ -254,14 +396,13 @@ export async function runRipgrep(
   } catch (error: unknown) {
     // Node's spawn() throws synchronously for a NUL in argv, and the local
     // impl can throw synchronously when the signal aborts between the check
-    // above and this call (or when the platform-package resolution rejects).
-    // The static narrowing that proves this re-check "always false" cannot
-    // see AbortSignal state changes.
+    // above and this call (or when the platform-package resolution or the
+    // sandbox wrap rejects). The static narrowing that proves this re-check
+    // "always false" cannot see AbortSignal state changes.
     // oxlint-disable-next-line typescript/no-unnecessary-condition
-    if (exec.signal.aborted) {
-      throw new SearchError(`${toolName} was aborted before completion (tool timeout or caller cancellation)`, 'SEARCH_ABORTED')
-    }
-    throw new SearchError(`${toolName} could not start its search command (ripgrep launch failed)`, 'SEARCH_FAILED', { cause: error })
+    if (exec.signal.aborted) throw abortedError(toolName)
+    const detail = target.confine === undefined ? 'ripgrep launch failed' : `ripgrep could not be confined or launched: ${String(error)}`
+    throw new SearchError(`${toolName} could not start its search command (${detail})`, 'SEARCH_FAILED', { cause: error })
   }
   let outcome: SubprocessOutcome
   try {
@@ -277,51 +418,24 @@ export async function runRipgrep(
   // The signal can abort while the spawn is awaited; the static narrowing that
   // proves this re-check "always false" cannot see AbortSignal state changes.
   // oxlint-disable-next-line typescript/no-unnecessary-condition
-  if (exec.signal.aborted) {
-    throw new SearchError(`${toolName} was aborted before completion (tool timeout or caller cancellation)`, 'SEARCH_ABORTED')
-  }
+  if (exec.signal.aborted) throw abortedError(toolName)
   if (outcome.signal !== null || outcome.exitCode === null) {
     throw new SearchError(`${toolName} search command was killed by signal ${outcome.signal ?? '(unknown)'}`, 'SEARCH_FAILED')
   }
-  if (outcome.exitCode !== 0 && outcome.exitCode !== 1) {
+  const runnerFailure = classifyRunnerFailure(outcome.exitCode, stderr.text, runnerFailureRules)
+  if (runnerFailure !== undefined) {
+    throw new SearchError(
+      `${toolName} could not run its search command: the sandbox runner failed (exit ${outcome.exitCode}): ${stderrExcerpt(stderr.text, stderr.lossy)}`,
+      'SEARCH_FAILED',
+    )
+  }
+  const protectedDenials = outcome.exitCode === 2 && target.confine !== undefined && onlyProtectedDenials(target, stderr)
+  if (outcome.exitCode !== 0 && outcome.exitCode !== 1 && !protectedDenials) {
     throw classifyRunFailure(toolName, outcome.exitCode, stderr.text, stderr.lossy)
   }
   const text = completeStdout(toolName, stdout, rawOutputMaxBytes)
-  return { stdout: text, noMatches: outcome.exitCode === 1, workdir }
-}
-
-/**
- * The sandbox provider's protected-read check for one finished search, which applies whenever the provider reports
- * protected reads, as the `read` tool's check does, so no tool row's config can leave it out. A provider that protects
- * no home, such as upstream's unconfigured local provider, makes it a pass-through. A search root under the protected
- * home is refused; under a root that contains it, each output path, which ripgrep prints beneath the root without
- * following links below it, is mapped to its canonical path beneath the resolved root and the protected ones are
- * dropped.
- * @param ctx - the plugin context.
- * @param exec - the tool run, whose session decides the sandbox mode.
- * @param toolName - `glob` or `grep`, for the error.
- * @param workdir - the directory ripgrep ran in.
- * @param searchPath - the requested search root, or the workdir when omitted.
- * @returns a predicate that is true for an output path to keep.
- * @throws {SearchError} `SEARCH_SANDBOX_DENIED` when the root is protected.
- */
-export function protectedSearchFilter(
-  ctx: Context,
-  exec: ToolExecution,
-  toolName: string,
-  workdir: string,
-  searchPath: string | undefined,
-): (outputPath: string) => boolean {
-  const reads = ctx.get('sandbox')?.protectedReads
-  if (reads === undefined) return () => true
-  const mode = ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
-  const refused = protectedReadGuard(reads, mode)
-  const root = resolve(workdir, searchPath ?? '.')
-  const canonicalRoot = canonicalPath(root)
-  if (refused(canonicalRoot)) {
-    throw new SearchError(`${toolName} cannot search "${searchPath ?? '.'}": file access denied under the protected home`, 'SEARCH_SANDBOX_DENIED')
-  }
-  return outputPath => !refused(join(canonicalRoot, relative(root, resolve(workdir, outputPath))))
+  target.verify()
+  return { stdout: text, noMatches: outcome.exitCode === 1, workdir, keep: target.keep, display: target.display }
 }
 
 /**

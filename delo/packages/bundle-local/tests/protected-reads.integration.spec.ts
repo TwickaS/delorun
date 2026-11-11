@@ -7,6 +7,7 @@
  * the home is unchanged. With the sandbox row in its parity form, which leaves the row to upstream, the same rows search
  * the home as upstream's tools do.
  */
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,7 +22,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_ROWS } from '../src/profile.ts'
 import { createTestHome, DELO_PROFILE, type TestHome } from './profiles.ts'
 
@@ -106,6 +107,7 @@ let ctx: Context | undefined
 let calls = 0
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await ctx?.fiber.dispose()
   ctx = undefined
 })
@@ -127,6 +129,31 @@ async function mount(config: Record<string, unknown>, sandbox: Record<string, un
   await ctx.plugin(LocalSandboxProvider, sandbox)
   await ctx.plugin(ToolFsSearch, interpolate({}, config))
 }
+
+/**
+ * Whether the local sandbox provider can confine a command on this host under the composed protection, which the
+ * search tools need to run ripgrep under the protected home.
+ * @returns true when a confined `true` exits 0.
+ */
+async function confinementUsable(): Promise<boolean> {
+  const probe = new Context()
+  await probe.plugin(LocalSandboxProvider, composedSandboxConfig())
+  let argv: string[]
+  try {
+    argv = (await probe.sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: workspace })).argv
+  } catch (error) {
+    // SandboxUnavailableError: no runner can confine on this host, so the searches that run ripgrep are skipped.
+    console.warn(`protected-reads: confinement unavailable: ${String(error)}`)
+    return false
+  } finally {
+    await probe.fiber.dispose()
+  }
+  const [program, ...rest] = argv
+  return program !== undefined && spawnSync(program, rest, { stdio: 'ignore', timeout: 30_000 }).status === 0
+}
+
+/** Whether searches under the protected home can run here; they fail closed where no runner can confine them. */
+const CONFINED = await confinementUsable()
 
 /** One finished tool call. */
 interface CallResult {
@@ -189,7 +216,7 @@ describe.each(rows)('the search tools of $path', ({ config }) => {
     expect(result.text).not.toContain('key.txt')
   })
 
-  it('leave the home\'s paths out of a wider search and keep the read exemptions and the workspace', async () => {
+  it.skipIf(!CONFINED)('leave the home\'s paths out of a wider search and keep the read exemptions and the workspace', async () => {
     await mount(config, composedSandboxConfig())
     const globbed = await call('glob', { pattern: '**/*', path: base })
     expect(globbed.isError).not.toBe(true)
@@ -203,10 +230,58 @@ describe.each(rows)('the search tools of $path', ({ config }) => {
     expect(grepped.text).not.toContain('needle secret')
   })
 
-  it('search the workspace as before', async () => {
+  it('read spilled output under the home, which the spill notice tells the model to grep', async () => {
+    await mount(config, composedSandboxConfig())
+    mkdirSync(join(home.dir, 'spill', 'session-1'), { recursive: true })
+    writeFileSync(join(home.dir, 'spill', 'session-1', 'grep.txt'), 'needle spilled\n')
+    const grepped = await call('grep', { pattern: 'needle', path: join(home.dir, 'spill') })
+    expect(grepped.isError).not.toBe(true)
+    expect(grepped.text).toContain('needle spilled')
+    expect((await call('glob', { pattern: '**/*.txt', path: join(home.dir, 'spill') })).text).toContain('grep.txt')
+  })
+
+  it.skipIf(!CONFINED)('search the workspace as before', async () => {
     await mount(config, composedSandboxConfig())
     expect((await call('glob', { pattern: '*.txt' })).text).toContain('notes.txt')
     expect((await call('grep', { pattern: 'needle' })).text).toContain('needle work')
+  })
+
+  it.skipIf(!CONFINED)('keep the home unreadable when a workspace directory is replaced by a link to it while the search runs', async () => {
+    await mount(config, composedSandboxConfig())
+    if (ctx === undefined) throw new Error('no composition is mounted')
+    const flip = join(workspace, 'flip')
+    mkdirSync(flip)
+    // The directory is a link to the home while ripgrep runs and a directory again before the tool checks its root.
+    const spawn = ctx.subprocess.spawn.bind(ctx.subprocess)
+    vi.spyOn(ctx.subprocess, 'spawn').mockImplementation((spec) => {
+      rmSync(flip, { recursive: true })
+      symlinkSync(home.dir, flip, 'dir')
+      const handle = spawn(spec)
+      void handle.done.then(() => {
+        rmSync(flip)
+        mkdirSync(flip)
+      })
+      return handle
+    })
+    try {
+      for (const [name, args] of [['grep', { pattern: 'needle', path: 'flip' }], ['glob', { pattern: '**/*', path: 'flip' }]] as const) {
+        const result = await call(name, args)
+        expect(result.text).not.toContain('needle secret')
+        expect(result.text).not.toContain('key.txt')
+        expect(result.text).not.toContain('.credentials.yaml')
+      }
+    } finally {
+      rmSync(flip, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')('fail closed when no runner can confine the search', async () => {
+    await mount(config, composedSandboxConfig())
+    if (ctx === undefined) throw new Error('no composition is mounted')
+    ;(ctx.sandbox as LocalSandboxProvider).internals = { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'unusable' }
+    const result = await call('grep', { pattern: 'needle' })
+    expect(result).toMatchObject({ isError: true, code: 'SEARCH_FAILED' })
+    expect(result.text).toContain('could not be confined')
   })
 
   it('search the home as upstream\'s tools do with the sandbox row in its parity form', async () => {

@@ -73,7 +73,9 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 <a id="protected-reads"></a>
 ### Protected reads
 
-Both tools honour the mounted `ctx.sandbox` provider's protected reads, as `read` and `read_image` do, and no row setting turns this off. A search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under the protected home, outside its readable entries, are left out of a wider search, unless the call runs under `danger-full-access`. A provider that protects no home, such as the local provider without `protectedHome`, leaves both tools searching everywhere the session reaches.
+Both tools honour the mounted `ctx.sandbox` provider's protected reads, as `read` and `read_image` do, and no row setting turns this off. A search rooted under the protected home or another path that reaches it fails with `SEARCH_SANDBOX_DENIED`, and results under the protected home, outside its readable and tool-readable entries, are left out of a wider search, unless the call runs under `danger-full-access`. A provider that protects no home, such as the local provider without `protectedHome`, leaves both tools searching everywhere the session reaches.
+
+Under protected reads the root is resolved to its canonical path before ripgrep starts, and ripgrep receives that path instead of the model's spelling; it runs confined by the provider under `read-only`, so the kernel keeps the home unreadable at every depth even when a workspace directory is replaced by a link to it during the search. A search whose root resolves to another path once ripgrep finishes fails with `SEARCH_SANDBOX_DENIED`. A root under a tool-readable entry, such as the spill directory, runs unconfined, because a confined run cannot see it and confined commands cannot write under the home. A host where the provider cannot confine fails the search with `SEARCH_FAILED`, as it fails a confined command. On a runner that does not confine reads, such as the Windows ACL runner, a link swapped in and restored while the search runs is not detected.
 
 ### Deployment requirement
 
@@ -81,7 +83,7 @@ Node deployments receive the `@vscode/ripgrep` platform package on supported mac
 
 ### Failures and recovery
 
-Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). The sandbox provider's protected reads add `SEARCH_SANDBOX_DENIED` and leave the protected paths out of a wider search ([Protected reads](#protected-reads)). Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
+Search failures carry the package-owned codes `SEARCH_INVALID_PATTERN` (ripgrep rejected the regex or glob), `SEARCH_FAILED` (a failed launch or confinement, a sandbox runner failure, inaccessible target, signal kill, or malformed `--json` output), `SEARCH_RAW_OUTPUT_OVERFLOW` (raw output over the cap), and `SEARCH_ABORTED` (cooperative timeout or caller cancellation). The sandbox provider's protected reads add `SEARCH_SANDBOX_DENIED` and leave the protected paths out of a wider search ([Protected reads](#protected-reads)). Exit 0 is success with results and exit 1 is a successful empty search; model argument mistakes stay ordinary tool argument errors.
 
 -----
 
@@ -112,7 +114,7 @@ Local workspace discovery is naturally a process-backed `rg` workflow, and putti
 
 Without an explicit `path`, `glob` prunes unrelated subtrees for patterns such as `packages/core/src/*.ts` when every directory component is a plain relative name outside VCS metadata. Ordered ripgrep globs exclude the tree, admit directories with the prefix's distinct names, then apply the original file pattern. Same-named directories elsewhere may also be traversed, but only the original pattern admits files. The added arguments are capped at 8 KiB; larger sets use the original traversal. The search root, path separators, symlink handling, matching, and modification-time ordering stay unchanged; other patterns retain the original traversal.
 
-Each call resolves the packaged binary (`@vscode/ripgrep`, or the executable's `-rg` sidecar in a pkg single-file runtime), prepends `--no-config` so a host `RIPGREP_CONFIG_PATH` cannot inject a `--pre` preprocessor into the unconfined spawn, and passes every model-controlled value as a plain argv element — no shell layer exists, so no quoting applies. Collect-mode budgets bound complete stdout and a stderr tail; a lossy stdout read fails as `SEARCH_RAW_OUTPUT_OVERFLOW` rather than parsing a silently-partial stream. The tools never read a raw spill path.
+Each call resolves the packaged binary (`@vscode/ripgrep`, or the executable's `-rg` sidecar in a pkg single-file runtime), prepends `--no-config` so a host `RIPGREP_CONFIG_PATH` cannot inject a `--pre` preprocessor, never passes `--follow`, and passes every model-controlled value as a plain argv element — no shell layer exists, so no quoting applies. Collect-mode budgets bound complete stdout and a stderr tail; a lossy stdout read fails as `SEARCH_RAW_OUTPUT_OVERFLOW` rather than parsing a silently-partial stream. The tools never read a raw spill path.
 
 ### Native-mode benchmark
 

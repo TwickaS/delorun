@@ -13,8 +13,8 @@ import { executeModelToolFixture, executeToolFixture } from '@deepseek-ai/dsh-to
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { existsSync, rmSync, symlinkSync } from 'node:fs'
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -24,7 +24,7 @@ import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tool
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
-import type { ConfinedArgv, ProtectedReads } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ProtectedReads, RunnerFailureRule, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 
 const testToolSignal = new AbortController().signal
 
@@ -303,15 +303,21 @@ describe('search tools over the real subprocess service + the packaged rg', () =
   })
 })
 
-/** A sandbox provider stand-in that reports protected reads; it never confines anything. */
+/**
+ * A sandbox provider stand-in that reports protected reads and records each wrap. Its wrap enforces nothing: it runs
+ * the argv behind {@link ProtectingProvider.runner}, so the tests see what the search tools ask the sandbox for.
+ */
 class ProtectingProvider extends SandboxProvider {
   static reads: ProtectedReads | undefined
+  static wraps: { argv: readonly string[]; policy: SandboxPolicy }[] = []
+  static runner: readonly string[] = []
+  static rules: readonly RunnerFailureRule[] = []
   override get protectedReads(): ProtectedReads | undefined {
     return ProtectingProvider.reads
   }
-  /* v8 ignore next 3 -- the search tools never confine; only protectedReads is read. */
-  confine(): Promise<ConfinedArgv> {
-    throw new Error('not used')
+  confine(argv: readonly string[], policy: SandboxPolicy): Promise<ConfinedArgv> {
+    ProtectingProvider.wraps.push({ argv, policy })
+    return Promise.resolve({ argv: [...ProtectingProvider.runner, ...argv], enforcement: 'full', denialSignatures: [], runnerFailureRules: ProtectingProvider.rules })
   }
 }
 
@@ -333,6 +339,9 @@ describe('search tools and the sandbox provider\'s protected home', () => {
       roots: [join(canonical, '.delo'), join(canonical, 'other-mount')],
       readable: [join(canonical, '.delo', 'runtimes'), join(canonical, 'other-mount', 'runtimes')],
     }
+    ProtectingProvider.wraps = []
+    ProtectingProvider.runner = []
+    ProtectingProvider.rules = []
     ctx = new Context()
     provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
@@ -345,6 +354,7 @@ describe('search tools and the sandbox provider\'s protected home', () => {
   })
 
   afterEach(async () => {
+    vi.restoreAllMocks()
     await ctx.fiber.dispose()
     await rm(dir, { recursive: true, force: true })
   })
@@ -369,6 +379,77 @@ describe('search tools and the sandbox provider\'s protected home', () => {
       expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
       expect(text(result)).not.toContain('needle secret')
     }
+  })
+
+  it('runs ripgrep confined read-only over the canonical root, not the model\'s spelling of it', async () => {
+    const canonical = await realpath(dir)
+    await mkdir(join(dir, 'real'))
+    await writeFile(join(dir, 'real', 'linked.txt'), 'needle linked\n')
+    await symlink(join(dir, 'real'), join(dir, 'work-link'), 'dir')
+    const grepped = text(await call('grep', { pattern: 'needle', path: 'work-link' }, agent()))
+    expect(grepped).toContain(`${join('work-link', 'linked.txt')}\nLine 1: needle linked`)
+    const globbed = text(await call('glob', { pattern: '**/*.txt' }, agent()))
+    expect(globbed).toContain(join('sub', 'work.txt'))
+    expect(ProtectingProvider.wraps.map(wrap => wrap.policy)).toEqual([
+      { mode: 'read-only', workspaceRoot: dir },
+      { mode: 'read-only', workspaceRoot: dir },
+    ])
+    expect(ProtectingProvider.wraps[0]?.argv.at(-1)).toBe(join(canonical, 'real'))
+    expect(ProtectingProvider.wraps[0]?.argv).not.toContain('work-link')
+  })
+
+  it('refuses a search whose root resolves to the home once ripgrep finishes', async () => {
+    await mkdir(join(dir, 'flip'))
+    const spawn = ctx.subprocess.spawn.bind(ctx.subprocess)
+    vi.spyOn(ctx.subprocess, 'spawn').mockImplementation((spec) => {
+      const handle = spawn(spec)
+      void handle.done.then(() => {
+        rmSync(join(dir, 'flip'), { recursive: true })
+        symlinkSync(join(dir, '.delo'), join(dir, 'flip'), 'dir')
+      })
+      return handle
+    })
+    const result = await call('grep', { pattern: 'needle', path: 'flip' }, agent())
+    expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+    expect(text(result)).toContain('the search root changed while the search ran')
+  })
+
+  it.skipIf(process.platform === 'win32')('fails a search whose sandbox runner fails instead of reporting no matches', async () => {
+    ProtectingProvider.runner = ['sh', '-c', 'echo "stand-in-runner: cannot start" >&2; exit 1', 'sh']
+    ProtectingProvider.rules = [{ fatalSignatures: ['stand-in-runner: '] }]
+    const result = await call('grep', { pattern: 'needle' }, agent())
+    expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_FAILED' } } })
+    expect(text(result)).toContain('the sandbox runner failed')
+  })
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('reports the rest of a search whose runner refuses to open the protected paths', async () => {
+    // A directory the operating system refuses to open stands in for Landlock's and Seatbelt's refusal of the home.
+    await chmod(join(dir, '.delo', 'secrets'), 0o000)
+    await chmod(join(dir, 'other-mount'), 0o000)
+    try {
+      const grepped = await call('grep', { pattern: 'needle', path: dir }, agent())
+      expect(grepped.isError).not.toBe(true)
+      expect(text(grepped)).toContain('needle work')
+      await mkdir(join(dir, 'sub', 'locked'))
+      await chmod(join(dir, 'sub', 'locked'), 0o000)
+      const failed = await call('grep', { pattern: 'needle', path: dir }, agent())
+      expect(failed).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_FAILED' } } })
+      await chmod(join(dir, 'sub', 'locked'), 0o755)
+    } finally {
+      await chmod(join(dir, '.delo', 'secrets'), 0o755)
+      await chmod(join(dir, 'other-mount'), 0o755)
+    }
+  })
+
+  it('searches a tool-readable entry under the home unconfined, which a confined run could not see', async () => {
+    await mkdir(join(dir, '.delo', 'spill'))
+    await writeFile(join(dir, '.delo', 'spill', 'grep.txt'), 'needle spilled\n')
+    const canonical = await realpath(dir)
+    ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delo', 'spill')] }
+    expect(text(await call('grep', { pattern: 'needle', path: '.delo/spill' }, agent()))).toContain('needle spilled')
+    expect(ProtectingProvider.wraps).toEqual([])
+    const refused = await call('grep', { pattern: 'needle', path: '.delo/secrets' }, agent())
+    expect(refused).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
   })
 
   it('refuses a search with no path in a session whose workspace is the home', async () => {
