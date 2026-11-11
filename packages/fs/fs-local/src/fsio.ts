@@ -301,6 +301,7 @@ async function resolveListedChildTarget(parent: LocalTarget, name: string): Prom
  * @throws {FsError} `FS_IO_ERROR` when the directory changed while it was opened.
  */
 async function readDirectoryEntries(target: LocalTarget): Promise<Dirent[]> {
+  /* v8 ignore else -- native macOS and Windows coverage takes the by-name listing. */
   if (process.platform === 'linux') {
     const handle = await open(target.targetKey, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY)
     try {
@@ -435,6 +436,7 @@ function changedWhileOpenedError(verb: PathVerb, target: LocalTarget): FsError {
  * @throws {FsError} `FS_IO_ERROR` when the descriptor is another file.
  */
 async function assertOpenedTarget(handle: FileHandle, target: LocalTarget, verb: PathVerb): Promise<void> {
+  /* v8 ignore else -- native macOS and Windows coverage confirms by identity. */
   if (process.platform === 'linux') {
     let opened: string | undefined
     try {
@@ -460,6 +462,7 @@ async function assertOpenedTarget(handle: FileHandle, target: LocalTarget, verb:
 }
 
 /** Open flags for a read that never blocks on a FIFO swapped in after the regular-file check; Windows has no FIFO open. */
+/* v8 ignore next -- the Windows flags are taken by native Windows coverage. */
 const READ_FLAGS = process.platform === 'win32' ? fsConstants.O_RDONLY : fsConstants.O_RDONLY | fsConstants.O_NONBLOCK
 
 /**
@@ -476,13 +479,15 @@ async function openRegularFile(target: LocalTarget, verb: 'read', signal?: Abort
   try {
     handle = await open(target.targetKey, READ_FLAGS)
   } catch (error: unknown) {
-    /* v8 ignore next 2 -- the file must vanish between the regular-file check and the open. */
+    /* v8 ignore start -- the file must vanish between the regular-file check and the open. */
     if (isENOENT(error) || isENOTDIR(error)) throw new FsError(`cannot ${verb} "${target.displayPath}": not found`, 'FS_NOT_FOUND', { cause: error })
     throw error
+    /* v8 ignore stop */
   }
   try {
     await assertOpenedTarget(handle, target, 'read')
     const info = await handle.stat()
+    /* v8 ignore next -- the file must be replaced by a non-regular one between the check and the open. */
     if (!info.isFile()) throw new FsError(`cannot ${verb} "${target.displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE')
     return { handle, info }
   } catch (error: unknown) {
@@ -733,6 +738,7 @@ interface HeldDirectory {
  * @throws {FsError} `FS_IO_ERROR` when the path names another directory.
  */
 async function holdDirectory(path: string, displayPath: string, verb: PathVerb): Promise<HeldDirectory> {
+  /* v8 ignore next -- the Windows flags are taken by native Windows coverage. */
   const handle = await open(path, fsConstants.O_RDONLY | (process.platform === 'win32' ? 0 : fsConstants.O_DIRECTORY))
   try {
     await assertOpenedTarget(handle, { displayPath, targetKey: FsTargetKey(path) }, verb)
@@ -740,12 +746,88 @@ async function holdDirectory(path: string, displayPath: string, verb: PathVerb):
     await handle.close()
     throw error
   }
+  /* v8 ignore start -- native macOS and Windows coverage, and a Linux host without /proc, reach entries by name. */
   const pinned = process.platform === 'linux' && await readlink(`/proc/self/fd/${handle.fd}`).then(() => true, () => false)
-  return {
-    entry: name => pinned ? `/proc/self/fd/${handle.fd}/${name}` : join(path, name),
-    pinned,
-    close: () => handle.close(),
+  return pinned ? pinnedDirectory(handle) : { entry: name => join(path, name), pinned: false, close: () => handle.close() }
+  /* v8 ignore stop */
+}
+
+/** A held directory whose entries are reached through its descriptor's `/proc/self/fd` path. */
+function pinnedDirectory(handle: FileHandle): HeldDirectory {
+  return { entry: name => `/proc/self/fd/${handle.fd}/${name}`, pinned: true, close: () => handle.close() }
+}
+
+/** Open flags for a directory reached through a held parent, which must not itself be a link. */
+const NO_FOLLOW_DIRECTORY = fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW
+
+/**
+ * Open one entry of a held directory as a directory without following a link in its place.
+ * @param parent - the held parent.
+ * @param name - the entry's name.
+ * @param displayPath - the caller-facing path of the file being changed, for errors.
+ * @returns the held entry.
+ * @throws {FsError} `FS_IO_ERROR` when the entry is a link or not a directory.
+ */
+async function holdEntry(parent: HeldDirectory, name: string, displayPath: string): Promise<HeldDirectory> {
+  try {
+    return pinnedDirectory(await open(parent.entry(name), NO_FOLLOW_DIRECTORY))
+  } catch (error: unknown) {
+    /* v8 ignore start -- a link or file must take the created directory's name between its creation and this open. */
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ELOOP' || code === 'ENOTDIR') {
+      throw new FsError(`cannot write "${displayPath}": the path changed while it was written; retry`, 'FS_IO_ERROR', { cause: error })
+    }
+    throw error
+    /* v8 ignore stop */
   }
+}
+
+/**
+ * Hold a write's destination directory, creating its missing directories first. On Linux the deepest existing ancestor
+ * is held and confirmed ({@link holdDirectory}), and each missing directory is created through the held parent's
+ * descriptor and then held without following a link in its place, so no step resolves the path by name again.
+ * Elsewhere the directories are created by name and confirmed ({@link ensureDirectory}) before the destination is held.
+ * @param directory - the canonical destination directory.
+ * @param displayPath - the caller-facing path of the file being written, for errors.
+ * @returns the held destination directory.
+ * @throws {FsError} `FS_IO_ERROR` when a directory on the way is not where the path names.
+ */
+async function holdDestinationDirectory(directory: string, displayPath: string): Promise<HeldDirectory> {
+  const missing: string[] = []
+  let ancestor = directory
+  while ((await probeNoFollow(ancestor)) === null) {
+    const parent = dirname(ancestor)
+    /* v8 ignore next -- the filesystem root always exists. */
+    if (parent === ancestor) break
+    missing.unshift(basename(ancestor))
+    ancestor = parent
+  }
+  let held = await holdDirectory(ancestor, displayPath, 'write')
+  /* v8 ignore start -- native macOS and Windows coverage creates the directories by name. */
+  if (!held.pinned) {
+    await held.close()
+    await ensureDirectory(directory, displayPath)
+    return holdDirectory(directory, displayPath, 'write')
+  }
+  /* v8 ignore stop */
+  for (const name of missing) {
+    try {
+      try {
+        await mkdir(held.entry(name))
+      } catch (error: unknown) {
+        // An entry another process made is held below only if it is a directory and not a link.
+        /* v8 ignore next -- another process must create the entry between the probe and this creation. */
+        if (!isEEXIST(error)) throw error
+      }
+      const next = await holdEntry(held, name, displayPath)
+      await held.close()
+      held = next
+    } catch (error: unknown) {
+      await held.close()
+      throw error
+    }
+  }
+  return held
 }
 
 /**
@@ -756,6 +838,7 @@ async function holdDirectory(path: string, displayPath: string, verb: PathVerb):
  * @param displayPath - the caller-facing path of the file being written, for errors.
  * @throws {FsError} `FS_IO_ERROR` when a created directory is not where the path names.
  */
+/* v8 ignore start -- native macOS and Windows coverage creates directories by name. */
 async function ensureDirectory(directory: string, displayPath: string): Promise<void> {
   const missing: string[] = []
   let ancestor = directory
@@ -785,6 +868,7 @@ async function ensureDirectory(directory: string, displayPath: string): Promise<
     }
   }
 }
+/* v8 ignore stop */
 
 /**
  * Confirm a staging directory reached by name lies in the directory the caller checked; otherwise remove it where it
@@ -794,12 +878,14 @@ async function ensureDirectory(directory: string, displayPath: string): Promise<
  * @param displayPath - the caller-facing path, for errors.
  * @throws {FsError} `FS_IO_ERROR` when it lies elsewhere.
  */
+/* v8 ignore start -- native macOS and Windows coverage stages by name. */
 async function assertStagedIn(stagingDir: string, expected: string, displayPath: string): Promise<void> {
   const actual = await realpath(stagingDir)
   if (actual === expected) return
   await rm(actual, { recursive: true, force: true })
   throw new FsError(`cannot write "${displayPath}": the path changed while it was written; retry`, 'FS_IO_ERROR')
 }
+/* v8 ignore stop */
 
 /**
  * Confirm the file a publication reached by name produced is the staged file at the checked path; a file published
@@ -845,11 +931,13 @@ async function assertPublishedAt(
  * states whether Windows must preserve destination security and defaults to mode presence,
  * while moves pass destination presence separately from the source mode.
  *
- * The destination's directory is created one missing component at a time and each confirmed where the path names it
- * ({@link ensureDirectory}), then held open and confirmed ({@link holdDirectory}): on Linux every staging and publishing
- * step reaches the directory through that descriptor, so a component replaced by a link after the caller's checks, such
- * as a sandbox fence's, cannot move the write elsewhere; outside Linux the staging directory and the published file are
- * confirmed by path. A write the path change would redirect fails with `FS_IO_ERROR` and leaves no file elsewhere.
+ * The destination's directory is held open and confirmed ({@link holdDestinationDirectory}). On Linux its missing
+ * directories are created through the held parent's descriptor, the staging directory is held without following a link
+ * and confirmed private and empty, and the temp file, publication and creation are reached through those descriptors,
+ * so neither a component of the path nor the staging directory replaced by a link after the caller's checks, such as a
+ * sandbox fence's, can move the write or its temp file elsewhere. Outside Linux the directories are created by name and
+ * confirmed, and the staging directory and the published file are confirmed by path. A write the path change would
+ * redirect fails with `FS_IO_ERROR` and leaves no file elsewhere.
  */
 export async function writeFileAtomic(
   absolutePath: string,
@@ -865,8 +953,7 @@ export async function writeFileAtomic(
   const directory = dirname(absolutePath)
   let held: HeldDirectory
   try {
-    await ensureDirectory(directory, displayPath)
-    held = await holdDirectory(directory, displayPath, 'write')
+    held = await holdDestinationDirectory(directory, displayPath)
   } catch (error) {
     throw error instanceof FsError ? error : writeIoError(displayPath, error)
   }
@@ -898,7 +985,8 @@ async function writeStagedFile(
   const stagingDirName = internals.tempDirName?.(absolutePath) ?? `.${basename(absolutePath)}.${process.pid}.${randomUUID()}.tmpdir`
   const stagingDir = held.entry(stagingDirName)
   const tempName = internals.tempName?.(absolutePath) ?? `${basename(absolutePath)}.tmp`
-  const tempPath = join(stagingDir, tempName)
+  let tempPath = join(stagingDir, tempName)
+  let staging: FileHandle | undefined
   const platform = internals.platform ?? process.platform
   const copyFileDacl = internals.copyFileDacl ?? copyFileDaclWin32
   const replaceFile = internals.replaceFile ?? replaceFileWin32
@@ -913,8 +1001,18 @@ async function writeStagedFile(
   try {
     await mkdir(stagingDir, { mode: 0o700 })
     stagingCreated = true
-    if (!held.pinned) await assertStagedIn(stagingDir, join(directory, stagingDirName), displayPath)
-    await chmod(stagingDir, 0o700)
+    /* v8 ignore else -- native macOS and Windows coverage stages by name. */
+    if (held.pinned) {
+      // The staging directory is held without following a link in its place and confirmed private and empty, and the
+      // temp file is reached through it, so renaming the directory away and planting a link cannot move the temp file.
+      staging = await open(stagingDir, NO_FOLLOW_DIRECTORY)
+      await staging.chmod(0o700)
+      await assertPrivateStaging(staging, displayPath)
+      tempPath = `/proc/self/fd/${staging.fd}/${tempName}`
+    } else {
+      await assertStagedIn(stagingDir, join(directory, stagingDirName), displayPath)
+      await chmod(stagingDir, 0o700)
+    }
 
     handle = await open(tempPath, 'wx', 0o600)
     await handle.chmod(0o600)
@@ -949,6 +1047,7 @@ async function writeStagedFile(
     } else {
       await rename(tempPath, destination)
     }
+    /* v8 ignore next -- native macOS and Windows coverage confirms the publication by path. */
     if (!held.pinned) await assertPublishedAt(absolutePath, stagingDir, staged, displayPath)
     try {
       await removeStagingDir(stagingDir)
@@ -967,7 +1066,25 @@ async function writeStagedFile(
       }
     }
     if (!stagingCreated) throw failure
-    return removeStagingDirOrThrow(stagingDir, failure, removeStagingDir)
+    return await removeStagingDirOrThrow(stagingDir, failure, removeStagingDir)
+  } finally {
+    await staging?.close()
+  }
+}
+
+/**
+ * Confirm a freshly created staging directory is the writer's own: a directory this process's user owns, at mode
+ * 0700, holding nothing.
+ * @param staging - the held staging directory.
+ * @param displayPath - the caller-facing path, for errors.
+ * @throws {FsError} `FS_IO_ERROR` when it is not.
+ */
+async function assertPrivateStaging(staging: FileHandle, displayPath: string): Promise<void> {
+  const info = await staging.stat()
+  const entries = await readdir(`/proc/self/fd/${staging.fd}`)
+  /* v8 ignore next 3 -- another process must fill or replace the staging directory between its creation and this check. */
+  if (!info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700 || entries.length > 0) {
+    throw new FsError(`cannot write "${displayPath}": the staging directory changed while it was written; retry`, 'FS_IO_ERROR')
   }
 }
 

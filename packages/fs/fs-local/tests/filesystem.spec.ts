@@ -350,6 +350,14 @@ describe('readBytes', () => {
     await expect(fs.readBytes(target, undefined, 4)).rejects.toMatchObject({ code: 'FS_TOO_LARGE' })
   })
 
+  it('rejects with the read hook\'s failure', async () => {
+    await writeFile(join(dir, 'a.bin'), Buffer.alloc(4, 1))
+    const target = await fs.resolve('a.bin')
+    fs.internals.inspectReadBytesAfterStat = () => { throw new Error('inspection failed') }
+
+    await expect(fs.readBytes(target, undefined, 4)).rejects.toThrow('inspection failed')
+  })
+
   it('rejects a missing file and a directory', async () => {
     await expect(fs.readBytes(await fs.resolve('nope'), undefined, 1024)).rejects.toMatchObject({ code: 'FS_NOT_FOUND' })
     await expect(fs.readBytes(await fs.resolve('.'), undefined, 1024)).rejects.toMatchObject({ code: 'FS_NOT_REGULAR_FILE' })

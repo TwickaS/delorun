@@ -3,7 +3,7 @@
  * after the provider resolved and checked the target: edits must not return the other file's text, and writes, creates
  * and deletes must not land in or remove from the other directory.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -81,6 +81,31 @@ describe.skipIf(process.platform === 'win32')('a directory replaced by a link af
     const target = await fs.resolve('flip/key')
     swapAfterProbe()
     await expect(fs.deleteFile(target)).rejects.toMatchObject({ code: 'FS_IO_ERROR' })
+    expect(readFileSync(join(home, 'key'), 'utf8')).toBe('secret-key\n')
+  })
+
+  it('publishes the staged file, not one a link planted in place of the staging directory reaches', async () => {
+    const { flip, home } = await setup()
+    writeFileSync(join(home, 'out.txt.tmp'), 'secret-key\n')
+    const destination = join(flip, 'out.txt')
+    await fsio.writeFileAtomic(destination, 'written\n', undefined, undefined, {
+      inspectTemp: ({ stagingDir }) => {
+        // The staging directory is renamed away and a link to the other directory takes its name.
+        renameSync(stagingDir, join(flip, 'moved-staging'))
+        symlinkSync(home, stagingDir, 'dir')
+      },
+    })
+    expect(readFileSync(destination, 'utf8')).toBe('written\n')
+    expect(readFileSync(join(home, 'out.txt.tmp'), 'utf8')).toBe('secret-key\n')
+    expect(lstatSync(home).isDirectory()).toBe(true)
+  })
+
+  it('removes nothing through a directory replaced by a link before the removal', async () => {
+    const { flip, home } = await setup()
+    const target = join(flip, 'key')
+    rmSync(flip, { recursive: true })
+    symlinkSync(home, flip, 'dir')
+    await expect(fsio.removeFile(target, 'flip/key')).rejects.toMatchObject({ code: 'FS_IO_ERROR' })
     expect(readFileSync(join(home, 'key'), 'utf8')).toBe('secret-key\n')
   })
 })
