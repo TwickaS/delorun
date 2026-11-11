@@ -18,7 +18,7 @@ Delo is pre-release. It has no tagged release yet, and interfaces and defaults c
 - `trash`, `export` and `import` to restore or purge deleted chats and workspaces, and to move a chat or a workspace between homes as a signed archive.
 - `plugin` and `headless`, which run DeepSeek Harness's own commands and profiles unchanged. Delo's protections, consents and privacy defaults belong to the CLI profile that `delorun` starts, so none of them applies to `delorun headless`, which also uploads session logs to DeepSeek as stock does.
 
-Review the [safety notice](SAFETY.md) before running the project.
+Review the [safety notice](SAFETY.md) before running the project. The [user guide](delo/docs/guide/README.md) explains how to install and use Delorun.
 
 ## Run
 
@@ -46,6 +46,7 @@ Delo is a fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 
 ## Documentation
 
+- [User guide](delo/docs/guide/README.md): install, first run, daily use, updates, customisation, safety and troubleshooting
 - [Delo documentation](delo/docs/README.md)
 - [Architecture](delo/docs/architecture/README.md)
 - [Security and threat model](delo/docs/security/README.md)
