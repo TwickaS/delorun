@@ -74,7 +74,7 @@ Index startup inputs are two layers, computed for the Peer the page speaks for. 
 
 ### Behavior under failure
 
-A listen failure (for example EADDRINUSE) rejects plugin initialization with the bind diagnostic, and unusable TLS material rejects it too, naming the config field and the resolved path but never the file's contents. An HTTP request whose handler or resource throws is answered 400 — or the socket destroyed when headers are already out — and logged as a warning; it never exits the process. An upgrade-handler exception or upgraded-socket transport error logs a warning and destroys its socket.
+Every listener answers a request or upgrade request with more than one `Host` line 400 before any gate, route, upgrade handler or the fallback runs, as HTTP/1.1 requires: node:http keeps only the first line in `req.headers`, so a route and a proxy in front of it could read different authorities. A listen failure (for example EADDRINUSE) rejects plugin initialization with the bind diagnostic, and unusable TLS material rejects it too, naming the config field and the resolved path but never the file's contents. An HTTP request whose handler or resource throws is answered 400 — or the socket destroyed when headers are already out — and logged as a warning; it never exits the process. An upgrade-handler exception or upgraded-socket transport error logs a warning and destroys its socket.
 
 -----
 

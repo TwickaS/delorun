@@ -64,6 +64,8 @@ export function createSyntheticExchange(frame: TunnelRequestFrame, sink: Respons
     url: frame.url,
     method: frame.method,
     headers: frame.headers,
+    // One line per name: a tunnel frame carries each header once.
+    rawHeaders: Object.entries(frame.headers).flat(),
     destroy: (): void => { aborted = true },
     async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
       if (frame.body === undefined) return

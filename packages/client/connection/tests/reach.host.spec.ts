@@ -389,8 +389,9 @@ describe('reach dispatch hardening', () => {
     for (const line of ['GET http://evil.example/exact HTTP/1.1', `GET https://${HOST}/exact HTTP/1.1`, 'GET //evil.example/exact HTTP/1.1']) {
       expect((await raw(port, `${line}\r\n${tail}`)).reply).toMatch(/^HTTP\/1\.1 421 [\s\S]*HOST_MISMATCH/)
     }
+    // The webserver answers a repeated Host line 400 before the reach gate runs.
     expect((await raw(port, `GET /exact HTTP/1.1\r\nHost: ${HOST}\r\nHost: evil.example\r\nCookie: ${SESSION}\r\nConnection: close\r\n\r\n`)).reply)
-      .toMatch(/^HTTP\/1\.1 421 [\s\S]*HOST_MISMATCH/)
+      .toMatch(/^HTTP\/1\.1 400 [\s\S]*repeated Host header/)
     expect(harness.ran).toEqual([])
   })
 

@@ -107,6 +107,28 @@ describe('worker tunnel resources', () => {
   })
 })
 
+describe('worker tunnel request synthesis', () => {
+  it('hands the route lane the frame headers as node:http raw lines, one line per name', async () => {
+    const frames: TunnelOutboundFrame[] = []
+    const raw: unknown[] = []
+    const server = new TunnelServer({
+      port: { postMessage: (frame) => { frames.push(frame) } },
+      requestListener: () => Promise.resolve((req, response) => {
+        raw.push((req as { rawHeaders?: unknown }).rawHeaders)
+        const res = response as { writeHead(status: number): void; end(body: string): void }
+        res.writeHead(200)
+        res.end('route lane')
+      }),
+    })
+    server.serve(seams(async () => (async function *(): AsyncGenerator { yield undefined })()))
+
+    server.handleMessage({ t: 'req', id: 24, method: 'POST', url: 'http://localhost/handler', headers: { host: 'localhost', 'x-probe': '1' } })
+    await vi.waitFor(() => { expect(frames).toHaveLength(1) })
+    // The tunnel names the loopback authority it synthesizes requests against, once.
+    expect(raw).toEqual([['host', '127.0.0.1', 'x-probe', '1']])
+  })
+})
+
 describe('worker tunnel package assets', () => {
   it('answers GET /__assets__ with the package-asset archive and refuses other methods', async () => {
     const { server, frames } = harness()

@@ -74,7 +74,7 @@ index 启动输入分两层，按页面所代表的 Peer 计算。`collectIndexI
 
 ### 失败时的行为
 
-监听失败（例如 EADDRINUSE）会以绑定诊断信息拒绝插件初始化，不可用的 TLS 材料同样会拒绝它，诊断信息给出配置字段与解析后的路径，但绝不包含文件内容。handler 或 resource 抛错的 HTTP 请求会得到 400——若响应头已经发出则销毁 socket——并记录 warning；它绝不会退出进程。upgrade handler 抛错或升级 socket 出现传输错误时，会记录 warning 并销毁对应 socket。
+每个监听器都会在任何 gate、路由、upgrade handler 或 fallback 运行之前，以 400 回应带有多个 `Host` 行的请求或 upgrade 请求，这是 HTTP/1.1 的要求：node:http 只在 `req.headers` 中保留第一行，路由与其前方的代理可能读到不同的 authority。监听失败（例如 EADDRINUSE）会以绑定诊断信息拒绝插件初始化，不可用的 TLS 材料同样会拒绝它，诊断信息给出配置字段与解析后的路径，但绝不包含文件内容。handler 或 resource 抛错的 HTTP 请求会得到 400——若响应头已经发出则销毁 socket——并记录 warning；它绝不会退出进程。upgrade handler 抛错或升级 socket 出现传输错误时，会记录 warning 并销毁对应 socket。
 
 -----
 

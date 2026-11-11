@@ -318,3 +318,42 @@ describe('additional listeners', () => {
     await expect(get(address(reopened).port, '/handler')).rejects.toThrow()
   })
 })
+
+describe('repeated Host lines', () => {
+  /** Send one raw request with two Host lines and collect everything the server writes until it closes. */
+  async function twoHosts(port: number, path: string, upgrade: boolean): Promise<string> {
+    const socket = connect(port, '127.0.0.1')
+    await once(socket, 'connect')
+    let received = ''
+    socket.setEncoding('utf8')
+    socket.on('data', (chunk: string) => { received += chunk })
+    const closed = once(socket, 'close')
+    const extra = upgrade ? 'Connection: Upgrade\r\nUpgrade: dsh-test\r\n' : 'Connection: close\r\n'
+    socket.write(`GET ${path} HTTP/1.1\r\nHost: 127.0.0.1:${String(port)}\r\nHost: evil.example\r\n${extra}\r\n`)
+    await closed
+    return received
+  }
+
+  /** The whole raw answer to a repeated Host line. */
+  const REFUSED = /^HTTP\/1\.1 400 Bad Request\r\n[\s\S]*\r\n\r\nbad request: repeated Host header\n$/
+
+  it('are answered 400 on the configured and an additional listener before any gate, route, resource, upgrade or fallback runs', async () => {
+    const { server, ran } = await startServer()
+    const gated: string[] = []
+    const listener = await server.openListener({ id: 'reach-a', bind: { kind: 'loopback' }, gate: (req, kind) => {
+      gated.push(`${kind} ${req.url ?? ''}`)
+      return { kind: 'pass' }
+    } })
+    for (const port of [server.port ?? 0, address(listener).port]) {
+      for (const path of ['/handler', '/assets/a.js', '/elsewhere']) {
+        expect(await twoHosts(port, path, false)).toMatch(REFUSED)
+      }
+      expect(await twoHosts(port, '/socket', true)).toMatch(REFUSED)
+    }
+    expect(ran).toEqual([])
+    expect(gated).toEqual([])
+    // One Host line still reaches every route.
+    expect((await get(address(listener).port, '/assets/a.js')).status).toBe(200)
+    expect(ran).toEqual(['assets'])
+  })
+})

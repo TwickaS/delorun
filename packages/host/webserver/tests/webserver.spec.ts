@@ -767,7 +767,7 @@ describe('real Loader composition', () => {
       off: (event: string, listener: () => void) => { listeners.get(event)?.delete(listener); return res },
     }
     const httpServer = Reflect.get(server, 'server') as { emit(event: 'request', req: object, res: object): boolean }
-    httpServer.emit('request', { url: '/tunnel', method: 'GET', headers: { host: 'tunnel.invalid' } }, res)
+    httpServer.emit('request', { url: '/tunnel', method: 'GET', headers: { host: 'tunnel.invalid' }, rawHeaders: ['host', 'tunnel.invalid'] }, res)
     await vi.waitFor(() => { expect(listeners.get('close')?.size ?? 0).toBeGreaterThan(0) })
     finished = true
     for (const listener of [...(listeners.get('close') ?? [])]) listener()

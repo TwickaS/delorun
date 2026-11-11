@@ -489,6 +489,32 @@ function pinHeaders(res: ServerResponse, headers: OutgoingHttpHeaders): void {
   }
 }
 
+/**
+ * The answer to a request carrying more than one `Host` line, which HTTP/1.1
+ * requires a server to refuse with 400 (RFC 9112 section 3.2). node:http keeps
+ * only the first line in `req.headers`, so a route, a Fetch `Request` built
+ * from those headers, or a proxy in front of this server could each read a
+ * different authority for the same request.
+ */
+const REPEATED_HOST_REFUSAL: WebGateRefusal = {
+  status: 400,
+  headers: { 'content-type': 'text/plain; charset=utf-8' },
+  body: 'bad request: repeated Host header\n',
+}
+
+/**
+ * Whether a request carries more than one `Host` line.
+ * @param req - the request; its `rawHeaders` alternate names and values.
+ * @returns true when two or more lines name `Host`.
+ */
+function hasRepeatedHost(req: IncomingMessage): boolean {
+  let lines = 0
+  for (let at = 0; at < req.rawHeaders.length; at += 2) {
+    if (req.rawHeaders[at]?.toLowerCase() === 'host') lines += 1
+  }
+  return lines > 1
+}
+
 /** Write a gate refusal over HTTP. */
 function writeRefusal(res: ServerResponse, refusal: WebGateRefusal): void {
   res.writeHead(refusal.status, { ...refusal.headers, 'content-length': Buffer.byteLength(refusal.body) })
@@ -811,6 +837,10 @@ export class WebServer extends Service {
       // node:http removed its own socket error handler; refused and dispatched sockets alike
       // get this one, and close destroys them, before the gate runs.
       this.trackUpgrade(socket, sockets.upgraded)
+      if (hasRepeatedHost(req)) {
+        writeUpgradeRefusal(socket, REPEATED_HOST_REFUSAL)
+        return
+      }
       let decision: WebGateDecision
       try {
         decision = options.gate(req, 'upgrade')
@@ -885,13 +915,18 @@ export class WebServer extends Service {
   }
 
   /**
-   * The node:http request listener of one listener. A gate, when given, decides
-   * each request before gzip and dispatch. Per-request failures log and answer
+   * The node:http request listener of one listener. A request with a repeated
+   * `Host` line is answered 400 first; a gate, when given, then decides each
+   * request before gzip and dispatch. Per-request failures log and answer
    * 400 rather than end the process: handle() rejecting on one malformed request
    * (bad %-escape, client dropping mid-body) would otherwise be an unhandled rejection.
    */
   private requestListener(gate?: WebListenerGate): (req: IncomingMessage, res: ServerResponse) => void {
     return (req, res) => {
+      if (hasRepeatedHost(req)) {
+        writeRefusal(res, REPEATED_HOST_REFUSAL)
+        return
+      }
       let decision: WebGateDecision | undefined
       if (gate !== undefined) {
         try {
@@ -952,10 +987,11 @@ export class WebServer extends Service {
     else await responder.handler(req, res)
   }
 
-  /** Hand one upgrade request to its exact-path route; a socket no route claims is destroyed. */
+  /** Hand one upgrade request to its exact-path route; a socket no route claims is destroyed, and a repeated `Host` is answered 400. */
   private dispatchUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, upgraded: Set<Duplex>): void {
     this.trackUpgrade(socket, upgraded)
-    this.routeUpgrade(req, socket, head)
+    if (hasRepeatedHost(req)) writeUpgradeRefusal(socket, REPEATED_HOST_REFUSAL)
+    else this.routeUpgrade(req, socket, head)
   }
 
   /** Own an upgrade socket: log and destroy it on error, and keep it in `upgraded` until it closes. */
