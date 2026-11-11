@@ -27,8 +27,8 @@
  */
 import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: the ctx.loader merge, read to start a refused server row again.
-import type {} from '@deepseek-ai/cordis-plugin-loader'
+// The ctx.loader merge, read to start a server row again, and the type of its rows.
+import type { Entry as LoaderEntry } from '@deepseek-ai/cordis-plugin-loader'
 import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import schema from '@deepseek-ai/schemastery'
@@ -36,20 +36,22 @@ import { resolveDeloHome } from '@delo/home'
 import {
   acceptanceOfStart,
   acceptanceStorePath,
+  changedPartOf,
   mismatchOf,
   readAcceptanceStore,
   writeAcceptanceStore,
 } from './store.ts'
 import type { AcceptedCommand, ServerStart } from './store.ts'
-import { McpReviewError, pendingReviewOf, type McpReviews, type PendingReview } from './review.ts'
-import type { PendingServer } from './wire.ts'
+import { acceptHint, McpReviewError, pendingReviewOf, type McpReviews, type PendingReview } from './review.ts'
+import type { AcceptedServer, PendingServer, ServerChange } from './wire.ts'
 import { registerMcpConsentRoutes } from './routes.ts'
 
-export { mcpReviewId, MCP_REVIEW_ID_LENGTH, MCP_REVIEW_ID_PATTERN, McpReviewError, pendingReviewOf, type McpReviews, type PendingReview } from './review.ts'
+export { acceptHint, mcpReviewId, MCP_REVIEW_ID_LENGTH, MCP_REVIEW_ID_PATTERN, McpReviewError, pendingReviewOf, type McpReviews, type PendingReview } from './review.ts'
 export {
   MAX_MCP_CONSENT_REQUEST_BYTES, MCP_CONSENT_REFUSAL_CODES, MCP_CONSENT_ROUTES, SERVER_NAME_PATTERN,
   type AcceptServerAnswer, type AcceptServerRequest, type DeclineServerAnswer, type DeclineServerRequest,
-  type McpConsentRefusalCode, type PendingServer, type PendingServersAnswer,
+  type AcceptedServer, type McpConsentRefusalCode, type PendingServer, type PendingServersAnswer, type RevokeServerAnswer,
+  type RevokeServerRequest, type ServerChange, SERVER_CHANGES,
 } from './wire.ts'
 
 /** The plugin's name in the loader's diagnostics. */
@@ -123,10 +125,82 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
    *   No reason names an environment value.
    */
   async review(command: McpServerCommand): Promise<McpConsentDecision> {
-    const decision = await this.decide(command)
-    if (decision.allow) this.reviews.delete(command.serverName)
-    else this.reviews.set(command.serverName, pendingReviewOf(command, decision.reason, Date.now()))
-    return decision
+    const verdict = await this.decide(command)
+    if (verdict.allow) {
+      this.reviews.delete(command.serverName)
+      return { allow: true }
+    }
+    this.reviews.set(command.serverName, pendingReviewOf(command, verdict.reason, verdict.change, Date.now()))
+    return { allow: false, reason: `${verdict.reason}${acceptHint(command.serverName)}` }
+  }
+
+  /**
+   * The accepted starts the store holds, each with the configured servers of the Loader that start its command.
+   * @returns them sorted by command; none while no store exists or it cannot be read as this version's format.
+   */
+  async accepted(): Promise<readonly AcceptedServer[]> {
+    let read: Awaited<ReturnType<typeof readAcceptanceStore>>
+    try {
+      read = await readAcceptanceStore(await this.path())
+    } catch (error) {
+      // A home that cannot be resolved holds no acceptance this service can show; every review says so.
+      this.ctx.logger.warn(`mcp-consent: the accepted servers cannot be listed: ${reasonOf(error)}`)
+      return []
+    }
+    if (read.kind !== 'readable') return []
+    return [...read.entries].sort(([left], [right]) => (left < right ? -1 : 1)).map(([command, accepted]) => ({
+      command,
+      args: [...accepted.args],
+      cwd: accepted.cwd,
+      envNames: [...accepted.envNames],
+      acceptedAt: accepted.acceptedAt,
+      servers: this.rowsStarting(command).map(row => row.serverName).sort(),
+    }))
+  }
+
+  /**
+   * Withdraw one acceptance at the home's own computer, after the person chose to; the route that calls this refuses
+   * every other caller first. The store drops the command's acceptance, and every running Loader row that starts the
+   * command starts again with its own configuration, so its review refuses it and the server stops until the person
+   * accepts it again.
+   * @param command - the accepted command, as the list showed it.
+   * @param acceptedAt - the acceptance time the list showed.
+   * @param confirmed - whether the person chose to revoke.
+   * @returns how many running rows were stopped.
+   * @throws {McpReviewError} `UNCONFIRMED` without the answer, `STALE_REVIEW` when the store no longer holds that
+   *   acceptance, and `STORE_REFUSED` when the store cannot be read or written; each records nothing.
+   */
+  async revokeAcceptance(command: string, acceptedAt: number, confirmed: boolean): Promise<{ readonly stopped: number }> {
+    if (!confirmed) throw new McpReviewError('UNCONFIRMED', 'the person has not confirmed the revoke, so nothing is changed')
+    await this.serial(async () => {
+      let path: string
+      try {
+        path = await this.path()
+      } catch (error) {
+        throw new McpReviewError('STORE_REFUSED', reasonOf(error), { cause: error })
+      }
+      const read = await readAcceptanceStore(path)
+      if (read.kind === 'refused') throw new McpReviewError('STORE_REFUSED', `the acceptance store cannot be read: ${read.problem}`)
+      const entries = read.kind === 'readable' ? new Map(read.entries) : new Map<string, AcceptedCommand>()
+      if (entries.get(command)?.acceptedAt !== acceptedAt) {
+        throw new McpReviewError('STALE_REVIEW', 'this acceptance changed after it was shown; look at the list again')
+      }
+      entries.delete(command)
+      try {
+        await writeAcceptanceStore(path, entries)
+      } catch (error) {
+        throw new McpReviewError('STORE_REFUSED', reasonOf(error), { cause: error })
+      }
+    })
+    this.ctx.logger.info('mcp-consent: the person revoked one accepted stdio server command at the home\'s computer')
+    let stopped = 0
+    for (const row of this.rowsStarting(command)) {
+      // `update` with the row's own configuration applies the row again, so its review refuses the start; nothing is saved.
+      const failure = await Promise.resolve().then(() => row.fiber.update(row.fiber.config, true)).then(() => row.fiber.await()).then(() => undefined, (error: unknown) => error)
+      if (refusedServer(failure) === row.serverName) stopped++
+      else this.ctx.logger.warn(`mcp-consent: the row ${row.id} did not stop after its acceptance was revoked${failure === undefined ? '' : `: ${reasonOf(failure)}`}`)
+    }
+    return { stopped }
   }
 
   /**
@@ -256,6 +330,23 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
   }
 
   /**
+   * The Loader rows configured to start a command, with their server names.
+   * @param command - the executable.
+   * @returns each row with a fiber whose configuration names the command as a stdio start.
+   */
+  private rowsStarting(command: string): { readonly id: string, readonly serverName: string, readonly fiber: NonNullable<LoaderEntry['fiber']> }[] {
+    const rows: { readonly id: string, readonly serverName: string, readonly fiber: NonNullable<LoaderEntry['fiber']> }[] = []
+    for (const entry of this.ctx.get('loader')?.entries() ?? []) {
+      const fiber = entry.fiber
+      const config: unknown = fiber?.config
+      if (fiber === undefined || typeof config !== 'object' || config === null || Reflect.get(config, 'command') !== command) continue
+      const serverName: unknown = Reflect.get(config, 'serverName')
+      if (typeof serverName === 'string') rows.push({ id: entry.id, serverName, fiber })
+    }
+    return rows
+  }
+
+  /**
    * The store's path under the resolved home.
    * @returns the absolute path.
    * @throws the home resolution's refusal, when the home cannot be resolved.
@@ -270,32 +361,33 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
    * @param command - the server start under review.
    * @returns the decision.
    */
-  private async decide(command: McpServerCommand): Promise<McpConsentDecision> {
+  private async decide(command: McpServerCommand): Promise<Verdict> {
     let path: string
     try {
       path = await this.path()
     } catch (error) {
-      return { allow: false, reason: `the Delo home could not be resolved, so no acceptance can be read (${reasonOf(error)})` }
+      return { allow: false, change: 'unreadable', reason: `the Delo home could not be resolved, so no acceptance can be read (${reasonOf(error)})` }
     }
     const read = await readAcceptanceStore(path)
     if (read.kind === 'absent') {
-      return { allow: false, reason: 'no command is accepted yet (the acceptance store does not exist)' }
+      return { allow: false, change: 'new', reason: 'no command is accepted yet (the acceptance store does not exist)' }
     }
     if (read.kind === 'refused') {
-      return { allow: false, reason: `the acceptance store could not be read, so nothing counts as accepted (${read.problem})` }
+      return { allow: false, change: 'unreadable', reason: `the acceptance store could not be read, so nothing counts as accepted (${read.problem})` }
     }
     if (read.kind === 'superseded') {
       return {
         allow: false,
+        change: 'new',
         reason: `the acceptance store is of version ${String(read.version)}, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again`,
       }
     }
     const accepted = read.entries.get(command.command)
     if (accepted === undefined) {
-      return { allow: false, reason: 'the acceptance store holds no acceptance for this command' }
+      return { allow: false, change: 'new', reason: 'the acceptance store holds no acceptance for this command' }
     }
-    const mismatch = mismatchOf(accepted, command)
-    return mismatch === undefined ? { allow: true } : { allow: false, reason: mismatch }
+    const reason = mismatchOf(accepted, command)
+    return reason === undefined ? { allow: true } : { allow: false, change: changedPartOf(accepted, command) ?? 'new', reason }
   }
 
   /**
@@ -330,6 +422,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // The studio's routes, in a profile that serves a studio.
   ctx.inject(['connection', 'mcpReviews'], (child) => { registerMcpConsentRoutes(child, child.mcpReviews) })
 }
+
+/** A review's outcome with what it asks about: the decision the mcp-client reads, and the change a surface names. */
+type Verdict = { readonly allow: true } | { readonly allow: false, readonly reason: string, readonly change: ServerChange }
 
 /**
  * The server a row's failure is this consent's refusal of. The refusal is the mcp-client's `McpConsentRefusedError`,

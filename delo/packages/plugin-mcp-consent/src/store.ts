@@ -112,6 +112,22 @@ export function acceptanceOfStart(start: ServerStart, acceptedAt: number): Accep
   }
 }
 
+/** The part of a start that differs from its command's acceptance. */
+export type ChangedPart = 'arguments' | 'directory' | 'environment'
+
+/**
+ * The first part of a server start that its command's acceptance does not cover, in the order a review compares them.
+ * @param accepted - the command's acceptance.
+ * @param start - the start under review.
+ * @returns the part, or `undefined` when the acceptance covers the start.
+ */
+export function changedPartOf(accepted: AcceptedCommand, start: ServerStart): ChangedPart | undefined {
+  if (!sameArgs(accepted.args, start.args)) return 'arguments'
+  if (accepted.cwd !== start.cwd) return 'directory'
+  if (accepted.envDigest !== envDigest(start.env)) return 'environment'
+  return undefined
+}
+
 /**
  * Why an acceptance does not cover a server start of its command, in words that name no environment value.
  * @param accepted - the command's acceptance.

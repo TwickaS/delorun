@@ -2,7 +2,9 @@
  * Specs of the pending reviews of `@delo/plugin-mcp-consent`: each refused stdio server start is kept for the studio's
  * MCP servers section and `delorun mcp`, without an environment value; an acceptance records exactly the start shown
  * and starts the refused row again; a decline records nothing. The denial cases prove that an unconfirmed answer, a
- * stale review and a request from a reach device record nothing.
+ * stale review and a request from a reach device record nothing. A review names what changed since the acceptance, the
+ * accepted starts are listed, and a revoke withdraws one and stops the rows that start it; a stale or unconfirmed
+ * revoke changes nothing.
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
@@ -61,9 +63,27 @@ describe('a refused start', () => {
     const [pending] = consent.pending()
     expect(pending).toEqual({
       serverName: 'files', reviewId: mcpReviewId(START), command: 'npx', args: START.args, cwd: '/srv/mcp', envNames: ['API_TOKEN'],
-      reason: 'no command is accepted yet (the acceptance store does not exist)', reviewedAt: expect.any(Number),
+      reason: 'no command is accepted yet (the acceptance store does not exist)', change: 'new', reviewedAt: expect.any(Number),
     })
     expect(JSON.stringify(consent.pending())).not.toContain(SECRET)
+  })
+
+  it('names the part of an accepted start that changed', async () => {
+    await consent.review(START)
+    await consent.acceptReview('files', mcpReviewId(START), true)
+    for (const [changed, change] of [
+      [{ ...START, args: [...START.args, '/home'] }, 'arguments'],
+      [{ ...START, cwd: '/srv/other' }, 'directory'],
+      [{ ...START, env: { API_TOKEN: 'another-value' } }, 'environment'],
+      [{ ...START, serverName: 'other', command: 'uvx' }, 'new'],
+    ] as const) {
+      await consent.review(changed)
+      expect(consent.pending().find(review => review.serverName === changed.serverName)?.change).toBe(change)
+    }
+  })
+
+  it('ends its refusal with where the person accepts it', async () => {
+    await expect(consent.review(START)).resolves.toMatchObject({ reason: expect.stringContaining('`delorun mcp accept files`') })
   })
 
   it('is replaced by the review of the changed start, whose id differs', async () => {
@@ -156,11 +176,12 @@ describe('an answer to a pending review', () => {
  */
 function routesOver(listener: string) {
   let hook: ((request: object, response: ServerResponse, next: () => Promise<void>) => Promise<void>) | undefined
-  const routes = new Map<string, { fetch: (request: Request) => Promise<Response> }>()
+  type Route = { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }
+  const routes = new Map<string, Route>()
   registerMcpConsentRoutes({
     on: (_name: string, registered: typeof hook) => { hook = registered },
     get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }) } : undefined),
-    connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response> }) => { routes.set(route.path, route) } } },
+    connection: { fetch: { register: (route: Route) => { routes.set(route.path, route) } } },
   } as never, consent)
   return {
     hook: (path: string, host: string) => {
@@ -171,19 +192,112 @@ function routesOver(listener: string) {
     },
     post: (path: string, body: object) => routes.get(path)!.fetch(new Request(`http://localhost${path}`, { method: 'POST', body: JSON.stringify(body) })),
     get: (path: string) => routes.get(path)!.fetch(new Request(`http://localhost${path}`)),
+    admits: (path: string, principal: object) => routes.get(path)?.admitPeer?.(new Request(`http://localhost${path}`), { principal }) === true,
   }
 }
+
+describe('an accepted start', () => {
+  /**
+   * A Loader holding one row per server name given, each configured to start the suite's command.
+   * @param names - the rows' server names.
+   * @returns the rows' update spies, by name.
+   */
+  function loaderWith(...names: string[]) {
+    const updates = new Map(names.map(name => [name, vi.fn(async () => {})]))
+    ctx.provide('loader', {
+      entries: () => [
+        ...names.map(serverName => ({
+          id: `mcp-${serverName}`,
+          fiber: {
+            config: { serverName, command: START.command },
+            update: updates.get(serverName),
+            await: () => Promise.reject(new McpConsentRefusedError({ ...START, serverName }, 'not accepted')),
+          },
+        })),
+        { id: 'http', fiber: { config: { serverName: 'web', url: 'https://example.com' }, update: vi.fn(), await: () => Promise.resolve() } },
+      ],
+    } as never)
+    return updates
+  }
+
+  it('is listed with the servers that start it, without an environment value', async () => {
+    loaderWith('files')
+    await consent.review(START)
+    await consent.acceptReview('files', mcpReviewId(START), true)
+    await expect(consent.accepted()).resolves.toEqual([{
+      command: 'npx', args: START.args, cwd: '/srv/mcp', envNames: ['API_TOKEN'], acceptedAt: expect.any(Number), servers: ['files'],
+    }])
+    expect(JSON.stringify(await consent.accepted())).not.toContain(SECRET)
+  })
+
+  it('is revoked: the store drops it, each row that starts it stops, and its next review asks again', async () => {
+    const updates = loaderWith('files', 'files-copy')
+    await consent.review(START)
+    await consent.acceptReview('files', mcpReviewId(START), true)
+    const [accepted] = await consent.accepted()
+    await expect(consent.revokeAcceptance('npx', accepted?.acceptedAt ?? 0, true)).resolves.toEqual({ stopped: 2 })
+    expect(updates.get('files')).toHaveBeenCalledWith({ serverName: 'files', command: 'npx' }, true)
+    await expect(consent.accepted()).resolves.toEqual([])
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
+  })
+
+  it('stays accepted after an unconfirmed or stale revoke', async () => {
+    const updates = loaderWith('files')
+    await consent.review(START)
+    await consent.acceptReview('files', mcpReviewId(START), true)
+    // The acceptance itself started the refused row again.
+    updates.get('files')?.mockClear()
+    const [accepted] = await consent.accepted()
+    const acceptedAt = accepted?.acceptedAt ?? 0
+    await expect(consent.revokeAcceptance('npx', acceptedAt, false)).rejects.toThrow(expect.objectContaining({ code: 'UNCONFIRMED' }))
+    await expect(consent.revokeAcceptance('npx', acceptedAt + 1, true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    await expect(consent.revokeAcceptance('uvx', acceptedAt, true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    expect(updates.get('files')).not.toHaveBeenCalled()
+    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+  })
+})
 
 describe('the routes', () => {
   it('refuse every request from a reach device with LOOPBACK_REQUIRED before any route runs', async () => {
     const remote = routesOver('tailscale-private')
-    for (const path of Object.values(MCP_CONSENT_ROUTES)) {
+    for (const path of Object.values(MCP_CONSENT_ROUTES).filter(path => path !== MCP_CONSENT_ROUTES.waiting)) {
       const answered = await remote.hook(path, 'home.example.ts.net')
       expect(answered.reached).toBe(false)
       expect(answered.status).toBe(403)
       expect(JSON.parse(answered.body ?? '{}')).toMatchObject({ error: 'LOOPBACK_REQUIRED' })
     }
     expect((await routesOver('loopback').hook(MCP_CONSENT_ROUTES.accept, 'localhost:3080')).reached).toBe(true)
+  })
+
+  it('let a reach device read only the waiting servers\' names and what changed', async () => {
+    const remote = routesOver('tailscale-private')
+    expect((await remote.hook(MCP_CONSENT_ROUTES.waiting, 'home.example.ts.net')).reached).toBe(true)
+    expect(remote.admits(MCP_CONSENT_ROUTES.waiting, { kind: 'reach-device', deviceId: 'phone' })).toBe(true)
+    expect(remote.admits(MCP_CONSENT_ROUTES.waiting, { kind: 'sdk' })).toBe(false)
+    expect(remote.admits(MCP_CONSENT_ROUTES.pending, { kind: 'reach-device', deviceId: 'phone' })).toBe(false)
+    await consent.review(START)
+    const answered = await (await remote.get(MCP_CONSENT_ROUTES.waiting)).text()
+    expect(JSON.parse(answered)).toEqual({ servers: [{ serverName: 'files', change: 'new' }] })
+    expect(answered).not.toContain('npx')
+    expect(answered).not.toContain('API_TOKEN')
+  })
+
+  it('revoke a confirmed, current acceptance, and refuse an unconfirmed, stale or malformed revoke with its code', async () => {
+    const routes = routesOver('loopback')
+    await consent.review(START)
+    await consent.acceptReview('files', mcpReviewId(START), true)
+    const listed = await (await routes.get(MCP_CONSENT_ROUTES.pending)).json() as { accepted: { acceptedAt: number }[] }
+    const acceptedAt = listed.accepted[0]?.acceptedAt ?? 0
+    const unconfirmed = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt, confirmed: false })
+    expect([unconfirmed.status, await unconfirmed.json()]).toEqual([400, expect.objectContaining({ error: 'UNCONFIRMED' })])
+    const stale = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt: acceptedAt + 1, confirmed: true })
+    expect([stale.status, await stale.json()]).toEqual([409, expect.objectContaining({ error: 'STALE_REVIEW' })])
+    const malformed = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt: 'then', confirmed: true })
+    expect([malformed.status, await malformed.json()]).toEqual([400, expect.objectContaining({ error: 'INVALID_REQUEST' })])
+    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    const revoked = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt, confirmed: true })
+    expect([revoked.status, await revoked.json()]).toEqual([200, { stopped: 0 }])
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
   })
 
   it('accept a confirmed, current review, and refuse an unconfirmed, stale or malformed answer with its code', async () => {

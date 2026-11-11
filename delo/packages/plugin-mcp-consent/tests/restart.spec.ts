@@ -1,8 +1,8 @@
 /**
  * An accepted server starts without a restart of the studio: under a real Loader, a stdio mcp-client row that the
  * add-time consent refused stays stopped with the typed refusal, and once the person accepts the review the studio
- * showed, the row starts again with its own configuration and registers its tools. The MCP SDK is replaced by a stub,
- * so no process starts.
+ * showed, the row starts again with its own configuration and registers its tools. Revoking the acceptance stops the
+ * row again and removes its tools. The MCP SDK is replaced by a stub, so no process starts.
  */
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -74,5 +74,11 @@ describe('an accepted server', () => {
     expect(mockConnect).toHaveBeenCalledTimes(1)
     expect(ctx.tools.get('mcp__files__remote')).toBeDefined()
     expect(reviews?.pending()).toEqual([])
+    const [accepted] = await reviews?.accepted() ?? []
+    expect(accepted?.servers).toEqual(['files'])
+    await expect(reviews?.revokeAcceptance('npx', accepted?.acceptedAt ?? 0, true)).resolves.toEqual({ stopped: 1 })
+    await expect(ctx.loader.resolve(serverId).fiber?.await()).rejects.toBeInstanceOf(McpConsentRefusedError)
+    expect(ctx.tools.get('mcp__files__remote')).toBeUndefined()
+    expect(reviews?.pending().map(review => review.change)).toEqual(['new'])
   })
 })

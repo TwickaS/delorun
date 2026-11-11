@@ -1,16 +1,17 @@
 /**
- * The studio's routes to the stdio MCP servers the add-time consent holds stopped ({@link MCP_CONSENT_ROUTES}): the
- * pending reviews the MCP servers section shows, and the person's acceptance or decline of one. Every route answers
- * only a request that arrived on the loopback listener: a reach device, or a request the home cannot place, is
- * answered `403 LOOPBACK_REQUIRED` before its body is read, so a server command is accepted only at the home's own
- * computer.
+ * The studio's routes to the stdio MCP servers the add-time consent holds stopped or has accepted
+ * ({@link MCP_CONSENT_ROUTES}): the pending reviews and accepted starts the Permissions section shows, and the person's
+ * acceptance, decline or revoke. Every route but `waiting` answers only a request that arrived on the loopback
+ * listener: a reach device, or a request the home cannot place, is answered `403 LOOPBACK_REQUIRED` before its body is
+ * read, so a server command is accepted or revoked only at the home's own computer. `waiting` admits a reach device's
+ * Peer and answers only server names and change kinds, never a start's command, arguments, directory or environment.
  *
  * @module @delo/plugin-mcp-consent/routes
  */
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { requireComputer } from '@delo/home-auth'
+import { REACH_DEVICE, requireComputer } from '@delo/home-auth'
 import { z } from 'zod'
 import { MCP_REVIEW_ID_PATTERN, McpReviewError, type McpReviews } from './review.ts'
 import { MAX_MCP_CONSENT_REQUEST_BYTES, MCP_CONSENT_ROUTES, SERVER_NAME_PATTERN, type McpConsentRefusalCode } from './wire.ts'
@@ -24,11 +25,12 @@ export const MCP_CONSENT_REFUSAL_STATUS: Readonly<Record<McpConsentRefusalCode, 
 }
 
 /** The action a reach device is told needs the home's computer. */
-const ACTION = 'Answering an MCP server\'s start'
+const ACTION = 'Answering or revoking an MCP server\'s start'
 
 const Answer = { serverName: z.string().regex(SERVER_NAME_PATTERN), reviewId: z.string().regex(MCP_REVIEW_ID_PATTERN) }
 const AcceptBody = z.strictObject({ ...Answer, confirmed: z.boolean() })
 const DeclineBody = z.strictObject(Answer)
+const RevokeBody = z.strictObject({ command: z.string().min(1).max(4096), acceptedAt: z.number().int().nonnegative(), confirmed: z.boolean() })
 
 /**
  * One JSON answer, never cached.
@@ -82,7 +84,7 @@ async function answered(call: () => object | Promise<object>): Promise<Response>
  * @param reviews - the consent service's pending reviews.
  */
 export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): void {
-  const paths: ReadonlySet<string> = new Set(Object.values(MCP_CONSENT_ROUTES))
+  const paths: ReadonlySet<string> = new Set(Object.values(MCP_CONSENT_ROUTES).filter(path => path !== MCP_CONSENT_ROUTES.waiting))
   ctx.on('connection/request', async (request, response, next) => {
     if (paths.has(request.url?.split('?', 1)[0] ?? '') && !requireComputer(request, response, ctx.get('homeAuth'), ACTION)) return
     await next()
@@ -91,7 +93,14 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     path: MCP_CONSENT_ROUTES.pending,
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: () => answered(() => ({ servers: reviews.pending() })),
+    fetch: () => answered(async () => ({ servers: reviews.pending(), accepted: await reviews.accepted() })),
+  })
+  ctx.connection.fetch.register({
+    path: MCP_CONSENT_ROUTES.waiting,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    admitPeer: (_request, peer) => peer.principal.kind === REACH_DEVICE,
+    fetch: () => answered(() => ({ servers: reviews.pending().map(({ serverName, change }) => ({ serverName, change })) })),
   })
   ctx.connection.fetch.register({
     path: MCP_CONSENT_ROUTES.accept,
@@ -114,6 +123,16 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
         reviews.declineReview(body.serverName, body.reviewId)
         return { declined: true }
       })
+    },
+  })
+  ctx.connection.fetch.register({
+    path: MCP_CONSENT_ROUTES.revoke,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      const body = await bodyOf(request, RevokeBody)
+      if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the command, the acceptance time and confirmed' })
+      return answered(() => reviews.revokeAcceptance(body.command, body.acceptedAt, body.confirmed))
     },
   })
 }

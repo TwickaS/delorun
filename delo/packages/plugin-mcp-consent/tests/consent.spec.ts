@@ -15,7 +15,7 @@ import type { MockInstance } from 'vitest'
 import { apply as startServer, MCP_ADD_CONSENT_PROVIDER_EXPORT, McpConsentRefusedError } from '@deepseek-ai/dsh-mcp-client'
 import type { Config as McpClientConfig, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import * as McpConsentPlugin from '../src/index.ts'
-import { DeloMcpConsent, Config, apply } from '../src/index.ts'
+import { DeloMcpConsent, Config, acceptHint, apply } from '../src/index.ts'
 import {
   AcceptanceStoreError,
   acceptanceOfStart,
@@ -28,6 +28,9 @@ import {
 
 /** The secret value of the suite's configured environment, which no store text or reason may hold. */
 const SECRET = 'secret-token-value'
+
+/** The clause every refusal of the suite's server ends with, naming where the person accepts it. */
+const HINT = acceptHint('srv')
 
 /** The server start every review of the suite judges. */
 const COMMAND: McpServerCommand = {
@@ -204,7 +207,7 @@ describe('the mcpAddConsent provider', () => {
     writeStore(acceptedStore({ ...COMMAND, args: ['-y', '@modelcontextprotocol/server-fs', '/elsewhere'] }))
     await expect(consent.review(COMMAND)).resolves.toEqual({
       allow: false,
-      reason: 'the person accepted a different argument list with this command',
+      reason: `the person accepted a different argument list with this command${HINT}`,
     })
   })
 
@@ -217,7 +220,7 @@ describe('the mcpAddConsent provider', () => {
       {},
     ]) {
       const decision = await consent.review({ ...COMMAND, env })
-      expect(decision).toEqual({ allow: false, reason: 'the person accepted this command with different environment variables or values' })
+      expect(decision).toEqual({ allow: false, reason: `the person accepted this command with different environment variables or values${HINT}` })
       expect(JSON.stringify(decision)).not.toContain(SECRET)
     }
   })
@@ -227,7 +230,7 @@ describe('the mcpAddConsent provider', () => {
     for (const cwd of ['/srv/other', '']) {
       await expect(consent.review({ ...COMMAND, cwd })).resolves.toEqual({
         allow: false,
-        reason: 'the person accepted this command with a different working directory',
+        reason: `the person accepted this command with a different working directory${HINT}`,
       })
     }
   })
@@ -249,7 +252,7 @@ describe('the mcpAddConsent provider', () => {
     for (const start of [COMMAND, { ...COMMAND, env: {}, cwd: '' }]) {
       await expect(consent.review(start)).resolves.toEqual({
         allow: false,
-        reason: 'the acceptance store is of version 1, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
+        reason: `the acceptance store is of version 1, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again${HINT}`,
       })
     }
   })
@@ -293,7 +296,7 @@ describe('the mcpAddConsent provider', () => {
     await expect(consent.review(COMMAND)).resolves.toEqual({ allow: true })
     await expect(consent.review({ ...COMMAND, command: 'other', args: [], env: {}, cwd: '' })).resolves.toEqual({
       allow: false,
-      reason: 'the acceptance store holds no acceptance for this command',
+      reason: `the acceptance store holds no acceptance for this command${HINT}`,
     })
   })
 
@@ -301,14 +304,14 @@ describe('the mcpAddConsent provider', () => {
     writeStore(acceptedStore({ ...COMMAND, command: 'other-command', args: [], env: {}, cwd: '' }))
     await expect(consent.review(COMMAND)).resolves.toEqual({
       allow: false,
-      reason: 'the acceptance store holds no acceptance for this command',
+      reason: `the acceptance store holds no acceptance for this command${HINT}`,
     })
   })
 
   it('asks while no store exists', async () => {
     await expect(consent.review(COMMAND)).resolves.toEqual({
       allow: false,
-      reason: 'no command is accepted yet (the acceptance store does not exist)',
+      reason: `no command is accepted yet (the acceptance store does not exist)${HINT}`,
     })
   })
 
@@ -346,7 +349,7 @@ describe('the mcpAddConsent provider', () => {
   })
 
   it('records an acceptance that a later review allows without asking', async () => {
-    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: 'no command is accepted yet (the acceptance store does not exist)' })
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: `no command is accepted yet (the acceptance store does not exist)${HINT}` })
     await consent.accept(COMMAND)
     const path = store()
     expect(statSync(path).mode & 0o777).toBe(0o600)
@@ -361,10 +364,10 @@ describe('the mcpAddConsent provider', () => {
   it('grants a changed command by accepting it again with its new arguments', async () => {
     await consent.accept(COMMAND)
     const changed = { ...COMMAND, args: ['-y', '@modelcontextprotocol/server-fs', '/elsewhere'] }
-    await expect(consent.review(changed)).resolves.toEqual({ allow: false, reason: 'the person accepted a different argument list with this command' })
+    await expect(consent.review(changed)).resolves.toEqual({ allow: false, reason: `the person accepted a different argument list with this command${HINT}` })
     await consent.accept(changed)
     await expect(consent.review(changed)).resolves.toEqual({ allow: true })
-    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: 'the person accepted a different argument list with this command' })
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: `the person accepted a different argument list with this command${HINT}` })
   })
 
   it('refuses to accept into a store that is not this version\'s format, and leaves it unchanged', async () => {

@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto'
 import { sortedEnvEntries, type McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import { envDigest } from './store.ts'
-import type { McpConsentRefusalCode, PendingServer } from './wire.ts'
+import type { AcceptedServer, McpConsentRefusalCode, PendingServer, ServerChange } from './wire.ts'
 
 /** The length of a review id: hexadecimal digits of a SHA-256. */
 export const MCP_REVIEW_ID_LENGTH = 32
@@ -39,13 +39,24 @@ export function mcpReviewId(start: McpServerCommand): string {
 }
 
 /**
+ * What a refusal adds after its reason, so a person who reads it in a log or a terminal knows the exact way to start the
+ * server: accept it at the home's own computer.
+ * @param serverName - the refused server.
+ * @returns the clause, starting with `; `.
+ */
+export function acceptHint(serverName: string): string {
+  return `; to start it, accept it at the home's computer with \`delorun mcp accept ${serverName}\` while Delo runs, or in the studio's Settings, Permissions`
+}
+
+/**
  * The pending review of a refused start.
  * @param start - the refused start.
  * @param reason - why the consent refused it.
+ * @param change - what the review asks about.
  * @param reviewedAt - when, in milliseconds since the epoch.
  * @returns the review, whose shown fields name the environment's variables but none of their values.
  */
-export function pendingReviewOf(start: McpServerCommand, reason: string, reviewedAt: number): PendingReview {
+export function pendingReviewOf(start: McpServerCommand, reason: string, change: ServerChange, reviewedAt: number): PendingReview {
   return {
     start,
     shown: {
@@ -56,6 +67,7 @@ export function pendingReviewOf(start: McpServerCommand, reason: string, reviewe
       cwd: start.cwd,
       envNames: sortedEnvEntries(start.env).map(([name]) => name),
       reason,
+      change,
       reviewedAt,
     },
   }
@@ -104,6 +116,20 @@ export interface McpReviews {
    * @throws {McpReviewError} for a stale answer.
    */
   declineReview(serverName: string, reviewId: string): void
+  /**
+   * The accepted starts, with the configured servers that use each.
+   * @returns them sorted by command; none while the store cannot be read.
+   */
+  accepted(): Promise<readonly AcceptedServer[]>
+  /**
+   * Withdraw one acceptance at the home's own computer and stop the running rows of its command.
+   * @param command - the accepted command.
+   * @param acceptedAt - the acceptance time the list showed.
+   * @param confirmed - the person's answer.
+   * @returns how many running rows were stopped.
+   * @throws {McpReviewError} for an unconfirmed or stale answer, or a store that cannot be written.
+   */
+  revokeAcceptance(command: string, acceptedAt: number, confirmed: boolean): Promise<{ readonly stopped: number }>
 }
 
 declare module '@deepseek-ai/cordis' {

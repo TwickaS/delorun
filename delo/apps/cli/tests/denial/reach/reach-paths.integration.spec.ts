@@ -64,23 +64,25 @@ const REACHED: Readonly<Record<string, string>> = {
 }
 
 /**
- * One exact Fetch route's decision for a device: `refused` answers 403, `per-call` asks remote access on each request.
- * A refused route answers upstream's `forbidden` unless its own check refuses the device first, with `refusal`'s code.
+ * One exact Fetch route's decision for a device: `refused` answers 403, `per-call` asks remote access on each request,
+ * and `admitted` answers every device through the route's own `admitPeer`. A refused route answers upstream's
+ * `forbidden` unless its own check refuses the device first, with `refusal`'s code.
  */
 interface FetchDecision {
-  readonly device: 'refused' | 'per-call'
+  readonly device: 'refused' | 'per-call' | 'admitted'
   readonly reason: string
   readonly refusal?: string
 }
 
 const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
 const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate'
-const MCP_ANSWER = 'accepting a stdio MCP server lets its command run outside the sandbox, which only the home\'s computer allows; the plugin refuses a device before upstream\'s gate'
+const MCP_ANSWER = 'accepting or revoking a stdio MCP server decides whether its command runs outside the sandbox, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
 /**
  * Every exact Fetch route of the composition with the device's decision. Delo's routes default to refused; a device
- * keeps a read only when it needs it to render a chat it can already read, and none of these is one.
+ * keeps a read only to render a chat it can already read or to send the person to the computer, as the waiting MCP
+ * servers' names do.
  */
 const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloChatStates.list': { device: 'refused', reason: 'snooze and settle states order the chat list at the computer; a device renders every chat without them, and the client keeps its last states' },
@@ -102,6 +104,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloMcpConsent.pending': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.accept': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.decline': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloMcpConsent.revoke': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloMcpConsent.waiting': { device: 'admitted', reason: 'the names of the servers waiting for the person\'s OK, without their commands, so a phone says to approve them at the computer' },
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
   '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
   '/api/session.markdown': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
@@ -280,6 +284,11 @@ describe('the routes a signed-in device reaches', () => {
     expect(routes.map(route => route.path).sort()).toEqual(Object.keys(FETCH_ROUTES).sort())
     for (const route of routes) {
       const decision = FETCH_ROUTES[route.path]
+      if (decision?.device === 'admitted') {
+        const reply = await asPhone(route.path, { method: route.methods[0] ?? 'GET' })
+        expect.soft({ path: route.path, status: reply.status }).toEqual({ path: route.path, status: 200 })
+        continue
+      }
       if (decision?.device !== 'refused') continue
       const method = route.methods[0] ?? 'GET'
       const reply = await asPhone(route.path, { method })
