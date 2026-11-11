@@ -9,7 +9,7 @@
  */
 import type { ExemptionRecord, VersionAxis } from '@delo/contract-plugin-versions'
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
-import type { Installation, InstallationStatus, ItemVerification, ReleaseCheckResult, ReportVersions, UncheckedSource } from '@delo/contract-update-report'
+import type { Installation, InstallationStatus, ItemVerification, LogCheckResult, ReleaseCheckResult, ReportVersions, UncheckedSource } from '@delo/contract-update-report'
 import type { DataFacts } from './data-formats.ts'
 import type { InstalledPluginFact } from './manifest.ts'
 
@@ -21,8 +21,8 @@ export interface ReleaseChecks {
   readonly signature: ReleaseCheckResult
   /** C2's freshness check: the signed timestamp is current and not replayed. */
   readonly freshness: ReleaseCheckResult
-  /** C18's release-log check. */
-  readonly log: ReleaseCheckResult
+  /** C18's release-log check, as the install recorded it; `unchecked` when its online check did not complete. */
+  readonly log: LogCheckResult
 }
 
 /** One revocation the target's catalogue list holds (C13), as the report reads it. */

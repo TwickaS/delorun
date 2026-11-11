@@ -26,6 +26,7 @@ import { planDataCopy, predictBundleList, readDataFormats, readInstalledPlugin, 
 import semver from 'semver'
 import { z } from 'zod'
 import { bundleAnchors, readBundleLayers, type BundleLayerFacts, type BundleLayerOptions } from './bundle-layers.ts'
+import { recordedLogCheck } from './release-check.ts'
 
 const run = promisify(execFile)
 
@@ -274,8 +275,8 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
       })
       return {
         versions,
-        // The store verified the signature now; the install verified freshness and the log before the files landed.
-        release: { manifest: brandString<Sha256Hex>(createHash('sha256').update(manifestBytes).digest('hex')), signature: 'passed', freshness: 'passed', log: 'passed' },
+        // The store verified the signature now; the install verified freshness and recorded the log check's state.
+        release: { manifest: brandString<Sha256Hex>(createHash('sha256').update(manifestBytes).digest('hex')), signature: 'passed', freshness: 'passed', log: await recordedLogCheck(home, runtime.version) },
         bundles: { ...listed, skipped: loaded.skipped, layers: loaded.layers },
         revocations: [],
         notChecked: ['revocations'],

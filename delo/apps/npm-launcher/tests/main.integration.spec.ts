@@ -115,20 +115,21 @@ describe('the launcher’s main function', () => {
     expect(state.releases[VERSION]?.state).toBe('unchecked')
   })
 
-  it('warns about an installed release whose stored log bundle is missing, and stops on one whose bundle path is not a file', async () => {
+  it('stops an installed release whose stored log bundle is missing, and one whose bundle path is not a file', async () => {
     const world = await surroundings()
     await main([], world.context())
     const files = new StorePaths(world.home, platformOf(process.platform, process.arch)).releaseFiles(parseRuntimeVersion(VERSION)!)
     await rm(files.bundle)
     world.stderr.length = 0
-    expect(await main(['status'], world.context())).toBe(0)
-    expect(world.stderr).toEqual([`Release ${VERSION} has not been checked against the release log; Delo checks it at the next connection. (no release-log bundle is stored for this release yet)\n`])
-    expect(world.started).toHaveLength(2)
+    expect(await main(['status'], world.context())).toBe(1)
+    expect(world.stderr.join('')).toContain(`Delo did not start release ${VERSION}: its release-log check failed.`)
+    expect(world.stderr.join('')).toContain('no release-log bundle is stored beside this release')
+    expect(world.started).toHaveLength(1)
     await mkdir(files.bundle)
     world.stderr.length = 0
     expect(await main(['status'], world.context())).toBe(1)
     expect(world.stderr).toEqual(['Delo stopped: EISDIR: illegal operation on a directory, read\n'])
-    expect(world.started).toHaveLength(2)
+    expect(world.started).toHaveLength(1)
   })
 
   it('starts the runtime it installed with a real process, and returns the runtime’s own status', async () => {

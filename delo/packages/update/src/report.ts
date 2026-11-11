@@ -82,12 +82,13 @@ function installationStatuses(statuses: ReportInput['statuses']): readonly Insta
 }
 
 /**
- * Refuse a target that did not pass every check.
+ * Refuse a target whose signature or freshness check did not pass, or whose release-log check failed. A log check that
+ * did not complete (`unchecked`) gets a report, which states it, and `delorun update --yes` does not confirm it.
  * @param target - the staged target.
  * @throws {UpdateReportError} `REPORT_TARGET_UNVERIFIED` naming the checks that failed.
  */
 function assertVerified(target: TargetFacts): void {
-  const failed = RELEASE_CHECKS.filter(check => target.release[check] !== 'passed')
+  const failed = RELEASE_CHECKS.filter(check => check === 'log' ? target.release.log === 'failed' : target.release[check] !== 'passed')
   if (failed.length > 0) throw new UpdateReportError('REPORT_TARGET_UNVERIFIED', `the target's ${failed.join(', ')} check did not pass; no report is made for it`)
 }
 

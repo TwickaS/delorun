@@ -91,7 +91,7 @@ async function serviceIn(home: string, timers?: RetryTimers, logger: DeloLogger 
  * @returns the input.
  */
 function input(fixture: Scenario, transport: FixtureTransport | undefined, patch: Partial<CheckInput> = {}): CheckInput {
-  return { root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, transport, mode: 'warn', ...patch }
+  return { root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, transport, mode: 'warn', missingBundle: 'failed', ...patch }
 }
 
 /**

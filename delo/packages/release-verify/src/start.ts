@@ -7,8 +7,8 @@
  * - `unchecked`: the offline check passed but the online check did not run — no network, the distributor was
  *   unreachable, or the newest witnessed checkpoint is over 24 hours old. The start goes on and prints
  *   {@link uncheckedWarning}, which names the release, and the check runs again at the next connection.
- * - `failed`: a verifiable failure. The start stops in every verification mode (R5) and the person is offered a
- *   rollback.
+ * - `failed`: a verifiable failure, or no stored bundle for a release the runtime store installed. The start stops in
+ *   every verification mode (R5) and the person is offered a rollback.
  *
  * Under `integrity.mode: off` (contract C15) the online check does not run, so a release whose bundle verifies stays
  * `unchecked` with no warning and no retry; the offline check still runs at every start and a verified failure still
@@ -34,6 +34,13 @@ export interface StartCheckInput {
   readonly manifest: Uint8Array
   /** The release's stored release-log bundle, when the client holds one. */
   readonly bundle: Uint8Array | undefined
+  /**
+   * What an absent {@link StartCheckInput.bundle} makes the release. `failed` for a release the runtime store installed,
+   * the first install and every update included: each such install keeps the bundle it verified beside the release, so
+   * a missing one was removed after the install. `unchecked` only for a client that fetches the bundle after it
+   * installed, such as a desktop app installed from a downloaded installer.
+   */
+  readonly missingBundle: 'failed' | 'unchecked'
   /** The client's clock, in Unix seconds. */
   readonly now: number
   /** The verified checkpoint the client stored, when it holds one. */
@@ -83,6 +90,10 @@ export function uncheckedWarning(version: string): string {
  */
 export async function checkAtStart(input: StartCheckInput): Promise<StartCheckResult> {
   if (input.bundle === undefined) {
+    if (input.missingBundle === 'failed') {
+      // `bundle-malformed` keeps the refusal inside the set the previous release reads from `trust/release-log.json`.
+      return { state: 'failed', refusal: 'bundle-malformed', detail: 'no release-log bundle is stored beside this release, and every install through the runtime store keeps the one it verified, so it was removed after the install', stop: true }
+    }
     // No bundle is stored yet — the first start of a desktop app installed from a downloaded installer fetches it. The
     // release is not checked, so it is `unchecked` and the start warns, as it does without a network.
     return { state: 'unchecked', detail: 'no release-log bundle is stored for this release yet', warning: uncheckedWarning(input.version), stop: false }

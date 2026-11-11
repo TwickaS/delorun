@@ -83,7 +83,7 @@ describe('a failure that is not a refusal', () => {
       const fixture = scenario()
       const transport = new FixtureTransport()
       transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
-      await checkAndRecord(home, { root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, transport, mode: 'warn' })
+      await checkAndRecord(home, { root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, transport, mode: 'warn', missingBundle: 'failed' })
       failures.checkpoint = true
       await expect(readCheckpointRecord(home)).rejects.toThrow('the checkpoint reader broke')
       failures.state = true

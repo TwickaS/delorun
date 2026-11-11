@@ -320,7 +320,7 @@ async function releaseLogPart(options: ReleaseCheckOptions, root: TrustedRoot, p
       throw error
     })
     const transport = options.fetch === undefined ? undefined : recordedLogTransport(await readChannelRecord(options.home) ?? {}, root.metadata, options.fetch)
-    const result = await checkAndStore(options.home, { root: root.metadata, version: options.release, manifest, bundle, now: options.now, transport, mode: options.mode })
+    const result = await checkAndStore(options.home, { root: root.metadata, version: options.release, manifest, bundle, missingBundle: 'failed', now: options.now, transport, mode: options.mode })
     record = await recordResult(options.home, options.release, options.now, result)
     notices = result.notices ?? []
   } catch (error) {
@@ -330,10 +330,10 @@ async function releaseLogPart(options: ReleaseCheckOptions, root: TrustedRoot, p
     case 'verified':
       return { result: 'pass', detail: 'the release-log entry verifies and the log is consistent with the stored checkpoint', recorded: record, notices }
     case 'failed':
+      // Contract C18: a release the store installed keeps its bundle, so a missing one fails as it stops a start.
+      if (bundle === undefined) return { result: 'fail', detail: `no release-log bundle is stored for release ${options.release} at ${path}`, recorded: record, notices }
       return { result: 'fail', detail: `the release log refused it (${String(record.refusal)}): ${String(record.detail)}`, recorded: record, notices }
     case 'unchecked': {
-      // Contract C18: `delorun verify` fails on a missing bundle, which a start only warns about.
-      if (bundle === undefined) return { result: 'fail', detail: `no release-log bundle is stored for release ${options.release} at ${path}`, recorded: record, notices }
       const why = options.fetch === undefined ? 'the online check was not run (--offline)' : `the online check could not complete: ${String(record.detail)}`
       const warning = uncheckedSinceWarning(options.release, record.uncheckedSince!, options.now, why)
       return { result: 'unknown', detail: `the release-log bundle verifies offline; ${why}`, recorded: record, warning, notices }

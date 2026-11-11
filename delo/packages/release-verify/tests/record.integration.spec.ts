@@ -39,7 +39,7 @@ function newHome(): string {
 function input(fixture: Scenario, patch: Partial<CheckInput> = {}): CheckInput {
   const transport = new FixtureTransport()
   transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
-  return { root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, transport, mode: 'warn', ...patch }
+  return { root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, transport, mode: 'warn', missingBundle: 'failed', ...patch }
 }
 
 describe('a check and its records', () => {

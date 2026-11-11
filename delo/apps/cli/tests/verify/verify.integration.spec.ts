@@ -247,7 +247,7 @@ describe('a verifiable fault fails the run, naming the check', { timeout: 30_000
     expect(line(run, 'release-signature')).toContain('(consistency-proof-invalid)')
   })
 
-  it('fails release-signature for a missing bundle, which a start only warns about', async () => {
+  it('fails release-signature for a missing bundle, which also stops a start', async () => {
     const fixture = await home()
     const path = join(fixture.home, 'runtimes', `delorun-${RELEASE}.manifest.log.json`)
     writable(path)

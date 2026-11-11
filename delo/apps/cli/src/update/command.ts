@@ -9,8 +9,8 @@
  * - `--check` runs the update check ([notice](./notice.ts)) on demand, whatever the profile's switch says: it fetches
  *   and verifies only the channel's signed metadata, needs no home process, prints the notice's line, and installs and
  *   changes nothing.
- * - `--yes` confirms a report with no `disabled` or `removed` item and no unverified item, and takes the copy when the
- *   data differs.
+ * - `--yes` confirms a report with no `disabled` or `removed` item, no unverified item and a release-log check that
+ *   passed, and takes the copy when the data differs.
  * - `--data-copy` takes a copy when the data does not differ; `--no-data-copy` declines it when it does.
  *
  * @module @delo/cli/update/command
@@ -138,6 +138,7 @@ export function reportLines(report: UpdateReport): readonly string[] {
   const lines = [
     `Update from Delo ${report.from.delo} (DSH ${report.from.dsh}) to Delo ${report.to.delo} (DSH ${report.to.dsh}) on the ${report.to.channel} channel.`,
     `Release checks: signature ${report.release.signature}, freshness ${report.release.freshness}, log ${report.release.log}.`,
+    ...report.release.log === 'unchecked' ? ['The release log could not be reached when this release was installed, so it is not yet known to be the release the public log holds.'] : [],
     `Installations: ${report.installations.map(entry => `${entry.id} ${entry.delo ?? ''} ${entry.state}`.replace(/ +/gu, ' ')).join('; ')}.`,
   ]
   const changes = report.items.filter(item => item.kind !== 'data')
@@ -222,6 +223,9 @@ interface Decision {
 async function decide(report: UpdateReport, values: { readonly yes?: boolean, readonly 'data-copy'?: boolean, readonly 'no-data-copy'?: boolean }, prompts: UpdatePrompts, output: CommandOutput): Promise<Decision> {
   if (values['data-copy'] === true && values['no-data-copy'] === true) throw new CliError(EXIT.usage, 'delorun update: choose --data-copy or --no-data-copy, not both')
   const data = report.items.find(item => item.kind === 'data')
+  if (values.yes === true && report.release.log !== 'passed') {
+    throw new CliError(EXIT.failed, `delorun update: the release-log check of Delo ${report.to.delo} did not complete, so nothing shows it is the release the public log holds, and --yes does not confirm it; run delorun update without --yes to decide, or again once the log answers`)
+  }
   if (values.yes === true && !confirmsWithoutAsking(report)) {
     throw new CliError(EXIT.failed, 'delorun update: the report disables or removes something, or holds an item Delo cannot predict, so --yes does not confirm it; run delorun update without --yes to decide')
   }

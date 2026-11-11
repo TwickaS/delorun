@@ -29,6 +29,7 @@ function input(fixture: Scenario, overrides: Partial<StartCheckInput> = {}): Sta
     stored: undefined,
     transport: undefined,
     mode: 'warn',
+    missingBundle: 'failed',
     ...overrides,
   }
 }
@@ -65,9 +66,18 @@ describe('a release that could not be checked', () => {
     expect(result.warning).toContain(VERSION)
   })
 
-  it('names the release when no bundle is stored for it yet', async () => {
+  it('c18-store-install-missing-bundle-fails: stops the start of a store-installed release whose bundle is missing, in every mode', async () => {
     const fixture = scenario()
-    const result = await checkAtStart(input(fixture, { bundle: undefined }))
+    for (const mode of ['off', 'warn', 'enforce'] as const) {
+      const result = await checkAtStart(input(fixture, { bundle: undefined, transport: reachable(fixture), mode }))
+      expect(result).toMatchObject({ state: 'failed', refusal: 'bundle-malformed', stop: true })
+      expect(result.detail).toContain('no release-log bundle is stored beside this release')
+    }
+  })
+
+  it('names the release when no bundle is stored for it yet, for a client that fetches it after installing', async () => {
+    const fixture = scenario()
+    const result = await checkAtStart(input(fixture, { bundle: undefined, missingBundle: 'unchecked' }))
     expect(result.state).toBe('unchecked')
     expect(result.stop).toBe(false)
     expect(result.detail).toContain('no release-log bundle')

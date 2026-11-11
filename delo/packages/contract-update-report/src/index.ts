@@ -74,8 +74,15 @@ export interface InstallationStatus {
   readonly target?: SemanticVersion
 }
 
-/** The result of one check on the target release; a report is shown only when all are `passed`. */
+/** The result of the target release's signature or freshness check; a report is shown only when both are `passed`. */
 export type ReleaseCheckResult = 'passed' | 'failed'
+
+/**
+ * The target release's release-log check state, as the install recorded it (contract C18): `passed` when the online
+ * check verified it, `unchecked` when the bundle verified offline and the online check did not complete, `failed` for
+ * a verifiable failure. A report is shown for `passed` and `unchecked`; `delorun update --yes` confirms only `passed`.
+ */
+export type LogCheckResult = 'passed' | 'unchecked' | 'failed'
 
 /** What an item is about. */
 export type ItemKind = 'plugin' | 'bundle' | 'row' | 'data'
@@ -235,7 +242,7 @@ export interface UpdateReport {
     readonly manifest: Sha256Hex
     readonly signature: ReleaseCheckResult
     readonly freshness: ReleaseCheckResult
-    readonly log: ReleaseCheckResult
+    readonly log: LogCheckResult
   }
   /** When it was built. */
   readonly generated: UtcTimestamp

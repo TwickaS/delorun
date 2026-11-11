@@ -26,6 +26,7 @@ import {
 import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { toJsonValue } from '@delo/release-formats/sign/json'
 import { progressLines } from '@delo/install'
+import { recordResult } from '@delo/release-verify'
 import type { ChannelRelease, OpenUpdateChannel, ReleaseFileBytes, UpdateReleaseChannel } from '@delo/runtime-store'
 
 /** How one fake release's successor behaves. */
@@ -233,15 +234,18 @@ export class FakeChannel implements UpdateReleaseChannel {
   private readonly key: KeyObject
   private readonly platform: RuntimePlatform
   private readonly releases: ReadonlyMap<string, FakeBehaviour>
+  private readonly home: string
 
   /**
+   * @param home - the Delo home whose `trust/release-log.json` records each installed release as verified.
    * @param root - the root the releases verify under.
    * @param key - the targets key.
    * @param platform - this machine's platform.
    * @param releases - each release's behaviour.
    * @param first - the first release to name.
    */
-  constructor(root: RootMetadata, key: KeyObject, platform: RuntimePlatform, releases: ReadonlyMap<string, FakeBehaviour>, first: RuntimeVersion) {
+  constructor(home: string, root: RootMetadata, key: KeyObject, platform: RuntimePlatform, releases: ReadonlyMap<string, FakeBehaviour>, first: RuntimeVersion) {
+    this.home = home
     this.root = root
     this.key = key
     this.platform = platform
@@ -271,5 +275,7 @@ export class FakeChannel implements UpdateReleaseChannel {
 
   async recordInstalled(release: ChannelRelease): Promise<void> {
     this.recorded.push(release.version)
+    // As the launcher's channel records a release whose online log check passed.
+    await recordResult(this.home, release.version, Math.floor(Date.now() / 1000), { state: 'verified', stop: false })
   }
 }

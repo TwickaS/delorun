@@ -213,7 +213,8 @@ export interface StartCheckRequest {
 /**
  * Contract C18's start check of an installed release ("Behaviour per client", the CLI launcher): its stored bundle
  * offline, then the online check, with the checkpoint and the state recorded under `trust/`. The manifest was already
- * verified by the store's start check under the same root.
+ * verified by the store's start check under the same root. A missing bundle stops the start: the store installed the
+ * release with the bundle it verified.
  * @param request - the home, the platform, the release, the root, the transport and the clock.
  * @returns what the start does: go on, go on with the warning, or stop.
  */
@@ -224,7 +225,7 @@ export async function startCheck(request: StartCheckRequest): Promise<StartCheck
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw error
   })
-  return checkAndRecord(request.home, { root: request.root, version: request.version, manifest, bundle, now: request.now, transport: request.transport, mode: LAUNCHER_MODE })
+  return checkAndRecord(request.home, { root: request.root, version: request.version, manifest, bundle, missingBundle: 'failed', now: request.now, transport: request.transport, mode: LAUNCHER_MODE })
 }
 
 /**

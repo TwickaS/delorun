@@ -86,6 +86,14 @@ describe('c03-no-report-for-unverified-target', () => {
     }
   })
 
+  it('reports a log check that did not complete as unchecked, and --yes does not confirm it', () => {
+    const report = buildUpdateReport(input({ target: target({ release: { ...target().release, log: 'unchecked' } }) }))
+    expect(report.release.log).toBe('unchecked')
+    // Without items, only the log state decides whether --yes confirms.
+    expect(confirmsWithoutAsking({ ...report, items: [] })).toBe(false)
+    expect(confirmsWithoutAsking({ ...report, items: [], release: { ...report.release, log: 'passed' } })).toBe(true)
+  })
+
   it('builds the report once every check passed', () => {
     expect(buildUpdateReport(input()).release.signature).toBe('passed')
   })

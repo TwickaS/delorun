@@ -163,9 +163,9 @@ export class LauncherChannel implements RuntimeChannel {
    * @returns the release's version and the root it verified with.
    * @throws {InstallError} `DOWNLOAD_REFUSED`, `DOWNLOAD_FAILED`, `INSTALL_VERIFY_FAILED`, `RELEASE_NOT_OFFERED`,
    *   `PLATFORM_NOT_RELEASED` when the verified manifest lists no runtime for this computer's platform,
-   *   `RELEASE_LOG_FAILED` or `TRUST_STATE_INVALID`; no file appears under `runtimes/` on any of them. A log that does
-   *   not answer, answers with no checkpoint its key signed, or whose checkpoint the witnesses have not cosigned is
-   *   `unchecked`, which never refuses.
+   *   `RELEASE_LOG_FAILED`, also for a release that publishes no bundle, or `TRUST_STATE_INVALID`; no file appears
+   *   under `runtimes/` on any of them. A log that does not answer, answers with no checkpoint its key signed, or whose
+   *   checkpoint the witnesses have not cosigned is `unchecked`, which never refuses.
    */
   async resolve(target?: RuntimeVersion): Promise<ChannelRelease> {
     const now = Math.floor(this.now() / 1000)
@@ -175,7 +175,7 @@ export class LauncherChannel implements RuntimeChannel {
     if (!released.includes(this.options.platform)) {
       throw new InstallError('PLATFORM_NOT_RELEASED', String(pointer.release), `${this.options.platform} is not in this release, which publishes a runtime for ${released.join(', ')} only`)
     }
-    const log = await this.checkLog({ root: root.metadata, version: pointer.release, manifest: current.manifestBytes, bundle: current.bundleBytes, now, transport: this.logFor(root.metadata), mode: 'enforce' })
+    const log = await this.checkLog({ root: root.metadata, version: pointer.release, manifest: current.manifestBytes, bundle: current.bundleBytes, missingBundle: 'failed', now, transport: this.logFor(root.metadata), mode: 'enforce' })
     if (log.state === 'failed') {
       throw new InstallError('RELEASE_LOG_FAILED', `release ${pointer.release}`, `the release log failed its check (${String(log.refusal)}: ${String(log.detail)}); nothing was installed`)
     }
@@ -229,7 +229,13 @@ export class LauncherChannel implements RuntimeChannel {
       this.options.progress?.({ step: 'resolved', channel: this.options.channel, version: pointer.release })
     }
     const manifest = await this.downloader.bytes(this.source.files(pointer.release, pointer.manifest.name), pointer.manifest.length)
-    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleFileName(pointer.release)), RELEASE_LOG_BUNDLE_SIZE_LIMIT)
+    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleFileName(pointer.release)), RELEASE_LOG_BUNDLE_SIZE_LIMIT).catch((error: unknown) => {
+      // A release that publishes no bundle has no log entry to verify, which is the log check's failure, not the network's.
+      if (isInstallError(error, 'DOWNLOAD_FAILED') && error.status === 404) {
+        throw new InstallError('RELEASE_LOG_FAILED', bundleFileName(pointer.release), `release ${pointer.release} publishes no release-log bundle (the host answered 404), so its log entry cannot be verified; nothing was installed`, { cause: error })
+      }
+      throw error
+    })
     const verified = verifyChannelRelease({
       root: root.metadata,
       timestamp,

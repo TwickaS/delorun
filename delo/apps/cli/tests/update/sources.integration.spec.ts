@@ -15,6 +15,7 @@ import { DELO_HOME_ENTRIES, STATUS_FILES, TRUST_FILES, type RuntimeVersion } fro
 import { EXEMPTION_FILES } from '@delo/contract-plugin-versions'
 import { ensureHomeTree } from '@delo/home'
 import { type DeloLogger } from '@delo/logs'
+import { recordResult } from '@delo/release-verify'
 import { RuntimeStore } from '@delo/runtime-store'
 import type { SkippedBundleFact } from '@delo/update'
 import { runtimePlatformOf } from '../../src/update/channel.ts'
@@ -202,11 +203,23 @@ describe('storeReportSources', () => {
     })
 
     it('reads the target\'s versions, the digest of its manifest and the checks the install made', TIMEOUT, async () => {
+      await recordResult(home, '1.1.0', 1_800_000_000, { state: 'verified', stop: false })
       const target = await sources(async () => Promise.resolve(TABLES)).target('1.1.0')
 
       expect(target.versions).toEqual({ delo: '1.1.0', dsh: '0.2.2', channel: 'stable' })
       expect(target.release).toEqual({ manifest: expect.stringMatching(/^[0-9a-f]{64}$/u) as string, signature: 'passed', freshness: 'passed', log: 'passed' })
       expect(target.revocations).toEqual([])
+    })
+
+    it('reports the release-log state the install recorded, and unchecked when it recorded none', TIMEOUT, async () => {
+      const read = sources(async () => Promise.resolve(TABLES))
+      expect((await read.target('1.6.0')).release.log).toBe('unchecked')
+      await recordResult(home, '1.6.0', 1_800_000_000, { state: 'unchecked', detail: 'the log did not answer', stop: false })
+      expect((await read.target('1.6.0')).release.log).toBe('unchecked')
+      await recordResult(home, '1.6.0', 1_800_000_060, { state: 'failed', refusal: 'consistency-proof-invalid', detail: 'the proof does not verify', stop: true })
+      expect((await read.target('1.6.0')).release.log).toBe('failed')
+      await recordResult(home, '1.6.0', 1_800_000_120, { state: 'verified', stop: false })
+      expect((await read.target('1.6.0')).release.log).toBe('passed')
     })
 
     it('reads the target\'s bundle tables with its own Node by default and answers for the profile\'s bundle list', TIMEOUT, async () => {

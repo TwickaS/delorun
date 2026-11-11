@@ -34,7 +34,7 @@ describe('a start check reaches no filesystem', () => {
     const transport = new FixtureTransport()
     transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
     const named = { ...fixture.bundle, manifest: { ...fixture.bundle.manifest, name: '../../../../etc/passwd' } }
-    const result = await checkAtStart({ root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(named)), now: COSIGNED_AT + 60, stored: undefined, transport, mode: 'enforce' })
+    const result = await checkAtStart({ root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(named)), now: COSIGNED_AT + 60, stored: undefined, transport, mode: 'enforce', missingBundle: 'failed' })
     expect(result).toMatchObject({ state: 'failed', refusal: 'manifest-digest-mismatch', stop: true })
     expect(touched).toEqual([])
   })
@@ -43,7 +43,7 @@ describe('a start check reaches no filesystem', () => {
     const fixture = scenario()
     const transport = new FixtureTransport()
     transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)
-    const result = await checkAtStart({ root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, stored: undefined, transport, mode: 'enforce' })
+    const result = await checkAtStart({ root: fixture.root, version: VERSION, manifest: MANIFEST, bundle: Buffer.from(JSON.stringify(fixture.bundle)), now: COSIGNED_AT + 60, stored: undefined, transport, mode: 'enforce', missingBundle: 'failed' })
     expect(result.state).toBe('verified')
     expect(touched).toEqual([])
   })

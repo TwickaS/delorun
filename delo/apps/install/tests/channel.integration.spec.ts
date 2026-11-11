@@ -242,6 +242,15 @@ describe('an artifact that is not the one the release signs', () => {
 })
 
 describe('the release log', () => {
+  it('c18-store-install-missing-bundle-fails: refuses a release that publishes no bundle, and records nothing', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, home, server } = await harness(fixture)
+    server.files.delete(`/releases/${VERSION}/delorun-${VERSION}.manifest.log.json`)
+    const error = await refusal(channel.resolve(), 'RELEASE_LOG_FAILED')
+    expect(error.detail).toContain('publishes no release-log bundle')
+    expect(await readdir(join(home, 'trust'))).not.toContain('release-log.json')
+  })
+
   it('continues on the signature when the log cannot be reached, and records that the check did not run', async () => {
     const fixture = await fixtureRelease()
     const events: InstallProgress[] = []

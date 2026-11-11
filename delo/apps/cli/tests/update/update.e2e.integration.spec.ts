@@ -72,7 +72,7 @@ beforeAll(async () => {
   mkdirSync(join(home, 'sessions', 'from-before'), { recursive: true })
   writeFileSync(join(home, 'sessions', 'from-before', 'log.jsonl'), 'before\n')
   store = new RuntimeStore({ home, platform, logger: SILENT })
-  channel = new FakeChannel(root.metadata, root.keys.targets, platform, RELEASES, v('1.1.0'))
+  channel = new FakeChannel(home, root.metadata, root.keys.targets, platform, RELEASES, v('1.1.0'))
   const first = fakeClosure('1.0.0', RELEASES.get('1.0.0')!)
   await store.install({ version: v('1.0.0'), root: root.metadata, fill: async (directory) => {
     writeClosure(directory, first)

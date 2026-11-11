@@ -46,10 +46,11 @@ describe('the release-log start check before a home process starts', () => {
     await releaseLogStartCheck(home, fixture.platform, VERSION as RuntimeVersion, fixture.rootMetadata, { transport: () => unreachableLog(), now: () => NOW * 1000 })
   })
 
-  it('lets a release with no stored bundle start, as unchecked', async () => {
+  it('stops a release with no stored bundle, which every install through the store keeps, with VERIFY_FAILED', async () => {
     const fixture = await fixtureRelease()
     storeRelease(fixture, undefined)
-    await releaseLogStartCheck(home, fixture.platform, VERSION as RuntimeVersion, fixture.rootMetadata, { transport: () => unreachableLog(), now: () => NOW * 1000 })
+    await expect(releaseLogStartCheck(home, fixture.platform, VERSION as RuntimeVersion, fixture.rootMetadata, { transport: () => unreachableLog(), now: () => NOW * 1000 }))
+      .rejects.toMatchObject({ code: 'VERIFY_FAILED', detail: expect.stringContaining('no release-log bundle is stored beside this release') })
   })
 
   it('stops a release whose stored bundle is for another manifest, with VERIFY_FAILED naming delorun verify', async () => {

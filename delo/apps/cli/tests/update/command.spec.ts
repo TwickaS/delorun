@@ -245,6 +245,24 @@ describe('runUpdate', () => {
     expect(sent('update.apply')).toHaveLength(0)
   })
 
+  it('c03-yes-refuses-unchecked-log: --yes refuses a report whose release-log check did not complete, and applies nothing', async () => {
+    await homeAnswering({ prepare: prepared(report({ release: { manifest: brandString<Sha256Hex>('c'.repeat(64)), signature: 'passed', freshness: 'passed', log: 'unchecked' } })) })
+
+    await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('the release-log check of Delo 1.1.0 did not complete') })
+
+    expect(sent('update.apply')).toHaveLength(0)
+  })
+
+  it('shows an unchecked release-log state in the report and lets the person decide', async () => {
+    await homeAnswering({ prepare: prepared(report({ release: { manifest: brandString<Sha256Hex>('c'.repeat(64)), signature: 'passed', freshness: 'passed', log: 'unchecked' } })) })
+
+    expect(await update(['--report'])).toBe(EXIT.ok)
+
+    expect(output.stdout).toContain('Release checks: signature passed, freshness passed, log unchecked.\n')
+    expect(output.stdout).toContain('The release log could not be reached when this release was installed')
+    expect(sent('update.apply')).toHaveLength(0)
+  })
+
   it('prints the report and the phases it passed through, and changes nothing, when the person declines', async () => {
     await homeAnswering({ prepare: prepared(report({ items: [CHANGED_BUNDLE] })) })
 
