@@ -1,3 +1,4 @@
-- text: Done {{workspace}} echo NAVIGATION_OK
+- text: Done {{workspace}} echo NAVIGATION_OK 0.0 s
+- button "Copy command"
 - button "Copy"
 - text: NAVIGATION_OK
