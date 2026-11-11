@@ -1975,6 +1975,12 @@
       "class": "security",
       "reason": "Exports the `ApprovalGrant` marker type, so Delo plugins can mark prompts that only the home's own computer may grant.",
       "sha256": "6665282b9987bd80b84ecc92e929d32db98394ced3798e29feb764f56c2eb74d"
+    },
+    {
+      "path": "packages/boot/plugin-manager/src/operations.ts",
+      "class": "delo-feature",
+      "feature": "plugin-manager-improvements",
+      "reason": "Plugin-manager improvements: the `operations` entry also exports `blockedBuildNames`, `recordPendingBuilds` and `approveBuilds`, the build-script approval steps the manager service runs after a failed pnpm run, so `delorun plugin` offers the same approval for one named package; nothing in upstream's behaviour changes."
     }
   ],
   "retired": []
