@@ -1,5 +1,5 @@
 /** The profile's history against a real git, in a temporary profile directory. */
-import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -158,4 +158,29 @@ it('finds one version by its id, and none for an id it does not hold, and refuse
   await expect(profile.list(2 ** 31)).rejects.toThrow('limit must be an integer from 1 to 2147483647')
   await expect(profile.list(0)).rejects.toThrow(RangeError)
   expect(await profile.list(MAX_LIST)).toHaveLength(2)
+})
+
+it('saves no version that its admission refuses, and saves the next one it admits', async () => {
+  const seen: Array<Map<string, string | undefined>> = []
+  const profile = new ProfileHistory(dir, FILES, 'git', 30_000, (files) => {
+    seen.push(new Map(files))
+    return files.get('cordis.patch.yml')?.includes('refused') === true ? 'the patch holds a refused value' : undefined
+  })
+  writeFileSync(join(dir, 'package.json'), '{}\n')
+  writeFileSync(join(dir, 'cordis.patch.yml'), '- id: a\n  config:\n    key: refused\n')
+  await expect(profile.record('Refused', { kind: 'person' })).rejects.toThrow(new HistoryUnavailableError('this version of the profile was not saved: the patch holds a refused value'))
+  expect(seen).toEqual([new Map([['package.json', '{}\n'], ['cordis.patch.yml', '- id: a\n  config:\n    key: refused\n']])])
+  expect(await profile.list(10)).toEqual([])
+  // Nothing was staged either: no object in the history's store holds the refused text.
+  expect(execFileSync('git', ['--git-dir', join(dir, HISTORY_DIR), 'count-objects'], { encoding: 'utf8', timeout: 30_000 })).toMatch(/^0 objects/)
+  rmSync(join(dir, 'cordis.patch.yml'))
+  const saved = await profile.record('Admitted', { kind: 'person' })
+  expect(seen.at(-1)).toEqual(new Map([['package.json', '{}\n'], ['cordis.patch.yml', undefined]]))
+  expect((await profile.list(10)).map(version => version.id)).toEqual([saved])
+})
+
+it('reports a managed file its admission cannot read as an unavailable history', async () => {
+  const profile = new ProfileHistory(dir, FILES, 'git', 30_000, () => undefined)
+  mkdirSync(join(dir, 'cordis.patch.yml'))
+  await expect(profile.record('Unreadable', { kind: 'person' })).rejects.toThrow(/^cordis\.patch\.yml cannot be read: /)
 })

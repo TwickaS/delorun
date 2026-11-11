@@ -585,6 +585,14 @@ declare module '@deepseek-ai/cordis' {
      */
     'plugin-manager/changed'(change: PluginChange): void
     /**
+     * Admit a version of the profile before the history saves it, from the managed files as they are about to be
+     * saved. A returned reason refuses the version: nothing is saved, and the change, undo, restore or history read
+     * that asked for it reports the history as unavailable with that reason.
+     * @mode bail
+     * @param files - each managed file's text, by name relative to the profile, or undefined for an absent file.
+     */
+    'plugin-manager/before-record'(files: ReadonlyMap<string, string | undefined>): string | undefined
+    /**
      * One chunk of an installation run's output, streamed as the run produces it.
      * @mode emit
      * @param chunk - the chunk and the run it belongs to.

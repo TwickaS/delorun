@@ -414,7 +414,8 @@ export class PluginManager extends TypertRemoteService {
     this.idleTimeoutMs = (config as Required<Config>).idleTimeoutMs
     this.pnpmCommand = (config as Required<Config>).pnpmCommand
     const { gitCommand, historyTimeoutMs } = config as Required<Config>
-    this.versions = new ProfileHistory(this.profile.dir, PROFILE_FILES, gitCommand, historyTimeoutMs)
+    this.versions = new ProfileHistory(this.profile.dir, PROFILE_FILES, gitCommand, historyTimeoutMs,
+      files => ctx.bail('plugin-manager/before-record', files))
     this.versionListLimit = (config as Required<Config>).versionListLimit
     this.versionLookupConcurrency = (config as Required<Config>).versionLookupConcurrency
     this.configuredRegistries = {

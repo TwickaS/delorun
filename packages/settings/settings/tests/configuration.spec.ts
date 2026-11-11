@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import z from '@deepseek-ai/schemastery'
+import { ConfigEditRefusedError } from '@deepseek-ai/dsh-config-editor'
 import { configurationFixture as fixture } from './configuration-fixture.ts'
 
 it('persists a model edit, updates the real consumer without remounting, and restores it at restart', async () => {
@@ -39,6 +40,25 @@ it('isolates instances, hides ordinary fields, rejects invalid edits, and redact
   expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'second')!.value).toEqual({ count: 2, list: [] })
   await ctx.settings.mutate('first', [{ op: 'unset', path: ['count'] }])
   expect(ctx.settings.describe({ redactSecrets: true }).find(row => row.ns === 'first')!.value).toEqual({ count: 2, list: [] })
+})
+
+it('leaves the profile patch unchanged when a before-save listener refuses the edit, and saves what it admits', async () => {
+  const { ctx, profile } = await fixture()
+  const before = readFileSync(profile.patchPath, 'utf8')
+  const saves: Array<{ entryId: string; config: unknown }> = []
+  ctx.on('config-editor/before-save', ({ entry, config }) => {
+    saves.push({ entryId: entry.options.id, config: structuredClone(config) })
+    return typeof config.token === 'string' && config.token !== 'private' ? 'token values stay out of the profile patch' : undefined
+  })
+  const edited = vi.fn()
+  ctx.on('config-editor/edited', edited)
+  await expect(ctx.settings.mutate('first', [{ op: 'set', path: ['token'], value: 'typed-secret' }])).rejects.toThrow(new ConfigEditRefusedError('token values stay out of the profile patch'))
+  expect(saves).toEqual([{ entryId: 'first', config: { ordinary: 'fixed', token: 'typed-secret' } }])
+  expect(readFileSync(profile.patchPath, 'utf8')).toBe(before)
+  expect(edited).not.toHaveBeenCalled()
+  await ctx.settings.update('first', { count: 5 })
+  expect(saves.at(-1)).toEqual({ entryId: 'first', config: { ordinary: 'fixed', token: 'private', count: 5 } })
+  expect(edited.mock.calls).toEqual([[{ entryId: 'first' }]])
 })
 
 it('refuses an edit shadowed by a higher home layer', async () => {

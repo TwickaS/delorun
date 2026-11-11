@@ -54,6 +54,13 @@ const IDENTITY = { name: 'DSH plugin management', email: 'plugin-manager@dsh.inv
 const FIELD = '\u001f'
 const RECORD = '\u001e'
 
+/**
+ * Decides whether one version may be saved, from the managed files as they are about to be saved.
+ * @param files - each managed file's text, by name relative to the profile, or undefined for an absent file.
+ * @returns undefined to save the version, or why it may not be saved.
+ */
+export type VersionAdmission = (files: ReadonlyMap<string, string | undefined>) => string | undefined
+
 /** One git run's exit code and output. */
 interface GitRun { exitCode: number; stdout: string }
 
@@ -78,12 +85,14 @@ export class ProfileHistory {
    * @param files - the managed files the history tracks, relative to `dir`.
    * @param gitCommand - the git executable name or path, resolved through `PATH`.
    * @param timeoutMs - the bound on one git run.
+   * @param admit - decides before each version whether it may be saved; every version is saved without one.
    */
   constructor(
     private readonly dir: string,
     private readonly files: readonly string[],
     private readonly gitCommand: string,
     private readonly timeoutMs: number,
+    private readonly admit?: VersionAdmission,
   ) {
     this.gitDir = join(dir, HISTORY_DIR)
   }
@@ -93,10 +102,15 @@ export class ProfileHistory {
    * @param summary - what changed, not blank; whitespace runs become one space.
    * @param changedBy - who changed it.
    * @returns the new version's id, or undefined when nothing changed.
-   * @throws HistoryUnavailableError when git cannot run or refuses.
+   * @throws HistoryUnavailableError when git cannot run or refuses, or when the admission refuses the managed files as
+   *   they are; nothing is staged or saved then.
    */
   async record(summary: string, changedBy: ProfileChangedBy): Promise<ProfileVersionId | undefined> {
     await this.ensure()
+    if (this.admit !== undefined) {
+      const refusal = this.admit(await this.managedFiles())
+      if (refusal !== undefined) throw new HistoryUnavailableError(`this version of the profile was not saved: ${refusal}`)
+    }
     await this.git(['add', '--all', '--', '.'])
     if ((await this.git(['diff', '--cached', '--quiet'], [0, 1])).exitCode === 0) return undefined
     const trailers = [`Changed-by: ${changedBy.kind}`, ...changedBy.kind === 'agent' ? [`Session: ${changedBy.sessionId}`] : []]
@@ -127,6 +141,20 @@ export class ProfileHistory {
   async version(id: ProfileVersionId): Promise<ProfileVersion | undefined> {
     if (!(await this.holds(id))) return undefined
     return (await this.log(['--max-count', '1', id]))[0]
+  }
+
+  // The managed files as they are in the profile; an absent file reads as undefined.
+  private async managedFiles(): Promise<Map<string, string | undefined>> {
+    const files = new Map<string, string | undefined>()
+    for (const name of this.files) {
+      try {
+        files.set(name, await readFile(join(this.dir, name), 'utf8'))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new HistoryUnavailableError(`${name} cannot be read: ${(error as Error).message}`, { cause: error })
+        files.set(name, undefined)
+      }
+    }
+    return files
   }
 
   // Whether the history holds a version with this id: a commit that its latest version reaches.

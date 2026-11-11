@@ -48,6 +48,7 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | Feature | What the edits do | Serves |
 | --- | --- | --- |
 | `code-refusal-switch` | The loader's `refuseCode` option and the boot's forwarding of it | a switch, off; no Delo composition turns it on |
+| `config-editor-events` | The config editor's `edited` event (C4) and its `before-save` hook (C1) | shipped `cli`, which refuses a value for a secret-role field |
 | `container-denial-marker` | The sandbox, shell and PTC fields that mark a denial by the environment | shipped confinement, behind a C16 switch |
 | `custom-chat-display` | The Custom work-details mode and the presentation policy the chat renderers read | the studio lane |
 | `default-workspace-directory` | The operator-named path of the first-use Workspace | no Delo consumer on `v5` |
@@ -68,7 +69,6 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | `profile-history` | Profile history, safe mode and the plugin audit on install | shipped `cli` (`delorun recover`) and `profile-safety` |
 | `scheduled-task-consent` | The consent asked before a scheduled task wakes its Session | shipped `plugin-schedule-consent` |
 | `session-created-at` | Session list rows carry `createdAt` | no Delo consumer on `v5` |
-| `settings-by-chat` | The config editor's `edited` event (C4) | no Delo consumer on `v5` |
 | `studio-seams` | Settings layout, onboarding, theme, sidebar and one-list workspace seams (WP1.6) | the studio lane; `bundle-local` sets `welcomeNotice` |
 | `terminal-card-controls` | The terminal card's copy-command control, duration and open start | the studio lane |
 | `trash-purge` | Forgetting purged Sessions in the search index and projection cache (C8) | shipped `trash` |

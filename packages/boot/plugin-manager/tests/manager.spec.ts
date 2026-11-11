@@ -2137,6 +2137,15 @@ it('leaves a settings edit saved when git cannot keep the history', async () => 
   expect(changed).not.toHaveBeenCalled()
 })
 
+it('saves no version that a before-record listener refuses, and reports the history as unavailable with its reason', async () => {
+  const { manager, ctx, dir } = await fixture()
+  ctx.on('plugin-manager/before-record', files => files.get('cordis.patch.yml')?.includes('refused-value') === true ? 'the patch holds a refused value' : undefined)
+  const versions = await manager.history(10)
+  writeFileSync(join(dir, 'cordis.patch.yml'), `${readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')}- id: extra-row\n  config:\n    limit: refused-value\n`)
+  expect(await manager.history(10)).toEqual({ available: false, reason: 'this version of the profile was not saved: the patch holds a refused value' })
+  expect(await manager.listHistory(10)).toEqual(versions)
+})
+
 it('restores a chosen version, installing its dependency set from its lockfile', async () => {
   const { manager, dir } = await fixture()
   writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n')

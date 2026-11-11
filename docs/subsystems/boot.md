@@ -24,7 +24,7 @@ The [boot package group](../../packages/boot/README.md) owns launcher-provided p
 
 `pluginAudit` is a distribution's optional plugin audit, a Service Definition the manager consumes and does not provide: `audit(target)` receives a `PluginAuditTarget` (the package's `name`, `version`, installed `dir` and the digests the user `accepted` for it) and answers a `PluginAuditResult` (a `decision` of `clear`, `accepted`, `needs-acceptance` or `refused`, the findings' `digest`, the `findings`, each a rule, title, severity, file, line and excerpt, and whether it was `truncated`). The manager asks it at every installation and before it enables a bundle; `needs-acceptance` refuses with `audit-findings` and `refused` with `audit-refused`, each error carrying `audit`. `InstallBundleOptions.acceptedAudit` names a digest the user accepted, which the manager saves for the package in `.plugin-manager/audits.json` once the audit accepts it, and `ChangeResult.audit` carries the findings a change went on with. Without the service nothing is audited.
 
-`ConfigEdit` names the entry, by its profile patch id, whose configuration `ConfigEditor.edit` saved and applied; `config-editor/edited` carries it once the profile's lock is released, and the plugin manager saves the edit as a version.
+`ConfigEdit` names the entry, by its profile patch id, whose configuration `ConfigEditor.edit` saved and applied; `config-editor/edited` carries it once the profile's lock is released, and the plugin manager saves the edit as a version. `ConfigSave` is what `config-editor/before-save` receives before an edit is written: the Loader `entry` and the complete `config` the profile patch would hold for it; a listener's reason refuses the edit with `ConfigEditRefusedError`. `plugin-manager/before-record` receives the managed files before the history saves a version, and a listener's reason refuses that version.
 
 ## Market records
 
@@ -139,11 +139,13 @@ entries(): Entry[]
  */
 configuration(): Array<{ entry: Entry; inherited: Record<string, unknown>; override: Record<string, unknown> }>
 
-/** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules. A saved
- * edit is announced as `config-editor/edited`.
+/** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules. A
+ * `config-editor/before-save` listener may refuse the edit before anything is written. A saved edit is announced as
+ * `config-editor/edited`.
  * @param entry Current Loader entry, also used to detect replacement during the write.
  * @param change Derive a raw config from the current entry and its inherited layer.
  * @returns Fulfillment after Loader reconciliation completes.
+ * @throws {ConfigEditRefusedError} when a `config-editor/before-save` listener refuses the edit.
  */
 async edit( entry: Entry, change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>, ): Promise<void>
 ```
@@ -575,6 +577,25 @@ Source: [`packages/boot/app-boot/src/index.ts`](../../packages/boot/app-boot/src
 
 ### `config-editor/*` events
 
+<a id="config-editorbefore-save--bail"></a>
+
+#### `config-editor/before-save` — bail
+
+Admit an edit before it is saved: called under the profile's lock, after the candidate config passed the plugin's schema and before the profile patch is written. A returned reason refuses the edit, which then throws ConfigEditRefusedError with that reason and leaves the file unchanged.
+
+```ts cordis-catalog
+/**
+ * Admit an edit before it is saved: called under the profile's lock, after the candidate config passed the
+ * plugin's schema and before the profile patch is written. A returned reason refuses the edit, which then throws
+ * {@link ConfigEditRefusedError} with that reason and leaves the file unchanged.
+ * @mode bail
+ * @param save - the entry and the complete config the profile patch would hold for it.
+ */
+'config-editor/before-save'(save: ConfigSave): string | undefined
+```
+
+Source: [`packages/boot/config-editor/src/index.ts`](../../packages/boot/config-editor/src/index.ts)
+
 <a id="config-editoredited--emit"></a>
 
 #### `config-editor/edited` — emit
@@ -632,6 +653,25 @@ Source: [`packages/boot/hmr/src/index.ts`](../../packages/boot/hmr/src/index.ts)
 <a id="plugin-manager-events"></a>
 
 ### `plugin-manager/*` events
+
+<a id="plugin-managerbefore-record--bail"></a>
+
+#### `plugin-manager/before-record` — bail
+
+Admit a version of the profile before the history saves it, from the managed files as they are about to be saved. A returned reason refuses the version: nothing is saved, and the change, undo, restore or history read that asked for it reports the history as unavailable with that reason.
+
+```ts cordis-catalog
+/**
+ * Admit a version of the profile before the history saves it, from the managed files as they are about to be
+ * saved. A returned reason refuses the version: nothing is saved, and the change, undo, restore or history read
+ * that asked for it reports the history as unavailable with that reason.
+ * @mode bail
+ * @param files - each managed file's text, by name relative to the profile, or undefined for an absent file.
+ */
+'plugin-manager/before-record'(files: ReadonlyMap<string, string | undefined>): string | undefined
+```
+
+Source: [`packages/boot/plugin-manager/src/types.ts`](../../packages/boot/plugin-manager/src/types.ts)
 
 <a id="plugin-managerchanged--emit"></a>
 

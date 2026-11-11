@@ -795,9 +795,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async edit( entry: Entry, change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>, ): Promise<void>',
-        description: 'Validate, persist, and reconcile a plugin\'s next config; ordinary fields keep normal lifecycle rules. A saved edit is announced as `config-editor/edited`.',
+        description: 'Validate, persist, and reconcile a plugin\'s next config; ordinary fields keep normal lifecycle rules. A `config-editor/before-save` listener may refuse the edit before anything is written. A saved edit is announced as `config-editor/edited`.',
         parameters: [{ name: 'entry', description: 'Current Loader entry, also used to detect replacement during the write.' }, { name: 'change', description: 'Derive a raw config from the current entry and its inherited layer.' }],
         returns: 'Fulfillment after Loader reconciliation completes.',
+        throws: ['{ConfigEditRefusedError} when a `config-editor/before-save` listener refuses the edit.'],
       },
     ],
   },
@@ -5054,6 +5055,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'payload', description: '.signal - optional compaction cancellation signal.' }, { name: 'next', description: 'delegate to the next recovery listener.' }],
   },
   {
+    name: 'config-editor/before-save',
+    mode: 'bail',
+    signature: '\'config-editor/before-save\'(save: ConfigSave): string | undefined',
+    summary: 'Admit an edit before it is saved: called under the profile\'s lock, after the candidate config passed the plugin\'s schema and before the profile patch is written.',
+    description: 'Admit an edit before it is saved: called under the profile\'s lock, after the candidate config passed the plugin\'s schema and before the profile patch is written. A returned reason refuses the edit, which then throws ConfigEditRefusedError with that reason and leaves the file unchanged.',
+    parameters: [{ name: 'save', description: 'the entry and the complete config the profile patch would hold for it.' }],
+  },
+  {
     name: 'config-editor/edited',
     mode: 'emit',
     signature: '\'config-editor/edited\'(edit: ConfigEdit): void',
@@ -5284,6 +5293,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'The selectable process catalog changed.',
     description: 'The selectable process catalog changed. Payload-free by design: consumers subscribe first, then re-read the complete catalog.',
     parameters: [],
+  },
+  {
+    name: 'plugin-manager/before-record',
+    mode: 'bail',
+    signature: '\'plugin-manager/before-record\'(files: ReadonlyMap<string, string | undefined>): string | undefined',
+    summary: 'Admit a version of the profile before the history saves it, from the managed files as they are about to be saved.',
+    description: 'Admit a version of the profile before the history saves it, from the managed files as they are about to be saved. A returned reason refuses the version: nothing is saved, and the change, undo, restore or history read that asked for it reports the history as unavailable with that reason.',
+    parameters: [{ name: 'files', description: 'each managed file\'s text, by name relative to the profile, or undefined for an absent file.' }],
   },
   {
     name: 'plugin-manager/changed',
@@ -6112,6 +6129,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ConfigEdit',
     declaration: 'export interface ConfigEdit {\n    readonly entryId: string;\n}',
+  },
+  {
+    name: 'ConfigSave',
+    declaration: 'export interface ConfigSave {\n    readonly entry: Entry;\n    readonly config: Readonly<Record<string, unknown>>;\n}',
   },
   {
     name: 'ConfigureCall',

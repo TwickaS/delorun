@@ -348,6 +348,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   ProfileHistoryInfo: 'boot.md',
   ProfileVersionPreview: 'boot.md',
   ConfigEdit: 'boot.md',
+  ConfigSave: 'boot.md',
   BundleRowInfo: 'boot.md',
   PluginInstallCancellation: 'boot.md',
   PluginAuditResult: 'boot.md',

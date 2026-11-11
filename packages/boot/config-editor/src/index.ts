@@ -24,6 +24,31 @@ declare module '@deepseek-ai/cordis' {
      * @param edit - the profile patch id of the entry whose configuration changed.
      */
     'config-editor/edited'(edit: ConfigEdit): void
+    /**
+     * Admit an edit before it is saved: called under the profile's lock, after the candidate config passed the
+     * plugin's schema and before the profile patch is written. A returned reason refuses the edit, which then throws
+     * {@link ConfigEditRefusedError} with that reason and leaves the file unchanged.
+     * @mode bail
+     * @param save - the entry and the complete config the profile patch would hold for it.
+     */
+    'config-editor/before-save'(save: ConfigSave): string | undefined
+  }
+}
+
+/** What {@link ConfigEditor.edit} is about to save. */
+export interface ConfigSave {
+  /** The Loader entry whose configuration changes; its fiber's runtime carries the plugin's Config schema. */
+  readonly entry: Entry
+  /** The complete config the profile patch would hold for the entry. */
+  readonly config: Readonly<Record<string, unknown>>
+}
+
+/** An edit a `config-editor/before-save` listener refused; the profile patch is unchanged. */
+export class ConfigEditRefusedError extends Error {
+  /** @param reason - the listener's reason, which is the message. */
+  constructor(reason: string) {
+    super(reason)
+    this.name = 'ConfigEditRefusedError'
   }
 }
 
@@ -94,11 +119,13 @@ export class ConfigEditor extends Service {
     return structuredClone((row?.config ?? {}) as Record<string, unknown>)
   }
 
-  /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules. A saved
-   * edit is announced as `config-editor/edited`.
+  /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules. A
+   * `config-editor/before-save` listener may refuse the edit before anything is written. A saved edit is announced as
+   * `config-editor/edited`.
    * @param entry Current Loader entry, also used to detect replacement during the write.
    * @param change Derive a raw config from the current entry and its inherited layer.
    * @returns Fulfillment after Loader reconciliation completes.
+   * @throws {ConfigEditRefusedError} when a `config-editor/before-save` listener refuses the edit.
    */
   async edit(
     entry: Entry,
@@ -117,6 +144,8 @@ export class ConfigEditor extends Service {
         const fiber = entry.fiber
         if (fiber.state !== FiberState.ACTIVE) throw new Error('Configuration plugin is no longer active')
         fiber.resolveConfig(next)
+        const refusal = this.ownerContext.bail('config-editor/before-save', { entry, config: next })
+        if (refusal !== undefined) throw new ConfigEditRefusedError(refusal)
         let before: string
         try { before = await readFile(path, 'utf8') }
         catch (error) {
