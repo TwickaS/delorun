@@ -72,6 +72,7 @@ async function request(test: Parameters<typeof scratch>[0], directory: string, t
     targetsKey: trusted.keys.targets,
     timestampKey: trusted.keys.timestamp,
     productionKeys: COMMITTED_REGISTRY,
+    platforms: ['linux-x64'],
     state: join(directory, 'state.json'),
     log: log.endpoints,
     logAttempts: 1,
@@ -124,6 +125,39 @@ describe('a local release', () => {
     expect(manifest.runtime['linux-x64']?.archive.length).toBeGreaterThan(0)
     expect(manifest.sbom.length).toBe(0)
     expect(manifest.npm).toEqual([])
+  })
+
+  it('signs each platform it is given, and its manifest lists exactly those', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    const platforms: RuntimePlatform[] = ['linux-x64', 'linux-arm64', 'win32-x64']
+    await buildLocalRelease(await request(test, directory, trusted, '0.1.0', { platforms, closures: fixtureClosure(test, '0.1.0', { platforms }) }))
+    const release = releaseDirectory(join(directory, 'channel'), '0.1.0')
+    const now = Math.floor(Date.now() / 1000)
+    const root = trustRootChain([trusted.root], now).at(-1)!
+    const manifest = verifySignedManifest(root.metadata, readFileSync(join(release, 'delorun-0.1.0.manifest.json')))
+    expect(Object.keys(manifest.runtime).sort()).toEqual([...platforms].sort())
+    for (const platform of platforms) {
+      expect(verifyFileList(root.metadata, manifest, platform, readFileSync(join(release, `delorun-0.1.0-${platform}.files.json`))).platform).toBe(platform)
+    }
+    expect(manifest.runtime['win32-x64']?.archive.name).toBe('delorun-0.1.0-win32-x64.zip')
+  })
+
+  it('refuses an empty or repeated platform list, before building anything', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    let built = false
+    const closures = (): Promise<void> => { built = true; return Promise.resolve() }
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { platforms: [], closures }))).rejects.toThrow('a local release names each of its platforms once, not []')
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { platforms: ['linux-x64', 'linux-x64'], closures }))).rejects.toThrow('names each of its platforms once')
+    expect(built).toBe(false)
+  })
+
+  it('refuses a platform whose files the closure build did not write', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { platforms: ['linux-x64', 'linux-arm64'] }))).rejects.toThrow('delorun-0.1.0-linux-arm64.files.json')
+    expect(existsSync(join(directory, 'channel', 'timestamp.json'))).toBe(false)
   })
 
   it('builds the same commit under two versions, and the timestamp moves to the second while the first stays served', async (test) => {
@@ -269,14 +303,16 @@ describe('copying a closure build’s files', () => {
     const source = scratch(test)
     await fixtureClosure(test, '0.1.0')(source)
     const target = scratch(test)
-    await copyClosureFiles(source, '0.1.0', target)
+    await copyClosureFiles(source, '0.1.0', ['linux-x64'], target)
     expect(readdirSync(target).sort()).toEqual(['delorun-0.1.0-linux-x64.files.json', 'delorun-0.1.0-linux-x64.tar.gz'])
   })
 
   it('names the build command when a file is missing', async (test) => {
     const source = scratch(test)
     mkdirSync(join(source, 'empty'))
-    await expect(copyClosureFiles(source, '0.1.0', scratch(test))).rejects.toThrow('build it with build-closure.ts --version 0.1.0 --platform linux-x64')
+    await expect(copyClosureFiles(source, '0.1.0', ['linux-x64'], scratch(test))).rejects.toThrow('build it with build-closure.ts --version 0.1.0 --platform linux-x64')
+    await fixtureClosure(test, '0.1.0')(source)
+    await expect(copyClosureFiles(source, '0.1.0', ['linux-x64', 'win32-x64'], scratch(test))).rejects.toThrow('delorun-0.1.0-win32-x64.zip does not exist; build it with build-closure.ts --version 0.1.0 --platform win32-x64')
   })
 })
 
@@ -308,6 +344,24 @@ describe('the local-release command', () => {
     expect(manifest.source.commit).toMatch(/^[0-9a-f]{40}$/u)
     expect(manifest.dsh).toMatch(/^\d+\.\d+\.\d+/u)
     expect(manifest).toMatchObject({ security: false, summary: 'A local fixture release.' })
+  })
+
+  it('signs the release platforms --platform names, and refuses a platform the release does not carry', async (test) => {
+    const platforms: RuntimePlatform[] = ['linux-x64', 'win32-x64']
+    const closures = scratch(test)
+    await fixtureClosure(test, '0.1.0', { platforms })(closures)
+    const { directory, args } = await command(test, '0.1.0', ['--closures-from', closures, '--platform', 'linux-x64', '--platform', 'win32-x64'])
+    const out = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    expect(await main(args)).toBe(0)
+    expect(out).toHaveBeenCalledWith(expect.stringContaining('for linux-x64, win32-x64 in'))
+    const manifest = readEnvelope('manifest', readFileSync(join(directory, 'channel', 'releases', 'download', 'v0.1.0', 'delorun-0.1.0.manifest.json'))).signed
+    expect(Object.keys(manifest.runtime).sort()).toEqual(platforms)
+    const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const darwin = await command(test, '0.1.0', ['--closures-from', closures, '--platform', 'darwin-arm64'])
+    expect(await main(darwin.args)).toBe(1)
+    expect(failure).toHaveBeenLastCalledWith('local-release: --platform darwin-arm64 is not a release platform; closure.json lists linux-x64, linux-arm64, win32-x64')
+    expect(await main([...darwin.args.slice(0, -1), 'plan9'])).toBe(1)
+    expect(failure).toHaveBeenLastCalledWith(expect.stringContaining('--platform plan9 is not a release platform'))
   })
 
   it('marks the release as a security fix with --security', async (test) => {

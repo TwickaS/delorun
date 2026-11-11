@@ -47,7 +47,7 @@ async function servedRelease(test: TestContext, closureFiles?: string): Promise<
   const closures = join(directory, 'closures')
   mkdirSync(closures)
   if (closureFiles === undefined) await fixtureClosure(test, VERSION)(closures)
-  else await copyClosureFiles(closureFiles, VERSION, closures)
+  else await copyClosureFiles(closureFiles, VERSION, ['linux-x64'], closures)
   const rootPath = join(directory, 'root.json')
   writeFileSync(rootPath, trusted.root)
   const channel = join(directory, 'channel')

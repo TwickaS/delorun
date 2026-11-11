@@ -4,16 +4,18 @@
  *
  * `node_modules/.bin/tsx delo/apps/release/src/local-release.ts --version <version> --summary <text> [--security] --out <channel dir>
  * --root <root file>... --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url>
- * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--artifacts build|existing] [--commit <rev>]
- * [--closures-from <dir>] [--cache <dir>] [--production-keys <file>]`
+ * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--platform <platform>]... [--artifacts build|existing]
+ * [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>]`
  *
  * `--summary` is the release's one-line summary and `--security` marks the release as a security fix; the signed
  * manifest carries both as `summary` and `security` (false without the flag), which an update notice shows.
  *
- * Without `--closures-from`, the command builds the Linux x64 runtime closure from `--commit` (`HEAD` by default) with
- * `build-closure.ts`'s recipe, which needs the pinned Node and pnpm and a long build (`--artifacts existing` reuses the
- * artifacts already built in the worktree instead of building them); with it, the command signs the
- * `delorun-<version>-linux-x64.tar.gz` and `.files.json` that a `build-closure.ts --platform linux-x64` run left there.
+ * `--platform` names each runtime platform the release carries, one of the release platforms `closure.json` lists;
+ * `linux-x64` alone when none is named. Without `--closures-from`, the command builds those platforms' runtime closures
+ * from `--commit` (`HEAD` by default) with `build-closure.ts`'s recipe, which needs the pinned Node and pnpm and a long
+ * build (`--artifacts existing` reuses the artifacts already built in the worktree instead of building them); with it,
+ * the command signs each platform's `delorun-<version>-<platform>` archive and `.files.json` that a `build-closure.ts`
+ * run left there.
  * `--log-submit`, `--log-checkpoint` and `--log-tiles` are `log-release.ts`'s log endpoints: the command submits the
  * manifest's entry to the log they name, so point them at a log you run, never at a public log unless the release is
  * meant to be logged there. The command asks the log for a witnessed checkpoint at most 60 times, `--log-poll-seconds`
@@ -33,9 +35,10 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
-import { buildClosuresChecked, type BuildRequest } from './build-closure.ts'
+import { buildClosuresChecked, isRuntimePlatform, type BuildRequest } from './build-closure.ts'
 import type { ClosureFiles } from './closure/archive-closure.ts'
 import { isArtifactSource } from './closure/artifacts.ts'
+import { readRecipe } from './closure/config.ts'
 import { readSigningKey } from '@delo/release-formats/sign/envelope'
 import { semanticVersion } from '@delo/release-formats/brands'
 import { buildLocalRelease, copyClosureFiles, LOCAL_PLATFORM } from './local/release.ts'
@@ -82,6 +85,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       'log-checkpoint': { type: 'string' },
       'log-tiles': { type: 'string' },
       'log-poll-seconds': { type: 'string', default: '30' },
+      'platform': { type: 'string', multiple: true },
       'artifacts': { type: 'string', default: 'build' },
       'commit': { type: 'string', default: 'HEAD' },
       'closures-from': { type: 'string' },
@@ -101,19 +105,24 @@ export async function main(argv: readonly string[], build: (repository: string, 
     const artifacts = values.artifacts
     const poll = Number(values['log-poll-seconds'])
     if (!Number.isFinite(poll) || poll < 0) throw new Error(`--log-poll-seconds ${values['log-poll-seconds']} is not a number of seconds`)
+    const released = readRecipe().closure.platforms
+    const platforms = [...new Set(values.platform ?? [LOCAL_PLATFORM])].map((platform) => {
+      if (!isRuntimePlatform(platform) || !released.includes(platform)) throw new Error(`--platform ${platform} is not a release platform; closure.json lists ${released.join(', ')}`)
+      return platform
+    })
     const repository = repositoryRoot(process.cwd())
     const productionKeys = readProductionKeysFile(values['production-keys'] === undefined ? join(repository, PRODUCTION_KEYS_PATH) : resolve(values['production-keys']))
     const commit = execFileSync('git', ['rev-parse', '--verify', `${values.commit}^{commit}`], { cwd: repository, encoding: 'utf8' }).trim()
     const cache = resolve(values.cache)
     const closures = async (directory: string): Promise<void> => {
-      if (values['closures-from'] !== undefined) return copyClosureFiles(resolve(values['closures-from']), version, directory)
-      // The build writes its files into a directory of its own, and only the Linux x64 files go on.
+      if (values['closures-from'] !== undefined) return copyClosureFiles(resolve(values['closures-from']), version, platforms, directory)
+      // The build writes its files into a directory of its own, and only the archives and file lists go on.
       const built = mkdtempSync(join(directory, 'closure-'))
-      await build(repository, { version, commit, out: built, platforms: [LOCAL_PLATFORM], cache, writePins: false, artifacts })
-      await copyClosureFiles(built, version, directory)
+      await build(repository, { version, commit, out: built, platforms, cache, writePins: false, artifacts })
+      await copyClosureFiles(built, version, platforms, directory)
       rmSync(built, { recursive: true, force: true })
     }
-    const released = await buildLocalRelease({
+    const result = await buildLocalRelease({
       commit,
       version,
       dsh: upstreamVersion(repository, commit),
@@ -124,6 +133,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       targetsKey: readSigningKey(resolve(values['targets-key']!)),
       timestampKey: readSigningKey(resolve(values['timestamp-key']!)),
       productionKeys,
+      platforms,
       state: resolve(state),
       log: { submit: values['log-submit']!, checkpoint: values['log-checkpoint']!, tiles: values['log-tiles']! },
       logAttempts: 60,
@@ -131,7 +141,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       closures,
       now: new Date(),
     })
-    console.log(`local-release: signed ${released.manifestName} for ${LOCAL_PLATFORM} in ${resolve(out)} (timestamp ${String(released.timestampVersion)}); the manifest lists no other platform`)
+    console.log(`local-release: signed ${result.manifestName} for ${platforms.join(', ')} in ${resolve(out)} (timestamp ${String(result.timestampVersion)}); the manifest lists no other platform`)
     return 0
   } catch (error) {
     console.error(`local-release: ${error instanceof Error ? error.message : String(error)}`)

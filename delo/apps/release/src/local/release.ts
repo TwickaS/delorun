@@ -9,9 +9,9 @@
  *
  * - `timestamp.json` and `root/<n>.root.json`, the metadata host's files;
  * - `releases/download/v<version>/`, the version's release files: the manifest, its log bundle and entry request, and
- *   the Linux x64 runtime archive with its signed file list.
+ *   each runtime archive with its signed file list.
  *
- * A local release is signed over the Linux x64 runtime only, the one platform its manifest lists. The other files the
+ * A local release is signed over the runtimes of the platforms it is given, which its manifest lists, and no other. The other files the
  * manifest schema requires (the desktop installers, the images, the SBOM, the install scripts, the rebuild record and the
  * advisory report) are zero-length placeholders that nothing in the channel serves, so the manifest says plainly that
  * those files do not exist. It does not replace the signing ceremony of `sign-release.ts`: nothing here is reproduced
@@ -49,7 +49,7 @@ import { initialState, nextTimestamp, readTimestampState, stateAfter } from '../
 import { rootKeyIds, type ProductionKeys } from './production-keys.ts'
 import { trustRootChain, verifyTimestamp } from '@delo/release-formats/sign/verify'
 
-/** The only platform a local release builds. */
+/** The platform a local release builds when the command names none. */
 export const LOCAL_PLATFORM: RuntimePlatform = 'linux-x64'
 
 /** The name the manifest gives the builder, so a reader sees that no second builder rebuilt this release. */
@@ -87,6 +87,8 @@ export interface LocalReleaseRequest {
   readonly timestampKey: KeyObject
   /** The production trust material, which none of {@link roots}, {@link targetsKey} and {@link timestampKey} may be. */
   readonly productionKeys: ProductionKeys
+  /** The runtime platforms the release carries and its manifest lists, at least one, each once. */
+  readonly platforms: readonly RuntimePlatform[]
   /** The signer's state file; created when absent, and replaced after each signing. */
   readonly state: string
   /** The log that the manifest's entry is submitted to. */
@@ -96,8 +98,8 @@ export interface LocalReleaseRequest {
   /** Waits between those attempts. */
   readonly logWait: () => Promise<void>
   /**
-   * Writes the Linux x64 runtime archive and its unsigned file list, named as `build-closure.ts` names them, into a
-   * new directory.
+   * Writes each platform's runtime archive and unsigned file list, named as `build-closure.ts` names them, into a new
+   * directory.
    */
   readonly closures: (directory: string) => Promise<void>
   /** The signing time. */
@@ -130,8 +132,8 @@ async function refOf(directory: string, name: string): Promise<FileRef> {
   return { name, length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
 }
 
-/** The manifest of a local release: the built runtime, and placeholders for everything the schema requires beyond it. */
-function localManifest(request: LocalReleaseRequest, runtime: { readonly archive: FileRef, readonly files: FileRef }): ReleaseManifest {
+/** The manifest of a local release: the built runtimes, and placeholders for everything the schema requires beyond them. */
+function localManifest(request: LocalReleaseRequest, runtime: ReadonlyMap<RuntimePlatform, { readonly archive: FileRef, readonly files: FileRef }>): ReleaseManifest {
   const version = semanticVersion(request.version)
   const sha512 = `${'A'.repeat(86)}==`
   const desktop = Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, {
@@ -148,7 +150,7 @@ function localManifest(request: LocalReleaseRequest, runtime: { readonly archive
     channel: 'stable',
     source: { repository: RELEASE_REPOSITORY_URL, tag: `v${request.version}`, commit: request.commit },
     published: utc(request.now),
-    runtime: { [LOCAL_PLATFORM]: runtime },
+    runtime: Object.fromEntries(runtime),
     desktop,
     images: { s2: image, s3: image },
     sbom: { ...absent(`delorun-${request.version}.spdx.json`), format: 'SPDX-2.3+json' },
@@ -208,9 +210,10 @@ async function replaceFile(path: string, bytes: Uint8Array | string): Promise<vo
  * Build, sign and log one release into a channel directory.
  * @param request - the commit, version, channel, keys, log and closure build.
  * @returns the signed manifest and the timestamp's version.
- * @throws Error when the summary is not a valid release summary, a root file, a key a root lists, the targets key or the
- *   timestamp key is production trust material, the version is already in the channel, the closure
- *   build did not write its files, the targets key is not the newest root's active targets key, the log gives no
+ * @throws Error when the summary is not a valid release summary, the platform list is empty or repeats a platform, a
+ *   root file, a key a root lists, the targets key or the timestamp key is production trust material, the version is
+ *   already in the channel, the closure build did not write its files, the targets key is not the newest root's
+ *   active targets key, the log gives no
  *   witnessed checkpoint, or any signed file fails the verification the client will run. The channel's timestamp is replaced last, so a failed build leaves the channel
  *   serving the release it served before.
  */
@@ -219,6 +222,9 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
     throw new Error(`the summary ${JSON.stringify(request.summary)} is not a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters on one line, with no control or format character and no whitespace at either end`)
   }
   refuseProductionRoots(request)
+  if (request.platforms.length === 0 || new Set(request.platforms).size !== request.platforms.length) {
+    throw new Error(`a local release names each of its platforms once, not ${JSON.stringify(request.platforms)}`)
+  }
   const release = releaseDirectory(request.channel, request.version)
   if (existsSync(release)) throw new Error(`${release} exists; a local release never replaces a version already in the channel`)
   const now = Math.floor(request.now.getTime() / 1000)
@@ -236,14 +242,18 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
   const work = await mkdtemp(join(request.channel, 'releases', 'download', '.building-'))
   try {
     await request.closures(work)
-    const names = closureFileNames(request.version, LOCAL_PLATFORM)
-    const unsigned = readEnvelope('files', await readFile(join(work, names.files)))
-    if (unsigned.signed.version !== request.version || unsigned.signed.platform !== LOCAL_PLATFORM) {
-      throw new Error(`${names.files} is the file list of ${unsigned.signed.version} ${unsigned.signed.platform}, not of ${request.version} ${LOCAL_PLATFORM}`)
+    const runtime = new Map<RuntimePlatform, { readonly archive: FileRef, readonly files: FileRef }>()
+    for (const platform of request.platforms) {
+      const names = closureFileNames(request.version, platform)
+      const unsigned = readEnvelope('files', await readFile(join(work, names.files)))
+      if (unsigned.signed.version !== request.version || unsigned.signed.platform !== platform) {
+        throw new Error(`${names.files} is the file list of ${unsigned.signed.version} ${unsigned.signed.platform}, not of ${request.version} ${platform}`)
+      }
+      const signedList = `${JSON.stringify(signEnvelope({ signed: unsigned.signedJson, signatures: [] }, [request.targetsKey]), undefined, 2)}\n`
+      await writeFile(join(work, names.files), signedList)
+      runtime.set(platform, { archive: await refOf(work, names.archive), files: await refOf(work, names.files) })
     }
-    const signedList = `${JSON.stringify(signEnvelope({ signed: unsigned.signedJson, signatures: [] }, [request.targetsKey]), undefined, 2)}\n`
-    await writeFile(join(work, names.files), signedList)
-    const manifest = localManifest(request, { archive: await refOf(work, names.archive), files: await refOf(work, names.files) })
+    const manifest = localManifest(request, runtime)
     const manifestName = `delorun-${request.version}.manifest.json`
     const manifestBytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.targetsKey]), undefined, 2)}\n`)
     const entry = entryRequest(manifestBytes, request.targetsKey)
@@ -268,16 +278,20 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
 }
 
 /**
- * Copy a closure build's Linux x64 files, such as `build-closure.ts --platform linux-x64` wrote, into a directory.
- * @param source - the directory holding `delorun-<version>-linux-x64.tar.gz` and its `.files.json`.
+ * Copy a closure build's files of the given platforms, such as `build-closure.ts --platform <platform>` wrote, into a
+ * directory.
+ * @param source - the directory holding each platform's `delorun-<version>-<platform>` archive and its `.files.json`.
  * @param version - the release version the files are named for.
+ * @param platforms - the platforms to copy.
  * @param directory - the directory to copy into.
- * @throws Error when either file is absent.
+ * @throws Error when any file is absent.
  */
-export async function copyClosureFiles(source: string, version: string, directory: string): Promise<void> {
-  const names = closureFileNames(version, LOCAL_PLATFORM)
-  for (const name of [names.archive, names.files]) {
-    if (!existsSync(join(source, name))) throw new Error(`${join(source, name)} does not exist; build it with build-closure.ts --version ${version} --platform ${LOCAL_PLATFORM}`)
-    await copyFile(join(source, name), join(directory, name))
+export async function copyClosureFiles(source: string, version: string, platforms: readonly RuntimePlatform[], directory: string): Promise<void> {
+  for (const platform of platforms) {
+    const names = closureFileNames(version, platform)
+    for (const name of [names.archive, names.files]) {
+      if (!existsSync(join(source, name))) throw new Error(`${join(source, name)} does not exist; build it with build-closure.ts --version ${version} --platform ${platform}`)
+      await copyFile(join(source, name), join(directory, name))
+    }
   }
 }

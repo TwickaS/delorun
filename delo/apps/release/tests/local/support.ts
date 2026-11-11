@@ -10,6 +10,7 @@ import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import type { TestContext } from 'vitest'
 import type { KeyObject } from 'node:crypto'
+import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { stampDeloVersion } from '../../src/closure/delo.ts'
 import { readEntryRequest } from '@delo/release-formats/log/entry'
@@ -143,25 +144,30 @@ else process.stdout.write('arguments: ' + JSON.stringify(process.argv.slice(2)) 
 `
 
 /**
- * Write the Linux x64 files of a fixture closure the way `build-closure.ts` leaves them: the runtime's own Node (a
- * script that hands over to the Node running the spec, so the archive stays small), the `delorun` entry file with the
- * release's version stamped into its package, and the archive with its unsigned file list.
+ * Write the files of a fixture closure the way `build-closure.ts` leaves them, for Linux x64 or each platform named:
+ * the runtime's own Node (a script that hands over to the Node running the spec, so the archive stays small), the
+ * `delorun` entry file with the release's version stamped into its package, and the archive with its unsigned file list.
  * @param test - the running test.
  * @param version - the release version.
- * @param change - `entrySuffix`, text added to the entry file, so two closures of one version differ by it.
- * @returns a function that writes the two files into a directory, for `LocalReleaseRequest.closures`.
+ * @param change - `entrySuffix`, text added to the entry file, so two closures of one version differ by it, and
+ *   `platforms`, the platforms to write.
+ * @returns a function that writes two files per platform into a directory, for `LocalReleaseRequest.closures`.
  */
-export function fixtureClosure(test: TestContext, version: string, change: { readonly entrySuffix?: string } = {}): (directory: string) => Promise<void> {
+export function fixtureClosure(test: TestContext, version: string, change: { readonly entrySuffix?: string, readonly platforms?: readonly RuntimePlatform[] } = {}): (directory: string) => Promise<void> {
   return async (directory) => {
-    const stage = join(scratch(test), 'stage')
-    writeTree(stage, {
-      'node/bin/node': { data: `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, executable: true },
-      'app/node_modules/@delo/cli/package.json': '{"name":"@delo/cli","version":"0.0.0","type":"module"}\n',
-      'app/node_modules/@delo/cli/src/bin.js': `${ENTRY}${change.entrySuffix ?? ''}`,
-    })
-    await stampDeloVersion(join(stage, 'app', 'node_modules'), version)
-    await archiveClosure({ stage, outDir: directory, version, platform: 'linux-x64', epoch: 1_793_981_656, pins: undefined, requireLaunchFiles: true })
+    for (const platform of change.platforms ?? ['linux-x64']) await fixturePlatformClosure(test, version, platform, change.entrySuffix ?? '', directory)
   }
+}
+
+async function fixturePlatformClosure(test: TestContext, version: string, platform: RuntimePlatform, entrySuffix: string, directory: string): Promise<void> {
+  const stage = join(scratch(test), 'stage')
+  writeTree(stage, {
+    [platform === 'win32-x64' ? 'node/node.exe' : 'node/bin/node']: { data: `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, executable: true },
+    'app/node_modules/@delo/cli/package.json': '{"name":"@delo/cli","version":"0.0.0","type":"module"}\n',
+    'app/node_modules/@delo/cli/src/bin.js': `${ENTRY}${entrySuffix}`,
+  })
+  await stampDeloVersion(join(stage, 'app', 'node_modules'), version)
+  await archiveClosure({ stage, outDir: directory, version, platform, epoch: 1_793_981_656, pins: undefined, requireLaunchFiles: true })
 }
 
 /**
