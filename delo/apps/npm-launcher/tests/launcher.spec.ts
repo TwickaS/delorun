@@ -721,6 +721,42 @@ describe('a runtime a real runtime store installed', () => {
   })
 })
 
+describe('a runtime signed by a targets key a newer shipped root revoked', () => {
+  it('c02-start-anchors-on-newest-shipped-root: is refused at start, because the start anchors on the newest shipped root, not the older stored one, and spawns nothing', async () => {
+    const fixture = await fixtureRelease()
+    const directory = await home({ root: fixture.roots[0]! })
+    try {
+      const store = new RuntimeStore({ home: directory, platform: fixture.platform, logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined } })
+      await store.install({ version: version(VERSION), root: fixture.rootMetadata, fill: staging => fillFromFixture(fixture, staging) })
+      // Root 2 replaces every role key, signed by both root keys: the targets key that signed the installed release is revoked.
+      const replacement = await fixtureRelease()
+      const second = nextRoot(fixture.rootMetadata, replacement.keys, [fixture.keys.root, replacement.keys.root])
+      const channel: RuntimeChannel = {
+        resolve: () => Promise.reject(new Error('the channel must not be asked')),
+        fill: () => Promise.reject(new Error('the channel must not be asked')),
+      }
+      let printed = ''
+      let spawned = false
+      const status = await runLauncher(launch({
+        home: directory,
+        store,
+        channel,
+        roots: [fixture.roots[0]!, second],
+        spawn: () => {
+          spawned = true
+          return Promise.resolve(0)
+        },
+        stderr: (text) => { printed += text },
+      }))
+      expect(status).toBe(LAUNCHER_EXIT.failed)
+      expect(printed).toContain('RUNTIME_CHANGED')
+      expect(spawned).toBe(false)
+    } finally {
+      await unlock(directory)
+    }
+  })
+})
+
 describe('a real runtime store whose current fails its start check after an update', () => {
   it('refuses delorun verify without running either release, leaving both pointers and every file as they were, and starts previous with delorun recover rollback for delorun start', async () => {
     const fixture = await fixtureRelease()

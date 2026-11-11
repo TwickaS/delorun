@@ -72,7 +72,8 @@ export async function readShippedRoots(directory: string): Promise<readonly Uint
  * sync placed under `trust/` is not an anchor.
  * @param home - the resolved Delo home.
  * @param shipped - the root files the launcher ships, oldest first, as {@link readShippedRoots} returns them.
- * @returns the stored root, as trusted.
+ * @returns the root to anchor on, by {@link verifyStoredRoot}'s rule: the newest shipped root when the stored root is
+ *   an older shipped one.
  * @throws {InstallError} `NO_TRUSTED_ROOT` when no root is stored or none is shipped; `TRUST_STATE_INVALID` when the
  *   stored root or the walked chain is a link, another user's, laxer than 0600 or unreadable; `INSTALL_VERIFY_FAILED`
  *   when no shipped root leads to the stored one.

@@ -361,10 +361,11 @@ function installedRefusal(options: LauncherOptions, installed: RuntimeVersion): 
  * start check anchors on it, so a root an install did not verify may not reach the store. A root newer than every
  * shipped root is trusted only with the chain the install walked to it, `trust/roots/<n>.root.json`, so a root a
  * restore or a sync placed under `trust/` is not an anchor. A home with no stored root is a store without a runtime,
- * because nothing on it was verified yet.
+ * because nothing on it was verified yet. A stored root older than the newest root this launcher ships is not the
+ * anchor: the newest shipped root is, so a targets key it revoked does not verify at this start.
  * @param home - the resolved Delo home.
  * @param shipped - the root files this launcher ships, oldest first.
- * @returns the stored root's metadata.
+ * @returns the metadata of the root the start check anchors on.
  * @throws {RuntimeStoreError} `NO_ACTIVE_RUNTIME` when no trusted root is stored or it does not read; `RUNTIME_CHANGED`
  *   when the stored root is not one this launcher trusts, or the chain that should prove it cannot be read.
  */

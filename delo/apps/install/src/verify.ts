@@ -249,17 +249,23 @@ export interface StoredRootRequest {
 }
 
 /**
- * Trust the root a home stored for a start, by the roots the launcher ships (contract C1: trust comes only through
- * the launcher's own roots). The stored root must be signed by its own root threshold, and at a version the launcher
- * ships it must be that very root: a root of the same version whose keys or roles differ is an unrelated root that
- * signs unrelated releases, so it is refused rather than handed to the start check.
+ * The root a start, an update and `delorun verify` anchor on, from the root a home stored and the roots the launcher
+ * ships (contract C1: trust comes only through the launcher's own roots). The stored root must be signed by its own
+ * root threshold, and at a version the launcher ships it must be that very root: a root of the same version whose keys
+ * or roles differ is an unrelated root that signs unrelated releases, so it is refused rather than handed to the start
+ * check.
+ *
+ * A stored root older than the newest shipped root is not the anchor: the newest shipped root is, so a targets key a
+ * later root revoked stops verifying at the first start of a launcher that ships that root, and no stored file can hold
+ * a home on the older root. The stored file is left as it is; the next install or update stores the root it walks to.
  *
  * A stored root newer than every shipped root is trusted only with the chain an install walked to it: every version
  * from the newest shipped root to the stored one, each signed by the root before it and by its own root threshold. A
  * root a restore or a sync placed under `trust/` descends from no shipped root, so it is refused rather than accepted
  * as an anchor for whatever runtime sits beside it.
  * @param request - the stored root, the shipped roots, the walked chain and the stored root's path.
- * @returns the stored root, as trusted.
+ * @returns the root to anchor on: the stored root when it is the newest shipped root or newer than every shipped
+ *   root, the newest shipped root when the stored root is an older shipped one.
  * @throws {InstallError} `NO_TRUSTED_ROOT` when the launcher ships no root; `INSTALL_VERIFY_FAILED` when the stored
  *   root does not verify, is older than the oldest shipped root, differs from the shipped root of its version, or is
  *   newer than every shipped root without a chain that walks from one.
@@ -280,18 +286,20 @@ export function verifyStoredRoot(request: StoredRootRequest): TrustedRoot {
     throw refused(request.source, error)
   }
   const version = stored.metadata.version
+  const newestShipped = shipped.reduce((newest, root) => (root.metadata.version > newest.metadata.version ? root : newest))
+  const newest = newestShipped.metadata.version
   const same = shipped.find(root => root.metadata.version === version)
   if (same !== undefined) {
     if (canonicalJson(toJsonValue(same.metadata)) !== canonicalJson(toJsonValue(stored.metadata))) {
       throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, and it is not the root this launcher ships for version ${String(version)}: its keys or roles differ, so the releases it signs are not this launcher's`)
     }
-    return stored
+    // An older stored root is never the anchor: the newest shipped root can revoke a key the stored one lists.
+    return version < newest ? newestShipped : stored
   }
   const oldest = Math.min(...shipped.map(root => root.metadata.version))
   if (version < oldest) {
     throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, older than root ${String(oldest)}, the oldest this launcher ships; a root never moves backwards`)
   }
-  const newest = Math.max(...shipped.map(root => root.metadata.version))
   const walked = request.walked.map((bytes) => {
     try {
       return { root: readRoot(bytes), bytes }

@@ -7,7 +7,7 @@ import { mkdtemp, open, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readRoot } from '@delo/release-formats/sign/verify'
+import { readRoot, verifySignedManifest } from '@delo/release-formats/sign/verify'
 import { isInstallError, type InstallError } from '../src/errors.ts'
 import { verifyDownloadedFile, verifyStoredRoot } from '../src/verify.ts'
 import { fileRef, fixtureRelease, nextRoot, sha256, type Fixture } from './support.ts'
@@ -83,6 +83,17 @@ describe('the root a start anchors on', () => {
     const fixture = await fixtureRelease()
     const stored = verifyStoredRoot({ stored: fixture.roots[0]!, shipped: fixture.roots, walked: [], source: '/home/.delo/trust/root.json' })
     expect(stored.metadata.version).toBe(fixture.rootMetadata.version)
+  })
+
+  it('c02-start-anchors-on-newest-shipped-root: anchors on the newest shipped root, not an older stored one, so a targets key the newer root revoked stops verifying', async () => {
+    const shipped = await fixtureRelease()
+    const replacement = await fixtureRelease()
+    // Version 2 replaces every role key, the targets key included: the version 1 targets key is revoked.
+    const second = nextRoot(shipped.rootMetadata, replacement.keys, [shipped.keys.root, replacement.keys.root])
+    const anchor = verifyStoredRoot({ stored: shipped.roots[0]!, shipped: [shipped.roots[0]!, second], walked: [], source: '/home/.delo/trust/root.json' })
+    expect(anchor.metadata.version).toBe(2)
+    expect(anchor.sha256).toBe(readRoot(second).sha256)
+    expect(() => verifySignedManifest(anchor.metadata, shipped.manifestBytes)).toThrow()
   })
 
   it('refuses a stored root of a shipped version whose keys and roles differ', async () => {
