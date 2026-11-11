@@ -13,6 +13,7 @@ Reach lets a person open their studio from their own phone or laptop over their 
 ## Contents
 
 - [What exists today](#what-exists-today)
+- [Exact Fetch routes a device meets](#exact-fetch-routes-a-device-meets)
 - [The rules](#the-rules)
 - [What this does not protect against](#what-this-does-not-protect-against)
 - [Denial tests](#denial-tests)
@@ -29,6 +30,21 @@ Reach lets a person open their studio from their own phone or laptop over their 
 - The studio's Devices section lists devices, opens the window and shows the address's state from `GET /delo/reach/status`.
 - **Not built:** the Funnel and relay providers, passkeys, OpenID Connect, the recovery kit, `delorun devices reset`, alerts, and the records of loopback credentials with their idle limit.
 - The loopback studio admits upstream's launch token and its stateless `dsh-auth-*` cookies, which expire 30 days after they are minted, have no idle limit and no server-side record, and stay valid until the browser session secret in `.credentials.yaml` changes; Delo never changes it. Every browser holding such a cookie acts as the one owner. The loopback studio sends no Content Security Policy.
+
+## Exact Fetch routes a device meets
+
+Under `/api`, an exact Fetch route answers a device only when it admits that Peer. Every route of the CLI composition has a decision here, and `delo/apps/cli/tests/denial/reach/reach-paths.integration.spec.ts` fails on a route without one. A new route is refused unless a device needs it to use a chat it can already read.
+
+| Route | A device | Why |
+| --- | --- | --- |
+| `/api/session/uploadFileBinary` | Per call | Remote access decides `fileUploads/upload`, which the `reach-device` policy allows, so a phone can attach a file to a chat it may write to. |
+| `/api/deloChatStates.list`, `/api/deloChatStates.set` | Refused | Snooze and settle states order the chat list at the computer; a device renders every chat without them. |
+| `/api/deloOnboarding.setupRecord` | Refused | What terminal setup recorded serves onboarding at the computer. |
+| `/api/deloOnboarding.addWorkspace` | Refused, `LOOPBACK_ONLY` | Adding a folder as a workspace is workspace management, which the home's computer keeps; onboarding refuses it off the loopback listener before upstream's gate. |
+| `/api/deloMainChat.open`, `/api/deloMainChat.reports` | Refused | Opening the main chat chooses its preset, and the report count marks the computer's sidebar; a device reads the main chat through `session/page`. |
+| `/api/deloUpdateCheck.notice` | Refused | The notice names the running release and how many plugins an update would turn off, and an update runs only at the computer. |
+| `/api/deloTrash.*` | Refused | Moving to, restoring from or deleting from the trash is not in the device rule. |
+| `/api/session.export`, `/api/session.markdown`, `/api/plugin-manager/detail-file`, `/api/file`, `/api/present.host`, `/api/present.open`, `/api/changes.summary`, `/api/changes.open`, `/api/changes.diff` | Refused | Upstream declares no device admission, so only the owner reaches them. |
 
 ## The rules
 

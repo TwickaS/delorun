@@ -63,10 +63,14 @@ const REACHED: Readonly<Record<string, string>> = {
   'prefix /auth/assets': HOME_AUTH,
 }
 
-/** One exact Fetch route's decision for a device: `refused` answers 403, `per-call` asks remote access on each request. */
+/**
+ * One exact Fetch route's decision for a device: `refused` answers 403, `per-call` asks remote access on each request.
+ * A refused route answers upstream's `forbidden` unless its own check refuses the device first, with `refusal`'s code.
+ */
 interface FetchDecision {
   readonly device: 'refused' | 'per-call'
   readonly reason: string
+  readonly refusal?: string
 }
 
 const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
@@ -80,6 +84,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloChatStates.list': { device: 'refused', reason: 'snooze and settle states order the chat list at the computer; a device renders every chat without them, and the client keeps its last states' },
   '/api/deloChatStates.set': { device: 'refused', reason: 'snoozing or settling a chat is not in the device rule' },
   '/api/deloOnboarding.setupRecord': { device: 'refused', reason: 'what the terminal setup recorded serves onboarding at the computer' },
+  '/api/deloOnboarding.addWorkspace': { device: 'refused', reason: 'adds a folder as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
   '/api/deloMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
   '/api/deloMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
   '/api/deloUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },
@@ -270,8 +275,9 @@ describe('the routes a signed-in device reaches', () => {
       if (decision?.device !== 'refused') continue
       const method = route.methods[0] ?? 'GET'
       const reply = await asPhone(route.path, { method })
-      // Pins upstream's exact-route gate and each route's lack of a device admission.
-      expect.soft({ path: route.path, status: reply.status, body: reply.body }).toEqual({ path: route.path, status: 403, body: 'forbidden' })
+      // Pins upstream's exact-route gate and each route's lack of a device admission, or the route's own refusal.
+      const body = decision.refusal === undefined ? reply.body : (JSON.parse(reply.body) as { readonly error?: unknown }).error
+      expect.soft({ path: route.path, status: reply.status, body }).toEqual({ path: route.path, status: 403, body: decision.refusal ?? 'forbidden' })
       if (!route.path.startsWith('/api/delo')) continue
       // A body each POST route refuses or ignores, so nothing is deleted.
       const answer = await asStudio(route.path, method, '{"clearLogs":"not a flag"}')
