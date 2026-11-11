@@ -119,6 +119,34 @@ interface McpResourceProvider {
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxmcpaddconsent--mcpaddconsent-abstract-seam"></a>
+
+### `ctx.mcpAddConsent` — `McpAddConsent` (abstract seam)
+
+Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis' standard duplicate-service behavior).
+
+```ts cordis-catalog
+/**
+ * Review one configured server command before the mcp-client plugin starts
+ * that server. The review runs at every boot of the server row, before any
+ * child process starts, so the provider can let an accepted command through
+ * at once and ask again when the command it is shown differs from the one
+ * it accepted before.
+ *
+ * The returned promise gates the server's start: the mcp-client plugin's
+ * activation does not finish, and the server does not start, until it
+ * settles, so an implementation that asks a person must settle it when the
+ * person answers and when the provider's own plugin unloads.
+ *
+ * @param command - the server start under review.
+ * @returns `allow: true` to start the server, or `allow: false` with the
+ *   reason that leaves the server stopped.
+ */
+abstract review(command: McpServerCommand): Promise<McpConsentDecision>
+```
+
+Source: [`packages/mcp/mcp-client/src/consent.ts`](../../packages/mcp/mcp-client/src/consent.ts)
+
 <a id="ctxmcpresources--mcpresourceruntime"></a>
 
 ### `ctx.mcpResources` — `McpResourceRuntime`

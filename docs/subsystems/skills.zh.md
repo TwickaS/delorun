@@ -314,6 +314,14 @@ async list(options: SkillViewOptions = {}): Promise<SkillSummary[]>
 async snapshot(options: SkillViewOptions = {}): Promise<SkillCatalogSnapshot>
 
 /**
+ * The skill directories the registered providers read without a workspace. A consent over the writes that change a
+ * skill classifies a target against them, so the roots a deployment configures for its providers are the roots the
+ * consent reviews; a provider that names no roots contributes none.
+ * @returns the configured root paths of every provider that names them, deduplicated, in registration order.
+ */
+configuredRoots(): string[]
+
+/**
  * Load and validate the winning candidate, passing its opaque discovery locator back to the
  * provider. Cancellation is rechecked after selection, including cache hits, and raced against
  * loading so an uncooperative provider cannot hang the caller.

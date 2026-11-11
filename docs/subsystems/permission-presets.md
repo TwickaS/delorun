@@ -141,10 +141,14 @@ resolve(name: string): PresetSpec
 optionOf(name: string): PresetOption
 
 /**
- * Record a changed preset, then update each changed knob through its own
- * setter. Selecting the effective preset again appends nothing.
+ * Update each changed knob through its own setter, then record the changed
+ * preset. Selecting the effective preset again appends nothing. A mounted
+ * mode guard runs before anything is appended, so a refused switch appends
+ * nothing either and the session keeps the knobs it had.
  * @param session - the session the switch belongs to.
  * @param name - the preset to switch to; unknown names throw.
+ * @throws {SandboxModeRefusedError} when the mounted mode guard refuses the
+ *   preset's sandbox mode.
  */
 set(session: Session, name: string): void
 ```

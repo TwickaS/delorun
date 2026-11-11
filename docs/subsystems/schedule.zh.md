@@ -175,9 +175,11 @@ Shared management service; reads and management writes never activate a Session,
  * @param request - Title, prompt, recurrence, and delivery destination.
  * @param actorSessionId - Session of the acting Agent, or undefined for a human caller.
  * @param signal - Cancellation checked before the durable write begins, including after FIFO waits.
+ * @param approval - The person's answer to the composed consent's ask for this call, whose named preset becomes
+ *   the delivery baseline; omitted, the baseline is read from the target.
  * @returns The stored task. Cancellation does not roll back an in-flight write.
  */
-async create( request: ScheduleCreateRequest, actorSessionId?: SessionId, signal?: AbortSignal, ): Promise<ScheduleCatalogEntry>
+async create( request: ScheduleCreateRequest, actorSessionId?: SessionId, signal?: AbortSignal, approval?: ScheduleConsentApproval, ): Promise<ScheduleCatalogEntry>
 
 /**
  * Read one page of Host tasks without activating target Sessions.
@@ -250,6 +252,10 @@ async history(request: ScheduleDeliveryHistoryRequest): Promise<ScheduleDelivery
 
 /**
  * Update or delete one task for a human Remote caller; an invalid patch rejects with `schedule/input-invalid`.
+ *
+ * A Remote edit carries no consent approval, so it changes the task exactly as the caller asked and
+ * leaves the delivery baseline and any recorded refusal alone: re-approving a delivery is the
+ * consent's answer to name, not a side effect of a form submission.
  * @param request - Task identity and one update or delete operation.
  * @param signal - Cancellation checked before the durable write begins, including after FIFO waits.
  * @returns The updated task, the deletion outcome, or a non-mutating miss or conflict.
@@ -264,14 +270,53 @@ async history(request: ScheduleDeliveryHistoryRequest): Promise<ScheduleDelivery
  * @param request - Task identity and one update or delete operation.
  * @param actorSessionId - Session of the acting Agent, or undefined for a human caller.
  * @param signal - Cancellation checked before the durable write begins, including after FIFO waits.
+ * @param approval - The person's answer to the composed consent's ask for this edit; only an approved edit
+ *   re-captures the delivery baseline and settles a refusal the consent recorded.
  * @returns The updated task, the deletion outcome, or a non-mutating miss or conflict.
  */
-async edit( request: ScheduleEditRequest, actorSessionId?: SessionId, signal?: AbortSignal, ): Promise<ScheduleEditResult>
+async edit( request: ScheduleEditRequest, actorSessionId?: SessionId, signal?: AbortSignal, approval?: ScheduleConsentApproval, ): Promise<ScheduleEditResult>
 ```
 
 Types: [SessionId](core.zh.md)
 
 Source: [`packages/schedule/schedule/src/index.ts`](../../packages/schedule/schedule/src/index.ts)
+
+<a id="ctxscheduleconsent--scheduleconsentservice"></a>
+
+### `ctx.scheduleConsent` — `ScheduleConsentService`
+
+Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get('scheduleConsent')`: a deployment that composes no consent keeps upstream's approval text and delivery behaviour at every consumer. `@delo/plugin-schedule-consent` provides one when its `enabled` field is on.
+
+```ts cordis-catalog
+/**
+ * Name what one `schedule_create` or `schedule_edit` approval would create.
+ * The returned text joins the approval, and `undefined` adds nothing.
+ * @param schedule - the effect the approved call would create.
+ * @returns the text the approval states, or undefined to add nothing.
+ */
+nameEffect(schedule: ScheduleEffect): string | undefined
+
+/**
+ * The permission preset a chat opened with these creation values runs under, when the consent knows it better than
+ * the deployment default, such as a Workspace's own preset. Undefined, or an absent member, leaves the deployment
+ * default. The approval names this preset, the task stores it as its baseline, and a delivery that opens the chat
+ * is reviewed under it before the chat exists.
+ * @param create - the creation values of the chat a delivery would open.
+ * @returns the preset that chat runs under, or undefined to keep the deployment default.
+ */
+presetFor?(create: ScheduleSessionCreateSpec): string | undefined
+
+/**
+ * Review one due delivery before it wakes its Session, and before a target that opens its own Session creates it.
+ * Only an `allow` delivers; any other answer, a `refuse` without a reason included, refuses. A throw delivers
+ * nothing and leaves the task armed, and a manual run reports it as `schedule/consent-failed`.
+ * @param review - the facts of the due delivery.
+ * @returns `allow` to deliver, or `refuse` with the reason the refusal surfaces.
+ */
+reviewDelivery(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict
+```
+
+Source: [`packages/schedule/schedule/src/types.ts`](../../packages/schedule/schedule/src/types.ts)
 
 <a id="schedule-events"></a>
 

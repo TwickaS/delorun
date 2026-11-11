@@ -619,6 +619,25 @@ Types: [SandboxExecutionPolicy](sandbox.zh.md)
 
 Source: [`packages/fs/fs/src/index.ts`](../../packages/fs/fs/src/index.ts)
 
+<a id="ctxwriteconsent--writeconsentservice"></a>
+
+### `ctx.writeConsent` — `WriteConsentService`
+
+The optional consent service the mutating tools consult before a mutation.
+
+```ts cordis-catalog
+/**
+ * Classify one pending mutation.
+ * @param request - the tool, the target path and the tool's diff.
+ * @returns `{ required: true, note }` when the mutation needs consent (the
+ *   note names the instruction-layer effect and carries the diff), or
+ *   `{ required: false }`/undefined to let it proceed without asking.
+ */
+review(request: WriteConsentRequest): WriteConsentReview | undefined
+```
+
+Source: [`packages/fs/tool-fs/src/consent.ts`](../../packages/fs/tool-fs/src/consent.ts)
+
 <a id="fs-events"></a>
 
 ### `fs/*` events

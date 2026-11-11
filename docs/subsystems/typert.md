@@ -589,6 +589,22 @@ snapshotFor(principal: Principal): RemoteAccessBaseline
 
 Source: [`packages/api/remote-access/src/index.ts`](../../packages/api/remote-access/src/index.ts)
 
+<a id="ctxremoteanswerguard--remoteanswerguard"></a>
+
+### `ctx.remoteAnswerGuard` — `RemoteAnswerGuard`
+
+Decides whether one Peer's answer to a forwarded Remote event may apply. Without a provider every answer the Gateway accepts applies: an owner Peer's, or another Peer's whose access policy allows the event. The provider throws a `RemoteError` to refuse: the answer is then not applied, the event stays pending for the other Clients it was delivered to, and the answering Client receives the failure with its code and details. The Client reports a `LOOPBACK_REQUIRED` refusal as its `remote/answer-refused` event and keeps its event stream; any other failure ends that Client's event generation. A non-owner access policy that allows answering a forwarded waterfall, such as `event:approval/request`, needs a provider: without one, that Peer's answer applies as an owner's would, a granting answer included.
+
+```ts cordis-catalog
+/**
+ * Refuse an answer by throwing.
+ * @param answer - the answer and the Peer that gave it.
+ */
+check(answer: RemoteEventAnswer): void
+```
+
+Source: [`packages/api/gateway/src/types.ts`](../../packages/api/gateway/src/types.ts)
+
 <a id="ctxtypert--typertregistry"></a>
 
 ### `ctx.typert` — `TypertRegistry`

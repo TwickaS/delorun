@@ -277,8 +277,8 @@ export class SessionProjectionCache extends Service {
    * memory and its document from the medium, and drop the session's
    * write-behind bookkeeping so a pending throttled flush cannot write the
    * forgotten values back. This is the cache's only delete entry point; a
-   * caller uses it when the session's content must not stay on disk (a purge
-   * under C8), because a checkpoint row is the cache's copy of what the chat
+   * caller uses it when the session's content must not stay on disk (a session
+   * purge), because a checkpoint row is the cache's copy of what the chat
    * displayed.
    * @param id - the session whose record goes.
    * @returns whether a stored record was removed.

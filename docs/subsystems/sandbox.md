@@ -204,6 +204,14 @@ abstract confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortS
 
 Source: [`packages/sandbox/sandbox/src/index.ts`](../../packages/sandbox/sandbox/src/index.ts)
 
+<a id="ctxsandboxmodeguard--sandboxmodeguard"></a>
+
+### `ctx.sandboxModeGuard` — `SandboxModeGuard`
+
+The optional mode-switch guard a consent layer mounts on the context: it runs before a `sandbox/mode` event is appended and returns the refusal reason when the switch must not happen, or undefined to allow it.
+
+Source: [`packages/sandbox/sandbox-policy/src/session-mode.ts`](../../packages/sandbox/sandbox-policy/src/session-mode.ts)
+
 <a id="ctxsandboxpolicy--sandboxpolicyservice"></a>
 
 ### `ctx.sandboxPolicy` — `SandboxPolicyService`

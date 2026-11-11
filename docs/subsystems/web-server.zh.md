@@ -304,7 +304,9 @@ collectIndexInjections(peer: PeerScope): IndexInjection[]
 
 /**
  * Render one index.html body for one Peer: the structured injection table
- * first, then the raw `tapIndex` transforms over the result.
+ * first, then the raw `tapIndex` transforms over the result. While answering
+ * a request a listener gate passed with a nonce, every inline element the
+ * table renders carries that nonce.
  * @param html - the raw index.html body.
  * @param peer - the Peer the page speaks for.
  * @returns the transformed body.
@@ -400,6 +402,25 @@ Collect the structured index injection table for the page `peer` speaks for. Emi
  * @mode emit
  */
 'webserver/index-inject'(table: IndexInjection[], peer: PeerScope): void
+```
+
+Source: [`packages/host/webserver/src/index.ts`](../../packages/host/webserver/src/index.ts)
+
+<a id="webserverrequest--emit"></a>
+
+#### `webserver/request` — emit
+
+Observe one request or upgrade request the main listener received, before any route sees it. Listeners must not write a response; one that throws is logged and the request is routed regardless. An additional listener's gate decides its own requests.
+
+```ts cordis-catalog
+/**
+ * Observe one request or upgrade request the main listener received, before any route sees it. Listeners
+ * must not write a response; one that throws is logged and the request is routed regardless. An additional
+ * listener's gate decides its own requests.
+ * @param request - The incoming request.
+ * @mode emit
+ */
+'webserver/request'(request: IncomingMessage): void
 ```
 
 Source: [`packages/host/webserver/src/index.ts`](../../packages/host/webserver/src/index.ts)

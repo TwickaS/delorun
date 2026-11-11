@@ -2067,6 +2067,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'mcpAddConsent',
+    summary: 'Abstract add-time consent service.',
+    description: 'Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior).',
+    methods: [
+      {
+        signature: 'abstract review(command: McpServerCommand): Promise<McpConsentDecision>',
+        description: 'Review one configured server command before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, so the provider can let an accepted command through at once and ask again when the command it is shown differs from the one it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
+        parameters: [{ name: 'command', description: 'the server start under review.' }],
+        returns: '`allow: true` to start the server, or `allow: false` with the reason that leaves the server stopped.',
+      },
+    ],
+  },
+  {
     key: 'mcpResources',
     summary: 'Scoped resource access plus three tools shared by configured MCP servers.',
     description: 'Scoped resource access plus three tools shared by configured MCP servers.',
@@ -2199,8 +2212,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'set(session: Session, name: string): void',
-        description: 'Record a changed preset, then update each changed knob through its own setter. Selecting the effective preset again appends nothing.',
+        description: 'Update each changed knob through its own setter, then record the changed preset. Selecting the effective preset again appends nothing. A mounted mode guard runs before anything is appended, so a refused switch appends nothing either and the session keeps the knobs it had.',
         parameters: [{ name: 'session', description: 'the session the switch belongs to.' }, { name: 'name', description: 'the preset to switch to; unknown names throw.' }],
+        throws: ['{SandboxModeRefusedError} when the mounted mode guard refuses the preset\'s sandbox mode.'],
       },
     ],
   },
@@ -2582,6 +2596,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'remoteAnswerGuard',
+    summary: 'Decides whether one Peer\'s answer to a forwarded Remote event may apply.',
+    description: 'Decides whether one Peer\'s answer to a forwarded Remote event may apply. Without a provider every answer the Gateway accepts applies: an owner Peer\'s, or another Peer\'s whose access policy allows the event. The provider throws a `RemoteError` to refuse: the answer is then not applied, the event stays pending for the other Clients it was delivered to, and the answering Client receives the failure with its code and details. The Client reports a `LOOPBACK_REQUIRED` refusal as its `remote/answer-refused` event and keeps its event stream; any other failure ends that Client\'s event generation. A non-owner access policy that allows answering a forwarded waterfall, such as `event:approval/request`, needs a provider: without one, that Peer\'s answer applies as an owner\'s would, a granting answer included.',
+    methods: [
+      {
+        signature: 'check(answer: RemoteEventAnswer): void',
+        description: 'Refuse an answer by throwing.',
+        parameters: [{ name: 'answer', description: 'the answer and the Peer that gave it.' }],
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -2593,6 +2619,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the argv to spawn instead, plus the enforcement completeness the selected backend achieves for it.',
       },
     ],
+  },
+  {
+    key: 'sandboxModeGuard',
+    summary: 'The optional mode-switch guard a consent layer mounts on the context: it runs before a `sandbox/mode` event is appended and returns the refusal reason when the switch must not happen, or undefined to allow it.',
+    description: 'The optional mode-switch guard a consent layer mounts on the context: it runs before a `sandbox/mode` event is appended and returns the refusal reason when the switch must not happen, or undefined to allow it.',
+    methods: [],
   },
   {
     key: 'sandboxPolicy',
@@ -2657,9 +2689,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'The stored task. Cancellation does not roll back an in-flight write.',
       },
       {
-        signature: 'async create( request: ScheduleCreateRequest, actorSessionId?: SessionId, signal?: AbortSignal, ): Promise<ScheduleCatalogEntry>',
+        signature: 'async create( request: ScheduleCreateRequest, actorSessionId?: SessionId, signal?: AbortSignal, approval?: ScheduleConsentApproval, ): Promise<ScheduleCatalogEntry>',
         description: 'Create one task and record the acting Agent\'s Session as involved; the Remote form omits that Session.\n\nThe record is built from the clock reading taken before the request joins the serialized queue. A `session` target must exist and must not belong to a delegated child; a `new_once` target reserves its Session identity.',
-        parameters: [{ name: 'request', description: 'Title, prompt, recurrence, and delivery destination.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
+        parameters: [{ name: 'request', description: 'Title, prompt, recurrence, and delivery destination.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }, { name: 'approval', description: 'The person\'s answer to the composed consent\'s ask for this call, whose named preset becomes the delivery baseline; omitted, the baseline is read from the target.' }],
         returns: 'The stored task. Cancellation does not roll back an in-flight write.',
       },
       {
@@ -2712,15 +2744,40 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'edit\') async remoteEdit(request: ScheduleEditRequest, signal?: AbortSignal): Promise<ScheduleEditResult>',
-        description: 'Update or delete one task for a human Remote caller; an invalid patch rejects with `schedule/input-invalid`.',
+        description: 'Update or delete one task for a human Remote caller; an invalid patch rejects with `schedule/input-invalid`.\n\nA Remote edit carries no consent approval, so it changes the task exactly as the caller asked and leaves the delivery baseline and any recorded refusal alone: re-approving a delivery is the consent\'s answer to name, not a side effect of a form submission.',
         parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
         returns: 'The updated task, the deletion outcome, or a non-mutating miss or conflict.',
       },
       {
-        signature: 'async edit( request: ScheduleEditRequest, actorSessionId?: SessionId, signal?: AbortSignal, ): Promise<ScheduleEditResult>',
+        signature: 'async edit( request: ScheduleEditRequest, actorSessionId?: SessionId, signal?: AbortSignal, approval?: ScheduleConsentApproval, ): Promise<ScheduleEditResult>',
         description: 'Update or delete one task and record the acting Agent\'s Session as involved; the Remote form omits that Session.\n\nAn update applies every patch field in one write and recomputes the next occurrence when the rule changes or the task resumes. A supplied `expectedUpdatedAt` that differs from the stored value returns `schedule_conflict`.',
-        parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
+        parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }, { name: 'approval', description: 'The person\'s answer to the composed consent\'s ask for this edit; only an approved edit re-captures the delivery baseline and settles a refusal the consent recorded.' }],
         returns: 'The updated task, the deletion outcome, or a non-mutating miss or conflict.',
+      },
+    ],
+  },
+  {
+    key: 'scheduleConsent',
+    summary: 'Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get(\'scheduleConsent\')`: a deployment that composes no consent keeps upstream\'s approval text and delivery behaviour at every consumer.',
+    description: 'Optional consent seam over the Schedule tools, resolved opportunistically with `ctx.get(\'scheduleConsent\')`: a deployment that composes no consent keeps upstream\'s approval text and delivery behaviour at every consumer. `@delo/plugin-schedule-consent` provides one when its `enabled` field is on.',
+    methods: [
+      {
+        signature: 'nameEffect(schedule: ScheduleEffect): string | undefined',
+        description: 'Name what one `schedule_create` or `schedule_edit` approval would create. The returned text joins the approval, and `undefined` adds nothing.',
+        parameters: [{ name: 'schedule', description: 'the effect the approved call would create.' }],
+        returns: 'the text the approval states, or undefined to add nothing.',
+      },
+      {
+        signature: 'presetFor?(create: ScheduleSessionCreateSpec): string | undefined',
+        description: 'The permission preset a chat opened with these creation values runs under, when the consent knows it better than the deployment default, such as a Workspace\'s own preset. Undefined, or an absent member, leaves the deployment default. The approval names this preset, the task stores it as its baseline, and a delivery that opens the chat is reviewed under it before the chat exists.',
+        parameters: [{ name: 'create', description: 'the creation values of the chat a delivery would open.' }],
+        returns: 'the preset that chat runs under, or undefined to keep the deployment default.',
+      },
+      {
+        signature: 'reviewDelivery(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict',
+        description: 'Review one due delivery before it wakes its Session, and before a target that opens its own Session creates it. Only an `allow` delivers; any other answer, a `refuse` without a reason included, refuses. A throw delivers nothing and leaves the task armed, and a manual run reports it as `schedule/consent-failed`.',
+        parameters: [{ name: 'review', description: 'the facts of the due delivery.' }],
+        returns: '`allow` to deliver, or `refuse` with the reason the refusal surfaces.',
       },
     ],
   },
@@ -3001,6 +3058,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Durably checkpoint one live session NOW (all mandatory points call this; tests and carriers may too). The registry cut is snapshotted at this boundary (states are live references), then the session\'s record is replaced on the domain\'s write chain. NOT fail-soft — callers on the fail-soft paths contain it.',
         parameters: [{ name: 'session', description: 'the live session to checkpoint.' }],
         returns: 'resolution after durability and event emission.',
+      },
+      {
+        signature: 'async forget(id: SessionId): Promise<boolean>',
+        description: 'Forget one session\'s checkpoint: remove its record from the domain\'s memory and its document from the medium, and drop the session\'s write-behind bookkeeping so a pending throttled flush cannot write the forgotten values back. This is the cache\'s only delete entry point; a caller uses it when the session\'s content must not stay on disk (a session purge), because a checkpoint row is the cache\'s copy of what the chat displayed.',
+        parameters: [{ name: 'id', description: 'the session whose record goes.' }],
+        returns: 'whether a stored record was removed.',
       },
       {
         signature: 'coldSnapshot( meta: SessionHeader, inheritedEventCount: SessionLogOffset, events: readonly SessionEvent[], ): ProjectionSnapshot',
@@ -3511,6 +3574,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Observe the current invocation-neutral catalog and whether discovery completed within a stable revision. Incomplete observations are never cached, allowing consumers to retain last-good state and retry on their next request boundary.',
         parameters: [{ name: 'options', description: 'view options; `scope` selects the viewing agent\'s layers, `cwd` selects project roots, and `signal` cancels discovery.' }],
         returns: 'sorted summaries plus discovery-completeness state.',
+      },
+      {
+        signature: 'configuredRoots(): string[]',
+        description: 'The skill directories the registered providers read without a workspace. A consent over the writes that change a skill classifies a target against them, so the roots a deployment configures for its providers are the roots the consent reviews; a provider that names no roots contributes none.',
+        parameters: [],
+        returns: 'the configured root paths of every provider that names them, deduplicated, in registration order.',
       },
       {
         signature: 'async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined>',
@@ -4487,7 +4556,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'renderIndex(html: string, peer: PeerScope): string',
-        description: 'Render one index.html body for one Peer: the structured injection table first, then the raw `tapIndex` transforms over the result.',
+        description: 'Render one index.html body for one Peer: the structured injection table first, then the raw `tapIndex` transforms over the result. While answering a request a listener gate passed with a nonce, every inline element the table renders carries that nonce.',
         parameters: [{ name: 'html', description: 'the raw index.html body.' }, { name: 'peer', description: 'the Peer the page speaks for.' }],
         returns: 'the transformed body.',
       },
@@ -4758,6 +4827,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Check out a removed worktree again at its recorded directory: its branch when the branch still exists, otherwise a new branch of the same name at `baseCommit`. Only the missing target\'s unlocked registration is removed, and an existing directory fails. Changes that were never committed are not recovered. Checkout disables configured clean, smudge, and process filters, as creation does. The calling Session\'s working directory does not change. Failures may retain newly allocated Git/filesystem artifacts.',
         parameters: [{ name: 'agent', description: 'caller whose sandbox policy confines the commands.' }, { name: 'request', description: 'recorded directory, branch, base commit, and source repository root.' }, { name: 'signal', description: 'cancellation of the restoration.' }, { name: 'onPhase', description: 'receives each stage before it begins; it must not throw.' }],
         returns: 'the directory and whether the branch was created again.',
+      },
+    ],
+  },
+  {
+    key: 'writeConsent',
+    summary: 'The optional consent service the mutating tools consult before a mutation.',
+    description: 'The optional consent service the mutating tools consult before a mutation.',
+    methods: [
+      {
+        signature: 'review(request: WriteConsentRequest): WriteConsentReview | undefined',
+        description: 'Classify one pending mutation.',
+        parameters: [{ name: 'request', description: 'the tool, the target path and the tool\'s diff.' }],
+        returns: '`{ required: true, note }` when the mutation needs consent (the note names the instruction-layer effect and carries the diff), or `{ required: false }`/undefined to let it proceed without asking.',
       },
     ],
   },
@@ -5430,6 +5512,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'table', description: 'Mutable row table; listeners append in activation order.' }, { name: 'peer', description: 'The Peer the rendered page speaks for.' }],
   },
   {
+    name: 'webserver/request',
+    mode: 'emit',
+    signature: '\'webserver/request\'(request: IncomingMessage): void',
+    summary: 'Observe one request or upgrade request the main listener received, before any route sees it.',
+    description: 'Observe one request or upgrade request the main listener received, before any route sees it. Listeners must not write a response; one that throws is logged and the request is routed regardless. An additional listener\'s gate decides its own requests.',
+    parameters: [{ name: 'request', description: 'The incoming request.' }],
+  },
+  {
     name: 'workflow/agent-end',
     mode: 'emit',
     signature: '\'workflow/agent-end\'(info: WorkflowRunInfo, agent: WorkflowAgentEndInfo): void',
@@ -5674,6 +5764,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ApiSessionAgentResult = {\n    readonly agent: Agent;\n} | {\n    readonly error: ApiSessionAgentError;\n};',
   },
   {
+    name: 'ApprovalGrant',
+    declaration: 'export type ApprovalGrant = \'full-access\' | \'workspace-management\';',
+  },
+  {
     name: 'ApprovalOutcome',
     declaration: 'export type ApprovalOutcome = \'allowed-once\' | \'rejected\' | \'cancelled\' | \'unavailable\';',
   },
@@ -5687,7 +5781,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ApprovalRequestEvent',
-    declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly signal?: AbortSignal;\n}',
+    declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly grants?: ApprovalGrant;\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'ArchiveSessionOptions',
@@ -6027,7 +6121,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ConnectionIndexRequest',
-    declaration: 'export interface ConnectionIndexRequest extends ConnectionTrustRequest {\n    readonly method?: string | undefined;\n    readonly url?: string | undefined;\n}',
+    declaration: 'export interface ConnectionIndexRequest extends ConnectionTrustRequest {\n}',
   },
   {
     name: 'ConnectionRpcFailure',
@@ -6039,7 +6133,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ConnectionTrustRequest',
-    declaration: 'export interface ConnectionTrustRequest {\n    readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>;\n}',
+    declaration: 'export interface ConnectionTrustRequest {\n    readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>;\n    readonly rawHeaders?: readonly string[] | undefined;\n    readonly method?: string | undefined;\n    readonly url?: string | undefined;\n}',
   },
   {
     name: 'ContentBlockMap',
@@ -7206,12 +7300,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type MatcherValue = string | number | boolean | null | RegExp | readonly (string | number | boolean | null)[];',
   },
   {
+    name: 'McpConsentDecision',
+    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
+  },
+  {
     name: 'McpResourceProvider',
     declaration: 'export interface McpResourceProvider {\n    request(request: McpResourceRequest, exec: ToolExecution): Promise<JsonValue>;\n}',
   },
   {
     name: 'McpResourceRequest',
     declaration: 'export type McpResourceRequest = {\n    method: \'resources/list\' | \'resources/templates/list\';\n    cursor?: string;\n} | {\n    method: \'resources/read\';\n    uri: string;\n};',
+  },
+  {
+    name: 'McpServerCommand',
+    declaration: 'export interface McpServerCommand {\n    readonly serverName: string;\n    readonly command: string;\n    readonly args: readonly string[];\n}',
   },
   {
     name: 'Mergeability',
@@ -7691,7 +7793,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PreToolDecision',
-    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n    info?: ToolErrorInfo;\n} | {\n    kind: \'cancel\';\n} | {\n    kind: \'ask\';\n    reason?: string;\n    displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n};',
+    declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n    info?: ToolErrorInfo;\n} | {\n    kind: \'cancel\';\n} | {\n    kind: \'ask\';\n    reason?: string;\n    displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    grants?: ApprovalGrant;\n};',
   },
   {
     name: 'Principal',
@@ -8034,6 +8136,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type RemoteEventAgentId = Branded<\'RemoteEventAgentId\'>;',
   },
   {
+    name: 'RemoteEventAnswer',
+    declaration: 'export interface RemoteEventAnswer {\n    readonly peer: PeerScope;\n    readonly event: string;\n    readonly request: object;\n    readonly value: unknown;\n}',
+  },
+  {
     name: 'RemoteEventHostInfo',
     declaration: 'export interface RemoteEventHostInfo {\n    readonly home: string;\n}',
   },
@@ -8183,11 +8289,19 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ScheduleCatalogEntry',
-    declaration: 'export type ScheduleCatalogEntry = ScheduleRecord & {\n    readonly target: ScheduleTarget;\n    readonly involvedSessionIds: SessionId[];\n    readonly status: \'active\' | \'paused\' | \'ended\';\n    readonly createdAt?: string;\n    readonly updatedAt?: string;\n    readonly executionActive?: true;\n    readonly deliveryFloorEndsAt?: string;\n    readonly lastDelivery?: ScheduleDeliveryReceipt;\n};',
+    declaration: 'export type ScheduleCatalogEntry = ScheduleRecord & {\n    readonly target: ScheduleTarget;\n    readonly involvedSessionIds: SessionId[];\n    readonly status: \'active\' | \'paused\' | \'ended\';\n    readonly createdAt?: string;\n    readonly updatedAt?: string;\n    readonly executionActive?: true;\n    readonly deliveryFloorEndsAt?: string;\n    readonly lastDelivery?: ScheduleDeliveryReceipt;\n    readonly consentRefusal?: ScheduleConsentRefusal;\n};',
   },
   {
     name: 'ScheduleConflictResult',
     declaration: 'export interface ScheduleConflictResult {\n    readonly id: ScheduleId;\n    readonly code: \'schedule_conflict\';\n}',
+  },
+  {
+    name: 'ScheduleConsentApproval',
+    declaration: 'export interface ScheduleConsentApproval {\n    readonly preset: string | undefined;\n}',
+  },
+  {
+    name: 'ScheduleConsentRefusal',
+    declaration: 'export interface ScheduleConsentRefusal {\n    readonly reason: string;\n    readonly refusedAt: string;\n}',
   },
   {
     name: 'ScheduleCreateRequest',
@@ -8226,12 +8340,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ScheduleDeliveryRecord extends ScheduleDeliveryReceipt {\n    readonly prompt?: string;\n}',
   },
   {
+    name: 'ScheduleDeliveryReview',
+    declaration: 'export interface ScheduleDeliveryReview {\n    readonly creationPreset: string | undefined;\n    readonly currentPreset: string | undefined;\n    readonly targetSessionId: string;\n}',
+  },
+  {
+    name: 'ScheduleDeliveryVerdict',
+    declaration: 'export type ScheduleDeliveryVerdict = {\n    readonly kind: \'allow\';\n} | {\n    readonly kind: \'refuse\';\n    readonly reason: string;\n};',
+  },
+  {
     name: 'ScheduleEditRequest',
     declaration: 'export type ScheduleEditRequest = {\n    readonly id: ScheduleId;\n    readonly action: \'update\';\n    readonly patch: SchedulePatch;\n    readonly expectedUpdatedAt?: string | null;\n} | {\n    readonly id: ScheduleId;\n    readonly action: \'delete\';\n    readonly expectedUpdatedAt?: string | null;\n};',
   },
   {
     name: 'ScheduleEditResult',
     declaration: 'export type ScheduleEditResult = ScheduleCatalogEntry | Extract<ScheduleDeleteResult, {\n    readonly deleted: true;\n}> | ScheduleNotFoundResult | ScheduleConflictResult;',
+  },
+  {
+    name: 'ScheduleEffect',
+    declaration: 'export interface ScheduleEffect {\n    readonly tool: \'schedule_create\' | \'schedule_edit\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly recurrence: string;\n    readonly targetSessionId: string | undefined;\n    readonly targetTitle: string | undefined;\n    readonly targetCwd: string | undefined;\n    readonly targetPreset: string | undefined;\n}',
   },
   {
     name: 'ScheduleExecutionPendingResult',
@@ -9143,7 +9269,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillProvider',
-    declaration: 'export interface SkillProvider {\n    readonly name: string;\n    readonly list: (options: SkillLookupOptions) => Promise<readonly SkillCandidate[] | SkillProviderObservation>;\n    readonly get: (candidate: SkillCandidate, options: SkillLookupOptions) => Promise<SkillDefinition | undefined>;\n}',
+    declaration: 'export interface SkillProvider {\n    readonly name: string;\n    readonly list: (options: SkillLookupOptions) => Promise<readonly SkillCandidate[] | SkillProviderObservation>;\n    readonly get: (candidate: SkillCandidate, options: SkillLookupOptions) => Promise<SkillDefinition | undefined>;\n    readonly configuredRoots?: () => readonly string[];\n}',
   },
   {
     name: 'SkillProviderControl',
@@ -10099,7 +10225,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WebGateDecision',
-    declaration: 'export type WebGateDecision = {\n    readonly kind: \'pass\';\n    readonly peer?: PeerScope;\n    readonly headers?: OutgoingHttpHeaders;\n    readonly only?: {\n        readonly route: {\n            readonly kind: WebRouteKind;\n            readonly path: string;\n        };\n        readonly refusal: WebGateRefusal;\n    };\n} | ({\n    readonly kind: \'refuse\';\n} & WebGateRefusal);',
+    declaration: 'export type WebGateDecision = {\n    readonly kind: \'pass\';\n    readonly peer?: PeerScope;\n    readonly headers?: OutgoingHttpHeaders;\n    readonly nonce?: string;\n    readonly only?: {\n        readonly route: {\n            readonly kind: WebRouteKind;\n            readonly path: string;\n        };\n        readonly refusal: WebGateRefusal;\n    };\n} | ({\n    readonly kind: \'refuse\';\n} & WebGateRefusal);',
   },
   {
     name: 'WebGateRefusal',
@@ -10404,6 +10530,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceView',
     declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
+    name: 'WriteConsentDiff',
+    declaration: 'export type WriteConsentDiff = string | {\n    old: string | null;\n    new: string;\n};',
+  },
+  {
+    name: 'WriteConsentRequest',
+    declaration: 'export interface WriteConsentRequest {\n    tool: WriteConsentTool;\n    path: string;\n    diff?: WriteConsentDiff;\n}',
+  },
+  {
+    name: 'WriteConsentReview',
+    declaration: 'export type WriteConsentReview = {\n    required: false;\n} | {\n    required: true;\n    note: string;\n    grants?: ApprovalGrant;\n};',
+  },
+  {
+    name: 'WriteConsentTool',
+    declaration: 'export type WriteConsentTool = string;',
   },
 ]
 

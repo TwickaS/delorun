@@ -662,13 +662,15 @@ export type ScheduleDeliveryVerdict =
 /**
  * Optional consent seam over the Schedule tools, resolved opportunistically with
  * `ctx.get('scheduleConsent')`: a deployment that composes no consent keeps
- * upstream's approval text and delivery behaviour at every consumer. Delo's C16
- * switch `scheduled_task_consent` mounts one.
+ * upstream's approval text and delivery behaviour at every consumer.
+ * `@delo/plugin-schedule-consent` provides one when its `enabled` field is on.
  */
 export interface ScheduleConsentService {
   /**
    * Name what one `schedule_create` or `schedule_edit` approval would create.
    * The returned text joins the approval, and `undefined` adds nothing.
+   * @param schedule - the effect the approved call would create.
+   * @returns the text the approval states, or undefined to add nothing.
    */
   nameEffect(schedule: ScheduleEffect): string | undefined
   /**
@@ -676,12 +678,16 @@ export interface ScheduleConsentService {
    * the deployment default, such as a Workspace's own preset. Undefined, or an absent member, leaves the deployment
    * default. The approval names this preset, the task stores it as its baseline, and a delivery that opens the chat
    * is reviewed under it before the chat exists.
+   * @param create - the creation values of the chat a delivery would open.
+   * @returns the preset that chat runs under, or undefined to keep the deployment default.
    */
   presetFor?(create: ScheduleSessionCreateSpec): string | undefined
   /**
    * Review one due delivery before it wakes its Session, and before a target that opens its own Session creates it.
    * Only an `allow` delivers; any other answer, a `refuse` without a reason included, refuses. A throw delivers
    * nothing and leaves the task armed, and a manual run reports it as `schedule/consent-failed`.
+   * @param review - the facts of the due delivery.
+   * @returns `allow` to deliver, or `refuse` with the reason the refusal surfaces.
    */
   reviewDelivery(review: ScheduleDeliveryReview): ScheduleDeliveryVerdict
 }
