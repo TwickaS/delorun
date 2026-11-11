@@ -84,10 +84,36 @@ export function parseOptions<T extends NonNullable<ParseArgsConfig['options']>>(
   try {
     return parseArgs({ args: [...args], options, strict: true, allowPositionals: false }).values
   } catch (error) {
-    // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
-    if (error instanceof TypeError && (error as NodeJS.ErrnoException).code?.startsWith('ERR_PARSE_ARGS') === true) {
-      throw new CliError(EXIT.usage, `delorun${command === '' ? '' : ` ${command}`}: ${error.message}`)
-    }
-    throw error
+    throw usageError(command, error)
+  }
+}
+
+/**
+ * The usage error for parseArgs's refusal of a command line.
+ * @param command - the command's name, for the message; empty for bare `delorun`.
+ * @param error - what parseArgs threw.
+ * @returns a {@link CliError} with the usage code for an unknown or malformed option; any other error unchanged.
+ */
+function usageError(command: string, error: unknown): unknown {
+  // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
+  if (error instanceof TypeError && (error as NodeJS.ErrnoException).code?.startsWith('ERR_PARSE_ARGS') === true) {
+    return new CliError(EXIT.usage, `delorun${command === '' ? '' : ` ${command}`}: ${error.message}`)
+  }
+  return error
+}
+
+/**
+ * Parse a command's options strictly and keep its positional arguments, reporting a wrong option as a usage error.
+ * @param command - the command's name, for the message.
+ * @param args - the arguments.
+ * @param options - the options it takes.
+ * @returns the parsed values and the positional arguments, in order.
+ * @throws {CliError} with the usage code for an unknown or malformed option.
+ */
+export function parseCommandLine<T extends NonNullable<ParseArgsConfig['options']>>(command: string, args: readonly string[], options: T): ReturnType<typeof parseArgs<{ args: string[], options: T, strict: true, allowPositionals: true }>> {
+  try {
+    return parseArgs({ args: [...args], options, strict: true, allowPositionals: true })
+  } catch (error) {
+    throw usageError(command, error)
   }
 }

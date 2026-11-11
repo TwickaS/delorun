@@ -4,7 +4,8 @@
  * ([package manager](./package-manager.ts)); upstream's parser refuses the desktop app's profile for
  * `plugin`, as it does for `dsh`. `delorun headless …` boots upstream's `headless` profile through Delo's composition
  * ([headless](./headless.ts)), not through upstream's command line.
- * `delorun plugin check` and `new` are Delo's own ([plugin check](./plugin-check.ts), [plugin new](./plugin-new/index.ts)).
+ * `delorun plugin check`, `new` and `dev` are Delo's own ([plugin check](./plugin-check.ts),
+ * [plugin new](./plugin-new/index.ts), [plugin dev](./plugin-dev.ts)).
  *
  * `delorun plugin` without `--profile` manages the CLI profile every `delorun` command uses, `DELO_PROFILE` or
  * `default`, as if `--profile <that name>` led its arguments; upstream's `dsh plugin` requires the option.
@@ -36,6 +37,7 @@ import { runUpstreamProfile, upstreamDependencies } from './start.ts'
 import { shippedPackageManager } from './package-manager.ts'
 import { capturesOutput, capturingPackageManager, decideBuilds, takeAllowBuild, takeCapture, terminalConfirm, type ConfirmBuild } from './plugin-builds.ts'
 import { runPluginCheck } from './plugin-check.ts'
+import { realDevDependencies, runPluginDev } from './plugin-dev.ts'
 import { runPluginNew } from './plugin-new/index.ts'
 import { printable } from './terminal-text.ts'
 
@@ -135,17 +137,19 @@ export async function plugin(args: readonly string[], context: CommandContext, r
 
 /**
  * `delorun plugin [--profile <name>] <pnpm-args…>`: upstream's plugin management for the CLI profile;
- * `check <directory>` and `new <name>` are Delo's own and handle their options themselves.
+ * `check <directory>`, `new <name>` and `dev <folder>` are Delo's own and handle their options themselves.
  */
 export const pluginCommand: CliCommand = {
   name: 'plugin',
-  summary: 'Manage a profile\'s plugins, as dsh plugin does; new and check help you write one',
+  summary: 'Manage a profile\'s plugins, as dsh plugin does; new, dev and check help you write one',
   run: async (args, context) => {
     switch (args[0]) {
       case 'check':
         return runPluginCheck(args.slice(1), context)
       case 'new':
         return runPluginNew(args.slice(1), context)
+      case 'dev':
+        return runPluginDev(args.slice(1), context, realDevDependencies(context, plugin))
       default:
         return plugin(args, context)
     }

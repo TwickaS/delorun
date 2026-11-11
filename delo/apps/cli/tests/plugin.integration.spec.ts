@@ -146,6 +146,14 @@ describe('a build pnpm refuses', () => {
   })
 })
 
+describe('the plugin command', () => {
+  it('sends check, new and dev to Delo\'s own commands, which refuse a wrong command line before any profile changes', async () => {
+    await expect(pluginCommand.run(['check'], context)).rejects.toThrow('usage: delorun plugin check <directory>')
+    await expect(pluginCommand.run(['dev'], context)).rejects.toThrow('usage: delorun plugin dev <folder>')
+    expect(existsSync(join(deloHome, 'profiles'))).toBe(false)
+  })
+})
+
 describe('the wrapper that keeps pnpm\'s output', () => {
   it('passes the package manager\'s output through, keeps a copy and ends with its exit code', () => {
     const file = join(osHome, 'out.log')

@@ -22,7 +22,7 @@
  * | `delorun devices list \| approve \| remove <id> \| code` | the devices this home trusts, managed at this computer (contract C5; [devices](./devices/command.ts)) |
  * | `delorun --version [--json]` | Delo's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands for the CLI profile, with a build approval for `plugin` ([upstream](./upstream.ts)) |
- * | `delorun plugin new <name>`, `plugin check <directory>` | a new plugin package, and what a plugin's version ranges admit ([upstream](./upstream.ts)) |
+ * | `delorun plugin new <name>`, `plugin dev <folder>`, `plugin check <directory>` | a new plugin package, the author's reload loop, and what a plugin's version ranges admit ([upstream](./upstream.ts)) |
  *
  * Every invocation but `--help` and `--version` first prunes the home's expired operational logs (contract C20;
  * [startup pruning](./logs/startup.ts)), and every one exports Delo's version as `DELO_VERSION` before any
