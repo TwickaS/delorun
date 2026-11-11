@@ -8,9 +8,9 @@
  * The refusal matrix is Delo's contract: loopback, link-local, RFC1918 private,
  * unique-local, shared (carrier-grade NAT), multicast and reserved destinations,
  * and the unspecified address, are refused; every other address is allowed. An
- * IPv6 destination that reaches an IPv4 address — mapped, compatible or NAT64 —
- * is classified as that IPv4 address, so the translator is no way around the
- * matrix. An address the classifier cannot parse is refused too — a guard that
+ * IPv6 destination that reaches an IPv4 address — mapped, compatible, NAT64,
+ * 6to4 or Teredo — is classified as that IPv4 address, so the translator or
+ * tunnel is no way around the matrix. An address the classifier cannot parse is refused too — a guard that
  * cannot tell where a connection would go must not wave it through.
  *
  * @module @delo/plugin-fetch-guard/guard
@@ -22,7 +22,7 @@ export type FetchGuardRefusalCode =
   | 'loopback'
   /** A link-local address: `169.254.0.0/16` or `fe80::/10`. */
   | 'link-local'
-  /** An RFC1918 private address: `10/8`, `172.16/12` or `192.168/16`. */
+  /** An RFC1918 private address, `10/8`, `172.16/12` or `192.168/16`, or a deprecated IPv6 site-local address, `fec0::/10`. */
   | 'private'
   /** An IPv6 unique-local address: `fc00::/7`. */
   | 'unique-local'
@@ -30,7 +30,10 @@ export type FetchGuardRefusalCode =
   | 'shared'
   /** A multicast address: `224.0.0.0/4` or `ff00::/8`. */
   | 'multicast'
-  /** A reserved address: `240.0.0.0/4`, which holds the broadcast address `255.255.255.255`. */
+  /**
+   * A reserved address: `240.0.0.0/4`, which holds the broadcast address `255.255.255.255`, or an IPv6
+   * IPv4-translated address, `::ffff:0:0:0/96`.
+   */
   | 'reserved'
   /** The unspecified address, `0.0.0.0` or `::`, which names no destination at all. */
   | 'unspecified'
@@ -178,35 +181,51 @@ function parseIpv6(address: string): Uint8Array | undefined {
 
 /**
  * The refusal of one IPv6 address under the matrix: the unspecified address
- * (`::`, including `::0.0.0.0`), `::1`, `fc00::/7`, `fe80::/10` and `ff00::/8`
- * are refused. An IPv4-mapped (`::ffff:a.b.c.d`), IPv4-compatible (`::a.b.c.d`)
- * or NAT64 (`64:ff9b::a.b.c.d`) destination connects as the IPv4 address its low
- * half spells, in hex or dotted quad alike, so it is classified as that IPv4
- * address — the `::1` check runs first, because `::1` and `::0.0.0.1` are one
- * address and `0.0.0.1` alone would be allowed. Every other address is allowed.
+ * (`::`, including `::0.0.0.0`), `::1`, `fc00::/7`, `fe80::/10`, the deprecated
+ * site-local `fec0::/10`, the IPv4-translated `::ffff:0:0:0/96` and `ff00::/8`
+ * are refused. A destination that reaches an IPv4 address is classified as that
+ * IPv4 address, in hex or dotted quad alike: IPv4-mapped (`::ffff:a.b.c.d`),
+ * IPv4-compatible (`::a.b.c.d`), well-known NAT64 (`64:ff9b::/96`) and
+ * local-use NAT64 (`64:ff9b:1::/48`) by their low 32 bits, 6to4 (`2002::/16`) by
+ * the 32 bits after the prefix, and Teredo (`2001::/32`) by its client address,
+ * the inverted low 32 bits. The `::1` check runs first, because `::1` and
+ * `::0.0.0.1` are one address and `0.0.0.1` alone would be allowed. Every other
+ * address is allowed.
  * @param bytes - the 16 bytes of the address.
  * @returns the refusal code, or undefined when the address is allowed.
  */
 function ipv6Refusal(bytes: Uint8Array): FetchGuardRefusalCode | undefined {
-  const zero = (from: number, to: number): boolean => bytes.slice(from, to).every(byte => byte === 0)
-  const lowHalf = (): FetchGuardRefusalCode | undefined => ipv4Refusal([bytes[12] ?? 0, bytes[13] ?? 0, bytes[14] ?? 0, bytes[15] ?? 0])
+  const byte = (at: number): number => bytes[at] ?? 0
+  const zero = (from: number, to: number): boolean => bytes.slice(from, to).every(value => value === 0)
+  const embedded = (at: number, invert = false): FetchGuardRefusalCode | undefined =>
+    ipv4Refusal([0, 1, 2, 3].map(offset => (invert ? ~byte(at + offset) : byte(at + offset)) & 0xff))
   // `::` names no destination, and `::0.0.0.0` spells the same address. The
   // check runs before the IPv4-compatible branch, whose `!zero(12, 16)` test
   // would otherwise let an all-zero low half fall through.
   if (zero(0, 16)) return 'unspecified'
-  if (zero(0, 15) && bytes[15] === 1) return 'loopback'
-  if (zero(0, 10) && bytes[10] === 0xff && bytes[11] === 0xff) return lowHalf()
-  // `64:ff9b::/96` is the well-known NAT64 prefix: a v6-only network reaches the
-  // IPv4 address its low 32 bits spell through the translator. Classifying that
-  // address is what keeps the translator from being a way around the matrix — a
-  // NAT64 destination to a refused address is refused — while a NAT64
-  // destination to a public one stays reachable, which is how such a network
-  // reaches the IPv4 web at all.
-  if (bytes[0] === 0x00 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b && zero(4, 12)) return lowHalf()
-  if (zero(0, 12) && !zero(12, 16)) return lowHalf()
-  if (((bytes[0] ?? 0) & 0xfe) === 0xfc) return 'unique-local'
-  if ((bytes[0] ?? 0) === 0xfe && ((bytes[1] ?? 0) & 0xc0) === 0x80) return 'link-local'
-  if ((bytes[0] ?? 0) === 0xff) return 'multicast'
+  if (zero(0, 15) && byte(15) === 1) return 'loopback'
+  if (zero(0, 10) && byte(10) === 0xff && byte(11) === 0xff) return embedded(12)
+  // `::ffff:0:a.b.c.d` is the IPv4-translated form of stateless translation
+  // (RFC 2765), which names no host a fetch could reach directly.
+  if (zero(0, 8) && byte(8) === 0xff && byte(9) === 0xff && zero(10, 12)) return 'reserved'
+  // `64:ff9b::/96` is the well-known NAT64 prefix and `64:ff9b:1::/48` the
+  // local-use one (RFC 8215), deployed as a /96 whose low 32 bits are the IPv4
+  // address: a v6-only network reaches that address through the translator.
+  // Classifying it keeps the translator from being a way around the matrix,
+  // while a NAT64 destination to a public address stays reachable, which is
+  // how such a network reaches the IPv4 web at all.
+  const nat64 = byte(0) === 0x00 && byte(1) === 0x64 && byte(2) === 0xff && byte(3) === 0x9b
+  if (nat64 && zero(4, 12)) return embedded(12)
+  if (nat64 && byte(4) === 0x00 && byte(5) === 0x01) return embedded(12)
+  // 6to4 (`2002::/16`) tunnels to the IPv4 address in the 32 bits after the prefix.
+  if (byte(0) === 0x20 && byte(1) === 0x02) return embedded(2)
+  // Teredo (`2001::/32`) delivers to the client address, stored inverted in the low 32 bits.
+  if (byte(0) === 0x20 && byte(1) === 0x01 && zero(2, 4)) return embedded(12, true)
+  if (zero(0, 12) && !zero(12, 16)) return embedded(12)
+  if ((byte(0) & 0xfe) === 0xfc) return 'unique-local'
+  if (byte(0) === 0xfe && (byte(1) & 0xc0) === 0x80) return 'link-local'
+  if (byte(0) === 0xfe && (byte(1) & 0xc0) === 0xc0) return 'private'
+  if (byte(0) === 0xff) return 'multicast'
   return undefined
 }
 

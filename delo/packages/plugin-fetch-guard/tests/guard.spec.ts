@@ -52,6 +52,22 @@ describe('the refusal matrix', () => {
     ['64:ff9b::127.0.0.1', 'loopback'],
     ['64:ff9b::100.64.0.1', 'shared'],
     ['64:ff9b::255.255.255.255', 'reserved'],
+    // 64:ff9b:1::/48 is the local-use NAT64 prefix, deployed as a /96.
+    ['64:ff9b:1::a00:1', 'private'],
+    ['64:ff9b:1:ab:cd::127.0.0.1', 'loopback'],
+    // 6to4 tunnels to the IPv4 address after 2002::/16.
+    ['2002:0a00:0001::', 'private'],
+    ['2002:7f00:1::1', 'loopback'],
+    ['2002:a9fe:a9fe::', 'link-local'],
+    // Teredo, here through the documentation server 192.0.2.1, delivers to its client address, the inverted
+    // low 32 bits, here a private and a loopback address.
+    ['2001:0:c000:201:8000:63bf:f5ff:fffe', 'private'],
+    ['2001::80ff:fffe', 'loopback'],
+    // fec0::/10 is the deprecated site-local range; ::ffff:0:0:0/96 is IPv4-translated.
+    ['fec0::1', 'private'],
+    ['feff:ffff::1', 'private'],
+    ['::ffff:0:192.0.2.10', 'reserved'],
+    ['::ffff:0:a00:5', 'reserved'],
     ['not-an-address', 'unclassifiable'],
     ['1.2.3', 'unclassifiable'],
     ['300.1.1.1', 'unclassifiable'],
@@ -79,6 +95,10 @@ describe('the refusal matrix', () => {
     // A NAT64 destination whose translator would reach a public address stays
     // reachable: that is how a v6-only network reaches the IPv4 web at all.
     ['64:ff9b::203.0.113.10'],
+    ['64:ff9b:1::203.0.113.10'],
+    ['2002:cb00:710a::1'],
+    // A Teredo client at 203.0.113.10, stored inverted as 0x34ff8ef5.
+    ['2001:0:c000:201:8000:63bf:34ff:8ef5'],
   ] as const)('allows the public-looking address %s', (address) => {
     expect(classifyAddress(address)).toBeUndefined()
   })

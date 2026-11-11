@@ -195,6 +195,66 @@
       "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
       "value": "223.255.255.255",
       "reason": "The web_fetch guard refuses the multicast range (B4); these boundary addresses prove the widened range's edges are not refused by mistake, not a deployment address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/README.md",
+      "value": "2001::",
+      "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address, named in its refusal matrix; protocol prefixes, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/README.md",
+      "value": "2002::",
+      "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address, named in its refusal matrix; protocol prefixes, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/src/guard.ts",
+      "value": "2001::",
+      "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address; protocol prefixes, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/src/guard.ts",
+      "value": "2002::",
+      "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address; protocol prefixes, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2001:0:c000:201:8000:63bf:34ff:8ef5",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2001:0:c000:201:8000:63bf:f5ff:fffe",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2001::80ff:fffe",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2002:0a00:0001::",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2002:7f00:1::1",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2002::",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2002:a9fe:a9fe::",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/tests/guard.spec.ts",
+      "value": "2002:cb00:710a::1",
+      "reason": "The web_fetch guard classifies 6to4 and Teredo destinations by their embedded IPv4 address; these fixtures embed documentation, private or loopback IPv4 addresses and are the refusal matrix itself, not a deployment's address."
     }
   ]
 }
