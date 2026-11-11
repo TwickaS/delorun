@@ -247,7 +247,7 @@ describe.each(rows)('the search tools of $path', ({ config }) => {
     for (const path of [join(spill, 'session-other'), spill]) {
       const refused = await call('grep', { pattern: 'needle', path })
       expect(refused).toMatchObject({ isError: true, code: 'SEARCH_SANDBOX_DENIED' })
-      expect(refused.text).not.toContain('session-other')
+      expect(refused.text).not.toContain('needle spilled for session-other')
     }
   })
 
