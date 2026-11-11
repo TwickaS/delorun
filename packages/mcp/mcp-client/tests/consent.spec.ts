@@ -2,7 +2,7 @@
  * Tests for the optional `mcpAddConsent` seam: the add-time consent a mounted
  * service runs before a stdio server's command starts, the start it is shown
  * (command, arguments, working directory and environment, with the executable
- * path and working directory they resolve to), the spawn of the reviewed
+ * path, Windows command shell and working directory they resolve to), the spawn of the reviewed
  * paths, and the lookup that waits for a declared provider whatever the order
  * of the loader's rows. Isolated file so the vi.mock of the MCP SDK doesn't
  * pollute other test suites.
@@ -244,6 +244,7 @@ describe('the optional mcpAddConsent seam', () => {
       cwd: '',
       resolvedCommand: join(tree.a, 'bin', 'tool'),
       resolvedCwd: tree.a,
+      resolvedShell: undefined,
       reason: 'refused',
     })
     expect(mockConnect).not.toHaveBeenCalled()
@@ -324,6 +325,25 @@ describe('the optional mcpAddConsent seam', () => {
     expect(JSON.stringify(Object.entries(refusal))).not.toContain('secret-value-123')
     expect(mockConnect).not.toHaveBeenCalled()
     await ctx.fiber.dispose()
+  })
+})
+
+describe('a refusal of a Windows batch file', () => {
+  it('names the command shell that runs the batch file, in the message and as a field', () => {
+    const refusal = new McpConsentRefusedError({
+      serverName: 'srv',
+      command: 'npx',
+      args: ['-y', '@scope/server'],
+      env: {},
+      cwd: '',
+      resolvedCommand: 'C:\\Program Files\\nodejs\\npx.cmd',
+      resolvedCwd: 'C:\\work\\repo',
+      resolvedShell: 'C:\\Windows\\System32\\cmd.exe',
+    }, 'refused')
+    expect(refusal.resolvedShell).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(refusal.message).toContain(
+      'which runs the batch file "C:\\\\Program Files\\\\nodejs\\\\npx.cmd" through the command shell "C:\\\\Windows\\\\System32\\\\cmd.exe" in "C:\\\\work\\\\repo"',
+    )
   })
 })
 

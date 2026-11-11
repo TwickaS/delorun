@@ -2,8 +2,8 @@
  * Specs of `@delo/plugin-mcp-consent`: the acceptance store's file handling
  * and the `mcpAddConsent` provider's reviews — an accepted start allowed
  * without asking, a changed command, argument list, working directory,
- * environment, resolved executable path or resolved working directory asked
- * again, a missing, malformed or superseded store asked again, and every
+ * environment, resolved executable path, command shell or resolved working
+ * directory asked again, a missing, malformed or superseded store asked again, and every
  * registration behind the switch.
  */
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -40,6 +40,13 @@ const COMMAND: McpServerCommand = {
   resolvedCwd: '/srv/mcp',
 }
 
+/** A Windows batch shim's start: the `.cmd` file and the canonical `COMSPEC` that runs it. */
+const SHIM: McpServerCommand = {
+  ...COMMAND,
+  resolvedCommand: '/Program Files/nodejs/npx.cmd',
+  resolvedShell: '/Windows/System32/cmd.exe',
+}
+
 /**
  * The text of a valid store holding the acceptance of one start.
  * @param start - the accepted start.
@@ -68,7 +75,7 @@ describe('the acceptance store format', () => {
     ])
     const text = serializeAcceptanceStore(entries)
     expect(text).toBe(`${JSON.stringify({
-      v: 3,
+      v: 4,
       acceptances: {
         alpha: acceptance(['-a'], 1),
         zed: acceptance(['-y', 'z'], 2),
@@ -93,19 +100,26 @@ describe('the acceptance store format', () => {
     })
   })
 
+  it('keeps the command shell of a batch file, and writes none for an executable that runs directly', () => {
+    expect(parseAcceptanceStore(acceptedStore(SHIM)).get('npx')).toMatchObject({ resolvedShell: '/Windows/System32/cmd.exe' })
+    expect(acceptedStore(COMMAND)).not.toContain('resolvedShell')
+    expect(parseAcceptanceStore(acceptedStore(COMMAND)).get('npx')).not.toHaveProperty('resolvedShell')
+  })
+
   it('digests an environment the same whatever order its keys were written in', () => {
     expect(envDigest({ B: '2', A: '1' })).toBe(envDigest({ A: '1', B: '2' }))
     expect(envDigest({ A: '1', B: '2' })).not.toBe(envDigest({ A: '1', B: '3' }))
     expect(envDigest({ A: '1' })).not.toBe(envDigest({ A: '1', B: '' }))
   })
 
-  it('reads a version 1 or version 2 store as superseded, whatever it holds', () => {
+  it('reads a version 1, 2 or 3 store as superseded, whatever it holds', () => {
     for (const [version, text] of [
       [1, JSON.stringify({ v: 1, acceptances: { npx: { args: ['-y'], acceptedAt: 1 } } })],
       [2, JSON.stringify({ v: 2, acceptances: { npx: { args: ['-y'], cwd: '', envNames: [], envDigest: envDigest({}), acceptedAt: 1 } } })],
+      [3, JSON.stringify({ v: 3, acceptances: { npx: acceptance(['-y'], 1) } })],
     ] as const) {
       expect(() => parseAcceptanceStore(text)).toThrow(SupersededStoreError)
-      expect(() => parseAcceptanceStore(text)).toThrow(`the store's version is ${String(version)}, written before an acceptance covered the resolved executable path and working directory`)
+      expect(() => parseAcceptanceStore(text)).toThrow(`the store's version is ${String(version)}, written before an acceptance covered the resolved executable path, command shell and working directory`)
     }
   })
 
@@ -114,18 +128,20 @@ describe('the acceptance store format', () => {
     for (const [text, problem] of [
       ['{', 'no JSON document'],
       ['[]', 'not a JSON object'],
-      [JSON.stringify({ v: 4, acceptances: {} }), 'the store\'s version is 4, not 3'],
-      [JSON.stringify({ v: 3, acceptances: {}, extra: true }), 'the store sets extra'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, extra: true } } }), 'the acceptance of the command "npx" sets extra'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, acceptedAt: 'now' } } }), 'the acceptance of the command "npx" does not hold a number acceptance time'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { args: ['-y'], acceptedAt: 1 } } }), 'the acceptance of the command "npx" does not hold a working directory string'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, resolvedCommand: 'npx' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved executable path'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, resolvedCommand: undefined } } }), 'the acceptance of the command "npx" does not hold an absolute resolved executable path'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, resolvedCwd: '.' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved working directory'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, resolvedCwd: 7 } } }), 'the acceptance of the command "npx" does not hold an absolute resolved working directory'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, envNames: 'PATH' } } }), 'the acceptance of the command "npx" does not hold a list of environment variable names'],
-      [JSON.stringify({ v: 3, acceptances: { npx: { ...valid, envDigest: 'PATH=/bin' } } }), 'the acceptance of the command "npx" does not hold a sha256 environment digest'],
-      [JSON.stringify({ v: 3, acceptances: { '': valid } }), 'an empty command'],
+      [JSON.stringify({ v: 5, acceptances: {} }), 'the store\'s version is 5, not 4'],
+      [JSON.stringify({ v: 4, acceptances: {}, extra: true }), 'the store sets extra'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, extra: true } } }), 'the acceptance of the command "npx" sets extra'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, acceptedAt: 'now' } } }), 'the acceptance of the command "npx" does not hold a number acceptance time'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { args: ['-y'], acceptedAt: 1 } } }), 'the acceptance of the command "npx" does not hold a working directory string'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCommand: 'npx' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved executable path'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCommand: undefined } } }), 'the acceptance of the command "npx" does not hold an absolute resolved executable path'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCwd: '.' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved working directory'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCwd: 7 } } }), 'the acceptance of the command "npx" does not hold an absolute resolved working directory'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedShell: 'cmd.exe' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved command shell'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedShell: null } } }), 'the acceptance of the command "npx" does not hold an absolute resolved command shell'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, envNames: 'PATH' } } }), 'the acceptance of the command "npx" does not hold a list of environment variable names'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, envDigest: 'PATH=/bin' } } }), 'the acceptance of the command "npx" does not hold a sha256 environment digest'],
+      [JSON.stringify({ v: 4, acceptances: { '': valid } }), 'an empty command'],
     ] as const) {
       expect(() => parseAcceptanceStore(text)).toThrow(AcceptanceStoreError)
       expect(() => parseAcceptanceStore(text)).toThrow(problem)
@@ -233,7 +249,7 @@ describe('the mcpAddConsent provider', () => {
     for (const start of [COMMAND, { ...COMMAND, env: {}, cwd: '' }]) {
       await expect(consent.review(start)).resolves.toEqual({
         allow: false,
-        reason: 'the acceptance store is of version 1, recorded before an acceptance covered the executable path and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
+        reason: 'the acceptance store is of version 1, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
       })
     }
   })
@@ -243,7 +259,29 @@ describe('the mcpAddConsent provider', () => {
     writeStore(JSON.stringify({ v: 2, acceptances: { [COMMAND.command]: versionTwo } }))
     await expect(consent.review(COMMAND)).resolves.toEqual({
       allow: false,
-      reason: 'the acceptance store is of version 2, recorded before an acceptance covered the executable path and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
+      reason: 'the acceptance store is of version 2, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
+    })
+  })
+
+  it('does not honour a version 3 store, even for the exact start it accepted', async () => {
+    writeStore(JSON.stringify({ v: 3, acceptances: { [COMMAND.command]: acceptanceOfStart(COMMAND, 1) } }))
+    await expect(consent.review(COMMAND)).resolves.toEqual({
+      allow: false,
+      reason: 'the acceptance store is of version 3, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
+    })
+  })
+
+  it('asks again when an accepted batch file now runs through another command shell, or through none', async () => {
+    writeStore(acceptedStore(SHIM))
+    await expect(consent.review(SHIM)).resolves.toEqual({ allow: true })
+    await expect(consent.review({ ...SHIM, resolvedShell: '/Users/person/cmd.exe' })).resolves.toEqual({
+      allow: false,
+      reason: 'the command runs through the command shell "/Users/person/cmd.exe", and the person accepted it run through the command shell "/Windows/System32/cmd.exe"',
+    })
+    const { resolvedShell: _shell, ...direct } = SHIM
+    await expect(consent.review(direct)).resolves.toEqual({
+      allow: false,
+      reason: 'the command runs through no command shell, and the person accepted it run through the command shell "/Windows/System32/cmd.exe"',
     })
   })
 
@@ -278,8 +316,8 @@ describe('the mcpAddConsent provider', () => {
     for (const text of [
       '{ not json',
       '[]',
-      JSON.stringify({ v: 4, acceptances: { [COMMAND.command]: acceptanceOfStart(COMMAND, 1) } }),
-      JSON.stringify({ v: 3, acceptances: { [COMMAND.command]: { ...acceptanceOfStart(COMMAND, 1), note: 'x' } } }),
+      JSON.stringify({ v: 5, acceptances: { [COMMAND.command]: acceptanceOfStart(COMMAND, 1) } }),
+      JSON.stringify({ v: 4, acceptances: { [COMMAND.command]: { ...acceptanceOfStart(COMMAND, 1), note: 'x' } } }),
     ]) {
       writeStore(text)
       await expect(consent.review(COMMAND)).resolves.toSatisfy((decision: { allow: boolean, reason: string }) =>
@@ -341,8 +379,8 @@ describe('the mcpAddConsent provider', () => {
   })
 
   it('refuses a start whose resolved paths are not absolute, and records nothing', async () => {
-    for (const start of [{ ...COMMAND, resolvedCommand: 'npx' }, { ...COMMAND, resolvedCwd: 'srv/mcp' }]) {
-      await expect(consent.accept(start)).rejects.toThrow('the start to accept does not hold an absolute resolved executable path and working directory')
+    for (const start of [{ ...COMMAND, resolvedCommand: 'npx' }, { ...COMMAND, resolvedCwd: 'srv/mcp' }, { ...SHIM, resolvedShell: 'cmd.exe' }]) {
+      await expect(consent.accept(start)).rejects.toThrow('the start to accept holds a resolved path that is not absolute')
     }
     expect(existsSync(store())).toBe(false)
   })

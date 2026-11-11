@@ -7,10 +7,11 @@
  * This plugin's service answers from the acceptance store, the JSON file under
  * the home's protected state ([`./store.ts`](./store.ts)): a command the
  * person accepted with exactly the arguments, working directory, resolved
- * executable path, resolved working directory and configured environment
- * under review starts at once, and every other review — an unknown command, a
- * changed argument list, working directory or environment, a bare command
- * that a PATH lookup now finds elsewhere, an empty or relative working
+ * executable path, command shell, resolved working directory and configured
+ * environment under review starts at once, and every other review — an
+ * unknown command, a changed argument list, working directory or environment,
+ * a bare command that a PATH lookup now finds elsewhere, a Windows batch file
+ * run through another `COMSPEC`, an empty or relative working
  * directory that now resolves elsewhere, a store that is missing, unreadable,
  * superseded or not this version's format — holds the server stopped and asks
  * the person to accept the command, which the service records with
@@ -92,11 +93,12 @@ export class DeloMcpConsent extends McpAddConsent {
    * of the home the process runs with.
    * @param command - the server start under review: the namespace, the
    *   executable, its arguments, its working directory, its configured
-   *   environment, and the absolute executable path and canonical working
-   *   directory the mcp-client resolved them to.
+   *   environment, and the absolute executable path, command shell and
+   *   canonical working directory the mcp-client resolved them to.
    * @returns `allow: true` when the store holds an acceptance of this
    *   command with exactly these arguments, this working directory, this
-   *   resolved executable path and working directory, and this environment,
+   *   resolved executable path, command shell and working directory, and
+   *   this environment,
    *   whatever order the environment's keys were written in, and
    *   `allow: false` with the reason it does not — the command, its
    *   arguments, its working directory, what they resolve to or its
@@ -120,7 +122,7 @@ export class DeloMcpConsent extends McpAddConsent {
    * @param start - the start the person accepted, as a review was shown it:
    *   the executable, its arguments in order, its working directory, its
    *   configured environment, of which the store keeps the names and a digest,
-   *   and the absolute executable path and working directory they resolved to.
+   *   and the absolute executable path, command shell and working directory they resolved to.
    * @returns when the store holds the acceptance.
    * @throws when the command is empty or a resolved path is not absolute, which
    *   no review is shown.
@@ -128,8 +130,9 @@ export class DeloMcpConsent extends McpAddConsent {
   accept(start: ServerStart): Promise<void> {
     return this.serial(async () => {
       if (start.command.length === 0) throw new Error('the command to accept is empty')
-      if (!isAbsolute(start.resolvedCommand) || !isAbsolute(start.resolvedCwd)) {
-        throw new Error('the start to accept does not hold an absolute resolved executable path and working directory')
+      const resolved = [start.resolvedCommand, start.resolvedCwd, ...start.resolvedShell === undefined ? [] : [start.resolvedShell]]
+      if (!resolved.every(entry => isAbsolute(entry))) {
+        throw new Error('the start to accept holds a resolved path that is not absolute')
       }
       const path = await this.path()
       const read = await readAcceptanceStore(path)
@@ -175,7 +178,7 @@ export class DeloMcpConsent extends McpAddConsent {
     if (read.kind === 'superseded') {
       return {
         allow: false,
-        reason: `the acceptance store is of version ${String(read.version)}, recorded before an acceptance covered the executable path and working directory the command resolves to, so nothing counts as accepted until the command is accepted again`,
+        reason: `the acceptance store is of version ${String(read.version)}, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again`,
       }
     }
     const accepted = read.entries.get(command.command)

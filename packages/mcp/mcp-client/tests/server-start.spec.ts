@@ -1,7 +1,8 @@
 /**
  * The Windows resolution of a stdio start, run against a fake host on any operating system: `PATH` and `PATHEXT`
  * lookup without searching the working directory first, commands with a separator resolved against the canonical
- * working directory, batch shims (`npx.cmd`) resolved to the file `cmd.exe` runs, and a closed failure for every start
+ * working directory, batch shims (`npx.cmd`) resolved to the file `cmd.exe` runs with the canonical `COMSPEC` that runs
+ * it, and a closed failure for every start
  * the spawn would run differently.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -91,6 +92,15 @@ describe('resolving a stdio start on Windows', () => {
     await expect(resolveServerStart(start('node', { env }), host)).resolves.toMatchObject({ resolvedCommand: `${NODE_DIR}\\node.exe` })
   })
 
+  it('shows the review the canonical COMSPEC that runs a batch shim, and no shell for a file run directly', async () => {
+    const files = { [`${NODE_DIR}\\npx.cmd`]: '@ECHO off\r\n', [`${NODE_DIR}\\node.exe`]: 'MZ', 'D:\\shells\\cmd.exe': 'MZ' }
+    const env = { PATH: NODE_DIR }
+    expect(await resolveServerStart(start('npx', { env }), windowsHost(files))).toMatchObject({ resolvedCommand: `${NODE_DIR}\\npx.cmd`, resolvedShell: COMSPEC })
+    const linked = windowsHost(files, [], { links: { [COMSPEC]: 'D:\\shells\\cmd.exe' } })
+    expect((await resolveServerStart(start('npx', { env }), linked)).resolvedShell).toBe('D:\\shells\\cmd.exe')
+    expect(await resolveServerStart(start('node', { env }), linked)).not.toHaveProperty('resolvedShell')
+  })
+
   it('compares PATHEXT extensions without case, in PATHEXT order, and tries a name with an extension as written first', async () => {
     const host = windowsHost({ 'C:\\tools\\uvx.EXE': 'MZ', 'C:\\tools\\uvx.bat': '@echo off', 'C:\\tools\\run.cmd': '@echo off' })
     expect((await resolveServerStart(start('uvx', { env: { PATH: 'C:\\tools', PATHEXT: '.bat;.exe' } }), host)).resolvedCommand).toBe('C:\\tools\\uvx.bat')
@@ -136,7 +146,7 @@ describe('resolving a stdio start on Windows', () => {
       .toBe('"C:\\\\tools\\\\script.js" would start through the program its extension is associated with')
     expect(await refusal(start('shebang', { env: { PATH: 'C:\\tools' } }), host))
       .toBe('"C:\\\\tools\\\\shebang.cmd" starts with a #! line, whose interpreter the Windows spawn looks up itself')
-    for (const env of [{}, { ComSpec: 'cmd.exe' }, { ComSpec: 'C:\\missing\\cmd.exe' }]) {
+    for (const env of [{}, { ComSpec: 'cmd.exe' }, { ComSpec: 'C:\\missing\\cmd.exe' }, { ComSpec: 'C:\\tools' }]) {
       expect(await refusal(start('shim', { env: { PATH: 'C:\\tools' } }), windowsHost(files, [], { env })))
         .toBe('"C:\\\\tools\\\\shim.cmd" runs through COMSPEC, which is not set to an existing absolute file')
     }

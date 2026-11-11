@@ -16,7 +16,8 @@
  * shell), and starts a file with a `#!` line through an interpreter it looks
  * up itself. The resolver finds the file with `PATH` and `PATHEXT` without
  * searching the working directory first, and the plugin spawns that absolute
- * file, so `cross-spawn` runs it directly or through the Host's `COMSPEC`; a
+ * file, so `cross-spawn` runs it directly or through the Host's `COMSPEC`,
+ * whose canonical path the review is shown for a batch file; a
  * file with another extension, which would start through a file association,
  * a file with a `#!` line, and a batch script without an absolute `COMSPEC`
  * are left unresolved.
@@ -244,11 +245,11 @@ const REVIEWABLE = /\.(?:com|exe|bat|cmd)$/iu
  * @param config - the server's stdio configuration.
  * @param cwd - the resolved working directory.
  * @param host - the host facts and file operations.
- * @returns the absolute file path.
+ * @returns the absolute file path, and for a `.bat` or `.cmd` file the canonical path of the `COMSPEC` that runs it.
  * @throws {McpServerStartUnresolvedError} when no file qualifies, the file is not an `.exe`, `.com`, `.bat` or `.cmd`
  *   file, it has a `#!` line, or a batch script has no absolute `COMSPEC` to run it.
  */
-async function resolveWindowsCommand(config: StdioConfig, cwd: string, host: ServerStartHost): Promise<string> {
+async function resolveWindowsCommand(config: StdioConfig, cwd: string, host: ServerStartHost): Promise<{ file: string; shell?: string }> {
   const env = childSpawnEnv(config.env)
   const extensions = (windowsEnvValue(env, 'PATHEXT') ?? DEFAULT_PATHEXT).split(';').filter(ext => ext.length > 0).map(ext => ext.toLowerCase())
   const named = win32.extname(config.command).length > 0
@@ -289,13 +290,32 @@ async function resolveWindowsCommand(config: StdioConfig, cwd: string, host: Ser
   if ((await host.head(found)).startsWith('#!')) {
     throw new McpServerStartUnresolvedError(config, `${JSON.stringify(found)} starts with a #! line, whose interpreter the Windows spawn looks up itself`)
   }
-  if (!DIRECT_EXECUTABLE.test(found)) {
-    const comspec = Object.entries(host.env).find(([name]) => name.toUpperCase() === 'COMSPEC')?.[1]
-    if (comspec === undefined || !win32.isAbsolute(comspec) || (await host.kind(comspec))?.file !== true) {
-      throw new McpServerStartUnresolvedError(config, `${JSON.stringify(found)} runs through COMSPEC, which is not set to an existing absolute file`)
-    }
+  if (DIRECT_EXECUTABLE.test(found)) return { file: found }
+  return { file: found, shell: await resolveComspec(config, found, host) }
+}
+
+/**
+ * The canonical path of the Host's `COMSPEC`, the command shell `cross-spawn` runs a batch file through.
+ * @param config - the server's stdio configuration, named in a refusal.
+ * @param file - the batch file, named in a refusal.
+ * @param host - the host facts and file operations.
+ * @returns the shell's absolute path with every link resolved.
+ * @throws {McpServerStartUnresolvedError} when `COMSPEC` is unset, relative, or not an existing file.
+ */
+async function resolveComspec(config: StdioConfig, file: string, host: ServerStartHost): Promise<string> {
+  const refused = (): McpServerStartUnresolvedError =>
+    new McpServerStartUnresolvedError(config, `${JSON.stringify(file)} runs through COMSPEC, which is not set to an existing absolute file`)
+  const comspec = Object.entries(host.env).find(([name]) => name.toUpperCase() === 'COMSPEC')?.[1]
+  if (comspec === undefined || !win32.isAbsolute(comspec)) throw refused()
+  let canonical: string
+  try {
+    canonical = await host.realpath(comspec)
+  } catch (_missing) {
+    // A shell that is missing or unreadable cannot be the reviewed one; the refusal names the batch file.
+    throw refused()
   }
-  return found
+  if ((await host.kind(canonical))?.file !== true) throw refused()
+  return canonical
 }
 
 /**
@@ -305,7 +325,8 @@ async function resolveWindowsCommand(config: StdioConfig, cwd: string, host: Ser
  * working directory with every symbolic link resolved, and the absolute path
  * of the file the spawn runs, looked up with the `PATH` (and on Windows
  * `PATHEXT`) of the environment the stdio transport gives the child
- * ({@link childSpawnEnv}).
+ * ({@link childSpawnEnv}), and on Windows, for a `.bat` or `.cmd` file, the
+ * canonical path of the Host's `COMSPEC` that runs it.
  * @param config - the server's stdio configuration.
  * @param host - the host facts and file operations; the plugin passes {@link nodeStartHost}.
  * @returns the start under review.
@@ -314,9 +335,9 @@ async function resolveWindowsCommand(config: StdioConfig, cwd: string, host: Ser
  */
 export async function resolveServerStart(config: StdioConfig, host: ServerStartHost = nodeStartHost): Promise<McpServerCommand> {
   const resolvedCwd = await resolveCwd(config, host)
-  const resolvedCommand = host.platform === 'win32'
+  const { file: resolvedCommand, shell } = host.platform === 'win32'
     ? await resolveWindowsCommand(config, resolvedCwd, host)
-    : await resolvePosixCommand(config, resolvedCwd, host)
+    : { file: await resolvePosixCommand(config, resolvedCwd, host) }
   return {
     serverName: config.serverName,
     command: config.command,
@@ -325,5 +346,6 @@ export async function resolveServerStart(config: StdioConfig, host: ServerStartH
     cwd: config.cwd,
     resolvedCommand,
     resolvedCwd,
+    ...shell === undefined ? {} : { resolvedShell: shell },
   }
 }

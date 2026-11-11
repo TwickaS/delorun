@@ -9,7 +9,8 @@
  * decides what that process runs: the command, its arguments, its working
  * directory and the configured environment variables, together with the
  * absolute executable path and canonical working directory the configured
- * command and directory resolve to when the review runs. The server is
+ * command and directory resolve to when the review runs, and on Windows the
+ * command shell that runs a batch file. The server is
  * spawned with those resolved paths, so it runs what was reviewed.
  *
  * A provider implements {@link McpAddConsent} and is loaded as a plugin whose
@@ -59,6 +60,12 @@ export interface McpServerCommand {
    * symbolic link resolved.
    */
   readonly resolvedCwd: string
+  /**
+   * On Windows, when {@link resolvedCommand} is a `.cmd` or `.bat` file, the
+   * canonical path of the Host's `COMSPEC`, the command shell that runs it.
+   * Absent when the file runs directly and on Linux and macOS.
+   */
+  readonly resolvedShell?: string
 }
 
 /** The decision a consent review returns. */
@@ -106,10 +113,21 @@ function describeEnv(envNames: readonly string[]): string {
 }
 
 /**
+ * The words naming what runs a server start's file in a consent message.
+ * @param start - the server start.
+ * @returns the quoted executable, or the quoted batch file and the command shell that runs it.
+ */
+function describeExecutable(start: McpServerCommand): string {
+  const file = JSON.stringify(start.resolvedCommand)
+  return start.resolvedShell === undefined ? `the executable ${file}` : `the batch file ${file} through the command shell ${JSON.stringify(start.resolvedShell)}`
+}
+
+/**
  * Refusal of one server start by the mounted consent, thrown by the
  * mcp-client plugin's activation so the refused server stays stopped. The
  * message names the command and arguments being granted, the resolved
- * executable path, the resolved and configured working directory and the
+ * executable path and, for a Windows batch file, the command shell that runs
+ * it, the resolved and configured working directory and the
  * names of the configured environment variables, carries
  * the provider's reason, and states that a server command runs outside the
  * agent sandbox. Environment values are never part of the error.
@@ -127,6 +145,8 @@ export class McpConsentRefusedError extends Error {
   readonly resolvedCommand: string
   /** The canonical working directory the refused server would have run in. */
   readonly resolvedCwd: string
+  /** The canonical path of the command shell that would have run a refused Windows batch file; absent otherwise. */
+  readonly resolvedShell: string | undefined
   /** The names of the refused configured environment variables, sorted; their values are withheld. */
   readonly envNames: readonly string[]
   /** The consent provider's own reason. */
@@ -141,7 +161,7 @@ export class McpConsentRefusedError extends Error {
     const envNames = sortedEnvEntries(start.env).map(([name]) => name)
     super(
       `mcp-client(${start.serverName}): the add-time consent did not allow this server's command, so the server stays stopped — ${reason}. `
-        + `The consent covers the command ${granted}, which runs the executable ${JSON.stringify(start.resolvedCommand)} `
+        + `The consent covers the command ${granted}, which runs ${describeExecutable(start)} `
         + `in ${JSON.stringify(start.resolvedCwd)} (configured as ${describeCwd(start.cwd)}) with ${describeEnv(envNames)}. `
         + 'A server command runs outside the agent sandbox.',
     )
@@ -152,6 +172,7 @@ export class McpConsentRefusedError extends Error {
     this.cwd = start.cwd
     this.resolvedCommand = start.resolvedCommand
     this.resolvedCwd = start.resolvedCwd
+    this.resolvedShell = start.resolvedShell
     this.envNames = envNames
     this.reason = reason
   }
@@ -201,8 +222,8 @@ export abstract class McpAddConsent extends Service {
    * that server. The review runs at every boot of the server row, before any
    * child process starts, so the provider can let an accepted start through
    * at once and ask again when the command, arguments, working directory,
-   * environment, resolved executable path or resolved working directory it
-   * is shown differ from the ones it accepted before.
+   * environment, resolved executable path, resolved command shell or resolved
+   * working directory it is shown differ from the ones it accepted before.
    *
    * The returned promise gates the server's start: the mcp-client plugin's
    * activation does not finish, and the server does not start, until it
