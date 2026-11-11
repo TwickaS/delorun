@@ -353,22 +353,43 @@ export const STAGE_SCENES = ['night', 'blueprint', ...GENERATIVE_SCENES] as cons
 /** One scene. */
 export type StageScene = typeof STAGE_SCENES[number]
 
-/**
- * The theme token the title's plate is filled with: a dark static grey, the same in both colour schemes, which the
- * theme's palettes recolour. The sidebar sets its title and toggle in `--dsw-static-neutral-bluish-00` over any art, and
- * that white reads on this grey at more than 4.5:1 in every palette.
- */
-export const TITLE_SCRIM_TOKEN = '--dsw-static-neutral-bluish-850'
-
-/** The fill of the title's plate, for the plate and for a tile that previews the title on the art. */
-export const TITLE_SCRIM_STYLE: CSSProperties = { background: `var(${TITLE_SCRIM_TOKEN})` }
+/** The theme token the title's veil is mixed from: the sidebar's own fill, so the veil is invisible where no art lies under it. */
+export const TITLE_VEIL_TOKEN = '--dsw-specific-sidebar-fill'
 
 /**
- * The plate under the sidebar's title and toggle, so they never sit directly on the art.
- * @returns the plate, hidden from assistive technology.
+ * The share of the sidebar's fill in the title's veil, in percent, per colour scheme: `title` under the brand, rising to
+ * `toggle` under the sidebar's toggle at the row's end. Over every colour any scene draws in, in every art palette,
+ * strength and theme palette, the title in `--dsw-alias-label-primary` reads at 4.5:1 or more on the title's share and
+ * the toggle in `--dsw-alias-label-secondary` at 3:1 or more on the toggle's share, which `title-contrast.client.spec.tsx`
+ * checks.
  */
-export function TitleScrim() {
-  return <div className={css.scrim} data-title-scrim="" style={TITLE_SCRIM_STYLE} aria-hidden="true" />
+export const TITLE_VEIL_FILL = { light: { title: 56, toggle: 80 }, dark: { title: 64, toggle: 64 } } as const
+
+/** One part of the veil, which `TITLE_VEIL_FILL` gives a share for in each scheme. */
+export type TitleVeilPart = keyof typeof TITLE_VEIL_FILL.light
+
+const veilMix = (percent: number): string => `color-mix(in srgb, var(${TITLE_VEIL_TOKEN}, var(--dsw-alias-bg-base)) ${String(percent)}%, transparent)`
+
+/**
+ * The veil's colour under one part of the brand row, following the colour scheme.
+ * @param part - the title or the toggle.
+ * @returns a `light-dark()` colour.
+ */
+export function titleVeilColor(part: TitleVeilPart): string {
+  return `light-dark(${veilMix(TITLE_VEIL_FILL.light[part])}, ${veilMix(TITLE_VEIL_FILL.dark[part])})`
+}
+
+/** The veil's colours as the `--title-veil` and `--title-veil-toggle` custom properties, which the veil and a preview tile's brand read. */
+export const TITLE_VEIL_STYLE = { '--title-veil': titleVeilColor('title'), '--title-veil-toggle': titleVeilColor('toggle') } as CSSProperties
+
+/**
+ * The veil under the sidebar's title and toggle: a band of the sidebar's fill, translucent and feathered above and
+ * below, so the title and toggle keep the theme's colours over the art while the art shows through. It marks itself
+ * `data-backdrop-plain`, which keeps upstream's sidebar from turning the brand light over the art.
+ * @returns the veil, hidden from assistive technology.
+ */
+export function TitleVeil() {
+  return <div className={css.veil} data-title-veil="" data-backdrop-plain="" style={TITLE_VEIL_STYLE} aria-hidden="true" />
 }
 
 /** The art palettes: T3 Code's Blueprint, Rose, Grove, Ocean, Ember and Iris, and the studio's accent. */

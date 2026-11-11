@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
 import { SidebarSettingsSection } from '../src/client/SettingsSection.tsx'
-import { TITLE_SCRIM_TOKEN } from '../src/client/StageArt.tsx'
+import { titleVeilColor } from '../src/client/StageArt.tsx'
 import { ART_PALETTES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, MAX_ART_SEED, type SidebarSettings } from '../src/config.ts'
 
 afterEach(() => {
@@ -219,13 +219,13 @@ describe('Settings → Sidebar names and parts', () => {
     expect(container.querySelector('#delo-sidebar-stock')).toBeNull()
   })
 
-  it('previews the brand on the title plate over art, and plain when the art is none', () => {
+  it('previews the brand on the title\'s veil over art, and plain when the art is none', () => {
     renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
     const brands = screen.getAllByText(en['settings.preview.brand'])
     expect(brands).toHaveLength(HEADER_ARTS.length)
-    const backgrounds = brands.map(brand => brand.style.background)
-    expect(backgrounds.filter(background => background === `var(${TITLE_SCRIM_TOKEN})`)).toHaveLength(HEADER_ARTS.length - 1)
-    expect(backgrounds[HEADER_ARTS.indexOf('none')]).toBe('')
+    const veils = brands.map(brand => brand.style.getPropertyValue('--title-veil'))
+    expect(veils.filter(veil => veil === titleVeilColor('title'))).toHaveLength(HEADER_ARTS.length - 1)
+    expect(veils[HEADER_ARTS.indexOf('none')]).toBe('')
   })
 })
 

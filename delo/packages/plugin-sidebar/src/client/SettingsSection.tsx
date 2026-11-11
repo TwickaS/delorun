@@ -13,7 +13,7 @@ import {
   ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, SIDEBAR_WIDTH, SORT_ORDERS,
   type ArtPalette, type SidebarSettings,
 } from '../config.ts'
-import { StageBackdrop, TITLE_SCRIM_STYLE } from './StageArt.tsx'
+import { StageBackdrop, TITLE_VEIL_STYLE } from './StageArt.tsx'
 import { GENERATIVE_SCENES } from './GenerativeArt.tsx'
 import css from './SettingsSection.module.css'
 
@@ -200,7 +200,7 @@ export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
               onClick={() => { if (current.headerArt !== art) save('headerArt', art) }}>
               <span className={css.preview}>
                 {art !== 'none' && <StageBackdrop scene={art} palette={current.artPalette} seed={current.artSeed} compact />}
-                <span className={css.previewBrand} style={art === 'none' ? undefined : TITLE_SCRIM_STYLE}>{t('settings.preview.brand')}</span>
+                <span className={css.previewBrand} style={art === 'none' ? undefined : TITLE_VEIL_STYLE}>{t('settings.preview.brand')}</span>
                 <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
               </span>
               <span className={css.tileFoot}>

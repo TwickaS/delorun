@@ -64,7 +64,7 @@ export { IconPicker, ICON_EMOJIS, type IconPickerProps, type IconPickerTarget } 
 export { GLYPHS, WorkspaceBadge, WorkspaceIconsContext } from './WorkspaceBadge.tsx'
 export * from '../workspace-icon.ts'
 export {
-  BlueprintArt, NightSkyArt, StageBackdrop, STAGE_PALETTES, STAGE_SCENES, TITLE_SCRIM_STYLE, TITLE_SCRIM_TOKEN, TitleScrim, type StagePalette, type StageScene,
+  BlueprintArt, NightSkyArt, StageBackdrop, STAGE_PALETTES, STAGE_SCENES, TITLE_VEIL_FILL, TITLE_VEIL_STYLE, TITLE_VEIL_TOKEN, titleVeilColor, TitleVeil, type TitleVeilPart, type StagePalette, type StageScene,
 } from './StageArt.tsx'
 export { DRAG_DISTANCE, useListDrag, type DragView, type ListDrag, type ListDragOptions } from './drag.ts'
 export * from './sections.ts'

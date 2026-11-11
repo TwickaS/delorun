@@ -193,18 +193,35 @@
 }
 
 /*
- * The title's plate: a solid band under the brand row, so the light title and toggle read on any art. Its colour is
- * set where it renders, from `TITLE_SCRIM_TOKEN`; the band spans the logo row's 44px of content.
+ * The title's veil: a band of the sidebar's fill under the brand row, feathered above and below, so the title and the
+ * toggle keep the theme's colours on any art. Its shares are set where it renders, as `--title-veil` under the brand and
+ * `--title-veil-toggle` from the toggle's start, 52px from the row's end, with the step spread over the 44px before it.
+ * The band's solid part spans the brand row's 24px line box, 24px below the sidebar's top, with room on each side. The
+ * feather's mask uses an opaque static token, since a mask reads only its colour's opacity.
  */
-.scrim {
-  --scrim-height: 44px;
+.veil {
+  --veil-height: 48px;
+  --veil-feather: 10px;
+  --veil-ramp-start: 96px;
+  --veil-ramp-end: 52px;
 
   position: absolute;
-  top: var(--delo-space-4);
-  right: var(--delo-space-4);
-  left: var(--delo-space-4);
-  height: var(--scrim-height);
-  border-radius: var(--dsw-radius-md);
+  top: var(--delo-space-5);
+  right: 0;
+  left: 0;
+  height: var(--veil-height);
+  background: linear-gradient(
+    to right,
+    var(--title-veil) calc(100% - var(--veil-ramp-start)),
+    var(--title-veil-toggle) calc(100% - var(--veil-ramp-end))
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    var(--dsw-static-neutral-bluish-00) var(--veil-feather),
+    var(--dsw-static-neutral-bluish-00) calc(100% - var(--veil-feather)),
+    transparent
+  );
   pointer-events: none;
   user-select: none;
 }

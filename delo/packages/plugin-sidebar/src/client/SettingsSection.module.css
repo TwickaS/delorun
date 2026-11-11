@@ -253,11 +253,13 @@
   line-height: var(--settings-small-line);
 }
 
+/* Over art the brand sits on the title's veil, in the theme's label colour, as in the sidebar. */
 .preview:has(> :first-child:not(.previewBrand)) .previewBrand {
   align-self: flex-start;
   padding: 0 var(--delo-space-3);
   border-radius: var(--dsw-radius-xs);
-  color: var(--dsw-static-neutral-bluish-00);
+  background: var(--title-veil);
+  color: var(--dsw-alias-label-primary);
 }
 
 .previewRows {
