@@ -91,7 +91,8 @@ function plugSpec(profile: string): string | undefined {
 function stoppingAtPrepare(seen: (string | undefined)[], overrides: Partial<StartDependencies> = {}): StartDependencies {
   return {
     approvedPluginContent: NO_APPROVED_CONTENT,
-    preStartSteps: realPreStartSteps(() => Promise.resolve(false)),
+    preStartSteps: realPreStartSteps(() => Promise.resolve(false), () => Promise.resolve(false)),
+    fatalRelease: () => () => undefined,
     prepareProfile: () => {
       seen.push(plugSpec('default'))
       return Promise.reject(new Error('stopped after Changes'))
@@ -297,6 +298,8 @@ describe('delorun headless', () => {
       preStartSteps: start.preStartSteps,
       runProfile: start.runProfile,
       loadEnvironment: start.loadEnvironment,
+      cwd: () => home,
+      fatalRelease: () => () => undefined,
     }
   }
 
@@ -313,7 +316,10 @@ describe('delorun headless', () => {
 
   it('leaves a home without the headless profile alone', async () => {
     const seen: (string | undefined)[] = []
-    await expect(headless(['say hello'], context, headlessStoppingAtPrepare(seen), () => undefined)).rejects.toThrow('stopped after Changes')
+    const dependencies = headlessStoppingAtPrepare(seen)
+    // The headless profile's one-time change, which creates the profile in a real run, is left out here.
+    const withoutMigrations = { ...dependencies, preStartSteps: dependencies.preStartSteps.filter(step => step.name !== 'profile-migrations') }
+    await expect(headless(['say hello'], context, withoutMigrations, () => undefined)).rejects.toThrow('stopped after Changes')
     expect(seen).toEqual([undefined])
     expect(context.errors).toEqual([])
   })

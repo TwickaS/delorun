@@ -448,7 +448,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const failing: StartDependencies = { ...recording([]), runProfile: () => Promise.reject(new Error('boot failed')) }
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, failing)).rejects.toThrow('failed to start: boot failed')
-    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
+    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
   })
 
   it('refuses a Delo bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
@@ -482,7 +482,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     // Upstream's shutdown may end the process before the failed start finishes; the refused Host's own teardown does not.
     expect(shutdowns).toEqual([])
     expect(events.filter(event => event === 'dispose')).toEqual(['dispose'])
-    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
+    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
     const upstreamOnly: BootedRow[] = [{ id: 'mcp', name: '@deepseek-ai/dsh-mcp-client', disabled: false, state: 'failed' }]
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording([], upstreamOnly, shutdowns))).toBeUndefined()
     expect(shutdowns).toEqual([])
@@ -673,6 +673,6 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(refused.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ state: 'not-imported', disabled: false })
     expect(refused.stderr).toContain('forced import failure')
     expect(refused.report.sessionLogEnabled).toBe(false)
-    expect(startArtifacts(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
+    expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual(['changes-boot.json'])
   })
 })

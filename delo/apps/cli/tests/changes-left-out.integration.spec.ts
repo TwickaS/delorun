@@ -125,7 +125,8 @@ function breakingDependencies(plugins: readonly string[], fails: (seen: Record<s
   const runs: Runs = { boots: [], relaunches: [] }
   const dependencies: StartDependencies = {
     approvedPluginContent: NO_APPROVED_CONTENT,
-    preStartSteps: realPreStartSteps(() => Promise.resolve(false)),
+    preStartSteps: realPreStartSteps(() => Promise.resolve(false), () => Promise.resolve(false)),
+    fatalRelease: () => () => undefined,
     prepareProfile: upstreamDependencies().prepareProfile,
     runProfile: (options: RunProfileOptions) => {
       const seen = Object.fromEntries(plugins.map(name => [name, activeIndex(name)]))
