@@ -8,7 +8,7 @@
  * @module @delo/cli/refusals
  */
 import { archiveDescriber, dshImportDescriber } from '@delo/archive'
-import { UpdatePendingError } from '@delo/bundle-local/update-gate'
+import { StartCheckPendingError, UpdatePendingError } from '@delo/bundle-local/update-gate'
 import { codedReason, describeFailure, homeLayoutDescriber, profileOption, refusalDescriber, renderRefusal, type Refusal, type RefusalContext, type RefusalDescriber, type TextRedactor } from '@delo/home'
 import { HomeProcessError, homeProcessDescriber, HostNotStoppedError, hostStopFailure, openedHomeLog } from '@delo/home-process'
 import { installDescriber } from '@delo/install'
@@ -141,6 +141,7 @@ export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
     remedies: error.code === 'TRASH_ITEM_NOT_FOUND' ? [`See what the trash holds: delorun trash list${profileOption(context)}`] : [],
   })),
   refusalDescriber(UpdatePendingError, error => ({ lead: 'Delo started no new turn: an update is waiting for running chats.', reason: error.message, remedies: ['Send it again once Delo is back.'] })),
+  refusalDescriber(StartCheckPendingError, error => ({ lead: 'Delo started no new turn: its start check did not finish.', reason: error.message, remedies: ['Run delorun status and delorun logs to see what the start is doing.', 'Start Delo with delorun start, then send it again.'] })),
   refusalDescriber(VerificationError, error => ({ lead: 'Delo refused a release file that did not verify.', reason: error.message, remedies: ['See every check: delorun verify'] })),
   refusalDescriber(LogVerificationError, error => ({ lead: 'Delo refused the release: its release-log bundle did not verify.', reason: codedReason(error.failure, error.message), remedies: ['See every check: delorun verify'] })),
   refusalDescriber(TileError, error => ({ lead: 'The release log served a tile that does not hold together.', reason: error.message, remedies: ['Report this if it repeats.'] })),

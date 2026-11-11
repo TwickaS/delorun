@@ -199,7 +199,7 @@ describe('watchChats and the update gate of @delo/bundle-local', () => {
     const ctx = new Context()
     const gate = new CountingChatGate()
     watchChats(ctx, gate)
-    await ctx.plugin(UpdateGate, { enabled: true, holdUntilChecked: false })
+    await ctx.plugin(UpdateGate, { enabled: true, holdUntilChecked: false, checkWaitSeconds: 60 })
     await settle()
 
     expect(ctx.deloTurnGate.held).toBe(false)
@@ -213,7 +213,7 @@ describe('watchChats and the update gate of @delo/bundle-local', () => {
   it('detaches from the service when the watch goes, so a held gate no longer refuses turns', async () => {
     const ctx = new Context()
     const gate = new CountingChatGate()
-    const service = new UpdateGate.UpdateTurnGateService(new Context(), { enabled: true, holdUntilChecked: false })
+    const service = new UpdateGate.UpdateTurnGateService(new Context(), { enabled: true, holdUntilChecked: false, checkWaitSeconds: 60 })
     const unprovide = ctx.provide('deloTurnGate', service)
     watchChats(ctx, gate)
     await settle()
