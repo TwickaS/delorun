@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, parse } from 'node:path'
@@ -19,7 +19,7 @@ import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
-import type { ConfinedArgv, SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ProtectedReads, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { SandboxedFileSystem } from '@deepseek-ai/dsh-fs-sandbox'
 import { assertWorkspaceOutsideTemp, outsideTempWorkspaceParent } from '../../../../scripts/snapshot-workspace-parent.ts'
 
@@ -290,11 +290,16 @@ describe('patch, delete, and move fences', () => {
   })
 })
 
-/** A sandbox provider stand-in that reports a protected home; it never confines anything. */
+/** A sandbox provider stand-in that reports a protected home and its other roots; it never confines anything. */
 class ProtectingProvider extends SandboxProvider {
   static home: string | undefined
+  static aliases: string[] = []
   override get protectedHome(): string | undefined {
     return ProtectingProvider.home
+  }
+  override get protectedReads(): ProtectedReads | undefined {
+    const home = ProtectingProvider.home
+    return home === undefined ? undefined : { roots: [home, ...ProtectingProvider.aliases], readable: [] }
   }
   /* v8 ignore next 3 -- the fence never confines; only protectedHome is read. */
   confine(): Promise<ConfinedArgv> {
@@ -348,6 +353,19 @@ describe('the sandbox provider\'s protected home', () => {
     await symlink(home, join(workspace, 'alias'), 'dir')
     await expect(fs.writeText(await target(join(workspace, 'alias', 'planted')), 'x')).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
     expect(existsSync(join(home, 'planted'))).toBe(false)
+  })
+
+  it('denies a write under another mount of the home that the provider reports', async () => {
+    const alias = join(workspace, 'other-mount')
+    await mkdir(alias)
+    ProtectingProvider.aliases = [await realpath(alias)]
+    try {
+      await bootWith('workspace-write', ProtectingProvider)
+      await expect(fs.writeText(await target(join(alias, 'planted')), 'x')).rejects.toThrow('denied under the protected home')
+      expect(existsSync(join(alias, 'planted'))).toBe(false)
+    } finally {
+      ProtectingProvider.aliases = []
+    }
   })
 
   it('leaves the fence unchanged when the provider protects no home', async () => {

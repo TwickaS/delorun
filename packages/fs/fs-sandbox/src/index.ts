@@ -21,7 +21,8 @@
  * a mutation only when the target canonicalizes under the policy's workspace
  * root, an explicit additional writable root, or a platform temp area from the
  * shared `writableRoots` policy, and not under the sandbox provider's
- * `protectedHome` when one is mounted and configured; `danger-full-access`
+ * `protectedHome` or another of its `protectedReads` roots, such as a second
+ * mount of the home, when one is mounted and configured; `danger-full-access`
  * delegates unfenced. A denial throws the structured `FS_SANDBOX_DENIED`.
  *
  * @module @deepseek-ai/dsh-fs-sandbox
@@ -165,9 +166,14 @@ export class SandboxedFileSystem extends LocalFileSystem {
     // symlink ancestor swapped since the tool resolved this target), and the
     // mutation delegates with THIS fresh target — never the stale one.
     const fresh = await this.resolve(target.displayPath)
-    const home = this.ctx.get('sandbox')?.protectedHome
-    if (home !== undefined && await isPathUnder(fresh.targetKey, home)) {
-      throw new FsError(`cannot write "${target.displayPath}": file access denied under the protected home`, 'FS_SANDBOX_DENIED')
+    // The home and every other path that reaches it, such as a second mount of its filesystem.
+    const sandbox = this.ctx.get('sandbox')
+    const home = sandbox?.protectedHome
+    const protectedRoots = [...home === undefined ? [] : [home], ...sandbox?.protectedReads?.roots ?? []]
+    for (const root of protectedRoots) {
+      if (await isPathUnder(fresh.targetKey, root)) {
+        throw new FsError(`cannot write "${target.displayPath}": file access denied under the protected home`, 'FS_SANDBOX_DENIED')
+      }
     }
     let contained = false
     for (const root of writableRoots(policy)) {

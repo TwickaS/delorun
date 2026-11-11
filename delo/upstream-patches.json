@@ -1103,8 +1103,8 @@
     {
       "path": "packages/fs/fs-sandbox/src/index.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): under `workspace-write` the write fence also refuses every target that canonicalizes under the mounted sandbox provider's `protectedHome` with `FS_SANDBOX_DENIED`, so the write tools cannot write into the home from a workspace that contains it. It reads the provider through `ctx.get('sandbox')`, adding no injection; without a provider or a protected home the fence is upstream's. Lead decision on the review of #66 (close the write-tool gap in this PR); stricter only.",
-      "sha256": "5be9dfad10dc1f15f5f3fcb7e4ec88543f5bc147297f83d4550b3214a7226968"
+      "reason": "Protected home and denied sockets (C1's confinement rules): under `workspace-write` the write fence also refuses every target that canonicalizes under the mounted sandbox provider's `protectedHome` with `FS_SANDBOX_DENIED`, so the write tools cannot write into the home from a workspace that contains it. It reads the provider through `ctx.get('sandbox')`, adding no injection; without a provider or a protected home the fence is upstream's. Lead decision on the review of #66 (close the write-tool gap in this PR); stricter only. The fence also refuses every other root of the provider's `protectedReads`, such as a second mount of the home the provider found.",
+      "sha256": "415e3eaeeff4770bf2fe1fba24010e7972cc9832e4319556ef633d7159935653"
     },
     {
       "path": "packages/fs/tool-fs-search/src/glob.ts",
