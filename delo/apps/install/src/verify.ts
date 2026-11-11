@@ -255,9 +255,9 @@ export interface StoredRootRequest {
  * or roles differ is an unrelated root that signs unrelated releases, so it is refused rather than handed to the start
  * check.
  *
- * A stored root older than the newest shipped root is not the anchor: the newest shipped root is, so a targets key a
- * later root revoked stops verifying at the first start of a launcher that ships that root, and no stored file can hold
- * a home on the older root. The stored file is left as it is; the next install or update stores the root it walks to.
+ * A stored root older than the newest shipped root, including one older than every shipped root, is not the anchor: the
+ * newest shipped root is, so a targets key a later root revoked stops verifying at the first start of a launcher that
+ * ships that root, and no stored file can hold a home on the older root. The stored file is left as it is; the next install or update stores the root it walks to.
  *
  * A stored root newer than every shipped root is trusted only with the chain an install walked to it: every version
  * from the newest shipped root to the stored one, each signed by the root before it and by its own root threshold. A
@@ -265,10 +265,10 @@ export interface StoredRootRequest {
  * as an anchor for whatever runtime sits beside it.
  * @param request - the stored root, the shipped roots, the walked chain and the stored root's path.
  * @returns the root to anchor on: the stored root when it is the newest shipped root or newer than every shipped
- *   root, the newest shipped root when the stored root is an older shipped one.
+ *   root, the newest shipped root when the stored root is older than it.
  * @throws {InstallError} `NO_TRUSTED_ROOT` when the launcher ships no root; `INSTALL_VERIFY_FAILED` when the stored
- *   root does not verify, is older than the oldest shipped root, differs from the shipped root of its version, or is
- *   newer than every shipped root without a chain that walks from one.
+ *   root does not verify, differs from the shipped root of its version, or is newer than every shipped root without a
+ *   chain that walks from one.
  */
 export function verifyStoredRoot(request: StoredRootRequest): TrustedRoot {
   const shipped = request.shipped.map((bytes) => {
@@ -297,9 +297,8 @@ export function verifyStoredRoot(request: StoredRootRequest): TrustedRoot {
     return version < newest ? newestShipped : stored
   }
   const oldest = Math.min(...shipped.map(root => root.metadata.version))
-  if (version < oldest) {
-    throw new InstallError('INSTALL_VERIFY_FAILED', request.source, `the stored root names version ${String(version)}, older than root ${String(oldest)}, the oldest this launcher ships; a root never moves backwards`)
-  }
+  // A root older than every shipped root anchors nothing; the newest shipped root supersedes it, as for an older shipped one.
+  if (version < oldest) return newestShipped
   const walked = request.walked.map((bytes) => {
     try {
       return { root: readRoot(bytes), bytes }

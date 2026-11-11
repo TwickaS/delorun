@@ -116,6 +116,14 @@ describe('the root a start anchors on', () => {
     return { second, third }
   }
 
+  it('anchors a stored root older than every shipped root on the newest shipped root instead of refusing it', async () => {
+    const shipped = await fixtureRelease()
+    const { second, third } = rotated(shipped)
+    const anchor = verifyStoredRoot({ stored: shipped.roots[0]!, shipped: [second, third], walked: [], source: '/home/.delo/trust/root.json' })
+    expect(anchor.metadata.version).toBe(3)
+    expect(anchor.sha256).toBe(readRoot(third).sha256)
+  })
+
   it('refuses a stored root newer than every shipped root when no chain proves where it came from', async () => {
     const shipped = await fixtureRelease()
     const { second } = rotated(shipped)
