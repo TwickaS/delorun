@@ -194,16 +194,17 @@
 # settings service, which this list does not govern.
 #
 # Plugins install from the registry pnpm's configuration names, or the
-# `registry` set here, and from no mirror: `fallbackRegistries` is empty, where
-# upstream asks npmmirror when the first registry fails. A person who wants the
-# mirror restates this row in the profile's own cordis.patch.yml with
-# `fallbackRegistries: ['https://registry.npmmirror.com/']` and the whole
-# `protectedPlugins` list below, since a patch replaces the row's whole config.
-# `delorun` refuses to start a profile whose row names a registry that is not an
-# https URL, or whose `protectedPlugins` drops a name listed here.
+# `registry` set here, and from no mirror unless the person turns the npm mirror
+# on: `npmMirror` of the `delo-plugin-install-check` row, which Settings →
+# Privacy and `delorun plugin mirror on|off` set. `delorun start` passes that
+# setting to the Host as DELO_NPM_MIRROR (NPM_MIRROR_ENV in src/profile.ts), and
+# `fallbackRegistries` reads it, so the mirror changes at the next start; any
+# other boot leaves the variable unset and asks no mirror. Upstream asks
+# npmmirror by default. `delorun` refuses to start a profile whose row drops a
+# name `protectedPlugins` lists here.
 - id: plugin-manager
   config:
-    fallbackRegistries: []
+    fallbackRegistries: !!js "process.env.DELO_NPM_MIRROR === 'on' ? ['https://registry.npmmirror.com/'] : []"
     protectedPlugins:
       - '@delo/plugin-instruction-consent'
       - '@delo/plugin-mcp-consent'

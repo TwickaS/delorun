@@ -69,11 +69,11 @@
 # its settings, or deselect or remove a bundle that carries one, so a model in a
 # workspace with a full-access grant cannot turn a guard off for the rest of the
 # run. Upstream's base bundle gives the row no config, so `protectedPlugins` is
-# the only key besides `fallbackRegistries`, which is empty: plugins install from
-# no mirror, as in the CLI profile.
+# the only key besides `fallbackRegistries`, which asks the npmmirror registry
+# only when the `npmMirror` setting is on, as in the CLI profile.
 - id: plugin-manager
   config:
-    fallbackRegistries: []
+    fallbackRegistries: !!js "process.env.DELO_NPM_MIRROR === 'on' ? ['https://registry.npmmirror.com/'] : []"
     protectedPlugins:
       - '@delo/plugin-instruction-consent'
       - '@delo/plugin-mcp-consent'

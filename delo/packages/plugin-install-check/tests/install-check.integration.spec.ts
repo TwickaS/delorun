@@ -4,10 +4,10 @@
  * linked folders it leaves alone, the install record it writes, and the change check that compares installed files
  * with that record. A loopback stand-in answers for the advisory feed and the registry.
  */
-import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { checkPackage, checkProfileTrust, reconcileProfile, readPluginTrust, type InstallCheckSettings, type PackageCheck } from '../src/check.ts'
+import { checkPackage, checkProfileTrust, reconcileProfile, readPluginTrust, recordInstalled, type InstallCheckSettings, type PackageCheck } from '../src/check.ts'
 import { readInstallRecord, recordPath, trustPath } from '../src/record.ts'
 import { advisory, OLD, removeProfile, settingsFor, startStandIn, writeProfile, writeProfileFiles, type FixturePackage, type StandIn } from './fixture.ts'
 
@@ -48,8 +48,11 @@ function profile(packages: readonly FixturePackage[]): string {
  * @param extra - request fields to change.
  * @returns the check.
  */
-function check(dir: string, name = 'good-plugin', extra: { allowedAdvisories?: string[], knownNames?: Set<string>, settings?: InstallCheckSettings } = {}): Promise<PackageCheck> {
-  return checkPackage({ profileDir: dir, name, allowedAdvisories: extra.allowedAdvisories ?? [], knownNames: extra.knownNames ?? new Set(), now: () => NOW }, extra.settings ?? settings)
+async function check(dir: string, name = 'good-plugin', extra: { allowedAdvisories?: string[], knownNames?: Set<string>, settings?: InstallCheckSettings, registries?: string[] } = {}): Promise<PackageCheck> {
+  const result = await checkPackage({ profileDir: dir, name, allowedAdvisories: extra.allowedAdvisories ?? [], knownNames: extra.knownNames ?? new Set(), registries: extra.registries ?? [], now: () => NOW }, extra.settings ?? settings)
+  // The fixture's packages are already installed, as after pnpm's installation and its builds.
+  if (result.kind === 'checked' && result.pending !== undefined) await recordInstalled(dir, result.pending, { now: () => NOW, maxFiles: 1000 })
+  return result
 }
 
 /**
@@ -82,7 +85,7 @@ describe('the install check', () => {
     const result = await check(profile([PLUGIN, DEPENDENCY]))
     expect(findings(result)).toEqual([{ rule: 'advisory', severity: 'warning', title: 'GHSA-2222-3333-4444 (high) affects left-pad@1.3.0: A flaw in the package (GHSA-2222-3333-4444)' }])
     expect(result.kind === 'checked' && result.blocking).toEqual([])
-    expect(result.kind === 'checked' && result.recorded).toBe(true)
+    expect(result.kind === 'checked' && result.pending !== undefined).toBe(true)
   })
 
   it('refuses a known critical advisory and records nothing until the person allows that advisory', async () => {
@@ -90,7 +93,7 @@ describe('the install check', () => {
     const dir = profile([PLUGIN, DEPENDENCY])
     const refused = await check(dir)
     expect(refused.kind === 'checked' && refused.blocking.map(finding => finding.advisory)).toEqual(['GHSA-2222-3333-4444'])
-    expect(refused.kind === 'checked' && refused.recorded).toBe(false)
+    expect(refused.kind === 'checked' && refused.pending).toBeUndefined()
     expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(false)
     const otherAllowed = await check(dir, 'good-plugin', { allowedAdvisories: ['GHSA-6666-7777-8888'] })
     expect(otherAllowed.kind === 'checked' && otherAllowed.blocking).toHaveLength(1)
@@ -223,11 +226,44 @@ describe('the change check', () => {
 describe('bringing records in step with a profile', () => {
   it('checks new and changed installations only, and removes the records of removed plugins', async () => {
     const dir = profile([PLUGIN, DEPENDENCY])
-    expect((await reconcileProfile({ profileDir: dir, allowedAdvisories: [], knownNames: new Set(), now: () => NOW }, settings)).checked.map(each => each.name)).toEqual(['good-plugin'])
-    expect((await reconcileProfile({ profileDir: dir, allowedAdvisories: [], knownNames: new Set(), now: () => NOW }, settings)).checked).toEqual([])
+    const first = await reconcileProfile({ profileDir: dir, allowedAdvisories: [], knownNames: new Set(), registries: [], now: () => NOW }, settings)
+    expect(first.checked.map(each => each.name)).toEqual(['good-plugin'])
+    for (const { check: each } of first.checked) if (each.kind === 'checked' && each.pending !== undefined) await recordInstalled(dir, each.pending, { now: () => NOW, maxFiles: 1000 })
+    expect((await reconcileProfile({ profileDir: dir, allowedAdvisories: [], knownNames: new Set(), registries: [], now: () => NOW }, settings)).checked).toEqual([])
     writeProfileFiles(dir, [{ ...DEPENDENCY, direct: true }])
-    const result = await reconcileProfile({ profileDir: dir, allowedAdvisories: [], knownNames: new Set(), now: () => NOW }, settings)
+    const result = await reconcileProfile({ profileDir: dir, allowedAdvisories: [], knownNames: new Set(), registries: [], now: () => NOW }, settings)
     expect(result.removed).toEqual(['good-plugin'])
     expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(false)
+  })
+})
+
+describe('the check before installation', () => {
+  it('reads the lockfile alone, so it answers before any file is installed, and records nothing until asked', async () => {
+    const dir = profile([PLUGIN, DEPENDENCY])
+    rmSync(join(dir, 'node_modules'), { recursive: true })
+    standIn.answers.advisories = { 'left-pad': [advisory('GHSA-2222-3333-4444', 'moderate', '*')] }
+    const result = await checkPackage({ profileDir: dir, name: 'good-plugin', allowedAdvisories: [], knownNames: new Set(), registries: [], now: () => NOW }, settings)
+    expect(result).toMatchObject({ kind: 'checked', version: '1.0.0', findings: [{ rule: 'advisory', package: 'left-pad' }] })
+    expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(false)
+    writeProfileFiles(dir, [PLUGIN, DEPENDENCY])
+    expect(result.kind === 'checked' && result.pending !== undefined && await recordInstalled(dir, result.pending, { now: () => NOW, maxFiles: 1000 })).toBe(true)
+    expect((await readInstallRecord(dir, 'good-plugin'))?.findings.map(finding => finding.rule)).toEqual(['advisory'])
+  })
+
+  it('records nothing when the lockfile names another reference than the check read', async () => {
+    const dir = profile([PLUGIN, DEPENDENCY])
+    const result = await checkPackage({ profileDir: dir, name: 'good-plugin', allowedAdvisories: [], knownNames: new Set(), registries: [], now: () => NOW }, settings)
+    writeProfileFiles(dir, [{ ...PLUGIN, version: '2.0.0' }, DEPENDENCY])
+    expect(result.kind === 'checked' && result.pending !== undefined && await recordInstalled(dir, result.pending, { now: () => NOW, maxFiles: 1000 })).toBe(false)
+  })
+
+  it('warns about a plain http registry and a plain http download, and installs them', async () => {
+    const dir = profile([{ ...PLUGIN, dependencies: { 'left-pad': '1.3.0' } }, { ...DEPENDENCY, resolution: `{integrity: sha512-x, tarball: 'http://downloads.example.test/left-pad.tgz'}` }])
+    const result = await check(dir, 'good-plugin', { registries: ['http://registry.example.test/', 'https://registry.npmjs.org/'] })
+    expect(findings(result).filter(finding => finding.rule === 'insecure-source')).toEqual([
+      { rule: 'insecure-source', severity: 'warning', title: 'The registry http://registry.example.test/ is plain http, so a package could be altered in transit; the lockfile\'s integrity hashes still apply where it records them' },
+      { rule: 'insecure-source', severity: 'warning', title: 'left-pad is downloaded over plain http (http://downloads.example.test/left-pad.tgz), so it could be altered in transit; its integrity hash in the lockfile still applies' },
+    ])
+    expect(result.kind === 'checked' && result.blocking).toEqual([])
   })
 })

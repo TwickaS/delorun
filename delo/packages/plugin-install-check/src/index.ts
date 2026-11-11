@@ -3,6 +3,11 @@
  * selects, enables or restores a bundle, so before any of the bundle's plugin code loads; and the `deloPluginTrust`
  * service, which reads and refreshes the profile's trust status ([check](./check.ts)).
  *
+ * The manager asks it first with `pending: 'install'`, once pnpm has resolved the installation into the lockfile and
+ * before any file is fetched or script runs, which is when the check runs; and again with nothing pending once the
+ * package is installed and built, which is when its files are recorded, with the findings of the first answer. A
+ * restore asks with `pending: 'scripts'` before its builds and again after them.
+ *
  * Every finding is shown and none blocks, except a known critical advisory: the audit then answers
  * `needs-acceptance`, and the studio's Plugins page shows the findings with an "Install anyway" confirmation that
  * accepts exactly that set. A linked or local folder is never checked. With the switch off — the default and the parity
@@ -15,9 +20,10 @@ import { readFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type { PluginAudit, PluginAuditFinding, PluginAuditResult, PluginAuditTarget } from '@deepseek-ai/dsh-plugin-manager'
+import type {} from '@deepseek-ai/dsh-plugin-manager'
 import z from '@deepseek-ai/schemastery'
 import { ADVISORY_FEED_URL } from '@delo/contract-release-manifest'
-import { checkPackage, checkProfileTrust, readPluginTrust, type InstallCheckSettings, type InstallFinding, type PackageCheck, type PluginTrustStatus } from './check.ts'
+import { checkPackage, checkProfileTrust, readPluginTrust, recordInstalled, type InstallCheckSettings, type InstallFinding, type PackageCheck, type PluginTrustStatus } from './check.ts'
 
 export type { InstallFinding, PluginTrustEntry, PluginTrustState, PluginTrustStatus } from './check.ts'
 
@@ -57,6 +63,11 @@ export interface Config {
   readonly maxFiles: number
   /** npm scopes and git owners whose plugins show critical advisories only. */
   readonly trustedSources: string[]
+  /**
+   * Ask the npmmirror registry when the first registry fails, as upstream does by default. `delorun` passes it to the
+   * plugin manager's `fallbackRegistries` at each start; Settings → Privacy and `delorun plugin mirror on|off` set it.
+   */
+  readonly npmMirror: boolean
 }
 
 /** The plugin's configuration schema: it takes any subset of the fields and fills the rest with their defaults, the switch's being the parity value. */
@@ -72,6 +83,7 @@ export const Config: z<Partial<Config>, Config> = z.object({
   metadataMaxBytes: z.natural().min(1024).default(64 * 1024 * 1024),
   maxFiles: z.natural().min(1).default(20_000),
   trustedSources: z.array(z.string().pattern(TRUSTED_SOURCE)).default([]),
+  npmMirror: z.boolean().default(false),
 })
 
 /**
@@ -80,7 +92,7 @@ export const Config: z<Partial<Config>, Config> = z.object({
  * @returns the settings.
  */
 export function resolveSettings(config: Config): InstallCheckSettings {
-  const { enabled: _enabled, registry, ...rest } = config
+  const { enabled: _enabled, npmMirror: _npmMirror, registry, ...rest } = config
   return { ...rest, registry: registry.endsWith('/') ? registry : `${registry}/` }
 }
 
@@ -169,14 +181,29 @@ export function apply(ctx: Context, config: Config): void {
   const settings = resolveSettings(config)
   const profile: ProfileContext = ctx.profileContext
   let known: Set<string> | undefined
+  /** Checks that passed before their installation finished, recorded once the manager asks with nothing pending. */
+  const awaiting = new Map<string, PackageCheck>()
+  const registries = async (): Promise<string[]> => {
+    const manager = ctx.get('pluginManager')
+    if (manager === undefined) return []
+    try {
+      const configured = await manager.registries()
+      return [...configured.registry === null ? configured.resolved === null ? [] : [configured.resolved] : [configured.registry], ...configured.fallbackRegistries]
+    } catch (error) {
+      // pnpm's own registry could not be read; the configured ones are still compared below, and the check goes on.
+      ctx.logger.warn('The plugin install check could not read the plugin registries', error)
+      return []
+    }
+  }
   const audit: PluginAudit = {
     async audit(target: PluginAuditTarget): Promise<PluginAuditResult> {
       known ??= installationNames(profile.installAnchor)
       let met: string | undefined
       let check: PackageCheck
       try {
-        check = await checkPackage({
-          profileDir: profile.dir, name: target.name, allowedAdvisories: [], knownNames: known, now: Date.now,
+        const earlier = target.pending === undefined ? awaiting.get(target.name) : undefined
+        check = earlier ?? await checkPackage({
+          profileDir: profile.dir, name: target.name, allowedAdvisories: [], knownNames: known, registries: await registries(), now: Date.now, compareFiles: target.pending === undefined,
           acceptsBlocking: (blocking) => {
             const digest = blockingDigest(target.name, blocking)
             if (!target.accepted.includes(digest)) return false
@@ -184,6 +211,17 @@ export function apply(ctx: Context, config: Config): void {
             return true
           },
         }, settings)
+        if (earlier !== undefined && check.kind === 'checked' && check.findings.some(finding => finding.severity === 'critical')) {
+          met = blockingDigest(target.name, check.findings.filter(finding => finding.severity === 'critical'))
+        }
+        if (check.kind === 'checked' && check.pending !== undefined) {
+          if (target.pending === undefined) {
+            awaiting.delete(target.name)
+            await recordInstalled(profile.dir, check.pending, { now: Date.now, maxFiles: settings.maxFiles })
+          } else {
+            awaiting.set(target.name, check)
+          }
+        }
       } catch (error) {
         // The check never blocks for its own failure: the person sees that it could not run, and the change goes on.
         ctx.logger.warn('The plugin install check failed', error)

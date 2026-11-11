@@ -4,13 +4,14 @@
  * set; and `deloPluginTrust`, which reads and refreshes the trust status. With the switch off it provides neither.
  * A loopback stand-in answers for the advisory feed and the registry.
  */
-import { chmodSync } from 'node:fs'
+import { chmodSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { PluginAuditResult } from '@deepseek-ai/dsh-plugin-manager'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { apply, blockingDigest, Config, inject, name, resolveSettings, type PluginTrust } from '../src/index.ts'
-import { advisory, OLD, removeProfile, startStandIn, writeProfile, type StandIn } from './fixture.ts'
+import { readInstallRecord, recordPath } from '../src/record.ts'
+import { advisory, OLD, removeProfile, startStandIn, writeProfile, writeProfileFiles, type StandIn } from './fixture.ts'
 
 let standIn: StandIn
 let dir: string
@@ -44,8 +45,8 @@ async function mount(enabled: boolean): Promise<Context> {
  * @param accepted - the digests the person accepted.
  * @returns its answer.
  */
-function audit(ctx: Context, accepted: string[] = []): Promise<PluginAuditResult> {
-  return ctx.get('pluginAudit')!.audit({ name: 'good-plugin', version: '1.0.0', dir: `${dir}/node_modules/good-plugin`, accepted })
+function audit(ctx: Context, accepted: string[] = [], pending?: 'install' | 'scripts'): Promise<PluginAuditResult> {
+  return ctx.get('pluginAudit')!.audit({ name: 'good-plugin', version: '1.0.0', dir: `${dir}/node_modules/good-plugin`, accepted, ...pending === undefined ? {} : { pending } })
 }
 
 describe('the install check plugin', () => {
@@ -84,6 +85,31 @@ describe('the install check plugin', () => {
     } finally {
       chmodSync(pluginDir, 0o755)
     }
+  })
+
+  it('checks when the installation is only resolved, and records the files once it is installed and built', async () => {
+    standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'moderate', '*')] }
+    const ctx = await mount(true)
+    rmSync(join(dir, 'node_modules'), { recursive: true })
+    const resolved = await audit(ctx, [], 'install')
+    expect(resolved.findings.map(finding => finding.rule)).toEqual(['delo.advisory'])
+    expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(false)
+    writeProfileFiles(dir, [{ name: 'good-plugin', version: '1.0.0', direct: true, files: { 'index.js': 'export default 1\n', 'built.js': 'export default "built"\n' } }])
+    const requests = standIn.advisoryRequests.length
+    expect(await audit(ctx)).toEqual(resolved)
+    expect(standIn.advisoryRequests).toHaveLength(requests)
+    expect(Object.keys((await readInstallRecord(dir, 'good-plugin'))?.packages[0]?.files ?? {})).toEqual(['built.js', 'index.js', 'package.json'])
+  })
+
+  it('refuses a critical advisory while the installation is only resolved, and accepts the same set when it is installed', async () => {
+    standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'critical', '*')] }
+    const ctx = await mount(true)
+    const refused = await audit(ctx, [], 'install')
+    expect(refused.decision).toBe('needs-acceptance')
+    expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(false)
+    expect(await audit(ctx, [refused.digest], 'install')).toMatchObject({ decision: 'accepted' })
+    expect(await audit(ctx, [refused.digest])).toMatchObject({ decision: 'accepted', digest: refused.digest })
+    expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(true)
   })
 
   it('reads and refreshes the trust status through deloPluginTrust', async () => {

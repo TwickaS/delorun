@@ -160,17 +160,20 @@ export function apply(ctx) {
   }
 }
 
-/** Answer each pnpm run by recording it in the trace and applying `run` to the profile files. */
 /** Remove the installed addon bundle, as an upgrade does before it installs another version. */
 async function removeAddon(manager: PluginManager, dir: string, trace: string[]): Promise<void> {
   mockPnpm(dir, trace, () => { removeFiles(dir) })
   expect(await manager.removeBundle('addon')).toMatchObject({ application: 'applied' })
 }
 
+/**
+ * Answer each pnpm run by recording it in the trace and applying `run` to the profile files; the installation that
+ * follows a resolution changes nothing further.
+ */
 function mockPnpm(dir: string, trace: string[], run: (args: readonly string[]) => void, exitCode = 0) {
   const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
     trace.push(`pnpm:${String(args[0])}`)
-    run(args)
+    if (args[0] !== 'install') run(args)
     return {
       exitCode, output: exitCode === 0 ? 'completed' : 'fixture install failed', truncated: false, logPath: join(dir, 'pnpm.log'),
     }
@@ -189,7 +192,7 @@ it('publishes a newly installed enabled bundle before its private bare plugin st
 
   expect(await manager.installBundle('addon', { enabled: true })).toMatchObject({ application: 'applied', changed: true })
   expect(published).toHaveBeenCalledOnce()
-  expect(trace).toEqual(['start:sibling', 'pnpm:add', 'publish', 'start:addon:1'])
+  expect(trace).toEqual(['start:sibling', 'pnpm:add', 'pnpm:install', 'publish', 'start:addon:1'])
   expect(entry()?.fiber?.state).toBe(FiberState.ACTIVE)
   expect(ctx.get('addonVersion')).toBe(1)
   expect(ctx.pluginPackages.packageOf('addon-plugin', parentURL)?.version).toBe('1.0.0')
@@ -207,7 +210,7 @@ it('publishes a newly installed disabled bundle without evaluating its plugin', 
 
   expect(await manager.installBundle('addon', { enabled: false })).toMatchObject({ application: 'applied', changed: true })
   expect(published).toHaveBeenCalledOnce()
-  expect(trace).toEqual(['start:sibling', 'pnpm:add', 'publish'])
+  expect(trace).toEqual(['start:sibling', 'pnpm:add', 'pnpm:install', 'publish'])
   expect(entry()).toBeUndefined()
   expect(existsSync(evaluationPath)).toBe(false)
   expect(ctx.pluginPackages.packageOf('addon', parentURL)?.version).toBe('1.0.0')
@@ -296,7 +299,7 @@ it('keeps the running bundle resolution through later package operations without
   expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual(['core'])
   expect(readProfileManifest('test', dir).dependencies).toEqual({ addon: '1.0.0' })
   expect(existsSync(join(dir, 'node_modules', 'other'))).toBe(false)
-  expect(trace).toEqual(['start:sibling', 'start:addon:1', 'pnpm:add', 'pnpm:remove'])
+  expect(trace).toEqual(['start:sibling', 'start:addon:1', 'pnpm:add', 'pnpm:install', 'pnpm:remove'])
 })
 
 it.each(['disable', 'remove'] as const)('retains a shared dependency after %s of its first declaring bundle', async (operation) => {
@@ -379,7 +382,7 @@ it('refuses to overwrite an installed bundle, and installs another version once 
   await removeAddon(manager, dir, trace)
   mockPnpm(dir, trace, () => { installFiles(dir, 2) })
   expect(await manager.installBundle('addon@2', { enabled: true })).toMatchObject({ application: 'applied', changed: true })
-  expect(trace).toEqual(['start:sibling', 'start:addon:1', 'stop:addon:1', 'publish', 'pnpm:remove', 'publish', 'pnpm:add', 'publish', 'start:addon:2'])
+  expect(trace).toEqual(['start:sibling', 'start:addon:1', 'stop:addon:1', 'publish', 'pnpm:remove', 'publish', 'pnpm:add', 'pnpm:install', 'publish', 'start:addon:2'])
   expect(entry()?.fiber?.state).toBe(FiberState.ACTIVE)
   expect(ctx.get('addonVersion')).toBe(2)
   expect(readFileSync(evaluationPath, 'utf8')).toBe('addon:1\naddon:2\n')
@@ -429,7 +432,7 @@ it('starts a plugin relinked to another directory without a restart', async () =
   await removeAddon(manager, dir, trace)
   mockPnpm(dir, trace, () => { linkTo(dir, join(work, 'source-3'), 3) })
   expect(await manager.installBundle(linkSource(join(work, 'source-3'), 3), { enabled: true })).toMatchObject({ application: 'applied', changed: true })
-  expect(trace).toEqual(['stop:addon:2', 'publish', 'pnpm:remove', 'publish', 'pnpm:add', 'publish', 'start:addon:3'])
+  expect(trace).toEqual(['stop:addon:2', 'publish', 'pnpm:remove', 'publish', 'pnpm:add', 'pnpm:install', 'publish', 'start:addon:3'])
   expect(ctx.get('addonVersion')).toBe(3)
 })
 
@@ -442,7 +445,7 @@ it('starts a registry installation of a package that was linked before', async (
   await removeAddon(manager, dir, trace)
   mockPnpm(dir, trace, () => { installFiles(dir, 3) })
   expect(await manager.installBundle('addon@3', { enabled: true })).toMatchObject({ application: 'applied', changed: true })
-  expect(trace).toEqual(['stop:addon:2', 'publish', 'pnpm:remove', 'publish', 'pnpm:add', 'publish', 'start:addon:3'])
+  expect(trace).toEqual(['stop:addon:2', 'publish', 'pnpm:remove', 'publish', 'pnpm:add', 'pnpm:install', 'publish', 'start:addon:3'])
   expect(ctx.get('addonVersion')).toBe(3)
 })
 
@@ -471,7 +474,7 @@ it('starts a bundle reinstalled from another link target while a plugin outside 
   // Plugins outside a Loader entry are the caller's; the reinstalled bundle starts from the new link target.
   expect(await manager.installBundle(linkSource(join(dir, '..', 'addon-source-3'), 3), { enabled: true }))
     .toMatchObject({ application: 'applied', changed: true })
-  expect(trace).toEqual(['pnpm:add', 'publish', 'start:addon:3'])
+  expect(trace).toEqual(['pnpm:add', 'pnpm:install', 'publish', 'start:addon:3'])
 })
 
 it('restores a disable whose publication waits for a restart and reports other publication failures', async () => {
@@ -628,7 +631,7 @@ it('publishes a newly installed bundle without HMR and leaves its activation to 
 
   expect(await manager.installBundle('addon', { enabled: true })).toMatchObject({ application: 'restart-required', changed: true })
   expect(published).toHaveBeenCalledOnce()
-  expect(trace).toEqual(['start:sibling', 'pnpm:add', 'publish'])
+  expect(trace).toEqual(['start:sibling', 'pnpm:add', 'pnpm:install', 'publish'])
   expect(ctx.pluginPackages.packageOf('addon', parentURL)?.version).toBe('1.0.0')
   expect(entry()).toBeUndefined()
   expect(ctx.get('addonVersion')).toBeUndefined()

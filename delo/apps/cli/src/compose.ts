@@ -32,8 +32,7 @@
  * - each required Delo row's package, and the Delo bundle that declares the row, resolve inside this Delo's own
  *   packages ({@link deloPackagesRoot}: `runtimes/<version>/app`, or the source checkout), so a same-named package
  *   elsewhere, such as in the profile's `node_modules`, cannot stand in for it;
- * - the `plugin-manager` row's `registry` and `fallbackRegistries` are literal https URLs, and its `protectedPlugins`
- *   keep every name a Delo bundle's patch of the row lists;
+ * - the `plugin-manager` row's `protectedPlugins` keep every name a Delo bundle's patch of the row lists;
  * - after boot, each service a required row provides ({@link ROW_SERVICES}) is provided by that row, by the fiber that
  *   registered it and not by its presence alone, and is present unless the row's switch is off: `sandbox`, `fetchGuard`,
  *   the consent services, `pluginAudit` and `deloPluginTrust`, and `deloTurnGate`, through which an update's or a stop's
@@ -55,6 +54,7 @@ import { deloRowIds, isDeloPackage, refuseSkippedDeloBundles, type BootedRow } f
 import { CliError, EXIT } from './exit.ts'
 import { composedRow, isRecord, patchLayers, rowInserts, rowPatches, sourcesSetting, type PatchLayer } from './patch-layers.ts'
 import { deloPackagesRoot } from './package-manager.ts'
+import { INSTALL_CHECK_ROW } from './plugin-install-check.ts'
 import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.ts'
 import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, startOnlySockets, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
 import { migrationsPath } from './profile-migrations.ts'
@@ -148,6 +148,8 @@ export interface ComposedStart {
   readonly rowPackages: readonly RowPackage[]
   /** The directory this Delo's own packages lie in ({@link deloPackagesRoot}). */
   readonly packagesRoot: string
+  /** Whether the npm mirror is on ({@link npmMirrorOf}); the start passes it to the Host as `DELO_NPM_MIRROR`. */
+  readonly npmMirror: boolean
 }
 
 /** Where a required Delo row's package, or the bundle that declares it, resolves. */
@@ -255,6 +257,7 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
     prompts,
     rowPackages,
     packagesRoot: deloPackagesRoot(),
+    npmMirror: npmMirrorOf(layers),
   }
   assertComposedInvariants(composed)
   return composed
@@ -320,12 +323,9 @@ function standInViolations(composed: ComposedStart): Violation[] {
   })
 }
 
-/** An https URL, the only registry plugin management may ask. */
-const HTTPS_REGISTRY = /^https:\/\/\S+$/u
-
 /**
- * The violations of the plugin manager's row: a registry or fallback registry that is not a literal https URL, and a
- * protected plugin that a Delo bundle's patch of the row lists and the composed row does not.
+ * The violations of the plugin manager's row: a protected plugin that a Delo bundle's patch of the row lists and the
+ * composed row does not.
  * @param composed - the composed start.
  * @param row - the plugin manager's row, composed or booted; `undefined` when the profile has none.
  * @returns the violations.
@@ -333,20 +333,24 @@ const HTTPS_REGISTRY = /^https:\/\/\S+$/u
 function pluginManagerViolations(composed: ComposedStart, row: { readonly config?: unknown } | undefined): Violation[] {
   if (row === undefined) return []
   const config = isRecord(row.config) ? row.config : {}
-  const sources = (key: string): string[] => sourcesSetting(composed.layers, PLUGIN_MANAGER_ROW, patch => isRecord(patch.config) && key in patch.config)
-  const violations: Violation[] = []
-  const registries = [...config.registry === undefined ? [] : [['registry', config.registry] as const], ...(Array.isArray(config.fallbackRegistries) ? config.fallbackRegistries : config.fallbackRegistries === undefined ? [] : [config.fallbackRegistries]).map(value => ['fallbackRegistries', value] as const)]
-  for (const [key, value] of registries) {
-    if (typeof value === 'string' && HTTPS_REGISTRY.test(value)) continue
-    violations.push({ subject: PLUGIN_MANAGER_ROW, problem: `names the ${key === 'registry' ? 'registry' : 'fallback registry'} ${typeof value === 'string' ? JSON.stringify(value) : 'set by an expression'}, which is not an https URL; plugins are installed only over https`, sources: sources(key) })
-  }
   const kept = new Set(Array.isArray(config.protectedPlugins) ? config.protectedPlugins.filter((name): name is string => typeof name === 'string') : [])
   const declared = composed.layers.filter(layer => layer.packageName !== undefined && isDeloPackage(layer.packageName))
     .flatMap(layer => rowPatches(layer.patches, PLUGIN_MANAGER_ROW))
     .flatMap(patch => isRecord(patch.config) && Array.isArray(patch.config.protectedPlugins) ? patch.config.protectedPlugins.filter((name): name is string => typeof name === 'string') : [])
   const dropped = [...new Set(declared)].filter(name => !kept.has(name))
-  if (dropped.length > 0) violations.push({ subject: PLUGIN_MANAGER_ROW, problem: `no longer protects ${dropped.join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists`, sources: sources('protectedPlugins') })
-  return violations
+  if (dropped.length === 0) return []
+  return [{ subject: PLUGIN_MANAGER_ROW, problem: `no longer protects ${dropped.join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists`, sources: sourcesSetting(composed.layers, PLUGIN_MANAGER_ROW, patch => isRecord(patch.config) && 'protectedPlugins' in patch.config) }]
+}
+
+/**
+ * Whether the composition turns the npm mirror on: the composed `delo-plugin-install-check` row's `npmMirror` is
+ * literally `true`.
+ * @param layers - the layers.
+ * @returns the setting; false without the row or with any other value.
+ */
+export function npmMirrorOf(layers: readonly PatchLayer[]): boolean {
+  const config = composedRow(layers, INSTALL_CHECK_ROW)?.config
+  return isRecord(config) && config.npmMirror === true
 }
 
 /**

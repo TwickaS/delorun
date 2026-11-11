@@ -38,6 +38,7 @@ import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
+import { NPM_MIRROR_ENV } from '@delo/bundle-local/profile'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delo-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
 import { announceStudio } from './open/announce.ts'
@@ -558,7 +559,7 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
  * @param logger - the home process's logger.
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
  * Before the boot it sets {@link DEFAULT_WORKSPACE_ENV} to the studio's first-use workspace folder
- * ([default workspace](./default-workspace.ts)).
+ * ([default workspace](./default-workspace.ts)), and {@link NPM_MIRROR_ENV} to the profile's npm mirror setting.
  * @throws {CliError} when the profile skipped a Delo bundle, no folder can hold the default workspace, the profile fails
  *   to boot, a row of a Delo bundle did not activate, or the composed or booted profile breaks an invariant; a refused
  *   Host is first torn down within the home process's bound, without ending the process. Before the Host serves, the
@@ -573,6 +574,8 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     await removeSandboxOverlay(request.home, request.profile)
     throw error
   })
+  // The Host boots in this process, so `@delo/bundle-local`'s `plugin-manager` row reads the mirror setting from here.
+  process.env[NPM_MIRROR_ENV] = composed.npmMirror ? 'on' : 'off'
   // The Host boots in this process, so `@delo/bundle-local`'s `workspace-controller` row reads the folder from here.
   try {
     const workspace = await resolveDefaultWorkspace(defaultWorkspaceRequest(request.home, composed.resolvedProfile.profile.patchPath))

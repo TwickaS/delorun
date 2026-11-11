@@ -38,6 +38,8 @@ export interface LockedEntry {
   readonly name: string
   /** The version or source after the name. */
   readonly version: string
+  /** The package's own version, which the lockfile records beside a tarball, git or directory source. */
+  readonly packageVersion?: string
   /** Its resolution. */
   readonly resolution: LockedResolution
   /** The 1-based line of the lockfile the entry starts on. */
@@ -69,11 +71,11 @@ const Resolution = z.looseObject({
 })
 const Dependencies = z.record(z.string(), z.string())
 const ImporterDependencies = z.record(z.string(), z.looseObject({ version: z.string() }))
-const Importer = z.looseObject({ dependencies: ImporterDependencies.optional(), optionalDependencies: ImporterDependencies.optional() })
+const Importer = z.looseObject({ dependencies: ImporterDependencies.nullish(), optionalDependencies: ImporterDependencies.nullish() })
 const LockfileSchema = z.looseObject({
   lockfileVersion: z.literal('9.0'),
   importers: z.record(z.string(), Importer).nullish(),
-  packages: z.record(z.string(), z.looseObject({ resolution: Resolution })).nullish(),
+  packages: z.record(z.string(), z.looseObject({ resolution: Resolution, version: z.string().optional() })).nullish(),
   snapshots: z.record(z.string(), z.looseObject({ dependencies: Dependencies.optional(), optionalDependencies: Dependencies.optional() }).nullable()).nullish(),
 })
 
@@ -109,7 +111,7 @@ export function parseLockfile(text: string): Lockfile {
     const { name, version } = splitKey(key)
     const { integrity, tarball, type, commit, repo, directory } = entry.resolution
     packages.set(key, {
-      key, name, version, line: lines.get(key) ?? 0,
+      key, name, version, line: lines.get(key) ?? 0, ...entry.version === undefined ? {} : { packageVersion: entry.version },
       resolution: { ...integrity === undefined ? {} : { integrity }, ...tarball === undefined ? {} : { tarball }, ...type === undefined ? {} : { type }, ...commit === undefined ? {} : { commit }, ...repo === undefined ? {} : { repo }, ...directory === undefined ? {} : { directory } },
     })
   }
@@ -160,16 +162,47 @@ export function snapshotKey(name: string, reference: string): string {
   return /^[a-z][a-z+.-]*:/u.test(reference) || !reference.replace(/\(.*$/u, '').includes('@') ? `${name}@${reference}` : reference
 }
 
-/** One installed package of a plugin's closure. */
-export interface InstalledPackage {
+/** One package of a plugin's closure, as the lockfile locks it. */
+export interface ClosurePackage {
   /** The name the package is installed under. */
   readonly name: string
-  /** The version reference that installed it. */
+  /** The version reference that installs it. */
   readonly reference: string
   /** Its `packages` entry; absent for a `link:` dependency, and for an entry the lockfile lacks. */
   readonly entry?: LockedEntry
+}
+
+/** One installed package of a plugin's closure. */
+export interface InstalledPackage extends ClosurePackage {
   /** Its directory, real path. */
   readonly dir: string
+}
+
+/**
+ * The packages one profile dependency and everything it depends on lock, read from the lockfile alone, so it answers
+ * before any of them is installed.
+ * @param lockfile - the profile's lockfile.
+ * @param name - the profile dependency.
+ * @returns each package once by snapshot key, the dependency first; a `link:` dependency's own dependencies are not
+ *   followed, since the profile's lockfile does not lock them.
+ */
+export function lockfileClosure(lockfile: Lockfile, name: string): ClosurePackage[] {
+  const reference = lockfile.dependencies.get(name)
+  if (reference === undefined) return []
+  const found: ClosurePackage[] = []
+  const seen = new Set<string>()
+  const visit = (dependency: string, ref: string): void => {
+    const snapshot = snapshotKey(dependency, ref)
+    if (seen.has(snapshot)) return
+    seen.add(snapshot)
+    const key = packageKey(dependency, ref)
+    const entry = key === undefined ? undefined : lockfile.packages.get(key)
+    found.push({ name: dependency, reference: ref, ...entry === undefined ? {} : { entry } })
+    if (ref.startsWith('link:')) return
+    for (const [child, childRef] of lockfile.snapshots.get(snapshot) ?? new Map<string, string>()) visit(child, childRef)
+  }
+  visit(name, reference)
+  return found
 }
 
 /**

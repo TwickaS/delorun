@@ -216,7 +216,7 @@ it('installs the spec the Git transport probe chooses with the profile Git envir
   onTestFinished(() => { transport.mockRestore(); pnpm.mockRestore() })
   expect((await manager.installBundle(spec)).application).toBe('failed')
   expect(transport).toHaveBeenCalledWith(expect.objectContaining({ kind: 'git', spec }), dir, expect.objectContaining({ timeoutMs: 7000, env }))
-  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', 'git+ssh://git@git.example/team/sub/plugin.git#main'])
+  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', 'git+ssh://git@git.example/team/sub/plugin.git#main', '--lockfile-only'])
 })
 
 it('attributes a failure to the host of the SSH spec the probe chose, which carries no HTTPS port', async () => {
@@ -823,7 +823,8 @@ it('retains approved policy and reports it as changed when the registry fails be
   expect(parse(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({ allowBuilds: { native: true } })
 })
 
-it('runs a real pnpm dependency script only after approval and retry', async () => {
+// Resolution and installation are two real pnpm runs per attempt.
+it('runs a real pnpm dependency script only after approval and retry', { timeout: 30_000 }, async () => {
   const { manager, dir, profile } = await fixture('startup')
   const addon = join(profile.cwd, 'addon')
   mkdirSync(addon)
@@ -847,7 +848,34 @@ it('runs a real pnpm dependency script only after approval and retry', async () 
   expect(readFileSync(built, 'utf8')).toBe('built')
 })
 
-it('offers approval for a real git-hosted package pnpm refused to prepare', async () => {
+it('runs no allowed install script of a package the audit refuses once the lockfile names it', { timeout: 30_000 }, async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, profile } = await fixture('startup', false, auditing('refused', calls))
+  const addon = join(profile.cwd, 'addon')
+  const marker = join(profile.cwd, 'install-script-ran')
+  mkdirSync(addon)
+  writeFileSync(join(addon, 'package.json'), JSON.stringify({ name: 'refused-fixture-addon', version: '1.0.0',
+    scripts: { install: 'node build.cjs' }, dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  writeFileSync(join(addon, 'build.cjs'), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
+  writeFileSync(join(addon, 'cordis.patch.yml'), '[]\n')
+  writeFileSync(join(dir, 'package.json'), '{"name":"refused-fixture","private":true}\n')
+  const policy = parseDocument(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8'))
+  policy.set('offline', true)
+  policy.set('storeDir', join(profile.cwd, 'store'))
+  // The build is allowed under the key pnpm names it by, so only the audit stands between the package and its script.
+  policy.set('allowBuilds', { 'refused-fixture-addon@file:../../addon': true })
+  writeFileSync(join(dir, 'pnpm-workspace.yaml'), String(policy))
+  const before = readFileSync(join(dir, 'package.json'), 'utf8')
+  const refused = await manager.installBundle('file:./addon', { enabled: false })
+  expect(existsSync(marker)).toBe(false)
+  expect(refused, JSON.stringify(refused)).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-refused' } })
+  expect(calls).toEqual([{ name: 'refused-fixture-addon', dir: join(dir, 'node_modules', 'refused-fixture-addon'), accepted: [], pending: 'install' }])
+  expect(existsSync(join(dir, 'node_modules', 'refused-fixture-addon'))).toBe(false)
+  expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+})
+
+// Resolution and installation are two real pnpm runs per attempt.
+it('offers approval for a real git-hosted package pnpm refused to prepare', { timeout: 30_000 }, async () => {
   // Both the fixture's Git and the manager's pnpm child read only this empty configuration.
   const env = { GIT_CONFIG_GLOBAL: '', GIT_CONFIG_NOSYSTEM: '1' }
   const pnpm = fileURLToPath(new URL('../../../../apps/desktop/node_modules/pnpm/bin/pnpm.mjs', import.meta.url))
@@ -1067,8 +1095,8 @@ it('restores the manifest when the package pnpm added declares no bundle', async
   expect(await manager.installBundle('plain')).toMatchObject({
     changed: false, application: 'failed', stage: 'install', error: { code: 'not-bundle' }, packageResult: { exitCode: 0 },
   })
-  // The manifest is put back rather than cleaned through another pnpm run.
-  expect(install).toHaveBeenCalledOnce()
+  // The resolution and the installation ran; the manifest is put back rather than cleaned through another pnpm run.
+  expect(install.mock.calls.map(call => call[1][0])).toEqual(['add', 'install'])
   expect(readProfileManifest('test', dir)).toMatchObject({ dependencies: { extra: '1.0.0' }, dsh: { profile: { bundles: ['core', 'extra'] } } })
   expect((await manager.listBundles()).some(row => row.name === 'plain')).toBe(false)
 })
@@ -1109,7 +1137,7 @@ it('keeps a valid installed bundle when its subsequent activation fails', async 
   onTestFinished(() => { install.mockRestore() })
   const result = await manager.installBundle('broken')
   expect(result).toMatchObject({ application: 'failed', stage: 'enable', target: 'broken', bundle: 'broken', packageResult: { exitCode: 0 } })
-  expect(install).toHaveBeenCalledOnce()
+  expect(install.mock.calls.map(call => call[1][0])).toEqual(['add', 'install'])
   expect((await manager.listBundles()).find(row => row.name === 'broken')).toMatchObject({ enabled: true, removable: true })
 })
 
@@ -1211,23 +1239,33 @@ it('streams pnpm output, reports the installation phases, and names the installe
   const install = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args, options) => {
     options.onOutput?.('Progress: resolved 1\n', 'stdout')
     options.onOutput?.('warning\n', 'stderr')
-    const name = String(args[1])
-    bundle(name, [{ id: name, name: './plugin.mjs', config: { service: name } }])
-    const manifest = readProfileManifest('test', dir)
-    manifest.dependencies = { ...manifest.dependencies, [name]: '1.0.0' }
-    writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+    if (args[0] === 'add') {
+      const name = String(args[1])
+      bundle(name, [{ id: name, name: './plugin.mjs', config: { service: name } }])
+      const manifest = readProfileManifest('test', dir)
+      manifest.dependencies = { ...manifest.dependencies, [name]: '1.0.0' }
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+    }
     return { exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') }
   })
   onTestFinished(() => { install.mockRestore() })
   const requestId = 'f2340b6d-40bb-46b7-8b94-217bdf5010bd' as PluginInstallRequestId
+  const before = readFileSync(join(dir, 'package.json'), 'utf8')
   expect(await manager.installBundle('streamed', { enabled: false, requestId })).toMatchObject({ application: 'applied', changed: true, bundle: 'streamed' })
-  expect(install).toHaveBeenCalledWith(expect.objectContaining({ profile: 'test' }), ['add', 'streamed'],
+  expect(install).toHaveBeenCalledWith(expect.objectContaining({ profile: 'test' }), ['add', 'streamed', '--lockfile-only'],
     expect.objectContaining({ command: 'pnpm', execution: 'service' }))
-  const jobId = chunks[0]?.jobId
+  // The installation compares and restores against the profile as it was before the resolution.
+  expect(install).toHaveBeenCalledWith(expect.objectContaining({ profile: 'test' }), ['install', '--frozen-lockfile'],
+    expect.objectContaining({ baseline: { manifest: before, lockfile: undefined } }))
+  const [resolving, installing] = [...new Set(chunks.map(chunk => chunk.jobId))]
+  const streamed = (jobId: string | undefined, argv: string[]) => [
+    { requestId, jobId, argv, cwd: dir, stream: 'stdout', text: 'Progress: resolved 1\n' },
+    { requestId, jobId, argv, cwd: dir, stream: 'stderr', text: 'warning\n' },
+    { requestId, jobId, argv, cwd: dir, stream: 'stdout', text: '', exitCode: 0 },
+  ]
   expect(chunks).toEqual([
-    { requestId, jobId, argv: ['pnpm', 'add', 'streamed'], cwd: dir, stream: 'stdout', text: 'Progress: resolved 1\n' },
-    { requestId, jobId, argv: ['pnpm', 'add', 'streamed'], cwd: dir, stream: 'stderr', text: 'warning\n' },
-    { requestId, jobId, argv: ['pnpm', 'add', 'streamed'], cwd: dir, stream: 'stdout', text: '', exitCode: 0 },
+    ...streamed(resolving, ['pnpm', 'add', 'streamed', '--lockfile-only']),
+    ...streamed(installing, ['pnpm', 'install', '--frozen-lockfile']),
   ])
   expect(phases).toEqual([{ requestId, phase: 'installing', attempt: { registry: null, index: 1, total: 2 } }, { requestId, phase: 'applying' }])
   expect(changes).toEqual([{ reason: 'install' }])
@@ -1618,22 +1656,26 @@ it('installs from the next registry after one is unreachable, restoring the file
       const manifest = readProfileManifest('test', dir)
       manifest.dependencies = { ...manifest.dependencies, [name]: '1.0.0' }
       writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
-      return { exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') }
+      return { exitCode: 0, output: 'resolved', truncated: false, logPath: join(dir, 'pnpm.log') }
     })
+    .mockResolvedValueOnce({ exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') })
   onTestFinished(() => { install.mockRestore() })
   const requestId = 'f2340b6d-40bb-46b7-8b94-217bdf5010bd' as PluginInstallRequestId
   const result = await manager.installBundle('fallen', { enabled: false, requestId })
   expect(result).toMatchObject({ application: 'applied', bundle: 'fallen', registries: [null, MIRROR], packageResult: { exitCode: 0 } })
   expect(result.failedAt).toBeUndefined()
-  expect(install.mock.calls.map(call => call[1])).toEqual([['add', 'fallen'], ['add', 'fallen', `--registry=${MIRROR}`]])
+  // The installation asks the registry that resolved the package.
+  expect(install.mock.calls.map(call => call[1])).toEqual([
+    ['add', 'fallen', '--lockfile-only'], ['add', 'fallen', '--lockfile-only', `--registry=${MIRROR}`], ['install', '--frozen-lockfile', `--registry=${MIRROR}`],
+  ])
   expect(phases).toEqual([
     { requestId, phase: 'installing', attempt: { registry: null, index: 1, total: 2 } },
     { requestId, phase: 'installing', attempt: { registry: MIRROR, index: 2, total: 2 } },
     { requestId, phase: 'applying' },
   ])
-  // Each attempt streams as its own run, the command line naming the registry it asked.
-  expect(new Set(chunks.map(chunk => chunk.jobId)).size).toBe(2)
-  expect(chunks.at(-1)).toMatchObject({ requestId, argv: ['pnpm', 'add', 'fallen', `--registry=${MIRROR}`], exitCode: 0 })
+  // Each run streams as its own, the command line naming the registry it asked.
+  expect(new Set(chunks.map(chunk => chunk.jobId)).size).toBe(3)
+  expect(chunks.at(-1)).toMatchObject({ requestId, argv: ['pnpm', 'install', '--frozen-lockfile', `--registry=${MIRROR}`], exitCode: 0 })
 })
 
 it('does not ask the next registry after the manager terminated a silent run', async () => {
@@ -1693,7 +1735,7 @@ it('stops at a failure no registry changes, at a host the spec itself is fetched
     application: 'failed', registries: ['https://npm.corp.example/'], failedAt: 'registry', packageResult: { kind: 'network' },
   })
   expect(install).toHaveBeenCalledTimes(3)
-  expect(install).toHaveBeenLastCalledWith(expect.anything(), ['add', 'dsh-x', '--registry=https://npm.corp.example/'], expect.anything())
+  expect(install).toHaveBeenLastCalledWith(expect.anything(), ['add', 'dsh-x', '--lockfile-only', '--registry=https://npm.corp.example/'], expect.anything())
   // Every configured registry unreachable: the failure is the last attempt's, and all of them are named.
   install.mockResolvedValue(failing('ERR_PNPM_META_FETCH_FAIL  GET https://registry/dsh-x: ETIMEDOUT'))
   expect(await manager.installBundle('dsh-x')).toMatchObject({ application: 'failed', registries: [null, MIRROR], failedAt: 'registry', packageResult: { kind: 'network' } })
@@ -1823,13 +1865,14 @@ function auditing(decision: 'needs-acceptance' | 'refused', calls: PluginAuditTa
   }
 }
 
-// A pnpm run that installs `audited`, a bundle of one row.
+// pnpm runs that resolve `audited`, a bundle of one row, into the manifest, then install it.
 function installsAudited(dir: string, bundle: (name: string, rows: unknown[]) => void) {
-  const install = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async () => {
-    bundle('audited', [])
-    const profile = readProfileManifest('test', dir)
-    profile.dependencies = { ...profile.dependencies, audited: '1.0.0' }
-    writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+  const install = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
+    if (args[0] === 'add') {
+      const profile = readProfileManifest('test', dir)
+      profile.dependencies = { ...profile.dependencies, audited: '1.0.0' }
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+    } else bundle('audited', [])
     return { exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') }
   })
   onTestFinished(() => { install.mockRestore() })
@@ -1844,9 +1887,16 @@ it('refuses an installation the plugin audit finds against until the user accept
   const refused = await manager.installBundle('audited', { enabled: false })
   expect(refused).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-findings', audit: { decision: 'needs-acceptance', digest: 'digest-1' } } })
   expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
-  expect(calls).toEqual([{ name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] }])
+  // Asked once the lockfile names the package, before pnpm installed anything.
+  expect(calls).toEqual([{ name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: [], pending: 'install' }])
+  expect(existsSync(join(dir, 'node_modules', 'audited'))).toBe(false)
   const accepted = await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })
   expect(accepted).toMatchObject({ application: 'applied', changed: true, audit: { decision: 'accepted', digest: 'digest-1' } })
+  // Asked again once it is installed and its builds have run.
+  expect(calls.slice(1)).toEqual([
+    { name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: ['digest-1'], pending: 'install' },
+    { name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: ['digest-1'] },
+  ])
   expect(JSON.parse(readFileSync(join(dir, '.plugin-manager', 'audits.json'), 'utf8'))).toEqual({ audited: ['digest-1'] })
   expect(lstatSync(join(dir, '.plugin-manager', 'audits.json')).mode & 0o777).toBe(0o600)
   // Enabling it later asks the audit again, with the saved acceptance.
@@ -1865,6 +1915,7 @@ it('refuses enabling a bundle whose findings the user never accepted, and a crit
   installsAudited(second.dir, second.bundle)
   expect(await second.manager.installBundle('audited', { acceptedAudit: 'digest-1' })).toMatchObject({ application: 'failed', error: { code: 'audit-refused', audit: { decision: 'refused' } } })
   expect(existsSync(join(second.dir, '.plugin-manager', 'audits.json'))).toBe(false)
+  expect(existsSync(join(second.dir, 'node_modules', 'audited'))).toBe(false)
 })
 
 it('lists absent Official entries offline without resolving their packages or consulting registries', async () => {
@@ -1939,7 +1990,7 @@ it('uses the generic exact installer and keeps an Official entry through on, off
       const packaged = JSON.parse(readFileSync(packagePath, 'utf8')) as Record<string, unknown>
       writeFileSync(packagePath, JSON.stringify({ ...packaged, version }))
       manifest.dependencies = { ...manifest.dependencies, [name]: version }
-    } else {
+    } else if (args[0] === 'remove') {
       delete manifest.dependencies?.[name]
       rmSync(join(profile.home, 'node_modules', name), { recursive: true, force: true })
     }
@@ -2317,8 +2368,12 @@ it('audits what a restore brings back after installing it with every script held
   onTestFinished(() => { pnpm.mockRestore() })
   const result = await manager.restore(version)
   expect(result).toMatchObject({ application: 'applied', changed: true, changes: { plugins: [{ name: 'audited', change: 'added' }], builds: [{ name: 'audited', to: 'allowed' }] } })
-  expect(steps).toEqual(['install --frozen-lockfile --ignore-scripts', 'audit', 'rebuild --pending'])
-  expect(calls).toEqual([{ name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] }])
+  // Asked again once the builds have run, so a recorded file list includes their output.
+  expect(steps).toEqual(['install --frozen-lockfile --ignore-scripts', 'audit', 'rebuild --pending', 'audit'])
+  expect(calls).toEqual([
+    { name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [], pending: 'scripts' },
+    { name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: [] },
+  ])
 })
 
 it.each(['needs-acceptance', 'refused'] as const)('puts the profile back when the audit answers %s for a package a restore brings back, running none of its scripts', async (decision) => {
@@ -2540,11 +2595,12 @@ it('refuses to list versions of a package not installed from a registry', async 
   expect(view).not.toHaveBeenCalled()
 })
 
-/** A pnpm stand-in that removes `extra` and installs the version an `add` names, unless `fails` names it. */
+/** A pnpm stand-in that removes `extra` and resolves the version an `add` names, unless `fails` names it; `install` succeeds. */
 function extraPnpm(dir: string, bundle: (name: string, rows: unknown[]) => void, fails: readonly string[] = []) {
   const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockImplementation(async (_context, args) => {
     const manifest = readProfileManifest('test', dir)
     const spec = String(args[1])
+    if (args[0] === 'install') return { exitCode: 0, output: '', truncated: false, logPath: '/install.log' }
     if (args[0] === 'remove') {
       delete manifest.dependencies?.extra
       rmSync(join(dir, 'node_modules', 'extra'), { recursive: true, force: true })
@@ -2574,7 +2630,9 @@ it('updates a registry bundle by removing it and installing the exact newer vers
   expect(updated).toMatchObject({ from: '1.0.0', to: '1.2.0', step: 'install', result: { application: 'applied', version: '1.2.0', enabled: true } })
   expect(updated.restore).toBeUndefined()
   expect(steps).toEqual(['checking', 'removing', 'installing'])
-  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['remove', 'extra'], ['add', 'extra@1.2.0', '--save-exact', `--registry=${MIRROR}`]])
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([
+    ['remove', 'extra'], ['add', 'extra@1.2.0', '--lockfile-only', '--save-exact', `--registry=${MIRROR}`], ['install', '--frozen-lockfile', `--registry=${MIRROR}`],
+  ])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.2.0')
   expect(ctx.get('managedProbe')).toBe(true)
 })
@@ -2594,8 +2652,9 @@ it('installs the removed version again when the target fails to install', async 
   expect(pnpm.mock.calls.map(call => call[1])).toEqual([
     // The update starts at the registry the package came from; a 404 there may be a mirror not yet synced, so pnpm's
     // own registry is asked too before the installation gives up.
-    ['remove', 'extra', `--config.registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-exact', `--registry=${MIRROR}`], ['add', 'extra@1.2.0', '--save-exact'],
-    ['add', 'extra@1.1.0', '--save-exact', `--registry=${MIRROR}`],
+    ['remove', 'extra', `--config.registry=${MIRROR}`],
+    ['add', 'extra@1.2.0', '--lockfile-only', '--save-exact', `--registry=${MIRROR}`], ['add', 'extra@1.2.0', '--lockfile-only', '--save-exact'],
+    ['add', 'extra@1.1.0', '--lockfile-only', '--save-exact', `--registry=${MIRROR}`], ['install', '--frozen-lockfile', `--registry=${MIRROR}`],
   ])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.1.0')
 })
@@ -2634,7 +2693,9 @@ it('removes a target that installed but could not start before installing the re
   onTestFinished(() => { spy.mockRestore() })
   const updated = await manager.updateBundle('extra', '1.2.0')
   expect(updated).toMatchObject({ result: { application: 'failed', stage: 'enable' }, restore: { application: 'applied', version: '1.0.0' } })
-  expect(pnpm.mock.calls.map(call => call[1].slice(0, 2))).toEqual([['remove', 'extra'], ['add', 'extra@1.2.0'], ['remove', 'extra'], ['add', 'extra@1.0.0']])
+  expect(pnpm.mock.calls.map(call => call[1].slice(0, 2))).toEqual([
+    ['remove', 'extra'], ['add', 'extra@1.2.0'], ['install', '--frozen-lockfile'], ['remove', 'extra'], ['add', 'extra@1.0.0'], ['install', '--frozen-lockfile'],
+  ])
   expect(readProfileManifest('test', dir).dependencies?.extra).toBe('1.0.0')
 })
 
@@ -2699,7 +2760,7 @@ it('installs over the running version without HMR and reports the restart', asyn
     step: 'install', result: { application: 'restart-required', restartReason: 'no-hmr', version: '1.2.0' },
   })
   expect(steps).toEqual(['checking', 'installing'])
-  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['add', 'extra@1.2.0', '--save-exact']])
+  expect(pnpm.mock.calls.map(call => call[1])).toEqual([['add', 'extra@1.2.0', '--lockfile-only', '--save-exact'], ['install', '--frozen-lockfile']])
 })
 
 it.each(['extra@^1.0.0', ' extra@1.0.0 ', 'https://user:secret@example.com/pkg'])('omits invalid exemption identity for %s', async (input) => {

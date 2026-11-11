@@ -1,13 +1,17 @@
 /**
- * The plugin install check where `delorun` runs it: after `delorun plugin` changes a profile's packages, at each start
- * before the Host boots, and in `delorun verify`. The check itself is `@delo/plugin-install-check`'s; this module reads
- * its settings from the profile's composed `delo-plugin-install-check` row, so the switch and settings a person changes
- * in the profile's `cordis.patch.yml` hold for the CLI as for the Host, and prints what it found.
+ * The plugin install check where `delorun` runs it: around `delorun plugin`'s package operations, at each start before
+ * the Host boots, and in `delorun verify`. The check itself is `@delo/plugin-install-check`'s; this module reads its
+ * settings from the profile's composed `delo-plugin-install-check` row, so the switch and settings a person changes in
+ * the profile's `cordis.patch.yml` hold for the CLI as for the Host, prints what it found, and sets the row's
+ * `npmMirror` for `delorun plugin mirror on|off`.
  *
- * Every finding is printed and none stops the command, except a known critical advisory: `delorun plugin` then puts the
- * profile's `package.json` and lockfile back as they were before the command, installs them again, and exits 1 naming
- * the advisory and `--allow-advisory <id>`, which installs it anyway. The checks never stop a start; a plugin whose
- * installed files differ from its record is a warning at every start until it is reinstalled or removed.
+ * An operation that installs packages runs in three steps: pnpm resolves it into the profile's lockfile only, the check
+ * reads that lockfile, and only then pnpm installs the lockfile and runs the build scripts the profile allows, after
+ * which each checked plugin is recorded. Every finding is printed and none stops the command, except a known critical
+ * advisory: `delorun plugin` then puts the profile's `package.json` and lockfile back as they were, so nothing was
+ * fetched into the profile and no script ran, and exits 1 naming `--allow-advisory <id>`, which installs it anyway. The
+ * checks never stop a start; a plugin whose installed files differ from its record is a warning at every start until it
+ * is reinstalled or removed.
  *
  * @module @delo/cli/plugin-install-check
  */
@@ -15,9 +19,10 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
 import { Config, installationNames, resolveSettings } from '@delo/plugin-install-check'
-import { checkProfileTrust, LockfileError, reconcileProfile, type InstallCheckSettings, type InstallFinding, type PackageCheck, type PluginTrustStatus } from '@delo/plugin-install-check/check'
+import { checkProfileTrust, forgetRemoved, LockfileError, reconcileProfile, recordInstalled, type InstallCheckSettings, type InstallFinding, type PackageCheck, type PendingRecord, type PluginTrustStatus } from '@delo/plugin-install-check/check'
 import type { CommandOutput } from './command.ts'
-import { CliError, EXIT } from './exit.ts'
+import { CliError, EXIT, type ExitCode } from './exit.ts'
+import { setPatchRow } from './setup/writes.ts'
 import { composedRow, isRecord, patchLayers } from './patch-layers.ts'
 import { printable } from './terminal-text.ts'
 
@@ -117,29 +122,190 @@ function printCheck(output: CommandOutput, name: string, check: PackageCheck): v
   for (const finding of check.findings) output.stderr(findingLine(finding))
 }
 
-/** What the check after a package operation found. */
-export interface InstallCheckOutcome {
+/** What the check of a resolved package operation found. */
+export interface ResolvedCheck {
   /** The plugins refused for a known critical advisory. */
   readonly refused: readonly string[]
+  /** What to record of each plugin that passed, once it is installed and built. */
+  readonly pending: readonly PendingRecord[]
 }
 
 /**
- * Check every plugin a package operation installed or changed, print each finding, and remove the records of removed
- * plugins.
- * @param request - the profile directory, its settings, the allowed advisories and the output.
- * @returns the refused plugins; none when the profile's lockfile does not read, which is printed as a warning.
+ * Check every plugin a resolved package operation adds or changes in the profile's lockfile, before anything is
+ * installed, print every finding, and remove the records of removed plugins.
+ * @param request - the profile directory, its settings, the allowed advisories, the registries the operation asks and
+ *   the output.
+ * @returns the refused plugins and what to record of the others; none when the profile's lockfile does not read,
+ *   which is printed as a warning.
  */
-export async function checkAfterOperation(request: { readonly profileDir: string, readonly check: ProfileCheckSettings, readonly allowedAdvisories: readonly string[], readonly output: CommandOutput }): Promise<InstallCheckOutcome> {
+export async function checkResolved(request: { readonly profileDir: string, readonly check: ProfileCheckSettings, readonly allowedAdvisories: readonly string[], readonly registries: readonly string[], readonly output: CommandOutput }): Promise<ResolvedCheck> {
   let result
   try {
-    result = await reconcileProfile({ profileDir: request.profileDir, allowedAdvisories: request.allowedAdvisories, knownNames: request.check.knownNames, now: Date.now }, request.check.settings)
+    result = await reconcileProfile({ profileDir: request.profileDir, allowedAdvisories: request.allowedAdvisories, knownNames: request.check.knownNames, registries: request.registries, now: Date.now, compareFiles: false }, request.check.settings)
   } catch (error) {
     if (!(error instanceof LockfileError)) throw error
-    request.output.stderr(`delorun: warning: the plugins this command installed were not checked: ${printable(error.message)}\n`)
-    return { refused: [] }
+    request.output.stderr(`delorun: warning: the plugins this command installs were not checked: ${printable(error.message)}\n`)
+    return { refused: [], pending: [] }
   }
   for (const { name, check } of result.checked) printCheck(request.output, name, check)
-  return { refused: result.checked.flatMap(({ name, check }) => check.kind === 'checked' && check.blocking.length > 0 ? [name] : []) }
+  return {
+    refused: result.checked.flatMap(({ name, check }) => check.kind === 'checked' && check.blocking.length > 0 ? [name] : []),
+    pending: result.checked.flatMap(({ check }) => check.kind === 'checked' && check.pending !== undefined ? [check.pending] : []),
+  }
+}
+
+/**
+ * Record each checked plugin once the operation installed it and ran its builds. A record that cannot be written is
+ * printed as a warning: the plugin stays installed and reads as unrecorded.
+ * @param profileDir - the profile directory.
+ * @param pending - what the check left to record.
+ * @param maxFiles - the most files recorded per package.
+ * @param output - where a warning goes.
+ */
+export async function recordAfterInstall(profileDir: string, pending: readonly PendingRecord[], maxFiles: number, output: CommandOutput): Promise<void> {
+  for (const each of pending) {
+    try {
+      await recordInstalled(profileDir, each, { now: Date.now, maxFiles })
+    } catch (error) {
+      output.stderr(`delorun: warning: ${printable(each.name)} is installed, but its files were not recorded, so changes to it cannot be detected: ${printable(error instanceof Error ? error.message : String(error))}\n`)
+    }
+  }
+}
+
+/**
+ * Remove the records of the plugins an operation removed; a lockfile that does not read leaves them, as a warning.
+ * @param profileDir - the profile directory.
+ * @param output - where a warning goes.
+ */
+export async function forgetRemovedPlugins(profileDir: string, output: CommandOutput): Promise<void> {
+  try {
+    await forgetRemoved(profileDir)
+  } catch (error) {
+    if (!(error instanceof LockfileError)) throw error
+    output.stderr(`delorun: warning: the install records were not brought up to date: ${printable(error.message)}\n`)
+  }
+}
+
+/** The pnpm commands that install packages, which `delorun plugin` checks between resolving and installing. */
+const INSTALLING = new Set(['add', 'install', 'i', 'update', 'up', 'upgrade'])
+
+/**
+ * The pnpm command an argument list runs: its first argument that is neither an option nor `--profile`'s value.
+ * @param args - the arguments after `plugin`.
+ * @returns the command, or `undefined`.
+ */
+function pnpmCommandOf(args: readonly string[]): string | undefined {
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]!
+    if (argument === '--') return undefined
+    if (argument === '--profile') { index++; continue }
+    if (!argument.startsWith('-')) return argument
+  }
+  return undefined
+}
+
+/**
+ * Whether `delorun plugin`'s arguments run a pnpm command that installs packages.
+ * @param args - the arguments after `plugin`, without `--allow-advisory`.
+ * @returns true for `add`, `install`, `update` and their aliases, unless the person already asked for the lockfile only.
+ */
+export function installsPackages(args: readonly string[]): boolean {
+  const command = pnpmCommandOf(args)
+  return command !== undefined && INSTALLING.has(command) && !args.includes('--lockfile-only')
+}
+
+/**
+ * The arguments with `--profile <profile>` first when they name no profile, which upstream's parser requires and
+ * `delorun` defaults.
+ * @param args - the arguments after `plugin`.
+ * @param profile - the profile `delorun` selected.
+ * @returns the arguments upstream receives.
+ */
+export function withProfile(args: readonly string[], profile: string): string[] {
+  return args.some(argument => argument === '--profile' || argument.startsWith('--profile=')) ? [...args] : ['--profile', profile, ...args]
+}
+
+/**
+ * The arguments that resolve an installing operation into the lockfile without installing anything.
+ * @param args - the arguments after `plugin`.
+ * @returns them with `--lockfile-only` added and `--frozen-lockfile` removed.
+ */
+export function resolveOnly(args: readonly string[]): string[] {
+  return [...args.filter(argument => argument !== '--frozen-lockfile'), '--lockfile-only']
+}
+
+/**
+ * The registry options an operation names, which its installation step repeats and the check compares.
+ * @param args - the arguments after `plugin`.
+ * @returns the options as given, and the URLs they name.
+ */
+export function registryOptions(args: readonly string[]): { readonly options: readonly string[], readonly urls: readonly string[] } {
+  const options: string[] = []
+  const urls: string[] = []
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]!
+    const prefixed = ['--registry=', '--config.registry='].find(prefix => argument.startsWith(prefix))
+    if (prefixed !== undefined) {
+      options.push(argument)
+      urls.push(argument.slice(prefixed.length))
+    } else if (argument === '--registry' && args[index + 1] !== undefined) {
+      options.push(argument, args[index + 1]!)
+      urls.push(args[index + 1]!)
+      index++
+    }
+  }
+  return { options, urls }
+}
+
+/**
+ * Turn the npm mirror on or off for a profile: write the `delo-plugin-install-check` row's composed settings with
+ * `npmMirror` into the profile's own `cordis.patch.yml`. The plugin manager asks the mirror from the next start.
+ * @param home - the Delo home.
+ * @param profileDir - the profile directory.
+ * @param installAnchor - the installation's `package.json`.
+ * @param on - the setting.
+ * @throws {CliError} when the profile has no such row, or its settings hold an expression this cannot restate.
+ */
+export function setNpmMirror(home: string, profileDir: string, installAnchor: string, on: boolean): void {
+  if (!existsSync(join(profileDir, 'package.json'))) throw new CliError(EXIT.failed, `delorun plugin mirror: ${profileDir} holds no profile; run delorun setup first`)
+  const profile = loadProfileDirectory('delorun', profileDir, installAnchor)
+  const row = composedRow(patchLayers(home, profile, []), INSTALL_CHECK_ROW)
+  if (row === undefined) throw new CliError(EXIT.failed, `delorun plugin mirror: the profile ${profile.name} has no ${INSTALL_CHECK_ROW} row, which holds the setting; it does not load Delo's bundle`)
+  const config = isRecord(row.config) ? row.config : {}
+  if (!Object.values(config).every(isPlainValue)) throw new CliError(EXIT.failed, `delorun plugin mirror: the ${INSTALL_CHECK_ROW} row in ${profile.patchPath} sets a value with an expression; set npmMirror: ${String(on)} there by hand`)
+  setPatchRow(profile.patchPath, { id: INSTALL_CHECK_ROW, config: { ...config, npmMirror: on } })
+}
+
+/**
+ * Whether a value is plain YAML data: a string, number, boolean, null, or an array or record of them.
+ * @param value - the value.
+ * @returns true when it is.
+ */
+function isPlainValue(value: unknown): boolean {
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return true
+  if (Array.isArray(value)) return value.every(isPlainValue)
+  return isRecord(value) && Object.getPrototypeOf(value) === Object.prototype && Object.values(value).every(isPlainValue)
+}
+
+/** The `delorun plugin mirror` usage line. */
+const MIRROR_USAGE = 'usage: delorun plugin mirror [--profile <name>] on|off'
+
+/**
+ * Run `delorun plugin mirror on|off`.
+ * @param args - the arguments after `mirror`.
+ * @param request - the home, the profile, its directory, the installation anchor and the output.
+ * @returns {@link EXIT.ok}.
+ * @throws {CliError} `EXIT.usage` without exactly `on` or `off`; see {@link setNpmMirror}.
+ */
+export function runMirror(args: readonly string[], request: { readonly home: string, readonly profile: string, readonly profileDir: string, readonly installAnchor: string, readonly output: CommandOutput }): ExitCode {
+  const words = args.filter((argument, index) => argument !== '--profile' && args[index - 1] !== '--profile' && !argument.startsWith('--profile='))
+  const value = words.length === 1 ? words[0] : undefined
+  if (value !== 'on' && value !== 'off') throw new CliError(EXIT.usage, MIRROR_USAGE)
+  setNpmMirror(request.home, request.profileDir, request.installAnchor, value === 'on')
+  request.output.stdout(value === 'on'
+    ? `The npm mirror is on for the profile ${request.profile}: plugin installs ask registry.npmmirror.com when the first registry cannot be reached or lacks the package. It applies from the next start.\n`
+    : `The npm mirror is off for the profile ${request.profile}: plugin installs ask only the first registry. It applies from the next start.\n`)
+  return EXIT.ok
 }
 
 /**

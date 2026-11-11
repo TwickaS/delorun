@@ -424,27 +424,29 @@ const PROTECTED = (parse(readFileSync(join(import.meta.dirname, '../../../packag
   .find(patch => patch.id === 'plugin-manager')?.config?.protectedPlugins ?? []
 
 describe('the plugin manager\'s row', { timeout: 60_000 }, () => {
-  it('asks no mirror unless the person turns it on, and accepts the mirror with every protected plugin restated', async () => {
+  it('asks no mirror until the install check\'s npmMirror setting is on, and keeps the protected plugins either way', async () => {
     expect(PROTECTED).toContain('@delo/plugin-install-check')
-    const composed = await compose()
-    expect(composedRow(composed.layers, 'plugin-manager')?.config).toMatchObject({ fallbackRegistries: [] })
-    appendToProfilePatch({ id: 'plugin-manager', config: { fallbackRegistries: ['https://registry.npmmirror.com/'], protectedPlugins: PROTECTED } })
+    expect((await compose()).npmMirror).toBe(false)
+    appendToProfilePatch({ id: 'delo-plugin-install-check', config: { enabled: true, npmMirror: true } })
     const mirrored = await compose()
+    expect(mirrored.npmMirror).toBe(true)
+    expect(composedRow(mirrored.layers, 'plugin-manager')?.config).toMatchObject({ protectedPlugins: PROTECTED })
     expect(() => { assertDeloInvariants(mirrored, booted(mirrored)) }).not.toThrow()
   })
 
-  it('refuses a registry or a fallback registry that is not https, and a patch that drops a protected plugin, naming the file', async () => {
-    const path = appendToProfilePatch({ id: 'plugin-manager', config: { registry: 'http://registry.example.test/', fallbackRegistries: ['http://mirror.example.test/'], protectedPlugins: ['@delo/plugin-fetch-guard'] } })
+  it('accepts a plain http registry, which the install check warns about, and refuses a patch that drops a protected plugin', async () => {
+    appendToProfilePatch({ id: 'plugin-manager', config: { registry: 'http://registry.example.test/', protectedPlugins: PROTECTED } })
+    await compose()
+    const path = appendToProfilePatch({ id: 'plugin-manager', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } })
     const message = await refused(compose)
-    expect(message).toContain(`plugin-manager names the registry "http://registry.example.test/", which is not an https URL; plugins are installed only over https (set in ${path})`)
-    expect(message).toContain('plugin-manager names the fallback registry "http://mirror.example.test/", which is not an https URL')
-    expect(message).toContain(`plugin-manager no longer protects ${PROTECTED.filter(name => name !== '@delo/plugin-fetch-guard').join(', ')}; a patch of the row replaces its whole config`)
+    expect(message).toContain(`plugin-manager no longer protects ${PROTECTED.filter(name => name !== '@delo/plugin-fetch-guard').join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists (set in `)
+    expect(message).toContain(`, ${path})`)
   })
 
-  it('refuses a booted Host whose plugin manager names an http fallback registry', async () => {
+  it('refuses a booted Host whose plugin manager protects fewer plugins than Delo\'s bundle lists', async () => {
     const composed = await compose()
-    const manager = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active' as const, config: { fallbackRegistries: ['http://mirror.example.test/'], protectedPlugins: PROTECTED } }
-    expect(await refused(() => { assertDeloInvariants(composed, booted(composed, [manager])) })).toContain('plugin-manager names the fallback registry "http://mirror.example.test/", which is not an https URL')
+    const manager = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active' as const, config: { protectedPlugins: [] } }
+    expect(await refused(() => { assertDeloInvariants(composed, booted(composed, [manager])) })).toContain('plugin-manager no longer protects @delo/plugin-instruction-consent')
   })
 })
 

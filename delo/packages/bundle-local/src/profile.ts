@@ -30,6 +30,13 @@ export const UPSTREAM_TEMPLATE = 'web'
  */
 export const DEFAULT_WORKSPACE_ENV = 'DELO_DEFAULT_WORKSPACE'
 
+/**
+ * The environment variable the `plugin-manager` row reads its `fallbackRegistries` from: `on` adds the npmmirror
+ * registry, anything else none. `delorun start` and `delorun headless` set it in the Host's own process from the
+ * `npmMirror` setting of the profile's `delo-plugin-install-check` row before the profile boots.
+ */
+export const NPM_MIRROR_ENV = 'DELO_NPM_MIRROR'
+
 const upstream = PROFILE_TEMPLATES[UPSTREAM_TEMPLATE]
 if (upstream === undefined) throw new Error(`@delo/bundle-local: upstream ships no ${UPSTREAM_TEMPLATE} profile template`)
 

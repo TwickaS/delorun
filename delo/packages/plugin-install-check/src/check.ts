@@ -2,9 +2,12 @@
  * The install check of a profile's plugins, free of Cordis, which the `pluginAudit` provider in the Host and
  * `delorun plugin` both run, and the change check a start and `delorun verify` run against what it recorded.
  *
- * A plugin installed from npm, a tarball or git is checked once per installed version: the plugin and every package
- * its installation added to the profile's lockfile get the findings of [findings](./findings.ts), and, unless a
- * critical advisory is not allowed, the plugin's whole closure is recorded ([record](./record.ts)). A plugin from a
+ * A plugin installed from npm, a tarball or git is checked once per installed version, in two steps. {@link checkPackage}
+ * reads the profile's lockfile alone, so it runs after pnpm resolved the installation and before anything is fetched
+ * into the profile or any script runs: the plugin and every package its installation added to the lockfile get the
+ * findings of [findings](./findings.ts). Once the installation is in place and its approved build scripts have run,
+ * {@link recordInstalled} records the SHA-256 of every file of the plugin's closure ([record](./record.ts)), so a
+ * build's own output is part of the record. A plugin a critical advisory refuses is never recorded. A plugin from a
  * trusted npm scope or git owner shows critical advisories only. A linked or local folder is not checked or recorded:
  * its files change as the person works on it.
  *
@@ -16,7 +19,8 @@ import { join, relative, sep } from 'node:path'
 import { trustedFileSystem } from '@delo/runtime-store/identity'
 import { capturePackage, comparePackage, type FileChanges } from './files.ts'
 import { findingsFor, type FindingSettings, type InstallFinding } from './findings.ts'
-import { closureOf, LOCKFILE, LockfileError, packageKey, parseLockfile, type InstalledPackage, type Lockfile } from './lockfile.ts'
+import { closureOf, LOCKFILE, LockfileError, lockfileClosure, packageKey, parseLockfile, type ClosurePackage, type Lockfile } from './lockfile.ts'
+import semver from 'semver'
 import { readInstallRecord, readInstallRecords, removeInstallRecord, writeInstallRecord, writePluginTrust, type InstallRecord, type InstallSource, type PluginTrustEntry, type PluginTrustStatus } from './record.ts'
 
 export type { FindingRule, FindingSettings, InstallFinding } from './findings.ts'
@@ -46,10 +50,27 @@ export interface PackageCheckRequest {
   readonly acceptsBlocking?: (blocking: readonly InstallFinding[]) => boolean
   /** Names the installation itself carries, which a new name is compared with. */
   readonly knownNames: ReadonlySet<string>
+  /** The registries the installation asked, as URLs; a plain `http:` one is a finding. */
+  readonly registries: readonly string[]
   /** The clock, in milliseconds. */
   readonly now: () => number
   /** Ends every request early. */
   readonly signal?: AbortSignal
+  /**
+   * Whether a plugin whose record stands is compared with its installed files; false while the files are not installed
+   * or not built yet, when only the recorded findings are shown. True when absent.
+   */
+  readonly compareFiles?: boolean
+}
+
+/** What an installation that passed the check leaves to record once it is installed and built. */
+export interface PendingRecord {
+  readonly name: string
+  readonly version?: string
+  readonly source: InstallSource
+  readonly findings: readonly InstallFinding[]
+  readonly allowedAdvisories: readonly string[]
+  readonly lockfileEntries: readonly string[]
 }
 
 /** What checking one plugin found. */
@@ -60,9 +81,10 @@ export type PackageCheck =
   | { readonly kind: 'unchecked', readonly findings: readonly InstallFinding[] }
   /**
    * The plugin was checked: `findings` lists every finding; `blocking` the critical advisories no allowance names, which
-   * refuse the installation; `recorded` whether its record now stands; `trusted` whether its source is trusted.
+   * refuse the installation; `trusted` whether its source is trusted. `pending` is what {@link recordInstalled} records
+   * once the installation is in place, present when the installation passed and its record does not stand yet.
    */
-  | { readonly kind: 'checked', readonly name: string, readonly version?: string, readonly findings: readonly InstallFinding[], readonly blocking: readonly InstallFinding[], readonly recorded: boolean, readonly trusted: boolean }
+  | { readonly kind: 'checked', readonly name: string, readonly version?: string, readonly findings: readonly InstallFinding[], readonly blocking: readonly InstallFinding[], readonly trusted: boolean, readonly pending?: PendingRecord }
 
 /**
  * Read a profile's lockfile.
@@ -99,7 +121,7 @@ function isLocalFolder(lockfile: Lockfile, name: string, reference: string): boo
  * @param pkg - the plugin's installed package.
  * @returns its source.
  */
-function sourceOf(pkg: InstalledPackage): InstallSource {
+function sourceOf(pkg: ClosurePackage): InstallSource {
   const resolution = pkg.entry?.resolution ?? {}
   const integrity = resolution.integrity === undefined ? {} : { integrity: resolution.integrity }
   if (resolution.type === 'git') return { kind: 'git', reference: pkg.reference, ...integrity, ...resolution.commit === undefined ? {} : { commit: resolution.commit }, ...resolution.repo === undefined ? {} : { url: resolution.repo } }
@@ -225,12 +247,12 @@ export async function checkPackage(request: PackageCheckRequest, settings: Insta
   const record = await readInstallRecord(profileDir, request.name)
   if (record?.source.reference === reference) {
     const capturedAt = request.now()
-    const { changed, refreshed } = await compareRecord(profileDir, record, { full: false, capturedAt, limit: settings.maxFiles })
+    const { changed, refreshed } = request.compareFiles === false ? { changed: [], refreshed: undefined } : await compareRecord(profileDir, record, { full: false, capturedAt, limit: settings.maxFiles })
     if (refreshed !== undefined) await writeInstallRecord(profileDir, refreshed)
     const trusted = isTrustedSource(record.name, record.source, settings.trustedSources)
-    return { kind: 'checked', name: record.name, ...record.version === undefined ? {} : { version: record.version }, findings: [...record.findings, ...changed.length === 0 ? [] : [changedFinding(record, changed)]], blocking: [], recorded: true, trusted }
+    return { kind: 'checked', name: record.name, ...record.version === undefined ? {} : { version: record.version }, findings: [...record.findings, ...changed.length === 0 ? [] : [changedFinding(record, changed)]], blocking: [], trusted }
   }
-  const closure = closureOf(profileDir, lockfile, request.name)
+  const closure = lockfileClosure(lockfile, request.name)
   const root = closure[0]
   if (root === undefined) return { kind: 'skipped', reason: 'not-a-dependency' }
   const others = await readInstallRecords(profileDir)
@@ -245,28 +267,46 @@ export async function checkPackage(request: PackageCheckRequest, settings: Insta
   ])
   const source = sourceOf(root)
   const trusted = isTrustedSource(request.name, source, settings.trustedSources)
-  const all = await findingsFor({ packages: brought, knownNames, now: request.now(), ...request.signal === undefined ? {} : { signal: request.signal } }, settings)
+  const all = await findingsFor({ packages: brought, knownNames, registries: request.registries, now: request.now(), ...request.signal === undefined ? {} : { signal: request.signal } }, settings)
   const findings = trusted ? all.filter(finding => finding.severity === 'critical') : all
   const allowed = new Set(request.allowedAdvisories)
   const unallowed = findings.filter(finding => finding.severity === 'critical' && !allowed.has(finding.advisory ?? ''))
   const blocking = unallowed.length > 0 && request.acceptsBlocking?.(unallowed) === true ? [] : unallowed
-  const version = await manifestVersion(root.dir)
+  const version = root.entry?.packageVersion ?? semver.valid(root.entry?.version ?? '') ?? undefined
   const base = { kind: 'checked' as const, name: request.name, ...version === undefined ? {} : { version }, findings, blocking, trusted }
-  if (blocking.length > 0) return { ...base, recorded: false }
-  const capturedAt = request.now()
-  const packages = []
-  for (const pkg of closure) {
-    const captured = await capturePackage(pkg.dir, settings.maxFiles, capturedAt)
-    const pkgVersion = await manifestVersion(pkg.dir)
-    packages.push({ name: pkg.name, ...pkgVersion === undefined ? {} : { version: pkgVersion }, dir: relativeDir(profileDir, pkg.dir), ...captured })
+  if (blocking.length > 0) return base
+  return {
+    ...base,
+    pending: {
+      name: request.name, ...version === undefined ? {} : { version }, source, findings,
+      allowedAdvisories: findings.flatMap(finding => finding.severity === 'critical' && finding.advisory !== undefined ? [finding.advisory] : []),
+      lockfileEntries: closure.flatMap(pkg => pkg.entry === undefined ? [] : [pkg.entry.key]).sort(),
+    },
   }
-  await writeInstallRecord(profileDir, {
-    name: request.name, ...version === undefined ? {} : { version }, source, installedAt: capturedAt, capturedAt, findings,
-    allowedAdvisories: findings.flatMap(finding => finding.severity === 'critical' && finding.advisory !== undefined ? [finding.advisory] : []),
-    lockfileEntries: closure.flatMap(pkg => pkg.entry === undefined ? [] : [pkg.entry.key]).sort(),
-    packages,
-  })
-  return { ...base, recorded: true }
+}
+
+/**
+ * Record a checked plugin once its installation is in place and its build scripts have run: the SHA-256 and identity
+ * of every file of every package of its installed closure.
+ * @param profileDir - the profile directory.
+ * @param pending - what the check left to record.
+ * @param options - the clock, in milliseconds, and the most files recorded per package.
+ * @returns whether it recorded: false when the profile's lockfile no longer names the reference the check read.
+ * @throws LockfileError when the profile's lockfile does not read.
+ */
+export async function recordInstalled(profileDir: string, pending: PendingRecord, options: { readonly now: () => number, readonly maxFiles: number }): Promise<boolean> {
+  const lockfile = await readProfileLockfile(profileDir)
+  if (lockfile.dependencies.get(pending.name) !== pending.source.reference) return false
+  const real = realpathSync(profileDir)
+  const capturedAt = options.now()
+  const packages = []
+  for (const pkg of closureOf(real, lockfile, pending.name)) {
+    const captured = await capturePackage(pkg.dir, options.maxFiles, capturedAt)
+    const pkgVersion = await manifestVersion(pkg.dir)
+    packages.push({ name: pkg.name, ...pkgVersion === undefined ? {} : { version: pkgVersion }, dir: relativeDir(real, pkg.dir), ...captured })
+  }
+  await writeInstallRecord(real, { ...pending, installedAt: capturedAt, capturedAt, packages })
+  return true
 }
 
 /** What bringing a profile's records in step with its dependencies did. */
@@ -278,9 +318,10 @@ export interface ReconcileResult {
 }
 
 /**
- * Bring a profile's records in step with its dependencies after a package operation: check each plugin from npm, a
- * tarball or git that has no record, or whose record names another lockfile reference, and remove the record of each
- * plugin the profile no longer depends on.
+ * Bring a profile's records in step with its dependencies after pnpm resolved a package operation: check each plugin
+ * from npm, a tarball or git that has no record, or whose record names another lockfile reference, and remove the
+ * record of each plugin the profile no longer depends on. The checked plugins are recorded by {@link recordInstalled}
+ * once installed.
  * @param request - the profile, the allowed advisories, the known names and the clock.
  * @param settings - the check's settings.
  * @returns what it checked and removed.
@@ -297,6 +338,19 @@ export async function reconcileProfile(request: Omit<PackageCheckRequest, 'name'
   const removed = [...records.keys()].filter(name => !lockfile.dependencies.has(name)).sort()
   for (const name of removed) await removeInstallRecord(request.profileDir, name)
   return { checked, removed }
+}
+
+/**
+ * Remove the records of the plugins a profile no longer depends on.
+ * @param profileDir - the profile directory.
+ * @returns the plugins whose records were removed, sorted.
+ * @throws LockfileError when the profile's lockfile does not read.
+ */
+export async function forgetRemoved(profileDir: string): Promise<string[]> {
+  const lockfile = await readProfileLockfile(profileDir)
+  const removed = [...(await readInstallRecords(profileDir)).keys()].filter(name => !lockfile.dependencies.has(name)).sort()
+  for (const name of removed) await removeInstallRecord(profileDir, name)
+  return removed
 }
 
 /**

@@ -2241,7 +2241,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'pluginAudit',
     summary: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`.',
-    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as `pluginAudit`; without one, nothing is audited.',
+    description: 'The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the package is installed; a restore asks it before the build scripts it allows run, and again after them. A distribution provides it as `pluginAudit`; without one, nothing is audited.',
     methods: [
       {
         signature: 'audit(target: PluginAuditTarget): Promise<PluginAuditResult>',
@@ -7660,7 +7660,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PluginAuditTarget',
-    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n}',
+    declaration: 'export interface PluginAuditTarget {\n    name: string;\n    version?: string;\n    dir: string;\n    accepted: string[];\n    pending?: \'install\' | \'scripts\';\n}',
   },
   {
     name: 'PluginChange',

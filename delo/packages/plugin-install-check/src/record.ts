@@ -123,7 +123,7 @@ export interface PluginTrustStatus {
 }
 
 const Finding = z.strictObject({
-  rule: z.enum(['missing-integrity', 'unpinned-commit', 'advisory', 'advisory-unchecked', 'recent-publish', 'publish-time-unchecked', 'similar-name', 'changed-files']),
+  rule: z.enum(['missing-integrity', 'unpinned-commit', 'advisory', 'advisory-unchecked', 'recent-publish', 'publish-time-unchecked', 'similar-name', 'insecure-source', 'changed-files']),
   title: z.string(),
   package: z.string(),
   version: z.string().exactOptional(),

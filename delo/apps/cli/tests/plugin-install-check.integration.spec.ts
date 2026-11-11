@@ -9,10 +9,13 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmS
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { checkPackage, readPluginTrust } from '@delo/plugin-install-check/check'
+import { checkPackage, readPluginTrust, recordInstalled } from '@delo/plugin-install-check/check'
 import { OLD, settingsFor, startStandIn, writeProfileFiles, type StandIn } from '@delo/plugin-install-check/tests/fixture'
-import { CliError } from '../src/exit.ts'
-import { checkInstalledPlugins, INSTALL_CHECK_ROW, profileCheckSettings } from '../src/plugin-install-check.ts'
+import { loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
+import { npmMirrorOf } from '../src/compose.ts'
+import { CliError, EXIT } from '../src/exit.ts'
+import { patchLayers } from '../src/patch-layers.ts'
+import { checkInstalledPlugins, INSTALL_CHECK_ROW, profileCheckSettings, runMirror } from '../src/plugin-install-check.ts'
 import { copyImportMigration, ensureCopyImport } from '../src/pnpm-import.ts'
 
 let home: string
@@ -66,7 +69,8 @@ describe('the change check at a start', () => {
   it('prints a warning for a plugin changed since its installation and records it as the trust status', async () => {
     writeRow('      config:\n        enabled: true\n')
     writeProfileFiles(profileDir, [{ name: 'good-plugin', version: '1.0.0', direct: true }])
-    await checkPackage({ profileDir, name: 'good-plugin', allowedAdvisories: [], knownNames: new Set(), now: Date.now }, settingsFor(standIn))
+    const checked = await checkPackage({ profileDir, name: 'good-plugin', allowedAdvisories: [], knownNames: new Set(), registries: [], now: Date.now }, settingsFor(standIn))
+    if (checked.kind === 'checked' && checked.pending !== undefined) await recordInstalled(profileDir, checked.pending, { now: Date.now, maxFiles: 1000 })
     appendFileSync(join(profileDir, 'node_modules', 'good-plugin', 'index.js'), 'globalThis.planted = true\n')
     const printed: string[] = []
     const status = await checkInstalledPlugins({ home, profile: 'default', profileDir, installAnchor: join(home, 'package.json'), full: false, output: { stdout: () => undefined, stderr: (text) => { printed.push(text) } } })
@@ -110,5 +114,25 @@ describe('the package import method', () => {
     expect(printed[0]).toMatch(/pnpm-workspace\.yaml is not a YAML mapping/u)
     writeFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'packages: [.]\n')
     expect(await migration.run()).toBe(true)
+  })
+})
+
+describe('the npm mirror setting', () => {
+  it('is written into the profile\'s own patch with the row\'s other settings, and read back by the composition', async () => {
+    writeRow('      config:\n        enabled: true\n        minimumAgeHours: 48\n')
+    const printed: string[] = []
+    expect(runMirror(['on'], { home, profile: 'default', profileDir, installAnchor: join(home, 'package.json'), output: { stdout: (text) => { printed.push(text) }, stderr: () => undefined } })).toBe(0)
+    expect(printed[0]).toMatch(/^The npm mirror is on for the profile default: .* It applies from the next start\.\n$/u)
+    const profile = loadProfileDirectory('delorun', profileDir, join(home, 'package.json'))
+    expect(npmMirrorOf(patchLayers(home, profile, []))).toBe(true)
+    expect(profileCheckSettings(home, profileDir, join(home, 'package.json'))?.settings.minimumAgeHours).toBe(48)
+    runMirror(['--profile', 'default', 'off'], { home, profile: 'default', profileDir, installAnchor: join(home, 'package.json'), output: { stdout: () => undefined, stderr: () => undefined } })
+    expect(npmMirrorOf(patchLayers(home, loadProfileDirectory('delorun', profileDir, join(home, 'package.json')), []))).toBe(false)
+  })
+
+  it('refuses a wrong command line and a profile without the row', () => {
+    const request = { home, profile: 'default', profileDir, installAnchor: join(home, 'package.json'), output: { stdout: () => undefined, stderr: () => undefined } }
+    expect(() => runMirror(['maybe'], request)).toThrow(new CliError(EXIT.usage, 'usage: delorun plugin mirror [--profile <name>] on|off'))
+    expect(() => runMirror(['on'], request)).toThrow(/has no delo-plugin-install-check row/u)
   })
 })

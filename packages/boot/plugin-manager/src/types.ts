@@ -86,12 +86,21 @@ export interface PluginAuditTarget {
   dir: string
   /** The digests the user accepted for this package, the newest last. */
   accepted: string[]
+  /**
+   * What the manager has yet to do for the package: `install` when pnpm has only resolved it into the profile's
+   * lockfile and none of its files exist yet, `scripts` when its files are installed but no install script of the
+   * change has run. The manager asks again with no `pending` once both are done; an audit that reads the package's
+   * files answers `clear` while they are pending.
+   */
+  pending?: 'install' | 'scripts'
 }
 
 /**
  * The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before
- * it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. A distribution provides it as
- * `pluginAudit`; without one, nothing is audited.
+ * it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after
+ * pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the
+ * package is installed; a restore asks it before the build scripts it allows run, and again after them. A
+ * distribution provides it as `pluginAudit`; without one, nothing is audited.
  */
 export interface PluginAudit {
   /**

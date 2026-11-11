@@ -1,8 +1,9 @@
 /**
  * The install check's findings for the packages one installation brings: a package without a lockfile integrity or
  * with a git commit that is not a full 40-hex id; a GitHub advisory that affects a locked version, read from npm's bulk
- * advisory API; a version the registry published less than the configured age ago; and a name close to a name the
- * profile or the installation already holds. A lookup that fails is a finding that says which check could not run, so
+ * advisory API; a version the registry published less than the configured age ago; a name close to a name the
+ * profile or the installation already holds; and a registry, tarball or git source reached over plain `http:`, through
+ * which a package could be altered in transit. A lookup that fails is a finding that says which check could not run, so
  * no check is skipped silently. Only a `critical` advisory blocks, and only until the person names it as allowed; every
  * other finding is a warning.
  *
@@ -10,7 +11,7 @@
  */
 import { advisoryId, FeedFailure, queryFeed, type LockedPackage } from '@delo/release-formats/advisory/feed'
 import semver from 'semver'
-import type { InstalledPackage } from './lockfile.ts'
+import type { ClosurePackage } from './lockfile.ts'
 
 /** What a finding is about. */
 export type FindingRule =
@@ -21,6 +22,7 @@ export type FindingRule =
   | 'recent-publish'
   | 'publish-time-unchecked'
   | 'similar-name'
+  | 'insecure-source'
   | 'changed-files'
 
 /** One finding of the install check. */
@@ -65,9 +67,11 @@ export interface FindingSettings {
 /** What the findings are computed from. */
 export interface FindingInput {
   /** The packages to check: the plugin and every package its installation added to the lockfile. */
-  readonly packages: readonly InstalledPackage[]
+  readonly packages: readonly ClosurePackage[]
   /** Names already in the profile or the installation, which a new name is compared with. */
   readonly knownNames: ReadonlySet<string>
+  /** The registries the installation asked, as URLs; a plain `http:` one is a finding. */
+  readonly registries: readonly string[]
   /** The clock, in milliseconds. */
   readonly now: number
   /** Ends every request early. */
@@ -86,7 +90,34 @@ const FULL_COMMIT = /^[0-9a-f]{40}$/u
 export async function findingsFor(input: FindingInput, settings: FindingSettings): Promise<InstallFinding[]> {
   const registryPackages = input.packages.flatMap(pkg => registryVersion(pkg) === undefined ? [] : [pkg])
   const [advisories, ages] = await Promise.all([advisoryFindings(registryPackages, settings, input.signal), ageFindings(registryPackages, settings, input.now, input.signal)])
-  return [...input.packages.flatMap(integrityFindings), ...advisories, ...ages, ...nameFindings(input.packages, input.knownNames, settings)]
+  return [...insecureFindings(input), ...input.packages.flatMap(integrityFindings), ...advisories, ...ages, ...nameFindings(input.packages, input.knownNames, settings)]
+}
+
+/** A URL over plain HTTP, `git+http:` included. */
+const PLAIN_HTTP = /^(?:git\+)?http:\/\//iu
+
+/**
+ * The plain-HTTP findings: a registry the installation asked, and each package fetched from a tarball or git URL, over
+ * `http:`. Such a source is used, as stock does; the lockfile's integrity hash, where it records one, still holds a
+ * later installation to the same bytes.
+ * @param input - the packages and the registries.
+ * @returns one finding per plain-HTTP registry and package.
+ */
+function insecureFindings(input: FindingInput): InstallFinding[] {
+  const plugin = input.packages[0]?.name ?? ''
+  const registries = [...new Set(input.registries.filter(url => PLAIN_HTTP.test(url)))].map((url): InstallFinding => ({
+    rule: 'insecure-source', package: plugin, path: LOCKFILE_PATH, line: 0, severity: 'warning',
+    title: `The registry ${url} is plain http, so a package could be altered in transit; the lockfile's integrity hashes still apply where it records them`,
+  }))
+  const packages = input.packages.flatMap((pkg): InstallFinding[] => {
+    const url = pkg.entry?.resolution.tarball ?? pkg.entry?.resolution.repo
+    if (url === undefined || !PLAIN_HTTP.test(url)) return []
+    return [{
+      rule: 'insecure-source', package: pkg.name, version: pkg.reference, path: LOCKFILE_PATH, line: pkg.entry?.line ?? 0, severity: 'warning',
+      title: `${pkg.name} is downloaded over plain http (${url}), so it could be altered in transit${pkg.entry?.resolution.integrity === undefined ? '' : '; its integrity hash in the lockfile still applies'}`,
+    }]
+  })
+  return [...registries, ...packages]
 }
 
 /**
@@ -95,7 +126,7 @@ export async function findingsFor(input: FindingInput, settings: FindingSettings
  * @param pkg - the package.
  * @returns the version, or `undefined` for a git, tarball, directory or link source, or a version that is not exact.
  */
-function registryVersion(pkg: InstalledPackage): string | undefined {
+function registryVersion(pkg: ClosurePackage): string | undefined {
   const resolution = pkg.entry?.resolution
   if (resolution === undefined || resolution.tarball !== undefined || resolution.type !== undefined) return undefined
   return semver.valid(pkg.entry?.version ?? '') ?? undefined
@@ -106,7 +137,7 @@ function registryVersion(pkg: InstalledPackage): string | undefined {
  * @param pkg - the package.
  * @returns a finding when the lockfile records no integrity for it, or pins its git source to less than a full commit.
  */
-function integrityFindings(pkg: InstalledPackage): InstallFinding[] {
+function integrityFindings(pkg: ClosurePackage): InstallFinding[] {
   const at = { package: pkg.name, version: pkg.reference, path: LOCKFILE_PATH, line: pkg.entry?.line ?? 0, severity: 'warning' as const }
   if (pkg.entry === undefined) return [{ ...at, rule: 'missing-integrity', title: `${pkg.name} has no entry in the profile's lockfile, so nothing pins what was installed` }]
   const { resolution } = pkg.entry
@@ -127,7 +158,7 @@ function integrityFindings(pkg: InstalledPackage): InstallFinding[] {
  * @returns one finding per advisory that affects a locked version, `critical` for a critical one, or one finding that
  *   the check could not run.
  */
-async function advisoryFindings(packages: readonly InstalledPackage[], settings: FindingSettings, signal: AbortSignal | undefined): Promise<InstallFinding[]> {
+async function advisoryFindings(packages: readonly ClosurePackage[], settings: FindingSettings, signal: AbortSignal | undefined): Promise<InstallFinding[]> {
   if (packages.length === 0) return []
   const locked: LockedPackage[] = packages.map(pkg => ({ name: pkg.entry!.name, version: pkg.entry!.version }))
   let answer
@@ -203,7 +234,7 @@ async function publishTime(url: string, version: string, settings: FindingSettin
  * @param signal - ends the requests early.
  * @returns one finding per version younger than the configured age, and one finding naming the lookups that failed.
  */
-async function ageFindings(packages: readonly InstalledPackage[], settings: FindingSettings, now: number, signal: AbortSignal | undefined): Promise<InstallFinding[]> {
+async function ageFindings(packages: readonly ClosurePackage[], settings: FindingSettings, now: number, signal: AbortSignal | undefined): Promise<InstallFinding[]> {
   const findings: InstallFinding[] = []
   const failures: string[] = []
   const queue = [...packages]
@@ -270,7 +301,7 @@ export function editDistance(a: string, b: string, limit: number): number {
  * @param settings - the distance and the shortest name compared.
  * @returns one finding per new name, naming the first close known name.
  */
-function nameFindings(packages: readonly InstalledPackage[], known: ReadonlySet<string>, settings: FindingSettings): InstallFinding[] {
+function nameFindings(packages: readonly ClosurePackage[], known: ReadonlySet<string>, settings: FindingSettings): InstallFinding[] {
   const findings: InstallFinding[] = []
   const reported = new Set<string>()
   for (const pkg of packages) {
