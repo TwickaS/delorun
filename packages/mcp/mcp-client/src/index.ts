@@ -20,6 +20,7 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { DEFAULT_MAX_INSTRUCTION_BYTES, RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { findMcpAddConsent, McpConsentRefusedError } from './consent.ts'
+import { resolveServerStart } from './server-start.ts'
 import { registerServerContext } from './server-context.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
@@ -36,6 +37,7 @@ export {
   sortedEnvEntries,
 } from './consent.ts'
 export type { McpConsentDecision, McpServerCommand } from './consent.ts'
+export { McpServerStartUnresolvedError, resolveServerStart } from './server-start.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-client'
@@ -170,24 +172,24 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // Optional add-time consent seam: a stdio server command runs as a local
   // child process outside the agent sandbox, so when a consent service is
   // mounted, or a loader row declares one, the configured start — command,
-  // arguments, working directory and environment — is reviewed at every boot
-  // and the server does not start until the review allows it. The lookup waits
-  // for declaring rows, so the result does not depend on row order. Without a
-  // provider — or for a Streamable HTTP server, which starts no local command
-  // — startup is exactly upstream's. A refusal fails THIS instance at load,
-  // which leaves the server stopped with the typed reason.
+  // arguments, working directory and environment, with the executable path
+  // and working directory they resolve to now — is reviewed at every boot and
+  // the server does not start until the review allows it. The allowed server
+  // is spawned with the reviewed executable path and working directory, so a
+  // later change of the Host's working directory or PATH cannot swap them.
+  // The lookup waits for declaring rows, so the result does not depend on row
+  // order. Without a provider — or for a Streamable HTTP server, which starts
+  // no local command — startup is exactly upstream's. An unresolved start or a
+  // refusal fails THIS instance at load, which leaves the server stopped with
+  // the typed reason.
+  let spawned: Config = config
   if (config.transport === 'stdio') {
     const consent = await findMcpAddConsent(ctx, config.serverName)
     if (consent !== undefined) {
-      const start = {
-        serverName: config.serverName,
-        command: config.command,
-        args: config.args,
-        env: config.env,
-        cwd: config.cwd,
-      }
+      const start = await resolveServerStart(config)
       const decision = await consent.review(start)
       if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
+      spawned = { ...config, command: start.resolvedCommand, cwd: start.resolvedCwd }
     }
   }
 
@@ -212,7 +214,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // The supervisor owns the client/transport generations, the reconnect
   // loop, and the live tool registrations; disposal stops reconnection,
   // quiesces in-flight work, and unregisters the current generation.
-  const connection = startConnection(ctx, config, reconnect)
+  const connection = startConnection(ctx, spawned, reconnect)
   registerServerContext(ctx, config.serverName, connection)
   let stopping: Promise<void> | undefined
   const dispose = (): Promise<void> => stopping ??= connection.dispose()

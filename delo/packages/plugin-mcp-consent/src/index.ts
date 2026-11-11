@@ -6,12 +6,15 @@
  * `@deepseek-ai/dsh-mcp-client`) whether the configured command is granted.
  * This plugin's service answers from the acceptance store, the JSON file under
  * the home's protected state ([`./store.ts`](./store.ts)): a command the
- * person accepted with exactly the arguments, working directory and configured
- * environment under review starts at once, and every other review — an
- * unknown command, a changed argument list, working directory or environment,
- * a store that is missing, unreadable, superseded or not this version's
- * format — holds the server stopped and asks the person to accept the command,
- * which the service records with {@link DeloMcpConsent.accept}.
+ * person accepted with exactly the arguments, working directory, resolved
+ * executable path, resolved working directory and configured environment
+ * under review starts at once, and every other review — an unknown command, a
+ * changed argument list, working directory or environment, a bare command
+ * that a PATH lookup now finds elsewhere, an empty or relative working
+ * directory that now resolves elsewhere, a store that is missing, unreadable,
+ * superseded or not this version's format — holds the server stopped and asks
+ * the person to accept the command, which the service records with
+ * {@link DeloMcpConsent.accept}.
  *
  * The module declares itself an `mcpAddConsent` provider
  * ({@link providesMcpAddConsent}), so an mcp-client row waits for this row
@@ -21,6 +24,7 @@
  * configured server exactly as upstream does.
  * @module @delo/plugin-mcp-consent
  */
+import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
@@ -87,15 +91,18 @@ export class DeloMcpConsent extends McpAddConsent {
    * person's home is resolved for every review, so a review reads the store
    * of the home the process runs with.
    * @param command - the server start under review: the namespace, the
-   *   executable, its arguments, its working directory and its configured
-   *   environment.
+   *   executable, its arguments, its working directory, its configured
+   *   environment, and the absolute executable path and canonical working
+   *   directory the mcp-client resolved them to.
    * @returns `allow: true` when the store holds an acceptance of this
-   *   command with exactly these arguments, this working directory and this
-   *   environment, whatever order the environment's keys were written in, and
-   *   `allow: false` with the reason it does not — the command, its arguments,
-   *   its working directory or its environment are not accepted, or the store
-   *   is missing, unreadable, superseded or not this version's format, which
-   *   asks the person again. No reason names an environment value.
+   *   command with exactly these arguments, this working directory, this
+   *   resolved executable path and working directory, and this environment,
+   *   whatever order the environment's keys were written in, and
+   *   `allow: false` with the reason it does not — the command, its
+   *   arguments, its working directory, what they resolve to or its
+   *   environment are not accepted, or the store is missing, unreadable,
+   *   superseded or not this version's format, which asks the person again.
+   *   No reason names an environment value.
    */
   review(command: McpServerCommand): Promise<McpConsentDecision> {
     return this.decide(command)
@@ -105,19 +112,25 @@ export class DeloMcpConsent extends McpAddConsent {
    * Record that the person accepted a server start, as the acceptance the
    * reviews allow. Accepting a command again replaces its earlier acceptance,
    * so a changed start is granted by accepting it with the arguments, working
-   * directory and environment it now carries. Accepting into a superseded
+   * directory, resolved paths and environment it now carries. Accepting into a superseded
    * store starts a store of this version that holds only this acceptance. The
    * asking surface of Delo's MCP server add flow calls this; until such a
    * surface is mounted, the store only grows through it and every unaccepted
    * start keeps its server stopped.
-   * @param start - the start the person accepted: the executable, its
-   *   arguments in order, its working directory and its configured
-   *   environment, of which the store keeps the names and a digest.
+   * @param start - the start the person accepted, as a review was shown it:
+   *   the executable, its arguments in order, its working directory, its
+   *   configured environment, of which the store keeps the names and a digest,
+   *   and the absolute executable path and working directory they resolved to.
    * @returns when the store holds the acceptance.
+   * @throws when the command is empty or a resolved path is not absolute, which
+   *   no review is shown.
    */
   accept(start: ServerStart): Promise<void> {
     return this.serial(async () => {
       if (start.command.length === 0) throw new Error('the command to accept is empty')
+      if (!isAbsolute(start.resolvedCommand) || !isAbsolute(start.resolvedCwd)) {
+        throw new Error('the start to accept does not hold an absolute resolved executable path and working directory')
+      }
       const path = await this.path()
       const read = await readAcceptanceStore(path)
       // A store that exists but is not this version's format is never added to: accepting into a refused store would
@@ -162,7 +175,7 @@ export class DeloMcpConsent extends McpAddConsent {
     if (read.kind === 'superseded') {
       return {
         allow: false,
-        reason: `the acceptance store is of version ${String(read.version)}, recorded before an acceptance covered the working directory and the environment, so nothing counts as accepted until the command is accepted again`,
+        reason: `the acceptance store is of version ${String(read.version)}, recorded before an acceptance covered the executable path and working directory the command resolves to, so nothing counts as accepted until the command is accepted again`,
       }
     }
     const accepted = read.entries.get(command.command)

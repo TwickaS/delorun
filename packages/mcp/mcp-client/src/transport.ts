@@ -7,7 +7,7 @@
  */
 
 import type { Transport } from '@modelcontextprotocol/client'
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type { Config } from './index.ts'
@@ -25,6 +25,19 @@ import type { Config } from './index.ts'
  */
 export function buildChildEnv(extra: Record<string, string>): Record<string, string> {
   return { ...scrubbedParentEnv(), ...extra }
+}
+
+/**
+ * The complete environment the stdio transport starts a server with: the
+ * SDK's default inherited names (`HOME`, `PATH`, `TERM`, `USER`, … from the
+ * Host's environment, without values that start with `()`) with
+ * {@link buildChildEnv} merged over them, in the order the SDK's spawn merges
+ * them. The `PATH` a bare command is looked up in is this environment's.
+ * @param extra - the plugin config's explicit environment entries.
+ * @returns the environment the child process receives.
+ */
+export function childSpawnEnv(extra: Record<string, string>): Record<string, string> {
+  return { ...getDefaultEnvironment(), ...buildChildEnv(extra) }
 }
 
 /**

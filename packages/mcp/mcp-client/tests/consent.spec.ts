@@ -1,10 +1,15 @@
 /**
  * Tests for the optional `mcpAddConsent` seam: the add-time consent a mounted
  * service runs before a stdio server's command starts, the start it is shown
- * (command, arguments, working directory and environment), and the lookup that
- * waits for a declared provider whatever the order of the loader's rows.
- * Isolated file so the vi.mock of the MCP SDK doesn't pollute other test suites.
+ * (command, arguments, working directory and environment, with the executable
+ * path and working directory they resolve to), the spawn of the reviewed
+ * paths, and the lookup that waits for a declared provider whatever the order
+ * of the loader's rows. Isolated file so the vi.mock of the MCP SDK doesn't
+ * pollute other test suites.
  */
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -40,7 +45,8 @@ vi.mock('@modelcontextprotocol/client', () => ({
   StreamableHTTPClientTransport: vi.fn(),
 }))
 
-vi.mock('@modelcontextprotocol/client/stdio', () => ({
+vi.mock('@modelcontextprotocol/client/stdio', async importOriginal => ({
+  ...await importOriginal<typeof import('@modelcontextprotocol/client/stdio')>(),
   StdioClientTransport: vi.fn(),
 }))
 
@@ -48,6 +54,8 @@ import * as McpClient from '@deepseek-ai/dsh-mcp-client/src/index.ts'
 import { apply, inject } from '@deepseek-ai/dsh-mcp-client/src/index.ts'
 import { McpAddConsent, McpConsentRefusedError, McpConsentUnavailableError } from '@deepseek-ai/dsh-mcp-client/src/consent.ts'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client/src/consent.ts'
+import { McpServerStartUnresolvedError } from '@deepseek-ai/dsh-mcp-client/src/server-start.ts'
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 
 // ---- Helpers ----
 
@@ -59,15 +67,60 @@ async function mountRegistry(): Promise<Context> {
   return ctx
 }
 
-const stdioConfig: Config = {
+const stdioConfig: Config & { transport: 'stdio' } = {
   transport: 'stdio',
   serverName: 'srv',
-  command: 'npx',
+  command: 'tool',
   args: ['-y', '@modelcontextprotocol/server-fs', '/tmp'],
   env: {},
   cwd: '',
   toolCallTimeoutMs: 60_000,
   failOnStartupError: false,
+}
+
+/**
+ * A temporary tree of two directories, `a` and `b`, each holding an
+ * executable `bin/tool`, with the Host's ambient PATH set to `a/bin` and then
+ * `b/bin` and the Host's working directory reported as `a`.
+ */
+interface ToolTree {
+  /** The tree's canonical root. */
+  readonly root: string
+  /** `<root>/a`. */
+  readonly a: string
+  /** `<root>/b`. */
+  readonly b: string
+  /** Report the Host's working directory as another directory. */
+  readonly hostIn: (dir: string) => void
+  /** Remove the tree and restore the stubs. */
+  readonly remove: () => void
+}
+
+/**
+ * Create a {@link ToolTree}.
+ * @returns the tree.
+ */
+function toolTree(): ToolTree {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'mcp-consent-start-')))
+  const a = join(root, 'a')
+  const b = join(root, 'b')
+  for (const dir of [a, b]) {
+    mkdirSync(join(dir, 'bin'), { recursive: true })
+    writeFileSync(join(dir, 'bin', 'tool'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+  }
+  vi.stubEnv('PATH', `${join(a, 'bin')}:${join(b, 'bin')}`)
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(a)
+  return {
+    root,
+    a,
+    b,
+    hostIn: dir => void cwd.mockReturnValue(dir),
+    remove: () => {
+      cwd.mockRestore()
+      vi.unstubAllEnvs()
+      rmSync(root, { recursive: true, force: true })
+    },
+  }
 }
 
 /** A consent stub whose reviews are scripted, one decision per call. */
@@ -90,8 +143,14 @@ class StubConsent extends McpAddConsent {
 
 describe('the optional mcpAddConsent seam', () => {
   let ctx: Context
+  let tree: ToolTree
+
+  afterEach(() => {
+    tree.remove()
+  })
 
   beforeEach(async () => {
+    tree = toolTree()
     vi.clearAllMocks()
     mockConnect.mockResolvedValue(undefined)
     mockClose.mockImplementation(function (this: { onclose?: () => void }) {
@@ -105,15 +164,34 @@ describe('the optional mcpAddConsent seam', () => {
     ctx = await mountRegistry()
   })
 
+  /**
+   * The start a review of {@link stdioConfig} is shown with the tree's defaults: the Host in `a`, `a/bin` first on PATH.
+   * @param overrides - the fields that differ.
+   * @returns the start.
+   */
+  function startOf(overrides: Partial<McpServerCommand> = {}): McpServerCommand {
+    return {
+      serverName: 'srv',
+      command: 'tool',
+      args: ['-y', '@modelcontextprotocol/server-fs', '/tmp'],
+      env: {},
+      cwd: '',
+      resolvedCommand: join(tree.a, 'bin', 'tool'),
+      resolvedCwd: tree.a,
+      ...overrides,
+    }
+  }
+
   it('starts the server exactly as upstream does when no consent service is mounted', async () => {
     await apply(ctx, stdioConfig)
 
     expect(mockConnect).toHaveBeenCalled()
+    expect(StdioClientTransport).toHaveBeenCalledWith(expect.objectContaining({ command: 'tool', cwd: '' }))
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
     await ctx.fiber.dispose()
   })
 
-  it('holds a new server row until the mounted service allows it', async () => {
+  it('holds a new server row until the mounted service allows it, then spawns the reviewed executable in the reviewed directory', async () => {
     const pending: PromiseWithResolvers<McpConsentDecision> = Promise.withResolvers()
     const consent = new StubConsent(ctx, [pending.promise])
     const fiber = ctx.plugin({ name: 'mcp-consent-held', inject, apply }, stdioConfig)
@@ -121,20 +199,18 @@ describe('the optional mcpAddConsent seam', () => {
     const activation = Promise.resolve(fiber).then(() => { activated = true })
 
     // The review sees the command each boot, before any child process starts.
-    await vi.waitFor(() => { expect(consent.calls).toEqual([{
-      serverName: 'srv',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-fs', '/tmp'],
-      env: {},
-      cwd: '',
-    }]) })
+    await vi.waitFor(() => { expect(consent.calls).toEqual([startOf()]) })
     expect(mockConnect).not.toHaveBeenCalled()
+    expect(StdioClientTransport).not.toHaveBeenCalled()
     expect(activated).toBe(false)
     expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined()
 
     pending.resolve({ allow: true })
     await activation
     expect(mockConnect).toHaveBeenCalled()
+    expect(StdioClientTransport).toHaveBeenCalledWith(expect.objectContaining({ command: join(tree.a, 'bin', 'tool'), cwd: tree.a }))
+    expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => [params.command, params.cwd]))
+      .toEqual(vi.mocked(StdioClientTransport).mock.calls.map(() => [join(tree.a, 'bin', 'tool'), tree.a]))
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
     await fiber.dispose()
   })
@@ -144,12 +220,14 @@ describe('the optional mcpAddConsent seam', () => {
 
     await expect(apply(ctx, { ...stdioConfig, failOnStartupError: true })).rejects.toMatchObject({
       message: 'mcp-client(srv): the add-time consent did not allow this server\'s command, so the server stays stopped — '
-        + 'not on the accepted list. The consent covers the command "npx" "-y" "@modelcontextprotocol/server-fs" "/tmp", '
-        + 'run in the Host\'s working directory with no configured environment variables. '
+        + 'not on the accepted list. The consent covers the command "tool" "-y" "@modelcontextprotocol/server-fs" "/tmp", '
+        + `which runs the executable ${JSON.stringify(join(tree.a, 'bin', 'tool'))} in ${JSON.stringify(tree.a)} `
+        + '(configured as the Host\'s working directory) with no configured environment variables. '
         + 'A server command runs outside the agent sandbox.',
     })
 
     expect(mockConnect).not.toHaveBeenCalled()
+    expect(StdioClientTransport).not.toHaveBeenCalled()
     expect(mockListTools).not.toHaveBeenCalled()
     expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined()
     await ctx.fiber.dispose()
@@ -160,26 +238,34 @@ describe('the optional mcpAddConsent seam', () => {
 
     const failure: unknown = await apply(ctx, stdioConfig).catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(McpConsentRefusedError)
-    expect((failure as McpConsentRefusedError).serverName).toBe('srv')
-    expect((failure as McpConsentRefusedError).command).toBe('npx')
-    expect((failure as McpConsentRefusedError).reason).toBe('refused')
+    expect(failure).toMatchObject({
+      serverName: 'srv',
+      command: 'tool',
+      cwd: '',
+      resolvedCommand: join(tree.a, 'bin', 'tool'),
+      resolvedCwd: tree.a,
+      reason: 'refused',
+    })
     expect(mockConnect).not.toHaveBeenCalled()
     await ctx.fiber.dispose()
   })
 
-  it('reviews the command at every boot, so a changed command reaches the service again', async () => {
+  it('resolves the start again at every boot, so a changed PATH order or Host working directory reaches the review as a different start', async () => {
     const consent = new StubConsent(ctx, [Promise.resolve({ allow: true }), Promise.resolve({ allow: true })])
 
     const first = createScope(ctx, {})
     await apply(first.ctx, stdioConfig)
     await first.dispose()
 
+    vi.stubEnv('PATH', `${join(tree.b, 'bin')}:${join(tree.a, 'bin')}`)
+    tree.hostIn(tree.b)
+    vi.mocked(StdioClientTransport).mockClear()
     const second = createScope(ctx, {})
     await apply(second.ctx, stdioConfig)
     await second.dispose()
 
-    const start = { serverName: 'srv', command: 'npx', args: ['-y', '@modelcontextprotocol/server-fs', '/tmp'], env: {}, cwd: '' }
-    expect(consent.calls).toEqual([start, start])
+    expect(consent.calls).toEqual([startOf(), startOf({ resolvedCommand: join(tree.b, 'bin', 'tool'), resolvedCwd: tree.b })])
+    expect(StdioClientTransport).toHaveBeenCalledWith(expect.objectContaining({ command: join(tree.b, 'bin', 'tool'), cwd: tree.b }))
   })
 
   it('does not hold a Streamable HTTP server, which starts no local command', async () => {
@@ -201,34 +287,39 @@ describe('the optional mcpAddConsent seam', () => {
     await ctx.fiber.dispose()
   })
 
-  it('shows the review the working directory and the configured environment along with the command', async () => {
+  it('shows the review the configured working directory and environment with the canonical directory and the executable they resolve to', async () => {
     const consent = new StubConsent(ctx, [Promise.resolve({ allow: true })])
+    // A relative working directory through a symbolic link, and a relative PATH entry resolved against that directory.
+    symlinkSync(tree.b, join(tree.a, 'to-b'))
 
-    await apply(ctx, { ...stdioConfig, cwd: '/srv/mcp', env: { NODE_OPTIONS: '--require ./hook.js', PATH: '/opt/bin' } })
+    await apply(ctx, { ...stdioConfig, cwd: 'to-b', env: { NODE_OPTIONS: '--require ./hook.js', PATH: 'bin' } })
 
-    expect(consent.calls).toEqual([{
-      serverName: 'srv',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-fs', '/tmp'],
-      env: { NODE_OPTIONS: '--require ./hook.js', PATH: '/opt/bin' },
-      cwd: '/srv/mcp',
-    }])
+    expect(consent.calls).toEqual([startOf({
+      env: { NODE_OPTIONS: '--require ./hook.js', PATH: 'bin' },
+      cwd: 'to-b',
+      resolvedCommand: join(tree.b, 'bin', 'tool'),
+      resolvedCwd: tree.b,
+    })])
+    expect(StdioClientTransport).toHaveBeenCalledWith(expect.objectContaining({ command: join(tree.b, 'bin', 'tool'), cwd: tree.b }))
+    expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => [params.env?.['NODE_OPTIONS'], params.env?.['PATH']]))
+      .toContainEqual(['--require ./hook.js', 'bin'])
     await ctx.fiber.dispose()
   })
 
   it('names the working directory and the environment variable names in a refusal, never the values', async () => {
     new StubConsent(ctx, [Promise.resolve({ allow: false, reason: 'the environment changed' })])
 
-    const failure: unknown = await apply(ctx, { ...stdioConfig, cwd: '/srv/mcp', env: { TOKEN: 'secret-value-123', LD_PRELOAD: '/tmp/x.so' } })
+    const failure: unknown = await apply(ctx, { ...stdioConfig, cwd: tree.b, env: { TOKEN: 'secret-value-123', LD_PRELOAD: '/tmp/x.so' } })
       .catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(McpConsentRefusedError)
     const refusal = failure as McpConsentRefusedError
     expect(refusal.message).toBe('mcp-client(srv): the add-time consent did not allow this server\'s command, so the server stays stopped — '
-      + 'the environment changed. The consent covers the command "npx" "-y" "@modelcontextprotocol/server-fs" "/tmp", '
-      + 'run in "/srv/mcp" with the configured environment variables LD_PRELOAD, TOKEN (values not shown). '
+      + 'the environment changed. The consent covers the command "tool" "-y" "@modelcontextprotocol/server-fs" "/tmp", '
+      + `which runs the executable ${JSON.stringify(join(tree.a, 'bin', 'tool'))} in ${JSON.stringify(tree.b)} `
+      + `(configured as ${JSON.stringify(tree.b)}) with the configured environment variables LD_PRELOAD, TOKEN (values not shown). `
       + 'A server command runs outside the agent sandbox.')
-    expect(refusal.cwd).toBe('/srv/mcp')
+    expect(refusal.cwd).toBe(tree.b)
     expect(refusal.envNames).toEqual(['LD_PRELOAD', 'TOKEN'])
     expect(JSON.stringify(Object.entries(refusal))).not.toContain('secret-value-123')
     expect(mockConnect).not.toHaveBeenCalled()
@@ -236,12 +327,110 @@ describe('the optional mcpAddConsent seam', () => {
   })
 })
 
+describe('a start whose executable or working directory cannot be resolved', () => {
+  let ctx: Context
+  let tree: ToolTree
+  let consent: StubConsent
+
+  beforeEach(async () => {
+    tree = toolTree()
+    vi.clearAllMocks()
+    mockConnect.mockResolvedValue(undefined)
+    ctx = await mountRegistry()
+    consent = new StubConsent(ctx, [Promise.resolve({ allow: true })])
+  })
+
+  afterEach(async () => {
+    await ctx.fiber.dispose()
+    tree.remove()
+  })
+
+  /**
+   * Start the server under the stub consent and return its failure, checking that nothing was reviewed or spawned.
+   * @param config - the overrides of {@link stdioConfig}.
+   * @returns the failure's reason.
+   */
+  async function unresolved(config: Partial<typeof stdioConfig>): Promise<string> {
+    const failure: unknown = await apply(ctx, { ...stdioConfig, ...config }).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(McpServerStartUnresolvedError)
+    expect(consent.calls).toEqual([])
+    expect(StdioClientTransport).not.toHaveBeenCalled()
+    expect(mockConnect).not.toHaveBeenCalled()
+    return (failure as McpServerStartUnresolvedError).reason
+  }
+
+  it('keeps the server stopped, unreviewed, when no executable of the command\'s name is on PATH', async () => {
+    const failure: unknown = await apply(ctx, { ...stdioConfig, command: 'absent' }).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(McpServerStartUnresolvedError)
+    expect(failure).toMatchObject({
+      serverName: 'srv',
+      command: 'absent',
+      cwd: '',
+      message: 'mcp-client(srv): the command "absent" could not be resolved to an executable, so the add-time consent cannot review it '
+        + 'and the server stays stopped — no executable file named "absent" is in the server\'s PATH. '
+        + 'A server command runs outside the agent sandbox.',
+    })
+    expect(consent.calls).toEqual([])
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('skips a directory and a file without execute permission on PATH, as the spawn does', async () => {
+    mkdirSync(join(tree.root, 'c', 'tool'), { recursive: true })
+    chmodSync(join(tree.a, 'bin', 'tool'), 0o644)
+    vi.stubEnv('PATH', `${join(tree.root, 'c')}:${join(tree.a, 'bin')}:${join(tree.b, 'bin')}`)
+
+    await apply(ctx, stdioConfig)
+
+    expect(consent.calls.map(call => call.resolvedCommand)).toEqual([join(tree.b, 'bin', 'tool')])
+  })
+
+  it('looks a command up in the working directory for an empty PATH entry', async () => {
+    await apply(ctx, { ...stdioConfig, cwd: 'bin', env: { PATH: '' } })
+
+    expect(consent.calls.map(call => [call.resolvedCommand, call.resolvedCwd])).toEqual([[join(tree.a, 'bin', 'tool'), join(tree.a, 'bin')]])
+  })
+
+  it('resolves a command that names a path against the working directory, without a PATH lookup', async () => {
+    vi.stubEnv('PATH', join(tree.b, 'bin'))
+
+    await apply(ctx, { ...stdioConfig, command: './bin/tool' })
+
+    expect(consent.calls.map(call => call.resolvedCommand)).toEqual([join(tree.a, 'bin', 'tool')])
+  })
+
+  it('keeps the server stopped when a command that names a path is not an executable file', async () => {
+    await expect(unresolved({ command: './bin/absent' })).resolves.toBe(`${JSON.stringify(join(tree.a, 'bin', 'absent'))} is not an executable file`)
+  })
+
+  it('keeps the server stopped when the environment sets no PATH for a bare command', async () => {
+    vi.stubEnv('PATH', undefined)
+    await expect(unresolved({})).resolves.toBe('the server\'s environment sets no PATH to look the command up in')
+  })
+
+  it('keeps the server stopped when the working directory does not exist or is not a directory', async () => {
+    await expect(unresolved({ cwd: 'absent' })).resolves.toBe(`the working directory ${JSON.stringify(join(tree.a, 'absent'))} does not exist or cannot be read`)
+    await expect(unresolved({ cwd: 'bin/tool' })).resolves.toBe(`the working directory ${JSON.stringify(join(tree.a, 'bin', 'tool'))} is not a directory`)
+  })
+
+  it('keeps the server stopped on Windows, whose command resolution the review does not reproduce', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+    try {
+      await expect(unresolved({})).resolves.toBe('resolving a command as the stdio transport starts it on Windows (PATHEXT, cmd.exe shims, script interpreters) is not supported')
+    } finally {
+      if (platform !== undefined) Object.defineProperty(process, 'platform', platform)
+    }
+  })
+})
+
 describe('the consent lookup under a Loader, whatever the order of its rows', () => {
   let ctx: Context
+  let tree: ToolTree
   /** The provider row's module, released by the test so the server row starts first. */
   let providerModule: PromiseWithResolvers<object>
 
   beforeEach(async () => {
+    tree = toolTree()
     vi.clearAllMocks()
     mockConnect.mockResolvedValue(undefined)
     mockClose.mockResolvedValue(undefined)
@@ -260,6 +449,7 @@ describe('the consent lookup under a Loader, whatever the order of its rows', ()
     // A test that failed before releasing the provider's module leaves its row importing; release it so disposal settles.
     providerModule.resolve({ name: 'consent-provider', apply() {} })
     await ctx.fiber.dispose()
+    tree.remove()
   })
 
   /**
@@ -309,6 +499,31 @@ describe('the consent lookup under a Loader, whatever the order of its rows', ()
     const failure: unknown = await ctx.loader.resolve(serverId).fiber?.await().catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(McpConsentUnavailableError)
     expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('starts the server as upstream does when the only other row fails to import its module', async () => {
+    providerModule.reject(new Error('the module could not be imported'))
+    const rows = startRows()
+    const serverId = await rows.server
+    await rows.provider.catch((error: unknown) => error)
+    await ctx.loader.await()
+
+    await ctx.loader.resolve(serverId).fiber?.await()
+    expect(mockConnect).toHaveBeenCalled()
+  })
+
+  it('counts a declaring row whose disabled expression throws as a row that provides nothing', async () => {
+    providerModule.resolve({ name: 'consent-provider', providesMcpAddConsent: true, apply() { throw new Error('a disabled row never starts') } })
+    const provider = ctx.loader.create({
+      name: 'cordis:provider',
+      get disabled(): boolean { throw new Error('the switch expression failed') },
+    })
+    const serverId = await ctx.loader.create({ name: 'cordis:mcp', config: { ...stdioConfig } })
+    await provider.catch((error: unknown) => error)
+    await ctx.loader.await()
+
+    await ctx.loader.resolve(serverId).fiber?.await()
+    expect(mockConnect).toHaveBeenCalled()
   })
 
   it('starts the server as upstream does when the declared row registers no consent, as with its switch off', async () => {

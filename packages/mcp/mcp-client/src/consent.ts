@@ -7,7 +7,10 @@
  * before its command runs. A stdio server command runs as a local child
  * process outside the agent sandbox, so the consent names everything that
  * decides what that process runs: the command, its arguments, its working
- * directory and the configured environment variables.
+ * directory and the configured environment variables, together with the
+ * absolute executable path and canonical working directory the configured
+ * command and directory resolve to when the review runs. The server is
+ * spawned with those resolved paths, so it runs what was reviewed.
  *
  * A provider implements {@link McpAddConsent} and is loaded as a plugin whose
  * module exports {@link MCP_ADD_CONSENT_PROVIDER_EXPORT} set to `true`. The
@@ -42,6 +45,20 @@ export interface McpServerCommand {
   readonly env: Readonly<Record<string, string>>
   /** The configured working directory; the empty string runs the server in the Host's working directory. */
   readonly cwd: string
+  /**
+   * The absolute path of the executable the server is spawned with: `command`
+   * itself when it contains `/`, resolved against {@link resolvedCwd}, or the
+   * first executable file named `command` in the `PATH` of the child's
+   * environment. Symbolic links are kept; the review covers this path, not the
+   * contents of the file it names.
+   */
+  readonly resolvedCommand: string
+  /**
+   * The canonical working directory the server is spawned in: `cwd` resolved
+   * against the Host's working directory when the review ran, with every
+   * symbolic link resolved.
+   */
+  readonly resolvedCwd: string
 }
 
 /** The decision a consent review returns. */
@@ -65,7 +82,7 @@ export const MCP_ADD_CONSENT_PROVIDER_EXPORT = 'providesMcpAddConsent'
  * @returns the `[name, value]` pairs sorted by name.
  */
 export function sortedEnvEntries(env: Readonly<Record<string, string>>): readonly (readonly [string, string])[] {
-  return Object.keys(env).sort().map(name => [name, env[name] ?? ''] as const)
+  return Object.entries(env).sort(([left], [right]) => Number(left > right) - Number(left < right))
 }
 
 /**
@@ -91,8 +108,9 @@ function describeEnv(envNames: readonly string[]): string {
 /**
  * Refusal of one server start by the mounted consent, thrown by the
  * mcp-client plugin's activation so the refused server stays stopped. The
- * message names the command and arguments being granted, the working
- * directory and the names of the configured environment variables, carries
+ * message names the command and arguments being granted, the resolved
+ * executable path, the resolved and configured working directory and the
+ * names of the configured environment variables, carries
  * the provider's reason, and states that a server command runs outside the
  * agent sandbox. Environment values are never part of the error.
  */
@@ -105,6 +123,10 @@ export class McpConsentRefusedError extends Error {
   readonly args: readonly string[]
   /** The refused working directory; the empty string is the Host's working directory. */
   readonly cwd: string
+  /** The absolute path of the refused executable. */
+  readonly resolvedCommand: string
+  /** The canonical working directory the refused server would have run in. */
+  readonly resolvedCwd: string
   /** The names of the refused configured environment variables, sorted; their values are withheld. */
   readonly envNames: readonly string[]
   /** The consent provider's own reason. */
@@ -119,7 +141,8 @@ export class McpConsentRefusedError extends Error {
     const envNames = sortedEnvEntries(start.env).map(([name]) => name)
     super(
       `mcp-client(${start.serverName}): the add-time consent did not allow this server's command, so the server stays stopped — ${reason}. `
-        + `The consent covers the command ${granted}, run in ${describeCwd(start.cwd)} with ${describeEnv(envNames)}. `
+        + `The consent covers the command ${granted}, which runs the executable ${JSON.stringify(start.resolvedCommand)} `
+        + `in ${JSON.stringify(start.resolvedCwd)} (configured as ${describeCwd(start.cwd)}) with ${describeEnv(envNames)}. `
         + 'A server command runs outside the agent sandbox.',
     )
     this.name = 'McpConsentRefusedError'
@@ -127,6 +150,8 @@ export class McpConsentRefusedError extends Error {
     this.command = start.command
     this.args = [...start.args]
     this.cwd = start.cwd
+    this.resolvedCommand = start.resolvedCommand
+    this.resolvedCwd = start.resolvedCwd
     this.envNames = envNames
     this.reason = reason
   }
@@ -175,8 +200,9 @@ export abstract class McpAddConsent extends Service {
    * Review one configured server start before the mcp-client plugin starts
    * that server. The review runs at every boot of the server row, before any
    * child process starts, so the provider can let an accepted start through
-   * at once and ask again when the command, arguments, working directory or
-   * environment it is shown differ from the ones it accepted before.
+   * at once and ask again when the command, arguments, working directory,
+   * environment, resolved executable path or resolved working directory it
+   * is shown differ from the ones it accepted before.
    *
    * The returned promise gates the server's start: the mcp-client plugin's
    * activation does not finish, and the server does not start, until it
@@ -249,7 +275,8 @@ export async function findMcpAddConsent(ctx: Context, serverName: string): Promi
   }
   const providers = [...loader.entries()]
     .filter(entry => enabled(entry) && declaresProvider(entry, exports => loader.unwrapExports(exports)))
-  await Promise.allSettled(providers.flatMap(entry => entry.fiber === undefined ? [] : [entry.fiber.await()]))
+  const fibers = providers.map(entry => entry.fiber).filter(fiber => fiber !== undefined)
+  await Promise.allSettled(fibers.map(fiber => fiber.await()))
   const consent = ctx.get('mcpAddConsent')
   if (consent !== undefined) return consent
   const inactive = providers.filter(entry => entry.fiber?.state !== FiberState.ACTIVE)

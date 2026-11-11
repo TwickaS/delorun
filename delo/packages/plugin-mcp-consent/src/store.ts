@@ -6,11 +6,14 @@
  * commands — a command an acceptance would let run outside the agent sandbox
  * can neither read the list nor add itself to it. The store's entries are
  * keyed by the command; one entry holds what was accepted with that command —
- * the argument list, the working directory, and the configured environment as
- * its variable names and a SHA-256 digest of the names and values, never the
- * values themselves — and when it was accepted. A store of version 1, written
- * before an acceptance covered the working directory and the environment, is
- * superseded: none of its acceptances counts.
+ * the argument list, the configured working directory, the absolute
+ * executable path and canonical working directory they resolved to, and the
+ * configured environment as its variable names and a SHA-256 digest of the
+ * names and values, never the values themselves — and when it was accepted. A
+ * store of version 1, written before an acceptance covered the working
+ * directory and the environment, or of version 2, written before it covered
+ * the resolved executable path and working directory, is superseded: none of
+ * its acceptances counts.
  *
  * The module is free of Cordis, so the store's format, its refusals and its
  * file handling are testable without a mounted plugin.
@@ -19,20 +22,21 @@
  */
 import { createHash } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
 import type { McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { readProtectedFile, writeProtectedFile } from '@delo/home'
 
 /** Format version of the acceptance store. */
-export const ACCEPTANCE_STORE_VERSION = 2 as const
+export const ACCEPTANCE_STORE_VERSION = 3 as const
 
 /**
- * Format versions written before an acceptance covered the working directory and the environment. A store of one of
- * them is superseded: none of its acceptances counts, and the next acceptance starts a store of this version.
+ * Format versions written before an acceptance covered everything a review compares: version 1 held no working
+ * directory or environment, and version 2 no resolved executable path or working directory. A store of one of them is
+ * superseded: none of its acceptances counts, and the next acceptance starts a store of this version.
  */
-export const SUPERSEDED_STORE_VERSIONS: readonly number[] = [1]
+export const SUPERSEDED_STORE_VERSIONS: readonly number[] = [1, 2]
 
 /** Directory of the acceptance store under the home's `secrets/` directory. */
 export const ACCEPTANCE_STORE_DIR = 'mcp-add-consent'
@@ -43,12 +47,19 @@ export const ACCEPTANCE_STORE_FILE = 'acceptances.json'
 /** A server start as an acceptance judges it: everything a review is shown except the server's namespace. */
 export type ServerStart = Omit<McpServerCommand, 'serverName'>
 
-/** One accepted command: the argument list, working directory and environment accepted with it, and when. */
+/**
+ * One accepted command: the argument list, working directory, resolved executable path and working directory, and
+ * environment accepted with it, and when.
+ */
 export interface AcceptedCommand {
   /** The arguments the command was accepted with, in the configured order. */
   readonly args: readonly string[]
-  /** The working directory the command was accepted with; the empty string is the Host's working directory. */
+  /** The configured working directory the command was accepted with; the empty string is the Host's working directory. */
   readonly cwd: string
+  /** The absolute path of the executable the command resolved to when it was accepted. */
+  readonly resolvedCommand: string
+  /** The canonical working directory the command was accepted to run in. */
+  readonly resolvedCwd: string
   /** The names of the configured environment variables the command was accepted with, sorted. */
   readonly envNames: readonly string[]
   /** {@link envDigest} of the configured environment the command was accepted with. */
@@ -58,7 +69,7 @@ export interface AcceptedCommand {
 }
 
 /** The fields of one acceptance in the store's format, in the order they are written. */
-const ACCEPTANCE_FIELDS: readonly string[] = ['args', 'cwd', 'envNames', 'envDigest', 'acceptedAt']
+const ACCEPTANCE_FIELDS: readonly string[] = ['args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'envNames', 'envDigest', 'acceptedAt']
 
 /** The text of an environment digest: the algorithm and 64 lowercase hexadecimal digits. */
 const ENV_DIGEST = /^sha256:[0-9a-f]{64}$/
@@ -84,6 +95,8 @@ export function acceptanceOfStart(start: ServerStart, acceptedAt: number): Accep
   return {
     args: [...start.args],
     cwd: start.cwd,
+    resolvedCommand: start.resolvedCommand,
+    resolvedCwd: start.resolvedCwd,
     envNames: sortedEnvEntries(start.env).map(([name]) => name),
     envDigest: envDigest(start.env),
     acceptedAt,
@@ -99,6 +112,12 @@ export function acceptanceOfStart(start: ServerStart, acceptedAt: number): Accep
 export function mismatchOf(accepted: AcceptedCommand, start: ServerStart): string | undefined {
   if (!sameArgs(accepted.args, start.args)) return 'the person accepted a different argument list with this command'
   if (accepted.cwd !== start.cwd) return 'the person accepted this command with a different working directory'
+  if (accepted.resolvedCwd !== start.resolvedCwd) {
+    return `the working directory resolves to ${JSON.stringify(start.resolvedCwd)}, and the person accepted this command run in ${JSON.stringify(accepted.resolvedCwd)}`
+  }
+  if (accepted.resolvedCommand !== start.resolvedCommand) {
+    return `the command resolves to the executable ${JSON.stringify(start.resolvedCommand)}, and the person accepted ${JSON.stringify(accepted.resolvedCommand)}`
+  }
   if (accepted.envDigest !== envDigest(start.env)) return 'the person accepted this command with different environment variables or values'
   return undefined
 }
@@ -123,7 +142,7 @@ export class SupersededStoreError extends AcceptanceStoreError {
    * @param version - the store's superseded version.
    */
   constructor(version: number) {
-    super(`the store's version is ${String(version)}, written before an acceptance covered the working directory and the environment`)
+    super(`the store's version is ${String(version)}, written before an acceptance covered the resolved executable path and working directory`)
     this.name = 'SupersededStoreError'
     this.version = version
   }
@@ -163,16 +182,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * @param value - the store's value for it.
  * @returns the acceptance.
  * @throws {AcceptanceStoreError} when the value is not an object holding only the argument list, the working
- *   directory, the environment's names and digest, and the acceptance time, with the right types.
+ *   directory, the absolute resolved executable path and working directory, the environment's names and digest, and
+ *   the acceptance time, with the right types.
  */
 function acceptanceOf(command: string, value: unknown): AcceptedCommand {
   const named = `the acceptance of the command ${JSON.stringify(command)}`
   if (!isRecord(value)) throw new AcceptanceStoreError(`${named} is not an object`)
   const extra = Object.keys(value).filter(key => !ACCEPTANCE_FIELDS.includes(key))
   if (extra.length > 0) throw new AcceptanceStoreError(`${named} sets ${extra.join(', ')}`)
-  const { args, cwd, envNames, envDigest: digest, acceptedAt } = value
+  const { args, cwd, resolvedCommand, resolvedCwd, envNames, envDigest: digest, acceptedAt } = value
   if (!isStringList(args)) throw new AcceptanceStoreError(`${named} does not hold a list of argument strings`)
   if (typeof cwd !== 'string') throw new AcceptanceStoreError(`${named} does not hold a working directory string`)
+  if (typeof resolvedCommand !== 'string' || !isAbsolute(resolvedCommand)) {
+    throw new AcceptanceStoreError(`${named} does not hold an absolute resolved executable path`)
+  }
+  if (typeof resolvedCwd !== 'string' || !isAbsolute(resolvedCwd)) {
+    throw new AcceptanceStoreError(`${named} does not hold an absolute resolved working directory`)
+  }
   if (!isStringList(envNames)) throw new AcceptanceStoreError(`${named} does not hold a list of environment variable names`)
   if (typeof digest !== 'string' || !ENV_DIGEST.test(digest)) {
     throw new AcceptanceStoreError(`${named} does not hold a sha256 environment digest`)
@@ -180,7 +206,7 @@ function acceptanceOf(command: string, value: unknown): AcceptedCommand {
   if (typeof acceptedAt !== 'number' || !Number.isFinite(acceptedAt)) {
     throw new AcceptanceStoreError(`${named} does not hold a number acceptance time`)
   }
-  return { args, cwd, envNames, envDigest: digest, acceptedAt }
+  return { args, cwd, resolvedCommand, resolvedCwd, envNames, envDigest: digest, acceptedAt }
 }
 
 /**
@@ -229,6 +255,8 @@ export function serializeAcceptanceStore(entries: ReadonlyMap<string, AcceptedCo
       acceptances[command] = {
         args: [...accepted.args],
         cwd: accepted.cwd,
+        resolvedCommand: accepted.resolvedCommand,
+        resolvedCwd: accepted.resolvedCwd,
         envNames: [...accepted.envNames],
         envDigest: accepted.envDigest,
         acceptedAt: accepted.acceptedAt,
@@ -269,7 +297,7 @@ function problemOf(error: unknown): string {
  * Read the store from its path, applying contract C1's protected-file refusal rule.
  * @param path - the store's absolute path.
  * @returns `absent` while no store exists, `readable` with its acceptances, `superseded` with the version of a store
- *   written before an acceptance covered the working directory and the environment, or `refused` with the reason a
+ *   written before an acceptance covered everything a review compares, or `refused` with the reason a
  *   store that exists could not be read as this version's format — a laxer mode, a symbolic link, another format, or
  *   a filesystem failure.
  */
