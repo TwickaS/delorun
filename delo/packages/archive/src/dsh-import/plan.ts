@@ -34,6 +34,7 @@ import { join, resolve } from 'node:path'
 import { SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import { isProfileSafetyError } from '@delo/profile-safety'
 import { ARCHIVE_LIMITS } from '@delo/contract-archive-and-trash'
+import { profileNameProblem } from '@delo/contract-home-layout'
 import { parseDocument } from 'yaml'
 import { ChatLogScan } from './chats.ts'
 import { compareCredentials, CREDENTIALS_PATH, readCredentials, type DshImportCredential } from './credentials.ts'
@@ -853,16 +854,21 @@ class Planner {
     }
   }
 
-  /** Plan `profiles/`: each profile lands under its own name, apart from the desktop app's and a name the Delo home holds. */
+  /**
+   * Plan `profiles/`: each profile lands under its own name, apart from the desktop app's, a name contract C1 reserves
+   * or does not accept as a profile name, which no `delorun` command could start, and a name the Delo home holds.
+   */
   private async profileRoot(): Promise<void> {
     const reserved = (this.options.reservedProfiles ?? []).map(name => name.toLowerCase())
     for (const name of await this.reader.list('profiles')) {
       const path = `profiles/${name}`
       const entry = await this.reader.inspect(path)
+      const problem = profileNameProblem(name)
       if (entry.kind === 'refused') this.skip(path, entry.reason)
       else if (entry.kind === 'file') this.skipName(path, name)
       else if (!isProfileName(name)) this.skip(path, 'unsafe-name')
       else if (name.toLowerCase() === DESKTOP_PROFILE_NAME) this.skip(path, 'desktop-profile')
+      else if (problem !== undefined) this.skip(path, 'profile-name', problem)
       else if (reserved.includes(name.toLowerCase()) || await this.targetStats(path) !== undefined) this.skip(path, 'taken')
       else await this.profile(name, path)
     }

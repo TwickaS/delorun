@@ -120,6 +120,19 @@ describe('the plan of a stock-home import', () => {
     expect(JSON.parse(profile?.manifest ?? '')).toEqual({ name: 'dsh-profile-web', private: true, dependencies: { 'registry-bundle': '1.2.3' }, dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@delo/bundle-local'] } } })
   })
 
+  it('leaves a profile no delorun command could start behind: a reserved name, or one with a capital or a dot', async () => {
+    for (const name of ['headless', 'Data-Users', 'Work', 'notes.v2', 'tui']) homes.write(`profiles/${name}/package.json`, manifest(['@deepseek-ai/dsh-base']))
+    const planned = await plan(homes)
+    expect(planned.profiles.map(profile => profile.name)).toEqual(['tui'])
+    const left = planned.skipped.filter(entry => entry.reason === 'profile-name').map(entry => [entry.path, entry.detail?.split(':')[0]]).sort()
+    expect(left).toEqual([
+      ['profiles/Data-Users', '"Data-Users" is reserved'],
+      ['profiles/Work', '"Work" is not a profile name'],
+      ['profiles/headless', '"headless" is reserved'],
+      ['profiles/notes.v2', '"notes.v2" is not a profile name'],
+    ])
+  })
+
   it('leaves a profile whole when its files cannot be read safely, and names why', async () => {
     homes.write('profiles/nomanifest/cordis.patch.yml', '[]\n')
     homes.write('profiles/notjson/package.json', '{')
