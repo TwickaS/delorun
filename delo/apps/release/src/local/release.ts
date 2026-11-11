@@ -23,7 +23,7 @@
  */
 import { createHash, type KeyObject } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   DESKTOP_PLATFORMS,
@@ -267,6 +267,8 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
     const timestamp = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(content), signatures: [] }, [request.timestampKey]), undefined, 2)}\n`)
     verifyTimestamp(newest, timestamp, now)
     // The release files go in first and the timestamp last, so a client never reads a timestamp whose files are absent.
+    // mkdtemp made the work directory 0700; a channel is served, so its version directory is readable like its files.
+    await chmod(work, 0o755)
     await rename(work, release)
     for (const [position, root] of roots.entries()) await writeFile(join(request.channel, 'root', `${String(root.metadata.version)}.root.json`), request.roots[position]!)
     await replaceFile(request.state, `${JSON.stringify(stateAfter(newest, timestamp, content.version), undefined, 2)}\n`)

@@ -5,7 +5,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { devNull } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -98,6 +98,7 @@ describe('a local release', () => {
       'delorun-0.1.0.manifest.log.json',
     ])
     expect(readdirSync(channel).sort()).toEqual(['releases', 'root', 'timestamp.json'])
+    expect(statSync(releaseDirectory(channel, '0.1.0')).mode & 0o777).toBe(0o755)
     expect(readdirSync(join(channel, 'root'))).toEqual(['1.root.json'])
     const now = Math.floor(Date.now() / 1000)
     const root = trustRootChain([readFileSync(join(channel, 'root', '1.root.json'))], now).at(-1)!
