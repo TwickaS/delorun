@@ -111,6 +111,13 @@ describe('the answers document', () => {
     expect(refusal(write('import.json', { ...BASE, importStockHome: true }))).toContain('importStockHome must be false in --config')
   })
 
+  it('refuses a document that turns changes protection on, which only a terminal changes, and reads an absent answer as no', () => {
+    expect(refusal(write('protect.json', { ...BASE, protectChanges: true }))).toBe('delorun setup --config: protectChanges must be false in --config: changes protection is turned on only at a terminal, so run delorun changes protection on in one')
+    expect(readAnswersDocument(write('kept.json', { ...BASE, protectChanges: false })).protectChanges).toBe(false)
+    expect(readAnswersDocument(write('absent.json', BASE)).protectChanges).toBe(false)
+    expect(refusal(write('word.json', { ...BASE, protectChanges: 'on' }))).toContain('protectChanges is not a value')
+  })
+
   it('refuses a credential value given as a name, a file that is not JSON and a file that is missing', () => {
     const secret = 'sk-SECRET-VALUE-79'
     const named = refusal(write('named.json', { ...BASE, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: secret } } }))
@@ -125,6 +132,7 @@ describe('the answers document', () => {
   it('--yes answers take every default and the key from the environment, and stop naming the variable when it is unset', () => {
     expect(yesAnswers({ DEEPSEEK_API_KEY: 'k' }).prompts).toBe('safer')
     expect(yesAnswers({ DEEPSEEK_API_KEY: 'k' }).reach).toEqual({ option: 'none', identityFactor: null })
+    expect(yesAnswers({ DEEPSEEK_API_KEY: 'k' }).protectChanges).toBe(false)
     expect(() => yesAnswers({})).toThrow('DEEPSEEK_API_KEY is not set')
     expect(() => yesAnswers({ DEEPSEEK_API_KEY: '' })).toThrow('DEEPSEEK_API_KEY is not set')
   })

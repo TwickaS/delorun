@@ -2,9 +2,10 @@
  * The answers `delorun setup` applies (contract C11, "Answer schema" and
  * "The --yes and --config forms"): the `--config` document, the `--yes`
  * defaults, and the refusals that keep reach and credential forwarding off in
- * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, and
- * a document that carries a question setup no longer asks. A refusal names the field and never echoes a value.
- * A version-2 document, written before the release-check question, reads as the current version with the check on.
+ * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, or
+ * for changes protection, which only a terminal proof changes, and a document that carries a question setup no longer
+ * asks. A refusal names the field and never echoes a value. A version-2 document, written before the release-check
+ * question, reads as the current version with the check on.
  *
  * @module @delo/cli/setup/answers
  */
@@ -61,12 +62,13 @@ const answersSchema = z.strictObject({
   schemaVersion: z.literal(SETUP_ANSWERS_SCHEMA_VERSION),
   ...answerFields,
   updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck),
+  protectChanges: z.boolean().default(SETUP_DEFAULTS.protectChanges),
   sections,
 })
 
-/** The version-2 document, which has no `updateCheck`, read as the current version with the check on. */
+/** The version-2 document, which has no `updateCheck` or `protectChanges`, read as the current version with the check on. */
 const version2Schema = z.strictObject({ schemaVersion: z.literal(2), ...answerFields, sections })
-  .transform(({ sections: record, ...answers }) => ({ ...answers, schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
+  .transform(({ sections: record, ...answers }) => ({ ...answers, schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, updateCheck: SETUP_DEFAULTS.updateCheck, protectChanges: SETUP_DEFAULTS.protectChanges, sections: record }))
 
 /**
  * The schema of a document's declared version.
@@ -141,6 +143,8 @@ export function readAnswersDocument(path: string): SetupAnswers {
   if (answers.sections.length > 0) throw refusal('sections', 'is written by setup; remove it from the document')
   // The stock-home import shows its preview before anything changes, which no document can stand in for.
   if (answers.importStockHome) throw refusal('importStockHome', 'must be false in --config: the import shows what it copies before it asks, so run delorun import-home in a terminal')
+  // Only a terminal proof changes the protection setting (C21), which no document can stand in for.
+  if (answers.protectChanges) throw refusal('protectChanges', 'must be false in --config: changes protection is turned on only at a terminal, so run delorun changes protection on in one')
   if (answers.profile.name !== null) {
     try {
       selectProfile(answers.profile.name, {})

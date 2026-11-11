@@ -2,8 +2,9 @@
  * The sections of `delorun setup`. A section is one topic of the terminal flow with its question, its review line
  * and the writes it produces, and the registry lists them in order. Quick runs the sections marked `quick`; Full runs
  * every section. Each section is also `delorun setup <id>`. Later packages add their sections through
- * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, key, prompts, background
- * and profile. Privacy shows the note in both modes and asks about the release check in Full.
+ * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, key, prompts, background,
+ * remote access, changes protection and profile. Privacy shows the note in both modes and asks about the release check
+ * in Full.
  *
  * @module @delo/cli/setup/sections
  */
@@ -28,6 +29,7 @@ import { writeUpdateCheckRow } from './update-check.ts'
 import { readPatchRow, setPatchRow, storeCredential } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
+import { CHANGES_PROTECTION_SECTION_ORDER, changesProtectionSection } from '../changes/setup-section.ts'
 
 /** The run's mode: Quick asks the `quick` sections, Full asks every section. */
 export type SetupMode = 'quick' | 'full'
@@ -430,7 +432,8 @@ export const profileSection: SetupSection = {
 
 /**
  * The registry of the sections this build ships. Later packages register theirs into it.
- * @returns a registry holding privacy, the stock-home import, key, prompts, background, remote access and profile.
+ * @returns a registry holding privacy, the stock-home import, key, prompts, background, remote access, changes protection
+ * and profile.
  */
 export function defaultRegistry(): SectionRegistry {
   const registry = new SectionRegistry()
@@ -440,6 +443,7 @@ export function defaultRegistry(): SectionRegistry {
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
   registry.register(reachSection(systemTailscale()), { order: REACH_SECTION_ORDER })
+  registry.register(changesProtectionSection(process), { order: CHANGES_PROTECTION_SECTION_ORDER })
   registry.register(profileSection, { order: 50 })
   return registry
 }

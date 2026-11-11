@@ -17,4 +17,8 @@ describe('setup answers defaults', () => {
     expect(SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS).toEqual([2])
     expect(SETUP_UPDATE_CHECK_ROW).toBe('delo-update-check')
   })
+
+  it('leaves the changes protection setting as it is', () => {
+    expect(SETUP_DEFAULTS.protectChanges).toBe(false)
+  })
 })
