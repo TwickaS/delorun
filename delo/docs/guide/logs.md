@@ -10,7 +10,7 @@ Delo has no release yet; this page describes the first release.
 
 ## Summary
 
-Each of Delo's own processes writes an operational log: a file that records how the process behaved, so you or your agent can find out why something failed. Operational logs are separate from session logs, which record your chats and are kept until you delete the chat. `delorun logs` prints every log's location and the recent records of your home process. Delo's contract requires every record to pass redaction before it is written, every log to rotate at 10 MiB, and every log file to be deleted 14 days after it was written while Delo runs.
+Each of Delo's own processes writes an operational log: a file that records how the process behaved, so you or your agent can find out why something failed. Operational logs are separate from session logs, which record your chats and are kept until you delete the chat. `delorun logs` prints every log's location and the recent records of your home process. Delo's contract requires every record to pass redaction before it is written, every log to rotate at 10 MiB, and every log file to be deleted once its oldest record is 14 days old, at the next `delorun` command.
 
 ## Contents
 
@@ -50,7 +50,7 @@ Paths are under your Delo home, `~/.delo` unless you set `DELO_HOME`, where `<pr
 | Rotation | at 10 MiB |
 | Files kept per process | 5 |
 | Deletion | of each file once its oldest record is 14 days old, so no record stays longer |
-| Checked | when any Delo process starts, every hour while one runs, and on `delorun logs --prune` |
+| Checked | at each `delorun` command, except `--help` and `--version`, and on `delorun logs --prune` |
 
 While no Delo process runs, nothing deletes expired files; they go at the next start of a Delo process or when you run `delorun logs --prune`.
 
@@ -75,4 +75,4 @@ A record prints as `<time> <level> <log name> [<session id>/<turn>] <message>`. 
 
 - `delorun logs --clear <name>` asks for confirmation, then deletes that log's older files and empties its active file; a running process continues in the emptied file. `delorun logs --clear` without a name does this for every local log and deletes upstream's startup reports.
 - `delorun logs --prune` deletes every expired file now and prints each one.
-- **After you purge a chat.** Fragments of a purged chat can remain in captured output in operational logs until they are deleted 14 days after they were written while Delo runs. Purge offers to clear the operational logs and startup reports at once, which runs `delorun logs --clear`.
+- **After you purge a chat.** Fragments of a purged chat can remain in captured output in operational logs until their file is deleted, once its oldest record is 14 days old. `delorun trash purge <id> --clear-logs` and `delorun trash empty --clear-logs` also clear the operational logs and startup reports, as `delorun logs --clear` does.

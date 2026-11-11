@@ -65,15 +65,12 @@ Delo's contract requires each option to also need your passkey or sign-in provid
 
 ### By default
 
-Delo's contract requires these integrity checks to run by default. They carry no personal data, but each request reveals your IP address, the request time and the Delo version to the host it reaches.
+These checks run by default. They carry no personal data, but each request reveals your IP address, the request time and the Delo version to the host it reaches.
 
-- The release-log check at each start, against Sigstore's public release log and its checkpoint distributor.
-- The plugin revocation list from `catalogue.delorun.com`, at each start of the home and every 6 hours while it runs.
-- Update checks, which fetch Delo's signed release metadata.
+- The release-log check at each start, against Sigstore's public release log and its checkpoint distributor. No setting turns it off; when the log cannot be reached, the start goes on with a warning.
+- The update check, once a day, which fetches Delo's signed release metadata from releases.delorun.com and GitHub. Turn it off in Settings → Privacy or with `delorun setup privacy` ([Updates](updates.md#the-update-notice)).
 
-Each file these checks fetch is verified by its signature, so a host that serves a changed file fails the check.
-
-Delo's contract requires `integrity.mode: off` to turn the release-log check and the revocation list off. The offline check of your installed release still runs at each start, and a failed check still stops it. With the revocation list off, the list goes stale after 24 hours: catalogue installs pause, and installed plugins keep loading.
+Each file these checks fetch is verified by its signature, so a host that serves a changed file fails the check. The first release publishes no plugin revocation list and fetches none.
 
 Docker workspaces pull images, and own-domain reach queries public certificate logs. Delo's contract requires each to happen only when you choose that feature.
 
@@ -90,7 +87,7 @@ Delo's contract requires that setup's `--yes` and `--config` forms never turn on
 ## Checking it yourself
 
 - Delo's contract requires `delorun verify` to check the release, the files, isolation, exposure, sign-in, plugins and data sharing, and to report what your system cannot enforce. Every report states that a program running as you can change the checks.
-- Delo's contract requires `delorun logs` to show each operational log, its location and its records. Delo's own records hold no secret, chat text, prompt, model output, tool argument or file content. Captured command output can still hold chat and file text until retention deletes it. While Delo runs, logs are deleted 14 days after they were written.
+- Delo's contract requires `delorun logs` to show each operational log, its location and its records. Delo's own records hold no secret, chat text, prompt, model output, tool argument or file content. Captured command output can still hold chat and file text until retention deletes it. A log file is deleted at the next `delorun` command once its oldest record is 14 days old.
 - The [threat model](../security/threat-model.md) lists each boundary, its defence and what Delo does not protect against.
 
 ## Reporting a problem

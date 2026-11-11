@@ -24,22 +24,25 @@ Set `DELO_HOME` to keep the home somewhere else, such as `DELO_HOME=~/work/delo 
 
 ## The first run
 
-The first `delorun` on a new home runs setup, which creates the CLI profile. After that, `delorun` starts Delo in your terminal and opens the studio in your browser; press Ctrl-C to stop it. `delorun start` starts Delo in the background, so you can close the terminal, and `delorun start --foreground` runs it in your terminal; neither opens the browser. `delorun status` shows whether Delo runs, its process and the runtime version, and `delorun stop` stops it once running chats end, or at once with `delorun stop --now`. Only one Delo runs per profile: a second start says that one is already running.
+The first `delorun` on a new home runs setup, which creates the CLI profile. After that, `delorun` starts Delo in the background and opens the studio in your browser, unless you chose in setup to run it in the terminal. `delorun status` shows whether Delo runs, its process and the runtime version, and `delorun stop` stops it once running chats end, or at once with `delorun stop --now`. Only one Delo runs per profile: a second start says that one is already running. [Daily use](daily-use.md) lists every command.
 
 ## Profiles
 
-The command line uses the profile `default`. Set `DELO_PROFILE`, or pass `--profile <name>`, to use another one. The desktop app keeps its own profile, `desktop`, which `delorun` refuses to run or change. Both share your sessions, workspaces and credentials.
+The command line uses the profile `default`. Set `DELO_PROFILE`, or pass `--profile <name>`, to use another one. A profile name has 1 to 32 lowercase letters, digits, `-` or `_`. The names `desktop`, reserved for a desktop app's own profile, and `headless`, which `delorun headless` uses, are refused, and so are Windows device names such as `con`. All profiles share your sessions, workspaces and credentials.
 
 ## Your DeepSeek Harness home
 
-Delo never changes or moves `~/.dsh`, and reads it only when you import it ([Switching from DeepSeek Harness](switching.md)). If you set `DSH_HOME` for DeepSeek Harness, `delorun` ignores it and uses your Delo home, and `delorun status` tells you so. `delorun plugin` and `delorun headless` work as `dsh plugin` and `dsh headless` do, inside your Delo home.
+Delo never changes or moves `~/.dsh`, and reads it only when you import it ([Switching from DeepSeek Harness](switching.md)). If you set `DSH_HOME` for DeepSeek Harness, `delorun` ignores it and uses your Delo home, and `delorun status` tells you so. `delorun plugin` works as `dsh plugin` does, inside your Delo home, and `delorun headless` answers one task as `dsh headless` does, with Delo's sandbox protection and guards ([Daily use](daily-use.md#the-plugin-and-headless-commands)).
 
 ## Fixing permissions
 
 Your home and Delo's folders in it are readable only by you (mode 700), and Delo's secret files only by you (mode 600). If another user could read one of them, Delo refuses to use it and prints the command that fixes it, for example:
 
 ```text
-delorun: SECRET_FILE_MODE: /home/you/.delo/secrets/home-auth/device.key has mode 0640, which other users can read; it must be 0600; fix it with: chmod 600 /home/you/.delo/secrets/home-auth/device.key
+Delo stopped before using /home/you/.delo/secrets/home-auth/home-key.pem.
+Why: SECRET_FILE_MODE: /home/you/.delo/secrets/home-auth/home-key.pem has mode 0640, which other users can read; it must be 0600
+What you can do:
+  Fix it with: chmod 600 /home/you/.delo/secrets/home-auth/home-key.pem
 ```
 
-Run the printed `chmod 700` or `chmod 600` command, then run `delorun` again. Delo never changes these permissions for you. On Windows, Delo does not check them yet.
+Run the printed `chmod 700` or `chmod 600` command, then run `delorun` again. A home, private folder or secret file that is a symbolic link or belongs to another user is refused too, without a command to fix it: move it away and let `delorun` create it again. Delo never changes these permissions for you. On Windows, Delo does not check them yet.

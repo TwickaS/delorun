@@ -26,15 +26,15 @@ Remote access lets you open the studio of the Delorun running on your computer f
 
 ## Turn remote access on
 
-Run `delorun reach on tailscale` in a terminal on your computer, or answer yes to "Remote access" in `delorun setup`'s Full mode. The command checks Tailscale, picks a fixed local port for the remote listener, writes both into your profile and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. It refuses when Tailscale Funnel is on for that address, because Funnel would put your sign-in page on the public internet; turn Funnel off with the command it prints. It also removes any other `tailscale serve` rule on the same port. Delorun opens the remote listener when it starts, so restart Delorun if it is running: `delorun stop`, then `delorun start`. `delorun reach status` shows whether remote access is on and whether Delorun runs; Settings → Devices in the studio on your computer shows whether the address is ready.
+Run `delorun reach on tailscale` in a terminal on your computer, or answer yes to "Remote access" in `delorun setup`'s Full mode. The command checks Tailscale, picks a fixed local port for the remote listener, writes both into your profile and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. It refuses when Tailscale Funnel is on for that address, because Funnel would put your sign-in page on the public internet; turn Funnel off with the command it prints. It also removes another `tailscale serve` rule on the same port that is not this studio's own, and every rule on that port while Delorun is stopped. Delorun opens the remote listener when it starts, so restart Delorun if it is running: `delorun stop`, then `delorun start`. `delorun reach status` shows whether remote access is on and whether Delorun runs; Settings → Devices in the studio on your computer shows whether the address is ready.
 
 ## Approve a device
 
 A device is approved only at your computer.
 
-1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio's Settings, under Devices. This opens an approval window for 5 minutes.
+1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio's Settings, under Devices. This opens an approval window for 5 minutes, which closes at the first approval. `delorun devices approve` needs Delorun running.
 2. On your phone, open your address and choose **Ask for approval**. The phone shows an 8-digit code.
-3. On your computer, the command lists every waiting device with a number, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field and a **Cancel request** button. Three wrong codes cancel only that request.
+3. On your computer, the command lists every waiting device with a number, a short request id, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field and a **Cancel request** button. Three wrong codes cancel only that request.
 
 At most 5 requests wait at a time. When a phone is told that 5 requests are waiting, cancel the ones you do not know at your computer, then ask again from the phone; a waiting request is never replaced on its own. A device name or platform that contains control or text-direction characters is refused.
 
@@ -51,15 +51,16 @@ An approved phone speaks for a device, not for you at your computer. Delorun all
 It can:
 
 - read your chats and workspaces, and follow a chat while it runs;
-- reply, attach images, start a chat in a workspace you already have, with your configured preset, and fork a chat;
+- reply, attach files, edit or withdraw a queued message, start a chat in a workspace you already have, with your configured preset, and fork a chat;
 - rename and pin chats;
 - answer ordinary prompts and questions the agent asks, and stop a run or a background job.
 
 It cannot:
 
-- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the phone shows "This needs you at your computer: granting full access", and the prompt keeps waiting for your computer;
+- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
 - install, enable or remove plugins, undo profile changes, or change any setting, the model a chat saves as default, or a chat's preset;
-- run slash commands, open a terminal, browse folders, read files on your computer by path, or see the Changes panel;
+- run slash commands, open a terminal, browse folders, read files on your computer by path, or apply, discard or undo changes;
+- answer a prompt that would let the agent manage workspaces and their instructions, change a chat's goals, or record feedback;
 - start a chat in a folder of its choosing, create, rename or delete workspaces, archive or reorder chats, or create or edit scheduled follow-ups;
 - approve or remove devices, change remote access, or reset the home.
 
