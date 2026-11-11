@@ -54,8 +54,9 @@ async function setUp(options: SetUpOptions = {}) {
   const journal = journalPath(home, PROFILE)
   // As in the home process, the Host's rows are known only while it runs.
   let hostRuns = true
+  const logger = new MemoryLogger()
   const subject: HandshakeSubject = {
-    running, home, profile: PROFILE, journal, logger: new MemoryLogger(),
+    running, home, profile: PROFILE, journal, logger,
     chats: () => gate,
     setState: (state) => { events.push(`state:${state}`) },
     suspend: async (limitS) => {
@@ -82,7 +83,7 @@ async function setUp(options: SetUpOptions = {}) {
     protection: () => (hostRuns ? PROTECTION : undefined),
   }
   const handshake = new UpdateHandshake(subject, { store, snapshots, copies })
-  return { home, events, handovers, store, snapshots, copies, handshake, journal, gate }
+  return { home, events, handovers, store, snapshots, copies, handshake, journal, gate, logger }
 }
 
 /** Prepare and apply an update to V2. */
@@ -258,12 +259,17 @@ describe('the person\'s rollback', () => {
   })
 
   it('applies the table, starts the version rolled back to and passes on what the table tells the person, leaving the record rolling-back for that version to remove', async () => {
-    const { handshake, copies, events, home, journal, handovers } = await setUp({ running: V2 })
+    const { handshake, copies, events, home, journal, handovers, logger } = await setUp({ running: V2 })
     copies.copies.add(V2)
     await committed(journal, true)
     expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'rolled-back', lines: ['Went back to 1.0.0; 1 chat(s) set aside.'] })
     // The version rolled back to may protect less than the one it replaced; it is not held to the running Host's protection.
     expect(handovers[0]?.health).not.toHaveProperty('previousProtection')
+    // The home log records each phase of the rollback, as it does an update's, and the commit.
+    expect(logger.records.filter(record => record.startsWith('info rollback '))).toEqual([
+      ...['reporting', 'waiting', 'switching', 'health-check'].map(phase => `info rollback phase ${JSON.stringify({ phase, from: V2, to: V1 })}`),
+      `info rollback committed ${JSON.stringify({ from: V2, to: V1, successor: 4242 })}`,
+    ])
     expect(copies.calls).toEqual([`rollback:${V1}>${V2}`])
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V2)

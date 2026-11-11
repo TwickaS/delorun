@@ -280,7 +280,7 @@ export class UpdateHandshake {
         throw new HomeProcessError('NO_UPDATE_RECORD', `no committed update to ${this.subject.running} is recorded; nothing to roll back`)
       }
       record = found
-      this.announce('reporting', record.from, progress)
+      this.rollbackPhase(record, 'reporting', progress)
       if (!profileOnly) prepared = await this.support.store.reportRollback(record.from)
     } catch (error) {
       this.current = undefined
@@ -330,6 +330,18 @@ export class UpdateHandshake {
   private announce(phase: UpdatePhase, target: RuntimeVersion, progress: Progress): void {
     this.current = { phase, target }
     progress({ phase })
+  }
+
+  /**
+   * Announce a phase of the person's rollback and log it, as {@link phase} logs an update's: the rollback goes from
+   * the record's target, which runs, back to its source.
+   * @param record - the update record the rollback undoes.
+   * @param phase - the phase.
+   * @param progress - writes progress lines.
+   */
+  private rollbackPhase(record: UpdateJournal, phase: UpdatePhase, progress: Progress): void {
+    this.subject.logger.info('rollback phase', { data: { phase, from: record.to, to: record.from } })
+    this.announce(phase, record.from, progress)
   }
 
   private async phase(update: JournalledUpdate, phase: UpdatePhase, progress: Progress): Promise<void> {
@@ -608,12 +620,12 @@ export class UpdateHandshake {
       return result
     }
     try {
-      const quiet = await this.quiesce(wait, drainTimeoutS, cancellation.signal, async () => { this.announce('waiting', record.from, progress) })
+      const quiet = await this.quiesce(wait, drainTimeoutS, cancellation.signal, async () => { this.rollbackPhase(record, 'waiting', progress) })
       release = quiet.release
       if (quiet.ended !== undefined) return end(quiet.ended === 'CANCELLED' ? { outcome: 'aborted' } : { outcome: 'aborted', reason: quiet.ended })
       this.waiting = undefined
       this.subject.setState('switching')
-      this.announce('switching', record.from, progress)
+      this.rollbackPhase(record, 'switching', progress)
       const health = prepared === undefined ? undefined : this.expectations(prepared.health, 'rollback')
       if (health !== undefined) {
         try {
@@ -653,7 +665,7 @@ export class UpdateHandshake {
         await removeJournal(journal)
         return end({ outcome: 'rolled-back', lines })
       }
-      this.announce('health-check', record.from, progress)
+      this.rollbackPhase(record, 'health-check', progress)
       const startId = brandString<StartId>(randomId())
       const successor = this.subject.startSuccessor({
         type: 'handover', v: 1, home: this.subject.home, profile: this.subject.profile, from: running, to: record.from, startId, health, startedAt: new Date().toISOString(),
@@ -663,6 +675,7 @@ export class UpdateHandshake {
         this.subject.handOver(successor, startId, record.from)
         this.committedSuccessor = successor
         this.current = { phase: 'committed', target: record.from }
+        this.subject.logger.info('rollback committed', { data: { from: record.to, to: record.from, successor: successor.pid } })
         return { outcome: 'rolled-back', lines }
       }
       // The data and the profile are back for `from`, so `to` may not run on them: the pointers stay on `from`.
