@@ -47,6 +47,7 @@ kind: "package-reference"
 | `probeTimeoutMs` | `5,000` | 每次竞争 runner 候选功能探测的超时时间 |
 | `protectedHome` | 无 | 受限命令不能写入或读取的现有目录（例如 harness 主目录）的绝对路径；与它重叠的 `workspace-write` 根目录会以 `HOME_IN_WRITABLE_ROOT` 被拒绝 |
 | `protectedHomeReadable` | `[]` | `protectedHome` 下、相对于它的路径，受限命令仍可读取和执行；需要 `protectedHome` |
+| `protectedHomeToolReadable` | `[]` | `protectedHome` 下、相对于它的路径，进程内读取工具可以读取，受限命令仍不可读取，例如 spill 目录；在 `protectedReads` 中报告，任何 runner 都不授予；需要 `protectedHome` |
 | `deniedSockets` | `[]` | 受限命令不能连接的 Unix 套接字绝对路径，在能表达该规则的 runner 上生效 |
 | `deniedSocketDirectories` | `[]` | 只存放受限命令不能连接的套接字的目录的绝对路径，例如 Docker Desktop 的控制套接字目录；bwrap 隐藏整个目录，Seatbelt 拒绝包装时其中存在的每个套接字 |
 
@@ -64,7 +65,7 @@ Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定�
 
 ### 受保护主目录与被拒绝的套接字
 
-设置 `protectedHome` 后，受限命令不能在该目录下创建、修改或删除任何内容；在限制读取的 runner 上，除 `protectedHomeReadable` 条目外也不能读取其中任何内容。工作区根目录或额外根目录等于、位于或包含主目录的 `workspace-write` 调用会在命令启动前以 `HOME_IN_WRITABLE_ROOT` 失败；在这样的工作区中，只读调用仍会运行。设置 `deniedSockets` 后，在能表达该规则的 runner 上受限命令不能连接这些套接字，其他 Unix 套接字与网络仍可访问。不设置这些字段时，每个 profile 都与原版相同。每次包装时，提供方还会找出到达主目录或被拒绝套接字的其他路径——Linux 上同一文件系统的其他挂载（从 `/proc/self/mountinfo` 读取，并按设备号与 inode 确认），以及 macOS 上 Data 卷的 firmlink 写法——并像原路径一样保护它们。当主目录或被拒绝的套接字位于 btrfs、bcachefs 或 overlayfs 上，或挂载表未列出其设备号时，就找不到这些其他挂载：提供方上的 `aliasCoverage()` 以及针对任意路径的 `pathAliasCoverage(path)` 会报告 `unknown`，使消费方不把主目录与套接字规则报告为已强制执行。通往主目录内其他位置或主目录之上的可读条目会被丢弃，位于可读条目内的被拒绝套接字会在加载时被拒绝。
+设置 `protectedHome` 后，受限命令不能在该目录下创建、修改或删除任何内容；在限制读取的 runner 上，除 `protectedHomeReadable` 条目外也不能读取其中任何内容。工作区根目录或额外根目录等于、位于或包含主目录的 `workspace-write` 调用会在命令启动前以 `HOME_IN_WRITABLE_ROOT` 失败；在这样的工作区中，只读调用仍会运行。设置 `deniedSockets` 后，在能表达该规则的 runner 上受限命令不能连接这些套接字，其他 Unix 套接字与网络仍可访问。不设置这些字段时，每个 profile 都与原版相同。每次包装时，提供方还会找出到达主目录或被拒绝套接字的其他路径——Linux 上同一文件系统的其他挂载（从 `/proc/self/mountinfo` 读取，并按设备号与 inode 确认），以及 macOS 上 Data 卷的 firmlink 写法——并像原路径一样保护它们。当主目录或被拒绝的套接字位于 btrfs、bcachefs 或 overlayfs 上，或挂载表未列出其设备号时，就找不到这些其他挂载：提供方上的 `aliasCoverage()` 以及针对任意路径的 `pathAliasCoverage(path)` 会报告 `unknown`，使消费方不把主目录与套接字规则报告为已强制执行。通往主目录内其他位置或主目录之上的可读条目会被丢弃，位于可读条目内的被拒绝套接字会在加载时被拒绝。工具可读条目会拼接到 `protectedReads` 的每个根路径下，从不进入任何 profile。
 
 | 规则 | bwrap | Landlock | Seatbelt | Windows ACL |
 |---|---|---|---|---|

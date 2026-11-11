@@ -278,6 +278,23 @@ describe('alias coverage', () => {
     expect(ctx.sandbox.protectedHome).toBeUndefined()
   })
 
+  it('reports tool-readable entries to read tools and grants them to no confined command', async () => {
+    const { home, workspace } = fixture()
+    mkdirSync(join(home, 'spill'))
+    const sandbox = await provider({ protectedHome: home, protectedHomeReadable: ['runtimes'], protectedHomeToolReadable: ['spill'] })
+    expect(sandbox.protectedReads?.toolReadable).toEqual(sandbox.protectedReads?.roots.map(root => join(root, 'spill')))
+    expect(sandbox.protectedReads?.readable).not.toContain(join(home, 'spill'))
+    const bwrap = await sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: workspace })
+    expect(bwrap.argv).toEqual(expect.arrayContaining(['--ro-bind', join(home, 'runtimes'), join(home, 'runtimes')]))
+    expect(bwrap.argv.some(arg => arg.includes('spill'))).toBe(false)
+    const seatbelt = await provider({ protectedHome: home, protectedHomeToolReadable: ['spill'] }, { platform: 'darwin', seatbeltExec: '/usr/bin/false' })
+    expect((await seatbelt.confine(['true'], { mode: 'read-only', workspaceRoot: workspace })).argv.join(' ')).not.toContain('spill')
+    await expect(provider({ protectedHomeToolReadable: ['spill'] })).rejects.toThrow('protectedHomeToolReadable requires protectedHome')
+    for (const entry of ['', '/abs', '..', '../outside', '.']) {
+      await expect(provider({ protectedHome: home, protectedHomeToolReadable: [entry] })).rejects.toThrow('protectedHomeToolReadable entries must be relative paths inside protectedHome')
+    }
+  })
+
   it('is reported by the provider and for any path on this host', async () => {
     const { home } = fixture()
     const sandbox = await provider({ protectedHome: home })

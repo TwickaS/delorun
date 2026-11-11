@@ -105,6 +105,12 @@ export interface Config {
    */
   protectedHomeReadable?: string[]
   /**
+   * Paths under {@link protectedHome}, relative to it, that in-process read tools may read while confined commands
+   * still may not, such as the spill directory whose files a spill notice tells the model to read. Reported as
+   * `protectedReads.toolReadable` and never granted by any runner's profile. Rejected without `protectedHome`.
+   */
+  protectedHomeToolReadable?: string[]
+  /**
    * Absolute paths of Unix sockets that confined commands cannot connect to, such as the Docker socket and the
    * channels under the protected home, on runners that express the rule ({@link RUNNER_PROTECTION}). Each path is
    * resolved at every wrap, and its resolved spellings are denied too.
@@ -319,6 +325,25 @@ function protectionSettings(config: Config): ProtectionSettings {
 }
 
 /**
+ * Validate `protectedHomeToolReadable` at load: each entry is a relative path inside the home.
+ * @param config - the schema-defaulted config.
+ * @param home - the canonical protected home, or `undefined` when none is configured.
+ * @returns the entries, relative to the home.
+ * @throws {Error} naming the invalid entry, or an entry given without a home.
+ */
+function toolReadableEntries(config: Config, home: string | undefined): readonly string[] {
+  const entries = config.protectedHomeToolReadable as string[]
+  if (home === undefined && entries.length > 0) throw new Error('sandbox-local: protectedHomeToolReadable requires protectedHome')
+  for (const entry of entries) {
+    const normalized = normalize(entry)
+    if (entry === '' || isAbsolute(entry) || normalized === '.' || normalized === '..' || normalized.startsWith(`..${sep}`)) {
+      throw new Error(`sandbox-local: protectedHomeToolReadable entries must be relative paths inside protectedHome: ${JSON.stringify(entry)}`)
+    }
+  }
+  return entries.map(entry => normalize(entry))
+}
+
+/**
  * The denial dialect each runner's kernel speaks — the case-insensitive stderr substrings a
  * denied file effect produces under it, carried on every wrap (the seam's
  * `ConfinedArgv.denialSignatures`).
@@ -376,6 +401,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     probeTimeoutMs: z.natural().default(5_000),
     protectedHome: z.string(),
     protectedHomeReadable: z.array(z.string()).default([]),
+    protectedHomeToolReadable: z.array(z.string()).default([]),
     deniedSockets: z.array(z.string()).default([]),
     deniedSocketDirectories: z.array(z.string()).default([]),
     escapeSocketDirectories: z.array(z.string()).default([]),
@@ -388,6 +414,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly configuredRunnerFailureSignatures: string[]
   private readonly probeTimeoutMs: number
   private readonly protection: ProtectionSettings
+  /** The configured {@link Config.protectedHomeToolReadable}, relative to the home; never part of a profile. */
+  private readonly toolReadable: readonly string[]
   /** The configured {@link Config.escapeSocketDirectories}, checked for existence at every wrap. */
   private readonly escapeSocketDirectories: readonly string[]
   /** Cached chain verdict; undefined until the first confined wrap needs it. */
@@ -423,6 +451,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     this.probeTimeoutMs = config.probeTimeoutMs as number
     assertPositiveFinite('probeTimeoutMs', this.probeTimeoutMs)
     this.protection = protectionSettings(config)
+    this.toolReadable = toolReadableEntries(config, this.protection.home)
     this.escapeSocketDirectories = config.escapeSocketDirectories as string[]
     // An operator-supplied runner does not use the ACL backend. The registry
     // remains optional and may be mounted after this provider.
@@ -448,7 +477,7 @@ export class LocalSandboxProvider extends SandboxProvider {
   }
 
   /**
-   * The home and its aliases found now, with the resolved readable entries under each.
+   * The home and its aliases found now, with the resolved readable entries and the tool-readable entries under each.
    * @returns the protected reads, or `undefined` when no home is configured.
    * @throws {SandboxUnsupportedPolicyError} when the Linux mount table cannot be read.
    */
@@ -458,7 +487,11 @@ export class LocalSandboxProvider extends SandboxProvider {
     if (home === undefined) return undefined
     const roots = [home, ...protection.homeAliases]
     const entries = protection.readable.map(entry => relative(home, entry.path))
-    return { roots, readable: roots.flatMap(root => entries.map(entry => join(root, entry))) }
+    return {
+      roots,
+      readable: roots.flatMap(root => entries.map(entry => join(root, entry))),
+      toolReadable: roots.flatMap(root => this.toolReadable.map(entry => join(root, entry))),
+    }
   }
 
   /**

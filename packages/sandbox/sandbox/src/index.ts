@@ -26,6 +26,7 @@ export {
   canonicalPath,
   pathWithin,
   protectedReadGuard,
+  toolReadableOnly,
   workspaceWritableRoots,
   writableRoots,
   SandboxInvalidRootError,
@@ -235,8 +236,14 @@ export abstract class SandboxProvider extends Service {
 export interface ProtectedReads {
   /** The protected home and the other paths that reach it. */
   readonly roots: readonly string[]
-  /** The readable entries under each root, which stay readable. */
+  /** The readable entries under each root, which confined executions and in-process read tools may read. */
   readonly readable: readonly string[]
+  /**
+   * The entries under each root that in-process read tools may read and confined executions may not, such as the
+   * directory holding spilled tool output that the tools tell a model to read. A provider never grants them to a
+   * confined execution. Absent means none.
+   */
+  readonly toolReadable?: readonly string[]
 }
 
 export default SandboxProvider

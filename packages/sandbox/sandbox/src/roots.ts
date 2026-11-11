@@ -137,13 +137,25 @@ export function assertRootsOutsideHome(roots: readonly string[], home: string): 
 
 /**
  * The check a model-facing read tool applies to each canonical path it would read, list or search: refused when it
- * lies under a protected root and under none of the readable entries. `danger-full-access` reads everything, as
- * confined commands in that mode do.
+ * lies under a protected root and under none of the readable or tool-readable entries. `danger-full-access` reads
+ * everything, as confined commands in that mode do.
  * @param reads - the provider's {@link ProtectedReads}, read once for the call; `undefined` protects nothing.
  * @param mode - the calling session's resolved sandbox mode.
  * @returns a predicate that is true for a path the tool must refuse.
  */
 export function protectedReadGuard(reads: ProtectedReads | undefined, mode: SandboxMode): (path: string) => boolean {
   if (reads === undefined || mode === 'danger-full-access') return () => false
-  return path => reads.roots.some(root => pathWithin(path, root)) && !reads.readable.some(entry => pathWithin(path, entry))
+  const exempt = [...reads.readable, ...reads.toolReadable ?? []]
+  return path => reads.roots.some(root => pathWithin(path, root)) && !exempt.some(entry => pathWithin(path, entry))
+}
+
+/**
+ * Whether a canonical path lies under one of the provider's tool-readable entries, which in-process tools may read and
+ * confined executions may not ({@link ProtectedReads.toolReadable}).
+ * @param reads - the provider's {@link ProtectedReads}.
+ * @param path - a canonical path.
+ * @returns true when the path is that entry or beneath it.
+ */
+export function toolReadableOnly(reads: ProtectedReads, path: string): boolean {
+  return (reads.toolReadable ?? []).some(entry => pathWithin(path, entry))
 }

@@ -9,7 +9,7 @@ import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { SandboxProtectedRootError, assertRootsOutsideHome, canonicalPath, pathWithin, protectedReadGuard, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
+import { SandboxProtectedRootError, assertRootsOutsideHome, canonicalPath, pathWithin, protectedReadGuard, toolReadableOnly, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
 
 /** Every temp root created by this file, removed after each test. */
 const roots: string[] = []
@@ -138,6 +138,18 @@ describe('protectedReadGuard', () => {
     expect(refused('/u/.delo-other/key')).toBe(false)
     expect(refused('/u/project/a.ts')).toBe(false)
     expect(protectedReadGuard(reads, 'read-only')('/u/.delo/secrets/key')).toBe(true)
+  })
+
+  it('lets read tools read a tool-readable entry, and refuses the rest of the home beside it', () => {
+    const withSpill = { ...reads, toolReadable: ['/u/.delo/spill', '/mnt/distro/u/.delo/spill'] }
+    const refused = protectedReadGuard(withSpill, 'workspace-write')
+    expect(refused('/u/.delo/spill/session-1/grep.txt')).toBe(false)
+    expect(refused('/mnt/distro/u/.delo/spill/session-1/grep.txt')).toBe(false)
+    expect(refused('/u/.delo/spill-other/key')).toBe(true)
+    expect(refused('/u/.delo/secrets/key')).toBe(true)
+    expect(toolReadableOnly(withSpill, '/u/.delo/spill/session-1')).toBe(true)
+    expect(toolReadableOnly(withSpill, '/u/.delo/runtimes')).toBe(false)
+    expect(toolReadableOnly(reads, '/u/.delo/spill')).toBe(false)
   })
 
   it('refuses nothing under danger-full-access or without protected reads', () => {
