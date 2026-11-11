@@ -5,6 +5,7 @@
  * is accepted only after a yes at a terminal and with the review id that was shown, an allowed command is revoked only
  * after a yes at a terminal and with the acceptance time that was shown, and every action needs Delo to run.
  */
+import { shellQuote } from '@delo/home'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -108,7 +109,7 @@ describe('delorun workspace full-access', () => {
     await expect(command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.failed)
     expect(asked).toEqual([])
     expect(await grants()).toEqual({})
-    expect(out.stderr).toContain(`asks you to confirm at a terminal, so nothing was changed. Run delorun workspace full-access ${JSON.stringify(workspaceKey(folder))} on in a terminal`)
+    expect(out.stderr).toContain(`asks you to confirm at a terminal, so nothing was changed. Run delorun workspace full-access ${shellQuote(workspaceKey(folder))} on in a terminal`)
   })
 
   it('records nothing when the workspace\'s full access changed while the person answered', async () => {
@@ -120,7 +121,7 @@ describe('delorun workspace full-access', () => {
       },
     })
     await expect(command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain(`changed while you answered, so nothing was changed. Run delorun workspace full-access ${JSON.stringify(workspaceKey(folder))} on again`)
+    expect(out.stderr).toContain(`changed while you answered, so nothing was changed. Run delorun workspace full-access ${shellQuote(workspaceKey(folder))} on again`)
     expect(await grants()).toEqual({ [workspaceKey(folder)]: 1 })
   })
 

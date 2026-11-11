@@ -4,6 +4,7 @@
  * and the run registered as a shared user of the chat data. Upstream's runner is replaced by one that mounts what
  * the composition composed.
  */
+import { shellQuote } from '@delo/home'
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -233,7 +234,7 @@ describe('delorun headless asking for full access', { timeout: 60_000 }, () => {
     expect(error).toBeInstanceOf(CliError)
     expect((error as CliError).exit).toBe(EXIT.failed)
     expect((error as CliError).message).toContain(JSON.stringify(workspaceKey(workspace)))
-    expect((error as CliError).message).toContain(`run delorun workspace full-access ${JSON.stringify(workspaceKey(workspace))} on`)
+    expect((error as CliError).message).toContain(`run delorun workspace full-access ${shellQuote(workspaceKey(workspace))} on`)
     expect((error as CliError).message).toContain('in the studio\'s Settings, Permissions;')
     expect(seen).toEqual([])
   })

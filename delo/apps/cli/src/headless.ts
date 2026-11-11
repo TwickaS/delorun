@@ -20,7 +20,7 @@
 import { mkdirSync } from 'node:fs'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { HEADLESS_PROFILE, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
-import { runDirectory } from '@delo/home'
+import { runDirectory, shellQuote } from '@delo/home'
 import { HostNotStoppedError, refuseBootedHost } from '@delo/home-process'
 import { FULL_ACCESS_PRESET, fullAccessGranted, permissionStorePath, readPermissionStore } from '@delo/plugin-permission-defaults/store'
 import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
@@ -29,6 +29,7 @@ import { assertDeloInvariants, composeDeloProfile, type ComposeDependencies } fr
 import { CliError, EXIT } from './exit.ts'
 import { isRecord, rowPatches, type PatchLayer } from './patch-layers.ts'
 import { runPreStartSteps, type PreStartStep } from './pre-start.ts'
+import { printable } from './terminal-text.ts'
 import type { BootedProfile } from './start.ts'
 
 /** The upstream profile `delorun headless` boots, which contract C1 reserves as a CLI profile name. */
@@ -154,11 +155,11 @@ export async function refuseUngrantedFullAccess(home: string, args: readonly str
     case 'absent':
       break
     case 'refused':
-      throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, and Delo's record of full-access grants, ${permissionStorePath(home)}, cannot be read (${read.problem}), so no grant counts and Delo did not start the task. Repair or remove that file, then turn full access on for this folder again: delorun workspace full-access ${JSON.stringify(workspace)} on`)
+      throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, and Delo's record of full-access grants, ${permissionStorePath(home)}, cannot be read (${read.problem}), so no grant counts and Delo did not start the task. Repair or remove that file, then turn full access on for this folder again: delorun workspace full-access ${printable(shellQuote(workspace))} on`)
     default:
       read satisfies never
   }
-  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it at this computer, run delorun workspace full-access ${JSON.stringify(workspace)} on, or turn it on in the studio's Settings, Permissions; delorun headless in this folder then keeps that grant. Or run without full access.`)
+  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it at this computer, run delorun workspace full-access ${printable(shellQuote(workspace))} on, or turn it on in the studio's Settings, Permissions; delorun headless in this folder then keeps that grant. Or run without full access.`)
 }
 
 /**

@@ -21,7 +21,7 @@
 import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as clack from '@clack/prompts'
-import { resolveDeloHome, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delo/home'
+import { resolveDeloHome, shellQuote, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delo/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
 import {
   FULL_ACCESS_PRESET, permissionStorePath, readPermissionStore, SAFER_PRESET, writePermissionStore,
@@ -33,7 +33,7 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseCommandLine, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
-import { printable, quoted } from '../terminal-text.ts'
+import { printable } from '../terminal-text.ts'
 
 /** What the command runs against. */
 export interface WorkspaceDependencies {
@@ -200,7 +200,7 @@ async function change(where: Where, folder: string, on: boolean): Promise<ExitCo
   const workspace = await keyOf(where, folder)
   const shown = workspaceAccessOf(await entriesOf(home), workspace)
   const named = printable(workspace)
-  const again = `delorun workspace full-access ${quoted(workspace)} ${on ? 'on' : 'off'}`
+  const again = `delorun workspace full-access ${printable(shellQuote(workspace))} ${on ? 'on' : 'off'}`
   if ((shown.grantedAt !== null) === on) {
     context.stdout(`Full access is already ${on ? 'on' : 'off'} for ${named}.\n`)
     return EXIT.ok
@@ -221,7 +221,7 @@ async function change(where: Where, folder: string, on: boolean): Promise<ExitCo
   const next = recorded(current, workspace, on ? FULL_ACCESS_PRESET : SAFER_PRESET, dependencies.now())
   await writePermissionStore(permissionStorePath(home), next)
   context.stdout(on
-    ? `Full access is on for ${named}. Chats in this workspace may switch to it, and delorun headless there may run with it. Turn it off with: delorun workspace full-access ${quoted(workspace)} off\n`
+    ? `Full access is on for ${named}. Chats in this workspace may switch to it, and delorun headless there may run with it. Turn it off with: delorun workspace full-access ${printable(shellQuote(workspace))} off\n`
     : `Full access is off for ${named}; its chats start on the safer preset.\n`)
   return reload(where, permissionEntriesDigest(next))
 }
