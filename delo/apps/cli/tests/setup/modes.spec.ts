@@ -112,7 +112,7 @@ const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
 ? DeepSeek API key (leave empty to go back)
 = *************************
 ? How should Delorun ask before it changes things?
-> Safer prompts (asks before instruction edits, new MCP servers, scheduled work and full access)
+> Safer prompts (asks before giving full access or starting a new MCP server, and before instruction edits and scheduled work)
   Same as stock (behaves as DeepSeek Harness does)
   ← Back
 = Safer prompts
@@ -328,7 +328,7 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
   ← Back
 = Read DEEPSEEK_API_KEY from the environment at each start
 ? How should Delorun ask before it changes things?
-> Safer prompts (asks before instruction edits, new MCP servers, scheduled work and full access)
+> Safer prompts (asks before giving full access or starting a new MCP server, and before instruction edits and scheduled work)
   Same as stock (behaves as DeepSeek Harness does)
   ← Back
 = Safer prompts

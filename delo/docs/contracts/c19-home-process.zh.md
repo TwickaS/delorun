@@ -115,7 +115,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 更新通道是 [C1](c01-home-layout.zh.md) 放在 `run/<profile>/update.sock` 的套接字，在 Windows 上则是 [C1](c01-home-layout.zh.md) 命名的命名管道。它承载读取或改变 home 进程状态的每个请求。
 
 - **调用方。** 它服务读取令牌文件的本人的 `delorun` 命令。Host 的更新插件尚未构建，因此没有任何 studio 操作抵达该通道；该插件将代表已由 studio 自身认证（上游的回环认证，或远程访问监听器上 C4 的准入）放行的 studio 会话行事，并附上它在内存中持有的令牌。
-- **调用方规则。** 请求携带的令牌指明其调用方：令牌文件中的令牌指明本人自己的命令，Host 的通道令牌指明 Host。每个操作都接受两者，但 `studio.open-token`、`devices.approve`、`devices.remove`、`mcp.accept` 与 `mcp.decline` 除外，home 进程会在读取其他任何内容之前对 Host 的通道令牌拒绝这些操作（`UNAUTHENTICATED` 与 `LOOPBACK_REQUIRED`），因为 Host 代表每个监听器上的会话行事，包括远程访问会话（[C14](c14-oidc-passkeys.zh.md#tailnet-membership)）。
+- **调用方规则。** 请求携带的令牌指明其调用方：令牌文件中的令牌指明本人自己的命令，Host 的通道令牌指明 Host。每个操作都接受两者，但 `studio.open-token`、`devices.approve`、`devices.remove`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 除外，home 进程会在读取其他任何内容之前对 Host 的通道令牌拒绝这些操作（`UNAUTHENTICATED` 与 `LOOPBACK_REQUIRED`），因为 Host 代表每个监听器上的会话行事，包括远程访问会话（[C14](c14-oidc-passkeys.zh.md#tailnet-membership)）。
 - **令牌检查。** 每个连接的第一行是带有 `token` 字段的请求。home 进程以恒定时间把它与当前启动的令牌比较。缺失、格式错误、错误或属于之前某次启动的令牌收到 `UNAUTHENTICATED`，连接随即关闭；该响应不携带其他任何信息。
 - **Host 的通道令牌。** home 进程在每次启动时创建第二个令牌，只把它保存在内存中，并在 Host 启动时通过其收到的 `UpdateChannelAccess` 交给 Host。通道对除 `studio.open-token` 之外的每个操作都接受它，`studio.open-token` 对它回答 `UNAUTHENTICATED`。
 - **帧格式。** 每个连接承载一个请求，编码为一行最多 16,384 字节的 UTF-8 JSON，以及回答它的若干响应行，每行一个 JSON 对象后跟换行符。home 进程在最后一个响应行之后关闭连接。
@@ -126,7 +126,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 
 ## 请求与响应
 
-每个请求都有字段 `v`（协议版本，1）、`token`、`op`，以及操作需要时的 `args`。操作未定义的字段以 `SCHEMA_VIOLATION` 被拒绝。没有任何操作接受文件路径、归档、URL 或命令：更新只指定一个版本，由 home 进程自行获取并校验该版本（[C1](c01-home-layout.zh.md)、[C2](c02-release-manifest.zh.md)、[C18](c18-release-log.zh.md)）。
+每个请求都有字段 `v`（协议版本，1）、`token`、`op`，以及操作需要时的 `args`。操作未定义的字段以 `SCHEMA_VIOLATION` 被拒绝。没有任何操作接受文件路径、归档或 URL，也没有任何操作指定由 home 进程运行的命令：更新只指定一个版本，由 home 进程自行获取并校验该版本（[C1](c01-home-layout.zh.md)、[C2](c02-release-manifest.zh.md)、[C18](c18-release-log.zh.md)）；`mcp.revoke` 指定一个已接受的 MCP 服务器命令，只为撤回对它的接受。
 
 | `op` | `args` | 响应 |
 | --- | --- | --- |
@@ -140,9 +140,10 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `devices.approve` | 无；`requestId` 与 `typedCode` 一起；或单独的 `cancelRequestId` | 不带参数时：打开 [C5](c05-device-approval.zh.md#approval-window) 的批准窗口，为本地的本人认领没有所有者的 home，并在有请求待处理或窗口关闭后回答一行 `closesAt` 与 `pending`；带 `requestId` 与 `typedCode` 时：[C5](c05-device-approval.zh.md#local-approval) 的本地批准，回答一行已批准的 `device`；带 `cancelRequestId` 时：取消该待处理请求，回答一行 `cancelled` |
 | `devices.remove` | `deviceId` | 移除一台受信任的设备（[C5](c05-device-approval.zh.md)），立即结束其会话并关闭其远程访问连接，回答一行 `removed`、`sessions` 与 `connections` |
 | `permission.reload` | 无 | Host 在 `delorun workspace full-access` 写入 `@delo/plugin-permission-defaults` 的按工作区权限存储之后重新读取它，并把失去授权的工作区中打开的 chat 设回更安全的预设；一行 `digest`，即 Host 现在持有的存储条目的 SHA-256，存储无法读取时还带 `storeProblem` |
-| `mcp.list` | 无 | 一行 `servers`：Host 的添加时同意拒绝了其启动、且尚无人答复的每个 stdio MCP 服务器，带 `serverName`、`reviewId`、`command`、`args`、`cwd`、`envNames`（从不含值）、`reason` 与 `reviewedAt` |
+| `mcp.list` | 无 | 一行 `servers`：Host 的添加时同意拒绝了其启动、且尚无人答复的每个 stdio MCP 服务器，带 `serverName`、`reviewId`、`command`、`args`、`cwd`、`envNames`（从不含值）、`reason`、`change`（与本人的接受相比有何不同：`new`、`arguments`、`directory`、`environment`，或接受存储无法读取时的 `unreadable`）与 `reviewedAt`；以及 `accepted`：接受存储持有的每个启动，带 `command`、`args`、`cwd`、`envNames`、`acceptedAt` 与 `servers`，即启动该命令的已配置服务器，存储无法读取时为空 |
 | `mcp.accept` | `serverName`、`reviewId` | 把该审查所显示的启动记录为已接受，并再次启动该服务器被拒绝的行；一行 `started`，即启动了多少行 |
 | `mcp.decline` | `serverName`、`reviewId` | 搁置该审查，不记录任何内容；服务器保持停止；一行 `declined` |
+| `mcp.revoke` | `command`（1 至 4,096 个字符）与 `acceptedAt` | 撤回 `mcp.list` 为该命令在该时间显示的接受，并停止启动它的运行中服务器行，每一行都等待新的答复；一行 `stopped`，即停止了多少行 |
 
 - **响应行。** 每行都有 `ok`（布尔值）；失败行带有 `error`，即[错误](#errors)中的代码；进度行带有 `phase`，或在 `update.prepare` 安装目标期间带有 `line`：安装进度中带换行符的一行，与启动器安装发布时打印的文本相同。报告在 `update.prepare` 返回后 600 秒过期；以过期或未知的 `reportId` 调用 `update.apply` 会以 `REPORT_EXPIRED` 失败。若请求以 home 进程不在通道上报告的方式失败，则该请求在没有最终行的情况下结束，失败记录在 home 进程的日志中；请求方将该请求的结果视为未知，`delorun update` 会说明这一点并指出 `delorun logs home`。
 - **`failed`。** 以 `failed` 结束的 `update.apply` 或 `rollback` 留下一个 home 进程可能无法自行完成的回滚；home 进程在发送最后一行后停止，更新记录保留到下次启动（[被中断的更新](#interrupted-updates)）。
@@ -264,13 +265,13 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `STUDIO_UNAVAILABLE` | `studio.open-token` 没有找到运行中的 Host，或找到的 Host 无法为这台电脑生成链接；该行的 `detail` 说明是哪种情况 |
 | `HOST_STOP_FAILED` | 为切换而进行的 Host 拆除失败或未在 `drainTimeoutS` 内完成；没有切换任何内容，Host 重新运行 |
 | `NO_RUNTIME_STORE` | 启动时存在一条不是 `committed` 的更新记录，而进程在运行时仓库之外运行，因此它不启动任何 Host；本人通过启动器启动 Delo，或运行 `delorun recover` |
-| `LOOPBACK_REQUIRED` | `devices.approve`、`devices.remove`、`mcp.accept` 或 `mcp.decline` 携带了 Host 的通道令牌 |
+| `LOOPBACK_REQUIRED` | `devices.approve`、`devices.remove`、`mcp.accept`、`mcp.decline` 或 `mcp.revoke` 携带了 Host 的通道令牌 |
 | `APPROVAL_FAILED` | 本地批准或取消被拒绝；detail 写明 [C5](c05-device-approval.zh.md#errors) 的代码，例如 `APPROVAL_CODE_MISMATCH` |
 | `APPROVALS_UNAVAILABLE` | `devices.approve` 或 `devices.remove` 抵达了未加载 `@delo/home-auth` 的 profile |
 | `REMOVAL_FAILED` | home-auth 拒绝了一次 `devices.remove`；detail 写明其代码 |
 | `CONSENT_UNAVAILABLE` | `permission.reload` 或某个 `mcp.*` 操作抵达的 Host 所在的 profile 未挂载该同意，因为其开关关闭 |
-| `STALE_REVIEW` | `mcp.accept` 或 `mcp.decline` 指定的审查已不属于该服务器：在 `mcp.list` 显示它之后，其启动被再次审查、接受或拒绝 |
-| `CONSENT_FAILED` | Host 因其他原因拒绝了一次 `mcp.accept`，例如无法写入的接受存储；detail 写明其代码 |
+| `STALE_REVIEW` | `mcp.accept` 或 `mcp.decline` 指定的审查已不属于该服务器：在 `mcp.list` 显示它之后，其启动被再次审查、接受或拒绝；或 `mcp.revoke` 指定的接受已不在存储中：在 `mcp.list` 显示它之后，该命令被再次接受或被撤回 |
+| `CONSENT_FAILED` | Host 因其他原因拒绝了一次 `mcp.accept` 或 `mcp.revoke`，例如无法写入的接受存储；detail 写明其代码 |
 
 <a id="consumers"></a>
 
@@ -303,7 +304,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 1. 更新通道的套接字位于 home 之下；凡 [C1](c01-home-layout.zh.md) 的规则得到强制执行之处，受限命令都不能读取或连接它。方言无法强制执行这些规则时，`delorun verify` 通过 [C15](c15-verification-checks.zh.md) 的 `confinement-rule` 检查报告这一点。
 2. 通道只接受携带当前 home 进程启动令牌的请求，并以恒定时间比较；缺失、错误或属于之前某次启动的令牌以 `UNAUTHENTICATED` 被拒绝，不附任何其他信息。
 3. 通道只服务本人的 `delorun` 命令，以及代表已认证 studio 会话的 Host 更新插件。
-4. 没有请求携带路径、归档、URL 或命令，因此持有令牌的调用方只能选择一个版本，由 home 进程自行获取并校验。
+4. 没有请求携带路径、归档或 URL，也没有请求指定由 home 进程运行的命令，因此持有令牌的调用方能选择的发布只有一个版本，由 home 进程自行获取并校验；`mcp.revoke` 指定一个已接受的命令，只为撤回对它的接受。
 5. home 锁按 profile 划分。桌面 Host 既不获取它，也不加入排空，`delorun update` 从不切换桌面应用。
 6. 只有在旧运行时上没有 chat 运行且新轮次被拒绝时，`current` 才切换；被中断的更新让一个完整版本处于当前状态，健康检查失败会恢复之前运行的版本。
 7. 请求大小、请求时限与连接数都有限额，被拒绝的认证记录到日志时不含所提交的值。在 Landlock 下，受限命令仍能打开连接直至达到这些限额；这只影响可用性，`delorun` 会重试 `BUSY` 的连接。
@@ -311,8 +312,8 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 9. 该保护依赖于对 agent 命令的限制。沙箱之外的本人用户进程可以自行运行 `delorun update`，本约定不声称能防范它。不存在 root 所有的辅助程序。
 10. 只有不受限制地运行的命令才能携带令牌抵达更新通道。`danger-full-access` 提权只能经由 [C1](c01-home-layout.zh.md) 的提权提示批准，该提示说明完全访问可以触及 Delo 的 home、其令牌、Docker 监管器与更新通道。
 11. 通道只为携带启动令牌的 `studio.open-token` 提供 studio 链接，从不为携带 Host 通道令牌的请求提供。响应行与链接都不会记录到日志，`delorun` 只在 `delorun open --print` 下打印链接。
-12. `devices.approve`、`devices.remove`、`mcp.accept` 与 `mcp.decline` 只在携带本人自己的命令从令牌文件读取的令牌时才被接受；Host 的通道令牌（home 进程只把它保存在内存中）对其中每一个都会被拒绝。
-13. `mcp.accept` 与 `mcp.decline` 指定 `mcp.list` 显示的审查；对服务器已不再持有的审查的答复以 `STALE_REVIEW` 被拒绝，且不记录任何内容。没有任何操作开启工作区的完全访问：`delorun workspace full-access` 在本人于终端确认之后自行写入权限存储，`permission.reload` 只让 Host 读取存储中的内容。
+12. `devices.approve`、`devices.remove`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 只在携带本人自己的命令从令牌文件读取的令牌时才被接受；Host 的通道令牌（home 进程只把它保存在内存中）对其中每一个都会被拒绝。
+13. `mcp.accept` 与 `mcp.decline` 指定 `mcp.list` 显示的审查，`mcp.revoke` 指定它显示的接受时间；对服务器已不再持有的审查的答复，或对存储已不再持有的接受的撤回，以 `STALE_REVIEW` 被拒绝，且不记录任何内容。没有任何操作开启工作区的完全访问：`delorun workspace full-access` 在本人于终端确认之后自行写入权限存储，`permission.reload` 只让 Host 读取存储中的内容。
 
 ### 拒绝测试
 
@@ -321,7 +322,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `update-waits-for-chat` | 在样例 chat 的轮次运行期间应用的更新停留在 `waiting`，在该轮次结束前 `current` 保持不变；这期间的新轮次以 `UPDATE_PENDING` 被拒绝；使用 `abort-if-busy` 时更新以 `CHATS_RUNNING` 结束为 `aborted` |
 | `update-channel-connect-denied` | 在每种强制执行 [C1](c01-home-layout.zh.md) `home-connect` 的方言上，受限的工作区命令连接更新通道失败，且无法读取启动令牌 |
 | `update-turn-refused-while-held` | chat 闸门保持期间，新轮次在任何模型请求之前以 `UPDATE_PENDING` 结束，已在运行的轮次继续其下一步，开关 `update_turn_refusal` 关闭时不拒绝任何轮次 |
-| `the channel token cannot answer an MCP server` | 携带 Host 通道令牌的 `mcp.accept` 与 `mcp.decline` 以 `LOOPBACK_REQUIRED` 被拒绝且不触及任何同意，而同一令牌的 `mcp.list` 成功；本人的令牌可以接受，过期的审查以 `STALE_REVIEW` 被拒绝，包含路径的服务器名称以 `SCHEMA_VIOLATION` 被拒绝 |
+| `the channel token cannot answer an MCP server` | 携带 Host 通道令牌的 `mcp.accept`、`mcp.decline` 与 `mcp.revoke` 以 `LOOPBACK_REQUIRED` 被拒绝且不触及任何同意，而同一令牌的 `mcp.list` 成功；本人的令牌可以接受与撤回，过期的审查与过期的接受以 `STALE_REVIEW` 被拒绝，包含路径的服务器名称与空命令以 `SCHEMA_VIOLATION` 被拒绝 |
 | `the channel token cannot call devices.approve` | 携带 Host 通道令牌的 `devices.approve` 以 `LOOPBACK_REQUIRED` 被拒绝，不打开窗口也不批准任何内容，而同一令牌的 `status` 成功，本人的令牌可以打开窗口 |
 | `update-channel-token-required` | 不带令牌、带错误令牌以及带之前启动令牌的请求，都收到 `UNAUTHENTICATED` 且没有其他字段 |
 | `update-channel-landlock` | 在 Landlock 下，受限的工作区命令连接更新通道成功，但因无法读取令牌，其请求以 `UNAUTHENTICATED` 失败，`delorun verify` 会报告这一状态 |

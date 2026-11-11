@@ -33,7 +33,7 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseCommandLine, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
-import { printable } from '../terminal-text.ts'
+import { printable, quoted } from '../terminal-text.ts'
 
 /** What the command runs against. */
 export interface WorkspaceDependencies {
@@ -200,13 +200,14 @@ async function change(where: Where, folder: string, on: boolean): Promise<ExitCo
   const workspace = await keyOf(where, folder)
   const shown = workspaceAccessOf(await entriesOf(home), workspace)
   const named = printable(workspace)
+  const again = `delorun workspace full-access ${quoted(workspace)} ${on ? 'on' : 'off'}`
   if ((shown.grantedAt !== null) === on) {
     context.stdout(`Full access is already ${on ? 'on' : 'off'} for ${named}.\n`)
     return EXIT.ok
   }
   if (on) {
     if (!dependencies.terminal) {
-      return failed(context, 'turning on full access asks you to confirm at a terminal, so nothing was changed. Run the command in a terminal on this computer')
+      return failed(context, `turning on full access asks you to confirm at a terminal, so nothing was changed. Run ${again} in a terminal on this computer`)
     }
     context.stdout(`${fullAccessNote(workspace)}\n`)
     if (await dependencies.confirm('Turn on full access for this workspace?') !== true) {
@@ -215,12 +216,12 @@ async function change(where: Where, folder: string, on: boolean): Promise<ExitCo
   }
   const current = await entriesOf(home)
   if (workspaceAccessOf(current, workspace).reviewId !== shown.reviewId) {
-    return failed(context, `the full access of ${named} changed while you answered, so nothing was changed. Run the command again`)
+    return failed(context, `the full access of ${named} changed while you answered, so nothing was changed. Run ${again} again`)
   }
   const next = recorded(current, workspace, on ? FULL_ACCESS_PRESET : SAFER_PRESET, dependencies.now())
   await writePermissionStore(permissionStorePath(home), next)
   context.stdout(on
-    ? `Full access is on for ${named}. Chats in this workspace may switch to it, and delorun headless there may run with it. Turn it off with: delorun workspace full-access ${JSON.stringify(workspace)} off\n`
+    ? `Full access is on for ${named}. Chats in this workspace may switch to it, and delorun headless there may run with it. Turn it off with: delorun workspace full-access ${quoted(workspace)} off\n`
     : `Full access is off for ${named}; its chats start on the safer preset.\n`)
   return reload(where, permissionEntriesDigest(next))
 }

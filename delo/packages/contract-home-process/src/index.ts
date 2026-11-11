@@ -223,7 +223,10 @@ export interface PermissionReloadRequest extends RequestBase {
   readonly op: 'permission.reload'
 }
 
-/** The `mcp.list` request: the stdio MCP servers whose start the running Host's add-time consent refused. Accepted with either token. */
+/**
+ * The `mcp.list` request: the stdio MCP servers whose start the running Host's add-time consent refused, and the
+ * accepted starts its acceptance store holds. Accepted with either token.
+ */
 export interface McpListRequest extends RequestBase {
   /** The operation. */
   readonly op: 'mcp.list'
@@ -261,7 +264,27 @@ export interface McpDeclineRequest extends RequestBase {
   readonly args: McpReviewArgs
 }
 
-/** Every request the update channel accepts; no request carries a path, an archive, a URL or a command. */
+/**
+ * The `mcp.revoke` request: the person withdrew, at the home's own computer, the acceptance that `mcp.list` showed for
+ * this command at this time; the Host drops it and stops the running servers that start the command. Accepted only with
+ * the token from the token file, and refused with `LOOPBACK_REQUIRED` for the Host's channel token.
+ */
+export interface McpRevokeRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'mcp.revoke'
+  /** Arguments. */
+  readonly args: {
+    /** The accepted command as `mcp.list` showed it: 1 to 4,096 characters. */
+    readonly command: string
+    /** The acceptance time `mcp.list` showed, in milliseconds since the epoch. */
+    readonly acceptedAt: number
+  }
+}
+
+/**
+ * Every request the update channel accepts. No request carries a path, an archive or a URL the home process opens or
+ * fetches, or a command it runs; `mcp.revoke` names an accepted command only to withdraw its acceptance.
+ */
 export type UpdateChannelRequest =
   | StatusRequest
   | UpdatePrepareRequest
@@ -276,6 +299,7 @@ export type UpdateChannelRequest =
   | McpListRequest
   | McpAcceptRequest
   | McpDeclineRequest
+  | McpRevokeRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =

@@ -1,19 +1,27 @@
 /**
  * The update channel's consent operations (contract C19): `permission.reload` after `delorun workspace full-access`
- * changed the per-workspace permission store, and `mcp.list`, `mcp.accept` and `mcp.decline`, through which
- * `delorun mcp` answers the stdio MCP servers the running Host's add-time consent holds stopped.
+ * changed the per-workspace permission store, and `mcp.list`, `mcp.accept`, `mcp.decline` and `mcp.revoke`, through
+ * which `delorun mcp` answers the stdio MCP servers the running Host's add-time consent holds stopped and withdraws the
+ * acceptances it holds.
  *
- * - **The caller rule.** `mcp.accept` and `mcp.decline` are accepted only with the person's token; the Host's token,
- *   which acts for studio sessions on every listener, reach sessions included, is refused with `LOOPBACK_REQUIRED`
- *   before anything is read. `permission.reload` and `mcp.list` change no consent and accept both.
- * - **The review id.** An answer names the review `mcp.list` showed; a server whose start was reviewed again since is
- *   refused with `STALE_REVIEW` and nothing is recorded.
+ * - **The caller rule.** `mcp.accept`, `mcp.decline` and `mcp.revoke` are accepted only with the person's token; the
+ *   Host's token, which acts for studio sessions on every listener, reach sessions included, is refused with
+ *   `LOOPBACK_REQUIRED` before anything is read. `permission.reload` and `mcp.list` change no consent and accept both.
+ * - **The shown state.** An answer names the review `mcp.list` showed, and a revoke the acceptance time it showed; a
+ *   server whose start was reviewed again since, or a command accepted again or revoked since, is refused with
+ *   `STALE_REVIEW` and nothing is recorded.
  *
  * @module @delo/home-process/consents
  */
-import type { McpAcceptRequest, McpDeclineRequest } from '@delo/contract-home-process'
+import type { McpAcceptRequest, McpDeclineRequest, McpRevokeRequest } from '@delo/contract-home-process'
 import type { ChannelCaller } from './devices-approve.ts'
 import { HomeProcessError } from './errors.ts'
+
+/**
+ * What a pending review asks about: a server never accepted (`new`), a start whose arguments, working directory or
+ * environment differ from the accepted one, or an acceptance store that cannot be read (`unreadable`).
+ */
+export type McpServerChange = 'new' | 'arguments' | 'directory' | 'environment' | 'unreadable'
 
 /** One pending stdio MCP server review, as `delorun mcp` shows it; no field holds an environment value. */
 export interface PendingMcpServer {
@@ -24,7 +32,24 @@ export interface PendingMcpServer {
   readonly cwd: string
   readonly envNames: readonly string[]
   readonly reason: string
+  /** What changed since the person's acceptance. */
+  readonly change: McpServerChange
   readonly reviewedAt: number
+}
+
+/** One accepted stdio MCP server start, as `delorun mcp` shows it; no field holds an environment value. */
+export interface AcceptedMcpServer {
+  /** The accepted executable; a revoke names it. */
+  readonly command: string
+  readonly args: readonly string[]
+  /** The accepted working directory; the empty string is the Host's working directory. */
+  readonly cwd: string
+  /** The names of the accepted environment variables, sorted. */
+  readonly envNames: readonly string[]
+  /** When the person accepted it, in milliseconds since the epoch; a revoke names it. */
+  readonly acceptedAt: number
+  /** The configured servers that start this command, sorted. */
+  readonly servers: readonly string[]
 }
 
 /**
@@ -44,6 +69,12 @@ export interface LocalConsents {
    */
   pendingServers(): readonly PendingMcpServer[] | undefined
   /**
+   * The accepted MCP server starts.
+   * @returns the accepted starts, empty while the acceptance store cannot be read, or undefined when the profile mounts
+   *   no MCP add-time consent.
+   */
+  acceptedServers(): Promise<readonly AcceptedMcpServer[] | undefined>
+  /**
    * Accept one pending review.
    * @param serverName - the server.
    * @param reviewId - the review shown.
@@ -59,6 +90,14 @@ export interface LocalConsents {
    * @throws an error with a `code` property, `STALE_REVIEW`, for a refused answer.
    */
   declineServer(serverName: string, reviewId: string): boolean
+  /**
+   * Withdraw one acceptance and stop the running servers that start its command.
+   * @param command - the accepted command.
+   * @param acceptedAt - the acceptance time shown.
+   * @returns how many running rows stopped, or undefined without the consent.
+   * @throws an error with a `code` property, `STALE_REVIEW` or `STORE_REFUSED`, for a refused answer.
+   */
+  revokeServer(command: string, acceptedAt: number): Promise<{ readonly stopped: number } | undefined>
 }
 
 /**
@@ -97,13 +136,14 @@ export async function reloadPermissions(consents: LocalConsents | undefined): Pr
 /**
  * Run `mcp.list`.
  * @param consents - the Host's consents, or undefined without a booted Host.
- * @returns the pending reviews.
+ * @returns `servers`, the pending reviews, and `accepted`, the accepted starts.
  * @throws {HomeProcessError} `CONSENT_UNAVAILABLE` without a Host or the MCP add-time consent.
  */
-export function listServers(consents: LocalConsents | undefined): Readonly<Record<string, unknown>> {
+export async function listServers(consents: LocalConsents | undefined): Promise<Readonly<Record<string, unknown>>> {
   const servers = consents?.pendingServers()
-  if (servers === undefined) throw unavailable('MCP add-time consent')
-  return { servers }
+  const accepted = await consents?.acceptedServers()
+  if (servers === undefined || accepted === undefined) throw unavailable('MCP add-time consent')
+  return { servers, accepted }
 }
 
 /**
@@ -150,4 +190,27 @@ export function declineServer(request: McpDeclineRequest, caller: ChannelCaller,
   }
   if (declined !== true) throw unavailable('MCP add-time consent')
   return { declined: true }
+}
+
+/**
+ * Run `mcp.revoke`.
+ * @param request - the request.
+ * @param caller - the credential it carried.
+ * @param consents - the Host's consents, or undefined without a booted Host.
+ * @returns how many running server rows stopped.
+ * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `CONSENT_UNAVAILABLE` without the consent;
+ *   `STALE_REVIEW` for an acceptance that changed; `CONSENT_FAILED` naming the Host's code for any other refusal.
+ */
+export async function revokeServer(request: McpRevokeRequest, caller: ChannelCaller, consents: LocalConsents | undefined): Promise<Readonly<Record<string, unknown>>> {
+  if (caller !== 'person') {
+    throw new HomeProcessError('LOOPBACK_REQUIRED', 'revoking an MCP server needs you at your computer: run delorun mcp revoke there')
+  }
+  let revoked: { readonly stopped: number } | undefined
+  try {
+    revoked = await consents?.revokeServer(request.args.command, request.args.acceptedAt)
+  } catch (error) {
+    throw consentRefusal(error)
+  }
+  if (revoked === undefined) throw unavailable('MCP add-time consent')
+  return revoked
 }

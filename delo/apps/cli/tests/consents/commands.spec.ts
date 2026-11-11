@@ -2,7 +2,8 @@
  * `delorun workspace full-access` and `delorun mcp` over a temporary home, a scripted home socket and a scripted prompt:
  * full access is recorded only after a yes at a terminal, a review that changed meanwhile records nothing, a folder Delo
  * never adds is refused, the running studio is asked to read the store again and a mismatch is reported; an MCP server
- * is accepted only after a yes at a terminal and with the review id that was shown, and every action needs Delo to run.
+ * is accepted only after a yes at a terminal and with the review id that was shown, an allowed command is revoked only
+ * after a yes at a terminal and with the acceptance time that was shown, and every action needs Delo to run.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -107,7 +108,7 @@ describe('delorun workspace full-access', () => {
     await expect(command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.failed)
     expect(asked).toEqual([])
     expect(await grants()).toEqual({})
-    expect(out.stderr).toContain('asks you to confirm at a terminal')
+    expect(out.stderr).toContain(`asks you to confirm at a terminal, so nothing was changed. Run delorun workspace full-access ${JSON.stringify(workspaceKey(folder))} on in a terminal`)
   })
 
   it('records nothing when the workspace\'s full access changed while the person answered', async () => {
@@ -119,7 +120,7 @@ describe('delorun workspace full-access', () => {
       },
     })
     await expect(command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('changed while you answered')
+    expect(out.stderr).toContain(`changed while you answered, so nothing was changed. Run delorun workspace full-access ${JSON.stringify(workspaceKey(folder))} on again`)
     expect(await grants()).toEqual({ [workspaceKey(folder)]: 1 })
   })
 
@@ -171,8 +172,15 @@ describe('delorun workspace full-access', () => {
 
 const SERVER = {
   serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '', envNames: ['API_TOKEN'],
-  reason: 'the acceptance store holds no acceptance for this command', reviewedAt: NOW,
+  reason: 'the acceptance store holds no acceptance for this command', change: 'new', reviewedAt: NOW,
 }
+
+const ACCEPTED = {
+  command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/repo', envNames: ['GIT_TOKEN'], acceptedAt: NOW, servers: ['git', 'history'],
+}
+
+/** The `mcp.list` answer of a studio holding {@link SERVER} waiting and {@link ACCEPTED} allowed. */
+const LISTED: ResponseLine[] = [{ ok: true, servers: [SERVER], accepted: [ACCEPTED] }]
 
 /**
  * `delorun mcp` over a scripted home socket and prompt.
@@ -202,14 +210,44 @@ function mcp(overrides: Partial<McpDependencies> & Scripted = {}) {
 
 describe('delorun mcp', () => {
   it('lists each pending server with its start and why it waits, without an environment value', async () => {
-    const { command, sent } = mcp({ lines: [[{ ok: true, servers: [SERVER] }]] })
+    const { command, sent } = mcp({ lines: [LISTED] })
     await expect(command.run(['list'], context)).resolves.toBe(EXIT.ok)
     expect(sent).toEqual([{ op: 'mcp.list' }])
-    expect(out.stdout).toContain('    command: npx\n    arguments: "-y" "server-filesystem"\n    working directory: the studio\'s own\n    environment variables (values not shown): API_TOKEN\n')
+    expect(out.stdout).toContain('files: new server\n    command: npx\n    arguments: "-y" "server-filesystem"\n    working directory: the studio\'s own\n    environment variables (values not shown): API_TOKEN\n')
+  })
+
+  it('says in plain words what changed since the person allowed each waiting server', async () => {
+    const changes = { arguments: 'its arguments changed', directory: 'its working directory changed', environment: 'its environment variables changed', unreadable: 'the acceptance list could not be read' }
+    for (const [change, words] of Object.entries(changes)) {
+      const { command } = mcp({ lines: [[{ ok: true, servers: [{ ...SERVER, change }], accepted: [] }]] })
+      await expect(command.run(['list'], context)).resolves.toBe(EXIT.ok)
+      expect(out.stdout).toContain(`files: ${words}\n`)
+    }
+    const unknown = mcp({ lines: [[{ ok: true, servers: [{ ...SERVER, change: 'renamed' }], accepted: [] }]] })
+    await expect(unknown.command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.failed })
+  })
+
+  it('lists the allowed commands with their start, the servers that use them and when they were allowed', async () => {
+    const { command } = mcp({ lines: [LISTED] })
+    await expect(command.run(['list'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain([
+      'Allowed MCP server commands:',
+      'uvx',
+      '    arguments: "mcp-server-git"',
+      '    working directory: /srv/repo',
+      '    environment variables (values not shown): GIT_TOKEN',
+      '    used by: git, history',
+      `    allowed: ${new Date(NOW).toISOString()}`,
+      'Stop one and have it ask again with delorun mcp revoke <command>.',
+    ].join('\n'))
+    const empty = mcp({ lines: [[{ ok: true, servers: [], accepted: [] }]] })
+    out.stdout = ''
+    await expect(empty.command.run(['list'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toBe('No MCP server is waiting for your answer.\n\nNo MCP server command is allowed.\n')
   })
 
   it('accepts a server with the review id it showed, once the person says yes at a terminal', async () => {
-    const { command, sent, asked } = mcp({ answers: [true], lines: [[{ ok: true, servers: [SERVER] }], [{ ok: true, started: 1 }]] })
+    const { command, sent, asked } = mcp({ answers: [true], lines: [LISTED, [{ ok: true, started: 1 }]] })
     await expect(command.run(['accept', 'files'], context)).resolves.toBe(EXIT.ok)
     expect(asked).toEqual(['Accept files and start it?'])
     expect(sent).toEqual([{ op: 'mcp.list' }, { op: 'mcp.accept', args: { serverName: 'files', reviewId: SERVER.reviewId } }])
@@ -217,31 +255,59 @@ describe('delorun mcp', () => {
   })
 
   it('accepts nothing without a yes, or without a terminal', async () => {
-    const unconfirmed = mcp({ answers: [false], lines: [[{ ok: true, servers: [SERVER] }]] })
+    const unconfirmed = mcp({ answers: [false], lines: [LISTED] })
     await expect(unconfirmed.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
     expect(unconfirmed.sent).toEqual([{ op: 'mcp.list' }])
-    const headless = mcp({ terminal: false, answers: [true], lines: [[{ ok: true, servers: [SERVER] }]] })
+    const headless = mcp({ terminal: false, answers: [true], lines: [LISTED] })
     await expect(headless.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
     expect(headless.asked).toEqual([])
     expect(headless.sent).toEqual([{ op: 'mcp.list' }])
   })
 
   it('says the answer was stale when the server\'s start changed after it was shown', async () => {
-    const { command } = mcp({ answers: [true], lines: [[{ ok: true, servers: [SERVER] }], [{ ok: false, error: 'STALE_REVIEW', detail: 'reviewed again' }]] })
+    const { command } = mcp({ answers: [true], lines: [LISTED, [{ ok: false, error: 'STALE_REVIEW', detail: 'reviewed again' }]] })
     await expect(command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('changed after it was shown, so nothing was recorded')
   })
 
   it('declines a server without asking', async () => {
-    const { command, sent, asked } = mcp({ lines: [[{ ok: true, servers: [SERVER] }], [{ ok: true, declined: true }]] })
+    const { command, sent, asked } = mcp({ lines: [LISTED, [{ ok: true, declined: true }]] })
     await expect(command.run(['decline', 'files'], context)).resolves.toBe(EXIT.ok)
     expect(asked).toEqual([])
     expect(sent.at(-1)).toEqual({ op: 'mcp.decline', args: { serverName: 'files', reviewId: SERVER.reviewId } })
   })
 
+  it('revokes an allowed command with the acceptance time it showed, once the person says yes at a terminal', async () => {
+    const { command, sent, asked } = mcp({ answers: [true], lines: [LISTED, [{ ok: true, stopped: 2 }]] })
+    await expect(command.run(['revoke', 'uvx'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('The servers that use it stop: git, history. Each asks for your answer again before it next starts.')
+    expect(asked).toEqual(['Revoke uvx and stop the servers that use it?'])
+    expect(sent).toEqual([{ op: 'mcp.list' }, { op: 'mcp.revoke', args: { command: 'uvx', acceptedAt: NOW } }])
+    expect(out.stdout).toContain('Revoked uvx; 2 running servers stopped.')
+  })
+
+  it('revokes nothing without a yes, or without a terminal', async () => {
+    const unconfirmed = mcp({ answers: [false], lines: [LISTED] })
+    await expect(unconfirmed.command.run(['revoke', 'uvx'], context)).resolves.toBe(EXIT.failed)
+    expect(unconfirmed.sent).toEqual([{ op: 'mcp.list' }])
+    expect(out.stderr).toContain('nothing was revoked; uvx stays allowed')
+    const headless = mcp({ terminal: false, answers: [true], lines: [LISTED] })
+    await expect(headless.command.run(['revoke', 'uvx'], context)).resolves.toBe(EXIT.failed)
+    expect(headless.asked).toEqual([])
+    expect(headless.sent).toEqual([{ op: 'mcp.list' }])
+  })
+
+  it('says the revoke was stale when the command\'s acceptance changed after it was shown', async () => {
+    const { command } = mcp({ answers: [true], lines: [LISTED, [{ ok: false, error: 'STALE_REVIEW', detail: 'accepted again' }]] })
+    await expect(command.run(['revoke', 'uvx'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('the allowed command changed after it was shown, so nothing was revoked. Look at it again with delorun mcp list')
+  })
+
   it('needs Delo to run, and a server that waits', async () => {
     await expect(mcp({ running: () => false }).command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.notRunning })
-    await expect(mcp({ lines: [[{ ok: true, servers: [] }]] }).command.run(['accept', 'files'], context)).rejects.toMatchObject({ exit: EXIT.failed })
+    await expect(mcp({ lines: [[{ ok: true, servers: [], accepted: [] }]] }).command.run(['accept', 'files'], context)).rejects.toMatchObject({ exit: EXIT.failed })
     await expect(mcp().command.run(['accept'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(mcp({ lines: [LISTED] }).command.run(['revoke', 'npx'], context)).rejects.toMatchObject({ exit: EXIT.failed })
+    await expect(mcp().command.run(['revoke'], context)).rejects.toMatchObject({ exit: EXIT.usage })
   })
 })

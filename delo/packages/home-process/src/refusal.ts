@@ -66,7 +66,7 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not start: an unfinished update needs the runtime store, and this delorun runs outside it.', remedies: ['Start Delo through the launcher the Delo home installs.', recoverStatus] }
     case 'LOOPBACK_REQUIRED':
       return {
-        lead: 'The home process refused the request: only the person\'s own delorun on this computer approves or removes devices and answers an MCP server.',
+        lead: 'The home process refused the request: only the person\'s own delorun on this computer approves or removes devices and answers or revokes an MCP server.',
         remedies: [`Approve the device at this computer: delorun devices approve${profile}`, `Answer the MCP server at this computer: delorun mcp accept <server>${profile}`],
       }
     case 'APPROVAL_FAILED':

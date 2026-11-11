@@ -56,7 +56,7 @@ import type { BootRow, ChatGate, HostProtection, HostRunner, RunningHost, Runtim
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
 import { approveDevices, removeDevice } from './devices-approve.ts'
-import { acceptServer, declineServer, listServers, reloadPermissions } from './consents.ts'
+import { acceptServer, declineServer, listServers, reloadPermissions, revokeServer } from './consents.ts'
 import { launchSupervisor, type LaunchedSupervisor, type SupervisorSetup } from './supervisor-launch.ts'
 
 /** What a home process runs with; `delorun` supplies every value. */
@@ -578,6 +578,8 @@ export class HomeProcess implements HandshakeSubject {
         return acceptServer(request, check.callerOf(request.token), this.host?.consents)
       case 'mcp.decline':
         return declineServer(request, check.callerOf(request.token), this.host?.consents)
+      case 'mcp.revoke':
+        return revokeServer(request, check.callerOf(request.token), this.host?.consents)
       default: {
         const unknown: never = request
         throw new HomeProcessError('SCHEMA_VIOLATION', `unknown op ${String((unknown as { readonly op: unknown }).op)}`)

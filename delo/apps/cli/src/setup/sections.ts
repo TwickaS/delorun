@@ -325,7 +325,7 @@ export const promptsSection: SetupSection = {
   appliesTo: () => true,
   async ask(io, draft) {
     const choice = await io.select<PromptsAnswer>('How should Delorun ask before it changes things?', [
-      { value: 'safer', label: PROMPT_LABELS.safer, hint: 'asks before instruction edits, new MCP servers, scheduled work and full access' },
+      { value: 'safer', label: PROMPT_LABELS.safer, hint: 'asks before giving full access or starting a new MCP server, and before instruction edits and scheduled work' },
       { value: 'stock', label: PROMPT_LABELS.stock, hint: 'behaves as DeepSeek Harness does' },
     ], draft.answers.prompts)
     return choice === BACK ? BACK : { answers: { prompts: choice }, status: 'answered' }

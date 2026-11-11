@@ -1,8 +1,9 @@
 /**
  * The update channel's closed request schema (contract C19, "Requests and responses"). The listener has already
  * authenticated the line by its `token`; this module checks the rest. An unknown `op`, an unknown field at any depth,
- * a `v` other than 1 or a value outside its type or bound is refused with `SCHEMA_VIOLATION`, so a request can name
- * only a version, never a path, an archive, a URL or a command.
+ * a `v` other than 1 or a value outside its type or bound is refused with `SCHEMA_VIOLATION`, so a request names no
+ * path, archive or URL the home process opens or fetches, and no command it runs: `mcp.revoke` names an accepted MCP
+ * server command only to withdraw its acceptance.
  *
  * @module @delo/home-process/schema
  */
@@ -20,6 +21,8 @@ const base = { v: z.literal(UPDATE_PROTOCOL_VERSION), token: z.string() }
 const approvalRequestId = z.string().regex(/^[A-Za-z0-9_-]{22}$/)
 /** An answer to one pending MCP server review: the server's configured name and the review id `mcp.list` showed. */
 const mcpReview = z.strictObject({ serverName: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/), reviewId: z.string().regex(/^[0-9a-f]{32}$/) })
+/** A withdrawal of one accepted MCP server start: its command and the acceptance time `mcp.list` showed. */
+const mcpRevoke = z.strictObject({ command: z.string().min(1).max(4096), acceptedAt: z.number().int().nonnegative() })
 const drain = { wait: z.enum(['drain', 'abort-if-busy', 'cancel']), drainTimeoutS: z.number().int().min(DRAIN_TIMEOUT_MIN_S).max(DRAIN_TIMEOUT_MAX_S).optional() }
 
 const request = z.discriminatedUnion('op', [
@@ -48,6 +51,7 @@ const request = z.discriminatedUnion('op', [
   z.strictObject({ ...base, op: z.literal('mcp.list') }),
   z.strictObject({ ...base, op: z.literal('mcp.accept'), args: mcpReview }),
   z.strictObject({ ...base, op: z.literal('mcp.decline'), args: mcpReview }),
+  z.strictObject({ ...base, op: z.literal('mcp.revoke'), args: mcpRevoke }),
 ])
 
 /**
