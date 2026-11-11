@@ -36,6 +36,7 @@ None; approval request and response rendering does not alter a model request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - The shared `conversation.approval.card` Factory presents reject, allow and an optional always-allow action, with caller-owned scope, subject metadata and answer callbacks. Tool approvals retain their two outcomes. Application consent can reuse the card without adopting tool-approval policy. Subject metadata enables left-aligned content and wrapping actions; callers that omit it retain inherited alignment and a single action row. Icons and labels identify the subject visually; the caller owns identity verification and saved grants.
+- A request's `grants` (`full-access` or `workspace-management`) reaches the pending approval and the card. For such a request the card renders the Session-scoped `conversation.approval.action` list between its detail and its buttons; each entry receives `grants`, `toolName`, `callId` and `allow()`, which answers the card through the same one-shot lock as its Allow button. A request without `grants`, or a list without entries, leaves the card unchanged.
 
 
 <a id="dev-note"></a>

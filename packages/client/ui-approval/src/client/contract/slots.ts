@@ -38,7 +38,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       props: ApprovalCardInput
       locale: 'approval'
-      children: { 'conversation.approval.detail': { kind: 'single'; scope: 'session' } }
+      children: {
+        'conversation.approval.detail': { kind: 'single'; scope: 'session' }
+        'conversation.approval.action': { kind: 'list'; scope: 'session' }
+      }
     }
   }
 
@@ -49,13 +52,41 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: ApprovalDetailOwnerProps
     }
+    /** Inline actions on a card whose request carries `grants`; rendered between the request body and its decision buttons. */
+    'conversation.approval.action': {
+      kind: 'list'
+      scope: 'session'
+      owner: ApprovalActionOwnerProps
+    }
   }
 }
+
+/**
+ * What an `allowed-once` answer grants beyond an ordinary tool call; the values of `ApprovalGrant` in
+ * `@deepseek-ai/dsh-user-approval`, which the `approval/request` consumer passes through unchanged.
+ */
+export type ApprovalGrant = 'full-access' | 'workspace-management'
 
 /** Stable identity handed to an optional approval-detail renderer. */
 export interface ApprovalDetailOwnerProps {
   /** Tool call correlated with the request. */
   callId: ToolCallId
+}
+
+/** Request facts and the card's answer handed to an inline grant action. */
+export interface ApprovalActionOwnerProps {
+  /** Grant the request asks for. */
+  grants: ApprovalGrant
+  /** Tool requesting the decision, when the caller supplied it. */
+  toolName: string | undefined
+  /** Tool call correlated with the request, when supplied. */
+  callId: ToolCallId | undefined
+  /**
+   * Answer the card as its Allow button does, through the same one-shot guard.
+   * Resolves after the answer is sent, or at once without answering when the card already answered or no longer
+   * accepts an answer; rejects with the send failure, after which the card accepts an answer again.
+   */
+  allow: () => Promise<void>
 }
 
 /** Client-visible fields of an approval request projected through Remote Events. */
@@ -68,6 +99,8 @@ export interface ApprovalPresentationRequest {
   readonly reason?: string
   /** Localized presentation copy; the audit reason remains unchanged. */
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
+  /** What an `allowed-once` answer grants beyond an ordinary tool call, when it does. */
+  readonly grants?: ApprovalGrant
   /** Cancellation projected from the Host waterfall. */
   readonly signal?: AbortSignal
 }
@@ -94,6 +127,8 @@ export class PendingApproval {
   readonly reason: string | undefined
   /** Localized presentation copy, when supplied by the asker. */
   readonly displayReason: ApprovalPresentationRequest['displayReason']
+  /** Grant an `allowed-once` answer gives, when the asker declared one. */
+  readonly grants: ApprovalGrant | undefined
   /** Result returned by the Remote Event listener to the Host waterfall. */
   readonly result: Promise<ApprovalDecision>
 
@@ -116,6 +151,7 @@ export class PendingApproval {
     this.callId = request.callId
     this.reason = request.reason
     this.displayReason = request.displayReason
+    this.grants = request.grants
     const completion = Promise.withResolvers<ApprovalDecision>()
     this.result = completion.promise
     this.#resolve = completion.resolve
@@ -215,6 +251,10 @@ export interface ApprovalCardInput {
   subject?: { name: string; icon?: string }
   /** Optional tool-owned detail rendered through the existing child slot. */
   callId?: ToolCallId
+  /** Tool requesting the decision, handed to inline grant actions. */
+  toolName?: string
+  /** Grant the request asks for; when present the card renders the `conversation.approval.action` list. */
+  grants?: ApprovalGrant
   /** Caller-specific scope label; ordinary approvals use Allow once. */
   allowLabel?: string
   /** Whether the caller still accepts an answer. */

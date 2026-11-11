@@ -14,10 +14,12 @@ import { PendingApproval } from './contract/slots.ts'
 import { en, ja, es, fr, de, ru, pt, zh } from './locales.ts'
 
 export type {
+  ApprovalActionOwnerProps,
   ApprovalCardInput,
   ApprovalComposerProps,
   ApprovalDecision,
   ApprovalDetailOwnerProps,
+  ApprovalGrant,
   ApprovalPresentationRequest,
   PendingApproval,
 } from './contract/slots.ts'
@@ -51,6 +53,7 @@ async function answerApproval(
       : { callId: request.callId }),
     ...(request.reason === undefined ? {} : { reason: request.reason }),
     ...(request.displayReason === undefined ? {} : { displayReason: request.displayReason }),
+    ...(request.grants === undefined ? {} : { grants: request.grants }),
     ...(request.signal === undefined ? {} : { signal: request.signal }),
   })
   const completed = Promise.withResolvers<void>()
@@ -92,7 +95,10 @@ export function apply(ctx: ClientContext): void {
   )
   ctx.slots.registerFactory({
     name: 'conversation.approval.card', scope: 'session', locale: NS,
-    children: { 'conversation.approval.detail': { kind: 'single', scope: 'session' } },
+    children: {
+      'conversation.approval.detail': { kind: 'single', scope: 'session' },
+      'conversation.approval.action': { kind: 'list', scope: 'session' },
+    },
   }, ApprovalCard)
   ctx.slots.inject('conversation.composer', () => ctx.slots.register({
     name: 'conversation.composer',

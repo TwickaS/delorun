@@ -36,6 +36,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 
 - 共用的 `conversation.approval.card` Factory 展示拒绝、允许和可选的始终允许操作，授权范围、对象信息和回答回调由调用方提供。工具审批保留原来的两种选择。应用授权可以复用卡片，同时保留独立的授权规则。传入对象信息时，内容左对齐，按钮允许换行；未传入时沿用继承的对齐方式和单排按钮。图标和名称用于识别对象，身份校验和授权保存由调用方负责。
+- 请求的 `grants`（`full-access` 或 `workspace-management`）会传给待处理审批和卡片。对于此类请求，卡片在详情和按钮之间渲染 Session 作用域的 `conversation.approval.action` 列表；每个条目收到 `grants`、`toolName`、`callId` 和 `allow()`，`allow()` 与卡片的允许按钮共用同一个单次作答锁来回答卡片。请求不带 `grants` 或列表没有条目时，卡片保持不变。
 
 
 <a id="dev-note"></a>

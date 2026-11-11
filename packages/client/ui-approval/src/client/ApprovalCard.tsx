@@ -15,7 +15,7 @@ export function ApprovalCard(props: FactoryComponentPropsOf<'conversation.approv
 }
 
 function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card'>) {
-  const { requestKey, title, description, subject, allowLabel, canAnswer, onAllow, onReject, onAlways, t } = props
+  const { requestKey, title, description, subject, allowLabel, grants, canAnswer, onAllow, onReject, onAlways, t } = props
   const detail = props.callId === undefined ? null : props.renderSlot('conversation.approval.detail', { callId: props.callId })
   const [answered, setAnswered] = useState(false)
   const waiting = useRef(false)
@@ -26,15 +26,17 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
     active.current = true
     return () => { active.current = false }
   }, [])
-  const answer = (send: () => Promise<void>): void => {
-    if (waiting.current || !canAnswer()) return
+  const answer = (send: () => Promise<void>): Promise<void> => {
+    if (waiting.current || !canAnswer()) return Promise.resolve()
     waiting.current = true
     setAnswered(true)
-    void send().catch(() => {
+    const sent = send()
+    void sent.catch(() => {
       if (!active.current || !canAnswer()) return
       waiting.current = false
       setAnswered(false)
     })
+    return sent
   }
   const keydown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const element = event.target as Element
@@ -47,8 +49,11 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
     event.stopPropagation()
     // oxlint-disable-next-line typescript/no-deprecated -- IME 229 covers engines without isComposing.
     if (event.repeat || composing.current || compositionEnded.current || event.nativeEvent.isComposing || event.keyCode === 229) return
-    answer(event.key === 'Enter' ? onAllow : onReject)
+    void answer(event.key === 'Enter' ? onAllow : onReject)
   }
+  const grantActions = grants === undefined ? null : props.renderSlot('conversation.approval.action', {
+    grants, toolName: props.toolName, callId: props.callId, allow: () => answer(onAllow),
+  })
   return (
     <div className={css.root} data-approval-key={requestKey} aria-busy={answered}
       onKeyDown={keydown}
@@ -72,14 +77,15 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
           {description !== undefined && <p className={css.description}>{description}</p>}
           {detail !== null && <div className={css.command}>{detail}</div>}
         </div>
+        {grantActions !== null && <div className={css.grantActions}>{grantActions}</div>}
         <div className={css.actionRow}>
-          <Button variant="outline" className={css.reject} disabled={answered} onClick={() => { answer(onReject) }}>
+          <Button variant="outline" className={css.reject} disabled={answered} onClick={() => { void answer(onReject) }}>
             {t('reject')}
           </Button>
-          <Button variant={onAlways === undefined ? 'primary' : 'outline'} disabled={answered} onClick={() => { answer(onAllow) }}>
+          <Button variant={onAlways === undefined ? 'primary' : 'outline'} disabled={answered} onClick={() => { void answer(onAllow) }}>
             {allowLabel ?? t('allowOnce')}
           </Button>
-          {onAlways !== undefined && <Button variant="primary" disabled={answered} onClick={() => { answer(onAlways) }}>
+          {onAlways !== undefined && <Button variant="primary" disabled={answered} onClick={() => { void answer(onAlways) }}>
             {t('allowAlways')}
           </Button>}
         </div>

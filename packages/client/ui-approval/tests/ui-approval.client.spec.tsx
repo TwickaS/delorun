@@ -8,7 +8,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApprovalCard } from '../src/client/ApprovalCard.tsx'
 import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
 import { ApprovalPanel } from '../src/client/ApprovalPanel.tsx'
-import type { ApprovalCardInput, ApprovalComposerProps, ApprovalInjected } from '../src/client/contract/slots.ts'
+import type {
+  ApprovalActionOwnerProps, ApprovalCardInput, ApprovalComposerProps, ApprovalGrant, ApprovalInjected,
+} from '../src/client/contract/slots.ts'
 import { PendingApproval } from '../src/client/contract/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
@@ -20,6 +22,7 @@ type ApprovalListener = (
     callId?: string
     reason?: string
     displayReason?: PendingApproval['displayReason']
+    grants?: ApprovalGrant
     signal?: AbortSignal
   },
   next: () => Promise<'unavailable'>,
@@ -312,6 +315,19 @@ describe('approval Remote Event consumer', () => {
     await scope.fiber.dispose()
   })
 
+  it('carries the requested grant onto the pending approval', async () => {
+    const bench = await setupPlugin()
+    const scope = createScope(bench.ctx, id('s1'))
+    await scope.fiber.await()
+    const result = bench.listener.call(scope.ctx, { toolName: 'workspace', grants: 'full-access' }, () => Promise.resolve('unavailable'))
+    const pending = bench.pending.getSnapshot()[0]!
+
+    expect(pending.grants).toBe('full-access')
+    await pending.answer('rejected')
+    await expect(result).resolves.toBe('rejected')
+    await scope.fiber.dispose()
+  })
+
   it('removes stable registrations with the plugin lifetime', async () => {
     const bench = await setupPlugin()
     await bench.ctx.fiber.dispose()
@@ -504,6 +520,56 @@ describe('ApprovalPanel', () => {
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('false')
     pending.abort(new Error('test cleanup'))
     await pending.result.catch(() => {})
+  })
+})
+
+describe('inline grant actions', () => {
+  function renderGrantAction(pending: PendingApproval) {
+    let owner: ApprovalActionOwnerProps | undefined
+    const renderSlot = vi.fn((key: string, props: object) => {
+      if (key !== 'conversation.approval.action') return null
+      owner = props as ApprovalActionOwnerProps
+      return <button type="button">Give consent</button>
+    }) as FactoryComponentPropsOf<'conversation.approval.card'>['renderSlot']
+    render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
+    return { renderSlot, owner: () => owner }
+  }
+
+  it('renders the action list with the request facts for a grant-asking request', () => {
+    const pending = new PendingApproval(id('s1'), {
+      toolName: 'workspace', callId: 'call-1' as ToolCallId, grants: 'full-access',
+    })
+    const { owner } = renderGrantAction(pending)
+
+    expect(screen.getByRole('button', { name: 'Give consent' })).toBeTruthy()
+    expect(owner()).toMatchObject({ grants: 'full-access', toolName: 'workspace', callId: 'call-1' })
+    pending.abort(new Error('test cleanup'))
+    return pending.result.catch(() => {})
+  })
+
+  it('answers allow-once exactly once through the card guard', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'workspace-management' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderGrantAction(pending)
+
+    await act(async () => { await owner()!.allow() })
+    await act(async () => { await owner()!.allow() })
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+
+    await expect(pending.result).resolves.toBe('allowed-once')
+    expect(answer).toHaveBeenCalledExactlyOnceWith('allowed-once')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Allow once' }).disabled).toBe(true)
+  })
+
+  it('renders no action list for a request without a grant', () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash' })
+    const { renderSlot } = renderGrantAction(pending)
+
+    expect(pending.grants).toBeUndefined()
+    expect(screen.queryByRole('button', { name: 'Give consent' })).toBeNull()
+    expect(renderSlot).not.toHaveBeenCalledWith('conversation.approval.action', expect.anything())
+    pending.abort(new Error('test cleanup'))
+    return pending.result.catch(() => {})
   })
 })
 

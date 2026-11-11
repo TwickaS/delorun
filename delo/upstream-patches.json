@@ -2053,6 +2053,36 @@
       "class": "delo-feature",
       "feature": "permission-defaults",
       "reason": "Extension point for the per-workspace full-access consent: the optional `permissionSwitchConsent` client service, which both current-session pickers ask after their own risk confirmation and right before they submit `/permission <preset>`; `false` submits nothing. Without a mounted service a pick submits exactly as upstream does, and a typed `/permission <preset>` never asks it. `@delo/bundle-local`'s browser half provides it to show the workspace's consent first. Offer upstream as a generic pre-submit hook."
+    },
+    {
+      "path": "packages/client/ui-approval/src/client/ApprovalCard.tsx",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+    },
+    {
+      "path": "packages/client/ui-approval/src/client/ApprovalPanel.module.css",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+    },
+    {
+      "path": "packages/client/ui-approval/src/client/ApprovalPanel.tsx",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+    },
+    {
+      "path": "packages/client/ui-approval/src/client/contract/slots.ts",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+    },
+    {
+      "path": "packages/client/ui-approval/src/client/index.ts",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
     }
   ],
   "retired": []
