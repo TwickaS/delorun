@@ -50,7 +50,7 @@ import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
-import { removeSandboxOverlay, sandboxOverlayPath, type SandboxProtection } from './sandbox-protection.ts'
+import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
 import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
 import { checkStoredRuntime, fullCheckDaysOf, storeUpdateSupport } from './update/store-support.ts'
@@ -551,7 +551,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   if (stored !== undefined) {
     await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) }, log: (text) => { logger.warn(text) } })
   }
-  return runningHost(booted, request, composed.protection, async () => {
+  return runningHost(booted, request, composed.startOnlySockets, async () => {
     if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env))
   })
 }
@@ -564,18 +564,18 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
  * bounds that wait itself, so a slow teardown never ends the process in the middle of a switch.
  * @param booted - the booted profile.
  * @param request - the home and profile.
- * @param protection - the sandbox protection this start set; the sockets it found on the computer stay out of what a
- *   successor's H3 compares.
+ * @param startOnly - the sockets only this start denies, found on the computer and listed by no layer, which stay out
+ *   of what a successor's H3 holds it to.
  * @param verifyRuntime - C3's H1, the start check of the running version from the store.
  * @returns the Host.
  */
-export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, protection: SandboxProtection, verifyRuntime: () => Promise<void>): RunningHost {
+export function runningHost(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>, startOnly: readonly string[], verifyRuntime: () => Promise<void>): RunningHost {
   const chats = new CountingChatGate()
   booted.watchChats(chats)
   const atBoot = booted.rows()
   const failed = inactiveRows(atBoot)
   const atBootRows = bootRowsOf(atBoot)
-  const atBootProtection = bootProtectionOf(atBoot, protection.observedSockets)
+  const atBootProtection = bootProtectionOf(atBoot, startOnly)
   return {
     ...withDevices(booted),
     chats,

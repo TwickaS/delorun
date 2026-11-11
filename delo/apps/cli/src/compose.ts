@@ -48,7 +48,7 @@ import { deloRowIds, isDeloPackage, refuseSkippedDeloBundles, type BootedRow } f
 import { CliError, EXIT } from './exit.ts'
 import { composedRow, isRecord, patchLayers, rowInserts, sourcesSetting, type PatchLayer } from './patch-layers.ts'
 import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.ts'
-import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
+import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, startOnlySockets, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
 import { migrationsPath } from './profile-migrations.ts'
 import { promptRows, readPromptsAnswer } from './setup/prompt-switches.ts'
 
@@ -126,6 +126,8 @@ export interface ComposedStart {
   readonly safe: SafeModeStart | undefined
   /** C1's sandbox settings the overlay sets. */
   readonly protection: SandboxProtection
+  /** The sockets only this start denies, which a successor's H3 does not hold it to ({@link startOnlySockets}). */
+  readonly startOnlySockets: readonly string[]
   /** Every layer that composes the rows, the overlays included, for the refusals' sources. */
   readonly layers: readonly PatchLayer[]
   /** The rows the Host must have active, each with the plugin its declaring bundle names. */
@@ -205,6 +207,7 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   const protection = await sandboxProtection(request.home, request.profile, request.env, request.osHome ?? homedir())
   const others = [...before, ...approved]
   const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile, others, protection)
+  const startOnly = startOnlySockets(request.home, resolvedProfile.profile, others, protection)
   const patchFiles = [...others, overlay]
   const prompts = request.kind === 'cli' ? readPromptsAnswer(join(request.home, 'profiles', request.profile)) : undefined
   const values = new Map<string, Readonly<Record<string, unknown>>>(prompts === undefined
@@ -217,6 +220,7 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
     patchFiles,
     safe,
     protection,
+    startOnlySockets: startOnly,
     layers,
     required: [SANDBOX_ROW, ...deloRows].map(id => ({ id, name: declaredName(layers, id) })),
     values,

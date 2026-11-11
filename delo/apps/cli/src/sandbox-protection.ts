@@ -165,7 +165,7 @@ export function settingsBeyondProtection(config: unknown): unknown {
 /**
  * The protection a booted sandbox row gives confined commands, without the sockets one start found on the computer.
  * @param config - the row's config as the Loader mounted it.
- * @param observed - the sockets to leave out: the start's {@link SandboxProtection.observedSockets}, or none to keep
+ * @param observed - the sockets to leave out: those only the start denies ({@link startOnlySockets}), or none to keep
  *   every socket the row denies.
  * @returns the protection, or `undefined` when the config names no protected home.
  */
@@ -262,6 +262,31 @@ function listedEntries(config: unknown, key: 'deniedSockets' | 'escapeSocketDire
 }
 
 /**
+ * The entries every layer lists for the sandbox row under a key, in layer order.
+ * @param layers - the layers.
+ * @param key - the list's key.
+ * @returns the entries, repeats included.
+ */
+function layeredEntries(layers: readonly PatchLayer[], key: 'deniedSockets' | 'escapeSocketDirectories'): string[] {
+  return layers.flatMap(layer => rowConfigs(layer.patches).flatMap(config => listedEntries(config, key)))
+}
+
+/**
+ * The sockets only the start denies: the observed sockets no layer of the profile lists. An observed socket a layer
+ * also lists is the profile's setting, which C3's H3 holds the next release to whether or not the next start finds it.
+ * @param home - the resolved Delo home, whose `cordis.patch.yml` applies over every profile.
+ * @param profile - the profile as it boots: its bundle layers and its own patch.
+ * @param patchFiles - the start's other `--patch` overlays, without the sandbox overlay.
+ * @param protection - the start's protection.
+ * @returns the entries of {@link SandboxProtection.observedSockets} no layer lists.
+ * @throws {Error} upstream's loader error when the home patch or an overlay cannot be read or parsed.
+ */
+export function startOnlySockets(home: string, profile: Profile, patchFiles: readonly string[], protection: SandboxProtection): string[] {
+  const listed = layeredEntries(patchLayers(home, profile, patchFiles), 'deniedSockets')
+  return protection.observedSockets.filter(socket => !listed.includes(socket))
+}
+
+/**
  * Write the overlay that sets the protection on the profile's sandbox row. The overlay must be the last `--patch`
  * overlay the start passes, after `patchFiles`: its config replaces the row's composed config whole.
  * @param home - the resolved Delo home, whose `cordis.patch.yml` applies over every profile.
@@ -292,7 +317,7 @@ export async function writeSandboxOverlay(home: string, name: string, profile: P
     throw new CliError(EXIT.failed, `delorun: the ${SANDBOX_ROW} row is configured with expressions (in ${sources}); Delo adds its home protection to that row at start and can carry over plain values only, so write its settings as plain YAML values`)
   }
   // A denied socket or escape directory only narrows what a confined command reaches, so every layer's entries stay.
-  const listed = (key: 'deniedSockets' | 'escapeSocketDirectories'): string[] => layers.flatMap(layer => rowConfigs(layer.patches).flatMap(config => listedEntries(config, key)))
+  const listed = (key: 'deniedSockets' | 'escapeSocketDirectories'): string[] => layeredEntries(layers, key)
   const config = {
     ...carried,
     protectedHome: protection.protectedHome,

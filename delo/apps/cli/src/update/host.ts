@@ -237,10 +237,10 @@ export function inactiveRows(rows: readonly BootedRow[]): BootRow[] {
 }
 
 /**
- * The protection a Host's sandbox row booted with, as the next release's H3 holds its own to: without the sockets the
- * Host's start found on the computer, which the next start may find otherwise.
+ * The protection a Host's sandbox row booted with, as the next release's H3 holds its own to: without the sockets only
+ * the Host's start denied, found on the computer and listed by no layer, which the next start may find otherwise.
  * @param rows - the Loader's rows.
- * @param observed - the sockets the start found on the computer.
+ * @param observed - the sockets to leave out: only the start's, or none to keep every socket the row denies.
  * @returns the protection, or `undefined` without a sandbox row that names a protected home.
  */
 export function bootProtectionOf(rows: readonly BootedRow[], observed: readonly string[]): HostProtection | undefined {

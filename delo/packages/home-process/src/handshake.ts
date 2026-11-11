@@ -385,10 +385,14 @@ export class UpdateHandshake {
 
   /**
    * What the successor's health check holds it to: the report's expectations and what the running Host had at boot,
-   * read while that Host still runs.
+   * read while that Host still runs. An update's successor is also held to the running Host's sandbox protection; a
+   * rollback's is not, because the version rolled back to may protect less than the one it replaced and must still run.
+   * @param health - the report's expectations.
+   * @param kind - an update's successor, or a rollback's.
+   * @returns the expectations.
    */
-  private expectations(health: PreparedRuntime['health']): HealthExpectations {
-    const protection = this.subject.protection()
+  private expectations(health: PreparedRuntime['health'], kind: 'update' | 'rollback'): HealthExpectations {
+    const protection = kind === 'update' ? this.subject.protection() : undefined
     return { ...health, previousFailures: this.subject.failedRows(), previousRows: this.subject.rows(), ...protection === undefined ? {} : { previousProtection: protection } }
   }
 
@@ -445,7 +449,7 @@ export class UpdateHandshake {
       this.waiting = undefined
       this.subject.setState('switching')
       await this.phase(update, 'switching', progress)
-      const health = this.expectations(prepared.health)
+      const health = this.expectations(prepared.health, 'update')
       // The target is checked as the launcher checks a version before it starts it, while nothing has changed yet.
       try {
         await store.checkLaunch(to)
@@ -610,7 +614,7 @@ export class UpdateHandshake {
       this.waiting = undefined
       this.subject.setState('switching')
       this.announce('switching', record.from, progress)
-      const health = prepared === undefined ? undefined : this.expectations(prepared.health)
+      const health = prepared === undefined ? undefined : this.expectations(prepared.health, 'rollback')
       if (health !== undefined) {
         try {
           await store.checkLaunch(record.from)

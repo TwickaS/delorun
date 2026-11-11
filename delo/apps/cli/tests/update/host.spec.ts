@@ -644,10 +644,11 @@ describe('checkHealth', () => {
      * The expectations a Host booted with a sandbox row hands its successor.
      * @param rows - its rows.
      * @param protection - its start's protection.
+     * @param layerSockets - the sockets a profile layer lists, which stay in what the successor is held to.
      * @returns the expectations.
      */
-    const handedOver = (rows: readonly BootedRow[], protection: SandboxProtection): HealthExpectations => {
-      const previousProtection = bootProtectionOf(rows, protection.observedSockets)
+    const handedOver = (rows: readonly BootedRow[], protection: SandboxProtection, layerSockets: readonly string[] = []): HealthExpectations => {
+      const previousProtection = bootProtectionOf(rows, protection.observedSockets.filter(socket => !layerSockets.includes(socket)))
       return { ...NOTHING_NAMED, previousRows: bootRowsOf(rows), ...previousProtection === undefined ? {} : { previousProtection } }
     }
     /**
@@ -678,7 +679,7 @@ describe('checkHealth', () => {
       const port = await studioAnswering(204)
       const { machine, before, after } = await dockerAppears()
       const listed = [join(machine, 'run', 'docker.sock')]
-      expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after, listed)] }), handedOver([manager, sandbox(before, listed)], before))).toEqual({ passed: true })
+      expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after, listed)] }), handedOver([manager, sandbox(before, listed)], before, listed))).toEqual({ passed: true })
     })
 
     it('passes H3 for a stricter protection: more denied sockets and escape directories, fewer read exemptions', async () => {
@@ -700,6 +701,16 @@ describe('checkHealth', () => {
       const verdict = await checkHealth(facts(port, { rows: () => [manager, sandbox(before, [], weaken(before))] }), { ...handedOver([manager, sandbox(before)], before), namedRows: ['sandbox'] })
       expect(verdict).toMatchObject({ passed: false, criterion: 'H3-only-named-disabled' })
       expect(verdict.passed ? '' : verdict.detail).toContain(detail)
+    })
+
+    it('fails H3 when an update drops a layer\'s Docker socket and the Docker context changed, so no start denies it', async () => {
+      const port = await studioAnswering(204)
+      const { machine, before } = await dockerAppears()
+      const listed = [join(machine, 'var-run', 'docker.sock')]
+      const switched = await sandboxProtection(machine, 'default', { DOCKER_HOST: 'tcp://127.0.0.1:2375', DOCKER_CONFIG: join(machine, 'no-config') }, machine)
+      expect(switched.observedSockets).toEqual([])
+      const verdict = await checkHealth(facts(port, { rows: () => [manager, sandbox(switched)] }), handedOver([manager, sandbox(before, listed)], before, listed))
+      expect(verdict).toEqual({ passed: false, criterion: 'H3-only-named-disabled', detail: `the sandbox row's protection is weaker than before the update: it no longer denies ${listed.join(', ')}` })
     })
 
     it('fails H3 when a socket a profile layer lists is no longer denied', async () => {

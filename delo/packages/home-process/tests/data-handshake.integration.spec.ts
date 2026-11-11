@@ -258,10 +258,12 @@ describe('the person\'s rollback', () => {
   })
 
   it('applies the table, starts the version rolled back to and passes on what the table tells the person, leaving the record rolling-back for that version to remove', async () => {
-    const { handshake, copies, events, home, journal } = await setUp({ running: V2 })
+    const { handshake, copies, events, home, journal, handovers } = await setUp({ running: V2 })
     copies.copies.add(V2)
     await committed(journal, true)
     expect(await handshake.rollback('drain', undefined, false, () => {})).toEqual({ outcome: 'rolled-back', lines: ['Went back to 1.0.0; 1 chat(s) set aside.'] })
+    // The version rolled back to may protect less than the one it replaced; it is not held to the running Host's protection.
+    expect(handovers[0]?.health).not.toHaveProperty('previousProtection')
     expect(copies.calls).toEqual([`rollback:${V1}>${V2}`])
     expect(readPointer(home, 'current')).toBe(V1)
     expect(readPointer(home, 'previous')).toBe(V2)

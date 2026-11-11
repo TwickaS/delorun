@@ -43,9 +43,13 @@ export interface HandoverLine {
 export const HANDOVER_LINE_MAX_BYTES = 65_536
 
 const version = z.string().regex(new RegExp(RUNTIME_VERSION_PATTERN))
-/** A row of the previous release's Host, as the handover carries it for the successor's health check. */
-const bootRow = z.strictObject({ id: z.string(), name: z.string(), generated: z.boolean(), configHash: z.string().regex(/^[0-9a-f]{64}$/u).optional() })
-const handoverSchema = z.strictObject({
+/**
+ * A row of the previous release's Host, as the handover carries it for the successor's health check. The handover's
+ * objects drop fields this release does not know, so a predecessor may add an optional field a successor can do
+ * without, as contract C19's "Compatibility" allows; a field a successor must understand raises `v`.
+ */
+const bootRow = z.object({ id: z.string(), name: z.string(), generated: z.boolean(), configHash: z.string().regex(/^[0-9a-f]{64}$/u).optional() })
+const handoverSchema = z.object({
   type: z.literal('handover'),
   v: z.literal(1),
   home: z.string().min(1),
@@ -53,13 +57,13 @@ const handoverSchema = z.strictObject({
   from: version,
   to: version,
   startId: z.string().regex(/^[0-9a-f]{32}$/),
-  health: z.strictObject({
+  health: z.object({
     disabledPlugins: z.array(z.string()),
     namedRows: z.array(z.string()),
     bundles: z.array(z.string()).optional(),
     previousFailures: z.array(bootRow),
     previousRows: z.array(bootRow),
-    previousProtection: z.strictObject({
+    previousProtection: z.object({
       protectedHome: z.string(),
       protectedHomeReadable: z.array(z.string()),
       deniedSockets: z.array(z.string()),
@@ -205,6 +209,25 @@ export interface HandoverPipe {
 }
 
 /**
+ * Read the handover line a successor receives: `v` 1, with every field this release knows checked and every field it
+ * does not know dropped.
+ * @param text - the line, without its newline.
+ * @returns the handover.
+ * @throws {Error} naming the first field that is not valid, a `v` other than 1 included; the message never quotes the line.
+ */
+export function parseHandoverLine(text: string): HandoverLine {
+  const parsed = handoverSchema.safeParse(parseJson(text))
+  if (!parsed.success) throw new Error(`the handover line is not valid at ${parsed.error.issues[0]?.path.join('.') ?? 'its root'}`)
+  // The schema checked the versions' and start id's form; the brands are the contracts' own types.
+  const data = parsed.data
+  const { bundles, previousProtection, ...health } = data.health
+  return {
+    ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId),
+    health: { ...health, ...bundles === undefined ? {} : { bundles }, ...previousProtection === undefined ? {} : { previousProtection } },
+  }
+}
+
+/**
  * Open the successor's end of the handover pipe and read the handover line. The pipe's end is watched from before the
  * first await, so a predecessor that dies while the successor starts is seen.
  * @param fd - the inherited descriptor, {@link HANDOVER_FD}.
@@ -219,18 +242,13 @@ export function openHandoverPipe(fd: number = HANDOVER_FD): Promise<HandoverPipe
     const committed = new Promise<boolean>((resolveCommit) => { commit = resolveCommit })
     readLines(pipe, (text) => {
       if (handover === undefined) {
-        const parsed = handoverSchema.safeParse(parseJson(text))
-        if (!parsed.success) {
+        let line: HandoverLine
+        try {
+          line = parseHandoverLine(text)
+        } catch (error) {
           pipe.destroy()
-          reject(new Error(`the handover line is not valid at ${parsed.error.issues[0]?.path.join('.') ?? 'its root'}`))
+          reject(error as Error)
           return
-        }
-        // The schema checked the versions' and start id's form; the brands are the contracts' own types.
-        const data = parsed.data
-        const { bundles, ...health } = data.health
-        const line: HandoverLine = {
-          ...data, from: brandString<RuntimeVersion>(data.from), to: brandString<RuntimeVersion>(data.to), startId: brandString<StartId>(data.startId),
-          health: { ...health, ...bundles === undefined ? {} : { bundles } },
         }
         handover = line
         resolve({

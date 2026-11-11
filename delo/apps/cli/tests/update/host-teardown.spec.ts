@@ -12,10 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // build, which keeps each module whole.
 import { createProcessShutdown } from '@deepseek-ai/dsh/lib/types/process-shutdown.js'
 import { runningHost, type BootedProfile } from '../../src/start.ts'
-import type { SandboxProtection } from '../../src/sandbox-protection.ts'
 
-/** A start's sandbox protection, which the Host's rows' settings hashes leave out. */
-const PROTECTION: SandboxProtection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: [], observedSockets: [], escapeSocketDirectories: ['/run/WSL'] }
 
 let home: string | undefined
 
@@ -49,7 +46,7 @@ describe('a Host whose teardown takes 8 seconds', () => {
     home = mkdtempSync(join(tmpdir(), 'delo-host-teardown-'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { booted, exits, disposed } = slowProfile()
-    const host = runningHost(booted, { home, profile: 'default' }, PROTECTION, async () => undefined)
+    const host = runningHost(booted, { home, profile: 'default' }, [], async () => undefined)
     let suspended = false
     const suspending = host.suspend().then(() => { suspended = true })
     await vi.advanceTimersByTimeAsync(7_999)

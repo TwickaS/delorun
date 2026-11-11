@@ -17,7 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { applyLaunchEnvironment } from '../src/launch-environment.ts'
 import { homePatchFile } from '../src/patch-layers.ts'
-import { DOCKER_DESKTOP_SOCKETS, removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, WSL_INTEROP_DIRECTORIES, writeSandboxOverlay, type SandboxProtection } from '../src/sandbox-protection.ts'
+import { DOCKER_DESKTOP_SOCKETS, removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, startOnlySockets, WSL_INTEROP_DIRECTORIES, writeSandboxOverlay, type SandboxProtection } from '../src/sandbox-protection.ts'
 
 let base: string | undefined
 const servers: Server[] = []
@@ -188,6 +188,18 @@ describe('the CLI profile\'s sandbox protection', () => {
       protectedHome: home,
       protectedHomeReadable: [...READ_EXEMPTIONS],
     })
+  })
+
+  it('counts as the start\'s own only the found sockets no layer lists, so a listed one stays in what a successor is held to', async () => {
+    const { home, osHome } = setUp()
+    const found = join(base ?? '', 'docker.sock')
+    const protection = { ...await protectionFor(home, osHome), observedSockets: [found, '/elsewhere/docker.sock'] }
+    expect(startOnlySockets(home, profileOf(BUNDLES), [], protection)).toEqual([found, '/elsewhere/docker.sock'])
+    writeFileSync(homePatchFile(home), `- id: sandbox\n  config:\n    deniedSockets: [${found}]\n`)
+    expect(startOnlySockets(home, profileOf(BUNDLES), [], protection)).toEqual(['/elsewhere/docker.sock'])
+    const overlay = join(base ?? '', 'listed.patch.yml')
+    writeFileSync(overlay, '- id: sandbox\n  config:\n    deniedSockets: [/elsewhere/docker.sock]\n')
+    expect(startOnlySockets(home, profileOf(BUNDLES), [overlay], protection)).toEqual([])
   })
 
   it('keeps every layer\'s escape directories beside WSL\'s interop directory', async () => {
