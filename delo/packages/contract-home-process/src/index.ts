@@ -212,6 +212,55 @@ export interface DevicesRemoveRequest extends RequestBase {
   }
 }
 
+/**
+ * The `permission.reload` request: the per-workspace permission store of `@delo/plugin-permission-defaults` was changed
+ * at the home's own computer by `delorun workspace full-access`, which writes the store itself; the running Host reads
+ * it again, and sets the open chats of a workspace that lost its grant back to the safer preset. Accepted with either
+ * token, because it changes nothing the store does not already hold.
+ */
+export interface PermissionReloadRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'permission.reload'
+}
+
+/** The `mcp.list` request: the stdio MCP servers whose start the running Host's add-time consent refused. Accepted with either token. */
+export interface McpListRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'mcp.list'
+}
+
+/** Arguments of an answer to one pending MCP server review. */
+export interface McpReviewArgs {
+  /** The server's configured name, `[A-Za-z0-9_-]{1,32}`. */
+  readonly serverName: string
+  /** The review id `mcp.list` showed: 32 lowercase hexadecimal digits. */
+  readonly reviewId: string
+}
+
+/**
+ * The `mcp.accept` request: the person accepted, at the home's own computer, the server start that `mcp.list` showed
+ * with this review id; the Host records it and starts the server's refused rows again. Accepted only with the token the
+ * person's own `delorun` reads from the token file, and refused with `LOOPBACK_REQUIRED` for the Host's channel token.
+ */
+export interface McpAcceptRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'mcp.accept'
+  /** Arguments. */
+  readonly args: McpReviewArgs
+}
+
+/**
+ * The `mcp.decline` request: the person set aside, at the home's own computer, the server start that `mcp.list` showed
+ * with this review id; the server stays stopped. Accepted only with the token from the token file, and refused with
+ * `LOOPBACK_REQUIRED` for the Host's channel token.
+ */
+export interface McpDeclineRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'mcp.decline'
+  /** Arguments. */
+  readonly args: McpReviewArgs
+}
+
 /** Every request the update channel accepts; no request carries a path, an archive, a URL or a command. */
 export type UpdateChannelRequest =
   | StatusRequest
@@ -223,6 +272,10 @@ export type UpdateChannelRequest =
   | StudioOpenTokenRequest
   | DevicesApproveRequest
   | DevicesRemoveRequest
+  | PermissionReloadRequest
+  | McpListRequest
+  | McpAcceptRequest
+  | McpDeclineRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =
@@ -252,6 +305,9 @@ export type HomeProcessErrorCode =
   | 'APPROVAL_FAILED'
   | 'APPROVALS_UNAVAILABLE'
   | 'REMOVAL_FAILED'
+  | 'CONSENT_UNAVAILABLE'
+  | 'STALE_REVIEW'
+  | 'CONSENT_FAILED'
 
 /** The body of a `status` response line. */
 export interface HomeStatus {

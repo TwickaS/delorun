@@ -20,6 +20,8 @@
  * | `delorun verify [--release <version>] [--offline] [--json]` | the release against its signed manifest and the release log (contracts C15 and C18; [verify](./verify/index.ts)) |
  * | `delorun reach status \| on tailscale \| off` | remote access to the studio over the person's tailnet (contract C7; [reach](./reach/command.ts)) |
  * | `delorun devices list \| approve \| remove <id> \| code` | the devices this home trusts, managed at this computer (contract C5; [devices](./devices/command.ts)) |
+ * | `delorun workspace full-access [<folder> on \| off]` | a workspace's full access, turned on after a confirmation at this computer or off (contract C1; [workspace](./workspace/command.ts)) |
+ * | `delorun mcp list \| accept <server> \| decline <server>` | the stdio MCP servers the running studio holds stopped, answered at this computer (contract C19; [mcp](./mcp/command.ts)) |
  * | `delorun --version [--json]` | Delo's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
  *
@@ -57,9 +59,11 @@ import { applyDeloVersionEnvironment, versionCommand } from './version.ts'
 import { verifyCommand } from './verify/index.ts'
 import { reachCommand } from './reach/command.ts'
 import { devicesCommand } from './devices/command.ts'
+import { workspaceCommand } from './workspace/command.ts'
+import { mcpCommand } from './mcp/command.ts'
 
 /** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, openCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, reachCommand, devicesCommand, trashCommand, exportCommand, importCommand, importHomeCommand, verifyCommand, pluginCommand, headlessCommand]
+export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, openCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, reachCommand, devicesCommand, workspaceCommand, mcpCommand, trashCommand, exportCommand, importCommand, importHomeCommand, verifyCommand, pluginCommand, headlessCommand]
 
 /**
  * The help text.

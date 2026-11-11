@@ -18,6 +18,8 @@ const version = z.string().max(RUNTIME_VERSION_MAX_LENGTH).regex(new RegExp(RUNT
 const base = { v: z.literal(UPDATE_PROTOCOL_VERSION), token: z.string() }
 /** An approval request id: 16 random bytes as base64url without padding. */
 const approvalRequestId = z.string().regex(/^[A-Za-z0-9_-]{22}$/)
+/** An answer to one pending MCP server review: the server's configured name and the review id `mcp.list` showed. */
+const mcpReview = z.strictObject({ serverName: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/), reviewId: z.string().regex(/^[0-9a-f]{32}$/) })
 const drain = { wait: z.enum(['drain', 'abort-if-busy', 'cancel']), drainTimeoutS: z.number().int().min(DRAIN_TIMEOUT_MIN_S).max(DRAIN_TIMEOUT_MAX_S).optional() }
 
 const request = z.discriminatedUnion('op', [
@@ -42,6 +44,10 @@ const request = z.discriminatedUnion('op', [
     op: z.literal('devices.remove'),
     args: z.strictObject({ deviceId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) }),
   }),
+  z.strictObject({ ...base, op: z.literal('permission.reload') }),
+  z.strictObject({ ...base, op: z.literal('mcp.list') }),
+  z.strictObject({ ...base, op: z.literal('mcp.accept'), args: mcpReview }),
+  z.strictObject({ ...base, op: z.literal('mcp.decline'), args: mcpReview }),
 ])
 
 /**

@@ -199,7 +199,7 @@ describe('delorun headless', { timeout: 60_000 }, () => {
 })
 
 /**
- * Record entries in the home's permission store, as the studio does.
+ * Record entries in the home's permission store, as the studio and `delorun workspace full-access` do.
  * @param entries - the workspace keys and their recorded permissions.
  */
 async function writeStore(entries: readonly (readonly [string, WorkspacePermission])[]): Promise<void> {
@@ -233,7 +233,7 @@ describe('delorun headless asking for full access', { timeout: 60_000 }, () => {
     expect(error).toBeInstanceOf(CliError)
     expect((error as CliError).exit).toBe(EXIT.failed)
     expect((error as CliError).message).toContain(JSON.stringify(workspaceKey(workspace)))
-    expect((error as CliError).message).toContain('open this folder as a workspace in the studio and choose Full access')
+    expect((error as CliError).message).toContain(`run delorun workspace full-access ${JSON.stringify(workspaceKey(workspace))} on`)
     expect(seen).toEqual([])
   })
 

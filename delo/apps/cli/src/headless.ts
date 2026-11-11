@@ -6,7 +6,7 @@
  * sandbox row and of every row of the bundle, the fetch guard, the instruction write, MCP and schedule consents, the
  * full-access consent and the turn gate, which holds the task's first step until that check passes. A guard that asks a
  * person refuses here, because the profile composes no answerer. Full access for a working directory whose full access
- * the person has not granted in the studio is refused by the full-access consent inside the Host; a request for it by
+ * the person has not granted, in the studio or with `delorun workspace full-access`, is refused by the full-access consent inside the Host; a request for it by
  * `--permission-mode` or `DSH_PERMISSION_MODE` is also refused early, before boot ({@link refuseUngrantedFullAccess}).
  *
  * The profile and its layers are Delo's: the launcher options of upstream's `dsh` (`--profile`, `--patch`,
@@ -154,11 +154,11 @@ export async function refuseUngrantedFullAccess(home: string, args: readonly str
     case 'absent':
       break
     case 'refused':
-      throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, and Delo's record of full-access grants, ${permissionStorePath(home)}, cannot be read (${read.problem}), so no grant counts and Delo did not start the task. Repair or remove that file, then grant full access for this folder in the studio again.`)
+      throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, and Delo's record of full-access grants, ${permissionStorePath(home)}, cannot be read (${read.problem}), so no grant counts and Delo did not start the task. Repair or remove that file, then turn full access on for this folder again: delorun workspace full-access ${JSON.stringify(workspace)} on`)
     default:
       read satisfies never
   }
-  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it, open this folder as a workspace in the studio and choose Full access once; delorun headless in this folder then keeps that grant. Or run without full access.`)
+  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it at this computer, run delorun workspace full-access ${JSON.stringify(workspace)} on, or turn it on in the studio's Settings, Workspace access; delorun headless in this folder then keeps that grant. Or run without full access.`)
 }
 
 /**

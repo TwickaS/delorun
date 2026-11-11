@@ -31,7 +31,8 @@ import { assertDeloInvariants, composeDeloProfile, NO_APPROVED_CONTENT, type App
 import { HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import { START_WAIT_MS } from '@delo/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
-import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalDeviceApproval, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
+import { localConsents } from './consents/host.ts'
+import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
@@ -205,6 +206,8 @@ export interface BootedProfile {
   readonly studioLink: (port: number | undefined) => StudioLinkResult
   /** The local device approval of `@delo/home-auth`, when the profile loads it. */
   readonly devices?: () => LocalDeviceApproval | undefined
+  /** The consents of `@delo/plugin-permission-defaults` and `@delo/plugin-mcp-consent`, each read per operation. */
+  readonly consents?: () => LocalConsents
 }
 
 /**
@@ -329,6 +332,7 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
     dispose: async () => { await ctx.fiber.dispose() },
     watchChats: (gate) => { watchChats(ctx, gate) },
     devices: () => localDeviceApproval(ctx),
+    consents: () => localConsents(ctx),
     watchUpdates: async options => watchUpdates(ctx, options),
     // The CLI profile's invariants require the service, so it is absent only in a profile that holds no turn.
     releaseTurns: () => { ctx.get('deloTurnGate')?.release() },
@@ -600,13 +604,15 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
 }
 
 /**
- * The running Host's local device approval, for the update channel's `devices.approve`.
+ * The running Host's local device approval and consents, for the update channel's `devices.*`, `permission.reload` and
+ * `mcp.*` operations.
  * @param booted - the booted profile.
- * @returns `devices` when the profile loads `@delo/home-auth`, otherwise nothing.
+ * @returns `devices` when the profile loads `@delo/home-auth`, and `consents` when the booted profile offers them.
  */
-function withDevices(booted: BootedProfile): { readonly devices?: LocalDeviceApproval } {
+function withDevices(booted: BootedProfile): { readonly devices?: LocalDeviceApproval, readonly consents?: LocalConsents } {
   const devices = booted.devices?.()
-  return devices === undefined ? {} : { devices }
+  const consents = booted.consents?.()
+  return { ...devices === undefined ? {} : { devices }, ...consents === undefined ? {} : { consents } }
 }
 
 /**

@@ -4,46 +4,46 @@
 #   pnpm run verify-translation-pairing --write delo/packages/home-process/README.md
 /:
   en: e940c9e16750466c
-  zh: e736c89a44cf0490
+  zh: dd1112f3226b5dd9
 /delo-home-process:
   en: 73c5d70871e63f06
   zh: 2e86dd285978f267
 /delo-home-process/summary:
-  en: 738d422c1f66cac5
-  zh: 8d747b942bfa6ed7
+  en: 8acacd938012e3fd
+  zh: 9f9d7b7bd628c062
 /delo-home-process/contents:
   en: ef59d61d36e7a17f
   zh: 8238873783e96af8
 /delo-home-process/starting-a-home-process:
-  en: 3452127d750bc6c3
-  zh: e4c0ebcb225359e8
+  en: 9af9a3d9dcb5af7e
+  zh: 249c07627102d87b
 /delo-home-process/the-update-channel:
-  en: 2d8f58e5699bf3c5
-  zh: db7c90c4528318a9
+  en: bb9328b2e685b8ba
+  zh: 75e951417180f1d7
 /delo-home-process/the-update-handshake:
-  en: eeb22c06ade5f8c1
-  zh: de53e5301723d7d5
+  en: 1ed3767d6b8c162d
+  zh: 74a2c3e28afe47e5
 /delo-home-process/the-handover:
-  en: aa1947d6f63af8c6
-  zh: b5395cccfb99d073
+  en: 6305d819724c67c0
+  zh: b5fc199a308e6a2c
 /delo-home-process/interrupted-updates:
-  en: 709a58242a5254ec
-  zh: a2d753834f88134e
+  en: a4f07cf35beebbb0
+  zh: 8818da728245b491
 /delo-home-process/stopping:
-  en: 30bc26bff5936fdd
-  zh: bf074aaa7ceb8f78
+  en: 75f618d1c45cab19
+  zh: 323a3cc65cc44718
 /delo-home-process/the-supervisor:
-  en: 621c2e9780b3003d
-  zh: ab0b8c55cc42c1d9
+  en: 3c90c060baeb392c
+  zh: 418d2e76a9ad1a78
 /delo-home-process/the-operational-log:
-  en: d6e2aeab812c2f86
-  zh: de6fcbb99ec99b86
+  en: b54b92a8b468aa83
+  zh: f66c3a2f5aabaaee
 /delo-home-process/seams-for-other-packages:
-  en: f8842db3fefd8384
-  zh: a73118aa097a2a4b
+  en: 6f0cd26fbcd77a19
+  zh: fbc4959435d76b96
 /delo-home-process/not-yet-implemented:
-  en: 167908102c761c76
-  zh: 81170137e3c3c50b
+  en: 5f29b0670b7ba157
+  zh: 017ecba80f89e5e9
 /delo-home-process/tests:
   en: 142de1200c535ef2
-  zh: bd23db560bfe7538
+  zh: a036b0f26018601b

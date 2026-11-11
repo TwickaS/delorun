@@ -74,6 +74,8 @@ interface FetchDecision {
 }
 
 const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
+const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate'
+const MCP_ANSWER = 'accepting a stdio MCP server lets its command run outside the sandbox, which only the home\'s computer allows; the plugin refuses a device before upstream\'s gate'
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
 /**
@@ -94,6 +96,12 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloTrash.restore': { device: 'refused', reason: TRASH },
   '/api/deloTrash.purge': { device: 'refused', reason: TRASH },
   '/api/deloTrash.empty': { device: 'refused', reason: TRASH },
+  '/api/deloPermission.workspaces': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloPermission.review': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloPermission.setFullAccess': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloMcpConsent.pending': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloMcpConsent.accept': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloMcpConsent.decline': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
   '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
   '/api/session.markdown': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
