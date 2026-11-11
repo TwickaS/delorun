@@ -3,12 +3,12 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyHarnessChange, composedDigest, composedFiles, createHarnessCopy, discardAllHarnessChanges, discardHarnessChange, findHarnessChange, harnessChanges, listHarness, loggedHarnessChange, readSignedFile, removeTree, showHarnessChange, undoHarnessChange, type HarnessContext } from '../src/harness.ts'
 import { leaveOutNewestChange, leftOutFact, newestLeavableChange } from '../src/left-out.ts'
-import { harnessCopyDirectory } from '../src/paths.ts'
+import { harnessCopyDirectory, harnessRecordPath } from '../src/paths.ts'
 import { readHarnessLog, readHarnessRecord, withEntry, writeChangeLog, writeHarnessLog, writeHarnessRecord, type AtComputer } from '../src/records.ts'
 import { storeEmptyVersion } from '../src/store.ts'
 import type { ChangeEntry, ChangeId, ContentVersion } from '../src/types.ts'
 import { harnessFixture, RUNTIME, SIGNED_FILES, snapshotOf, START_FILE, terminal } from './harness-fixture.ts'
-import { alterReads, makeFifo, modeOf, rejection, temporaryDirectory } from './support.ts'
+import { alterReads, makeFifo, modeOf, rejection, temporaryDirectory, understateSize } from './support.ts'
 
 /**
  * @param ctx - the runtime.
@@ -444,7 +444,8 @@ describe('harness decisions in every order', () => {
     const directory = join(home, 'changes', 'harness', RUNTIME)
     chmodSync(directory, 0o000)
     try {
-      await expect(harnessChanges(ctx)).rejects.toMatchObject({ code: 'EACCES' })
+      const refused = await rejection(harnessChanges(ctx), 'HARNESS_COPY_UNREADABLE')
+      expect(refused.cause).toMatchObject({ code: 'EACCES' })
       await expect(removeTree(join(directory, 'copy'))).rejects.toMatchObject({ code: 'EACCES' })
     } finally {
       chmodSync(directory, 0o700)
@@ -486,5 +487,143 @@ describe('the harness listing', () => {
     mkdirSync(profileDir, { recursive: true })
     writeFileSync(join(profileDir, 'package.json'), '{"name":"p"}\n')
     expect(await newestLeavableChange({ home, profile: 'p', profileDir }, RUNTIME)).toBeUndefined()
+  })
+})
+
+/** The fixture's signed files under `app/`. */
+const APP_FILES = Object.entries(SIGNED_FILES).filter(([path]) => path.startsWith('app/'))
+
+/** The bytes of the fixture's signed files under `app/`. */
+const APP_BYTES = APP_FILES.reduce((total, [, text]) => total + Buffer.byteLength(text), 0)
+
+/** The entries of the fixture's copy: `copy/` itself, five directories down to `src/`, and the four signed files. */
+const COPY_ENTRIES = 10
+
+describe('a copy past the scan\'s limits', () => {
+  it('edit-harness refuses before copying anything when the copy would pass the limits of its scan', async () => {
+    const { ctx, home, signed } = harnessFixture()
+    const over = await rejection(createHarnessCopy({ ...ctx, limits: { entries: COPY_ENTRIES - 1, bytes: APP_BYTES } }, terminal()), 'CONTENT_TOO_LARGE')
+    expect(over.subject).toBe(join(signed.directory, 'app'))
+    expect(over.detail).toBe(`${join(signed.directory, 'app')} holds more than ${String(COPY_ENTRIES - 1)} files and directories, the most Delo reads in your copy of it, so changes to Delo ${RUNTIME} itself cannot be made for this release.`)
+    const heavy = await rejection(createHarnessCopy({ ...ctx, limits: { entries: COPY_ENTRIES, bytes: APP_BYTES - 1 } }, terminal()), 'CONTENT_TOO_LARGE')
+    expect(heavy.detail).toContain(`holds more than ${String(APP_BYTES - 1)} bytes, the most Delo reads in your copy of it, so changes to Delo ${RUNTIME} itself cannot be made for this release.`)
+    expect(existsSync(join(home, 'changes', 'harness', RUNTIME))).toBe(false)
+    const fits = { ...ctx, limits: { entries: COPY_ENTRIES, bytes: APP_BYTES } }
+    expect((await createHarnessCopy(fits, terminal())).created).toBe(true)
+    expect((await harnessChanges(fits, { cache: false })).changes).toEqual([])
+  })
+
+  it('counts the approved files in place of the signed ones, as the copy holds them', async () => {
+    const { ctx, home } = harnessFixture()
+    await createHarnessCopy(ctx, terminal())
+    writeFileSync(inCopy(ctx, 'app/added.js'), 'export const added = 1\n')
+    rmSync(inCopy(ctx, 'app/package.json'))
+    for (const change of (await harnessChanges(ctx)).changes) await applyHarnessChange(ctx, change.id, terminal())
+    rmSync(harnessCopyDirectory(home, RUNTIME), { recursive: true })
+    const bytes = APP_BYTES - Buffer.byteLength(SIGNED_FILES['app/package.json']!) + Buffer.byteLength('export const added = 1\n')
+    await rejection(createHarnessCopy({ ...ctx, limits: { entries: COPY_ENTRIES, bytes: bytes - 1 } }, terminal()), 'CONTENT_TOO_LARGE')
+    const fits = { ...ctx, limits: { entries: COPY_ENTRIES, bytes } }
+    await createHarnessCopy(fits, terminal())
+    expect((await harnessChanges(fits, { cache: false })).changes).toEqual([])
+  })
+
+  it('a copy that cannot be scanned is refused with HARNESS_COPY_UNREADABLE naming the copy and the way back', async () => {
+    const { ctx, home } = harnessFixture()
+    await createHarnessCopy(ctx, terminal())
+    const refused = await rejection(harnessChanges({ ...ctx, limits: { entries: COPY_ENTRIES - 1, bytes: APP_BYTES } }), 'HARNESS_COPY_UNREADABLE')
+    expect(refused.subject).toBe(join(harnessCopyDirectory(home, RUNTIME), 'app'))
+    expect(refused.detail).toContain(`holds more than ${String(COPY_ENTRIES - 1)} files, links and directories`)
+    expect(refused.detail).toContain('delorun changes edit-harness --discard')
+    expect(refused.cause).toMatchObject({ code: 'CONTENT_TOO_LARGE' })
+  })
+})
+
+describe('discarding every harness change from a copy that cannot be read', () => {
+  /**
+   * A runtime with one applied change and one change waiting in its copy.
+   * @returns the fixture and the applied change.
+   */
+  async function edited(): Promise<{ readonly fixture: ReturnType<typeof harnessFixture>, readonly applied: ChangeId }> {
+    const fixture = harnessFixture()
+    const applied = await editStart(fixture.ctx)
+    await applyHarnessChange(fixture.ctx, applied, terminal())
+    writeFileSync(inCopy(fixture.ctx, 'app/added.js'), 'export {}\n')
+    return { fixture, applied }
+  }
+
+  /**
+   * Discard every change and check that the harness returns to the signed release.
+   * @param ctx - the runtime.
+   * @param applied - the applied change, which is undone.
+   * @returns why the copy could not be read.
+   */
+  async function discardedAll(ctx: HarnessContext, applied: ChangeId): Promise<string | undefined> {
+    const reset = await discardAllHarnessChanges(ctx, terminal())
+    expect(reset.discarded).toEqual([])
+    expect(reset.undone.map(entry => [entry.id, entry.state])).toEqual([[applied, 'undone']])
+    expect((await readHarnessRecord(ctx.home, RUNTIME)).files).toEqual({})
+    expect(existsSync(harnessCopyDirectory(ctx.home, RUNTIME))).toBe(false)
+    return reset.unread
+  }
+
+  it('a copy past the scan\'s limits is removed, its applied changes undone', async () => {
+    const { fixture, applied } = await edited()
+    const unread = await discardedAll({ ...fixture.ctx, limits: { entries: COPY_ENTRIES - 1, bytes: APP_BYTES } }, applied)
+    expect(unread).toContain(`holds more than ${String(COPY_ENTRIES - 1)} files, links and directories`)
+    expect(unread).not.toContain('edit-harness --discard')
+  })
+
+  it('a copy with entries that cannot be read, read-only files and directories included, is removed', async () => {
+    const { fixture, applied } = await edited()
+    const { ctx } = fixture
+    chmodSync(inCopy(ctx, 'app/node_modules/@delo/cli/src/bin.js'), 0o400)
+    chmodSync(inCopy(ctx, 'app/node_modules/@delo/cli/src'), 0o500)
+    chmodSync(inCopy(ctx, 'app/node_modules/@delo'), 0o000)
+    await rejection(harnessChanges(ctx), 'HARNESS_COPY_UNREADABLE')
+    expect(await discardedAll(ctx, applied)).toContain('EACCES')
+  })
+
+  it('a link where the copy was is removed, never followed', async () => {
+    const { fixture, applied } = await edited()
+    const { ctx } = fixture
+    const elsewhere = temporaryDirectory('delo-elsewhere-')
+    writeFileSync(join(elsewhere, 'kept.txt'), 'kept\n')
+    rmSync(harnessCopyDirectory(ctx.home, RUNTIME), { recursive: true })
+    symlinkSync(join(elsewhere, 'kept.txt'), harnessCopyDirectory(ctx.home, RUNTIME))
+    expect(await discardedAll(ctx, applied)).toContain(`${harnessCopyDirectory(ctx.home, RUNTIME)} is not a directory`)
+    expect(readFileSync(join(elsewhere, 'kept.txt'), 'utf8')).toBe('kept\n')
+  })
+
+  it('a copy whose app directory is a link is scanned without following it and removed without touching its target', async () => {
+    const { fixture, applied } = await edited()
+    const { ctx } = fixture
+    const elsewhere = temporaryDirectory('delo-elsewhere-')
+    writeFileSync(join(elsewhere, 'kept.txt'), 'kept\n')
+    rmSync(inCopy(ctx, 'app'), { recursive: true })
+    symlinkSync(elsewhere, inCopy(ctx, 'app'))
+    const reset = await discardAllHarnessChanges(ctx, terminal())
+    expect(reset.unread).toBeUndefined()
+    expect(reset.undone.map(entry => entry.id)).toEqual([applied])
+    expect(existsSync(harnessCopyDirectory(ctx.home, RUNTIME))).toBe(false)
+    expect(readFileSync(join(elsewhere, 'kept.txt'), 'utf8')).toBe('kept\n')
+  })
+
+  it('a file that grows while the copy is read does not stop it', async () => {
+    const { fixture, applied } = await edited()
+    const restore = await understateSize(inCopy(fixture.ctx, 'app/added.js'), 1)
+    try {
+      expect(await discardedAll(fixture.ctx, applied)).toContain('app/added.js grew while it was read')
+    } finally {
+      restore()
+    }
+  })
+
+  it('a record Delo did not write, or a signed installation that cannot be read, still stops it', async () => {
+    const { fixture } = await edited()
+    const { ctx } = fixture
+    await expect(discardAllHarnessChanges({ ...ctx, signed: () => Promise.reject(new Error('the installation cannot be read')) }, terminal())).rejects.toThrow('the installation cannot be read')
+    writeFileSync(harnessRecordPath(ctx.home, RUNTIME), 'not json\n', { mode: 0o600 })
+    await rejection(discardAllHarnessChanges(ctx, terminal()), 'RECORD_UNREADABLE')
+    expect(existsSync(harnessCopyDirectory(ctx.home, RUNTIME))).toBe(true)
   })
 })

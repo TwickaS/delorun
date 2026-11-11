@@ -18,13 +18,13 @@ import { dirname, join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { boundedDiff, compareVersions, reviewInputOf } from './diff.ts'
-import { ChangesError } from './errors.ts'
+import { ChangesError, isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { harnessCopyDirectory, harnessRuntimeDirectory, harnessScanCachePath, versionsDirectory } from './paths.ts'
 import { findEntry, isHarnessPath, readHarnessLog, readHarnessRecord, requirePresence, withEntry, withHarnessLock, writeHarnessLog, writeHarnessRecord, type AtComputer } from './records.ts'
 import { reviewChange } from './review.ts'
 import { readObject, readVersion, storeEmptyVersion, storeFileVersion } from './store.ts'
-import { compareCodeUnits, openRegularFile, readChunks, scanFolder, versionOf, type FileEntry } from './tree.ts'
+import { byteLimitWords, compareCodeUnits, CONTENT_LIMITS, openRegularFile, readChunks, scanFolder, versionOf, type FileEntry, type ScanLimits, type ScannedFolder } from './tree.ts'
 import type { ApprovedHarnessFile, BoundedDiff, ChangeEntry, ChangeId, ChangeLog, ContentVersion, FileChange, HarnessRecord, ObjectDigest, RiskSummary } from './types.ts'
 
 /** One file of the signed release, as its verified signed file list names it. */
@@ -61,6 +61,8 @@ export interface HarnessContext {
   readonly signed: () => Promise<SignedRuntime>
   /** The clock for the records' times; `() => new Date()` by default. */
   readonly now?: () => Date
+  /** The limits of the copy's scan, and of the copy `edit-harness` makes; {@link CONTENT_LIMITS} by default. A test hook. */
+  readonly limits?: ScanLimits
 }
 
 /** A file of the runtime's writable copy that differs from what the runtime runs, waiting for review. */
@@ -114,6 +116,11 @@ export interface HarnessReset {
   readonly discarded: readonly ChangeEntry[]
   /** The applied changes, now undone. */
   readonly undone: readonly ChangeEntry[]
+  /**
+   * Why the copy could not be read, when it could not: the changes waiting in it were then removed with it without
+   * being logged.
+   */
+  readonly unread?: string
 }
 
 /** What the writable copy's creation did. */
@@ -343,17 +350,52 @@ export async function pathExists(path: string): Promise<boolean> {
  * @param ctx - the runtime.
  * @param presence - proof that the person is at their computer.
  * @returns the copy's `app/` directory and whether this call created it.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `RUNTIME_CHANGED` when a
- *   signed file differs from the list; `STORE_CORRUPT` when the store does not hold an approved version.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `CONTENT_TOO_LARGE`, before
+ *   anything is copied, when the copy would pass the limits of its scan ({@link checkHarnessCopySize}); `RUNTIME_CHANGED`
+ *   when a signed file differs from the list; `STORE_CORRUPT` when the store does not hold an approved version.
  */
 export async function createHarnessCopy(ctx: HarnessContext, presence: AtComputer): Promise<HarnessCopy> {
   requirePresence(presence, ctx.runtime)
   const copy = harnessCopyDirectory(ctx.home, ctx.runtime)
   return withHarnessLock(ctx.home, async () => {
     if (await pathExists(copy)) return { directory: join(copy, 'app'), created: false }
-    await writeHarnessCopy(ctx.home, ctx.runtime, await ctx.signed(), await readHarnessRecord(ctx.home, ctx.runtime))
+    const signed = await ctx.signed()
+    const record = await readHarnessRecord(ctx.home, ctx.runtime)
+    await checkHarnessCopySize(ctx.home, ctx.runtime, signed, record, ctx.limits ?? CONTENT_LIMITS)
+    await writeHarnessCopy(ctx.home, ctx.runtime, signed, record)
     return { directory: join(copy, 'app'), created: true }
   })
+}
+
+/**
+ * Refuse a writable copy its scan could not read: count, from the signed file list and the record, the files and
+ * directories `changes/harness/<runtime>/copy/` would hold (itself included) and their bytes, as the copy's scan
+ * counts them. Nothing is read from the installation.
+ * @param home - the Delo home.
+ * @param runtime - the runtime version.
+ * @param signed - the runtime's signed installation.
+ * @param record - the runtime's harness record.
+ * @param limits - the limits of the copy's scan.
+ * @throws {ChangesError} `CONTENT_TOO_LARGE`, subject the installation's `app/` directory, naming the limit the copy
+ *   would pass; `STORE_CORRUPT` when the store does not hold an approved version.
+ */
+export async function checkHarnessCopySize(home: string, runtime: string, signed: SignedRuntime, record: HarnessRecord, limits: ScanLimits): Promise<void> {
+  const sizes = new Map<string, number>()
+  for (const file of appFiles(signed).values()) if (!Object.hasOwn(record.files, file.path)) sizes.set(file.path, file.length)
+  for (const [path, approved] of Object.entries(record.files)) {
+    const content = await fileContentOf(home, approved.version)
+    if (content !== undefined) sizes.set(path, content.size)
+  }
+  const directories = new Set(['', 'app'])
+  for (const path of sizes.keys()) for (let parent = dirname(path); parent !== '.'; parent = dirname(parent)) directories.add(parent)
+  const app = join(signed.directory, 'app')
+  const cannot = `so changes to Delo ${runtime} itself cannot be made for this release.`
+  if (directories.size + sizes.size > limits.entries) {
+    throw new ChangesError('CONTENT_TOO_LARGE', app, `${app} holds more than ${String(limits.entries)} files and directories, the most Delo reads in your copy of it, ${cannot}`)
+  }
+  if ([...sizes.values()].reduce((total, size) => total + size, 0) > limits.bytes) {
+    throw new ChangesError('CONTENT_TOO_LARGE', app, `${app} holds more than ${byteLimitWords(limits.bytes)}, the most Delo reads in your copy of it, ${cannot}`)
+  }
 }
 
 /**
@@ -419,8 +461,8 @@ export interface HarnessReadOptions {
  */
 async function locatePending(ctx: HarnessContext, options: HarnessReadOptions = {}): Promise<HarnessPending & { readonly located: readonly Located[] }> {
   const copy = harnessCopyDirectory(ctx.home, ctx.runtime)
-  if (!await pathExists(copy)) return { changes: [], located: [], skipped: [], keptBeside: [] }
-  const scanned = await scanFolder(copy, { active: true, ...options.cache === false ? {} : { cache: harnessScanCachePath(ctx.home, ctx.runtime) } })
+  const scanned = await scanCopy(ctx, options)
+  if (scanned === undefined) return { changes: [], located: [], skipped: [], keptBeside: [] }
   const skipped = [...scanned.skipped]
   const keptBeside: string[] = []
   const present = new Map<string, { readonly source: string, readonly entry: FileEntry }>()
@@ -460,6 +502,40 @@ async function locatePending(ctx: HarnessContext, options: HarnessReadOptions = 
 }
 
 /**
+ * Scan the running runtime's copy, following no link.
+ * @param ctx - the runtime.
+ * @param options - whether the scan cache is used.
+ * @returns the scan, or undefined when the runtime has no copy.
+ * @throws {ChangesError} `HARNESS_COPY_UNREADABLE` when the copy is not a directory, passes the scan's limits or holds
+ *   an entry that cannot be read; `CHANGED_WHILE_READING` when a file changed while it was read.
+ */
+async function scanCopy(ctx: HarnessContext, options: HarnessReadOptions): Promise<ScannedFolder | undefined> {
+  const copy = harnessCopyDirectory(ctx.home, ctx.runtime)
+  const unreadable = (cause: Error): ChangesError => {
+    const app = join(copy, 'app')
+    return new ChangesError('HARNESS_COPY_UNREADABLE', app, `Your copy of Delo ${ctx.runtime} in ${app} cannot be read, so Delo cannot tell which changes wait there: ${unreadReason(cause)}. Remove what does not belong in it, or take back every change to Delo ${ctx.runtime} itself: delorun changes edit-harness --discard`, { cause })
+  }
+  try {
+    if (!await pathExists(copy)) return undefined
+    if ((await lstat(copy)).isDirectory()) return await scanFolder(copy, { active: true, ...options.cache === false ? {} : { cache: harnessScanCachePath(ctx.home, ctx.runtime) }, ...ctx.limits === undefined ? {} : { limits: ctx.limits } })
+  } catch (error) {
+    if (isChangesError(error) && error.code === 'CHANGED_WHILE_READING') throw error
+    throw unreadable(error as Error)
+  }
+  throw unreadable(new Error(`${copy} is not a directory`))
+}
+
+/**
+ * @param error - why the copy could not be read: the scan's failure, or the `HARNESS_COPY_UNREADABLE` refusal or
+ *   `CHANGED_WHILE_READING` failure of its scan.
+ * @returns the reason in the person's words, without a remedy.
+ */
+function unreadReason(error: Error): string {
+  if (isChangesError(error) && error.code === 'HARNESS_COPY_UNREADABLE') return unreadReason(error.cause as Error)
+  return isChangesError(error) ? error.detail : error.message
+}
+
+/**
  * @param located - a located change.
  * @returns it without where its bytes come from.
  */
@@ -475,7 +551,8 @@ function publicChange(located: Located): HarnessChange {
  * @param ctx - the runtime.
  * @param options - whether the scan cache is used.
  * @returns the changes, the entries the scan skipped and the files kept beside.
- * @throws {ChangesError} `CONTENT_TOO_LARGE` when the copy passes the scan's limits; `CHANGED_WHILE_READING`.
+ * @throws {ChangesError} `HARNESS_COPY_UNREADABLE` when the copy is not a directory, passes the scan's limits or holds an
+ *   entry that cannot be read; `CHANGED_WHILE_READING`.
  */
 export async function harnessChanges(ctx: HarnessContext, options: HarnessReadOptions = {}): Promise<HarnessPending> {
   const { located: _located, ...pending } = await locatePending(ctx, options)
@@ -813,12 +890,14 @@ async function undoEntry(ctx: HarnessContext, record: HarnessRecord, entry: Chan
 
 /**
  * Discard every harness change of the running runtime: every pending one is logged discarded, every applied one and
- * every one left out at start undone, the runtime's record emptied and the copy removed. Afterwards the runtime runs
- * its signed release unchanged.
+ * every one left out at start undone, the runtime's record emptied and the copy removed, its directories made writable
+ * first. A copy that cannot be read does not stop it: the changes waiting in it are removed with it, unlogged, and
+ * `unread` says why. Afterwards the runtime runs its signed release unchanged.
  * @param ctx - the runtime.
  * @param presence - proof that the person is at their computer.
- * @returns the changes discarded and undone.
- * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue.
+ * @returns the changes discarded and undone, and why the copy could not be read.
+ * @throws {ChangesError} `NOT_AT_COMPUTER` for a proof the attest functions did not issue; `RECORD_UNREADABLE` when the
+ *   record or the harness's log is not one Delo wrote.
  */
 export async function discardAllHarnessChanges(ctx: HarnessContext, presence: AtComputer): Promise<HarnessReset> {
   requirePresence(presence, ctx.runtime)
@@ -826,7 +905,16 @@ export async function discardAllHarnessChanges(ctx: HarnessContext, presence: At
     let log = await readHarnessLog(ctx.home)
     const at = timeOf(ctx)
     const discarded: ChangeEntry[] = []
-    for (const change of (await locatePending(ctx)).located) {
+    let located: readonly Located[] = []
+    let unread: string | undefined
+    try {
+      located = (await locatePending(ctx)).located
+    } catch (error) {
+      // Which changes wait in a copy that cannot be read is unknown; removing the copy below discards them all.
+      if (!isChangesError(error) || (error.code !== 'HARNESS_COPY_UNREADABLE' && error.code !== 'CHANGED_WHILE_READING')) throw error
+      unread = unreadReason(error)
+    }
+    for (const change of located) {
       const entry: ChangeEntry = { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), state: 'discarded', decidedAt: at, decidedFrom: presence.kind }
       discarded.push(entry)
       log = withEntry(log, entry)
@@ -845,7 +933,7 @@ export async function discardAllHarnessChanges(ctx: HarnessContext, presence: At
     await writeHarnessRecord(ctx.home, { ...record, files: {} })
     await writeHarnessLog(ctx.home, log)
     await removeTree(harnessCopyDirectory(ctx.home, ctx.runtime))
-    return { discarded, undone }
+    return { discarded, undone, ...unread === undefined ? {} : { unread } }
   })
 }
 

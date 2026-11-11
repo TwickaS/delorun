@@ -14,7 +14,7 @@
  * @module @delo/changes/harness-tree
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { chmod, link, lstat, mkdir, open, readdir, rename } from 'node:fs/promises'
+import { chmod, link, lstat, mkdir, open, readdir, rename, utimes } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { ChangesError } from './errors.ts'
@@ -33,6 +33,17 @@ const TREE_EXECUTABLE_MODE = 0o555
 
 /** The errors of a hard link after which a composed tree copies the installation's file instead. */
 const COPY_INSTEAD = new Set(['EXDEV', 'EPERM', 'ENOTSUP'])
+
+/** The errors of building a composed tree that mean a path is in the way of it, which refuse with `HARNESS_CHANGED`. */
+const IN_THE_WAY = new Set(['ENOTDIR', 'EEXIST'])
+
+/**
+ * How long after a start chose a composed tree retention keeps it. A start chooses its tree, sets the tree's time and
+ * then starts the home process that marks the runtime in use, so retention, which skips trees only once a home process
+ * runs, could otherwise remove a tree a concurrent start is about to run; keeping a recent tree costs only its
+ * directories and hard links, and a later start removes it.
+ */
+export const TREE_RETENTION_GRACE_MS = 60 * 60 * 1000
 
 /** One way a composed tree differs from the signed release with the approved files in place. */
 export interface ComposedProblem {
@@ -134,8 +145,9 @@ async function holds(path: string, expected: { readonly digest: string, readonly
 async function pathHolds(signed: SignedRuntime, root: string, path: string, file: TreeFile): Promise<boolean> {
   const target = join(root, ...path.split('/'))
   if (file.kind === 'approved') return holds(target, file)
-  const mine = await lstat(target)
-  const theirs = await lstat(join(signed.directory, ...path.split('/'))).catch((_unreadable: unknown) => {
+  // Device and inode numbers can pass 2^53, so they compare exactly only as bigints.
+  const mine = await lstat(target, { bigint: true })
+  const theirs = await lstat(join(signed.directory, ...path.split('/')), { bigint: true }).catch((_unreadable: unknown) => {
     // The installation's own start check reports a file it cannot read; the tree's file is then checked by its bytes.
     return undefined
   })
@@ -220,7 +232,8 @@ async function buildTree(home: string, signed: SignedRuntime, files: Readonly<Re
  * @param runtime - the runtime version.
  * @param signed - the runtime's signed installation, verified by the runtime store's start check.
  * @returns the tree, or undefined when the runtime runs its signed release.
- * @throws {ChangesError} `HARNESS_CHANGED` naming the path when the rebuilt tree fails its check too;
+ * @throws {ChangesError} `HARNESS_CHANGED` naming the path when the rebuilt tree fails its check too, or when a path is
+ *   in the way of the build (`ENOTDIR` or `EEXIST`: a file where a directory belongs, or what another builder wrote);
  *   `RECORD_UNREADABLE`; `STORE_CORRUPT` when the store does not hold an approved version; `RUNTIME_CHANGED` when a
  *   signed file a copy reads differs from the list.
  */
@@ -228,22 +241,74 @@ export async function prepareComposedTree(home: string, runtime: string, signed:
   return withHarnessLock(home, async () => {
     const composed = await composition(home, runtime)
     if (composed === undefined) return undefined
-    const runs = harnessRunDirectory(home, runtime)
-    const directory = join(runs, composed.digest)
-    if (await pathExists(directory) && await composedProblem(home, signed, composed.files, directory) === undefined) return { directory, digest: composed.digest }
-    await mkdir(runs, { recursive: true, mode: PRIVATE_DIR_MODE })
-    const staging = join(runs, `.${composed.digest}.delo-tmp-${randomBytes(8).toString('hex')}`)
+    const directory = join(harnessRunDirectory(home, runtime), composed.digest)
     try {
-      await buildTree(home, signed, composed.files, staging)
-      await removeTree(directory)
-      await rename(staging, directory)
-    } finally {
-      await removeTree(staging)
+      await buildComposedTree(home, signed, composed.files, directory)
+    } catch (error) {
+      if (!IN_THE_WAY.has(String((error as NodeJS.ErrnoException).code))) throw error
+      throw await inTheWay(directory, error as NodeJS.ErrnoException & { readonly dest?: string })
     }
-    const problem = await composedProblem(home, signed, composed.files, directory)
-    if (problem !== undefined) throw treeRefusal(directory, problem)
+    // The time marks the tree chosen, so retention keeps it while this start's home process is not yet running.
+    const now = new Date()
+    await utimes(directory, now, now)
     return { directory, digest: composed.digest }
   })
+}
+
+/**
+ * Leave a composed tree in place that holds exactly the composition: the one there, or one built and renamed into
+ * place.
+ * @param home - the Delo home.
+ * @param signed - the signed installation.
+ * @param files - the composed files.
+ * @param directory - the tree.
+ * @throws {ChangesError} `HARNESS_CHANGED` naming the path when the rebuilt tree fails its check.
+ */
+async function buildComposedTree(home: string, signed: SignedRuntime, files: Readonly<Record<string, ContentVersion>>, directory: string): Promise<void> {
+  if (await isDirectory(directory) && await composedProblem(home, signed, files, directory) === undefined) return
+  const runs = dirname(directory)
+  await mkdir(runs, { recursive: true, mode: PRIVATE_DIR_MODE })
+  const staging = join(runs, `.${basename(directory)}.delo-tmp-${randomBytes(8).toString('hex')}`)
+  try {
+    await buildTree(home, signed, files, staging)
+    await removeTree(directory)
+    await rename(staging, directory)
+  } finally {
+    await removeTree(staging)
+  }
+  const problem = await composedProblem(home, signed, files, directory)
+  if (problem !== undefined) throw treeRefusal(directory, problem)
+}
+
+/**
+ * @param path - a path.
+ * @returns whether it is a directory, not following a link; false when nothing is there.
+ * @throws the filesystem error other than `ENOENT`, such as `ENOTDIR` when a file stands where a parent belongs.
+ */
+async function isDirectory(path: string): Promise<boolean> {
+  return await pathExists(path) && (await lstat(path)).isDirectory()
+}
+
+/**
+ * The refusal of a build a path was in the way of: for `ENOTDIR` the nearest parent of the failed path that is not a
+ * directory, else the failed path (a hard link's destination).
+ * @param directory - the tree.
+ * @param error - the `ENOTDIR` or `EEXIST` failure.
+ * @returns the refusal that names the path.
+ */
+async function inTheWay(directory: string, error: NodeJS.ErrnoException & { readonly dest?: string }): Promise<ChangesError> {
+  let path = error.dest ?? error.path ?? directory
+  if (error.code === 'ENOTDIR') {
+    for (let parent = dirname(path); parent !== dirname(parent); parent = dirname(parent)) {
+      const stats = await lstat(parent).catch((_missing: unknown) => {
+        // A parent that is not there is not the one in the way; the walk goes on up.
+        return undefined
+      })
+      if (stats !== undefined && !stats.isDirectory()) path = parent
+    }
+  }
+  const what = error.code === 'ENOTDIR' ? 'is a file where Delo needs a directory' : 'is already there'
+  return new ChangesError('HARNESS_CHANGED', path, `${path} ${what} to build the harness with your approved changes in ${directory}, so Delo does not run it. If no other start of Delo runs, remove ${path} and start Delo again.`, { cause: error })
 }
 
 /**
@@ -286,7 +351,10 @@ export interface HarnessRetention {
 export interface HarnessRetentionRequest {
   /** The running runtime version. */
   readonly runtime: string
-  /** The digest of its composed tree to keep; every other tree of the runtime is removed. */
+  /**
+   * The digest of its composed tree to keep; every other tree of the runtime is removed, except one a start chose
+   * within {@link TREE_RETENTION_GRACE_MS}.
+   */
   readonly keep?: string
   /** Whether the runtime's other trees may be removed: false while another home process may run from one. */
   readonly removeTrees: boolean
@@ -295,8 +363,9 @@ export interface HarnessRetentionRequest {
 }
 
 /**
- * Remove the running runtime's other composed trees, and the `changes/harness/<runtime>/` directories of runtimes the
- * store no longer has installed, each made writable first. A failure to remove one is reported and leaves it.
+ * Remove the running runtime's other composed trees, except one whose time a start set within
+ * {@link TREE_RETENTION_GRACE_MS}, and the `changes/harness/<runtime>/` directories of runtimes the store no longer has
+ * installed, each made writable first. A failure to remove one is reported and leaves it.
  * @param home - the Delo home.
  * @param request - the runtime, the tree to keep, whether trees may be removed, and the installed runtimes.
  * @returns what was removed and what was not.
@@ -315,7 +384,10 @@ export async function retainHarness(home: string, request: HarnessRetentionReque
     }
     if (request.removeTrees) {
       const runs = harnessRunDirectory(home, request.runtime)
-      for (const name of await namesIn(runs)) if (name !== request.keep) await remove(join(runs, name))
+      const chosenBefore = Date.now() - TREE_RETENTION_GRACE_MS
+      for (const name of await namesIn(runs)) {
+        if (name !== request.keep && (await lstat(join(runs, name))).mtimeMs < chosenBefore) await remove(join(runs, name))
+      }
     }
     for (const name of await namesIn(harnessDirectory(home))) {
       if (isRuntimeVersion(name) && !request.installed.has(name)) await remove(harnessRuntimeDirectory(home, name))

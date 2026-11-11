@@ -134,7 +134,10 @@ export async function runHarnessCommand(args: readonly string[], context: Comman
     }
     if (!await confirmed(dependencies, `Discard every change to Delo ${harness.runtime} itself? It returns to the signed release.`)) return declined(context)
     const reset = await discardAllHarnessChanges(harness, presence)
-    print(context.stdout, [`Discarded ${String(reset.discarded.length)} waiting and undid ${String(reset.undone.length)} applied changes to Delo ${harness.runtime}; it runs the signed release from its next start.`])
+    print(context.stdout, [
+      `Discarded ${String(reset.discarded.length)} waiting and undid ${String(reset.undone.length)} applied changes to Delo ${harness.runtime}; it runs the signed release from its next start.`,
+      ...reset.unread === undefined ? [] : [`Your copy of Delo ${harness.runtime} could not be read, so the changes waiting in it were removed with it without being listed: ${reset.unread}`],
+    ])
     return EXIT.ok
   } catch (error) {
     if (!isChangesError(error)) throw error

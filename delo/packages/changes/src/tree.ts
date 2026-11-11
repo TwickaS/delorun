@@ -88,6 +88,27 @@ export const CONTENT_ENTRY_LIMIT = 50_000
 /** The most bytes the files of one content version may hold, the installed packages it includes counted. */
 export const CONTENT_BYTE_LIMIT = 512 * 1024 * 1024
 
+/** The most entries and bytes one scan admits. */
+export interface ScanLimits {
+  /** The most files, links and directories, the scanned folder itself counted. */
+  readonly entries: number
+  /** The most bytes of files. */
+  readonly bytes: number
+}
+
+/** The limits of every content version: {@link CONTENT_ENTRY_LIMIT} and {@link CONTENT_BYTE_LIMIT}. */
+export const CONTENT_LIMITS: ScanLimits = { entries: CONTENT_ENTRY_LIMIT, bytes: CONTENT_BYTE_LIMIT }
+
+/**
+ * A byte limit in the person's words.
+ * @param bytes - the limit.
+ * @returns it in MiB when it is a whole number of them, else in bytes.
+ */
+export function byteLimitWords(bytes: number): string {
+  const mebibyte = 1024 * 1024
+  return bytes % mebibyte === 0 ? `${String(bytes / mebibyte)} MiB` : `${String(bytes)} bytes`
+}
+
 /** The `package.json` fields whose names a package installed beside it resolves, in the order they are read. */
 const DEPENDENCY_FIELDS = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const
 
@@ -136,6 +157,8 @@ export interface ScanCacheOptions {
   readonly cache?: string
   /** The wall clock in milliseconds, which decides which files the cache records; defaults to `Date.now`. A test hook. */
   readonly now?: () => number
+  /** The limits the scan stops at; {@link CONTENT_LIMITS} by default. A test hook. */
+  readonly limits?: ScanLimits
 }
 
 /** One file a scan read, and where it read it. */
@@ -401,6 +424,8 @@ interface Walk {
   readonly home: string | undefined
   /** The folder scanned, named in a refusal. */
   readonly folder: string
+  /** The limits it stops at. */
+  readonly limits: ScanLimits
   /** The files, links and directories counted so far. */
   count: number
   /** The bytes of the files counted so far. */
@@ -411,17 +436,16 @@ interface Walk {
  * Count one entry of the version, and its bytes, against the limits.
  * @param walk - the scan.
  * @param bytes - the bytes it adds; zero for a link or a directory.
- * @throws {ChangesError} `CONTENT_TOO_LARGE` when the version would pass {@link CONTENT_ENTRY_LIMIT} or
- *   {@link CONTENT_BYTE_LIMIT}.
+ * @throws {ChangesError} `CONTENT_TOO_LARGE` when the version would pass the scan's limits.
  */
 function admit(walk: Walk, bytes: number): void {
   walk.count += 1
   walk.bytes += bytes
-  if (walk.count > CONTENT_ENTRY_LIMIT) {
-    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${CONTENT_ENTRY_LIMIT} files, links and directories, so Delo does not copy it.`)
+  if (walk.count > walk.limits.entries) {
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${String(walk.limits.entries)} files, links and directories, so Delo does not copy it.`)
   }
-  if (walk.bytes > CONTENT_BYTE_LIMIT) {
-    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${CONTENT_BYTE_LIMIT / (1024 * 1024)} MiB, so Delo does not copy it.`)
+  if (walk.bytes > walk.limits.bytes) {
+    throw new ChangesError('CONTENT_TOO_LARGE', walk.folder, `${walk.folder}, with the installed packages it links, holds more than ${byteLimitWords(walk.limits.bytes)}, so Delo does not copy it.`)
   }
 }
 
@@ -701,7 +725,7 @@ async function walkDirectory(walk: Walk, root: string, absolute: string, directo
  * @returns the entries, the files with where they were read, and the skipped paths, each sorted by path; `.` when the
  *   folder is the Delo home or in a system directory, which the scan does not read.
  * @throws {ChangesError} `CHANGED_WHILE_READING` when a file is replaced by a link or another kind, or grows, while it
- *   is read; `CONTENT_TOO_LARGE` when the version would pass {@link CONTENT_ENTRY_LIMIT} or {@link CONTENT_BYTE_LIMIT}.
+ *   is read; `CONTENT_TOO_LARGE` when the version would pass the scan's limits, {@link CONTENT_LIMITS} by default.
  * @throws the filesystem error, such as `ENOENT`, when the folder cannot be read.
  */
 export async function scanFolder(folder: string, options: ScanOptions): Promise<ScannedFolder> {
@@ -719,6 +743,7 @@ export async function scanFolder(folder: string, options: ScanOptions): Promise<
     dependencies: 'home' in options ? options.dependencies ?? 'include' : 'active',
     home,
     folder,
+    limits: options.limits ?? CONTENT_LIMITS,
     count: 0,
     bytes: 0,
   }

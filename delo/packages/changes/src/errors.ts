@@ -29,9 +29,12 @@ import { codedReason, profileOption, refusalDescriber, type RefusalDescriber } f
  * - `LOAD_REFUSED`: what the profile would load is not what Changes keeps (a link or an active directory differs), so a
  *   start or a reload does not load it.
  * - `HARNESS_CHANGED`: the composed tree a start runs, the signed release with the person's approved harness files in
- *   place, holds a file that is not the signed or the approved one, so the start does not run it.
+ *   place, holds a file that is not the signed or the approved one, or a path where Delo builds it is in the way, so the
+ *   start does not run it.
  * - `HARNESS_CHANGES_PENDING`: changes to the running runtime's harness wait for review in its writable copy, so an
  *   update, which would leave them behind in that runtime's copy, does not apply.
+ * - `HARNESS_COPY_UNREADABLE`: the running runtime's writable copy is not a directory, passes the scan's limits or holds
+ *   an entry that cannot be read, so which changes wait there is unknown; the subject is the copy's `app/` directory.
  */
 export type ChangesCode =
   | 'RECORD_UNREADABLE'
@@ -51,6 +54,7 @@ export type ChangesCode =
   | 'LOAD_REFUSED'
   | 'HARNESS_CHANGED'
   | 'HARNESS_CHANGES_PENDING'
+  | 'HARNESS_COPY_UNREADABLE'
 
 /** A refusal or failure of Changes. */
 export class ChangesError extends Error {

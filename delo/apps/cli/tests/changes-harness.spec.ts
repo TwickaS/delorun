@@ -5,11 +5,11 @@
  * and `doctor` say about the composed tree.
  */
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyHarnessChange, attestTerminal, ChangesError, createHarnessCopy, harnessChanges, harnessCopyDirectory, harnessStatus, prepareComposedTree, readHarnessLog, readHarnessRecord, type ChangeId, type ContentVersion, type HarnessContext, type HarnessStatus, type SignedFile, type SignedRuntime } from '@delo/changes'
+import { applyHarnessChange, attestTerminal, ChangesError, createHarnessCopy, harnessChanges, harnessCopyDirectory, harnessStatus, prepareComposedTree, readHarnessLog, readHarnessRecord, TREE_RETENTION_GRACE_MS, type ChangeId, type ContentVersion, type HarnessContext, type HarnessStatus, type SignedFile, type SignedRuntime } from '@delo/changes'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { ensureHomeTree } from '@delo/home'
@@ -219,6 +219,15 @@ describe('the start\'s hand-off to the composed tree', () => {
     expect(dependencies.started).toEqual([])
   })
 
+  it('discarding every harness change from a copy that cannot be read removes it and says why', async () => {
+    await applyHarnessChange(harness(), await editStart(), terminal())
+    chmodSync(join(harnessCopyDirectory(home, RUNTIME), 'app', 'node_modules'), 0o000)
+    expect(await runChanges(['edit-harness', '--discard'], context, terminalAnswering(['y']))).toBe(EXIT.ok)
+    expect(context.printed.join('')).toContain(`Discarded 0 waiting and undid 1 applied changes to Delo ${RUNTIME}`)
+    expect(context.printed.join('')).toContain(`Your copy of Delo ${RUNTIME} could not be read, so the changes waiting in it were removed with it without being listed: EACCES`)
+    expect(existsSync(harnessCopyDirectory(home, RUNTIME))).toBe(false)
+  })
+
   it('refuses the start when the signed installation or the composed tree fails its check', async () => {
     await applyHarnessChange(harness(), await editStart(), terminal())
     const store = handOff({ signed: () => Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', signed.directory, 'runtime 1.2.3 differs from its signed file list')) })
@@ -237,6 +246,8 @@ describe('the start\'s hand-off to the composed tree', () => {
     await handOffToComposedTree({ home, env: context.env, output: context }, handOff({ homeProcessRuns: () => true }))
     const runs = join(home, 'changes', 'harness', RUNTIME, 'run')
     expect(readdirSync(runs)).toHaveLength(2)
+    const longAgo = new Date(Date.now() - TREE_RETENTION_GRACE_MS - 60_000)
+    for (const name of readdirSync(runs)) utimesSync(join(runs, name), longAgo, longAgo)
     mkdirSync(join(home, 'changes', 'harness', '0.9.0'))
     chmodSync(join(home, 'changes', 'harness'), 0o500)
     try {
