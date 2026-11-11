@@ -66,7 +66,7 @@ export function changesProtectionSection(streams: TerminalStreams): SetupSection
     id: 'changes-protection',
     title: 'Changes protection',
     mode: 'full',
-    asks: true,
+    asks: () => true,
     appliesTo: () => true,
     async ask(io, draft, environment) {
       const current = await reported(() => readProtection(environment.home))

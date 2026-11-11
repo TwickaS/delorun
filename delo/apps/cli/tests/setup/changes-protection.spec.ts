@@ -26,7 +26,7 @@ const REDIRECTED: TerminalStreams = { stdin: { isTTY: true }, stdout: { isTTY: f
 const ON_NOTE = 'Changes protection is on: changes to your plugins and to Delo itself wait for your review in delorun changes list.'
 
 /** Full answers up to the protection question: environment key, safer prompts, background, no remote access. */
-const BEFORE: readonly Answer[] = ['full', 'environment', 'safer', 'yes', 'no']
+const BEFORE: readonly Answer[] = ['full', 'on', 'environment', 'safer', 'yes', 'no']
 /** Full answers after the protection question: the default name and port, save, no install. */
 const AFTER: readonly Answer[] = ['default', '3080', 'save', false]
 

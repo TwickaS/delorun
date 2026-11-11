@@ -135,7 +135,7 @@ function breakingDependencies(plugins: readonly string[], fails: (seen: Record<s
       runs.boots.push(seen)
       if (fails(seen)) return Promise.reject(new Error(`SyntaxError: Unexpected token in ${plugins.join(', ')}`))
       const booted = (): BootedRow[] => composedBootRows(deloHome, options, rows(seen))
-      return Promise.resolve({ rows: booted, providerOf: composedProviders(booted), releaseTurns: () => {}, shutdown: () => Promise.resolve(), dispose: () => Promise.resolve(), watchChats: () => {}, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), reload: () => Promise.resolve({ ok: true }) })
+      return Promise.resolve({ rows: booted, providerOf: composedProviders(booted), releaseTurns: () => {}, shutdown: () => Promise.resolve(), dispose: () => Promise.resolve(), watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), reload: () => Promise.resolve({ ok: true }) })
     },
     loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
     probe: () => () => Promise.resolve('answered'),

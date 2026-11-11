@@ -349,6 +349,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
         watchUpdates: (watch) => { watched.push(watch); watch.line('Delorun 0.1.1 is available'); watch.log?.('delo-update-check: the update check failed: logged'); return Promise.resolve() },
       }),
       runtime: () => ({ version: brandString<RuntimeVersion>('0.1.0'), store: true }),
+      checkRuntime: () => Promise.resolve(),
       updates: () => ({ copies: { recover: () => Promise.resolve() }, store: { pointers: () => Promise.resolve({ current: brandString<RuntimeVersion>('0.1.0') }) } }) as never,
     }
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, fromStore)).toBeUndefined()

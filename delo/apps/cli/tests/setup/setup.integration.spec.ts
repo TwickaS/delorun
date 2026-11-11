@@ -239,7 +239,7 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('update-notice-off-at-first-start: a Full setup that turns the check off has the row off in the profile the first start composes, so no check mounts', async () => {
     const atStart: { row?: ReturnType<typeof composedUpdateCheckRow> } = {}
     const run = runSetup({
-      home, profile: PROFILE, output, env: {}, form: asked(['full', 'off', 'environment', 'safer', 'yes', 'no', 'default', '3080', 'save', false]),
+      home, profile: PROFILE, output, env: {}, form: asked(['full', 'off', 'environment', 'safer', 'yes', 'no', 'no', 'default', '3080', 'save', false]),
       keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
       ending: { ...fakeEnding(ending), start: () => { atStart.row = composedUpdateCheckRow(); return Promise.resolve(0) } },
     })

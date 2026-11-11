@@ -81,13 +81,13 @@ export interface SetupAnswers {
   readonly reach: ReachAnswer
   /** Whether setup imports the stock DeepSeek Harness home after showing its preview; never true in a `--config` document. */
   readonly importStockHome: boolean
-  /** Whether Delo checks the release channel for a newer release; a document may leave it out, which means `true`. */
-  readonly updateCheck: boolean
   /**
    * Whether setup turns changes protection on for the home (contract C21), only at a terminal; `false` leaves the home's
    * setting as it is. Never true in a `--config` document.
    */
   readonly protectChanges: boolean
+  /** Whether Delo checks the release channel for a newer release; a document may leave it out, which means `true`. */
+  readonly updateCheck: boolean
   /** The sections this run showed, in order; the studio's onboarding leaves out what the terminal covered. */
   readonly sections: readonly SectionRecord[]
 }
@@ -101,8 +101,8 @@ export const SETUP_DEFAULTS = {
   profile: { name: null, port: null },
   reach: { option: 'none', identityFactor: null },
   importStockHome: false,
-  updateCheck: true,
   protectChanges: false,
+  updateCheck: true,
   sections: [],
 } as const satisfies SetupAnswers
 

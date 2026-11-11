@@ -94,8 +94,8 @@ An answers document is a JSON object with the fields below. The same schema is u
   "profile": { "name": null, "port": null },
   "reach": { "option": "none", "identityFactor": null },
   "importStockHome": false,
-  "updateCheck": true,
   "protectChanges": false,
+  "updateCheck": true,
   "sections": [{ "id": "privacy", "status": "seen" }, { "id": "key", "status": "answered" }]
 }
 ```
@@ -112,8 +112,8 @@ An answers document is a JSON object with the fields below. The same schema is u
 | `reach.option` | `none`, `tailscale-private`, `tailscale-funnel` or `self-hosted-relay`. | `none` | Any value other than `none` is accepted only in the interactive form. |
 | `reach.identityFactor` | `passkey`, `oidc`, `tailnet` or `null`. | `null` | `null` when the option is `none`. `passkey` or `oidc` for `tailscale-funnel` and `self-hosted-relay`. `passkey`, `oidc` or `tailnet` for `tailscale-private`. `tailnet` is available only under C7's socket variant ([C7](c07-reach-providers.md#tailscale-serve-target)); otherwise setup refuses it with `TAILNET_IDENTITY_UNAVAILABLE`. `passkey` on a `ts.net` address is available only where C14 makes passkeys available there ([C14](c14-oidc-passkeys.md#relying-party-ids)); otherwise setup refuses it with `PASSKEY_UNAVAILABLE`. |
 | `importStockHome` | Boolean. | `false` | Set by the import section. `--config` refuses `true`, because the import shows its preview before it asks. |
-| `updateCheck` | Boolean; optional. | `true` | Whether Delo checks the release channel for a newer release. `--no-update-check` sets it to `false` in every form. |
 | `protectChanges` | Boolean. | `false` | Set by the `changes-protection` section; an absent field reads as `false`. `--config` refuses `true`, because only a terminal proof changes the protection setting ([C21](c21-changes.md)). |
+| `updateCheck` | Boolean; optional. | `true` | Whether Delo checks the release channel for a newer release. `--no-update-check` sets it to `false` in every form. |
 | `sections` | A list of `{ "id", "status" }`, in flow order. | `[]` | Written by setup, never by a document. `seen` is a note shown, `answered` a question answered, `skipped` a section that took its default without being asked. The studio's onboarding leaves out what the terminal covered. |
 
 Earlier versions asked for the runtime, the studio additions, help with other models, desktop analytics and DeepSeek's session-log upload. Setup recorded those answers and applied none of them, so it no longer asks them. An answers document that carries `studioAdditions`, `runtime`, `helpSetUpModels`, `sessionLogUpload` or `desktopAnalytics` is refused with a message that names the removed keys. The two opt-ins stay off, and the studio's Settings → Privacy section changes them.
@@ -135,8 +135,8 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | `reach.option` | The reach rows of the reach contracts. `none` writes none. | The profile. Written only in the interactive form. |
 | `reach.identityFactor` | An enrolment request for the reach address. No config row. | Home-auth state, under the identity contracts. |
 | `importStockHome` | The data of the stock-home import of [C8](c08-archive-and-trash.md#the-stock-home-import): exactly the plan the section's preview showed, under the home lock of every profile. A stock file that changed since, a Delo home that gained a chat since, or a run that did not show the preview refuses it. | The home. |
-| `updateCheck` | `false` writes the `delo-update-check` row as Settings → Privacy saves it: its id, its plugin name and the bundle's config with `enabled: false`. `true` leaves no config on that row, so the bundle's `enabled: true` applies. | The profile's `cordis.patch.yml`, before Delorun first starts. |
 | `protectChanges` | `true` writes `changes/protection.json` with the level `on`, at mode 0600 under a 0700 `changes/`, through the terminal proof `delorun changes protection on` uses, taken from setup's own standard input and output. Nothing is written when protection is already on or the answer is `false`. When either stream is not a terminal, setup stops before the write and names how to finish: `delorun setup` in a terminal resumes the step, or `delorun changes protection on` turns it on. | The home. |
+| `updateCheck` | `false` writes the `delo-update-check` row as Settings → Privacy saves it: its id, its plugin name and the bundle's config with `enabled: false`. `true` leaves no config on that row, so the bundle's `enabled: true` applies. | The profile's `cordis.patch.yml`, before Delorun first starts. |
 | `sections` | Recorded in `setup-answers.json`. | The profile directory. |
 
 Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In upstream's profiles it sends a session-log prefix only after the person submits feedback. The CLI profile disables it together with upstream's feedback command and message feedback rows, so nothing sends feedback there.

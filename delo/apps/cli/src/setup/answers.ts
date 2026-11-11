@@ -50,6 +50,7 @@ const answerFields = {
   profile: z.strictObject({ name: z.string().min(1).nullable(), port: z.number().int().min(MIN_PORT).max(MAX_PORT).nullable() }),
   reach,
   importStockHome: z.boolean(),
+  protectChanges: z.boolean().default(SETUP_DEFAULTS.protectChanges),
 }
 
 const sections = z.array(z.strictObject({ id: z.string().min(1), status: z.enum(SECTION_STATUSES) })).default([])
@@ -62,13 +63,12 @@ const answersSchema = z.strictObject({
   schemaVersion: z.literal(SETUP_ANSWERS_SCHEMA_VERSION),
   ...answerFields,
   updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck),
-  protectChanges: z.boolean().default(SETUP_DEFAULTS.protectChanges),
   sections,
 })
 
-/** The version-2 document, which has no `updateCheck` or `protectChanges`, read as the current version with the check on. */
+/** The version-2 document, which has no `updateCheck`, read as the current version with the check on. */
 const version2Schema = z.strictObject({ schemaVersion: z.literal(2), ...answerFields, sections })
-  .transform(({ sections: record, ...answers }) => ({ ...answers, schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, updateCheck: SETUP_DEFAULTS.updateCheck, protectChanges: SETUP_DEFAULTS.protectChanges, sections: record }))
+  .transform(({ sections: record, ...answers }) => ({ ...answers, schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
 
 /**
  * The schema of a document's declared version.
