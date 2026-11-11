@@ -38,6 +38,8 @@ const BENCHMARKS = 'the wait-time benchmark under delo/apps/benchmarks, which ru
 /** The exported error classes that never reach `delorun`'s entry point, each with the reason. */
 const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   FullAccessConsentRefusedError: PLUGIN,
+  FullAccessChangeError: PLUGIN,
+  McpReviewError: PLUGIN,
   PermissionStoreError: PLUGIN,
   UnsupportedHostError: PLUGIN,
   InvalidPathError: PLUGIN,
