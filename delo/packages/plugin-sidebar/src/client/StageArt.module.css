@@ -195,7 +195,8 @@
 /*
  * The title's veil: a band of the sidebar's fill under the brand row, feathered above and below, so the title and the
  * toggle keep the theme's colours on any art. Its shares are set where it renders, as `--title-veil` under the brand and
- * `--title-veil-toggle` from the toggle's start, 52px from the row's end, with the step spread over the 44px before it.
+ * `--title-veil-toggle` from 52px before the sidebar's right edge, which clears the toggle's 28px box 8px in from that
+ * edge, with the step spread over the 44px before it.
  * The band's solid part spans the brand row's 24px line box, 24px below the sidebar's top, with room on each side. The
  * feather's mask uses an opaque static token, since a mask reads only its colour's opacity.
  */
