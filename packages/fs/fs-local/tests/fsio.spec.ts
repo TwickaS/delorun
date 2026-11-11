@@ -882,6 +882,15 @@ describe('writeFileAtomic — temp-file safety', () => {
     expect((await stat(file)).isDirectory()).toBe(true)
   })
 
+  it('removes the empty staging directory when the temp file cannot be created', async () => {
+    const file = join(dir, 'a.txt')
+    await expect(writeFileAtomic(file, 'ours', undefined, undefined, {
+      tempDirName: () => '.a.txt.staging',
+      tempName: () => join('missing', 'a.txt.tmp'),
+    })).rejects.toMatchObject({ code: 'FS_IO_ERROR' })
+    expect(await readdir(dir)).toEqual([])
+  })
+
   it('does not turn post-commit staging cleanup failure into a failed guarded write', async () => {
     const file = join(dir, 'a.txt')
     const cleanupFailure = new Error('staging cleanup failed')

@@ -100,6 +100,23 @@ describe.skipIf(process.platform === 'win32')('a directory replaced by a link af
     expect(lstatSync(home).isDirectory()).toBe(true)
   })
 
+  it('leaves entries planted in the staging directory in place and removes nothing they reach', async () => {
+    const { flip, home } = await setup()
+    const destination = join(flip, 'out.txt')
+    await fsio.writeFileAtomic(destination, 'written\n', undefined, undefined, {
+      tempDirName: () => '.out.txt.staging',
+      inspectTemp: ({ stagingDir }) => {
+        mkdirSync(join(stagingDir, 'sub'))
+        writeFileSync(join(stagingDir, 'sub', 'keep'), 'planted\n')
+        symlinkSync(home, join(stagingDir, 'link'), 'dir')
+      },
+    })
+    expect(readFileSync(destination, 'utf8')).toBe('written\n')
+    expect(readFileSync(join(flip, '.out.txt.staging', 'sub', 'keep'), 'utf8')).toBe('planted\n')
+    expect(lstatSync(join(flip, '.out.txt.staging', 'link')).isSymbolicLink()).toBe(true)
+    expect(readFileSync(join(home, 'key'), 'utf8')).toBe('secret-key\n')
+  })
+
   it('removes nothing through a directory replaced by a link before the removal', async () => {
     const { flip, home } = await setup()
     const target = join(flip, 'key')

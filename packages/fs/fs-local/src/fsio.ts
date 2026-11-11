@@ -7,7 +7,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { constants as fsConstants, createReadStream, realpath as realpathCallback } from 'node:fs'
-import { chmod, link, lstat, mkdir, open, readdir, readlink, rename, rm, rmdir, stat } from 'node:fs/promises'
+import { chmod, link, lstat, mkdir, open, readdir, readlink, rename, rm, rmdir, stat, unlink } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import type { BigIntStats, Dirent, Stats } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
@@ -775,8 +775,19 @@ const NO_FOLLOW_DIRECTORY = fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsC
  * @throws {FsError} `FS_IO_ERROR` when the entry is a link or not a directory.
  */
 async function holdEntry(parent: HeldDirectory, name: string, displayPath: string): Promise<HeldDirectory> {
+  return pinnedDirectory(await openDirectoryEntry(parent.entry(name), displayPath))
+}
+
+/**
+ * Open a directory reached through a held parent without following a link in its place.
+ * @param path - the entry's path through the held parent's descriptor.
+ * @param displayPath - the caller-facing path of the file being changed, for errors.
+ * @returns the open directory.
+ * @throws {FsError} `FS_IO_ERROR` when the entry is a link or not a directory.
+ */
+async function openDirectoryEntry(path: string, displayPath: string): Promise<FileHandle> {
   try {
-    return pinnedDirectory(await open(parent.entry(name), NO_FOLLOW_DIRECTORY))
+    return await open(path, NO_FOLLOW_DIRECTORY)
   } catch (error: unknown) {
     /* v8 ignore start -- a link or file must take the created directory's name between its creation and this open. */
     const code = (error as NodeJS.ErrnoException).code
@@ -878,7 +889,7 @@ async function ensureDirectory(directory: string, displayPath: string): Promise<
 
 /**
  * Confirm a staging directory reached by name lies in the directory the caller checked; otherwise remove it where it
- * landed and refuse the write.
+ * landed when it is still an empty directory, never walking into it, and refuse the write.
  * @param stagingDir - the staging directory as created.
  * @param expected - its path in the checked directory.
  * @param displayPath - the caller-facing path, for errors.
@@ -888,7 +899,11 @@ async function ensureDirectory(directory: string, displayPath: string): Promise<
 async function assertStagedIn(stagingDir: string, expected: string, displayPath: string): Promise<void> {
   const actual = await realpath(stagingDir)
   if (actual === expected) return
-  await rm(actual, { recursive: true, force: true })
+  try {
+    await rmdir(actual)
+  } catch (_notEmptyOrNotOurs) {
+    // A directory something filled or replaced after its creation stays in place; the write is refused below.
+  }
   throw new FsError(`cannot write "${displayPath}": the path changed while it was written; retry`, 'FS_IO_ERROR')
 }
 /* v8 ignore stop */
@@ -943,7 +958,8 @@ async function assertPublishedAt(
  * so neither a component of the path nor the staging directory replaced by a link after the caller's checks, such as a
  * sandbox fence's, can move the write or its temp file elsewhere. Outside Linux the directories are created by name and
  * confirmed, and the staging directory and the published file are confirmed by path. A write the path change would
- * redirect fails with `FS_IO_ERROR` and leaves no file elsewhere.
+ * redirect fails with `FS_IO_ERROR` and leaves no file elsewhere. The staging directory is removed without walking it:
+ * one that holds anything besides the temp file, or a link that took its name, stays in place.
  */
 export async function writeFileAtomic(
   absolutePath: string,
@@ -1000,9 +1016,10 @@ async function writeStagedFile(
   const inspectPublicationTarget = internals.inspectPublicationTarget
     ?? (path => lstat(path, { bigint: true }))
   const removeStagingDir = internals.removeStagingDir
-    ?? (path => rm(path, { recursive: true, force: true }))
+    ?? (path => removeStagingEntries(tempCreated ? tempPath : undefined, path))
   let handle: Awaited<ReturnType<typeof open>> | undefined
   let stagingCreated = false
+  let tempCreated = false
   let staged: BigIntStats | undefined
   try {
     await mkdir(stagingDir, { mode: 0o700 })
@@ -1011,7 +1028,7 @@ async function writeStagedFile(
     if (held.pinned) {
       // The staging directory is held without following a link in its place and confirmed private and empty, and the
       // temp file is reached through it, so renaming the directory away and planting a link cannot move the temp file.
-      staging = await open(stagingDir, NO_FOLLOW_DIRECTORY)
+      staging = await openDirectoryEntry(stagingDir, displayPath)
       await staging.chmod(0o700)
       await assertPrivateStaging(staging, displayPath)
       tempPath = `/proc/self/fd/${staging.fd}/${tempName}`
@@ -1021,6 +1038,7 @@ async function writeStagedFile(
     }
 
     handle = await open(tempPath, 'wx', 0o600)
+    tempCreated = true
     await handle.chmod(0o600)
     if (platform === 'win32' && existingDestination) {
       // Windows reaches entries by name ({@link HeldDirectory.pinned} is false there).
@@ -1077,6 +1095,42 @@ async function writeStagedFile(
     await staging?.close()
   }
 }
+
+/**
+ * Remove a staging directory without walking it: unlink the temp file if one was created and is still there, then
+ * remove the directory only if it is empty. Anything else placed in it, such as a planted subdirectory or link, stays in
+ * place with the owner-only directory, and so does a link or another directory that took the directory's name, so
+ * nothing reached through such an entry is removed.
+ * @param tempPath - the created temp file, through the held staging directory on Linux, or `undefined` when none was
+ *   created.
+ * @param stagingDir - the staging directory, through the held destination directory on Linux.
+ * @returns when the directory is removed or left in place.
+ * @throws the `unlink` or `rmdir` failure other than a missing temp file or a directory that is not empty, not a
+ *   directory or gone.
+ */
+async function removeStagingEntries(tempPath: string | undefined, stagingDir: string): Promise<void> {
+  if (tempPath !== undefined) {
+    try {
+      await unlink(tempPath)
+    } catch (error: unknown) {
+      // A published temp file is already gone.
+      /* v8 ignore next -- another unlink failure needs a permission or IO fault on the writer's own staging directory. */
+      if (!isENOENT(error)) throw error
+    }
+  }
+  try {
+    await rmdir(stagingDir)
+  } catch (error: unknown) {
+    /* v8 ignore next -- another rmdir failure needs a permission or IO fault on the writer's own staging directory. */
+    if (!STAGING_LEFT_IN_PLACE.has((error as NodeJS.ErrnoException).code ?? '')) throw error
+  }
+}
+
+/**
+ * `rmdir` failures that leave a staging directory in place: not empty (`EEXIST` on some systems), replaced by a link or
+ * file, or already gone.
+ */
+const STAGING_LEFT_IN_PLACE: ReadonlySet<string> = new Set(['ENOTEMPTY', 'EEXIST', 'ENOTDIR', 'ENOENT'])
 
 /**
  * Confirm a freshly created staging directory is the writer's own: a directory this process's user owns, at mode
