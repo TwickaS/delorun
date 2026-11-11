@@ -98,6 +98,12 @@ export const GATES: readonly GateCheck[] = [
     inputs: ['delo/**/*.ts', 'delo/**/*.tsx', 'delo/**/*.mts', 'delo/**/*.cts', `${GATE_DIR}/erasable-syntax.ts`],
   },
   {
+    id: 'gates:no-unknown-casts',
+    title: 'No assertion to `unknown` beyond upstream\'s recorded baseline, in upstream\'s sources and Delo\'s',
+    command: [TSX, 'scripts/verify-no-unknown-casts.ts'],
+    inputs: ['**/*.ts', '**/*.mts', '**/*.cts', '**/*.tsx', '**/*.js', '**/*.mjs', '**/*.cjs', '**/*.jsx', 'scripts/no-unknown-casts.baseline.json'],
+  },
+  {
     id: 'gates:package-states',
     title: 'Every Delo package records a state that agrees with what the shipped roots reach',
     command: [TSX, `${GATE_DIR}/package-states.ts`],
