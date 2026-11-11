@@ -16,7 +16,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WebGateDecision, WebGateRefusal, WebListener, WebListenerBind, WebRouteKind } from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { LOOPBACK_LISTENER, type Admission, type Authenticator, type ListenerPolicy, type PreLoginRoute } from './authenticator.ts'
-import { countHostLines } from './api-request-trust.ts'
 import type { ConnectionTrustRequest, HostConnectionHandle } from './rpc.ts'
 import { CONNECT_PATH } from './connect-protocol.ts'
 import { isLoopbackHostname } from './loopback-hostname.ts'
@@ -261,11 +260,6 @@ function removeIdentityHeaders(request: IncomingMessage): void {
   }
 }
 
-/** How many `Host` header lines a request carries; node:http keeps only the first in its parsed view. */
-function hostLines(request: IncomingMessage): number {
-  return countHostLines(request.rawHeaders)
-}
-
 function carriesUpstreamCookie(request: IncomingMessage): boolean {
   const cookie = header(request, 'cookie')
   if (cookie === undefined) return false
@@ -393,7 +387,8 @@ class ReachDispatcher {
     const raw = request.url ?? '/'
     if (!raw.startsWith('/') || raw.startsWith('//')) return refuse('HOST_MISMATCH')
     const host = header(request, 'host')?.toLowerCase()
-    if (host !== rule.host || hostLines(request) !== 1) return refuse('HOST_MISMATCH')
+    // A repeated Host line never reaches the gate: the web server answers it 400 first.
+    if (host !== rule.host) return refuse('HOST_MISMATCH')
     if (rule.sni !== undefined) {
       const servername = (request.socket as Partial<TLSSocket>).servername
       if (typeof servername !== 'string' || servername.toLowerCase() !== rule.sni) return refuse('SNI_MISMATCH')

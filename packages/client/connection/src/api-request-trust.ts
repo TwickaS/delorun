@@ -61,30 +61,6 @@ function isBareAuthority(authority: string): boolean {
 }
 
 /**
- * How many `Host` header lines a raw header list carries.
- * @param rawHeaders - alternating name/value lines, as node:http reports them.
- * @returns the number of `Host` lines.
- */
-export function countHostLines(rawHeaders: readonly string[]): number {
-  let lines = 0
-  for (let at = 0; at < rawHeaders.length; at += 2) {
-    if (rawHeaders[at]?.toLowerCase() === 'host') lines += 1
-  }
-  return lines
-}
-
-/**
- * Whether the request carries exactly one `Host` line. node:http keeps only
- * the first `Host` in its parsed view, so a repeated line is invisible there
- * while a downstream hop, a proxy, or a second parser may read the other one;
- * a raw list is the only witness. A Fetch `Headers` merges repeats into one
- * comma-joined value, which the authority check already refuses.
- */
-function hasOneHostLine(request: ConnectionTrustRequest): boolean {
-  return request.rawHeaders === undefined || countHostLines(request.rawHeaders) === 1
-}
-
-/**
  * Whether a request target reaches the shared `/api` channel. The target is
  * read as the webserver's router reads it, through WHATWG URL parsing, which
  * removes dot segments (`/x/../api`, `/x/%2e%2e/api`) and reads `\` as `/`,
@@ -220,8 +196,8 @@ function isBindAddressAuthority(hostUrl: URL, bindHost: string | undefined): boo
  * @param trustedHosts - non-loopback authorities this deployment serves: exact `host:port`, or port-less `host` matching any port.
  * @param bindHost - the listener's own bind IP literal, accepted on any port independently of `trustedHosts`.
  * @param protocol - listener protocol for default Host ports; HTTP when no Web carrier is mounted.
- * @returns true when the Host is ours (loopback, the bind address, or trusted), it appears
- *   exactly once, and any attached browser markers are same-origin. A state-changing `/api`
+ * @returns true when the Host is ours (loopback, the bind address, or trusted) and not a
+ *   comma-joined repeat, and any attached browser markers are same-origin. A state-changing `/api`
  *   request with no markers at all passes only toward loopback or an HTTPS listener.
  */
 export function isTrustedApiRequest(
@@ -238,7 +214,8 @@ export function isTrustedApiRequest(
   // Fetch-Metadata, indistinguishable from curl, and its response is readable
   // by the rebound page.
   const host = header(request.headers, 'host')
-  if (host === undefined || !isBareAuthority(host) || !hasOneHostLine(request)) return false
+  // A repeated Host line never reaches here over node:http: the web server answers it 400 before any route runs.
+  if (host === undefined || !isBareAuthority(host)) return false
   const hostUrl = parseAuthority(host, protocol)
   if (hostUrl === undefined) return false
   if (!isLoopbackHostname(hostUrl.hostname)

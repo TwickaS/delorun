@@ -184,15 +184,9 @@ describe('isTrustedApiRequest', () => {
     }
   })
 
-  it('refuses a repeated Host line, which node:http keeps only the first of', () => {
-    const headers = { host: '127.0.0.1:3080' }
-    expect(isTrustedApiRequest({ headers, rawHeaders: ['host', '127.0.0.1:3080', 'cookie', 'a=1'] }, [])).toBe(true)
-    // The parsed view holds the first line; a second one names another authority.
-    expect(isTrustedApiRequest({
-      headers,
-      rawHeaders: ['Host', '127.0.0.1:3080', 'Host', 'evil.example'],
-    }, [])).toBe(false)
-    // A Fetch Headers merges repeats into one comma-joined value.
+  it('refuses repeated Host values a Fetch Headers merged', () => {
+    // A Fetch Headers merges repeats into one comma-joined value; node:http
+    // requests with a repeated line are answered 400 by the web server first.
     expect(isTrustedApiRequest({ headers: new Headers([['host', '127.0.0.1:3080'], ['host', 'evil.example']]) }, [])).toBe(false)
   })
 

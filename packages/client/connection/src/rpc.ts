@@ -98,12 +98,6 @@ export type RpcMessage = ClientRequest | ServerResponse
 export interface ConnectionTrustRequest {
   /** Request headers supplied by either the Fetch or node:http representation. */
   readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>
-  /**
-   * Alternating name/value header lines, when the carrier has them: node:http's
-   * parsed view keeps only the first `Host`, so a repeated line is visible only
-   * here.
-   */
-  readonly rawHeaders?: readonly string[] | undefined
   /** Request method, when the carrier reports it; the fence reads it to decide whether the request changes state. */
   readonly method?: string | undefined
   /** Request target, when the carrier reports it; the fence reads it to decide whether the request reaches `/api`. */
