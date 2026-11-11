@@ -11,7 +11,7 @@ import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
@@ -19,6 +19,20 @@ import * as Connection from '@deepseek-ai/dsh-client-connection'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import * as FrontendStatic from '../src/index.ts'
+
+/** How many times the plugin read the dist manifest's bytes. */
+const manifestReads = vi.hoisted(() => ({ count: 0 }))
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    async readFile(...args: Parameters<typeof actual.readFile>) {
+      if (typeof args[0] === 'string' && args[0].endsWith('manifest.webmanifest')) manifestReads.count += 1
+      return actual.readFile(...args)
+    },
+  }
+})
 
 let root: string | undefined
 let context: Context | undefined
@@ -318,6 +332,27 @@ describe('real Loader composition', () => {
     await rm(join(dist, 'manifest.webmanifest'))
     expect(await status('/icon-512.png')).toBe(401)
     expect(await status('/favicon.svg')).toBe(200)
+  })
+
+  it('serves a manifest icon whose src is percent-encoded, as the decoded request path names it', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const dist = join(root!, 'dist')
+    await writeFile(join(dist, 'icon 192.png'), 'SPACED')
+    await writeFile(join(dist, 'manifest.webmanifest'), JSON.stringify({ icons: [{ src: 'icon%20192.png' }, { src: 'bad%zz.png' }] }))
+    expect(await request(loaded.webServer.port, '/icon%20192.png')).toMatchObject({ status: 200, body: 'SPACED' })
+  })
+
+  it('parses the manifest once per version of the file, not once per request', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const port = loaded.webServer.port
+    const manifest = join(root!, 'dist', 'manifest.webmanifest')
+    manifestReads.count = 0
+    for (let at = 0; at < 3; at += 1) expect((await request(port, '/icon-192.png')).status).toBe(200)
+    expect(manifestReads.count).toBe(1)
+    // A rewritten manifest is read again, and its new list decides.
+    await writeFile(manifest, JSON.stringify({ icons: [{ src: 'icon-512.png' }] }))
+    expect((await request(port, '/icon-192.png')).status).toBe(401)
+    expect(manifestReads.count).toBe(2)
   })
 
   it('answers in-process reads for the given Peer without browser authentication', { timeout: 60_000 }, async () => {

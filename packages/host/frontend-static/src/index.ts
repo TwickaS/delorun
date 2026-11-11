@@ -23,7 +23,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -88,18 +88,19 @@ const PUBLIC_ROOT_FILES: ReadonlySet<string> = new Set([
 ])
 
 /**
- * The dist-root file names the manifest's `icons` list, read at each call so a
- * rebuilt dist is followed. An icon `src` resolves against the manifest's own
- * URL, as a launcher resolves it; a `src` that leaves the dist root's top level
- * (another directory, another origin) names nothing here. An absent,
- * unreadable or unparsable manifest names no icon.
- * @param distRoot - absolute dist root directory.
+ * The dist-root file names a manifest's `icons` list. An icon `src` resolves
+ * against the manifest's own URL, as a launcher resolves it, and is decoded as
+ * a request path is, so `icon%20192.png` names the file `icon 192.png`; a `src`
+ * that leaves the dist root's top level (another directory, another origin) or
+ * does not decode names nothing here. An unreadable or unparsable manifest
+ * names no icon.
+ * @param path - absolute path of the manifest.
  * @returns the icon file names directly under the dist root.
  */
-async function manifestIcons(distRoot: string): Promise<ReadonlySet<string>> {
+async function readManifestIcons(path: string): Promise<ReadonlySet<string>> {
   let manifest: unknown
   try {
-    manifest = JSON.parse(await readFile(join(distRoot, MANIFEST), 'utf8'))
+    manifest = JSON.parse(await readFile(path, 'utf8'))
   } catch {
     // An unreadable or unparsable manifest names no icon, so its icons stay
     // fenced; a request for the manifest itself reports the read failure.
@@ -112,17 +113,46 @@ async function manifestIcons(distRoot: string): Promise<ReadonlySet<string>> {
   for (const icon of icons) {
     const src: unknown = typeof icon === 'object' && icon !== null && 'src' in icon ? icon.src : undefined
     if (typeof src !== 'string') continue
-    let url: URL
+    let name: string
     try {
-      url = new URL(src, base)
+      const url = new URL(src, base)
+      if (url.origin !== base.origin) continue
+      name = decodeURIComponent(url.pathname.slice(1))
     } catch {
-      // An unresolvable src names no file.
+      // An unresolvable src, or one with a malformed percent-escape, names no file.
       continue
     }
-    const name = url.pathname.slice(1)
-    if (url.origin === base.origin && name !== '' && !name.includes('/')) names.add(name)
+    if (name !== '' && !name.includes('/')) names.add(name)
   }
   return names
+}
+
+/**
+ * A reader of the icons the dist root's manifest lists. It parses the manifest
+ * once per version of the file, told apart by its inode, size and change
+ * times, so a rebuilt dist is followed without a parse per request. An absent
+ * manifest lists no icon.
+ * @param distRoot - absolute dist root directory.
+ * @returns the reader, which resolves to the icon file names directly under the dist root.
+ */
+function manifestIconReader(distRoot: string): () => Promise<ReadonlySet<string>> {
+  const path = join(distRoot, MANIFEST)
+  let cached: { readonly version: string; readonly names: ReadonlySet<string> } | undefined
+  return async () => {
+    let version: string
+    try {
+      const file = await stat(path)
+      version = `${String(file.ino)}:${String(file.size)}:${String(file.mtimeMs)}:${String(file.ctimeMs)}`
+    } catch {
+      // An absent or unreadable manifest lists no icon until it can be read.
+      cached = undefined
+      return new Set()
+    }
+    if (cached?.version === version) return cached.names
+    const names = await readManifestIcons(path)
+    cached = { version, names }
+    return names
+  }
 }
 
 /**
@@ -134,12 +164,13 @@ async function manifestIcons(distRoot: string): Promise<ReadonlySet<string>> {
  * or a file in a subdirectory with a similar name stays fenced.
  * @param distRoot - absolute dist root directory.
  * @param target - absolute path of the requested file, already inside the dist root.
+ * @param manifestIcons - reads the icon names the manifest lists.
  * @returns true for a public dist-root file.
  */
-async function isPublicAsset(distRoot: string, target: string): Promise<boolean> {
+async function isPublicAsset(distRoot: string, target: string, manifestIcons: () => Promise<ReadonlySet<string>>): Promise<boolean> {
   if (dirname(target) !== distRoot) return false
   const name = basename(target)
-  return PUBLIC_ROOT_FILES.has(name) || (await manifestIcons(distRoot)).has(name)
+  return PUBLIC_ROOT_FILES.has(name) || (await manifestIcons()).has(name)
 }
 
 /** The two fences {@link serveStatic} consults before it reads bytes. */
@@ -171,6 +202,8 @@ function bytesBody(bytes: Uint8Array): ReadableStream<Uint8Array> {
  * request and for a file that is not public, each consulted before its bytes.
  * @param renderIndex - turns the raw index.html body into the served document
  * for the dist root and configured index path.
+ * @param manifestIcons - reads the icon names the dist root's manifest lists,
+ * which are public with the fixed install files.
  * @returns the dist response; a HEAD response carries the GET status and
  * headers without a body. A file other than the index carries
  * `cache-control: no-cache` and a weak ETag from a SHA-1 of its bytes, and a
@@ -180,6 +213,7 @@ async function serveStatic(
   request: Request, distRoot: string, distIndex: string,
   fences: StaticFences,
   renderIndex: (html: string) => string,
+  manifestIcons: () => Promise<ReadonlySet<string>>,
 ): Promise<Response> {
   const target = resolve(normalize(join(distRoot, decodeURIComponent(new URL(request.url).pathname))))
   // Traversal rejection: the target must be distRoot itself (`/`) or stay under
@@ -197,7 +231,7 @@ async function serveStatic(
     } else {
       // Every dist file but the install-time ones belongs to the signed-in
       // application, so the fence decides before its bytes are read.
-      if (!(await isPublicAsset(distRoot, target))) {
+      if (!(await isPublicAsset(distRoot, target, manifestIcons))) {
         const refusal = fences.asset()
         if (refusal !== undefined) return refusal
       }
@@ -249,6 +283,8 @@ export function apply(ctx: Context, config: Config): void {
     if (rejection === undefined) return undefined
     return new Response(rejection === 401 ? 'unauthorized' : 'forbidden', { status: rejection })
   }
+  // One cached reading of the manifest's icons per mounted instance, so a remount starts fresh.
+  const manifestIcons = manifestIconReader(distRoot)
   ctx.effect(() => ctx.webServer.registerFallback({
     resource: (request, peer) => serveStatic(
       request,
@@ -265,6 +301,7 @@ export function apply(ctx: Context, config: Config): void {
       // reference they insert.
       html => ctx.webServer.renderIndex(html, peer ?? ctx.connection.browserPeer)
         .replace(/<head(?:\s[^>]*)?>/i, open => `${open}<base href="./">`),
+      manifestIcons,
     ),
   }), 'frontend-static: fallback seat')
 }
