@@ -35,7 +35,7 @@ import type { DeloLogger } from '@delo/logs'
 import { readRoot, verifySignedManifest, verifyTimestamp, type TrustedRoot } from '@delo/release-formats/sign/verify'
 import { checkAndStore, recordResult, uncheckedWarning, type Fetch, type RecordedCheck } from '@delo/release-verify'
 import { recordedLogTransport } from '../update/channel.ts'
-import { RuntimeStore, StorePaths } from '@delo/runtime-store'
+import { RuntimeStore, StorePaths, type VerifiedRuntime } from '@delo/runtime-store'
 
 /** What one run of the checks reads. */
 export interface ReleaseCheckOptions {
@@ -95,6 +95,8 @@ export interface ReleaseCheckOutcome {
   readonly notices: readonly string[]
   /** Where this home's releases come from, or `undefined` when its channel record does not read. */
   readonly origins: ReleaseOrigins | undefined
+  /** The release's files with their verified signed file list, when `runtime-files` passed. */
+  readonly verified?: VerifiedRuntime
 }
 
 /** One part of the `release-signature` check. */
@@ -362,10 +364,10 @@ function combine(parts: readonly Part[]): Part {
  * @param root - the trusted root.
  * @returns the part.
  */
-async function runtimeFilesPart(options: ReleaseCheckOptions, platform: RuntimePlatform, root: TrustedRoot): Promise<Part> {
+async function runtimeFilesPart(options: ReleaseCheckOptions, platform: RuntimePlatform, root: TrustedRoot): Promise<Part & { readonly verified?: VerifiedRuntime }> {
   try {
     const runtime = await new RuntimeStore({ home: options.home, platform, logger: options.logger }).checkRuntime(options.release, root.metadata)
-    return { result: 'pass', detail: `all ${String(runtime.files.files.length)} files of runtime ${options.release} match the signed file list` }
+    return { result: 'pass', detail: `all ${String(runtime.files.files.length)} files of runtime ${options.release} match the signed file list`, verified: runtime }
   } catch (error) {
     return { result: 'fail', detail: reasonOf(error) }
   }
@@ -379,6 +381,7 @@ interface OwnChecks {
   readonly recorded?: RecordedCheck
   readonly warnings?: readonly string[]
   readonly notices?: readonly string[]
+  readonly verified?: VerifiedRuntime
 }
 
 /**
@@ -401,7 +404,7 @@ export async function checkRelease(options: ReleaseCheckOptions): Promise<Releas
   } catch (error) {
     warnings.push(`the home's channel record does not read, so where its releases come from is unknown: ${reasonOf(error)}`)
   }
-  return { results, root: own.root, onlineOnly: own.onlineOnly ?? false, recorded: own.recorded, warnings, notices: own.notices ?? [], origins }
+  return { results, root: own.root, onlineOnly: own.onlineOnly ?? false, recorded: own.recorded, warnings, notices: own.notices ?? [], origins, ...own.verified === undefined ? {} : { verified: own.verified } }
 }
 
 /**
@@ -444,5 +447,6 @@ async function releaseChecks(options: ReleaseCheckOptions): Promise<OwnChecks> {
     ...log.recorded === undefined ? {} : { recorded: log.recorded },
     warnings: [...anchorWarnings, ...log.warning === undefined ? [] : [log.warning]],
     notices: log.notices ?? [],
+    ...files.verified === undefined ? {} : { verified: files.verified },
   }
 }

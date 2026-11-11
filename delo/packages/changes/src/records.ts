@@ -336,7 +336,7 @@ const ENTRY_RULES: Readonly<Record<string, FieldRule>> = {
   id: { test: matching(CHANGE_ID_PATTERN), expected: 'a change id' },
   kind: { test: oneOf(CHANGE_KINDS), expected: 'a change kind' },
   state: { test: oneOf(CHANGE_STATES), expected: 'a change state' },
-  subject: nested({ plugin: optional.string, source: optional.string, file: optional.string, setting: optional.string, spec: optional.string }, 'a change subject'),
+  subject: nested({ plugin: optional.string, source: optional.string, file: optional.string, runtime: optional.string, setting: optional.string, spec: optional.string }, 'a change subject'),
   from: optional.version,
   to: optional.version,
   summary: required.string,

@@ -180,6 +180,8 @@ export interface ChangeSubject {
   readonly source?: string
   /** The harness file's path relative to the runtime, for `harness-edit`. */
   readonly file?: string
+  /** The runtime version whose file it is, for `harness-edit`. */
+  readonly runtime?: string
   /** The setting's name, for `guard-weakening`. */
   readonly setting?: string
   /** The install spec, for `plugin-install` and `plugin-update` of a plugin not linked from a folder. */

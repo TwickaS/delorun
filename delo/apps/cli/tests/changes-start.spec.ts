@@ -19,7 +19,8 @@ import type { HeadlessDependencies } from '../src/headless.ts'
 import { realPreStartSteps, startForeground, upstreamDependencies, type StartDependencies } from '../src/start.ts'
 import { headless } from '../src/upstream.ts'
 import { runtimeOfFile } from '../src/update/runtime.ts'
-import { checkStoredRuntime, storeUpdateSupport } from '../src/update/store-support.ts'
+import { checkRunningRuntime } from '../src/changes/harness-start.ts'
+import { storeUpdateSupport } from '../src/update/store-support.ts'
 
 const hooks = vi.hoisted(() => ({ markError: undefined as Error | undefined }))
 
@@ -110,6 +111,7 @@ function stoppingAtPrepare(seen: (string | undefined)[], overrides: Partial<Star
     handover: () => Promise.resolve(undefined),
     opener: { canOpen: () => false, link: () => Promise.reject(new Error('not reached')), open: () => Promise.reject(new Error('not reached')) },
     relaunch: () => Promise.reject(new Error('no second start here')),
+    handOff: () => Promise.resolve(undefined),
     ...overrides,
   }
 }
@@ -160,7 +162,7 @@ describe('a start of the CLI profile', { timeout: 60_000 }, () => {
 
 describe('the start\'s dependencies', () => {
   it('check a stored runtime with the store\'s own start check', () => {
-    expect(upstreamDependencies().checkRuntime).toBe(checkStoredRuntime)
+    expect(upstreamDependencies().checkRuntime).toBe(checkRunningRuntime)
   })
 })
 

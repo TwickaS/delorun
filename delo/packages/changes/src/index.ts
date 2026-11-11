@@ -7,8 +7,9 @@
  * dependencies ([link](./link.ts)), what a start loads ([enforce](./enforce.ts)) and the invariants a booted profile keeps
  * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), what the studio's state reads of the records ([state](./state.ts)), and the Host's side of a work
  * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
- * ([install actions](./install-actions.ts), also the entry `@delo/changes/install`), and reloading the running Host
- * ([reload](./reload.ts)). Ending a work session because Delo
+ * ([install actions](./install-actions.ts), also the entry `@delo/changes/install`), reloading the running Host
+ * ([reload](./reload.ts)), and the person's changes to the harness itself with the composed tree a start runs
+ * ([harness](./harness.ts), [harness tree](./harness-tree.ts)). Ending a work session because Delo
  * stops is the separate entry `@delo/changes/stop` ([stop](./stop.ts)).
  *
  * @module @delo/changes
@@ -53,3 +54,5 @@ export {
 export * from './work-record.ts'
 export * from './install-actions.ts'
 export * from './reload.ts'
+export * from './harness.ts'
+export * from './harness-tree.ts'

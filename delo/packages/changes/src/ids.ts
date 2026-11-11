@@ -23,7 +23,7 @@ export const CHANGE_ID_PATTERN = /^c[0-9a-f]{10}$/
  * @returns the id.
  */
 export function changeId(kind: ChangeKind, subject: ChangeSubject, from: ContentVersion | undefined, to: ContentVersion | undefined, occurrence = 0): ChangeId {
-  const parts = [kind, subject.plugin ?? '', subject.source ?? '', subject.file ?? '', subject.setting ?? '', subject.spec ?? '', from ?? '', to ?? '', ...occurrence === 0 ? [] : [String(occurrence)]]
+  const parts = [kind, subject.plugin ?? '', subject.source ?? '', subject.file ?? '', subject.setting ?? '', subject.spec ?? '', from ?? '', to ?? '', ...occurrence === 0 ? [] : [String(occurrence)], ...subject.runtime === undefined ? [] : [`runtime:${subject.runtime}`]]
   return brandString<ChangeId>(`c${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 10)}`)
 }
 

@@ -13,6 +13,8 @@
  * active directory hold the content from before the change, or nothing for an install or a plugin turned on
  * ([enforce](./enforce.ts)), and names the change, until the person applies it again or undoes it ([actions](./actions.ts)).
  * Leaving a change out needs no proof of presence: it only takes back what a person applied, and only a start calls it.
+ * A harness change is left out the same way, in the harness's change log, when it is the newest decision across both
+ * logs ([harness](./harness.ts)).
  *
  * @module @delo/changes/left-out
  */
@@ -21,7 +23,7 @@ import { locked, timeOf } from './action-support.ts'
 import type { ChangesContext } from './actions.ts'
 import { readLinks } from './link.ts'
 import { activeDirectory } from './paths.ts'
-import { approvedOf, readActiveRecord, readApproved, readChangeLog, withEntry, writeChangeLog } from './records.ts'
+import { approvedOf, readActiveRecord, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, withEntry, withHarnessLock, writeChangeLog, writeHarnessLog } from './records.ts'
 import type { ActiveContent, ActiveRecord, ApprovedRecord, ChangeEntry, ChangeKind, ChangeLog, ChangeState } from './types.ts'
 
 /** The most a left-out change's failure keeps, in bytes of UTF-8. */
@@ -101,14 +103,37 @@ export function leavableIn(records: LeavableRecords): ChangeEntry | undefined {
 }
 
 /**
- * The change a failed start of the profile leaves out. Nothing is written.
+ * The change a failed start of the profile leaves out. Nothing is written. When the newest decision across the profile's
+ * change log and the harness's change log of the running runtime is a harness change, it is that change or nothing.
  * @param ctx - the profile.
+ * @param runtime - the runtime version the start runs from the runtime store; undefined outside the store, which has
+ *   no harness changes.
  * @returns the applied entry, or undefined when the failed start leaves nothing out.
  * @throws {ChangesError} `RECORD_UNREADABLE` when a record of Changes or the profile's manifest is not one Delo wrote.
  */
-export async function newestLeavableChange(ctx: Pick<ChangesContext, 'home' | 'profile' | 'profileDir'>): Promise<ChangeEntry | undefined> {
+export async function newestLeavableChange(ctx: Pick<ChangesContext, 'home' | 'profile' | 'profileDir'>, runtime?: string): Promise<ChangeEntry | undefined> {
+  const log = await readChangeLog(ctx.home, ctx.profile)
+  const harness = runtime === undefined ? undefined : await newestHarnessDecision(ctx.home, runtime)
+  const newest = newestDecided(log.entries, candidate => RUNNING_DECISIONS.has(candidate.state))
+  if (harness !== undefined && (newest === undefined || Date.parse(harness.entry.decidedAt!) >= Date.parse(newest.decidedAt!))) return harness.leavable ? harness.entry : undefined
   const linked = new Set((await readLinks(ctx.profileDir)).filter(link => resolve(link.target) === resolve(activeDirectory(ctx.home, ctx.profile, link.name))).map(link => link.name))
-  return leavableIn({ log: await readChangeLog(ctx.home, ctx.profile), approved: await readApproved(ctx.profileDir), active: await readActiveRecord(ctx.home, ctx.profile), linked })
+  return leavableIn({ log, approved: await readApproved(ctx.profileDir), active: await readActiveRecord(ctx.home, ctx.profile), linked })
+}
+
+/**
+ * The newest decision that changed what a runtime runs of the harness's own files, and whether a failed start may
+ * leave it out: an applied `harness-edit` whose content the runtime's record still approves.
+ * @param home - the Delo home.
+ * @param runtime - the running runtime version.
+ * @returns the decision, or undefined when the harness's log has none for the runtime.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the harness's log or record is not one Delo wrote.
+ */
+async function newestHarnessDecision(home: string, runtime: string): Promise<{ readonly entry: ChangeEntry, readonly leavable: boolean } | undefined> {
+  const entry = newestDecided((await readHarnessLog(home)).entries, candidate => candidate.kind === 'harness-edit' && candidate.subject.runtime === runtime && RUNNING_DECISIONS.has(candidate.state))
+  if (entry === undefined) return undefined
+  const files = (await readHarnessRecord(home, runtime)).files
+  const file = entry.subject.file!
+  return { entry, leavable: entry.state === 'applied' && Object.hasOwn(files, file) && files[file]!.version === entry.to }
 }
 
 /**
@@ -127,24 +152,27 @@ export function boundedFailure(failure: string): string {
 }
 
 /**
- * Leave the newest change out after a failed start: under the profile write lock, its entry becomes
- * `left-out-at-start` with the failure, decided from `start`. Only the change log is written; the next start makes the
- * plugin's active directory hold what it held before the change.
+ * Leave the newest change out after a failed start: under the profile write lock and the harness lock, its entry becomes
+ * `left-out-at-start` with the failure, decided from `start`. Only the change log is written, the harness's for a
+ * harness change; the next start makes the plugin's active directory hold what it held before the change, or composes
+ * the runtime without the harness change ([harness](./harness.ts)).
  * @param ctx - the profile, the clock and the lock wait.
  * @param failure - the failed start's error message, without a stack; kept to {@link FAILURE_LIMIT_BYTES}.
+ * @param runtime - the runtime version the start runs from the runtime store; undefined outside it.
  * @returns the entry as it now stands, or undefined when the failed start leaves nothing out.
  * @throws {ChangesError} `RECORD_UNREADABLE` when a record of Changes or the profile's manifest is not one Delo wrote.
  */
-export async function leaveOutNewestChange(ctx: ChangesContext, failure: string): Promise<ChangeEntry | undefined> {
-  return locked(ctx, async () => {
-    const entry = await newestLeavableChange(ctx)
+export async function leaveOutNewestChange(ctx: ChangesContext, failure: string, runtime?: string): Promise<ChangeEntry | undefined> {
+  return locked(ctx, async () => withHarnessLock(ctx.home, async () => {
+    const entry = await newestLeavableChange(ctx, runtime)
     if (entry === undefined) return undefined
     const at = timeOf(ctx)
     const { lastFailure: _lastFailure, ...applied } = entry
     const left: ChangeEntry = { ...applied, state: 'left-out-at-start', decidedAt: at, decidedFrom: 'start', leftOut: { at, failure: boundedFailure(failure) } }
-    await writeChangeLog(ctx.home, ctx.profile, withEntry(await readChangeLog(ctx.home, ctx.profile), left))
+    if (entry.kind === 'harness-edit') await writeHarnessLog(ctx.home, withEntry(await readHarnessLog(ctx.home), left))
+    else await writeChangeLog(ctx.home, ctx.profile, withEntry(await readChangeLog(ctx.home, ctx.profile), left))
     return left
-  })
+  }))
 }
 
 /**
@@ -174,7 +202,8 @@ export function leftOutContent(entry: ChangeEntry): ActiveContent {
  * @returns the fact the start, `doctor` and the studio name.
  */
 export function leftOutFact(entry: ChangeEntry): LeftOutFact {
-  return { id: entry.id, plugin: entry.subject.plugin ?? '', kind: entry.kind, at: entry.leftOut?.at ?? entry.decidedAt ?? entry.createdAt, failure: entry.leftOut?.failure ?? '' }
+  const plugin = entry.kind === 'harness-edit' ? `Delo itself (${String(entry.subject.file)})` : entry.subject.plugin ?? ''
+  return { id: entry.id, plugin, kind: entry.kind, at: entry.leftOut?.at ?? entry.decidedAt ?? entry.createdAt, failure: entry.leftOut?.failure ?? '' }
 }
 
 /**
@@ -193,14 +222,16 @@ export function leftOutNow(log: ChangeLog, active: ActiveRecord): LeftOutFact[] 
 }
 
 /**
- * The change the newest failed start left out, whether or not it stays out.
+ * The change the newest failed start left out, whether or not it stays out, from the profile's change log or the
+ * harness's.
  * @param home - the Delo home.
  * @param profile - the profile's name.
  * @returns the fact, or undefined when no start left a change out.
- * @throws {ChangesError} `RECORD_UNREADABLE` when the change log is not one Delo wrote.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when a change log is not one Delo wrote.
  */
 export async function lastLeftOut(home: string, profile: string): Promise<LeftOutFact | undefined> {
-  const entry = newestDecided((await readChangeLog(home, profile)).entries, candidate => candidate.state === 'left-out-at-start' && candidate.decidedFrom === 'start')
+  const entries = [...(await readChangeLog(home, profile)).entries, ...(await readHarnessLog(home)).entries]
+  const entry = newestDecided(entries, candidate => candidate.state === 'left-out-at-start' && candidate.decidedFrom === 'start')
   return entry === undefined ? undefined : leftOutFact(entry)
 }
 

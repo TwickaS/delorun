@@ -15,8 +15,11 @@ vi.setConfig({ testTimeout: 60_000 })
 /** The repository root. */
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
 
+/** The functions that decide a change to Delo itself or write the person's copy of it, which only a terminal runs. */
+const HARNESS_ACTIONS = ['applyHarnessChange', 'discardHarnessChange', 'undoHarnessChange', 'discardAllHarnessChanges', 'createHarnessCopy']
+
 /** The functions that decide a change or prove presence. */
-const GUARDED = ['applyChange', 'applyInstallChange', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio', 'leaveOutNewestChange']
+const GUARDED = ['applyChange', 'applyInstallChange', 'discardChange', 'undoChange', 'turnOff', 'turnOn', 'changeProtection', 'setProtection', 'openWorkSession', 'closeWorkSession', 'startWork', 'finishWork', 'attestTerminal', 'attestStudio', 'leaveOutNewestChange', ...HARNESS_ACTIONS]
 
 /** The function that leaves a change out without a proof of presence, because a start failed. */
 const START_ONLY = 'leaveOutNewestChange'
@@ -129,8 +132,9 @@ describe('no model tool or route reaches a changes action', () => {
     const routes = readFileSync(join(ROOT, ROUTES), 'utf8')
     expect(IMPORTS_CHANGES.test(routes)).toBe(true)
     expect(guardedNames(routes)).toContain('attestStudio')
-    // The routes never reach the protection setting, the terminal proof or the agent's plugin operation.
-    for (const name of ['changeProtection', 'setProtection', 'attestTerminal', 'applyInstallChange']) expect(guardedNames(routes), name).not.toContain(name)
+    // The routes never reach the protection setting, the terminal proof, the agent's plugin operation or an action on
+    // Delo itself, which only a terminal that knows the runtime's signed file list decides.
+    for (const name of ['changeProtection', 'setProtection', 'attestTerminal', 'applyInstallChange', ...HARNESS_ACTIONS]) expect(guardedNames(routes), name).not.toContain(name)
     expect(guardedNames(routes)).not.toContain('*')
   })
 
@@ -154,6 +158,7 @@ describe('no model tool or route reaches a changes action', () => {
     expect(IMPORTS_CHANGES.test("import { attestTerminal } from '../../changes/src/records.ts'")).toBe(true)
     expect(IMPORTS_CHANGES.test("import { listChanges } from '@delo/changesets'")).toBe(false)
     expect(guardedNames("import { startWork, finishWork } from '@delo/changes'")).toEqual(['startWork', 'finishWork'])
+    expect(guardedNames("import { applyHarnessChange, createHarnessCopy, readHarnessLog } from '@delo/changes'")).toEqual(['applyHarnessChange', 'createHarnessCopy'])
     expect(IMPORTS_STOP.test("import { finishWorkWithoutPerson } from '@delo/changes/stop'")).toBe(true)
     expect(IMPORTS_STOP.test("import { finishWorkWithoutPerson } from '../../changes/src/stop.ts'")).toBe(true)
     expect(IMPORTS_STOP.test("import { listChanges } from '@delo/changes'")).toBe(false)

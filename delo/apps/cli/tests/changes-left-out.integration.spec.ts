@@ -145,6 +145,7 @@ function breakingDependencies(plugins: readonly string[], fails: (seen: Record<s
     updates: () => { throw new Error('a start outside the store has no update support') },
     checkRuntime: () => Promise.reject(new Error('a start outside the store checks no stored runtime')),
     handover: () => Promise.resolve(undefined),
+    handOff: () => Promise.resolve(undefined),
     opener: { canOpen: () => true, link: requestStudioLink, open: () => Promise.reject(new Error('no link reaches the browser here')) },
     relaunch: (request) => {
       runs.relaunches.push({ ...request, home: deloHome })

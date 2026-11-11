@@ -102,6 +102,7 @@ function driven(answers: readonly string[], outcomes: readonly (ReloadOutcome | 
       hosted += 1
       return run(reload)
     },
+    harness: () => undefined,
     pluginOperation: () => async (args) => {
       operations.push(args)
       return Promise.resolve({ exitCode: operationExit, logPath: '/logs/operation.log' })

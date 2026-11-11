@@ -6,7 +6,7 @@ description: "The @delo/changes library: the approved copies of plugins linked f
 
 ## Summary
 
-A person's harness is the signed release plus the changes they approved at their computer. This package keeps the approved copy of every plugin the profile links from a folder, computes what a folder changed against that copy, and makes the profile load the approved copy, never the folder. The contract is [C21](../../docs/contracts/c21-changes.md).
+A person's harness is the signed release plus the changes they approved at their computer. This package keeps the approved copy of every plugin the profile links from a folder, computes what a folder changed against that copy, and makes the profile load the approved copy, never the folder. It also keeps the person's changes to the harness itself: their writable copy of an installed release, the files they approved, and the composed tree a start runs instead of the signed installation, which it never writes. The contract is [C21](../../docs/contracts/c21-changes.md).
 
 ## Contents
 
@@ -68,10 +68,14 @@ The plugin keeps loading from its active directory, so the home process watches 
 
 `src/left-out.ts` leaves out the change that broke a start ([C21](../../docs/contracts/c21-changes.md#when-a-start-fails)). `newestLeavableChange(ctx)` names it: the newest decision that changed what runs, when it applied a person's `plugin-edit`, `plugin-install`, `plugin-update` or `plugin-on` to a plugin linked to its active directory that holds the change's content; otherwise nothing, so a second failure leaves nothing more out. `leaveOutNewestChange(ctx, failure)` writes only the change log under the profile write lock, marking the entry `left-out-at-start` with the failure; it takes no proof, and only `delo/apps/cli/src/changes/retry.ts` calls it. From then on `enforceApprovedContent` makes the plugin's active directory hold the change's `from`, or nothing, with `active.json` kind `left-out`, and names it with `leftOutWords` in `startNotice`, until `applyChange` loads it again or `undoChange` undoes it. `listChanges` returns such changes as `leftOut`; `leftOutFacts(home, profile)` gives them to the studio and `changesStatus` to `delorun doctor`.
 
+## Changes to the harness itself
+
+`src/harness.ts` keeps the person's edits of an installed runtime's `app/` files ([C21](../../docs/contracts/c21-changes.md#harness-edits)). Every function takes a `HarnessContext`: the home, the running runtime version and `signed()`, the installation with the signed file list the runtime store's start check verified, read only when needed; every byte read from the installation is checked against that list. `createHarnessCopy` makes `changes/harness/<runtime>/copy/app/`; `harnessChanges` computes one pending `harness-edit` change per file of the copy that differs from what runs; `showHarnessChange` stores both sides and reviews them; `applyHarnessChange`, `discardHarnessChange`, `undoHarnessChange` and `discardAllHarnessChanges` decide under `withHarnessLock`, each taking a proof of presence, and log in `changes/harness/log.json`. `listHarness` gives `list` the waiting, left-out and logged changes. `src/harness-tree.ts` builds and checks the composed tree (`prepareComposedTree`, `checkComposedTree`), removes the trees and directories no start needs (`retainHarness`), and reports a runtime's harness for `verify` and `doctor` without writing (`harnessStatus`). `newestLeavableChange(ctx, runtime)` and `leaveOutNewestChange(ctx, failure, runtime)` leave a harness change out when it is the newest decision across both logs.
+
 ## Not covered
 
 - Plugin code runs with the harness's full authority; nothing here confines it.
-- A changed file of the harness itself is refused by the runtime store's start check in every protection setting.
+- A changed file of the signed installation is refused by the runtime store's start check in every protection setting; the person's edits run only from the composed tree, once applied.
 
 ## Development
 

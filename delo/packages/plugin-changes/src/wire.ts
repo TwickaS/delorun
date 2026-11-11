@@ -41,6 +41,9 @@ export const CONFIRM_RISK = 'CONFIRM_RISK'
 /** The refusal code of `done` when the folder holds another version than the one the person was shown. */
 export const CHANGED_SINCE_REVIEW = 'CHANGED_SINCE_REVIEW'
 
+/** The refusal code of `apply`, `discard` and `undo` for a change to Delo itself, which only a terminal decides. */
+export const DECIDE_AT_TERMINAL = 'DECIDE_AT_TERMINAL'
+
 /** What a change changes. */
 export type ChangeKindView = 'plugin-edit' | 'plugin-install' | 'plugin-update' | 'plugin-remove' | 'plugin-off' | 'plugin-on' | 'harness-edit' | 'guard-weakening'
 
@@ -85,6 +88,27 @@ export interface EntryView {
   readonly leftOut?: FailureView
   /** Whether `undo` takes it back. */
   readonly undoable: boolean
+}
+
+/**
+ * One decided change to a file of Delo itself, as `state` lists it from the log the home keeps for every runtime. A
+ * terminal decides it: no route applies, discards or undoes it.
+ */
+export interface HarnessEntryView {
+  readonly id: string
+  readonly state: Exclude<ChangeStateView, 'pending'>
+  /** The file, relative to the runtime's directory. */
+  readonly file: string
+  /** The Delo version whose file it changes. */
+  readonly runtime: string
+  /** One line in the person's words. */
+  readonly summary: string
+  /** ISO 8601. */
+  readonly createdAt: string
+  /** ISO 8601. */
+  readonly decidedAt?: string
+  /** What the start that left it out failed with. */
+  readonly leftOut?: FailureView
 }
 
 /** A change computed from a folder that waits for review, as `show?pending` lists it. */
@@ -154,6 +178,8 @@ export interface ChangesStateView {
   readonly requests: readonly EntryView[]
   /** The newest decided changes, newest first. */
   readonly recent: readonly EntryView[]
+  /** The newest decided changes to Delo itself, newest first. */
+  readonly harness: readonly HarnessEntryView[]
   readonly workSession?: WorkSessionView
   /** One sentence per record that cannot be read. */
   readonly problems: readonly string[]
@@ -186,23 +212,38 @@ export interface FileView {
   readonly dependency: boolean
 }
 
+/** What a review shows of a change: its files, the risk summary and the bounded diff. */
+export interface ReviewView {
+  readonly files: readonly FileView[]
+  readonly risk: RiskView
+  /** The bounded unified diff, and the text files whose hunks the bound left out. */
+  readonly diff: { readonly text: string, readonly truncated: boolean, readonly omitted: readonly string[] }
+}
+
 /** A change computed from a folder, in full. */
-export interface ChangeView {
+export interface ChangeView extends ReviewView {
   readonly id: string
   readonly kind: 'plugin-edit' | 'plugin-install'
   readonly plugin: string
   readonly source: string
-  readonly files: readonly FileView[]
   /** Paths the scan could not include. */
   readonly skipped: readonly string[]
-  readonly risk: RiskView
-  /** The bounded unified diff, and the text files whose hunks the bound left out. */
-  readonly diff: { readonly text: string, readonly truncated: boolean, readonly omitted: readonly string[] }
   readonly lastFailure?: FailureView
 }
 
-/** `GET show?id=`. */
-export type ShownView = { readonly kind: 'pending', readonly change: ChangeView } | { readonly kind: 'logged', readonly entry: EntryView }
+/** A logged change to a file of Delo itself, read from the content versions the home keeps. */
+export interface HarnessReviewView extends ReviewView {
+  readonly kind: 'harness-edit'
+}
+
+/**
+ * `GET show?id=`: a plugin's change waiting for review, a plugin's logged change, or a logged change to Delo itself,
+ * whose `review` is absent when the home no longer keeps its content.
+ */
+export type ShownView =
+  | { readonly kind: 'pending', readonly change: ChangeView }
+  | { readonly kind: 'logged', readonly entry: EntryView }
+  | { readonly kind: 'harness', readonly entry: HarnessEntryView, readonly review?: HarnessReviewView }
 
 /** `GET show?work=`: the open session's folder against the content it started from. */
 export interface WorkReviewView {

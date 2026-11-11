@@ -15,7 +15,7 @@ import type { AddressInfo } from 'node:net'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { enforceApprovedContent, type ChangesContext, type ReloadOutcome } from '@delo/changes'
+import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, storeEmptyVersion, storeFileVersion, versionsDirectory, writeHarnessLog, type ChangeEntry, type ChangesContext, type ChangeState, type ReloadOutcome } from '@delo/changes'
 import { REQUEST_LISTENER } from '@delo/home'
 import { onTestFinished } from 'vitest'
 import { changesRoutes, type RouteDependencies } from '../src/routes.ts'
@@ -75,6 +75,49 @@ export async function approvedPlugin(): Promise<{ readonly ctx: ChangesContext, 
   symlinkSync(relative(dirname(link), source), link)
   await enforceApprovedContent({ home: ctx.home, profile: ctx.profile, profileDir: ctx.profileDir })
   return { ctx, source }
+}
+
+/** The runtime the logged changes to Delo itself name. */
+export const RUNTIME = '0.4.0'
+
+/** One logged change to a file of Delo itself. */
+export interface HarnessFields {
+  readonly file: string
+  /** The file's content before the change; absent for an added file. */
+  readonly before?: string
+  /** The file's content after the change; absent for a removed file. */
+  readonly after?: string
+  readonly state: ChangeState
+  /** When it was decided, ISO 8601. */
+  readonly at: string
+  readonly leftOut?: { readonly at: string, readonly failure: string }
+  /** Whether the store keeps the content after the change, as it does until collection removes it. */
+  readonly kept?: boolean
+}
+
+/**
+ * Store both sides of each change and write them as the log of changes to Delo itself, in the order given.
+ * @param home - the Delo home.
+ * @param changes - the changes.
+ * @returns the log's entries.
+ */
+export async function logHarnessChanges(home: string, changes: readonly HarnessFields[]): Promise<ChangeEntry[]> {
+  const entries: ChangeEntry[] = []
+  for (const change of changes) {
+    const side = (text: string | undefined) => text === undefined ? storeEmptyVersion(home) : storeFileVersion(home, change.file, Buffer.from(text), false)
+    const from = await side(change.before)
+    const to = await side(change.after)
+    if (change.kept === false) rmSync(join(versionsDirectory(home), `${to}.json`))
+    const subject = { file: change.file, runtime: RUNTIME }
+    entries.push({
+      id: changeId('harness-edit', subject, from, to), kind: 'harness-edit', state: change.state, subject, from, to,
+      summary: `Delo ${RUNTIME} itself: ${change.file}`, createdAt: change.at,
+      ...change.state === 'pending' ? {} : { decidedAt: change.at, decidedFrom: 'terminal' },
+      ...change.leftOut === undefined ? {} : { leftOut: change.leftOut },
+    })
+  }
+  await writeHarnessLog(home, { schema: CHANGE_LOG_SCHEMA, entries })
+  return entries
 }
 
 /** A running server and what its routes reached. */

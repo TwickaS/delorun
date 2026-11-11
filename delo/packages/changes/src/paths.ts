@@ -20,6 +20,7 @@
  *     <runtime>/
  *       approved.json               the runtime's files whose approved content differs from the signed release's
  *       copy/                       the person's writable copy of the runtime's app/ directory
+ *       scan-cache.json             file digests by inode, size and times, to scan the copy quickly
  *       run/<digest>/               the signed runtime with the approved files in place, which a start runs
  * ```
  *
@@ -189,4 +190,13 @@ export function harnessCopyDirectory(home: string, runtime: string): string {
  */
 export function harnessRunDirectory(home: string, runtime: string): string {
   return join(harnessRuntimeDirectory(home, runtime), CHANGES_ENTRIES.harnessRun)
+}
+
+/**
+ * @param home - the Delo home.
+ * @param runtime - the runtime version.
+ * @returns the scan cache of the runtime's writable copy.
+ */
+export function harnessScanCachePath(home: string, runtime: string): string {
+  return join(harnessRuntimeDirectory(home, runtime), CHANGES_ENTRIES.scanCache)
 }

@@ -11,7 +11,7 @@
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import type { UpdateSupport } from '@delo/home-process'
 import type { DeloLogger } from '@delo/logs'
-import { RuntimeStore, type OpenUpdateChannel, type TrustedRootSource } from '@delo/runtime-store'
+import { RuntimeStore, type OpenUpdateChannel, type TrustedRootSource, type VerifiedRuntime } from '@delo/runtime-store'
 import { homeReleaseChannel, runtimePlatformOf } from './channel.ts'
 import { storeReportSources } from './sources.ts'
 import { homeUpdateSupport } from './support.ts'
@@ -58,9 +58,10 @@ export function storeUpdateSupport(home: string, profile: string, running: Runti
  * @param version - the installed version.
  * @param logger - the home process's logger.
  * @param root - the stored root, anchored on the launcher's roots.
+ * @returns the verified runtime with its signed file list.
  * @throws {RuntimeStoreError} when the version is not installed, its files do not match its manifest, or the root
  *   does not verify it; `ROOT_NOT_ANCHORED` when the root cannot be anchored.
  */
-export async function checkStoredRuntime(home: string, version: RuntimeVersion, logger: DeloLogger, root: TrustedRootSource): Promise<void> {
-  await new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger }).checkRuntime(version, await root())
+export async function checkStoredRuntime(home: string, version: RuntimeVersion, logger: DeloLogger, root: TrustedRootSource): Promise<VerifiedRuntime> {
+  return new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger }).checkRuntime(version, await root())
 }

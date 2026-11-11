@@ -1,7 +1,8 @@
 /**
  * What a start does for Changes before a profile boots: a fresh start from C1's runtime store first runs the store's
  * start check of the runtime, in every protection setting, and refuses a runtime whose files differ from the signed
- * release; then each plugin the profile links from a folder, other than the harness's own packages, is made to load
+ * release, or a composed tree it runs from that differs from the signed release with the approved harness files in
+ * place ([harness start](./harness-start.ts)); then each plugin the profile links from a folder, other than the harness's own packages, is made to load
  * the content Changes allows ([`@delo/changes`](../../../../packages/changes/src/enforce.ts)), and what the profile
  * leaves out is printed. A start of the home process first ends a work session that a home process which did not stop
  * left open. Both run as the pre-start step `changes` ([pre-start](../pre-start.ts)) of `delorun start` and `delorun
@@ -68,7 +69,8 @@ export function isCarriedPackage(name: string, target: string): boolean {
  * @param request - the home, the profile, whether this process holds its home lock and, for a fresh start from the
  *   store, its runtime check.
  * @param output - where the lines about left-out or unreviewed changes go.
- * @throws {CliError} when the stored runtime's files differ from the signed release, a record of Changes cannot be
+ * @throws {CliError} when the stored runtime's files differ from the signed release, or its composed tree from the
+ *   approved composition, a record of Changes cannot be
  *   read, a folder cannot be stored, or the profile history cannot record the profile's change: the profile does not
  *   boot.
  */
@@ -78,6 +80,7 @@ export async function startChanges(request: ChangesStartRequest, output: (text: 
     try {
       await runtime.check()
     } catch (error) {
+      if (isChangesError(error)) throw new CliError(EXIT.failed, `delorun: Delo ${runtime.version} was not started with your changes to it: ${error.detail}`)
       if (!(error instanceof RuntimeStoreError)) throw error
       throw new CliError(EXIT.failed, `delorun: Delo ${runtime.version} was not started, because its files differ from the signed release: ${error.detail}. See what differs with: delorun verify`)
     }

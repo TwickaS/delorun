@@ -10,7 +10,7 @@ import { lstatSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { SHOW_PATH, STATE_PATH } from '../src/routes.ts'
-import { approvedPlugin, get, json, serveRoutes } from './routes-fixture.ts'
+import { approvedPlugin, get, json, logHarnessChanges, serveRoutes } from './routes-fixture.ts'
 
 const { touched } = vi.hoisted(() => ({ touched: [] as string[] }))
 
@@ -53,10 +53,11 @@ describe('the state route', () => {
     const { ctx, source } = await approvedPlugin()
     const server = await serveRoutes(ctx)
     writeFileSync(join(source, 'index.js'), 'export default "two"\n')
+    const [self] = await logHarnessChanges(ctx.home, [{ file: 'app/node_modules/delo/lib/main.js', before: 'one\n', after: 'two\n', state: 'applied', at: '2026-11-10T10:00:00.000Z' }])
     const before = snapshot(ctx.home)
     // Pins `recordedChanges` in `stateOf`: computing the pending changes stores the folder's content and the scan cache.
     const state = json(await get(server.port, STATE_PATH))
-    expect(state).toMatchObject({ folders: [{ plugin: 'plug', source, kind: 'plugin-edit' }], problems: [] })
+    expect(state).toMatchObject({ folders: [{ plugin: 'plug', source, kind: 'plugin-edit' }], harness: [{ id: self!.id, state: 'applied' }], problems: [] })
     expect(snapshot(ctx.home)).toEqual(before)
     // `show?pending` is the read that stores the folder's content.
     expect(json(await get(server.port, `${SHOW_PATH}?pending`)).pending).toMatchObject([{ plugin: 'plug', kind: 'plugin-edit', files: 1 }])

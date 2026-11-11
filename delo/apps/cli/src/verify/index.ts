@@ -21,9 +21,10 @@ import { DELO_LAUNCHER_ROOTS_ENV } from '@delo/contract-home-layout'
 import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationMode, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
 import type { DeloLogger } from '@delo/logs'
 import type { Fetch, RecordedCheck } from '@delo/release-verify'
-import { parseRuntimeVersion } from '@delo/runtime-store'
+import { parseRuntimeVersion, StorePaths } from '@delo/runtime-store'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput } from '../command.ts'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
+import { signedRuntimeOf } from '../changes/harness-start.ts'
 import { runtimeOfFile } from '../update/runtime.ts'
 import { deloVersion } from '../version.ts'
 import { changesExit, changesLines, changesSuffix, readVerifyChanges, type VerifyChanges } from './changes.ts'
@@ -234,7 +235,9 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
         launcherRoots: context.env[DELO_LAUNCHER_ROOTS_ENV],
         logger: stderrLogger(context),
       })
-      const changes = await readVerifyChanges(home.path, profile, environment.fromStore(home.path))
+      const fromStore = environment.fromStore(home.path)
+      const signed = outcome.verified === undefined ? undefined : signedRuntimeOf(new StorePaths(home.path, outcome.verified.files.platform).version(release), outcome.verified)
+      const changes = await readVerifyChanges(home.path, profile, fromStore, fromStore ? { runtime: release, signed } : undefined)
       if (values.json) context.stdout(`${JSON.stringify(report(release, outcome, now, changes))}\n`)
       else context.stdout(reportLines(release, outcome, changes))
       for (const notice of outcome.notices) context.stderr(`notice: ${notice}\n`)

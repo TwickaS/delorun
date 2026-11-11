@@ -7,7 +7,8 @@
  *
  * Through upstream's sandbox provider, configured as the home process configures the CLI profile's (the home protected
  * with C1's read exemptions), each dialect this host runs is tested: the confined command fails and leaves
- * `changes/protection.json` absent, and a confined direct write to `changes/` fails, while the same command without
+ * `changes/protection.json` absent, and a confined direct write to `changes/` fails, the harness's writable copy and
+ * records under `changes/harness/` included, while the same command without
  * confinement, the person's own full access, lowers the setting. A workspace that contains the home shows the rule
  * alone: with the home protected the provider refuses to confine a command there, and without it the same command in
  * the same pseudo-terminal lowers the setting. Homes live under `/var/tmp`, because upstream's profiles replace `/tmp`
@@ -163,6 +164,14 @@ async function confinedCannotLower(dialect: 'bwrap' | 'landlock'): Promise<void>
   expect(existsSync(protectionPath(paths.home))).toBe(false)
   expect(existsSync(join(paths.home, 'changes')) ? readdirSync(join(paths.home, 'changes')) : []).toEqual([])
   for (const target of [protectionPath(paths.home), join(paths.home, 'changes', 'store', 'objects', 'a'.repeat(64))]) {
+    expect(await attemptWrite(prefix, target), target).not.toBe('ok')
+    expect(existsSync(target)).toBe(false)
+  }
+  // The person's writable copy of the harness and the harness's records are under `changes/` too, so a confined command
+  // writes none of them, not even into a copy that exists.
+  const copy = join(paths.home, 'changes', 'harness', '1.2.3', 'copy', 'app')
+  mkdirSync(copy, { recursive: true, mode: 0o700 })
+  for (const target of [join(copy, 'start.js'), join(copy, 'node_modules', 'x.js'), join(paths.home, 'changes', 'harness', '1.2.3', 'approved.json'), join(paths.home, 'changes', 'harness', 'log.json')]) {
     expect(await attemptWrite(prefix, target), target).not.toBe('ok')
     expect(existsSync(target)).toBe(false)
   }

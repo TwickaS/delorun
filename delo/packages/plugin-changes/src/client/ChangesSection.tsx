@@ -1,16 +1,17 @@
 /**
  * The Changes section in Settings: the work session, the changes a start left out, the changes and the agent's
- * requests waiting for review, the recent changes and the protection setting. The state, which the page reads every 15
- * seconds, names the plugins under Changes; the section reads their folders for the changes waiting for review when it
- * opens, after each action and when the person asks. Review opens a change with its diff and
- * risk summary; Apply, Discard, Undo, Apply again, Start working and Done act through the harness's Changes routes, and
- * a change the checks flagged asks a second confirmation that names what they found. A page that is not at the
+ * requests waiting for review, the recent changes, the changes to Delo itself and the protection setting. The state,
+ * which the page reads every 15 seconds, names the plugins under Changes; the section reads their folders for the
+ * changes waiting for review when it opens, after each action and when the person asks. Review opens a change with its
+ * diff and risk summary; Apply, Discard, Undo, Apply again, Start working and Done act through the harness's Changes
+ * routes, and a change the checks flagged asks a second confirmation that names what they found. A change to Delo
+ * itself is reviewed read only, with the terminal commands that decide it and no action. A page that is not at the
  * computer shows everything with every action disabled.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button, CommandText, Modal, relativeTime, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChangesStateView, EntryView, FolderView, PendingView, RiskKindView, ShownView, WorkReviewView } from '../wire.ts'
+import type { ChangesStateView, EntryView, FolderView, HarnessEntryView, PendingView, RiskKindView, ShownView, WorkReviewView } from '../wire.ts'
 import type { ActionOutcome, ChangesLoad } from './controller.ts'
 import { ChangeDetail } from './ChangeDetail.tsx'
 import css from './ChangesSection.module.css'
@@ -100,6 +101,7 @@ type Ask =
 /** The dialog on display. */
 type Dialog =
   | { readonly kind: 'review', readonly change: PendingView }
+  | { readonly kind: 'self', readonly entry: HarnessEntryView }
   | { readonly kind: 'done', readonly plugin: string }
   | { readonly kind: 'second', readonly flagged: Flagged, readonly kinds: readonly RiskKindView[], readonly notShown: readonly string[] }
   | { readonly kind: 'ask', readonly ask: Ask }
@@ -209,6 +211,7 @@ export function ChangesSection(props: ChangesSectionProps) {
         </li>)}
       </Group>}
       <Recent state={state} t={t} disabled={disabled} onUndo={(entry) => { setDialog({ kind: 'ask', ask: { kind: 'undo', entry } }) }} />
+      <SelfGroup state={state} t={t} busy={busy} onReview={(entry) => { setDialog({ kind: 'self', entry }) }} />
       <Protection state={state} t={t} />
     </>}
     {dialog?.kind === 'review'
@@ -216,6 +219,9 @@ export function ChangesSection(props: ChangesSectionProps) {
         onClose={() => { setDialog(undefined) }}
         onApply={() => { run(() => props.apply(dialog.change.id, false), { kind: 'apply', id: dialog.change.id }) }}
         onDiscard={() => { run(() => props.discard(dialog.change.id)) }} />
+      : null}
+    {dialog?.kind === 'self'
+      ? <SelfDialog key={dialog.entry.id} entry={dialog.entry} t={t} show={props.show} onClose={() => { setDialog(undefined) }} />
       : null}
     {dialog?.kind === 'done'
       ? <DoneDialog key={dialog.plugin} plugin={dialog.plugin} t={t} reviewWork={props.reviewWork} busy={busy} canAct={canAct}
@@ -389,6 +395,59 @@ function Recent({ state, t, disabled, onUndo }: { readonly state: ChangesStateVi
 }
 
 /**
+ * The newest decided changes to Delo itself with Review and the terminal commands that decide them, and the command that
+ * lists the changes waiting in the person's copy of Delo. It offers no action: only a terminal decides these changes.
+ * @param props - the state, the dictionary, whether an action runs, and Review.
+ * @returns the group.
+ */
+function SelfGroup({ state, t, busy, onReview }: { readonly state: ChangesStateView, readonly t: T, readonly busy: boolean, readonly onReview: (entry: HarnessEntryView) => void }) {
+  const now = Date.now()
+  return <Group heading={t('self.heading')}>
+    {state.harness.length === 0 ? <li className={css.empty}>{t('self.empty')}</li> : null}
+    {state.harness.map((entry) => {
+      const at = relativeTime(Date.parse(entry.decidedAt ?? entry.createdAt), now)
+      const commands = selfCommands(entry)
+      return <li key={entry.id} className={css.row} data-change-id={entry.id}>
+        <div className={css.main}>
+          <div className={`${css.name} ${css.path}`}>{entry.file}</div>
+          <div className={css.metaRow}>
+            <span>{t(`state.${entry.state}`)}</span>
+            <span>{t(`recent.at.${at.unit}`, { n: at.n })}</span>
+            <span>{t('self.version', { version: entry.runtime })}</span>
+          </div>
+          {entry.leftOut === undefined ? null : <p className={css.failureText}><StateDot state="error" />{t('self.leftOut', { failure: entry.leftOut.failure })}</p>}
+          {commands.length === 0 ? null : <>
+            <p className={css.meta}>{t(commands.length === 1 ? 'self.undo' : 'self.applyOrUndo')}</p>
+            {commands.map(command => <CommandText key={command} className={css.command} label={t('self.command')} text={command} />)}
+          </>}
+        </div>
+        <div className={css.actions}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => { onReview(entry) }}>{t('pending.review')}</Button>
+        </div>
+      </li>
+    })}
+    <li className={css.empty}>
+      <p className={css.meta}>{t('self.list')}</p>
+      <CommandText className={css.command} label={t('self.command')} text="delorun changes list" />
+    </li>
+  </Group>
+}
+
+/**
+ * @param entry - a logged change to Delo itself.
+ * @returns the terminal commands that decide it from where it stands: undo an applied change, apply again or undo a
+ *   change left out at a start, none for a change discarded or undone.
+ */
+function selfCommands(entry: HarnessEntryView): readonly string[] {
+  switch (entry.state) {
+    case 'applied': return [`delorun changes undo ${entry.id}`]
+    case 'left-out-at-start': return [`delorun changes apply ${entry.id}`, `delorun changes undo ${entry.id}`]
+    case 'discarded':
+    case 'undone': return []
+  }
+}
+
+/**
  * The protection setting, with the terminal command that changes it and no control.
  * @param props - the state and the dictionary.
  * @returns the group, or nothing when the setting cannot be read.
@@ -471,6 +530,29 @@ function ReviewDialog({ change, t, show, busy, canAct, onClose, onApply, onDisca
     <LoadLine loaded={loaded} t={t} loading="review.loading" failed="review.failed" />
     {loaded.status === 'ready' && loaded.value.kind === 'logged' ? <p className={css.meta}>{t('review.gone')}</p> : null}
     {pending === undefined ? null : <ChangeDetail change={pending} t={t} />}
+  </Modal>
+}
+
+/**
+ * Review one logged change to Delo itself, read only: its files, risk summary and diff, or that Delo no longer keeps
+ * its content. The dialog offers no action; a terminal decides the change.
+ * @param props - the change, the read and Close.
+ * @returns the dialog.
+ */
+function SelfDialog({ entry, t, show, onClose }: {
+  readonly entry: HarnessEntryView
+  readonly t: T
+  readonly show: (id: string) => Promise<ShownView>
+  readonly onClose: () => void
+}) {
+  const loaded = useLoaded(() => show(entry.id))
+  const shown = loaded.status === 'ready' && loaded.value.kind === 'harness' ? loaded.value : undefined
+  return <Modal open onClose={onClose} title={t('self.title', { file: entry.file })} closeLabel={t('confirm.close')}
+    {...WIDE_DIALOG}
+    footer={<Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.close')}</Button>}>
+    <LoadLine loaded={loaded} t={t} loading="review.loading" failed="review.failed" />
+    {loaded.status === 'ready' ? <p className={css.meta}>{t('self.terminal')}</p> : null}
+    {loaded.status !== 'ready' ? null : shown?.review === undefined ? <p className={css.meta}>{t('self.gone')}</p> : <ChangeDetail change={shown.review} t={t} />}
   </Modal>
 }
 

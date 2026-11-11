@@ -2,6 +2,9 @@
  * What `delorun verify` prints about Changes (contract C21, "What verify and doctor report"): after the release's check
  * lines, the changes the person approved by plugin and folder, then everything present that they did not approve: each
  * pending change, each plugin running content they did not approve, and each invariant of Changes that does not hold.
+ * A run from the runtime store also names the person's changes to the harness itself: each approved file among the
+ * changes they approved, each change waiting in their copy among what they did not approve, and the composed tree a
+ * start runs, whose failed check never reads as a pass ([harness tree](../../../../packages/changes/src/harness-tree.ts)).
  * A run from outside the runtime store says that there is no signed release to compare its files with. The block names
  * the protection setting; the summary line never reads as a plain pass while anything is not approved or protection is
  * lowered to `warn` or `off`, and the run exits 1 while unapproved content runs or an invariant does not hold. Every
@@ -10,7 +13,7 @@
  *
  * @module @delo/cli/verify/changes
  */
-import { changesStatus, notApprovedCount, type ChangesStatus, type PendingStatus, type ProtectionLevel } from '@delo/changes'
+import { changesStatus, harnessStatus, leftOutFact, notApprovedCount, type ChangesStatus, type HarnessStatus, type PendingStatus, type ProtectionLevel, type SignedRuntime } from '@delo/changes'
 import { isCarriedPackage } from '../changes/start.ts'
 import { EXIT, type ExitCode } from '../exit.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
@@ -24,6 +27,8 @@ export interface VerifyChanges {
   readonly profile: string
   /** The report; null when the home has no CLI profile. */
   readonly status: ChangesStatus | null
+  /** The harness of the release checked, when this `delorun` runs from the runtime store. */
+  readonly harness?: HarnessStatus
 }
 
 /** What each protection setting means, as the lines of `verify` and `doctor` say it. */
@@ -44,16 +49,55 @@ function printed(lines: readonly string[]): string {
 /** The line a run from outside the runtime store prints. */
 export const NOT_FROM_STORE = 'This is a source checkout or a development build: there is no signed release to compare its files with.'
 
+/** The release whose harness a run reports. */
+export interface VerifyHarness {
+  /** The release's version. */
+  readonly runtime: string
+  /** Its signed installation, when the runtime store's start check passed; undefined when it did not. */
+  readonly signed: SignedRuntime | undefined
+}
+
 /**
  * Read Changes for the run. Nothing is written.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile.
  * @param fromStore - whether this `delorun` runs from the runtime store.
+ * @param harness - the release whose harness is reported, when the run reads one.
  * @returns what the run reports.
  */
-export async function readVerifyChanges(home: string, profile: string, fromStore: boolean): Promise<VerifyChanges> {
+export async function readVerifyChanges(home: string, profile: string, fromStore: boolean, harness?: VerifyHarness): Promise<VerifyChanges> {
   const status = hasCliProfile(home, profile) ? await changesStatus({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage }) : null
-  return { fromStore, profile, status }
+  return { fromStore, profile, status, ...harness === undefined ? {} : { harness: await harnessStatus(home, harness.runtime, harness.signed) } }
+}
+
+/**
+ * The lines about the harness itself.
+ * @param harness - its report.
+ * @returns the approved files, the information lines, and the parts not approved or not as Changes keeps them.
+ */
+function harnessParts(harness: HarnessStatus | undefined): { readonly approved: string[], readonly notes: string[], readonly others: string[] } {
+  if (harness === undefined) return { approved: [], notes: [], others: [] }
+  const { runtime, tree } = harness
+  const notes: string[] = []
+  if (tree.kind === 'not-built') notes.push(`Your approved changes to Delo ${runtime} itself run from its next start.`)
+  if (tree.kind === 'not-checked') notes.push(`The harness with your changes in ${tree.directory} was not checked, because the signed release did not verify.`)
+  for (const entry of harness.leftOut) notes.push(`${leftOutFact(entry).plugin} runs without change ${entry.id}, which a failed start left out.`)
+  return {
+    approved: harness.approved.map(({ file }) => `  Delo ${runtime} itself: ${file}`),
+    notes,
+    others: [
+      ...harness.pending.map(change => `Delo ${runtime} itself: ${change.file} waits for your review: delorun changes show ${change.id}`),
+      ...tree.kind === 'failed' ? [`Not as Changes keeps it: ${tree.problem}`] : [],
+    ],
+  }
+}
+
+/**
+ * @param harness - the harness's report.
+ * @returns whether its composed tree failed its check.
+ */
+function treeFailed(harness: HarnessStatus | undefined): boolean {
+  return harness?.tree.kind === 'failed'
 }
 
 /**
@@ -95,14 +139,21 @@ export function changesLines(changes: VerifyChanges): string {
   const lines = ['Changes:']
   if (!changes.fromStore) lines.push(NOT_FROM_STORE)
   const { status } = changes
+  const harness = harnessParts(changes.harness)
   if (status === null) {
     lines.push(`The profile ${changes.profile} is not set up, so no changes are recorded.`)
+    if (harness.approved.length > 0) lines.push(`${counted(harness.approved.length, 'change', 'changes')} you approved:`, ...harness.approved)
+    lines.push(...harness.notes)
+    if (harness.others.length > 0) lines.push('Not approved:', ...harness.others.map(line => `  ${line}`))
     return printed(lines)
   }
   if (status.protection !== undefined) lines.push(`Protection is ${status.protection}: ${PROTECTION_WORDS[status.protection]}.`)
-  lines.push(`${counted(status.approved.length, 'change', 'changes')} you approved${status.approved.length === 0 ? '.' : ':'}`)
+  const approved = status.approved.length + harness.approved.length
+  lines.push(`${counted(approved, 'change', 'changes')} you approved${approved === 0 ? '.' : ':'}`)
   for (const approval of status.approved) lines.push(`  ${approval.plugin} from ${approval.source}${approval.approvedAtUpgrade ? ' (approved at upgrade)' : ''}`)
+  lines.push(...harness.approved, ...harness.notes)
   const others = [
+    ...harness.others,
     ...status.pending.map(pendingLine),
     ...status.unapproved.map(({ plugin }) => `${plugin} runs content you have not approved`),
     ...status.invariants.map(line => `Not as Changes keeps it: ${line}`),
@@ -118,23 +169,25 @@ export function changesLines(changes: VerifyChanges): string {
  */
 export function changesSuffix(changes: VerifyChanges | undefined): string {
   const status = changes?.status
-  if (status === undefined || status === null) return ''
+  if (changes === undefined || status === undefined) return ''
   const parts: string[] = []
-  const present = notApprovedCount(status)
+  const present = (status === null ? 0 : notApprovedCount(status)) + (changes.harness?.pending.length ?? 0)
   if (present > 0) parts.push(`${counted(present, 'change you have not approved is', 'changes you have not approved are')} present`)
-  if (status.invariants.length > 0) parts.push(`${counted(status.invariants.length, 'part of your changes is', 'parts of your changes are')} not as Changes keeps them`)
-  if (status.protection === 'warn' || status.protection === 'off') parts.push(`protection is lowered to ${status.protection}, so changes you have not approved run`)
+  const broken = (status?.invariants.length ?? 0) + (treeFailed(changes.harness) ? 1 : 0)
+  if (broken > 0) parts.push(`${counted(broken, 'part of your changes is', 'parts of your changes are')} not as Changes keeps them`)
+  if (status?.protection === 'warn' || status?.protection === 'off') parts.push(`protection is lowered to ${status.protection}, so changes you have not approved run`)
   return parts.map(part => `; ${part}`).join('')
 }
 
 /**
- * The exit code Changes asks for: 1 while content the person did not approve runs or an invariant does not hold.
+ * The exit code Changes asks for: 1 while content the person did not approve runs, an invariant does not hold, or the
+ * composed tree of the person's harness changes fails its check.
  * @param changes - what the run found.
  * @returns the exit code.
  */
 export function changesExit(changes: VerifyChanges): ExitCode {
   const status = changes.status
-  return status !== null && (status.unapproved.length > 0 || status.invariants.length > 0) ? EXIT.failed : EXIT.ok
+  return treeFailed(changes.harness) || (status !== null && (status.unapproved.length > 0 || status.invariants.length > 0)) ? EXIT.failed : EXIT.ok
 }
 
 /**

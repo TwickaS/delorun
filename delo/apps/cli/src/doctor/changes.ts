@@ -4,7 +4,8 @@
  * the approved one, the `engines.dsh` and `engines.delo` its active `package.json` declares, and what it registers that
  * changes a consent, a guard or the sandbox policy), the cause of a failed start or load named with the newest applied
  * change of the plugin, each change a failed start left out with its plugin and failure, each pending change and each
- * invariant that does not hold.
+ * invariant that does not hold; and for the runtime this `delorun` runs from the store, the person's changes to the
+ * harness itself: its approved files, its writable copy, the changes waiting there and the composed tree a start runs.
  *
  * A plugin that did not load, runs content the person did not approve or waits for review is `warn`, and so are a change
  * left out at start and protection lowered to `warn` or `off`; an invariant that does not hold is `fail`. Nothing is
@@ -14,12 +15,15 @@
  * @module @delo/cli/doctor/changes
  */
 import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import {
   activeDirectory,
   BUILT_IN_CHECKS,
   changesStatus,
   compareVersions,
+  harnessStatus,
+  leftOutFact,
   isChangesError,
   readVersion,
   reviewChange,
@@ -29,9 +33,12 @@ import {
   type ActiveContent,
   type ChangesStatus,
   type ContentVersion,
+  type HarnessStatus,
   type PluginStatus,
 } from '@delo/changes'
 import { resolveDeloHome } from '@delo/home'
+import { outputLogger, quietOutput, verifiedSignedRuntime } from '../changes/harness-start.ts'
+import { runtimeOfFile, type RunningRuntime } from '../update/runtime.ts'
 import { isCarriedPackage } from '../changes/start.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { clipped, printable } from '../terminal-text.ts'
@@ -242,14 +249,71 @@ export async function changesLines(home: string, profile: string, status: Change
 }
 
 /**
- * The `changes` check: resolve the home, then report Changes for the CLI profile. Nothing is written.
- * @param env - the environment, read for `DELO_HOME` and `DSH_HOME`.
- * @param profile - the CLI profile.
+ * The `changes` lines about the harness itself: the files whose approved content differs from the signed release's,
+ * the writable copy and the changes waiting there, the changes a failed start left out, and the composed tree a start
+ * runs. A composed tree that fails its check is `fail`; one not checked, a change waiting and a change left out are
+ * `warn`.
+ * @param harness - the running runtime's harness.
  * @returns the results.
  */
-export async function checkChanges(env: Readonly<Record<string, string | undefined>>, profile: string): Promise<CheckResult[]> {
+export function harnessLines(harness: HarnessStatus): CheckResult[] {
+  const { runtime, tree } = harness
+  const results: CheckResult[] = []
+  if (harness.approved.length > 0) results.push(line('pass', `you approved changes to ${String(harness.approved.length)} ${harness.approved.length === 1 ? 'file' : 'files'} of Delo ${runtime} itself: ${harness.approved.map(({ file }) => file).join(', ')}.`))
+  if (harness.copy !== undefined) results.push(line('pass', `your copy of Delo ${runtime} is in ${harness.copy}; delorun changes edit-harness --discard takes every change to Delo itself back.`))
+  for (const change of harness.pending) results.push(line('warn', `Delo ${runtime} itself: ${change.file} waits for your review: delorun changes show ${change.id}`))
+  for (const { id, plugin, at, failure } of harness.leftOut.map(leftOutFact)) {
+    results.push(line('warn', `${plugin} runs without change ${id}, which a start at ${at} left out because it failed: ${quotedFailure(failure)}. To try it again: delorun changes apply ${id}. To undo it: delorun changes undo ${id}`))
+  }
+  switch (tree.kind) {
+    case 'signed':
+      break
+    case 'not-built':
+      results.push(line('pass', `Delo ${runtime} runs your approved changes to it from its next start, from ${tree.directory}.`))
+      break
+    case 'passed':
+      results.push(line('pass', `Delo ${runtime} runs your approved changes to it from ${tree.directory}, which holds the signed release with exactly those files changed.`))
+      break
+    case 'failed':
+      results.push(line('fail', tree.problem))
+      break
+    case 'not-checked':
+      results.push(line('warn', `${tree.directory} was not checked, because the signed release of Delo ${runtime} did not verify; see delorun verify.`))
+      break
+  }
+  return results
+}
+
+/**
+ * The `changes` check: resolve the home, then report Changes for the CLI profile, and the harness of the runtime this
+ * `delorun` runs from the store. Nothing is written.
+ * @param env - the environment, read for `DELO_HOME` and `DSH_HOME`.
+ * @param profile - the CLI profile.
+ * @param harness - reads the running runtime's harness; undefined outside the runtime store ({@link runningHarnessStatus}
+ *   by default).
+ * @returns the results.
+ */
+export async function checkChanges(env: Readonly<Record<string, string | undefined>>, profile: string, harness: (home: string) => Promise<HarnessStatus | undefined> = home => runningHarnessStatus(home, env)): Promise<CheckResult[]> {
   const home = (await resolveDeloHome(env)).path
-  if (!hasCliProfile(home, profile)) return [line('pass', `the profile ${profile} is not set up, so there are no changes to check.`)]
+  const own = await harness(home)
+  const harnessResults = own === undefined ? [] : harnessLines(own)
+  if (!hasCliProfile(home, profile)) return [line('pass', `the profile ${profile} is not set up, so there are no changes to check.`), ...harnessResults]
   const status = await changesStatus({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage })
-  return changesLines(home, profile, status)
+  return [...await changesLines(home, profile, status), ...harnessResults]
+}
+
+/**
+ * The harness of the runtime this `delorun` runs from the store, its composed tree checked against the signed release.
+ * @param home - the Delo home.
+ * @param env - the environment `delorun` was started with, read for the launcher's roots.
+ * @param runtime - the runtime this `delorun` runs; this module's by default.
+ * @returns the report, or undefined outside the runtime store.
+ */
+export async function runningHarnessStatus(home: string, env: Readonly<Record<string, string | undefined>>, runtime: RunningRuntime = runtimeOfFile(home, fileURLToPath(import.meta.url))): Promise<HarnessStatus | undefined> {
+  if (!runtime.store) return undefined
+  const signed = await verifiedSignedRuntime(home, runtime.version, env, outputLogger(quietOutput())).catch((_unverified: unknown) => {
+    // An installation that does not verify leaves the tree unchecked, and the line says so; `delorun verify` names why.
+    return undefined
+  })
+  return harnessStatus(home, runtime.version, signed)
 }

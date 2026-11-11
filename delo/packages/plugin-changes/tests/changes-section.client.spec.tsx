@@ -7,7 +7,7 @@ import type { FunctionComponent } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, CHANGES_SECTION_ID, CHANGES_SECTION_ORDER, inject, NS, STATE_REFRESH_MS, WORK_BADGE_ID, WORK_BADGE_ORDER } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { ACTION_PATHS, SHOW_PATH, STATE_PATH, type ChangesStateView, type ChangeView, type EntryView, type PendingView, type WorkReviewView } from '../src/wire.ts'
+import { ACTION_PATHS, SHOW_PATH, STATE_PATH, type ChangesStateView, type ChangeView, type EntryView, type HarnessEntryView, type HarnessReviewView, type PendingView, type WorkReviewView } from '../src/wire.ts'
 
 const VERSION = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9'
 const HOUR = 3_600_000
@@ -17,7 +17,7 @@ type FakeState = Omit<ChangesStateView, 'folders'> & { readonly pending: readonl
 
 /** A state with nothing in it, at the computer. */
 function emptyState(fields: Partial<FakeState> = {}): FakeState {
-  return { atComputer: true, profile: 'default', protection: 'block', leftOut: [], pending: [], requests: [], recent: [], problems: [], ...fields }
+  return { atComputer: true, profile: 'default', protection: 'block', leftOut: [], pending: [], requests: [], recent: [], harness: [], problems: [], ...fields }
 }
 
 /**
@@ -66,6 +66,22 @@ const FLAGGED_CHANGE = change({
   skipped: ['socket'],
 })
 
+const SELF_FILE = 'app/node_modules/delo/lib/main.js'
+
+/** A logged change to Delo itself. */
+function self(fields: Partial<HarnessEntryView> & Pick<HarnessEntryView, 'id' | 'state'>): HarnessEntryView {
+  const at = new Date(Date.now() - 3 * HOUR).toISOString()
+  return { file: SELF_FILE, runtime: '0.4.0', summary: `Delo 0.4.0 itself: ${SELF_FILE}`, createdAt: at, decidedAt: at, ...fields }
+}
+
+/** The review of a change to Delo itself. */
+const SELF_REVIEW: HarnessReviewView = {
+  kind: 'harness-edit',
+  files: [{ path: SELF_FILE, status: 'modified', binary: false, dependency: false }],
+  risk: { kinds: [], phrases: [], needsSecondConfirmation: false, findings: [] },
+  diff: { text: `--- a/${SELF_FILE}\n+++ b/${SELF_FILE}\n@@ -1 +1 @@\n-one\n+two\n`, truncated: false, omitted: [] },
+}
+
 type Route = (request: { readonly url: URL, readonly body: Record<string, unknown> }) => Response | Promise<Response>
 
 /** A stand-in harness: the state, one change per id, the work review, and every action, each replaceable. */
@@ -82,6 +98,8 @@ function harness(initial: FakeState = emptyState()) {
       if (url.searchParams.has('pending')) return Response.json({ kind: 'pending-list', pending: state.pending })
       const work = url.searchParams.get('work')
       if (work !== null) return Response.json(workReview())
+      const harnessEntry = state.harness.find(entry => entry.id === url.searchParams.get('id'))
+      if (harnessEntry !== undefined) return Response.json({ kind: 'harness', entry: harnessEntry, ...harnessEntry.state === 'applied' ? { review: SELF_REVIEW } : {} })
       const shown = changes.get(String(url.searchParams.get('id')))
       return shown === undefined ? Response.json({ kind: 'logged', entry: logged({ id: String(url.searchParams.get('id')) }) }) : Response.json({ kind: 'pending', change: shown })
     },
@@ -325,6 +343,9 @@ describe('the Changes section', () => {
     expect(screen.getByText(en['pending.empty'])).toBeTruthy()
     expect(screen.getByText(en['recent.empty'])).toBeTruthy()
     expect(screen.getByText(en['work.none'])).toBeTruthy()
+    const selfGroup = screen.getByRole('region', { name: en['self.heading'] })
+    expect(within(selfGroup).getByText(en['self.empty'])).toBeTruthy()
+    expect(within(selfGroup).getByText('delorun changes list')).toBeTruthy()
     expect(screen.queryByRole('region', { name: en['protection.heading'] })).toBeNull()
     expect(screen.queryByRole('region', { name: en['leftOut.heading'] })).toBeNull()
     expect(screen.queryByRole('region', { name: en['requests.heading'] })).toBeNull()
@@ -639,6 +660,58 @@ describe('the Changes section', () => {
     fake.replace(ACTION_PATHS.done, () => Response.json({ kind: 'went-back', plugin: 'hello-plugin', failure: 'Error: z' }))
     await done()
     expect(toasts()).toContain(en['toast.wentBack'].replace('{failure}', 'Error: z'))
+  })
+
+  it('the studio lists changes to Delo itself with their diff and offers no action for them', async () => {
+    const applied = self({ id: 'c00000000a1', state: 'applied', decidedAt: new Date(Date.now() - 2 * HOUR).toISOString() })
+    const leftOut = self({ id: 'c00000000a2', state: 'left-out-at-start', file: 'app/node_modules/delo/lib/added.js', leftOut: { at: new Date().toISOString(), failure: 'SyntaxError: no' } })
+    const { decidedAt: _undecided, ...discarded } = self({ id: 'c00000000a3', state: 'discarded' })
+    const { fake } = await openSection(emptyState({ harness: [applied, leftOut, discarded] }))
+    const group = screen.getByRole('region', { name: en['self.heading'] })
+    const rows = within(group).getAllByRole('listitem')
+    expect(rows[0]?.textContent).toContain(`${SELF_FILE}${en['state.applied']}${en['recent.at.hours'].replace('{n}', '2')}${en['self.version'].replace('{version}', '0.4.0')}`)
+    expect(within(rows[0] as HTMLElement).getByText(en['self.undo'])).toBeTruthy()
+    expect(within(rows[0] as HTMLElement).getByText('delorun changes undo c00000000a1')).toBeTruthy()
+    expect(within(rows[1] as HTMLElement).getByText(en['self.leftOut'].replace('{failure}', 'SyntaxError: no'))).toBeTruthy()
+    expect(within(rows[1] as HTMLElement).getByText(en['self.applyOrUndo'])).toBeTruthy()
+    expect(within(rows[1] as HTMLElement).getByText('delorun changes apply c00000000a2')).toBeTruthy()
+    expect(within(rows[1] as HTMLElement).getByText('delorun changes undo c00000000a2')).toBeTruthy()
+    expect(rows[2]?.textContent).toContain(`${en['state.discarded']}${en['recent.at.hours'].replace('{n}', '3')}`)
+    expect(rows[2]?.textContent).not.toContain('delorun changes')
+    expect(within(rows[3] as HTMLElement).getByText(en['self.list'])).toBeTruthy()
+    expect(within(rows[3] as HTMLElement).getByText('delorun changes list')).toBeTruthy()
+    // Review is the one button of each change; a terminal decides it.
+    expect(within(group).getAllByRole('button').map(button => button.textContent)).toEqual([en['pending.review'], en['pending.review'], en['pending.review']])
+    fireEvent.click(within(rows[0] as HTMLElement).getByRole('button', { name: en['pending.review'] }))
+    let dialog = await screen.findByRole('dialog', { name: en['self.title'].replace('{file}', SELF_FILE) })
+    const diff = await within(dialog).findByRole('region', { name: en['review.diff'] })
+    expect(diff.querySelector('pre')?.textContent).toBe(SELF_REVIEW.diff.text)
+    expect(within(dialog).getByText(en['self.notice'])).toBeTruthy()
+    expect(within(dialog).getByText(en['self.terminal'])).toBeTruthy()
+    expect(within(dialog).queryByText(en['risk.notice'])).toBeNull()
+    expect(dialog.textContent).not.toContain(en['review.folder'].replace('{folder}', ''))
+    expect(within(dialog).getAllByRole('button').every(button => button.textContent === en['confirm.close'] || button.getAttribute('aria-label') === en['confirm.close'])).toBe(true)
+    fireEvent.click(within(dialog).getAllByRole('button', { name: en['confirm.close'] }).at(-1) as HTMLElement)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    // A change whose content Delo no longer keeps is shown without its diff.
+    fireEvent.click(within(rows[2] as HTMLElement).getByRole('button', { name: en['pending.review'] }))
+    dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText(en['self.gone'])).toBeTruthy()
+    expect(within(dialog).queryByRole('region', { name: en['review.diff'] })).toBeNull()
+    fireEvent.click(within(dialog).getAllByRole('button', { name: en['confirm.close'] }).at(-1) as HTMLElement)
+    // A review that cannot be read says so.
+    fake.replace(SHOW_PATH, () => new Response(null, { status: 500 }))
+    fireEvent.click(within(rows[1] as HTMLElement).getByRole('button', { name: en['pending.review'] }))
+    dialog = await screen.findByRole('dialog')
+    expect((await within(dialog).findByRole('alert')).textContent).toBe(en['review.failed'])
+    expect(within(dialog).queryByText(en['self.gone'])).toBeNull()
+    expect(fake.calls.filter(call => call.path !== STATE_PATH && call.path !== SHOW_PATH)).toEqual([])
+  })
+
+  it('names no harness, integrity, trust or drift in its copy', () => {
+    for (const dictionary of [en, zh]) {
+      for (const [key, text] of Object.entries(dictionary)) expect(text, key).not.toMatch(/harness|integrity|trust|drift/i)
+    }
   })
 
   it('a remote session sees the changes and cannot act on them', async () => {

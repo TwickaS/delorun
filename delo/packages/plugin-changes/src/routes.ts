@@ -17,6 +17,10 @@
  * `state` reads only the records: it writes nothing and reads no plugin's folder, so the studio's repeated reads and a
  * remote session's cost nothing. Only `show` reads folders, computes diffs and stores their content.
  *
+ * A change to Delo itself is decided only at a terminal, which knows the signed file list of the runtime it runs: the
+ * routes read its log entry and its diff from the store and refuse `apply`, `discard` and `undo` for it with
+ * `409 DECIDE_AT_TERMINAL` and the command, before any action runs. No route calls an action on Delo's own files.
+ *
  * Every answer is JSON with `cache-control: no-store`; file names, diffs, summaries and failures travel as JSON strings
  * that the screen renders as text. No answer names the Delo home's path: a refusal or an unreadable part whose words
  * name it answers its code, or names the part, with {@link HOME_WITHHELD_SENTENCE}, and the Host log keeps the words; a recorded failure's
@@ -35,12 +39,15 @@ import {
   isChangesError,
   isPluginRequest,
   listChanges,
+  loggedHarnessChange,
   PACKAGE_NAME_PATTERN,
   parseChangeId,
   readBootRecord,
   readChangeLog,
+  readHarnessLog,
   readProtection,
   recordedChanges,
+  reviewHarnessChange,
   reviewWork,
   riskKindPhrase,
   showChange,
@@ -58,9 +65,11 @@ import {
   type ChangesCode,
   type ChangesContext,
   type ContentVersion,
+  type HarnessReview,
   type ListedChange,
   type ReloadHost,
   type RiskSummary,
+  type ShownChange,
   type StudioArrival,
   type WorkDone,
   type WorkReview,
@@ -72,6 +81,7 @@ import {
   ACTION_PATHS,
   CHANGED_SINCE_REVIEW,
   CONFIRM_RISK,
+  DECIDE_AT_TERMINAL,
   LOOPBACK_REQUIRED,
   SHOW_PATH,
   STATE_PATH,
@@ -82,6 +92,7 @@ import {
   type DiscardView,
   type DoneView,
   type EntryView,
+  type HarnessEntryView,
   type PendingListView,
   type PendingView,
   type RiskView,
@@ -95,7 +106,7 @@ export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, type Changes
 /** The largest body an action reads, in bytes; a body names one change or plugin. */
 export const MAX_BODY_BYTES = 16 * 1024
 
-/** How many logged changes `state` returns, newest first. */
+/** How many logged changes `state` returns of a profile's log and of the log of changes to Delo itself, newest first. */
 export const RECENT_CHANGES = 20
 
 /** The sentence a request that is not at the computer is answered with. */
@@ -187,6 +198,7 @@ const CHANGES_STATUS: Readonly<Record<ChangesCode, number>> = {
   OPERATION_FAILED: 409,
   CONTENT_TOO_LARGE: 409,
   LOAD_REFUSED: 409,
+  HARNESS_CHANGED: 409,
 }
 
 /**
@@ -397,6 +409,43 @@ function entryView(entry: ChangeEntry): EntryView {
 }
 
 /**
+ * @param entry - an entry of the log of changes to Delo itself.
+ * @returns what the person reads of it, or undefined when it is not a decided change to a named file of a runtime.
+ */
+function harnessEntryView(entry: ChangeEntry): HarnessEntryView | undefined {
+  const { file, runtime } = entry.subject
+  if (entry.kind !== 'harness-edit' || file === undefined || runtime === undefined || entry.state === 'pending') return undefined
+  return {
+    id: entry.id,
+    state: entry.state,
+    file,
+    runtime,
+    summary: entry.summary,
+    createdAt: entry.createdAt,
+    ...entry.decidedAt === undefined ? {} : { decidedAt: entry.decidedAt },
+    ...entry.leftOut === undefined ? {} : { leftOut: entry.leftOut },
+  }
+}
+
+/**
+ * The newest {@link RECENT_CHANGES} decided entries of a log, newest first; of two decided at the same time, the one
+ * logged later first.
+ * @param entries - the log's entries.
+ * @param view - what the person reads of an entry; undefined leaves it out.
+ * @returns the views.
+ */
+function newestDecided<V>(entries: readonly ChangeEntry[], view: (entry: ChangeEntry) => V | undefined): V[] {
+  return entries
+    .flatMap((entry, index) => {
+      const shown = entry.state === 'pending' ? undefined : view(entry)
+      return shown === undefined ? [] : [{ shown, index, at: Date.parse(entry.decidedAt ?? entry.createdAt) }]
+    })
+    .sort((left, right) => right.at - left.at || right.index - left.index)
+    .slice(0, RECENT_CHANGES)
+    .map(({ shown }) => shown)
+}
+
+/**
  * @param error - a thrown value.
  * @returns its words for the person.
  */
@@ -475,9 +524,10 @@ async function part<T>(problems: string[], home: HomeWords, what: string, read: 
 
 /**
  * `GET state`: what failed at the last start, the changes left out at it, the plugins under Changes and the agent's
- * plugin requests waiting for review, the recent changes newest first with whether each can be undone, the protection
- * setting, safe mode, the work session, and whether the request is at the computer, so the screen says so before an
- * action is refused. It reads the records only: nothing is written and no plugin's folder is read.
+ * plugin requests waiting for review, the recent changes newest first with whether each can be undone, the recent
+ * changes to Delo itself, the protection setting, safe mode, the work session, and whether the request is at the
+ * computer, so the screen says so before an action is refused. It reads the records only: nothing is written and no
+ * plugin's folder is read.
  * @param ctx - the profile.
  * @param atComputer - whether the request could act.
  * @param home - the home's spellings and the log.
@@ -491,13 +541,8 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean, home: HomeWords
   const safeMode = await part(problems, home, 'The safe mode record', () => readSafeMode(ctx.home, ctx.profile))
   const workSession = await part(problems, home, 'The work session', () => workSessionFact(ctx.home, ctx.profile))
   const recorded = await part(problems, home, 'The changes waiting for review', () => recordedChanges(ctx))
+  const harnessLog = await part(problems, home, 'The log of changes to Delo itself', () => readHarnessLog(ctx.home))
   const entries = log?.entries ?? []
-  const recent = entries
-    .map((entry, index) => ({ entry, index, at: Date.parse(entry.decidedAt ?? entry.createdAt) }))
-    .filter(({ entry }) => entry.state !== 'pending')
-    .sort((left, right) => right.at - left.at || right.index - left.index)
-    .slice(0, RECENT_CHANGES)
-    .map(({ entry }) => entryView(entry))
   return {
     atComputer,
     profile: ctx.profile,
@@ -513,7 +558,8 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean, home: HomeWords
     leftOut: entries.filter(entry => entry.state === 'left-out-at-start').map(entryView),
     folders: (recorded?.folders ?? []).map(({ plugin, source, kind }) => ({ plugin, source, kind })),
     requests: (recorded?.requests ?? []).map(entryView),
-    recent,
+    recent: newestDecided(entries, entryView),
+    harness: newestDecided(harnessLog?.entries ?? [], harnessEntryView),
     ...workSession === undefined ? {} : { workSession },
     problems,
   }
@@ -535,8 +581,66 @@ async function shownOf(ctx: ChangesContext, url: URL): Promise<ShownView | WorkR
   }
   if (names[0] === 'pending') return { kind: 'pending-list', pending: (await listChanges(ctx)).pending.map(pendingView) }
   if (names[0] === 'work') return workView(await reviewWork(ctx, pluginOf(url.searchParams.get('work'))))
-  const shown = await showChange(ctx, changeIdOf({ id: url.searchParams.get('id') }))
+  const id = changeIdOf({ id: url.searchParams.get('id') })
+  let shown: ShownChange
+  try {
+    shown = await showChange(ctx, id)
+  } catch (error) {
+    // An id no plugin's change has may name a change to Delo itself, which only the log of those changes holds.
+    const harness = isChangesError(error) && error.code === 'UNKNOWN_CHANGE' ? await harnessShown(ctx.home, id) : undefined
+    if (harness === undefined) throw error
+    return harness
+  }
   return shown.kind === 'pending' ? { kind: 'pending', change: changeView(shown.change) } : { kind: 'logged', entry: entryView(shown.entry) }
+}
+
+/**
+ * A logged change to Delo itself with its files, risk summary and bounded diff, read from the store. Collection removes
+ * the content of a change that was discarded or undone, and such a change is answered without its review.
+ * @param home - the Delo home.
+ * @param id - the change id.
+ * @returns what the person reads, or undefined when the log of changes to Delo itself has no such decided change.
+ * @throws {ChangesError} `RECORD_UNREADABLE` for a log that cannot be read; `STORE_CORRUPT` when the store lacks the
+ *   content of a change that is neither discarded nor undone.
+ */
+async function harnessShown(home: string, id: ChangeId): Promise<ShownView | undefined> {
+  const entry = (await readHarnessLog(home)).entries.find(candidate => candidate.id === id)
+  const view = entry === undefined ? undefined : harnessEntryView(entry)
+  if (entry === undefined || view === undefined) return undefined
+  const change = loggedHarnessChange(entry)
+  let review: HarnessReview | undefined
+  try {
+    review = change === undefined ? undefined : await reviewHarnessChange(home, change)
+  } catch (error) {
+    // The content of a discarded or undone change may be collected; anything else is a failure of the store.
+    if (!isChangesError(error) || error.code !== 'STORE_CORRUPT' || (entry.state !== 'discarded' && entry.state !== 'undone')) throw error
+  }
+  return {
+    kind: 'harness',
+    entry: view,
+    ...review === undefined ? {} : {
+      review: {
+        kind: 'harness-edit',
+        files: review.files.map(file => ({ path: file.path, status: file.status, binary: file.binary, dependency: file.dependency })),
+        risk: riskView(review.risk),
+        diff: { text: review.diff.text, truncated: review.diff.truncated, omitted: review.diff.omitted },
+      },
+    },
+  }
+}
+
+/**
+ * Refuse an action on a change to Delo itself: only a terminal, which knows the signed file list of the runtime it
+ * runs, applies, discards or undoes one. The refusal comes before any action runs.
+ * @param home - the Delo home.
+ * @param id - the change id the body names.
+ * @param action - the action asked for.
+ * @throws {RouteRefusal} `409 DECIDE_AT_TERMINAL` with the command when the log of changes to Delo itself has the id;
+ *   {@link ChangesError} `RECORD_UNREADABLE` for a log that cannot be read.
+ */
+async function refuseHarnessChange(home: string, id: ChangeId, action: 'apply' | 'discard' | 'undo'): Promise<void> {
+  if (!(await readHarnessLog(home)).entries.some(entry => entry.id === id)) return
+  throw new RouteRefusal(409, DECIDE_AT_TERMINAL, `Change ${id} changes Delo itself, which you ${action} at a terminal: delorun changes ${action} ${id}`)
 }
 
 /**
@@ -606,8 +710,8 @@ function doneView(done: WorkDone): DoneView {
  * @param presence - the studio proof.
  * @param dependencies - the Host's reload and the installation's bundles.
  * @returns what the person reads.
- * @throws {RouteRefusal} for a body the action does not take, an agent's plugin request, an unconfirmed risk, or safe
- *   mode without the installation's bundles; {@link ChangesError} for a refusal of Changes.
+ * @throws {RouteRefusal} for a body the action does not take, a change to Delo itself, an agent's plugin request, an
+ *   unconfirmed risk, or safe mode without the installation's bundles; {@link ChangesError} for a refusal of Changes.
  */
 async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<ActionView | DiscardView | StartedView | DoneView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
   const options = { reload: dependencies.reload }
@@ -616,6 +720,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       onlyFields(body, ['id', 'confirmedRisk'])
       const id = changeIdOf(body)
       const confirmed = confirmedRiskOf(body.confirmedRisk)
+      await refuseHarnessChange(ctx.home, id, action)
       const shown = await showChange(ctx, id)
       if (shown.kind === 'logged' && isPluginRequest(shown.entry)) {
         throw new RouteRefusal(409, 'APPLY_AT_TERMINAL', `Change ${id} installs, updates or removes a plugin the agent asked for, which runs the plugin operation in a terminal: delorun changes apply ${id}`)
@@ -628,6 +733,7 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       onlyFields(body, ['id', 'confirmedRisk'])
       const id = changeIdOf(body)
       confirmedRiskOf(body.confirmedRisk)
+      await refuseHarnessChange(ctx.home, id, action)
       return action === 'discard' ? { entry: entryView(await discardChange(ctx, id, presence)) } : actionView(await undoChange(ctx, id, presence, options))
     }
     case 'off':

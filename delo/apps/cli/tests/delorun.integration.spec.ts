@@ -271,6 +271,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       handover: async () => Promise.resolve(undefined),
       opener: { canOpen: () => true, link: requestStudioLink, open: () => Promise.reject(new Error('no link reaches the browser here')) },
       relaunch: () => Promise.reject(new Error('no second start here')),
+      handOff: () => Promise.resolve(undefined),
     }
   }
 

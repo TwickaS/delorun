@@ -5,12 +5,12 @@
  *
  * Each test's comment names the check whose removal makes it fail, so the suite is also the mutation record.
  */
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { attestStudio, protectionPath, readProtection, setProtection, writeChangeLog } from '@delo/changes'
+import { lstatSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { attestStudio, harnessLogPath, protectionPath, readHarnessLog, readProtection, setProtection, writeChangeLog } from '@delo/changes'
 import { describe, expect, it, vi } from 'vitest'
 import { ACTION_PATHS, arrivalOf, changesRoutes, HOME_IN_ANSWERS, HOME_WITHHELD_SENTENCE, LOOPBACK_REQUIRED_SENTENCE, MAX_BODY_BYTES, SHOW_PATH, STATE_PATH, type ChangesAction } from '../src/routes.ts'
-import { CREDENTIAL, get, json, post, routeHome, send, serveRoutes } from './routes-fixture.ts'
+import { CREDENTIAL, get, json, logHarnessChanges, post, routeHome, RUNTIME, send, serveRoutes } from './routes-fixture.ts'
 
 // Each case starts a server on a loopback port and writes a temporary home; under a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 30_000 })
@@ -188,7 +188,7 @@ describe('what a route refuses', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     const state = json(await get(server.port, STATE_PATH))
-    expect(state).toEqual({ atComputer: true, profile: 'default', protection: 'block', leftOut: [], folders: [], requests: [], recent: [], problems: [] })
+    expect(state).toEqual({ atComputer: true, profile: 'default', protection: 'block', leftOut: [], folders: [], requests: [], recent: [], harness: [], problems: [] })
     const broken = await serveRoutes({ ...ctx, home: `${ctx.home}/missing`, profileDir: `${ctx.profileDir}/missing` })
     const problems = json(await get(broken.port, STATE_PATH)).problems as string[]
     expect(problems.map(problem => problem.split(':')[0])).toEqual(['The changes waiting for review cannot be read'])
@@ -273,6 +273,127 @@ describe('what an answer says of the home', () => {
     const unknown = json(await get(server.port, `${SHOW_PATH}?id=c0123456789`))
     expect(unknown.code).toBe('UNKNOWN_CHANGE')
     expect(unknown.message).not.toBe(HOME_WITHHELD_SENTENCE)
+  })
+})
+
+/** A file of Delo itself, relative to the runtime's directory. */
+const SELF_FILE = 'app/node_modules/delo/lib/main.js'
+
+/**
+ * Every entry under a directory with its kind, size and modification time.
+ * @param root - the directory.
+ * @returns one line per entry, by path.
+ */
+function snapshot(root: string): string[] {
+  return readdirSync(root, { recursive: true, encoding: 'utf8' }).sort().map((path) => {
+    const stats = lstatSync(join(root, path))
+    return `${path} ${String(stats.size)} ${String(stats.mtimeMs)}`
+  })
+}
+
+describe('changes to Delo itself', () => {
+  it('the studio lists changes to Delo itself with their diff from the store', async () => {
+    const { root, ctx } = routeHome()
+    const server = await serveRoutes(ctx)
+    const [applied, leftOut, discarded, undone, pending, unnamed, lost] = await logHarnessChanges(ctx.home, [
+      { file: SELF_FILE, before: 'export default "one"\n', after: 'export default "two"\n', state: 'applied', at: '2026-11-10T10:00:00.000Z' },
+      { file: 'app/node_modules/delo/lib/added.js', after: 'export {}\n', state: 'left-out-at-start', at: '2026-11-10T11:00:00.000Z', leftOut: { at: '2026-11-10T11:00:00.000Z', failure: 'SyntaxError: no' } },
+      { file: SELF_FILE, before: 'export default "two"\n', after: 'export default "three"\n', state: 'discarded', at: '2026-11-10T09:00:00.000Z', kept: false },
+      { file: SELF_FILE, before: 'a\n', after: 'b\n', state: 'undone', at: '2026-11-10T08:00:00.000Z' },
+      // A change waiting for review is not a decided one.
+      { file: SELF_FILE, before: 'c\n', after: 'd\n', state: 'pending', at: '2026-11-10T12:00:00.000Z' },
+      { file: SELF_FILE, before: 'e\n', after: 'f\n', state: 'applied', at: '2026-11-10T07:00:00.000Z' },
+      { file: SELF_FILE, before: 'g\n', after: 'h\n', state: 'applied', at: '2026-11-10T06:00:00.000Z', kept: false },
+    ])
+    // An entry that names no runtime is no change to Delo itself the studio can show.
+    const log = await readHarnessLog(ctx.home)
+    const { runtime: _runtime, ...withoutRuntime } = unnamed!.subject
+    // An undone change whose log entry names neither side, nor when it was decided, has nothing to review.
+    const { from: _from, to: _to, decidedAt: _decidedAt, ...sideless } = undone!
+    const entries = log.entries.map(entry => entry.id === unnamed!.id ? { ...entry, subject: withoutRuntime } : entry.id === undone!.id ? sideless : entry)
+    writeFileSync(harnessLogPath(ctx.home), JSON.stringify({ ...log, entries }), { mode: 0o600 })
+    const state = json(await get(server.port, STATE_PATH))
+    const harness = state.harness as Record<string, unknown>[]
+    expect(harness).toEqual([
+      { id: leftOut!.id, state: 'left-out-at-start', file: 'app/node_modules/delo/lib/added.js', runtime: RUNTIME, summary: `Delo ${RUNTIME} itself: app/node_modules/delo/lib/added.js`, createdAt: '2026-11-10T11:00:00.000Z', decidedAt: '2026-11-10T11:00:00.000Z', leftOut: { at: '2026-11-10T11:00:00.000Z', failure: 'SyntaxError: no' } },
+      { id: applied!.id, state: 'applied', file: SELF_FILE, runtime: RUNTIME, summary: `Delo ${RUNTIME} itself: ${SELF_FILE}`, createdAt: '2026-11-10T10:00:00.000Z', decidedAt: '2026-11-10T10:00:00.000Z' },
+      expect.objectContaining({ id: discarded!.id, state: 'discarded' }),
+      expect.objectContaining({ id: undone!.id, state: 'undone' }),
+      expect.objectContaining({ id: lost!.id, state: 'applied' }),
+    ])
+    // Changes to Delo itself are not a profile's changes.
+    expect(state).toMatchObject({ recent: [], leftOut: [], problems: [] })
+    const shown = await get(server.port, `${SHOW_PATH}?id=${applied!.id}`)
+    expect(json(shown)).toEqual({
+      kind: 'harness',
+      entry: harness[1],
+      review: {
+        kind: 'harness-edit',
+        files: [{ path: SELF_FILE, status: 'modified', binary: false, dependency: false }],
+        risk: { kinds: [], phrases: [], needsSecondConfirmation: false, findings: [] },
+        diff: { text: expect.stringContaining('-export default "one"\n+export default "two"') as string, truncated: false, omitted: [] },
+      },
+    })
+    expect(shown.body).not.toContain(root)
+    expect(json(await get(server.port, `${SHOW_PATH}?id=${leftOut!.id}`))).toMatchObject({ kind: 'harness', review: { files: [{ path: 'app/node_modules/delo/lib/added.js', status: 'added' }] } })
+    // Collection removed the content of a discarded change, and an undone change names neither side: each is answered
+    // without its review.
+    expect(json(await get(server.port, `${SHOW_PATH}?id=${discarded!.id}`))).toEqual({ kind: 'harness', entry: harness[2] })
+    expect(json(await get(server.port, `${SHOW_PATH}?id=${undone!.id}`))).toEqual({ kind: 'harness', entry: harness[3] })
+    // An applied change whose content the store lacks is a failure of the store, named without the home's path.
+    const corrupt = await get(server.port, `${SHOW_PATH}?id=${lost!.id}`)
+    expect(corrupt.status).toBe(500)
+    expect(json(corrupt)).toEqual({ code: 'STORE_CORRUPT', message: HOME_WITHHELD_SENTENCE })
+    expect(json(await get(server.port, `${SHOW_PATH}?id=${unnamed!.id}`))).toMatchObject({ code: 'UNKNOWN_CHANGE' })
+    // A change waiting for review in the copy of Delo is listed by the terminal only.
+    expect(json(await get(server.port, `${SHOW_PATH}?id=${pending!.id}`))).toMatchObject({ code: 'UNKNOWN_CHANGE' })
+  })
+
+  it('lists the 20 newest changes to Delo itself', async () => {
+    const { ctx } = routeHome()
+    const server = await serveRoutes(ctx)
+    const logged = await logHarnessChanges(ctx.home, Array.from({ length: 21 }, (_, index) => ({ file: SELF_FILE, before: String(index), after: String(index + 1), state: 'applied' as const, at: new Date(Date.UTC(2026, 10, 10, 0, index)).toISOString() })))
+    const listed = (json(await get(server.port, STATE_PATH)).harness as { id: string }[]).map(entry => entry.id)
+    expect(listed).toEqual(logged.slice(1).reverse().map(entry => entry.id))
+  })
+
+  it('a harness change cannot be applied, discarded or undone from the studio', async () => {
+    const { ctx } = routeHome()
+    const server = await serveRoutes(ctx)
+    const logged = await logHarnessChanges(ctx.home, [
+      { file: SELF_FILE, before: 'one\n', after: 'two\n', state: 'applied', at: '2026-11-10T10:00:00.000Z' },
+      { file: SELF_FILE, before: 'two\n', after: 'three\n', state: 'left-out-at-start', at: '2026-11-10T11:00:00.000Z', leftOut: { at: '2026-11-10T11:00:00.000Z', failure: 'boom' } },
+    ])
+    const before = snapshot(ctx.home)
+    const log = await readHarnessLog(ctx.home)
+    for (const { id } of logged) {
+      for (const action of ['apply', 'discard', 'undo'] as const) {
+        // Pins `refuseHarnessChange` in `act`: without it the route runs a profile's action on the id.
+        const reply = await post(server.port, ACTION_PATHS[action], { id })
+        expect(reply.status, `${action} ${id}`).toBe(409)
+        expect(json(reply)).toEqual({ code: 'DECIDE_AT_TERMINAL', message: `Change ${id} changes Delo itself, which you ${action} at a terminal: delorun changes ${action} ${id}` })
+        // The refusals of a remote session and of another site still come first.
+        expect(json(await send(server.port, ACTION_PATHS[action], { method: 'POST', headers: [CREDENTIAL, 'x-test-remote: 1'], body: { id }, withholdBody: true }))).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+        expect(json(await send(server.port, ACTION_PATHS[action], { method: 'POST', headers: [CREDENTIAL, 'Sec-Fetch-Site: cross-site'], body: { id }, withholdBody: true }))).toMatchObject({ code: 'CROSS_SITE' })
+      }
+    }
+    expect(snapshot(ctx.home)).toEqual(before)
+    expect(await readHarnessLog(ctx.home)).toEqual(log)
+    expect(server.reloads()).toBe(0)
+  })
+
+  it('names the log of changes to Delo itself when it cannot be read, and acts on no change until it can be', async () => {
+    const { root, ctx } = routeHome()
+    const server = await serveRoutes(ctx)
+    mkdirSync(dirname(harnessLogPath(ctx.home)), { recursive: true, mode: 0o700 })
+    writeFileSync(harnessLogPath(ctx.home), 'not json', { mode: 0o600 })
+    const state = await get(server.port, STATE_PATH)
+    expect(state.body).not.toContain(root)
+    expect(json(state)).toMatchObject({ harness: [], problems: [`The log of changes to Delo itself cannot be read: ${HOME_WITHHELD_SENTENCE}`] })
+    const refused = await post(server.port, ACTION_PATHS.undo, { id: 'c0123456789' })
+    expect(refused.status).toBe(500)
+    expect(json(refused)).toEqual({ code: 'RECORD_UNREADABLE', message: HOME_WITHHELD_SENTENCE })
+    expect(json(await get(server.port, `${SHOW_PATH}?id=c0123456789`))).toEqual({ code: 'RECORD_UNREADABLE', message: HOME_WITHHELD_SENTENCE })
   })
 })
 

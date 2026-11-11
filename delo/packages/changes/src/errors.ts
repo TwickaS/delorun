@@ -28,6 +28,8 @@ import { codedReason, profileOption, refusalDescriber, type RefusalDescriber } f
  *   ([tree](./tree.ts)), so Changes does not copy it.
  * - `LOAD_REFUSED`: what the profile would load is not what Changes keeps (a link or an active directory differs), so a
  *   start or a reload does not load it.
+ * - `HARNESS_CHANGED`: the composed tree a start runs, the signed release with the person's approved harness files in
+ *   place, holds a file that is not the signed or the approved one, so the start does not run it.
  */
 export type ChangesCode =
   | 'RECORD_UNREADABLE'
@@ -45,6 +47,7 @@ export type ChangesCode =
   | 'OPERATION_FAILED'
   | 'CONTENT_TOO_LARGE'
   | 'LOAD_REFUSED'
+  | 'HARNESS_CHANGED'
 
 /** A refusal or failure of Changes. */
 export class ChangesError extends Error {

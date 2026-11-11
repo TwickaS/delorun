@@ -141,3 +141,25 @@ export async function rejection(promise: Promise<unknown>, code: ChangesCode): P
   expect((error as ChangesError).code).toBe(code)
   return error as ChangesError
 }
+
+/**
+ * Make every read of one file after its first full read return its bytes with the first byte changed, as a file
+ * rewritten in place between two reads does, until the returned function is called.
+ * @param path - the file.
+ * @returns what puts the reads back.
+ */
+export async function alterReads(path: string): Promise<() => void> {
+  const { dev, ino, size } = statSync(path)
+  const prototype = await fileHandlePrototype()
+  const original = prototype.read as (this: FileHandle, buffer: Buffer, offset: number, length: number, position: number | null) => Promise<{ bytesRead: number, buffer: Buffer }>
+  let read = 0
+  const spy = vi.spyOn(prototype, 'read').mockImplementation(async function (this: FileHandle, buffer: Buffer, offset: number, length: number, position: number | null) {
+    const result = await original.call(this, buffer, offset, length, position)
+    const stats = await this.stat()
+    if (stats.dev !== dev || stats.ino !== ino || result.bytesRead === 0) return result
+    if (read >= size) buffer[offset] = buffer[offset]! ^ 1
+    read += result.bytesRead
+    return result
+  } as FileHandle['read'])
+  return () => { spy.mockRestore() }
+}

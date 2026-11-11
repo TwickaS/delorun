@@ -1,16 +1,17 @@
 /**
  * One change as the person reviews it: the plugin's folder, the files with their status, what the checks found with
  * the fixed sentence that the summary is a help and not a protection, the files the diff does not show, and the
- * bounded diff. Every name, line and message is rendered as text.
+ * bounded diff. A change to Delo itself has no folder and no skipped paths. Every name, line and message is rendered as
+ * text.
  */
 import { Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChangeView } from '../wire.ts'
+import type { ChangeView, HarnessReviewView } from '../wire.ts'
 import css from './ChangesSection.module.css'
 
 /** Props of {@link ChangeDetail}. */
 export interface ChangeDetailProps {
-  readonly change: ChangeView
+  readonly change: ChangeView | HarnessReviewView
   readonly t: TranslateNS<'deloChanges'>
 }
 
@@ -36,11 +37,13 @@ export function ChangeDetail({ change, t }: ChangeDetailProps) {
   const { risk, diff } = change
   const notShown = risk.findings.filter(finding => finding.kind === 'not-shown')
   const lines = diff.text === '' ? [] : diff.text.replace(/\n$/, '').split('\n')
+  const self = change.kind === 'harness-edit'
+  const skipped = self ? [] : change.skipped
   return <div className={css.detail}>
-    <p className={css.meta}>{t('review.folder', { folder: change.source })}</p>
+    {self ? null : <p className={css.meta}>{t('review.folder', { folder: change.source })}</p>}
     <section className={css.block} aria-label={t('review.risk')}>
       <h3 className={css.blockHeading}>{t('review.risk')}</h3>
-      <p className={css.notice} role="note">{t('risk.notice')}</p>
+      <p className={css.notice} role="note">{t(self ? 'self.notice' : 'risk.notice')}</p>
       {risk.kinds.length === 0
         ? <p className={css.meta}>{t('risk.nothing')}</p>
         : <ul className={css.riskList}>
@@ -68,9 +71,9 @@ export function ChangeDetail({ change, t }: ChangeDetailProps) {
         </li>)}
       </ul>
     </section>
-    {change.skipped.length === 0 ? null : <section className={css.block}>
+    {skipped.length === 0 ? null : <section className={css.block}>
       <p className={css.meta}>{t('review.skipped')}</p>
-      <ul className={css.plainList}>{change.skipped.map(path => <li key={path}>{path}</li>)}</ul>
+      <ul className={css.plainList}>{skipped.map(path => <li key={path}>{path}</li>)}</ul>
     </section>}
     <section className={css.block} aria-label={t('review.diff')}>
       <h3 className={css.blockHeading}>{t('review.diff')}</h3>

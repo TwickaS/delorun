@@ -12,6 +12,9 @@
  * | `off <plugin>`, `on <plugin>` | one plugin stops running, or runs again |
  * | `protection [block \| warn \| off]` | prints the setting, or changes it |
  * | `work <plugin> [--for <minutes>]`, `done <plugin>` | edits in the plugin's folder load live for at most `--for` minutes; `done` shows the folder's version and approves exactly it ([work command](./work-command.ts)) |
+ * | `edit-harness [--discard]` | makes the person's writable copy of the installed release, whose saved files are changes to Delo itself; `--discard` takes every such change back ([harness command](./harness-command.ts)) |
+ *
+ * `list`, `show`, `apply`, `discard` and `undo` reach a change to Delo itself by its id as they reach a plugin's.
  *
  * Every subcommand that changes something first needs the person at a terminal, standard input and output both, and
  * refuses otherwise before it reads or writes anything; then it asks for confirmation. Everything printed from a folder,
@@ -50,15 +53,18 @@ import {
   unshownAtUpgrade,
   type ActionResult,
   type AtComputer,
+  type BoundedDiff,
   type ChangeEntry,
   type ChangeId,
   type ChangesContext,
+  type HarnessContext,
   type InstallResult,
   type ListedChange,
   type PluginOperation,
   type ProtectionLevel,
   type ReloadHost,
   type ReloadOutcome,
+  type ShownChange,
 } from '@delo/changes'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import { acquireHomeLock, newStartId, runDirectory } from '@delo/home'
@@ -66,15 +72,17 @@ import { queryHomeStatus, sendHomeRequest, updateChannelProbe } from '@delo/home
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
-import { printable, printableJson, printableLines, printableText } from '../terminal-text.ts'
+import { printable, printableJson, printableLines } from '../terminal-text.ts'
 import { askOnTerminal, isYes } from '../trash/terminal.ts'
-import { runtimeOfFile } from '../update/runtime.ts'
+import { runtimeOfFile, type RunningRuntime } from '../update/runtime.ts'
 import { upgradeLine } from '../verify/changes.ts'
 import { upstreamPluginOperation } from './plugin-operation.ts'
+import { applyHarness, diffLines, discardHarness, findHarnessTarget, harnessListLines, isHarnessSubcommand, readHarnessListing, runHarnessCommand, showHarness, undoHarness, type HarnessTarget } from './harness-command.ts'
+import { harnessContextOf, outputLogger } from './harness-start.ts'
 import { isWorkSubcommand, runWorkCommand } from './work-command.ts'
 
 /** The usage line. */
-const USAGE = 'usage: delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [block|warn|off] | work <plugin> [--for <minutes>] | done <plugin>] [--profile <name>] [--json]'
+const USAGE = 'usage: delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [block|warn|off] | work <plugin> [--for <minutes>] | done <plugin> | edit-harness [--discard]] [--profile <name>] [--json]'
 
 /** The refusal when the command does not run at a terminal. */
 export const NOT_AT_TERMINAL = 'This needs you at your computer: run it in a terminal.'
@@ -111,6 +119,14 @@ export interface ChangesCommandDependencies {
    * Absent, the diff is printed without waiting.
    */
   readonly pageLines?: number
+  /**
+   * The harness the command works on: the running runtime's when `delorun` runs from the runtime store, whose signed
+   * installation the store's start check reads when an action needs it ({@link harnessContextOf} by default).
+   * @param home - the Delo home.
+   * @param context - the environment and output.
+   * @returns the harness, or undefined outside the runtime store.
+   */
+  readonly harness: (home: string, context: CommandContext) => HarnessContext | undefined
 }
 
 /** One subcommand and its argument. */
@@ -249,7 +265,18 @@ export async function withProfileHost<T>(home: string, profile: string, run: (re
  * @returns them.
  */
 export function terminalDependencies(): ChangesCommandDependencies {
-  return { streams: { stdin: process.stdin, stdout: process.stdout }, ask: askOnTerminal, withHost: withProfileHost, pluginOperation: upstreamPluginOperation, pageLines: pageLinesOf(process.stdout.rows) }
+  return { streams: { stdin: process.stdin, stdout: process.stdout }, ask: askOnTerminal, withHost: withProfileHost, pluginOperation: upstreamPluginOperation, pageLines: pageLinesOf(process.stdout.rows), harness: runningHarness }
+}
+
+/**
+ * The harness of the runtime this `delorun` runs, whose runtime store's warnings go to standard error.
+ * @param home - the Delo home.
+ * @param context - the environment and output.
+ * @param runtime - the runtime this `delorun` runs; this module's by default.
+ * @returns the harness, or undefined outside the runtime store.
+ */
+export function runningHarness(home: string, context: CommandContext, runtime: RunningRuntime = runtimeOfFile(home, fileURLToPath(import.meta.url))): HarnessContext | undefined {
+  return harnessContextOf(home, runtime, context.env, outputLogger(context))
 }
 
 /**
@@ -329,19 +356,22 @@ function entryLine(entry: ChangeEntry): string {
  */
 async function list(ctx: ChangesContext, json: boolean, context: CommandContext, dependencies: ChangesCommandDependencies): Promise<CommandResult> {
   const listing = await listChanges(ctx)
+  const harness = await readHarnessListing(dependencies.harness(ctx.home, context), ctx.home)
   if (json) {
-    context.stdout(`${printableJson(listing)}\n`)
+    context.stdout(`${printableJson({ ...listing, harness: { ...harness.listing, ...harness.problem === undefined ? {} : { problem: harness.problem } } })}\n`)
     return EXIT.ok
   }
+  const harnessLines = harnessListLines(harness)
   // The first start under Changes logs each approval with its plugin and folder.
   const unshown = listing.entries.filter(unshownAtUpgrade).flatMap(({ subject: { plugin, source } }) => plugin === undefined || source === undefined ? [] : [{ plugin, source }])
-  const waiting = [...listing.pending.flatMap(pendingLines), ...listing.requests.flatMap(requestLines)]
+  const waiting = [...listing.pending.flatMap(pendingLines), ...listing.requests.flatMap(requestLines), ...harnessLines.waiting]
   const lines = [
     ...unshown.length === 0 ? [] : [...unshown.map(upgradeLine), ''],
     ...waiting.length === 0 ? ['Nothing waits for your review.'] : ['Waiting for review:', ...waiting, 'See one with: delorun changes show <id>'],
   ]
   if (listing.leftOut.length > 0) lines.push('', 'Left out because Delo did not start with them:', ...listing.leftOut.flatMap(entry => leftOutWords(leftOutFact(entry)).split('\n').map(line => `  ${line}`)))
   if (listing.entries.length > 0) lines.push('', 'Recent changes, newest first:', ...listing.entries.map(entryLine))
+  lines.push(...harnessLines.others)
   for (const { plugin, source } of listing.missing) lines.push('', `The folder of ${plugin}, ${source}, is gone; its approved copy still runs.`)
   lines.push('', `Protection: ${listing.protection}: ${PROTECTION_MEANING[listing.protection]}.`)
   if (listing.workSession !== undefined) lines.push(`Working on ${listing.workSession.plugin} since ${listing.workSession.startedAt}, until ${listing.workSession.endsAt} at the latest: edits in its folder load live.`)
@@ -375,23 +405,13 @@ function changeLines(change: ListedChange, diff: boolean): string[] {
 }
 
 /**
- * @param change - a change waiting for review.
- * @returns its bounded diff as terminal lines ({@link printableText}), and what the bound left out.
- */
-function diffLines(change: ListedChange): string[] {
-  const lines = change.diff.text === '' ? ['The diff shows no lines.'] : printableText(change.diff.text.trimEnd())
-  if (change.diff.truncated) lines.push(`The diff was cut short at its size limit; left out: ${change.diff.omitted.join(', ')}`)
-  return lines
-}
-
-/**
  * Print a change's diff before `apply` asks, a page at a time when the dependencies give a page size: after each full
  * page but the last the person presses Enter for the next page, or answers `a` for the rest without stopping.
  * @param change - the change.
  * @param dependencies - the terminal and the page size.
  * @param context - the output.
  */
-async function pagedDiff(change: ListedChange, dependencies: ChangesCommandDependencies, context: CommandContext): Promise<void> {
+async function pagedDiff(change: { readonly diff: BoundedDiff }, dependencies: ChangesCommandDependencies, context: CommandContext): Promise<void> {
   const lines = diffLines(change)
   const size = Math.max(1, dependencies.pageLines ?? lines.length)
   let at = 0
@@ -420,17 +440,40 @@ function entryLines(entry: ChangeEntry): string[] {
   return lines
 }
 
+/** What a change id names: a plugin's change, or a change to the harness itself. */
+type Target =
+  | { readonly kind: 'plugin', readonly shown: ShownChange }
+  | { readonly kind: 'harness', readonly target: HarnessTarget }
+
 /**
- * `show`.
+ * Find what a change id names: a plugin's change first, then a change to the harness itself.
  * @param ctx - the profile.
+ * @param harness - the running runtime's harness, or undefined outside the store.
+ * @param id - the id.
+ * @returns the change.
+ * @throws {ChangesError} `UNKNOWN_CHANGE` when neither has the id; `CHANGED_SINCE_REVIEW`.
+ */
+async function targetOf(ctx: ChangesContext, harness: HarnessContext | undefined, id: ChangeId): Promise<Target> {
+  try {
+    return { kind: 'plugin', shown: await showChange(ctx, id) }
+  } catch (error) {
+    if (!isChangesError(error) || error.code !== 'UNKNOWN_CHANGE') throw error
+    const target = await findHarnessTarget(harness, ctx.home, id)
+    if (target === undefined) throw error
+    return { kind: 'harness', target }
+  }
+}
+
+/**
+ * `show` of a plugin's change.
+ * @param shown - the change.
  * @param id - the change id.
  * @param diff - whether to print the diff.
  * @param json - whether to print JSON.
  * @param context - the output.
  * @returns the exit code.
  */
-async function show(ctx: ChangesContext, id: ChangeId, diff: boolean, json: boolean, context: CommandContext): Promise<CommandResult> {
-  const shown = await showChange(ctx, id)
+function show(shown: ShownChange, id: ChangeId, diff: boolean, json: boolean, context: CommandContext): CommandResult {
   if (json) {
     context.stdout(`${printableJson(shown)}\n`)
     return EXIT.ok
@@ -482,13 +525,13 @@ function reported(done: string, result: ActionResult, context: CommandContext): 
  * checks flagged and each file whose content the diff does not show, and the change.
  * @param ctx - the profile.
  * @param id - the change id.
+ * @param shown - the change.
  * @param presence - the terminal proof.
  * @param dependencies - the terminal and the Host.
  * @param context - the output.
  * @returns the exit code.
  */
-async function apply(ctx: ChangesContext, id: ChangeId, presence: AtComputer, dependencies: ChangesCommandDependencies, context: CommandContext): Promise<CommandResult> {
-  const shown = await showChange(ctx, id)
+async function apply(ctx: ChangesContext, id: ChangeId, shown: ShownChange, presence: AtComputer, dependencies: ChangesCommandDependencies, context: CommandContext): Promise<CommandResult> {
   if (shown.kind === 'pending') {
     print(context.stdout, [...changeLines(shown.change, false), ''])
     await pagedDiff(shown.change, dependencies, context)
@@ -590,6 +633,7 @@ function attestAtTerminal(dependencies: ChangesCommandDependencies): AtComputer 
  */
 export async function runChanges(args: readonly string[], context: CommandContext, dependencies: ChangesCommandDependencies = terminalDependencies()): Promise<CommandResult> {
   if (isWorkSubcommand(args)) return runWorkCommand(args, context, dependencies, () => attestAtTerminal(dependencies))
+  if (isHarnessSubcommand(args)) return runHarnessCommand(args, context, dependencies, () => attestAtTerminal(dependencies))
   const { action, profile: profileFlag, json } = requested(args)
   // A change needs the person at the terminal before anything is read or written, the home's tree included.
   const reads = action.kind === 'list' || action.kind === 'show' || (action.kind === 'protection' && action.level === undefined)
@@ -601,14 +645,24 @@ export async function runChanges(args: readonly string[], context: CommandContex
     switch (action.kind) {
       case 'list':
         return await list(ctx, json, context, dependencies)
-      case 'show':
-        return await show(ctx, action.id, action.diff, json, context)
+      case 'show': {
+        const harness = dependencies.harness(home.path, context)
+        const target = await targetOf(ctx, harness, action.id)
+        return target.kind === 'plugin' ? show(target.shown, action.id, action.diff, json, context) : await showHarness(harness, target.target, action.diff, json, context)
+      }
       case 'protection':
         return await protection(ctx, action.level, presence, dependencies, context)
-      case 'apply':
-        return await apply(ctx, action.id, presence!, dependencies, context)
+      case 'apply': {
+        const harness = dependencies.harness(home.path, context)
+        const target = await targetOf(ctx, harness, action.id)
+        if (target.kind === 'harness') return await applyHarness(harness, target.target, presence!, dependencies, context, change => pagedDiff(change, dependencies, context))
+        return await apply(ctx, action.id, target.shown, presence!, dependencies, context)
+      }
       case 'discard': {
-        const shown = await showChange(ctx, action.id)
+        const harness = dependencies.harness(home.path, context)
+        const target = await targetOf(ctx, harness, action.id)
+        if (target.kind === 'harness') return await discardHarness(harness, target.target, presence!, dependencies, context)
+        const { shown } = target
         print(context.stdout, [...shown.kind === 'pending' ? changeLines(shown.change, false) : entryLines(shown.entry), ''])
         if (!await confirmed(dependencies, `Discard ${action.id}? It will not run, and your folder stays as it is.`)) return declined(context)
         await dependencies.withHost(home.path, profile, () => discardChange(ctx, action.id, presence!))
@@ -616,7 +670,10 @@ export async function runChanges(args: readonly string[], context: CommandContex
         return EXIT.ok
       }
       case 'undo': {
-        const shown = await showChange(ctx, action.id)
+        const harness = dependencies.harness(home.path, context)
+        const target = await targetOf(ctx, harness, action.id)
+        if (target.kind === 'harness') return await undoHarness(harness, target.target, presence!, dependencies, context)
+        const { shown } = target
         if (!await confirmed(dependencies, `Undo ${action.id}: ${printable(shown.kind === 'pending' ? shown.change.plugin : shown.entry.summary)}?`)) return declined(context)
         return reported(`Undid ${action.id}`, await dependencies.withHost(home.path, profile, reload => undoChange(ctx, action.id, presence!, { reload })), context)
       }
@@ -638,6 +695,6 @@ export async function runChanges(args: readonly string[], context: CommandContex
 /** `delorun changes`: review, apply, discard and undo changes to what Delo runs. */
 export const changesCommand: CliCommand = {
   name: 'changes',
-  summary: 'What waits for your review, and apply <id>, discard <id>, undo <id>, off <plugin>, on <plugin>, protection, work <plugin>, done <plugin>',
+  summary: 'What waits for your review, and apply <id>, discard <id>, undo <id>, off <plugin>, on <plugin>, protection, work <plugin>, done <plugin>, edit-harness',
   run: (args, context) => runChanges(args, context),
 }

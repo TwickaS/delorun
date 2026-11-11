@@ -21,7 +21,6 @@
  *
  * @module @delo/cli/changes/retry
  */
-import { spawn } from 'node:child_process'
 import { isChangesError, lastLeftOut, leaveOutNewestChange, leftOutFact, leftOutWords, newestLeavableChange, pluginRows, SECOND_FAILURE_LINE } from '@delo/changes'
 import type { DeloLogger } from '@delo/logs'
 import type { CommandOutput, CommandResult } from '../command.ts'
@@ -29,6 +28,7 @@ import type { BootedRow } from '../delo-bundles.ts'
 import { CliError, EXIT } from '../exit.ts'
 import { profileDirectory } from '../profile.ts'
 import { printableText } from '../terminal-text.ts'
+import { runChild, startEntry } from './harness-start.ts'
 
 export { SECOND_FAILURE_LINE }
 
@@ -55,6 +55,8 @@ export interface StartRetryRequest {
   readonly output: CommandOutput
   /** The home process's logger, which records a failure to leave a change out. */
   readonly logger: DeloLogger
+  /** The runtime version the start runs from the runtime store, whose harness changes it may leave out; absent outside the store. */
+  readonly runtime?: string
 }
 
 /**
@@ -126,18 +128,19 @@ export function startRetry(request: StartRetryRequest): StartRetry {
     role,
     async checkRows(rows) {
       if (role !== 'first') return
-      const newest = await newestLeavableChange(ctx).catch((error: unknown) => {
+      const newest = await newestLeavableChange(ctx, request.runtime).catch((error: unknown) => {
         warn('Delo could not read which change it would leave out', error)
         return undefined
       })
-      if (newest === undefined) return
+      // A change to the harness itself has no rows of its own; the start's failure decides it.
+      if (newest === undefined || newest.kind === 'harness-edit') return
       const plugin = newest.subject.plugin!
       const inactive = pluginRows(plugin, rows).filter(row => !row.disabled && row.state !== 'active')
       if (inactive.length > 0) throw new CliError(EXIT.failed, `${plugin} did not load: ${inactive.map(row => `row ${row.id} is ${row.state}`).join(', ')}`)
     },
     async afterFailure(error) {
       if (role !== 'first') return
-      const entry = await leaveOutNewestChange(ctx, messageOf(error)).catch((leaveError: unknown) => {
+      const entry = await leaveOutNewestChange(ctx, messageOf(error), request.runtime).catch((leaveError: unknown) => {
         warn('Delo could not leave the newest change out after the start failed', leaveError)
         return undefined
       })
@@ -187,49 +190,29 @@ export async function retryForeground(request: ForegroundRequest, start: () => P
   }
 }
 
-/** The signals the first process passes to the second start's process. */
-const FORWARDED = ['SIGTERM', 'SIGHUP'] as const
-
 /**
  * Run the second foreground start in a child process with this terminal: `delorun start --foreground` for the same
- * profile, with `--open` when the first start opened the studio, and {@link CHANGES_RETRY_ENV} set. This process
- * forwards `SIGTERM` and `SIGHUP` to it and leaves `SIGINT`, which the terminal sends to both, to the child.
+ * profile, with `--open` when the first start opened the studio, and {@link CHANGES_RETRY_ENV} set. The child is the
+ * signed installation's `delorun` ([harness start](./harness-start.ts)), never a composed tree's, so the signed code
+ * composes the harness again without a harness change the first start left out. This process forwards `SIGTERM` and
+ * `SIGHUP` to it and leaves `SIGINT`, which the terminal sends to both, to the child.
  * @param request - the profile, the studio choice and the environment `delorun` was started with.
- * @param command - the command's entry point and Node's options, such as a source checkout's loader; this process's by
- *   default.
+ * @param command - the command's entry point, Node's options, such as a source checkout's loader, and the Node
+ *   executable; this process's by default, mapped to the signed installation by {@link startEntry}.
  * @returns `undefined`, with this process's exit code set to the child's, or to {@link EXIT.failed} when a signal ended
  *   it.
  * @throws {CliError} when the entry point is unknown or the child cannot be started.
  */
-export function relaunchForeground(request: ForegroundRequest, command: { readonly entry: string | undefined, readonly execArgv: readonly string[] } = { entry: process.argv[1], execArgv: process.execArgv }): Promise<CommandResult> {
+export function relaunchForeground(request: ForegroundRequest, command: { readonly entry: string | undefined, readonly execArgv: readonly string[], readonly node?: string } = { entry: process.argv[1], execArgv: process.execArgv }): Promise<CommandResult> {
   const { entry, execArgv } = command
   if (entry === undefined) return Promise.reject(new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so Delo cannot start again without the change'))
-  const child = spawn(process.execPath, [...execArgv, entry, 'start', '--foreground', '--profile', request.profile, ...request.open ? ['--open'] : []], {
-    stdio: 'inherit',
-    env: { ...request.env, [CHANGES_RETRY_ENV]: '1' },
-  })
-  const forwards = FORWARDED.map(signal => [signal, (): void => { child.kill(signal) }] as const)
-  // The terminal sends an interrupt to the child as well; this process waits for the child to end.
-  const interrupt = (): void => {}
-  for (const [signal, forward] of forwards) process.on(signal, forward)
-  process.on('SIGINT', interrupt)
-  return new Promise<CommandResult>((resolve, reject) => {
-    const release = (): void => {
-      for (const [signal, forward] of forwards) process.off(signal, forward)
-      process.off('SIGINT', interrupt)
-    }
-    child.once('error', (error) => {
-      // A child that could not be started may still report `exit`, which must not set this process's exit code.
-      child.removeAllListeners('exit')
-      release()
-      reject(new CliError(EXIT.failed, `delorun: Delo could not start again without the change: ${error.message}`))
-    })
-    child.once('exit', (code) => {
-      release()
-      process.exitCode = code ?? EXIT.failed
-      resolve(undefined)
-    })
-  })
+  const signed = startEntry({ node: command.node ?? process.execPath, entry })
+  return runChild(
+    { node: signed.node, args: [...execArgv, signed.entry, 'start', '--foreground', '--profile', request.profile, ...request.open ? ['--open'] : []] },
+    { ...request.env, [CHANGES_RETRY_ENV]: '1' },
+    'inherit',
+    'delorun: Delo could not start again without the change',
+  )
 }
 
 /** How one background start ended. */
