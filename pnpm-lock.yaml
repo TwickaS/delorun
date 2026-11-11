@@ -1840,6 +1840,9 @@ importers:
       '@deepseek-ai/dsh-client-test-runtime':
         specifier: workspace:*
         version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-approval':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-approval
       '@deepseek-ai/dsh-client-ui-permission-presets':
         specifier: workspace:*
         version: link:../../../packages/client/ui-permission-presets

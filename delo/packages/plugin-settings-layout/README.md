@@ -31,8 +31,8 @@ The navigation has three groups. Each page shows only the sections and rows that
 | You | Account | Upstream's account section; Delo's composition hides it, so the page shows only where it is registered | section `account` |
 | Agent | Models | Upstream's model providers | section `models` |
 | Agent | Modes | Upstream's agent presets | section `agent-presets` |
-| Agent | Permissions | A New chats card with the default permission mode, then Workspace access, each workspace's full access | row `permission`; section `delo-workspace-access` |
-| Agent | Tools | Tool settings, MCP servers waiting for an answer, then upstream's inventory of built-in plugins | sections `delo-tool-settings`, `delo-mcp-servers`, `plugins` |
+| Agent | Permissions | A New chats card with the default permission mode, then Permissions: each full-access grant and each MCP server waiting or allowed, with revoke | row `permission`; section `delo-permissions` |
+| Agent | Tools | Tool settings, then upstream's inventory of built-in plugins | sections `delo-tool-settings`, `plugins` |
 | Delo | About | Version, then a Getting started card with Show onboarding again | rows `current-version`, `delo-onboarding` (from the onboarding plugin, not yet on this branch) |
 
 The search field finds pages, cards and rows by name and by keywords in English and Chinese. Anything the layout does not place, such as a third-party plugin's section or a new upstream General row, appears under More, so no section or row disappears.

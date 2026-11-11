@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 /**
  * The consent surfaces of the studio: the full-access consent that upstream's permission control asks before a chat
- * switches to full access in a workspace without a grant, the Workspace access section and the MCP servers section.
- * The denial cases prove that a remote studio, an unanswered consent and a stale review record nothing, and that a
- * profile without the consent plugins (such as one set up with "Same as stock") keeps upstream's behaviour.
+ * switches to full access in a workspace without a grant, the approval card's full-access action, the MCP server review,
+ * the notice that a server waits, and the Permissions section with its revokes. The denial cases prove that a remote
+ * studio, an unanswered consent and a stale review record nothing, that a phone sees "Approve this at your computer"
+ * instead of a button, and that a profile without the consent plugins (such as one set up with "Same as stock") keeps
+ * upstream's behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -17,8 +19,10 @@ import {
   confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
   type FullAccessConsentProps, type FullAccessConsentSource,
 } from '../src/client/FullAccessConsent.tsx'
-import { WorkspaceAccessSection, type WorkspaceAccessSectionProps } from '../src/client/WorkspaceAccessSection.tsx'
-import { McpServersSection, type McpServersSectionProps } from '../src/client/McpServersSection.tsx'
+import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
+import { createMcpReviewSource, McpServerReview, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
+import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
+import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 
 afterEach(() => {
   cleanup()
@@ -125,16 +129,30 @@ function renderConsent(source: FullAccessConsentSource) {
 }
 
 describe('the full-access consent', () => {
-  it('names the folder, what full access reaches and that it covers this workspace only', async () => {
+  it('says in one sentence what it allows and in one its risk, with the folder and what it reaches under Details', async () => {
     const source = createFullAccessConsentSource(fakeHost().fetch)
     void source.ask(OFF)
     renderConsent(source)
     const dialog = screen.getByRole('dialog', { name: en['consent.title'] })
-    expect(within(dialog).getByText(`site · ${OFF.workspace}`)).toBeTruthy()
-    for (const key of ['consent.effect', 'consent.reach.files', 'consent.reach.keys', 'consent.reach.channels', 'consent.scope'] as const) {
-      expect(within(dialog).getByText(en[key])).toBeTruthy()
+    expect(within(dialog).getByText(en['consent.allows'].replace('{workspace}', 'site'))).toBeTruthy()
+    expect(within(dialog).getByText(en['consent.risk'])).toBeTruthy()
+    const details = within(dialog).getByText(en['consent.details']).closest('details')
+    if (details === null) throw new Error('no details')
+    expect(details.open).toBe(false)
+    expect(within(details).getByText(OFF.workspace)).toBeTruthy()
+    for (const key of ['consent.reach.files', 'consent.reach.keys', 'consent.reach.channels', 'consent.scope'] as const) {
+      expect(within(details).getByText(en[key])).toBeTruthy()
     }
     expect(within(dialog).getByRole('button', { name: en['consent.confirm'] })).toBeTruthy()
+  })
+
+  it('switches the chat it was asked from along with the grant', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } } })
+    const source = createFullAccessConsentSource(host.fetch)
+    const answered = source.ask(OFF, 'chat-1')
+    source.confirm()
+    await expect(answered).resolves.toBe(true)
+    expect(host.received[0]?.body).toEqual({ workspace: OFF.workspace, reviewId: OFF.reviewId, on: true, confirmed: true, chat: 'chat-1' })
   })
 
   it('records the grant with the review it showed and the person\'s answer, then closes', async () => {
@@ -181,143 +199,298 @@ describe('the full-access consent', () => {
   })
 })
 
+const SERVER = {
+  serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '', envNames: ['API_TOKEN'],
+  reason: 'the acceptance store holds no acceptance for this command', change: 'new' as const, reviewedAt: NOW - 60_000,
+}
+const ACCEPTED = { command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/git', envNames: [], acceptedAt: NOW - 86_400_000, servers: ['git'] }
+const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): Answer => ({ status: 200, body: { servers, accepted } })
+
 /**
- * Render the Workspace access section over a fake home.
+ * The approval card's owner props and the action's face, over a fake home.
  * @param host - the fake home.
- * @param ask - the consent's question.
- * @returns the render result.
+ * @param overrides - the props a case changes.
+ * @returns the props.
  */
-function renderAccess(host: ReturnType<typeof fakeHost>, ask: FullAccessConsentSource['ask'] = async () => false) {
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask } as WorkspaceAccessSectionProps
-  return render(<WorkspaceAccessSection {...props} />)
+function actionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<FullAccessActionProps> = {}): FullAccessActionProps {
+  return {
+    t: makeTranslate(en), grants: 'full-access', toolName: 'bash', callId: undefined, allow: vi.fn(async () => {}),
+    sessionId: 'chat-1', fetch: host.fetch, ask: vi.fn(async () => true), ...overrides,
+  } as FullAccessActionProps
 }
 
-describe('the Workspace access section', () => {
-  it('lists each workspace with its full access, and asks the consent before turning it on', async () => {
-    const host = fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF] } } })
-    const ask = vi.fn(async () => false)
-    renderAccess(host, ask)
+describe('the approval card\'s full-access action', () => {
+  it('offers to allow full access for the workspace, asks the consent once, then answers the card', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
+    const props = actionProps(host)
+    render(<FullAccessAction {...props} />)
     await settle()
-    expect(screen.getByText('site')).toBeTruthy()
-    expect(screen.getByText(en['access.off'])).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['access.turnOn'] }))
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
     await settle()
-    expect(ask).toHaveBeenCalledWith(OFF)
-    expect(host.received.filter(request => request.key.startsWith('POST'))).toEqual([])
+    expect(props.ask).toHaveBeenCalledWith(OFF, 'chat-1')
+    expect(props.allow).toHaveBeenCalledTimes(1)
   })
 
-  it('turns full access off with the person\'s answer and says how many open chats went back', async () => {
+  it('leaves the card unanswered when the person cancels the consent', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
+    const props = actionProps(host, { ask: vi.fn(async () => false) })
+    render(<FullAccessAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
+    await settle()
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('does not ask again in a workspace that holds a grant: it switches the chat and answers the card', async () => {
+    const host = fakeHost({
+      [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
+      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
+    })
+    const props = actionProps(host)
+    render(<FullAccessAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
+    await settle()
+    expect(props.ask).not.toHaveBeenCalled()
+    expect(host.received.find(request => request.key === `POST ${PERMISSION_ROUTES.setFullAccess}`)?.body)
+      .toEqual({ workspace: ON.workspace, reviewId: ON.reviewId, on: true, confirmed: true, chat: 'chat-1' })
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells a phone to approve at the computer, with no button', async () => {
+    const props = actionProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE }))
+    render(<FullAccessAction {...props} />)
+    await settle()
+    expect(screen.getByRole('status').textContent).toBe(en['action.atComputer'])
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('shows nothing for another grant, the consent\'s own card, a chat without a folder and a profile without the plugin', async () => {
+    const reviewed = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
+    const cases = [
+      actionProps(reviewed, { grants: 'workspace-management' }),
+      actionProps(reviewed, { toolName: 'permission' }),
+      actionProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(422, 'NO_WORKSPACE') })),
+      actionProps(fakeHost()),
+    ]
+    for (const props of cases) {
+      const { container, unmount } = render(<FullAccessAction {...props} />)
+      await settle()
+      expect(container.innerHTML).toBe('')
+      unmount()
+    }
+  })
+})
+
+/**
+ * Render the MCP server review over its store.
+ * @param source - the store.
+ * @returns the render result.
+ */
+function renderReview(source: McpReviewSource) {
+  const props = {
+    t: makeTranslate(en), useReview: <T,>(select: (state: ReturnType<McpReviewSource['hooks']['review']['getSnapshot']>) => T) => select(source.hooks.review.getSnapshot()),
+    confirm: source.confirm, cancel: source.cancel,
+  } as McpServerReviewProps
+  return render(<McpServerReview {...props} />)
+}
+
+describe('the MCP server review', () => {
+  it('says what allowing does and its risk, with the start without an environment value under Details', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask(SERVER)
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText(en['mcp.confirm.allows'].replace('{server}', 'files'))).toBeTruthy()
+    expect(within(dialog).getByText(en['mcp.confirm.risk'])).toBeTruthy()
+    const details = within(dialog).getByText(en['mcp.details']).closest('details')
+    if (details === null) throw new Error('no details')
+    expect(within(details).getByText('npx')).toBeTruthy()
+    expect(within(details).getByText('"-y" "server-filesystem"')).toBeTruthy()
+    expect(within(details).getByText('API_TOKEN')).toBeTruthy()
+    expect(dialog.textContent).not.toContain(SERVER.reason)
+  })
+
+  it('says what changed since the person allowed the server', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask({ ...SERVER, change: 'environment' })
+    renderReview(source)
+    expect(screen.getByText(en['mcp.change.environment'])).toBeTruthy()
+  })
+
+  it('allows the start it showed with the person\'s answer, and records nothing when cancelled', async () => {
+    const host = fakeHost({ [`POST ${MCP_CONSENT_ROUTES.accept}`]: { status: 200, body: { started: 1 } } })
+    const source = createMcpReviewSource(host.fetch)
+    const cancelled = source.ask(SERVER)
+    source.cancel()
+    await expect(cancelled).resolves.toBeUndefined()
+    expect(host.received).toEqual([])
+    const allowed = source.ask(SERVER)
+    source.confirm()
+    await expect(allowed).resolves.toBe(1)
+    expect(host.received).toEqual([{ key: `POST ${MCP_CONSENT_ROUTES.accept}`, body: { serverName: 'files', reviewId: SERVER.reviewId, confirmed: true } }])
+  })
+
+  it('stays open with the stale review named', async () => {
+    const source = createMcpReviewSource(fakeHost({ [`POST ${MCP_CONSENT_ROUTES.accept}`]: refusal(409, 'STALE_REVIEW') }).fetch)
+    void source.ask(SERVER)
+    source.confirm()
+    await settle()
+    renderReview(source)
+    expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
+  })
+})
+
+/**
+ * Render the waiting-server notice over a fake home.
+ * @param host - the fake home.
+ * @param review - the review's question.
+ * @returns the render result.
+ */
+function renderNotice(host: ReturnType<typeof fakeHost>, review: McpReviewSource['ask'] = async () => undefined) {
+  const props = { t: makeTranslate(en), fetch: host.fetch, review } as McpWaitingNoticeProps
+  return render(<McpWaitingNotice {...props} />)
+}
+
+describe('the notice that an MCP server waits', () => {
+  it('names the waiting server and opens its review from "Review and allow this server"', async () => {
+    const review = vi.fn(async () => 1)
+    renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) }), review)
+    await settle()
+    expect(screen.getByText('An MCP server is waiting for your OK: files.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en['mcp.notice.review'] }))
+    expect(review).toHaveBeenCalledWith(SERVER)
+  })
+
+  it('tells a phone, which reads only the names, to approve at the computer', async () => {
+    const host = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } } })
+    renderNotice(host)
+    await settle()
+    expect(screen.getByText('An MCP server is waiting for your OK: files. Approve this at your computer.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en['mcp.notice.review'] })).toBeNull()
+  })
+
+  it('shows nothing while no server waits, and in a profile without the plugin', async () => {
+    for (const host of [fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([]) }), fakeHost()]) {
+      const { container, unmount } = renderNotice(host)
+      await settle()
+      expect(container.innerHTML).toBe('')
+      unmount()
+    }
+  })
+})
+
+/**
+ * Render the Permissions section over a fake home.
+ * @param host - the fake home.
+ * @param faces - the consent's and the review's questions.
+ * @returns the render result.
+ */
+function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}) {
+  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces } as PermissionsSectionProps
+  return render(<PermissionsSection {...props} />)
+}
+
+/**
+ * The row of the section that names a text.
+ * @param text - the text.
+ * @returns the row.
+ */
+function rowOf(text: string): HTMLElement {
+  const row = screen.getByText(text).closest('li')
+  if (row === null) throw new Error(`no row for ${text}`)
+  return row
+}
+
+describe('the Permissions section', () => {
+  it('lists the workspaces that hold full access, with the others behind a disclosure that asks the consent', async () => {
+    const other = { ...OFF, workspace: '/home/person/projects/notes', title: 'notes' }
+    const ask = vi.fn(async () => false)
+    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON, other] } } }), { ask })
+    await settle()
+    expect(within(rowOf('site')).getByRole('button', { name: en['access.revoke'] })).toBeTruthy()
+    const others = screen.getByText('Other workspaces (1)').closest('details')
+    if (others === null) throw new Error('no disclosure')
+    expect(others.open).toBe(false)
+    fireEvent.click(within(rowOf('notes')).getByRole('button', { name: en['access.allow'] }))
+    await settle()
+    expect(ask).toHaveBeenCalledWith(other)
+  })
+
+  it('revokes full access in one click, and says how many chats went back', async () => {
     const host = fakeHost({
       [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON] } },
       [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: { ...OFF, reviewId: 'c'.repeat(32) }, chats: 2 } },
     })
-    renderAccess(host)
+    renderPermissions(host)
     await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['access.turnOff'] }))
+    fireEvent.click(within(rowOf('site')).getByRole('button', { name: en['access.revoke'] }))
     await settle()
     expect(host.received.find(request => request.key === `POST ${PERMISSION_ROUTES.setFullAccess}`)?.body)
       .toEqual({ workspace: ON.workspace, reviewId: ON.reviewId, on: false, confirmed: true })
-    expect(screen.getByRole('status').textContent).toBe('Full access is off for site. Open chats set back to the safer preset: 2.')
+    expect(screen.getByRole('status').textContent).toBe('site is back on the safer preset. Chats switched back: 2.')
   })
 
-  it('tells a remote studio that the home\'s computer turns full access on and off', async () => {
-    renderAccess(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE }))
-    await settle()
-    expect(screen.getByRole('status').textContent).toContain(FULL_ACCESS_COMMAND)
-    expect(screen.queryByRole('button')).toBeNull()
-  })
-
-  it('says only that the profile does not ask, where the plugin is not mounted', async () => {
-    renderAccess(fakeHost())
-    await settle()
-    expect(screen.getByText(en['access.unavailable'])).toBeTruthy()
-  })
-})
-
-const SERVER = {
-  serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '', envNames: ['API_TOKEN'],
-  reason: 'the acceptance store holds no acceptance for this command', reviewedAt: NOW - 60_000,
-}
-
-/**
- * Render the MCP servers section over a fake home.
- * @param host - the fake home.
- * @returns the render result.
- */
-function renderServers(host: ReturnType<typeof fakeHost>) {
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch } as McpServersSectionProps
-  return render(<McpServersSection {...props} />)
-}
-
-describe('the MCP servers section', () => {
-  it('shows what a waiting server would run, the names of its environment variables, and why it waits', async () => {
-    renderServers(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: { status: 200, body: { servers: [SERVER] } } }))
-    await settle()
-    const row = screen.getByText('files').closest('li')
-    if (row === null) throw new Error('no row for the server')
-    expect(within(row).getByText('npx')).toBeTruthy()
-    expect(within(row).getByText('"-y" "server-filesystem"')).toBeTruthy()
-    expect(within(row).getByText(en['mcp.cwdHost'])).toBeTruthy()
-    expect(within(row).getByText('API_TOKEN')).toBeTruthy()
-    expect(within(row).getByText(SERVER.reason)).toBeTruthy()
-  })
-
-  it('accepts a server only after the confirmation, with the review it showed and the person\'s answer', async () => {
+  it('lists a waiting server with what changed, opens its review, and declines it in place', async () => {
+    const review = vi.fn(async () => 1)
     const host = fakeHost({
-      [`GET ${MCP_CONSENT_ROUTES.pending}`]: { status: 200, body: { servers: [SERVER] } },
-      [`POST ${MCP_CONSENT_ROUTES.accept}`]: { status: 200, body: { started: 1 } },
-    })
-    renderServers(host)
-    await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['mcp.accept'] }))
-    expect(host.received.filter(request => request.key.startsWith('POST'))).toEqual([])
-    const dialog = screen.getByRole('dialog', { name: 'Start files outside the sandbox?' })
-    fireEvent.click(within(dialog).getByRole('button', { name: en['mcp.confirm.accept'] }))
-    await settle()
-    expect(host.received.find(request => request.key === `POST ${MCP_CONSENT_ROUTES.accept}`)?.body)
-      .toEqual({ serverName: 'files', reviewId: SERVER.reviewId, confirmed: true })
-    expect(screen.getByRole('status').textContent).toBe('files is accepted and running.')
-  })
-
-  it('records nothing when the person cancels the confirmation, and names a stale review', async () => {
-    const host = fakeHost({
-      [`GET ${MCP_CONSENT_ROUTES.pending}`]: { status: 200, body: { servers: [SERVER] } },
-      [`POST ${MCP_CONSENT_ROUTES.accept}`]: refusal(409, 'STALE_REVIEW'),
-    })
-    renderServers(host)
-    await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['mcp.accept'] }))
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['mcp.confirm.cancel'] }))
-    expect(host.received.filter(request => request.key.startsWith('POST'))).toEqual([])
-    fireEvent.click(screen.getByRole('button', { name: en['mcp.accept'] }))
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['mcp.confirm.accept'] }))
-    await settle()
-    expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
-  })
-
-  it('declines a server, which stays stopped', async () => {
-    const host = fakeHost({
-      [`GET ${MCP_CONSENT_ROUTES.pending}`]: { status: 200, body: { servers: [SERVER] } },
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, change: 'arguments' }]),
       [`POST ${MCP_CONSENT_ROUTES.decline}`]: { status: 200, body: { declined: true } },
     })
-    renderServers(host)
+    renderPermissions(host, { review })
     await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['mcp.decline'] }))
+    const row = rowOf('files')
+    expect(within(row).getByText(en['mcp.change.arguments'])).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: en['mcp.review'] }))
+    await settle()
+    expect(review).toHaveBeenCalledWith({ ...SERVER, change: 'arguments' })
+    expect(screen.getByRole('status').textContent).toBe('files is allowed and running.')
+    fireEvent.click(within(rowOf('files')).getByRole('button', { name: en['mcp.decline'] }))
     await settle()
     expect(host.received.find(request => request.key === `POST ${MCP_CONSENT_ROUTES.decline}`)?.body).toEqual({ serverName: 'files', reviewId: SERVER.reviewId })
-    expect(screen.getByRole('status').textContent).toBe('files stays stopped.')
   })
 
-  it('tells a remote studio to answer at the home\'s computer, and offers no answer', async () => {
-    renderServers(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE }))
+  it('lists an allowed server and revokes it in one click, saying how many servers stopped', async () => {
+    const host = fakeHost({
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([], [ACCEPTED]),
+      [`POST ${MCP_CONSENT_ROUTES.revoke}`]: { status: 200, body: { stopped: 1 } },
+    })
+    renderPermissions(host)
     await settle()
-    expect(screen.getByRole('status').textContent).toContain('delorun mcp list')
+    const row = rowOf('git')
+    expect(within(row).getByText('uvx')).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: en['mcp.revoke'] }))
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${MCP_CONSENT_ROUTES.revoke}`)?.body).toEqual({ command: 'uvx', acceptedAt: ACCEPTED.acceptedAt, confirmed: true })
+    expect(screen.getByRole('status').textContent).toBe('Revoked. Servers stopped: 1.')
+  })
+
+  it('names a stale revoke and keeps the grant listed', async () => {
+    const host = fakeHost({
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([], [ACCEPTED]),
+      [`POST ${MCP_CONSENT_ROUTES.revoke}`]: refusal(409, 'STALE_REVIEW'),
+    })
+    renderPermissions(host)
+    await settle()
+    fireEvent.click(within(rowOf('git')).getByRole('button', { name: en['mcp.revoke'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
+    expect(rowOf('git')).toBeTruthy()
+  })
+
+  it('tells a phone to approve at the computer, and offers no answer', async () => {
+    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE }))
+    await settle()
+    const line = screen.getByRole('status').textContent
+    expect(line).toContain(FULL_ACCESS_COMMAND)
+    expect(line).toContain(MCP_COMMAND)
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('says only that the profile does not ask, where the plugin is not mounted', async () => {
-    renderServers(fakeHost())
+  it('says only that the profile does not ask, where the plugins are not mounted', async () => {
+    renderPermissions(fakeHost())
     await settle()
+    expect(screen.getByText(en['access.unavailable'])).toBeTruthy()
     expect(screen.getByText(en['mcp.unavailable'])).toBeTruthy()
   })
 })

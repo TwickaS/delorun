@@ -1,9 +1,10 @@
 /**
- * The consent the studio shows before a workspace's full access is turned on: the folder it covers, what commands
- * under full access can reach, and that it covers that workspace only. The same consent serves the composer's
- * permission control, through upstream's `permissionSwitchConsent` service, and the Workspace access section. One store
- * behind one `shell.overlay` entry holds the open consent, so it outlives the surface that asked. On a remote studio the
- * home refuses the review, and the consent says the answer needs the home's own computer and offers no way to grant.
+ * The consent the studio shows before a workspace's full access is turned on: one sentence on what it allows, one on
+ * its risk, and, behind Details, the folder it covers and what commands under full access can reach. The same consent
+ * serves the composer's permission control, through upstream's `permissionSwitchConsent` service, the approval card's
+ * action and the Permissions section. One store behind one `shell.overlay` entry holds the open consent, so it outlives
+ * the surface that asked. On a remote studio the home refuses the review, and the consent says the answer is given at
+ * the home's own computer and offers no way to grant.
  */
 import type { ReactNode } from 'react'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -20,6 +21,8 @@ export type FullAccessConsentState = {
   readonly seq: number
   /** The workspace as the home showed it; absent on a remote studio, which the home refused the review. */
   readonly access?: WorkspaceAccess
+  /** The open chat the consent was asked from, which the grant also switches to full access. */
+  readonly chat?: string
   /** Whether the person's answer is being recorded. */
   readonly busy: boolean
   /** Why the last answer was not recorded, as a refusal code or the home's sentence. */
@@ -38,9 +41,10 @@ export interface FullAccessConsentSource {
   /**
    * Show the consent for one workspace and wait for the person's answer.
    * @param access - the workspace as the home showed it, or undefined on a remote studio.
+   * @param chat - the open chat the consent is asked from, which the grant also switches to full access.
    * @returns true once the grant is recorded; false when the person cancelled or the studio is remote.
    */
-  readonly ask: (access: WorkspaceAccess | undefined) => Promise<boolean>
+  readonly ask: (access: WorkspaceAccess | undefined, chat?: string) => Promise<boolean>
   /** Record the grant for the open consent; a refusal keeps the consent open with its failure. */
   readonly confirm: () => void
   /** Close the open consent without recording anything. */
@@ -98,20 +102,19 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
         },
       },
     },
-    ask(access) {
+    ask(access, chat) {
       // A second ask answers the first as cancelled: one consent is open at a time.
       close(false)
-      publish({ seq: ++seq, ...access === undefined ? {} : { access }, busy: false })
+      publish({ seq: ++seq, ...access === undefined ? {} : { access }, ...chat === undefined ? {} : { chat }, busy: false })
       return new Promise<boolean>((resolve) => { settle = resolve })
     },
     confirm() {
       const open = state
       if (open?.access === undefined || open.busy) return
-      const access = open.access
       publish({ ...open, busy: true })
-      setFullAccess(fetch, access, true).then(
+      setFullAccess(fetch, open.access, true, open.chat).then(
         () => { if (state?.seq === open.seq) close(true) },
-        (error: unknown) => { if (state?.seq === open.seq) publish({ seq: open.seq, access, busy: false, failure: consentFailureOf(error) }) },
+        (error: unknown) => { if (state?.seq === open.seq) publish({ ...open, busy: false, failure: consentFailureOf(error) }) },
       )
     },
     cancel() {
@@ -146,6 +149,15 @@ export async function confirmPermissionSwitch(fetch: HostFetch, consent: Pick<Fu
   return consent.ask(access)
 }
 
+/**
+ * The name a workspace shows: its registered title, or its folder's last segment.
+ * @param access - the workspace.
+ * @returns the name.
+ */
+export function workspaceName(access: WorkspaceAccess): string {
+  return access.title ?? access.workspace.split(/[\\/]/).filter(part => part !== '').at(-1) ?? access.workspace
+}
+
 /** Props of the `shell.overlay` entry: the consent's store and the consents copy. */
 export type FullAccessConsentProps = PropsLocale<'deloConsents'> & InjectFace<Omit<FullAccessConsentSource, 'ask'>>
 
@@ -153,12 +165,13 @@ export type FullAccessConsentProps = PropsLocale<'deloConsents'> & InjectFace<Om
  * The sentence a failure shows.
  * @param t - the consents copy.
  * @param failure - the failure.
+ * @param action - the phrase a remote refusal names: changing full access, or allowing an MCP server.
  * @returns the sentence.
  */
-export function consentFailureText(t: FullAccessConsentProps['t'], failure: ConsentFailure): string {
+export function consentFailureText(t: FullAccessConsentProps['t'], failure: ConsentFailure, action: 'action.changeAccess' | 'action.answerServer' = 'action.changeAccess'): string {
   switch (failure.kind) {
     case 'stale': return t('failed.stale')
-    case 'remote': return t('loopback', { action: t('action.changeAccess') })
+    case 'remote': return t('loopback', { action: t(action) })
     case 'unreachable': return t('failed.unreachable')
     case 'unreadable': return t('failed.unreadable')
     case 'refused': return failure.message
@@ -186,15 +199,22 @@ export function FullAccessConsent({ useConsent, confirm, cancel, t }: FullAccess
     {access === undefined
       ? <p className={css.text}>{t('consent.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code></p>
       : <div className={css.consent}>
-        <p className={css.text}>{t('consent.workspace')}</p>
-        <p className={css.path}>{access.title === undefined ? access.workspace : `${access.title} · ${access.workspace}`}</p>
-        <p className={css.text}>{t('consent.effect')}</p>
-        <ul className={css.reach}>
-          <li>{t('consent.reach.files')}</li>
-          <li>{t('consent.reach.keys')}</li>
-          <li>{t('consent.reach.channels')}</li>
-        </ul>
-        <p className={css.text}>{t('consent.scope')}</p>
+        <p className={css.text}>{t('consent.allows', { workspace: workspaceName(access) })}</p>
+        <p className={css.text}>{t('consent.risk')}</p>
+        <details className={css.disclosure}>
+          <summary>{t('consent.details')}</summary>
+          <dl className={css.start}>
+            <dt>{t('consent.folder')}</dt>
+            <dd><code className={css.command}>{access.workspace}</code></dd>
+          </dl>
+          <p className={css.text}>{t('consent.reachIntro')}</p>
+          <ul className={css.reach}>
+            <li>{t('consent.reach.files')}</li>
+            <li>{t('consent.reach.keys')}</li>
+            <li>{t('consent.reach.channels')}</li>
+          </ul>
+          <p className={css.text}>{t('consent.scope')}</p>
+        </details>
         {consent.failure === undefined ? null : <p className={css.failed} role="alert">{consentFailureText(t, consent.failure)}</p>}
       </div>}
   </Modal>

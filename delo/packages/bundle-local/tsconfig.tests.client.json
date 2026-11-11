@@ -40,6 +40,9 @@
       "path": "../../../packages/client/ui-slots"
     },
     {
+      "path": "../../../packages/client/ui-approval"
+    },
+    {
       "path": "../../../packages/client/ui-permission-presets"
     }
   ]

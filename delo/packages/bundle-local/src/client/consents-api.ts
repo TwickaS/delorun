@@ -1,20 +1,21 @@
 /**
  * Requests to the home's consent routes: the per-workspace full access of `@delo/plugin-permission-defaults` and the
- * pending stdio MCP servers of `@delo/plugin-mcp-consent`, through the same-origin requests of
- * [`./host-api.ts`](./host-api.ts). Each route answers only the studio on the home's own computer; a remote studio
- * receives `LOOPBACK_REQUIRED`, and a profile whose consent switch is off, such as one set up with "Same as stock",
- * mounts no route, so the request answers 404.
+ * pending and accepted stdio MCP servers of `@delo/plugin-mcp-consent`, through the same-origin requests of
+ * [`./host-api.ts`](./host-api.ts). Each route but the waiting servers' names answers only the studio on the home's own
+ * computer; a remote studio receives `LOOPBACK_REQUIRED`, and a profile whose consent switch is off, such as one set up
+ * with "Same as stock", mounts no route, so the request answers 404.
  * @module @delo/bundle-local/client/consents-api
  */
 import {
-  MCP_CONSENT_ROUTES, type AcceptServerAnswer, type PendingServer, type PendingServersAnswer,
+  MCP_CONSENT_ROUTES, SERVER_CHANGES, type AcceptedServer, type AcceptServerAnswer, type PendingServer, type PendingServersAnswer,
+  type RevokeServerAnswer, type ServerChange, type WaitingServer, type WaitingServersAnswer,
 } from '@delo/plugin-mcp-consent/wire'
 import {
   PERMISSION_ROUTES, type SetFullAccessAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from '@delo/plugin-permission-defaults/wire'
 import { call, fields, hostFailureOf, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
 
-export type { PendingServer, WorkspaceAccess, WorkspacesAnswer }
+export type { AcceptedServer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
 
 /** The preset whose switch needs the workspace's consent. */
 export const FULL_ACCESS_PRESET = 'danger-full-access'
@@ -32,13 +33,19 @@ const isWorkspaceAccess: Check = fields({
 const isWorkspaces: Check = fields({ workspaces: listOf(isWorkspaceAccess), storeProblem: optional(isString) })
 const isReview: Check = fields({ access: isWorkspaceAccess })
 const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime })
+const isServerChange: Check = value => SERVER_CHANGES.some(change => change === value)
 const isPendingServers: Check = fields({
   servers: listOf(fields({
     serverName: isString, reviewId: isString, command: isString, args: listOf(isString), cwd: isString,
-    envNames: listOf(isString), reason: isString, reviewedAt: isTime,
+    envNames: listOf(isString), reason: isString, change: isServerChange, reviewedAt: isTime,
+  })),
+  accepted: listOf(fields({
+    command: isString, args: listOf(isString), cwd: isString, envNames: listOf(isString), acceptedAt: isTime, servers: listOf(isString),
   })),
 })
+const isWaitingServers: Check = fields({ servers: listOf(fields({ serverName: isString, change: isServerChange })) })
 const isAccepted: Check = fields({ started: isTime })
+const isRevoked: Check = fields({ stopped: isTime })
 const isDeclined: Check = fields({ declined: value => value === true })
 
 /**
@@ -85,25 +92,48 @@ export async function reviewChat(fetch: HostFetch, sessionId: string): Promise<W
  * @param fetch - the request function.
  * @param access - the workspace as the consent showed it.
  * @param on - on, which records the grant, or off, which withdraws it.
- * @returns the workspace after the change and how many open chats were set back to the safer preset.
+ * @param chat - the open chat the consent was asked from, which turning on also switches to full access.
+ * @returns the workspace after the change and how many open chats changed preset.
  * @throws {HostRequestError} for a refusal (`LOOPBACK_REQUIRED`, `STALE_REVIEW`, `STORE_REFUSED` among them), an
  *   unreachable Host or an unreadable answer.
  */
-export function setFullAccess(fetch: HostFetch, access: WorkspaceAccess, on: boolean): Promise<SetFullAccessAnswer> {
+export function setFullAccess(fetch: HostFetch, access: WorkspaceAccess, on: boolean, chat?: string): Promise<SetFullAccessAnswer> {
   return call<SetFullAccessAnswer>(fetch, PERMISSION_ROUTES.setFullAccess, isChange, {
-    workspace: access.workspace, reviewId: access.reviewId, on, confirmed: true,
+    workspace: access.workspace, reviewId: access.reviewId, on, confirmed: true, ...chat === undefined ? {} : { chat },
   })
 }
 
 /**
- * Read the stdio MCP servers waiting for the person's answer.
+ * Read the stdio MCP servers waiting for the person's answer and the accepted starts.
  * @param fetch - the request function.
- * @returns the pending servers, or undefined when the profile mounts no MCP add-time consent.
+ * @returns the pending and accepted servers, or undefined when the profile mounts no MCP add-time consent.
  * @throws {HostRequestError} for a refusal (`LOOPBACK_REQUIRED` on a remote studio), an unreachable Host or an
  *   unreadable answer.
  */
-export async function readPendingServers(fetch: HostFetch): Promise<readonly PendingServer[] | undefined> {
-  return (await mounted(call<PendingServersAnswer>(fetch, MCP_CONSENT_ROUTES.pending, isPendingServers)))?.servers
+export function readServers(fetch: HostFetch): Promise<PendingServersAnswer | undefined> {
+  return mounted(call<PendingServersAnswer>(fetch, MCP_CONSENT_ROUTES.pending, isPendingServers))
+}
+
+/**
+ * Read the names of the stdio MCP servers waiting for the person's answer, which a remote studio may read too.
+ * @param fetch - the request function.
+ * @returns the waiting servers, or undefined when the profile mounts no MCP add-time consent.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export async function readWaitingServers(fetch: HostFetch): Promise<readonly WaitingServer[] | undefined> {
+  return (await mounted(call<WaitingServersAnswer>(fetch, MCP_CONSENT_ROUTES.waiting, isWaitingServers)))?.servers
+}
+
+/**
+ * Revoke one accepted start; every running server that starts it stops until the person allows it again.
+ * @param fetch - the request function.
+ * @param accepted - the accepted start as the section showed it.
+ * @returns how many running servers stopped.
+ * @throws {HostRequestError} for a refusal (`LOOPBACK_REQUIRED`, `STALE_REVIEW`, `STORE_REFUSED` among them), an
+ *   unreachable Host or an unreadable answer.
+ */
+export function revokeServer(fetch: HostFetch, accepted: AcceptedServer): Promise<RevokeServerAnswer> {
+  return call<RevokeServerAnswer>(fetch, MCP_CONSENT_ROUTES.revoke, isRevoked, { command: accepted.command, acceptedAt: accepted.acceptedAt, confirmed: true })
 }
 
 /**
