@@ -9,7 +9,7 @@ English | [中文](guide.zh.md)
 
 ## Change
 
-`scrubbedParentEnv()` in `@deepseek-ai/dsh-subprocess` decides which of the harness's own environment variables a child process inherits: shell commands, MCP stdio servers, language servers and subagent CLIs. Before, a value was dropped for URL user information only in the form `scheme://user:secret@`. Now any user information after `scheme://` drops the variable, a user name alone included, because a token in that place cannot be told from a login: `https://<token>@host`, a Sentry DSN, `ssh://git@host/repo` and `postgres://user@db/app` are no longer inherited. A scp-style `git@host:org/repo` has no scheme and is still inherited, as is a URL whose `@` lies in its query or fragment.
+`scrubbedParentEnv()` in `@deepseek-ai/dsh-subprocess` decides which of the harness's own environment variables a child process inherits: shell commands, MCP stdio servers, language servers and subagent CLIs. Before, a value was dropped for URL user information only in the form `scheme://user:secret@`. Now any user information after `scheme://` drops the variable, a user name alone included, because a token in that place cannot be told from a login: `https://<token>@host`, `redis://:<password>@host`, a Sentry DSN, `ssh://git@host/repo` and `postgres://user@db/app` are no longer inherited. A scp-style `git@host:org/repo` has no scheme and is still inherited, as is a URL whose `@` lies in its query or fragment.
 
 The names `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `*PASSPHRASE*` and `MYSQL_PWD` are no longer inherited either. A `*PATH` search list, such as `PATH` or `PYTHONPATH`, now loses only an element that names a credential file or an agent socket, where before such an element dropped the whole variable.
 

@@ -78,6 +78,14 @@ describe('the credential-shaped values', () => {
     expect(env.SCRUB_PROBE_ENDPOINT).toBeUndefined()
   })
 
+  it.each(['redis://:canary@cache.example.invalid:6379/0', 'https://:canarykey@api.example.invalid/v1'])('drops a name whose value is a URL whose user information is a password with an empty user: %s', (value) => {
+    expect(childEnvWith({ SCRUB_PROBE_ENDPOINT: value }).SCRUB_PROBE_ENDPOINT).toBeUndefined()
+  })
+
+  it('keeps a URL with a port and an @ only in its path', () => {
+    expect(childEnvWith({ SCRUB_PROBE_ENDPOINT: 'https://host.example.invalid:8443/users/@me' }).SCRUB_PROBE_ENDPOINT).toBe('https://host.example.invalid:8443/users/@me')
+  })
+
   it('drops a name whose value is a Sentry DSN', () => {
     expect(childEnvWith({ SENTRY_DSN: 'https://canarykey@o123.ingest.sentry.invalid/1' }).SENTRY_DSN).toBeUndefined()
   })

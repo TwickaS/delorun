@@ -1493,14 +1493,14 @@
     {
       "path": "packages/subprocess/subprocess/src/index.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*PASSPHRASE*`, `MYSQL_PWD`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a user name alone included, a webhook URL, a PEM private key block, a credential-file path or an agent socket. A `*PATH` search list loses only its elements that name a credential file or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through. Lead verdict (2026-11-11): kept; child processes lose credential-named variables and URL values with user information, and a PATH-like list loses only its credential-file and agent-socket elements.",
-      "sha256": "a9a69de9b1f6a46689e33814d40c46e52425d98d2c0bf3a1d6885b30cba9d423"
+      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*PASSPHRASE*`, `MYSQL_PWD`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a user name alone and a password with an empty user name included, a webhook URL, a PEM private key block, a credential-file path or an agent socket. A `*PATH` search list loses only its elements that name a credential file or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through.",
+      "sha256": "fdb4a63cffa00678992b6f71968638c11c6cc6c69b28340d397e6c56c025b812"
     },
     {
       "path": "packages/subprocess/subprocess/tests/env.spec.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive. Also covers token-only URL user information, Sentry DSNs, a user name alone, scp-style remotes and query `@`, and per-element removal from search paths. Lead verdict (2026-11-11): kept; covers credential names, URL user information with and without a password, and per-element filtering of PATH-like lists.",
-      "sha256": "313a27fe116a56bf98f3ebf7daeb90242742bad0b82825344b8831989753231a"
+      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive. Also covers token-only and empty-user URL user information, Sentry DSNs, a user name alone, scp-style remotes and query `@`, and per-element removal from search paths.",
+      "sha256": "899da1ffe60e861bbd0238c30b3761a63acdb44c28f91451bda26f4a806f216a"
     },
     {
       "path": "packages/test-support/session-snapshot/src/index.ts",

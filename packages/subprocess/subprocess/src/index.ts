@@ -111,14 +111,15 @@ const CREDENTIAL_FILE_NAMES = [
  * whole value has one of these shapes is dropped whatever it is called.
  *
  * Any user information after `scheme://` counts, including a user name with no
- * password: `https://<token>@host` and a Sentry DSN carry the secret as the
+ * password and a password with an empty user name (`redis://:<secret>@host`):
+ * `https://<token>@host` and a Sentry DSN carry the secret as the
  * user name, and a token cannot be told apart from a plain login such as the
  * `git` of `ssh://git@host/repo`, so both are dropped. A scp-style
  * `git@host:org/repo` has no scheme and is not a URL with user information.
  */
 const CREDENTIAL_VALUE_SHAPES: readonly RegExp[] = [
-  // `scheme://user@host` or `scheme://user:secret@host`: the user information is the credential.
-  /[a-z][a-z0-9+.-]*:\/\/[^\s/?#@:]+(?::[^\s/?#@]*)?@/i,
+  // `scheme://user@host`, `scheme://user:secret@host` or `scheme://:secret@host`: the user information is the credential.
+  /[a-z][a-z0-9+.-]*:\/\/[^\s/?#@:]*(?::[^\s/?#@]*)?@/i,
   // A webhook endpoint — a `hooks.` host or a `/webhook(s)` path — whose path is the secret.
   /[a-z][a-z0-9+.-]*:\/\/(?:hooks\.[^\s"'<>]+|[^\s"'<>]*[/.]webhooks?[/.][^\s"'<>]*)/i,
   // A PEM private key block, however the value was spelled.

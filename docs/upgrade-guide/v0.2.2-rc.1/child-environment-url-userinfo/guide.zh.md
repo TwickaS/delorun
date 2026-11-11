@@ -9,7 +9,7 @@ description: "子进程不再继承值中含有任何用户信息（包括仅有
 
 ## 变更
 
-`@deepseek-ai/dsh-subprocess` 中的 `scrubbedParentEnv()` 决定子进程继承 harness 自身的哪些环境变量：shell 命令、MCP stdio 服务器、语言服务器与子智能体 CLI。以前，只有 `scheme://user:secret@` 形式的 URL 用户信息才会让变量被丢弃。现在 `scheme://` 之后的任何用户信息都会让变量被丢弃，包括仅有用户名的情况，因为该位置上的 token 无法与登录名区分：`https://<token>@host`、Sentry DSN、`ssh://git@host/repo` 与 `postgres://user@db/app` 都不再被继承。scp 风格的 `git@host:org/repo` 没有 scheme，仍会被继承；`@` 位于查询或片段中的 URL 也仍会被继承。
+`@deepseek-ai/dsh-subprocess` 中的 `scrubbedParentEnv()` 决定子进程继承 harness 自身的哪些环境变量：shell 命令、MCP stdio 服务器、语言服务器与子智能体 CLI。以前，只有 `scheme://user:secret@` 形式的 URL 用户信息才会让变量被丢弃。现在 `scheme://` 之后的任何用户信息都会让变量被丢弃，包括仅有用户名的情况，因为该位置上的 token 无法与登录名区分：`https://<token>@host`、`redis://:<password>@host`、Sentry DSN、`ssh://git@host/repo` 与 `postgres://user@db/app` 都不再被继承。scp 风格的 `git@host:org/repo` 没有 scheme，仍会被继承；`@` 位于查询或片段中的 URL 也仍会被继承。
 
 名称 `KUBECONFIG`、`KRB5CCNAME`、`*_CREDENTIALS`、`*PASSPHRASE*` 与 `MYSQL_PWD` 也不再被继承。`*PATH` 搜索列表（例如 `PATH` 或 `PYTHONPATH`）现在只去掉指向凭据文件或代理套接字的元素，而以前这样的元素会让整个变量被丢弃。
 
