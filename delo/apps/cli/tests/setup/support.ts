@@ -92,6 +92,8 @@ export interface EndingBehaviour {
   readonly startResult?: 0 | 1
   /** Whether a browser takes the link; true by default. */
   readonly opens?: boolean
+  /** The launcher's version; `0.1.0` by default, and `undefined` for a run the launcher did not start. */
+  readonly launcherVersion?: string | undefined
 }
 
 /**
@@ -117,5 +119,6 @@ export function fakeEnding(log: EndingLog, behaviour: EndingBehaviour = {}): End
     },
     canOpen: () => behaviour.canOpen ?? true,
     identity: () => ({ user: 'person', host: 'machine' }),
+    launcherVersion: () => ('launcherVersion' in behaviour ? behaviour.launcherVersion : '0.1.0'),
   }
 }

@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, type RuntimeVersion } from '@delo/contract-home-layout'
+import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, DELO_LAUNCHER_VERSION_ENV, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { ensureHomeTree, resolveDeloHome } from '@delo/home'
@@ -211,6 +211,24 @@ export interface StartCheckRequest {
 }
 
 /**
+ * This launcher package's own version, the `version` its `package.json` names, which the runtime pins `delorun setup`'s
+ * install to and `delorun verify` compares with the release's signed `npm` entries.
+ * @param packageDirectory - the launcher package's directory.
+ * @returns the version; `undefined` when the file does not read or names no version, so the runtime is told none.
+ */
+export async function launcherVersion(packageDirectory: string): Promise<string | undefined> {
+  let manifest: unknown
+  try {
+    manifest = JSON.parse(await readFile(join(packageDirectory, 'package.json'), 'utf8'))
+  } catch (_unreadable) {
+    // A launcher whose own package.json does not read tells the runtime no version; setup then offers no install.
+    return undefined
+  }
+  const version = typeof manifest === 'object' && manifest !== null && 'version' in manifest ? manifest.version : undefined
+  return typeof version === 'string' && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version) ? version : undefined
+}
+
+/**
  * Contract C18's start check of an installed release ("Behaviour per client", the CLI launcher): its stored bundle
  * offline, then the online check, with the checkpoint and the state recorded under `trust/`. The manifest was already
  * verified by the store's start check under the same root. A missing bundle stops the start: the store installed the
@@ -301,6 +319,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     // root this home stored only when it is one of them.
     const packageDirectory = context.packageDirectory ?? dirname(dirname(fileURLToPath(import.meta.url)))
     const roots = await readEmbeddedRoots(packageDirectory)
+    const version = await launcherVersion(packageDirectory)
     const fetch = context.fetch ?? globalThis.fetch.bind(globalThis)
     // The log is the one the trusted root names, read through `@delo/release-verify`'s transport; a build for a local
     // log names its own origin instead (`logPlan`).
@@ -332,8 +351,9 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       }),
       roots,
       logger,
-      // The runtime anchors `delorun verify` on the roots this launcher ships, as this launcher's start does.
-      spawn: command => spawn({ ...command, env: { ...command.env, [DELO_LAUNCHER_ROOTS_ENV]: join(packageDirectory, ROOTS_DIRECTORY) } }),
+      // The runtime anchors `delorun verify` on the roots this launcher ships, as this launcher's start does, and pins
+      // setup's install of the delorun command to this launcher's version.
+      spawn: command => spawn({ ...command, env: { ...command.env, [DELO_LAUNCHER_ROOTS_ENV]: join(packageDirectory, ROOTS_DIRECTORY), ...version === undefined ? {} : { [DELO_LAUNCHER_VERSION_ENV]: version } } }),
       startCheck: (version, root) => startCheck({ home: home.path, platform, version, root, transport: transportFor(root), now: Math.floor((context.now ?? Date.now)() / 1000) }),
       output: context.output,
       report,

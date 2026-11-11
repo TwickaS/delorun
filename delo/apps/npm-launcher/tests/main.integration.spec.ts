@@ -62,6 +62,7 @@ async function surroundings(options: { readonly roots?: boolean } = {}): Promise
   const packageDirectory = join(directory, 'package')
   await mkdir(join(packageDirectory, 'roots'), { recursive: true })
   if (options.roots !== false) await writeFile(join(packageDirectory, 'roots', '1.root.json'), fixture.roots[0]!)
+  await writeFile(join(packageDirectory, 'package.json'), `${JSON.stringify({ name: 'delorun', version: '0.4.2' })}\n`)
   const stderr: string[] = []
   const stdout: string[] = []
   const started: LaunchCommand[] = []
@@ -111,6 +112,8 @@ describe('the launcher’s main function', () => {
     expect(world.started.at(-1)!.args.at(-1)).toBe('status')
     // The runtime is told where this launcher's shipped roots are, so delorun verify anchors on them.
     expect(world.started.at(-1)!.env.DELO_LAUNCHER_ROOTS).toBe(join(world.package, 'roots'))
+    // The runtime is told this launcher's own version, which setup pins its install of the delorun command to.
+    expect(world.started.at(-1)!.env.DELO_LAUNCHER_VERSION).toBe('0.4.2')
     const state = JSON.parse(await readFile(join(world.home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string, uncheckedSince?: number }> }
     expect(state.releases[VERSION]?.state).toBe('unchecked')
   })

@@ -30,6 +30,13 @@ export const DSH_HOME_ENV = 'DSH_HOME'
  */
 export const DELO_LAUNCHER_ROOTS_ENV = 'DELO_LAUNCHER_ROOTS'
 
+/**
+ * Environment variable through which the launcher tells the runtime it starts its own npm package version, the
+ * `version` of the launcher package's `package.json`. `delorun setup` installs the `delorun` command at exactly that
+ * version, and `delorun verify` compares it with the `npm` entries of the release's signed manifest.
+ */
+export const DELO_LAUNCHER_VERSION_ENV = 'DELO_LAUNCHER_VERSION'
+
 /** Upstream's default harness-home directory name; Delo never reads or writes `~/.dsh`. */
 export const UPSTREAM_HOME_DIR_NAME = '.dsh'
 

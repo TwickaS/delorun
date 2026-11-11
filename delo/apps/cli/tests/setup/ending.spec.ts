@@ -72,6 +72,14 @@ describe('the computer', () => {
     expect(identity.host).not.toBe('')
   })
 
+  it('reads the launcher version the launcher set, and no version that is not a semantic version', () => {
+    expect(computerEnding(directory, 'default', output, { DELO_LAUNCHER_VERSION: '0.3.1' }).launcherVersion()).toBe('0.3.1')
+    expect(computerEnding(directory, 'default', output, {}).launcherVersion()).toBeUndefined()
+    for (const value of ['latest', '0.3.1 --ignore-scripts', '', 'v0.3.1']) {
+      expect(computerEnding(directory, 'default', output, { DELO_LAUNCHER_VERSION: value }).launcherVersion()).toBeUndefined()
+    }
+  })
+
   it('reads no address while no home process answers, and never from the log', async () => {
     const { mkdirSync, writeFileSync } = await import('node:fs')
     const { dirname } = await import('node:path')
@@ -93,6 +101,23 @@ describe('finishing a run', () => {
     await expect(finishSetup(prompter, fakeEnding(log), { profile: 'default', background: true, output })).rejects.toThrow('terminal closed')
     const cancelled = { ...prompter, confirm: () => Promise.reject(new SetupCancelled()) }
     expect(await finishSetup(cancelled, fakeEnding(log), { profile: 'default', background: true, output })).toBe(EXIT.ok)
+  })
+
+  it('c02-setup-installs-pinned-launcher: installs the delorun command pinned to the version of the launcher that started the run, never unpinned', async () => {
+    const recording: Recording = { screen: [], asked: [] }
+    const log: EndingLog = { spawned: [], started: [], opened: 0 }
+    await finishSetup(scriptedPrompter([true], recording), fakeEnding(log, { launcherVersion: '0.3.1' }), { profile: 'default', background: true, output })
+    expect(log.spawned).toEqual(['npm install -g delorun@0.3.1'])
+  })
+
+  it('offers no install when the launcher version is unknown, and says how to install a pinned version', async () => {
+    const recording: Recording = { screen: [], asked: [] }
+    const log: EndingLog = { spawned: [], started: [], opened: 0 }
+    const lines: string[] = []
+    await finishSetup(scriptedPrompter([], recording), fakeEnding(log, { launcherVersion: undefined }), { profile: 'default', background: true, output: { stdout: text => void lines.push(text), stderr: () => undefined } })
+    expect(log.spawned).toEqual([])
+    expect(recording.asked).toEqual([])
+    expect(lines.join('')).toContain('npm install -g delorun@<version>')
   })
 
   it('names port 80 in the SSH line when the address has no port', async () => {

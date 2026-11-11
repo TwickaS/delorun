@@ -53,6 +53,8 @@ export interface ReleaseCheckOptions {
   readonly mode: Exclude<VerificationMode, 'off'>
   /** The launcher's shipped-roots directory, from the variable the launcher sets; `undefined` when it set none. */
   readonly launcherRoots: string | undefined
+  /** The launcher's own npm package version, from the variable the launcher sets; `undefined` when it set none. */
+  readonly launcherVersion: string | undefined
   /** Where the runtime store reports a removal it could not finish; the check removes nothing. */
   readonly logger: DeloLogger
 }
@@ -95,6 +97,8 @@ export interface ReleaseCheckOutcome {
   readonly notices: readonly string[]
   /** Where this home's releases come from, or `undefined` when its channel record does not read. */
   readonly origins: ReleaseOrigins | undefined
+  /** The launcher against the release's signed `npm` entries ({@link launcherComparison}), when the manifest verified. */
+  readonly launcher: string | undefined
 }
 
 /** One part of the `release-signature` check. */
@@ -236,6 +240,8 @@ async function anchoredRoot(options: ReleaseCheckOptions): Promise<RootStep> {
 interface ManifestPart extends Part {
   /** The verified manifest's bytes, when it verified. */
   readonly bytes?: Uint8Array
+  /** The verified manifest, when it verified. */
+  readonly manifest?: ReleaseManifest
 }
 
 /**
@@ -262,7 +268,29 @@ async function manifestPart(root: TrustedRoot, paths: StorePaths, release: Runti
     return { result: 'fail', detail: `the manifest of release ${release} does not verify with the trusted root: ${reasonOf(error)}` }
   }
   if (manifest.version !== String(release)) return { result: 'fail', detail: `the stored manifest is release ${manifest.version}, not ${release}` }
-  return { result: 'pass', detail: 'the manifest\'s targets signature verifies', bytes }
+  return { result: 'pass', detail: 'the manifest\'s targets signature verifies', bytes, manifest }
+}
+
+/** The npm package name of the launcher, as a release manifest's `npm` entries name it. */
+const LAUNCHER_PACKAGE = 'delorun'
+
+/**
+ * The launcher that started this run against the release's signed `npm` entries. npm serves the launcher before any
+ * Delo check runs, so the run says which launcher version ran and the integrity the signed manifest gives that version,
+ * for the person to compare with npm's own record out of band. Nothing here passes or fails a check: a launcher of an
+ * earlier release starts a runtime an update installed, and a local release lists no npm package.
+ * @param version - the launcher's version, from `DELO_LAUNCHER_VERSION`, or `undefined` when the launcher set none.
+ * @param manifest - the verified manifest of the installed release.
+ * @returns the line's text, without a trailing period: the integrity to compare when the release lists this launcher
+ *   version, or why the launcher could not be compared with the release.
+ */
+export function launcherComparison(version: string | undefined, manifest: ReleaseManifest): string {
+  if (version === undefined) return `the launcher that started this Delo did not name its version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${manifest.version} lists`
+  const listed = manifest.npm.filter(entry => entry.name === LAUNCHER_PACKAGE)
+  const same = listed.find(entry => String(entry.version) === version)
+  if (same !== undefined) return `${LAUNCHER_PACKAGE}@${version}, which release ${manifest.version}'s signed manifest lists with integrity ${String(same.integrity)}; compare it with npm view ${LAUNCHER_PACKAGE}@${version} dist.integrity`
+  if (listed.length === 0) return `${LAUNCHER_PACKAGE}@${version}; release ${manifest.version}'s signed manifest lists no ${LAUNCHER_PACKAGE} npm package to compare it with`
+  return `${LAUNCHER_PACKAGE}@${version}; release ${manifest.version}'s signed manifest lists ${listed.map(entry => `${LAUNCHER_PACKAGE}@${String(entry.version)}`).join(', ')}, so compare the launcher with the manifest of release ${version}`
 }
 
 /**
@@ -379,6 +407,7 @@ interface OwnChecks {
   readonly recorded?: RecordedCheck
   readonly warnings?: readonly string[]
   readonly notices?: readonly string[]
+  readonly launcher?: string
 }
 
 /**
@@ -401,7 +430,7 @@ export async function checkRelease(options: ReleaseCheckOptions): Promise<Releas
   } catch (error) {
     warnings.push(`the home's channel record does not read, so where its releases come from is unknown: ${reasonOf(error)}`)
   }
-  return { results, root: own.root, onlineOnly: own.onlineOnly ?? false, recorded: own.recorded, warnings, notices: own.notices ?? [], origins }
+  return { results, root: own.root, onlineOnly: own.onlineOnly ?? false, recorded: own.recorded, warnings, notices: own.notices ?? [], origins, launcher: own.launcher }
 }
 
 /**
@@ -426,10 +455,11 @@ async function releaseChecks(options: ReleaseCheckOptions): Promise<OwnChecks> {
   const anchorWarnings = anchor.anchored === 'stored' ? [`the trusted root was anchored on the stored root only: ${String(anchor.reason)}. A pass needs the launcher's shipped roots; run delorun verify through the delorun launcher.`] : []
   const paths = new StorePaths(options.home, platform)
   const manifest = await manifestPart(root, paths, options.release)
-  if (manifest.bytes === undefined) {
+  if (manifest.bytes === undefined || manifest.manifest === undefined) {
     const signature = combine([anchorPart, rooted.expiry, manifest])
     return { parts: new Map([['release-signature', signature], ['runtime-files', { result: 'unknown', detail: 'not checked, because the signed manifest did not verify' }]]), root: anchor, warnings: anchorWarnings }
   }
+  const launcher = launcherComparison(options.launcherVersion, manifest.manifest)
   const log = await releaseLogPart(options, root, paths, manifest.bytes)
   const freshness = await freshnessPart(options.home, root, options.now)
   const files = await runtimeFilesPart(options, platform, root)
@@ -444,5 +474,6 @@ async function releaseChecks(options: ReleaseCheckOptions): Promise<OwnChecks> {
     ...log.recorded === undefined ? {} : { recorded: log.recorded },
     warnings: [...anchorWarnings, ...log.warning === undefined ? [] : [log.warning]],
     notices: log.notices ?? [],
+    launcher,
   }
 }

@@ -126,7 +126,7 @@ const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
   ← Back
 = Save and set up
 Set up the CLI profile default at <profile>.
-? Install the delorun command? (runs npm install -g delorun) (Yes)
+? Install the delorun command? (runs npm install -g delorun@0.1.0) (Yes)
 = Yes
 Delorun is running in the background and keeps running after you close this terminal.
 Studio: http://127.0.0.1:3080/ (opened in your browser)
@@ -158,7 +158,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
       { id: 'reach', status: 'skipped' },
       { id: 'profile', status: 'skipped' },
     ])
-    expect(ending.spawned).toEqual(['npm install -g delorun'])
+    expect(ending.spawned).toEqual(['npm install -g delorun@0.1.0'])
     expect(ending.started).toEqual(['background'])
     expect(ending.opened).toBe(1)
     expect(readBackgroundAnswer(profileDirectory(home, PROFILE))).toBe(true)
@@ -360,7 +360,7 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
   ← Back
 = Save and set up
 Set up the CLI profile work at <work profile>.
-? Install the delorun command? (runs npm install -g delorun) (Yes)
+? Install the delorun command? (runs npm install -g delorun@0.1.0) (Yes)
 = Yes
 Delorun is running in this terminal. Closing the terminal stops it.
 Studio: http://127.0.0.1:4100/ (opened in your browser)
@@ -422,12 +422,12 @@ describe('the ending', { timeout: TIMEOUT_MS }, () => {
   it('prints the exact install line when the person declines the install', async () => {
     expect(await interactive(['quick', 'environment', 'safer', 'save', false])).toBe(EXIT.ok)
     expect(ending.spawned).toEqual([])
-    expect(screen()).toContain('To install it later, run:\n  npm install -g delorun')
+    expect(screen()).toContain('To install it later, run:\n  npm install -g delorun@0.1.0')
   })
 
   it('prints the exact install line when the install fails, and still starts Delorun', async () => {
     expect(await interactive(QUICK_SCRIPT, { behaviour: { installExit: 127 } })).toBe(EXIT.ok)
-    expect(screen()).toContain('The install did not finish. To install it yourself, run:\n  npm install -g delorun')
+    expect(screen()).toContain('The install did not finish. To install it yourself, run:\n  npm install -g delorun@0.1.0')
     expect(ending.started).toHaveLength(1)
   })
 

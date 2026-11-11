@@ -1,6 +1,8 @@
 /**
  * The end of an interactive setup: the offer to install the `delorun` command, then starting Delorun and opening
- * the studio, and the text that says what is running and how to look at it or stop it. Everything that touches the
+ * the studio, and the text that says what is running and how to look at it or stop it. The install names the exact
+ * version of the launcher that started this run (`DELO_LAUNCHER_VERSION`), so the installed command is the package
+ * the person already ran and not whatever npm serves as newest; without that version setup offers no install. Everything that touches the
  * computer goes through {@link Ending}, so specs inject a fake spawn and a fake start. The studio address comes from
  * the home process's `status` answer and carries no token; the browser gets a one-time link the home process mints
  * ([studio](../open/studio.ts)).
@@ -8,7 +10,8 @@
  * @module @delo/cli/setup/ending
  */
 import { hostname, userInfo } from 'node:os'
-import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import { DELO_LAUNCHER_VERSION_ENV, HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import semver from 'semver'
 import { queryHomeStatus } from '@delo/home-process'
 import { EXIT, type ExitCode } from '../exit.ts'
 import type { CommandOutput, CommandResult } from '../command.ts'
@@ -16,8 +19,18 @@ import { computerOpener, openStudio, profileFlag, spawnCommand, type StudioOpene
 import { startDetached, startForeground } from '../start.ts'
 import { SetupCancelled, type Prompter } from './prompts.ts'
 
-/** The line the install offer runs, and prints when the person declines or it fails. */
-export const INSTALL_COMMAND = 'npm install -g delorun'
+/**
+ * The command the install offer runs, and prints when the person declines or it fails: the launcher package at one
+ * exact version.
+ * @param version - the launcher's version, a semantic version.
+ * @returns the program and its arguments.
+ */
+export function installCommand(version: string): readonly [string, ...string[]] {
+  return ['npm', 'install', '-g', `delorun@${version}`]
+}
+
+/** What setup prints when the launcher's version is unknown, in place of the install offer. */
+export const NO_LAUNCHER_VERSION = 'Setup does not offer to install the delorun command: this Delorun was not started by the delorun launcher, so the launcher version to pin is not known. Install it with npm install -g delorun@<version>, naming the version in the release notes, after comparing its integrity as the Trust page describes.'
 
 /** How the studio was started: attached to this terminal, or detached from it. */
 export type StartMode = 'background' | 'foreground'
@@ -55,6 +68,11 @@ export interface Ending {
    * @returns the account and computer name for the SSH port-forward line.
    */
   identity(): { readonly user: string, readonly host: string }
+  /**
+   * @returns the version of the launcher that started this run, from `DELO_LAUNCHER_VERSION`, or `undefined` when the
+   *   variable is unset or not a semantic version.
+   */
+  launcherVersion(): string | undefined
 }
 
 /**
@@ -94,6 +112,10 @@ export function computerEnding(
     open: async () => (await openStudio(home, profile, opener)).kind === 'opened',
     canOpen: () => opener.canOpen(),
     identity: () => ({ user: userInfo().username, host: hostname() }),
+    launcherVersion: () => {
+      const version = env[DELO_LAUNCHER_VERSION_ENV]
+      return version !== undefined && semver.valid(version) === version ? version : undefined
+    },
   }
 }
 
@@ -110,11 +132,12 @@ export interface EndingRequest {
 /**
  * Ask whether to install the command. Cancelling the question declines it: setup has written everything by now.
  * @param prompter - asks the question.
+ * @param command - the install command, as the person reads it.
  * @returns whether the person said yes.
  */
-async function offersInstall(prompter: Prompter): Promise<boolean> {
+async function offersInstall(prompter: Prompter, command: string): Promise<boolean> {
   try {
-    return await prompter.confirm(`Install the delorun command? (runs ${INSTALL_COMMAND})`, true)
+    return await prompter.confirm(`Install the delorun command? (runs ${command})`, true)
   } catch (error) {
     if (error instanceof SetupCancelled) return false
     throw error
@@ -130,11 +153,17 @@ async function offersInstall(prompter: Prompter): Promise<boolean> {
  */
 export async function finishSetup(prompter: Prompter, ending: Ending, request: EndingRequest): Promise<ExitCode> {
   const { output } = request
-  if (await offersInstall(prompter)) {
-    const [command, ...args] = INSTALL_COMMAND.split(' ') as [string, ...string[]]
-    if ((await ending.spawn(command, args)) !== 0) output.stdout(`The install did not finish. To install it yourself, run:\n  ${INSTALL_COMMAND}\n`)
+  const version = ending.launcherVersion()
+  if (version === undefined) {
+    output.stdout(`${NO_LAUNCHER_VERSION}\n`)
   } else {
-    output.stdout(`To install it later, run:\n  ${INSTALL_COMMAND}\n`)
+    const [command, ...args] = installCommand(version)
+    const line = [command, ...args].join(' ')
+    if (await offersInstall(prompter, line)) {
+      if ((await ending.spawn(command, args)) !== 0) output.stdout(`The install did not finish. To install it yourself, run:\n  ${line}\n`)
+    } else {
+      output.stdout(`To install it later, run:\n  ${line}\n`)
+    }
   }
   const mode: StartMode = request.background ? 'background' : 'foreground'
   const canOpen = ending.canOpen()

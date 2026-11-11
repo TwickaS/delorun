@@ -13,7 +13,7 @@
  *
  * @module @delo/cli/verify
  */
-import { DELO_LAUNCHER_ROOTS_ENV } from '@delo/contract-home-layout'
+import { DELO_LAUNCHER_ROOTS_ENV, DELO_LAUNCHER_VERSION_ENV } from '@delo/contract-home-layout'
 import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationMode, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
 import type { DeloLogger } from '@delo/logs'
 import type { Fetch, RecordedCheck } from '@delo/release-verify'
@@ -130,12 +130,14 @@ export function summaryLine(results: readonly VerificationCheckResult[]): string
  * The report's lines.
  * @param release - the release checked.
  * @param outcome - what the run found.
- * @returns the text: a heading, the root line, one line per check and the summary.
+ * @returns the text: a heading, the root line, the origins line, the launcher line when the manifest verified, one
+ *   line per check and the summary.
  */
-export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins'>): string {
+export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins' | 'launcher'>): string {
   const width = Math.max(...outcome.results.map(result => result.id.length))
   const lines = outcome.results.map(result => `${LABELS[result.result].padEnd(7)}  ${result.id.padEnd(width)}  ${result.detail}`)
-  return `Release ${release}, verification mode ${VERIFY_MODE}; ${VERIFICATION_NOTICE}.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${lines.join('\n')}\n${summaryLine(outcome.results)}`
+  const launcher = outcome.launcher === undefined ? '' : `Launcher: ${outcome.launcher}.\n`
+  return `Release ${release}, verification mode ${VERIFY_MODE}; ${VERIFICATION_NOTICE}.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${launcher}${lines.join('\n')}\n${summaryLine(outcome.results)}`
 }
 
 /**
@@ -203,6 +205,7 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
         fetch: values.offline ? undefined : environment.fetch,
         mode: VERIFY_MODE,
         launcherRoots: context.env[DELO_LAUNCHER_ROOTS_ENV],
+        launcherVersion: context.env[DELO_LAUNCHER_VERSION_ENV],
         logger: stderrLogger(context),
       })
       if (values.json) context.stdout(`${JSON.stringify(report(release, outcome, now))}\n`)
