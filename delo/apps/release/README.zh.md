@@ -86,9 +86,23 @@
 1. 将草稿发布中发布工作流的文件（包括其 `manifest-draft.json`）下载到某个目录中，例如 `release/`。
 2. 在仓库中检出该标签，用同一配方构建它，并为输出生成证明：`node_modules/.bin/tsx delo/apps/release/src/build-closure.ts --version <version> --commit v<version> --out rebuild/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，然后对同一输出构建镜像：`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out rebuild/ --oci rebuild-oci/ --attestation-key ~/.config/delo/rebuild-attestation.key --attestation rebuild.attestation.json`，它会先检查证明能用该密钥验证通过，且恰好覆盖 `rebuild/` 中的文件，然后保留其提交，把它扩展到镜像文件与重写后的 SBOM；对于并非本机构建写出的目录，它不会生成证明。
 3. 记录重建：`node_modules/.bin/tsx delo/apps/release/src/record-rebuild.ts --version <version> --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --builder <name> --compared-with <workflow run URL>`。它依据该标签处提交的 `rebuild-exceptions.json`，将每个重建文件与发布工作流中同名的文件比较，将记录写入 `release/` 之外的 `--record`，并在比较发现差异时以 1 退出。设置了 `CI` 或 `GITHUB_ACTIONS` 时，它拒绝运行；重建缺少任一平台的归档或文件列表或 SBOM 时，它也拒绝。
-4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --attestation rebuild.attestation.json --attestation-key ~/.config/delo/rebuild-attestation.key --key <targets.pem>`。
+4. 签名：`node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release release/ --rebuild rebuild/ --record delorun-<version>.rebuild.json --attestation rebuild.attestation.json --attestation-key ~/.config/delo/rebuild-attestation.key --key <targets.pem>`，此前先获取发布分支，例如 `git fetch origin v5`。仅当要以仓库的 `delo/release/allowed-signers` 之外的允许签名者文件、或 `origin/v5` 之外的分支进行检查时，才添加 `--allowed-signers <file>` 或 `--release-branch <revision>`。
 
 `sign-release.ts` 会拒绝运行，并给出一条写明所需来源的消息，即 "a rebuild made by the targets-key holder on their own machine, outside CI, with the published recipe"。出现以下任一情况时，它都会拒绝：重建记录缺失或无法读取；`release/` 中已有 `delorun-<version>.rebuild.json`，或 `--record` 或 `--rebuild` 位于 `release/` 之中；记录写明 `ci: true` 或报告了差异；设置了 `CI` 或 `GITHUB_ACTIONS`；`--rebuild` 不是本机上的目录、其文件无法复现记录中的摘要，或缺少任一平台的运行时归档或文件列表或 SBOM；记录的提交不是标签所指的提交，或记录中的配方摘要或工具链（Node.js、pnpm、编译器与链接器）与该提交的配方不一致；证明缺失、位于 `release/` 或 `rebuild/` 之中，或无法用证明密钥对版本、提交以及 `rebuild/` 中的每个文件验证通过；或将发布工作流的文件与重建再次比较时发现差异。它还会依据该发布提交处已提交的接受记录，针对 npm 的公告源再次运行依赖安全公告检查，并在检查失败，或其接受的安全公告与草稿的 `advisories.accepted` 不同时拒绝。它还拒绝这样的草稿：其 SBOM 不是 `delorun-<version>.spdx.json`，其运行时条目不是对应平台自身的 `delorun-<version>-<platform>.tar.gz`（`win32-x64` 为 `.zip`）与 `delorun-<version>-<platform>.files.json`，或其文件未以草稿所列的长度与摘要出现在发布目录中。所有检查通过后，它会先以临时文件名在 `release/` 中写入每个已签名的运行时文件列表、以 `delorun-<version>.rebuild.json` 为名的记录，以及 `delorun-<version>.manifest.json`（该 manifest 的 `rebuild` 字段写明记录与持有者，并标注 `ci: false`），再将它们重命名到位，manifest 最后重命名；重命名之前的任何失败都不会改动 `release/`。
+
+在读取重建之前，`sign-release.ts` 会检查发布的来源。它拒绝这样的标签 `v<version>`：轻量标签；没有 SSH 签名、或为另一个标签名创建的附注标签；或其签名无法由 `git verify-tag`（使用 `gpg.format=ssh` 与 `ssh-keygen`）以[允许签名者文件](#release-tag-signers)所列的某个密钥验证通过；只要该文件尚未列出任何密钥，它就拒绝所有标签。它拒绝不在发布分支上的标签提交（`git merge-base --is-ancestor`），也拒绝不指向任何提交的发布分支。它拒绝 `install.sh` 或 `install.ps1` 不是零长度占位文件的草稿，因为安装脚本尚未纳入重建比较。检查完草稿的文件之后，它还会拒绝这样的 `npm[]` 条目：其打包的 tarball（按 `npm pack` 的命名为 `<name>-<version>.tgz`，即 `delorun-<version>.tgz`）不在 `release/` 中；其完整性值（`sha512-` 加上 tarball 字节的 base64 SHA-512，即 npm 的 `dist.integrity`）与条目不同；或其 `package/package.json` 写明的包名或版本不同；因此 `release/` 中须有工作流所发布的已打包启动器。
+
+<a id="release-tag-signers"></a>
+
+### 发布标签签名者
+
+`delo/release/allowed-signers` 列出允许签署发布标签的 SSH 密钥，每个密钥一行 `<principal> namespaces="git" <key type> <base64 key>`，采用 git 的 `gpg.ssh.allowedSignersFile` 格式（见 `man ssh-keygen` 中的 "ALLOWED SIGNERS"）。它目前不列出任何密钥，因此在所有者添加每位发布签名者的 SSH 签名密钥的公钥部分之前，`sign-release.ts` 会拒绝所有标签；对该文件的改动需经 CODEOWNERS 审查。签名者用 `git -c gpg.format=ssh -c user.signingkey=<private key file> tag -s -m "Delo <version>" v<version>` 为发布提交打标签。
+
+<a id="production-keys"></a>
+
+### 生产密钥
+
+`delo/release/production-keys.json`（`delo.production-keys/1`）列出 Delo 的生产信任材料：`roots` 为每个生产根文件的 `version` 及其字节的 SHA-256；`keyids` 为每个生产根密钥、targets 密钥与时间戳密钥的密钥 ID，即根元数据在 `keys` 下所列原始 Ed25519 公钥的 SHA-256。由于尚无任何生产密钥，它目前不列出任何内容。密钥仪式之后，所有者在一个经过审查的提交中，添加每个已签名的 `root/<n>.root.json` 及 `sha256sum` 输出的摘要，以及该根在 `roles.root.keyids`、`roles.targets.keys` 与 `roles.timestamp.keyids` 中列出的每个密钥 ID；每次轮换之后，添加新的根与密钥，且不删除任何已有条目。信任页面与 README 公布相同的根 SHA-256 与密钥 ID。`local-release.ts` 拒绝所有列出的根与密钥；读取器拒绝超过 64 KiB 的文件、未知或缺失的字段、重复的 JSON 键，以及重复列出的条目。
 
 ### targets 密钥
 

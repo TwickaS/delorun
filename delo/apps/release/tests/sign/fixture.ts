@@ -1,13 +1,15 @@
 /**
- * A complete fixture release for the signing and verification specs: a git repository with the release's tag and
- * the recipe committed under `delo/apps/release`, the release workflow's output with its manifest draft, the
- * targets-key holder's rebuild of the same closures with its attestation and rebuild record path outside the release,
- * throwaway attestation and targets key files, and root metadata over throwaway keys. Every key is generated in the test and removed with its
- * temporary directory.
+ * A complete fixture release for the signing and verification specs: a git repository with the recipe committed under
+ * `delo/apps/release` on the branch `main` and the release's tag signed with a throwaway SSH key that the fixture's
+ * allowed-signers file lists, the release workflow's output with its manifest draft, zero-length install-script
+ * placeholders and the packed `delorun` npm package, the targets-key holder's rebuild of the same closures with its
+ * attestation and rebuild record path outside the release, throwaway attestation and targets key files, and root
+ * metadata over throwaway keys. Every key is generated in the test and removed with its temporary directory.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import { devNull } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createServer } from 'node:http'
@@ -32,6 +34,8 @@ import { CHANGELOG_SCHEMA } from '../../src/changelog/data.ts'
 import { DATA_PATH } from '../../src/changelog/paths.ts'
 import { DELO_RECORDS_PATH, UPSTREAM_VERSION_PATH } from '../../src/sign/patch-rule.ts'
 import { PLUGIN_INTERFACE_PATH, readPluginInterface } from '../../src/sign/plugin-interface.ts'
+import { npmIntegrity } from '../../src/sign/npm-package.ts'
+import { tarStream } from '@delo/release-formats/archive/tar'
 import { REPO, runEntry, scratch, writeTree, type RunResult } from '../support.ts'
 
 /** The fixture release's version. */
@@ -41,6 +45,42 @@ export const VERSION = '0.1.0'
 export const PLATFORMS = readRecipe().closure.platforms
 
 const EPOCH = 1_793_981_656
+
+/** The branch the fixture repository's release commit is on. */
+export const RELEASE_BRANCH = 'main'
+
+/** A throwaway SSH signing key and the allowed-signers line that lists it. */
+export interface TagSigner {
+  /** The private key file, which git's `user.signingkey` names. */
+  readonly key: string
+  /** The line of an allowed-signers file that lists the public key for the `git` namespace. */
+  readonly allowed: string
+}
+
+/**
+ * A new throwaway Ed25519 SSH key, made with `ssh-keygen`.
+ * @param directory - where to write the key files.
+ * @param name - the private key file's name; the public key is `<name>.pub`.
+ * @returns the key file and its allowed-signers line.
+ */
+export function tagSigner(directory: string, name: string): TagSigner {
+  const key = join(directory, name)
+  execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', name, '-f', key], { timeout: 30_000 })
+  const [type, base64] = readFileSync(`${key}.pub`, 'utf8').trim().split(' ')
+  return { key, allowed: `${name}@example.test namespaces="git" ${type!} ${base64!}\n` }
+}
+
+/**
+ * The bytes of a packed npm package as `npm pack` lays it out: one `package/package.json` naming the package.
+ * @param name - the package name.
+ * @param version - the package version.
+ * @returns the gzipped tarball.
+ */
+export async function packedPackage(name: string, version: string): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of tarStream([{ path: 'package/package.json', mode: '0644', data: Buffer.from(`${JSON.stringify({ name, version, bin: { delorun: 'dist/bin.js' } }, undefined, 2)}\n`) }], EPOCH)) chunks.push(chunk)
+  return gzipSync(Buffer.concat(chunks))
+}
 
 /** The closure lockfile every fixture archive holds: one registry package. */
 export const LOCKFILE = `lockfileVersion: '9.0'\n\npackages:\n\n  example-parser@1.2.3:\n    resolution: {integrity: sha512-${'A'.repeat(86)}==}\n`
@@ -183,12 +223,22 @@ export interface ReleaseFixture {
   readonly keyPath: string
   readonly keys: Keys
   readonly commit: string
+  /** The SSH key that signed the release tag, which {@link ReleaseFixture.allowedSigners} lists. */
+  readonly signer: TagSigner
+  /** The fixture's allowed-signers file. */
+  readonly allowedSigners: string
+  /** Run git in the fixture repository, with no global or system configuration. */
+  readonly git: (args: readonly string[]) => string
   /** Run a release entry point in the fixture repository. */
   readonly run: (entry: string, args: readonly string[], env?: NodeJS.ProcessEnv) => RunResult
   /** Record the rebuild with `record-rebuild.ts`. */
   readonly record: () => RunResult
-  /** Sign with the signing library against an advisory feed stand-in that answers with `advisories`, optionally from another rebuild output, record or attestation, and with `firstOfLine` when given. */
-  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object, readonly firstOfLine?: boolean }) => Promise<RunResult>
+  /**
+   * Sign with the signing library against an advisory feed stand-in that answers with `advisories`, optionally from
+   * another rebuild output, record or attestation, with `firstOfLine` when given, and with another allowed-signers
+   * file or release branch than the fixture's.
+   */
+  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object, readonly firstOfLine?: boolean, readonly allowedSigners?: string, readonly releaseBranch?: string }) => Promise<RunResult>
 }
 
 /**
@@ -215,6 +265,9 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
     git(['commit', '-q', '--allow-empty', '-m', `release ${earlier.version}`])
     git(['tag', `v${earlier.version}`])
   }
+  const signer = tagSigner(directory, 'release-signer')
+  const allowedSigners = join(directory, 'allowed-signers')
+  writeFileSync(allowedSigners, `# The fixture's release signer.\n${signer.allowed}`)
   writeReleaseFacts(repo, FIXTURE_DSH)
   writeChangelog(repo, options.changelog ?? [...assembled, version])
   mkdirSync(join(repo, 'delo/apps/release'), { recursive: true })
@@ -233,7 +286,7 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
   writeFileSync(join(repo, '.github', 'CODEOWNERS'), '* @example-maintainer\n')
   git(['add', '-A'])
   git(['commit', '-q', '-m', 'fixture'])
-  git(['tag', `v${version}`])
+  git(['-c', 'gpg.format=ssh', '-c', `user.signingkey=${signer.key}`, 'tag', '-s', '-m', `release ${version}`, `v${version}`])
   const commit = git(['rev-parse', 'HEAD'])
   const release = join(directory, 'release')
   const rebuild = join(directory, 'rebuild')
@@ -253,7 +306,9 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
   const feed = await feedStandIn(test, {})
   const report = await releaseAdvisoryCheck(repo, commit, release, semanticVersion(version), feed.url)
   writeFileSync(join(release, `delorun-${version}.advisories.json`), `${JSON.stringify(report, undefined, 2)}\n`)
-  for (const name of ['install.sh', 'install.ps1']) writeFileSync(join(release, name), `${name}\n`)
+  for (const name of ['install.sh', 'install.ps1']) writeFileSync(join(release, name), '')
+  const tarball = await packedPackage('delorun', version)
+  writeFileSync(join(release, `delorun-${version}.tgz`), tarball)
   const desktop: Record<string, unknown> = {}
   for (const platform of DESKTOP_PLATFORMS) {
     const names = { installer: `Delo-${version}-${platform}.installer`, update: `Delo-${version}-${platform}.update`, blockmap: `Delo-${version}-${platform}.blockmap` }
@@ -274,7 +329,7 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
     desktop,
     images,
     sbom: { ...ref(release, `delorun-${version}.spdx.json`), format: 'SPDX-2.3+json' },
-    npm: [{ name: 'delorun', version, integrity: `sha512-${'A'.repeat(86)}==` }],
+    npm: [{ name: 'delorun', version, integrity: npmIntegrity(tarball) }],
     install: { sh: ref(release, 'install.sh'), ps1: ref(release, 'install.ps1') },
     advisories: { report: ref(release, `delorun-${version}.advisories.json`), accepted: [] },
     security: false,
@@ -302,6 +357,9 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
     keyPath,
     keys,
     commit,
+    signer,
+    allowedSigners,
+    git,
     run,
     record: () => run('record-rebuild.ts', ['--version', version, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
     sign: async (signEnv = {}, args = {}) => {
@@ -319,6 +377,8 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
           now: new Date('2026-11-06T12:00:00Z'),
           feed: feed.url,
           firstOfLine: args.firstOfLine ?? false,
+          allowedSigners: args.allowedSigners ?? allowedSigners,
+          releaseBranch: args.releaseBranch ?? RELEASE_BRANCH,
         })
         return { status: 0, stdout: signed.manifestName, stderr: '' }
       } catch (error) {

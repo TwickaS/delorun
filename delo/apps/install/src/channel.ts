@@ -31,6 +31,7 @@ import type { RuntimeChannel, ChannelRelease } from '@delo/runtime-store'
 import { parseRuntimeVersion } from '@delo/runtime-store'
 import { archiveFormat } from '@delo/release-formats/archive/entry'
 import { walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
+import { LOCAL_RELEASE_BUILDER } from '@delo/release-formats/sign/schemas'
 import { HomeLayoutError } from '@delo/home'
 import { ReleaseLogInternalError, type ReleaseLogTransport } from '@delo/release-verify/online'
 import { checkAndStore, recordResult } from '@delo/release-verify/record'
@@ -244,6 +245,9 @@ export class LauncherChannel implements RuntimeChannel {
       bundle: bundle.bytes,
       ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
     })
+    if (this.source.metadata === RELEASE_METADATA_ORIGIN && verified.manifest.rebuild.builders.some(builder => builder.name === LOCAL_RELEASE_BUILDER)) {
+      throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${pointer.release} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs no such release`)
+    }
     if (record) this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
     return { root, timestamp, pointer, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
   }

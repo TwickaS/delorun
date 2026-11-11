@@ -15,7 +15,9 @@
  * manifest schema requires (the desktop installers, the images, the SBOM, the install scripts, the rebuild record and the
  * advisory report) are zero-length placeholders that nothing in the channel serves, so the manifest says plainly that
  * those files do not exist. It does not replace the signing ceremony of `sign-release.ts`: nothing here is reproduced
- * by a second builder or checked against the advisory feed.
+ * by a second builder or checked against the advisory feed. So that a release built this way never carries production
+ * trust, it refuses, before it writes anything, a root file, a root key, a targets key or a timestamp key that the
+ * production-keys registry of `local/production-keys.ts` lists.
  *
  * @module @delo/release/local/release
  */
@@ -30,6 +32,7 @@ import {
   RELEASE_SUMMARY_MAX_LENGTH,
   type FileRef,
   type ReleaseManifest,
+  type RootMetadata,
   type RuntimePlatform,
   type UtcTimestamp,
 } from '@delo/contract-release-manifest'
@@ -41,15 +44,16 @@ import { logRelease, type LogEndpoints } from '../log/client.ts'
 import { entryRequest } from '@delo/release-formats/log/entry'
 import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { toJsonValue } from '@delo/release-formats/sign/json'
-import { ManifestSchema, readEnvelope, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
+import { LOCAL_RELEASE_BUILDER, ManifestSchema, readEnvelope, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
 import { initialState, nextTimestamp, readTimestampState, stateAfter } from '../sign/timestamp.ts'
+import { rootKeyIds, type ProductionKeys } from './production-keys.ts'
 import { trustRootChain, verifyTimestamp } from '@delo/release-formats/sign/verify'
 
 /** The only platform a local release builds. */
 export const LOCAL_PLATFORM: RuntimePlatform = 'linux-x64'
 
 /** The name the manifest gives the builder, so a reader sees that no second builder rebuilt this release. */
-export const LOCAL_BUILDER = 'local release (no independent rebuild)'
+export const LOCAL_BUILDER = LOCAL_RELEASE_BUILDER
 
 /**
  * Where a version's release files sit below the channel directory, as GitHub Releases serves them.
@@ -81,6 +85,8 @@ export interface LocalReleaseRequest {
   readonly targetsKey: KeyObject
   /** The timestamp private key. */
   readonly timestampKey: KeyObject
+  /** The production trust material, which none of {@link roots}, {@link targetsKey} and {@link timestampKey} may be. */
+  readonly productionKeys: ProductionKeys
   /** The signer's state file; created when absent, and replaced after each signing. */
   readonly state: string
   /** The log that the manifest's entry is submitted to. */
@@ -155,6 +161,39 @@ function localManifest(request: LocalReleaseRequest, runtime: { readonly archive
   })
 }
 
+/** The message stem of every refusal of production trust material. */
+export const PRODUCTION_REFUSAL = 'a local release refuses production trust material'
+
+/**
+ * Refuse a root file that the production-keys registry lists by its SHA-256.
+ * @param request - the roots and the registry.
+ * @throws Error naming the first listed root file by its position.
+ */
+function refuseProductionRoots(request: LocalReleaseRequest): void {
+  for (const [position, bytes] of request.roots.entries()) {
+    const digest = sha256Hex(createHash('sha256').update(bytes).digest('hex'))
+    if (request.productionKeys.rootDigests.has(digest)) throw new Error(`${PRODUCTION_REFUSAL}: root file ${String(position + 1)} is a production root (SHA-256 ${digest})`)
+  }
+}
+
+/**
+ * Refuse a root that lists a production key, and a targets or timestamp key that is one.
+ * @param request - the keys and the registry.
+ * @param roots - the request's roots, read.
+ * @throws Error naming the first production key found and where.
+ */
+function refuseProductionKeys(request: LocalReleaseRequest, roots: readonly RootMetadata[]): void {
+  for (const [role, key] of [['targets', request.targetsKey], ['timestamp', request.timestampKey]] as const) {
+    const keyid = publicKeyEntry(key).keyid
+    if (request.productionKeys.keyids.has(keyid)) throw new Error(`${PRODUCTION_REFUSAL}: the ${role} key ${keyid} is a production key`)
+  }
+  for (const root of roots) {
+    for (const { keyid, where } of rootKeyIds(root)) {
+      if (request.productionKeys.keyids.has(keyid)) throw new Error(`${PRODUCTION_REFUSAL}: root ${String(root.version)} lists the production key ${keyid} in ${where}`)
+    }
+  }
+}
+
 /**
  * Write a file through a temporary name, so a reader never sees half of it.
  * @param path - the file.
@@ -169,7 +208,8 @@ async function replaceFile(path: string, bytes: Uint8Array | string): Promise<vo
  * Build, sign and log one release into a channel directory.
  * @param request - the commit, version, channel, keys, log and closure build.
  * @returns the signed manifest and the timestamp's version.
- * @throws Error when the summary is not a valid release summary, the version is already in the channel, the closure
+ * @throws Error when the summary is not a valid release summary, a root file, a key a root lists, the targets key or the
+ *   timestamp key is production trust material, the version is already in the channel, the closure
  *   build did not write its files, the targets key is not the newest root's active targets key, the log gives no
  *   witnessed checkpoint, or any signed file fails the verification the client will run. The channel's timestamp is replaced last, so a failed build leaves the channel
  *   serving the release it served before.
@@ -178,10 +218,12 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
   if (!ReleaseSummarySchema.safeParse(request.summary).success) {
     throw new Error(`the summary ${JSON.stringify(request.summary)} is not a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters on one line, with no control or format character and no whitespace at either end`)
   }
+  refuseProductionRoots(request)
   const release = releaseDirectory(request.channel, request.version)
   if (existsSync(release)) throw new Error(`${release} exists; a local release never replaces a version already in the channel`)
   const now = Math.floor(request.now.getTime() / 1000)
   const roots = trustRootChain(request.roots, now)
+  refuseProductionKeys(request, roots.map(root => root.metadata))
   const newest = roots.at(-1)!
   const targets = publicKeyEntry(request.targetsKey).keyid
   const active = newest.metadata.roles.targets.keys.filter(key => key.status === 'active')

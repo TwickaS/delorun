@@ -144,6 +144,8 @@ export interface FixtureOptions {
   readonly dsh?: string
   /** The security mark and summary the manifest carries; neither by default, as in a manifest signed before they existed. */
   readonly notice?: { readonly security: boolean, readonly summary: string }
+  /** The builder the manifest's rebuild names; the targets-key holder by default. */
+  readonly builder?: string
 }
 
 /**
@@ -192,7 +194,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
     sbom: { ...dummy(`delorun-${releaseVersion}.spdx.json`), format: 'SPDX-2.3+json' },
     npm: [{ name: 'delorun', version: version(releaseVersion), integrity: brandString<NpmIntegrity>(`sha512-${'A'.repeat(86)}==`) }],
     install: { sh: dummy('install.sh'), ps1: dummy('install.ps1') },
-    rebuild: { record: dummy(`delorun-${releaseVersion}.rebuild.json`), builders: [{ name: 'the targets-key holder', ci: false }] },
+    rebuild: { record: dummy(`delorun-${releaseVersion}.rebuild.json`), builders: [{ name: options.builder ?? 'the targets-key holder', ci: false }] },
     advisories: { report: dummy(`delorun-${releaseVersion}.advisories.json`), accepted: [] },
     ...options.notice,
   }

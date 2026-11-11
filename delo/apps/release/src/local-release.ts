@@ -5,7 +5,7 @@
  * `node_modules/.bin/tsx delo/apps/release/src/local-release.ts --version <version> --summary <text> [--security] --out <channel dir>
  * --root <root file>... --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url>
  * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--artifacts build|existing] [--commit <rev>]
- * [--closures-from <dir>] [--cache <dir>]`
+ * [--closures-from <dir>] [--cache <dir>] [--production-keys <file>]`
  *
  * `--summary` is the release's one-line summary and `--security` marks the release as a security fix; the signed
  * manifest carries both as `summary` and `security` (false without the flag), which an update notice shows.
@@ -18,6 +18,9 @@
  * manifest's entry to the log they name, so point them at a log you run, never at a public log unless the release is
  * meant to be logged there. The command asks the log for a witnessed checkpoint at most 60 times, `--log-poll-seconds`
  * apart (30 by default). `--state` is the timestamp signer's state file, created on the first release.
+ * `--production-keys` is the production-keys registry, `delo/release/production-keys.json` of the repository by
+ * default; the command refuses, before it builds anything, a `--root` file, a key one of those roots lists, or a
+ * `--targets-key` or `--timestamp-key` that the registry lists.
  *
  * @module @delo/release/local-release
  */
@@ -36,6 +39,7 @@ import { isArtifactSource } from './closure/artifacts.ts'
 import { readSigningKey } from '@delo/release-formats/sign/envelope'
 import { semanticVersion } from '@delo/release-formats/brands'
 import { buildLocalRelease, copyClosureFiles, LOCAL_PLATFORM } from './local/release.ts'
+import { PRODUCTION_KEYS_PATH, readProductionKeysFile } from './local/production-keys.ts'
 
 /** The upstream release name a commit is based on: `upstream.ref` of the divergence ledger, `dsh-v<version>`. */
 const UPSTREAM_REF = /^dsh-v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/u
@@ -82,6 +86,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       'commit': { type: 'string', default: 'HEAD' },
       'closures-from': { type: 'string' },
       'cache': { type: 'string', default: join(homedir(), '.cache', 'delo-release') },
+      'production-keys': { type: 'string' },
     },
   })
   try {
@@ -97,6 +102,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
     const poll = Number(values['log-poll-seconds'])
     if (!Number.isFinite(poll) || poll < 0) throw new Error(`--log-poll-seconds ${values['log-poll-seconds']} is not a number of seconds`)
     const repository = repositoryRoot(process.cwd())
+    const productionKeys = readProductionKeysFile(values['production-keys'] === undefined ? join(repository, PRODUCTION_KEYS_PATH) : resolve(values['production-keys']))
     const commit = execFileSync('git', ['rev-parse', '--verify', `${values.commit}^{commit}`], { cwd: repository, encoding: 'utf8' }).trim()
     const cache = resolve(values.cache)
     const closures = async (directory: string): Promise<void> => {
@@ -117,6 +123,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       roots: root.map(path => readFileSync(resolve(path))),
       targetsKey: readSigningKey(resolve(values['targets-key']!)),
       timestampKey: readSigningKey(resolve(values['timestamp-key']!)),
+      productionKeys,
       state: resolve(state),
       log: { submit: values['log-submit']!, checkpoint: values['log-checkpoint']!, tiles: values['log-tiles']! },
       logAttempts: 60,

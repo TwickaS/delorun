@@ -13,14 +13,38 @@ import { RELEASE_REPOSITORY_URL, type RuntimePlatform } from '@delo/contract-rel
 import type { BuildRequest } from '../../src/build-closure.ts'
 import type { ClosureFiles } from '../../src/closure/archive-closure.ts'
 import { main, upstreamVersion } from '../../src/local-release.ts'
-import { buildLocalRelease, copyClosureFiles, LOCAL_BUILDER, releaseDirectory, type LocalReleaseRequest } from '../../src/local/release.ts'
+import { buildLocalRelease, copyClosureFiles, LOCAL_BUILDER, PRODUCTION_REFUSAL, releaseDirectory, type LocalReleaseRequest } from '../../src/local/release.ts'
+import { PRODUCTION_KEYS_PATH, PRODUCTION_KEYS_SCHEMA, readProductionKeys, readProductionKeysFile, type ProductionKeys } from '../../src/local/production-keys.ts'
+import { publicKeyEntry } from '@delo/release-formats/sign/envelope'
 import { verifySignedManifest, trustRootChain, verifyFileList, verifyTimestamp } from '@delo/release-formats/sign/verify'
 import { readBundle, verifyBundle } from '@delo/release-formats/log/bundle'
 import { readEnvelope } from '@delo/release-formats/sign/schemas'
-import { scratch } from '../support.ts'
+import { REPO, scratch } from '../support.ts'
 import { fixtureClosure, keyFile, serveLog, trust, type Trust } from './support.ts'
 
 const COMMIT = 'a'.repeat(40)
+
+/** The registry the repository commits, which lists no production material yet. */
+const COMMITTED_REGISTRY = readProductionKeysFile(join(REPO, PRODUCTION_KEYS_PATH))
+
+/**
+ * A production-keys registry file's bytes.
+ * @param roots - the listed roots.
+ * @param keyids - the listed key ids.
+ * @returns the file.
+ */
+function registryFile(roots: ReadonlyArray<{ readonly version: number, readonly sha256: string }>, keyids: readonly string[]): Buffer {
+  return Buffer.from(`${JSON.stringify({ schema: PRODUCTION_KEYS_SCHEMA, roots, keyids }, undefined, 2)}\n`)
+}
+
+/**
+ * A registry that lists the given key ids as production keys.
+ * @param keyids - the key ids.
+ * @returns the registry.
+ */
+function listing(...keyids: string[]): ProductionKeys {
+  return readProductionKeys(registryFile([], keyids))
+}
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -47,6 +71,7 @@ async function request(test: Parameters<typeof scratch>[0], directory: string, t
     roots: [trusted.root],
     targetsKey: trusted.keys.targets,
     timestampKey: trusted.keys.timestamp,
+    productionKeys: COMMITTED_REGISTRY,
     state: join(directory, 'state.json'),
     log: log.endpoints,
     logAttempts: 1,
@@ -158,6 +183,37 @@ describe('a local release', () => {
     expect(existsSync(join(directory, 'channel'))).toBe(false)
   })
 
+  it('local-release-refuses-production-root: refuses a root file whose SHA-256 the production-keys registry lists, before building or writing anything', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    let built = false
+    const digest = createHash('sha256').update(trusted.root).digest('hex')
+    const productionKeys = readProductionKeys(registryFile([{ version: 1, sha256: digest }], []))
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { productionKeys, closures: () => { built = true; return Promise.resolve() } })))
+      .rejects.toThrow(`${PRODUCTION_REFUSAL}: root file 1 is a production root (SHA-256 ${digest})`)
+    expect(built).toBe(false)
+    expect(existsSync(join(directory, 'channel'))).toBe(false)
+    expect(existsSync(join(directory, 'state.json'))).toBe(false)
+  })
+
+  it('local-release-refuses-production-keys: refuses a targets or timestamp key, and a root listing a key in any role, that the registry lists', async (test) => {
+    const directory = scratch(test)
+    const trusted = trust()
+    let built = false
+    const closures = (): Promise<void> => { built = true; return Promise.resolve() }
+    const id = (key: Parameters<typeof publicKeyEntry>[0]): string => publicKeyEntry(key).keyid
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { productionKeys: listing(id(trusted.keys.targets)), closures })))
+      .rejects.toThrow(`${PRODUCTION_REFUSAL}: the targets key ${id(trusted.keys.targets)} is a production key`)
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { productionKeys: listing(id(trusted.keys.timestamp)), closures })))
+      .rejects.toThrow(`${PRODUCTION_REFUSAL}: the timestamp key ${id(trusted.keys.timestamp)} is a production key`)
+    for (const role of ['root', 'catalogue'] as const) {
+      await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { productionKeys: listing(id(trusted.keys[role])), closures })))
+        .rejects.toThrow(`${PRODUCTION_REFUSAL}: root 1 lists the production key ${id(trusted.keys[role])} in roles.${role}`)
+    }
+    expect(built).toBe(false)
+    expect(existsSync(join(directory, 'channel'))).toBe(false)
+  })
+
   it('refuses a closure build that wrote the file list of another version', async (test) => {
     const directory = scratch(test)
     const trusted = trust()
@@ -178,6 +234,33 @@ describe('a local release', () => {
     await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { log: log.endpoints }))).rejects.toThrow('after 1 attempts; the release is not published')
     expect(readdirSync(join(directory, 'channel', 'releases', 'download'))).toEqual([])
     expect(existsSync(join(directory, 'channel', 'timestamp.json'))).toBe(false)
+  })
+})
+
+describe('the production-keys registry', () => {
+  it('reads the committed registry, which lists no production root or key yet', () => {
+    expect(COMMITTED_REGISTRY.rootDigests.size).toBe(0)
+    expect(COMMITTED_REGISTRY.keyids.size).toBe(0)
+  })
+
+  it('reads the listed root digests and key ids', () => {
+    const registry = readProductionKeys(registryFile([{ version: 1, sha256: 'a'.repeat(64) }, { version: 2, sha256: 'b'.repeat(64) }], ['c'.repeat(64)]))
+    expect([...registry.rootDigests]).toEqual(['a'.repeat(64), 'b'.repeat(64)])
+    expect([...registry.keyids]).toEqual(['c'.repeat(64)])
+  })
+
+  it('refuses a registry with another schema, an unknown field, a malformed value, a repeated entry or a repeated JSON key', () => {
+    const root = { version: 1, sha256: 'a'.repeat(64) }
+    expect(() => readProductionKeys(Buffer.from(JSON.stringify({ schema: 'delo.production-keys/2', roots: [], keyids: [] })))).toThrow('the production-keys registry does not read')
+    expect(() => readProductionKeys(Buffer.from(JSON.stringify({ schema: PRODUCTION_KEYS_SCHEMA, roots: [], keyids: [], note: 'x' })))).toThrow('the production-keys registry does not read')
+    expect(() => readProductionKeys(Buffer.from(JSON.stringify({ schema: PRODUCTION_KEYS_SCHEMA, roots: [{ ...root, expires: 'never' }], keyids: [] })))).toThrow('the production-keys registry does not read')
+    expect(() => readProductionKeys(registryFile([], ['A'.repeat(64)]))).toThrow('the production-keys registry does not read')
+    expect(() => readProductionKeys(registryFile([{ version: 0, sha256: 'a'.repeat(64) }], []))).toThrow('the production-keys registry does not read')
+    expect(() => readProductionKeys(registryFile([], ['c'.repeat(64), 'c'.repeat(64)]))).toThrow(`lists the key id ${'c'.repeat(64)} twice`)
+    expect(() => readProductionKeys(registryFile([root, { version: 2, sha256: root.sha256 }], []))).toThrow(`lists the root digest ${root.sha256} twice`)
+    expect(() => readProductionKeys(registryFile([root, { version: 1, sha256: 'b'.repeat(64) }], []))).toThrow('lists the root version 1 twice')
+    expect(() => readProductionKeys(Buffer.from(`{"schema":"${PRODUCTION_KEYS_SCHEMA}","roots":[],"keyids":[],"keyids":[]}`))).toThrow()
+    expect(() => readProductionKeys(Buffer.alloc(64 * 1024 + 1, 0x20))).toThrow('above its limit')
   })
 })
 
@@ -293,6 +376,23 @@ describe('the local-release command', () => {
     expect(await main(args)).toBe(1)
     expect(failure).toHaveBeenLastCalledWith('local-release: --log-poll-seconds soon is not a number of seconds')
     expect(await main([...args.slice(0, -2), '--log-poll-seconds=-1'])).toBe(1)
+  })
+
+  it('refuses a root that the production-keys registry it is given lists, and reads the committed registry by default', async (test) => {
+    const closures = scratch(test)
+    await fixtureClosure(test, '0.1.0')(closures)
+    const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { directory, args } = await command(test, '0.1.0', ['--closures-from', closures])
+    const digest = createHash('sha256').update(readFileSync(join(directory, 'root.json'))).digest('hex')
+    writeFileSync(join(directory, 'production-keys.json'), registryFile([{ version: 1, sha256: digest }], []))
+    expect(await main([...args, '--production-keys', join(directory, 'production-keys.json')])).toBe(1)
+    expect(failure).toHaveBeenLastCalledWith(`local-release: ${PRODUCTION_REFUSAL}: root file 1 is a production root (SHA-256 ${digest})`)
+    expect(existsSync(join(directory, 'channel'))).toBe(false)
+    writeFileSync(join(directory, 'production-keys.json'), '{"schema":"delo.production-keys/1"}')
+    expect(await main([...args, '--production-keys', join(directory, 'production-keys.json')])).toBe(1)
+    expect(failure).toHaveBeenLastCalledWith(expect.stringContaining('local-release: the production-keys registry does not read'))
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    expect(await main(args)).toBe(0)
   })
 
   it('refuses a call that names too little, a version that is not one, and a failed build, with exit status 1', async (test) => {

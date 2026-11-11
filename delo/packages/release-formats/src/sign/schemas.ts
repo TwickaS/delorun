@@ -99,6 +99,13 @@ export const ImageRefSchema = z.strictObject({ repository: z.string().min(1), in
 export const ReleaseSummarySchema = z.string().refine(isValidSummary, `a release summary: 1 to ${String(RELEASE_SUMMARY_MAX_LENGTH)} characters, no control, format, line-break or lone surrogate character, and no whitespace at either end`)
 
 /**
+ * The `rebuild.builders[].name` of a release `delo/apps/release/src/local-release.ts` built: no second builder rebuilt
+ * it and no allowed signer tagged it. A launcher fetching from contract C2's production publication refuses a manifest
+ * that names this builder.
+ */
+export const LOCAL_RELEASE_BUILDER = 'local release (no independent rebuild)'
+
+/**
  * The signed content of a release manifest. `security` and `summary` are optional, so a manifest signed before they
  * existed still reads; signing requires both (`ManifestDraftSchema` in `release.ts`).
  */

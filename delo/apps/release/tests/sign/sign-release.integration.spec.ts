@@ -16,7 +16,8 @@ import { outputRefs, REQUIRED_SOURCE } from '../../src/rebuild/record.ts'
 import { LogStandIn, WitnessStandIn } from '../log/standin.ts'
 import { checkFileRef, verifyFileList, verifySignedManifest } from '@delo/release-formats/sign/verify'
 import { writeTree } from '../support.ts'
-import { COMMITTED_BASE_DIGEST, COMMITTED_COMPILER, PLATFORMS, releaseFixture, rootFile, VERSION, type ReleaseFixture } from './fixture.ts'
+import { DESKTOP_PLATFORMS } from '@delo/contract-release-manifest'
+import { COMMITTED_BASE_DIGEST, COMMITTED_COMPILER, PLATFORMS, RELEASE_BRANCH, releaseFixture, rootFile, VERSION, type ReleaseFixture } from './fixture.ts'
 
 const MANIFEST = `delorun-${VERSION}.manifest.json`
 const RECORD = `delorun-${VERSION}.rebuild.json`
@@ -240,9 +241,9 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
   it('refuses a release file whose bytes differ from the draft\'s reference', async (test) => {
     const fixture = await releaseFixture(test)
     expect(fixture.record().status).toBe(0)
-    const script = join(fixture.release, 'install.sh')
-    writeFileSync(script, readFileSync(script, 'utf8').toUpperCase())
-    refusedWithoutWriting(fixture, await fixture.sign(), 'install.sh does not match install.sh in the draft')
+    const installer = `Delo-${VERSION}-${DESKTOP_PLATFORMS[0]}.installer`
+    writeFileSync(join(fixture.release, installer), readFileSync(join(fixture.release, installer), 'utf8').toUpperCase())
+    refusedWithoutWriting(fixture, await fixture.sign(), `${installer} does not match desktop.${DESKTOP_PLATFORMS[0]}.installer in the draft`)
   })
 
   it('refuses without the rebuild attestation, or with one another key made or that covers another build', async (test) => {
@@ -290,12 +291,25 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
 
   it('refuses from the command line without a rebuild record, naming the required source', async (test) => {
     const fixture = await releaseFixture(test)
-    const result = fixture.run('sign-release.ts', ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath])
+    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--allowed-signers', fixture.allowedSigners, '--release-branch', RELEASE_BRANCH]
+    const result = fixture.run('sign-release.ts', args)
     refusal(result.stderr)
     expect(result.status).toBe(1)
-    const stated = fixture.run('sign-release.ts', ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--first-of-line'])
+    const stated = fixture.run('sign-release.ts', [...args, '--first-of-line'])
     refusal(stated.stderr)
     expect(stated.status).toBe(1)
+  })
+
+  it('reads the repository\'s allowed-signers file and the release branch origin/v5 by default from the command line', async (test) => {
+    const fixture = await releaseFixture(test)
+    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath]
+    const unlisted = fixture.run('sign-release.ts', args)
+    expect(unlisted.stderr).toContain(`signing refuses: the allowed-signers file ${join(fixture.repo, 'delo', 'release', 'allowed-signers')} does not read`)
+    expect(unlisted.status).toBe(1)
+    const branch = fixture.run('sign-release.ts', [...args, '--allowed-signers', fixture.allowedSigners])
+    expect(branch.stderr).toContain('signing refuses: the release branch origin/v5 names no commit')
+    expect(branch.status).toBe(1)
+    expect(existsSync(join(fixture.release, MANIFEST))).toBe(false)
   })
 
   it('refuses a rebuild without the SBOM, recording or signing', async (test) => {

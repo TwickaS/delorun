@@ -1,0 +1,14 @@
+# The SSH keys allowed to sign Delo release tags, in git's allowed-signers format (gpg.ssh.allowedSignersFile; see
+# "ALLOWED SIGNERS" in man ssh-keygen). sign-release.ts verifies the release tag v<version> with this file through
+# git verify-tag and refuses to sign when the tag is lightweight, unsigned, or signed by a key this file does not list.
+#
+# Each signer is one line:
+#
+#   <principal> namespaces="git" <key type> <base64 key>
+#
+# for example `release@example.org namespaces="git" ssh-ed25519 AAAAC3Nza...`, where the key is the public half of
+# the SSH key the signer sets as git's user.signingkey with gpg.format=ssh and signs tags with (git tag -s).
+#
+# The owner adds each release signer's SSH signing key here. A change to this file needs CODEOWNERS review.
+#
+# This file lists no key yet, so signing refuses every tag until the owner adds one.

@@ -11,6 +11,8 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { RELEASE_METADATA_ORIGIN } from '@delo/contract-release-manifest'
+import { LOCAL_RELEASE_BUILDER } from '@delo/release-formats/sign/schemas'
 import { Downloader } from '../src/download.ts'
 import { isInstallError, type InstallError } from '../src/errors.ts'
 import { LauncherChannel, MAX_ROOT_ROTATIONS, RELEASE_SOURCE, type LauncherChannelOptions, type ReleaseSource } from '../src/channel.ts'
@@ -121,6 +123,46 @@ describe('a release the channel can verify', () => {
     // its launcher ships descends from one of them.
     expect(await readdir(join(home, 'trust', 'roots'))).toEqual(['1.root.json'])
     expect(await readFile(join(home, 'trust', 'roots', '1.root.json'))).toEqual(Buffer.from(fixture.roots[0]!))
+  })
+})
+
+describe('a release a local release build signed', () => {
+  /**
+   * A channel over contract C2's production publication whose every request a map of paths answers, so the channel
+   * fetches as a production launcher does without reaching a network.
+   * @param fixture - the release the publication serves.
+   * @returns the channel.
+   */
+  async function production(fixture: Fixture): Promise<LauncherChannel> {
+    const files = releasePaths(fixture)
+    const served: typeof globalThis.fetch = async (input) => {
+      const bytes = files.get(new URL(input instanceof Request ? input.url : String(input)).pathname)
+      return bytes === undefined ? new Response(null, { status: 404 }) : new Response(new Uint8Array(bytes), { status: 200 })
+    }
+    const source: ReleaseSource = { metadata: RELEASE_METADATA_ORIGIN, files: (version, name) => `${RELEASE_METADATA_ORIGIN}/releases/${version}/${name}` }
+    return new LauncherChannel({
+      home: await scratchHome(),
+      platform: fixture.platform,
+      roots: fixture.roots,
+      channel: 'stable',
+      log: logService(fixture.checkpoint),
+      source,
+      downloader: new Downloader({ fetch: served, hosts: { scheme: 'https:', hosts: [new URL(RELEASE_METADATA_ORIGIN).hostname], maxRedirects: 0 } }),
+      now: () => NOW * 1000,
+    })
+  }
+
+  it('c02-production-refuses-local-release: is refused by a channel that fetches from the production publication', async () => {
+    const fixture = await fixtureRelease({ builder: LOCAL_RELEASE_BUILDER })
+    const error = await refusal((await production(fixture)).resolve(), 'INSTALL_VERIFY_FAILED')
+    expect(error.detail).toContain(`names the builder "${LOCAL_RELEASE_BUILDER}"`)
+    await refusal((await production(fixture)).newest(), 'INSTALL_VERIFY_FAILED')
+  })
+
+  it('is installed from a channel of its own, and a production channel installs a release the holder rebuilt', async () => {
+    const local = await fixtureRelease({ builder: LOCAL_RELEASE_BUILDER })
+    expect(String((await (await harness(local)).channel.resolve()).version)).toBe(VERSION)
+    expect(String((await (await production(await fixtureRelease())).resolve()).version)).toBe(VERSION)
   })
 })
 

@@ -2,9 +2,13 @@
  * Signing a release with the targets key (contract C2): the checks that refuse to sign without the targets-key
  * holder's rebuild, then the signed runtime file lists, the published rebuild record and the signed manifest. Signing
  * runs on the holder's machine with the release workflow's files in a local directory and the holder's rebuild
- * record and rebuild output outside it; it checks every file the manifest names, holds the manifest's runtime entries
- * to exactly the release platforms `closure.json` lists at the release's commit, compares every runtime archive and
- * file list of the workflow's output with the holder's rebuild again, and writes nothing before every check passes.
+ * record and rebuild output outside it; it checks that the release tag is signed by a key the allowed-signers file
+ * lists and names a commit on the release branch (`sign/source.ts`), checks every file the manifest names, holds the
+ * manifest's runtime entries to exactly the release platforms `closure.json` lists at the release's commit, refuses
+ * install scripts other than zero-length placeholders, which the rebuild comparison does not cover, checks each npm
+ * package's integrity, name and version against its packed tarball (`sign/npm-package.ts`), compares every runtime
+ * archive and file list of the workflow's output with the holder's rebuild again, and writes nothing before every
+ * check passes.
  *
  * @module @delo/release/sign/release
  */
@@ -41,6 +45,8 @@ import { signEnvelope } from '@delo/release-formats/sign/envelope'
 import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@delo/release-formats/sign/json'
 import { ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
 import { patchRuleProblem } from './patch-rule.ts'
+import { npmPackageProblem } from './npm-package.ts'
+import { releaseBranchProblem, tagSignatureProblem } from './source.ts'
 
 /** Signing refused; the message names what is missing or wrong. */
 export class SigningRefusal extends Error {
@@ -83,6 +89,10 @@ export interface SigningRequest {
   readonly feed: string
   /** Whether the holder states that the release, a patch version, is the first of its major and minor; see `PatchRuleRequest.firstOfLine` in `patch-rule.ts`. */
   readonly firstOfLine: boolean
+  /** The allowed-signers file the release tag's SSH signature must verify with; the command passes the committed `delo/release/allowed-signers`. */
+  readonly allowedSigners: string
+  /** The branch the release commit must be on, as a revision of {@link SigningRequest.repository}, such as `origin/v5`. */
+  readonly releaseBranch: string
 }
 
 /** What signing wrote: besides the signed files, the release-log entry body of the manifest, which the release workflow submits. */
@@ -146,7 +156,15 @@ async function realDirectory(path: string, what: string): Promise<string> {
   return real
 }
 
-async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Promise<{ record: RebuildRecord, recordBytes: Buffer, comparison: Comparison }> {
+/**
+ * The rebuild checks: the holder's record, rebuild output and attestation, and the comparison with the workflow's files.
+ * @param request - the signing request.
+ * @param draft - the manifest draft.
+ * @param tagged - the commit the release tag names.
+ * @returns the record, its bytes and the comparison.
+ * @throws SigningRefusal when a check fails.
+ */
+async function checkRebuild(request: SigningRequest, draft: ManifestDraft, tagged: string): Promise<{ record: RebuildRecord, recordBytes: Buffer, comparison: Comparison }> {
   const markers = ciMarkers(request.env)
   if (markers.length > 0) refuse(`${markers.join(' and ')} is set, so this run is a CI run`)
   const recordName = rebuildRecordName(draft.version)
@@ -173,12 +191,6 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
   if (record.builder.ci) refuse(`the rebuild record says it was made in CI (builder ${JSON.stringify(record.builder.name)})`)
   if (record.comparison !== 'match') refuse('the rebuild record\'s comparison found a difference')
   if (record.commit !== draft.source.commit) refuse(`the rebuild record's commit ${record.commit} differs from the release's ${draft.source.commit}`)
-  let tagged: string
-  try {
-    tagged = commitOf(request.repository, draft.source.tag)
-  } catch (error) {
-    refuse(`the tag ${draft.source.tag} names no commit in ${request.repository}: ${(error as Error).message}`)
-  }
   if (tagged !== record.commit) refuse(`the rebuild record's commit ${record.commit} differs from the commit ${tagged} that tag ${draft.source.tag} names`)
   let recipe: CommittedRecipe
   try {
@@ -250,13 +262,18 @@ async function writeAll(directory: string, outputs: ReadonlyArray<readonly [stri
   for (const [name] of outputs) await rename(join(directory, `${name}${PENDING_SUFFIX}`), join(directory, name))
 }
 
+/** The message stem of the refusal of an install script that is not a zero-length placeholder. */
+export const INSTALL_SCRIPT_REFUSAL = 'the install scripts are not in the rebuild comparison yet'
+
 /**
  * Check a release and sign it: the runtime file lists in place, then the manifest. Besides the rebuild, the advisory
- * check and the draft's files, the checks include the patch rule of `patch-rule.ts`.
- * @param request - the directories, rebuild record, key and environment.
+ * check and the draft's files, the checks include the release tag's signature and branch (`source.ts`), the install
+ * scripts' placeholders, the npm packages' tarballs (`npm-package.ts`) and the patch rule of `patch-rule.ts`.
+ * @param request - the directories, rebuild record, key, allowed signers, release branch and environment.
  * @returns the signed manifest and the comparison.
  * @throws SigningRefusal when any check fails; nothing is written then.
- * @throws Error when git cannot list the repository's tags for the patch rule; nothing is written then either.
+ * @throws Error when git cannot be started or cannot list the repository's tags for the patch rule; nothing is
+ *   written then either.
  */
 export async function signRelease(request: SigningRequest): Promise<SignedRelease> {
   let draft: ManifestDraft
@@ -277,7 +294,20 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
     }
   }
   if (draft.sbom.name !== sbomName(draft.version)) throw new SigningRefusal(`signing refuses: the draft names ${draft.sbom.name} as the SBOM; a release's SBOM is ${sbomName(draft.version)}`)
-  const { record, recordBytes, comparison } = await checkRebuild(request, draft)
+  for (const [where, script] of [['install.sh', draft.install.sh], ['install.ps1', draft.install.ps1]] as const) {
+    if (script.length !== 0) throw new SigningRefusal(`signing refuses: the draft's ${where} is ${script.name} of ${String(script.length)} bytes, but ${INSTALL_SCRIPT_REFUSAL}, so a release lists each install script only as a zero-length placeholder`)
+  }
+  const unsigned = await tagSignatureProblem(request.repository, draft.source.tag, request.allowedSigners)
+  if (unsigned !== undefined) throw new SigningRefusal(`signing refuses: ${unsigned}`)
+  let tagged: string
+  try {
+    tagged = commitOf(request.repository, `refs/tags/${draft.source.tag}`)
+  } catch (error) {
+    throw new SigningRefusal(`signing refuses: the tag ${draft.source.tag} names no commit in ${request.repository}: ${(error as Error).message}`)
+  }
+  const offBranch = await releaseBranchProblem(request.repository, tagged, request.releaseBranch)
+  if (offBranch !== undefined) throw new SigningRefusal(`signing refuses: ${offBranch}`)
+  const { record, recordBytes, comparison } = await checkRebuild(request, draft, tagged)
   const patchProblem = patchRuleProblem({ repository: request.repository, version: draft.version, dsh: draft.dsh, commit: record.commit, firstOfLine: request.firstOfLine })
   if (patchProblem !== undefined) throw new SigningRefusal(`signing refuses: ${patchProblem}`)
   let built: ReleaseImages | undefined
@@ -311,6 +341,10 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
     if (!existsSync(join(request.release, ref.name))) throw new SigningRefusal(`signing refuses: ${where} names ${ref.name}, which is not in ${request.release}`)
     const actual = await refOf(request.release, ref.name)
     if (actual.length !== ref.length || actual.sha256 !== ref.sha256) throw new SigningRefusal(`signing refuses: ${ref.name} does not match ${where} in the draft`)
+  }
+  for (const entry of draft.npm) {
+    const problem = await npmPackageProblem(request.release, entry)
+    if (problem !== undefined) throw new SigningRefusal(`signing refuses: ${problem}`)
   }
   const signedLists = new Map<string, string>()
   const runtime: Record<string, { archive: FileRef, files: FileRef }> = {}
