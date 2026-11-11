@@ -40,8 +40,8 @@ import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignal
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { afterChangesBoot, changesApprovedContent, recordChangesBoot } from './changes/start.ts'
 import { reloadProfile } from './changes/reload.ts'
-import { checkRunningRuntime, handOffToComposedTree, handsOff, processHandOff, startEntry } from './changes/harness-start.ts'
-import { relaunchForeground, retryDetached, retryForeground, startRetry, type DetachedOutcome, type ForegroundRelaunch, type StartRetry } from './changes/retry.ts'
+import { checkRunningRuntime, handOffToComposedTree, handsOff, processHandOff, startEntry, type HandOff } from './changes/harness-start.ts'
+import { relaunchForeground, retryDetached, retryForeground, retryHandOff, startRetry, type DetachedOutcome, type ForegroundRelaunch, type StartRetry } from './changes/retry.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
 import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
@@ -141,9 +141,9 @@ export interface StartDependencies {
    * Hand the start off to the composed tree of its runtime before anything else runs ([harness start](./changes/harness-start.ts));
    * {@link handOffToComposedTree} for this process in a real start.
    * @param request - the start.
-   * @returns `{ ran }` with the composed tree's result when the start handed off; undefined when it runs here.
+   * @returns what the hand-off did when the start handed off; undefined when it runs here.
    */
-  readonly handOff: (request: StartRequest) => Promise<{ readonly ran: CommandResult } | undefined>
+  readonly handOff: (request: StartRequest) => Promise<HandOff | undefined>
   /**
    * The handover pipe when this process was started as an update's successor, which inherits it as file descriptor 3.
    * @returns the pipe, or `undefined` for a fresh start.
@@ -454,7 +454,9 @@ export function upstreamDependencies(): StartDependencies {
  * process alive, and the lock, the token and the socket go when it exits; a refusal or a failed boot removes them
  * at once. A fresh start that failed right after a change starts once more without it ([retry](./changes/retry.ts)).
  * Run from the signed installation of a runtime whose harness has approved files, it first hands off to the composed
- * tree ([harness start](./changes/harness-start.ts)) and returns what that start returned.
+ * tree ([harness start](./changes/harness-start.ts)) and returns what that start returned; when the tree's `delorun`
+ * failed before its start ran, this process leaves the newest harness change out and starts once more through the same
+ * hand-off ([retry](./changes/retry.ts)).
  * @param request - the home, profile, studio choice and output.
  * @param dependencies - the profile preparation and runner, environment loader, holder probe, exit hooks, output
  *   capture and second start.
@@ -469,8 +471,12 @@ export function upstreamDependencies(): StartDependencies {
  */
 export async function startForeground(request: StartRequest, dependencies: StartDependencies = upstreamDependencies()): Promise<CommandResult> {
   const handed = await dependencies.handOff(request)
-  if (handed !== undefined) return handed.ran
-  return retryForeground(request, () => startHomeProcess(request, dependencies), dependencies.relaunch)
+  if (handed === undefined) return retryForeground(request, () => startHomeProcess(request, dependencies), dependencies.relaunch)
+  if (handed.kind === 'ran') return handed.ran
+  const next = await retryHandOff(request, handed)
+  if (next.kind === 'again') return startForeground({ ...request, env: next.env }, dependencies)
+  process.exitCode = next.code
+  return undefined
 }
 
 /**
@@ -713,7 +719,7 @@ export async function startDetached(home: string, profile: string, output: Comma
   if (argument === undefined) throw new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so the home process cannot be started')
   // The signed installation's entry, which hands off to the composed tree itself when the harness has approved files.
   const entry = startEntry({ node: process.execPath, entry: argument })
-  const handing = await handsOff(home, runtimeOfFile(home, fileURLToPath(import.meta.url)))
+  const handing = await handsOff(home, profile, runtimeOfFile(home, fileURLToPath(import.meta.url)))
   return retryDetached({ home, profile, output }, async (variables) => {
     const outcome = await launchDetached(home, profile, output, { ...entry, handsOff: handing }, variables)
     if (outcome.kind === 'running') await announceStudio(home, profile, open, output, opener)

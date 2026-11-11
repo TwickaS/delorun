@@ -14,6 +14,11 @@
  * - `delorun start` in the background marks its child with {@link CHANGES_STARTER_ENV}, so the child exits with the code
  *   instead, and starts it once more with {@link CHANGES_RETRY_ENV}.
  * - The second start never leaves a change out; when it fails, the start prints {@link SECOND_FAILURE_LINE}.
+ * - When the signed installation handed off and the composed tree's `delorun` exited with a failure before its start ran
+ *   ([harness start](./harness-start.ts)), the signed process leaves the runtime's newest harness change out, prints the
+ *   words that name it and starts once more in the same process with {@link CHANGES_RETRY_ENV} set, through the same
+ *   decision, which composes without the change or runs the signed installation ({@link retryHandOff}). A start already
+ *   marked as the second one, or one with no harness change to leave out, prints {@link harnessFailureWords} instead.
  *
  * Both markers are read from the environment `delorun` was started with and removed from this process's environment,
  * so nothing the Host starts inherits them. Neither weakens a check: the retry marker only stops a start from leaving a
@@ -21,7 +26,7 @@
  *
  * @module @delo/cli/changes/retry
  */
-import { isChangesError, lastLeftOut, leaveOutNewestChange, leftOutFact, leftOutWords, newestLeavableChange, pluginRows, SECOND_FAILURE_LINE } from '@delo/changes'
+import { isChangesError, lastLeftOut, leaveOutNewestChange, leaveOutNewestHarnessChange, leftOutFact, leftOutWords, newestAppliedHarnessChange, newestLeavableChange, pluginRows, SECOND_FAILURE_LINE, type ChangeId } from '@delo/changes'
 import type { DeloLogger } from '@delo/logs'
 import type { CommandOutput, CommandResult } from '../command.ts'
 import type { BootedRow } from '../delo-bundles.ts'
@@ -244,4 +249,55 @@ export async function retryDetached(request: { readonly home: string, readonly p
   if ((await launch({ [CHANGES_STARTER_ENV]: 'detached', [CHANGES_RETRY_ENV]: '1' })).kind === 'running') return EXIT.ok
   request.output.stderr(`${SECOND_FAILURE_LINE}\n`)
   return EXIT.failed
+}
+
+/**
+ * The words of a start whose composed tree's `delorun` failed before its start ran and that leaves no harness change
+ * out: how to undo the newest change to Delo itself, and how to run the installed release without any.
+ * @param id - the runtime's newest applied harness change, when there is one.
+ * @returns the lines, joined by line breaks, without a final one.
+ */
+export function harnessFailureWords(id: ChangeId | undefined): string {
+  return [
+    'Delo did not start with your changes to Delo itself.',
+    id === undefined ? 'See them with: delorun changes list.' : `To undo the newest one: delorun changes undo ${id}.`,
+    'To start the installed release without any of them: delorun changes edit-harness --discard.',
+  ].join('\n')
+}
+
+/** What a start does after the composed tree's `delorun` failed before its start ran. */
+export type HandOffRetry =
+  /** Start once more with this environment, which carries {@link CHANGES_RETRY_ENV}. */
+  | { readonly kind: 'again', readonly env: Environment }
+  /** End with this exit code. */
+  | { readonly kind: 'stop', readonly code: number }
+
+/**
+ * Leave the runtime's newest harness change out after the composed tree's `delorun` exited with a failure before its
+ * start ran. A start marked with {@link CHANGES_RETRY_ENV} leaves nothing out; a home process `delorun start` started in
+ * the background ends with {@link EXIT.changeLeftOut} and lets its starter name the change and start again.
+ * @param request - the home, the environment `delorun` was started with and the output.
+ * @param failed - the runtime the start runs and the child's exit code.
+ * @returns `again` with the second start's environment, or `stop` with the exit code.
+ */
+export async function retryHandOff(request: { readonly home: string, readonly env: Environment, readonly output: CommandOutput }, failed: { readonly runtime: string, readonly code: number }): Promise<HandOffRetry> {
+  const { home, env, output } = request
+  if (env[CHANGES_RETRY_ENV] !== '1') {
+    const failure = `Delo's harness with your changes exited with code ${String(failed.code)} while it loaded, before it started`
+    const entry = await leaveOutNewestHarnessChange(home, failed.runtime, failure).catch((error: unknown) => {
+      output.stderr(printed(`Delo could not leave the newest change to Delo itself out: ${detailOf(error)}`))
+      return undefined
+    })
+    if (entry !== undefined) {
+      if (env[CHANGES_STARTER_ENV] === 'detached') return { kind: 'stop', code: EXIT.changeLeftOut }
+      output.stderr(printed(leftOutWords(leftOutFact(entry))))
+      return { kind: 'again', env: { ...env, [CHANGES_RETRY_ENV]: '1' } }
+    }
+  }
+  const applied = await newestAppliedHarnessChange(home, failed.runtime).catch((_unreadable: unknown) => {
+    // A harness log Delo cannot read names no change; the words then point to `delorun changes list`, which says why.
+    return undefined
+  })
+  output.stderr(printed(harnessFailureWords(applied?.id)))
+  return { kind: 'stop', code: failed.code }
 }

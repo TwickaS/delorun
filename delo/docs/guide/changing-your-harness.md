@@ -94,7 +94,7 @@ When the agent asks to install, update or remove a plugin, nothing is installed 
 | `delorun changes undo <id>` | Delo runs the file as before from its next start. |
 | `delorun changes edit-harness --discard` | Asks, then takes back every change to Delo itself and removes your copy; the next start runs the installed release unchanged. |
 
-These commands run only in a terminal, and only in an installed Delo, not in a source checkout. When Delo fails to start right after you applied a change to it, it starts once more without that change, as it does for a plugin. `delorun verify` and `delorun doctor` list the files you changed. Your changes belong to the installed version: after an update, the update report says how each one carries over.
+These commands run only in a terminal, and only in an installed Delo, not in a source checkout. When Delo fails to start right after you applied a change to it, including when a changed file stops Delo before it starts, it starts once more without your newest change to it, as it does for a plugin. When it does not start without that change either, it names `delorun changes undo <id>` for your newest applied change and `delorun changes edit-harness --discard`, which takes back every change to Delo itself. Safe mode, `delorun recover safe-mode`, runs the installed release without any of your changes to it until you leave safe mode. `delorun verify` and `delorun doctor` list the files you changed. Your changes belong to the installed version: after an update, the update report says how each one carries over.
 
 ## Turning one plugin off
 

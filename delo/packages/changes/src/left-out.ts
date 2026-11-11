@@ -14,7 +14,8 @@
  * ([enforce](./enforce.ts)), and names the change, until the person applies it again or undoes it ([actions](./actions.ts)).
  * Leaving a change out needs no proof of presence: it only takes back what a person applied, and only a start calls it.
  * A harness change is left out the same way, in the harness's change log, when it is the newest decision across both
- * logs ([harness](./harness.ts)).
+ * logs ([harness](./harness.ts)), and by {@link leaveOutNewestHarnessChange} when the composed tree's `delorun` failed
+ * before its start ran.
  *
  * @module @delo/changes/left-out
  */
@@ -166,13 +167,57 @@ export async function leaveOutNewestChange(ctx: ChangesContext, failure: string,
   return locked(ctx, async () => withHarnessLock(ctx.home, async () => {
     const entry = await newestLeavableChange(ctx, runtime)
     if (entry === undefined) return undefined
-    const at = timeOf(ctx)
-    const { lastFailure: _lastFailure, ...applied } = entry
-    const left: ChangeEntry = { ...applied, state: 'left-out-at-start', decidedAt: at, decidedFrom: 'start', leftOut: { at, failure: boundedFailure(failure) } }
+    const left = leftOutEntry(entry, timeOf(ctx), failure)
     if (entry.kind === 'harness-edit') await writeHarnessLog(ctx.home, withEntry(await readHarnessLog(ctx.home), left))
     else await writeChangeLog(ctx.home, ctx.profile, withEntry(await readChangeLog(ctx.home, ctx.profile), left))
     return left
   }))
+}
+
+/**
+ * @param entry - the applied entry a failed start leaves out.
+ * @param at - when, ISO 8601.
+ * @param failure - what the start failed with.
+ * @returns the entry `left-out-at-start` with the failure, decided from `start`.
+ */
+function leftOutEntry(entry: ChangeEntry, at: string, failure: string): ChangeEntry {
+  const { lastFailure: _lastFailure, ...applied } = entry
+  return { ...applied, state: 'left-out-at-start', decidedAt: at, decidedFrom: 'start', leftOut: { at, failure: boundedFailure(failure) } }
+}
+
+/**
+ * Leave a runtime's newest harness change out after the composed tree's `delorun` failed before its start ran, as an
+ * applied file that throws when Node imports it makes it: under the harness lock, when the newest decision of the
+ * runtime in the harness's log is an applied `harness-edit` whose content the record still holds, its entry becomes
+ * `left-out-at-start` with the failure, decided from `start`, whatever the profile's change log holds. Only the
+ * harness's log is written; the next composition of the runtime leaves the change out.
+ * @param home - the Delo home.
+ * @param runtime - the runtime version the start runs from the runtime store.
+ * @param failure - what the composed tree's start failed with; kept to {@link FAILURE_LIMIT_BYTES}.
+ * @param now - the clock; `() => new Date()` by default.
+ * @returns the entry as it now stands, or undefined when the runtime's newest harness decision is not one a failed
+ *   start may leave out.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the harness's log or record is not one Delo wrote.
+ */
+export async function leaveOutNewestHarnessChange(home: string, runtime: string, failure: string, now: () => Date = () => new Date()): Promise<ChangeEntry | undefined> {
+  return withHarnessLock(home, async () => {
+    const newest = await newestHarnessDecision(home, runtime)
+    if (newest?.leavable !== true) return undefined
+    const left = leftOutEntry(newest.entry, now().toISOString(), failure)
+    await writeHarnessLog(home, withEntry(await readHarnessLog(home), left))
+    return left
+  })
+}
+
+/**
+ * The runtime's harness change in state `applied` decided last.
+ * @param home - the Delo home.
+ * @param runtime - the runtime version.
+ * @returns the entry, or undefined when the harness's log holds none for the runtime.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the harness's log is not one Delo wrote.
+ */
+export async function newestAppliedHarnessChange(home: string, runtime: string): Promise<ChangeEntry | undefined> {
+  return newestDecided((await readHarnessLog(home)).entries, entry => entry.kind === 'harness-edit' && entry.subject.runtime === runtime && entry.state === 'applied')
 }
 
 /**

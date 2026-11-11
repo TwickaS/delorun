@@ -8,19 +8,23 @@
  * ({@link handOffToComposedTree}). It checks the installation with the runtime store's start check under the root the
  * launcher anchors, builds or checks the composed tree, and runs the tree's `delorun` with the same arguments as a child
  * with this terminal, descriptor 3 passed on when it is open (an update's successor handover), `SIGTERM` and `SIGHUP`
- * forwarded, and the child's exit code returned. {@link startEntry} is the one function that says which installation's
- * entry a start runs: the hand-off's, the background start's and the retry's after a start left a change out, which
- * always start the signed entry, so the signed code composes again.
+ * forwarded, and the child's exit code returned. A child that exits with a failure before its start ran, as one whose
+ * changed file throws when Node imports it does, is reported apart, so the start can leave the change out
+ * ([retry](./retry.ts)). A profile in safe mode runs the signed installation. {@link startEntry} is the one function that
+ * says which installation's entry a start runs: the hand-off's, the background start's and the retry's after a start
+ * left a change out, which always start the signed entry, so the signed code composes again.
  *
  * @module @delo/cli/changes/harness-start
  */
 import { spawn, type StdioOptions } from 'node:child_process'
-import { fstatSync, readdirSync } from 'node:fs'
+import { existsSync, fstatSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
 import { checkComposedTree, composition, isChangesError, prepareComposedTree, retainHarness, type HarnessContext, type SignedRuntime } from '@delo/changes'
 import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { HANDOVER_FD } from '@delo/contract-home-process'
+import { runDirectory } from '@delo/home'
 import type { DeloLogger } from '@delo/logs'
+import { readSafeMode } from '@delo/profile-safety'
 import { parseRuntimeVersion, RuntimeStoreError, StorePaths, type TrustedRootSource } from '@delo/runtime-store'
 import type { CommandOutput, CommandResult } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
@@ -107,24 +111,30 @@ export function harnessContextOf(home: string, runtime: RunningRuntime, env: Rea
 /** The signals a process that waits for a child passes on to it. */
 const FORWARDED = ['SIGTERM', 'SIGHUP'] as const
 
+/** How a child process ended. */
+export interface ChildExit {
+  /** Its exit code, or null when a signal ended it. */
+  readonly code: number | null
+}
+
 /**
  * Run `delorun` in a child process with this terminal and wait for it: `SIGTERM` and `SIGHUP` are passed on, and an
- * interrupt, which the terminal sends to both, is left to the child.
+ * interrupt, which the terminal sends to both, is left to the child. The child stays in this process's process group, so
+ * stopping the group, as an update stops a successor that did not become healthy, stops it too.
  * @param command - the Node executable, its options and the arguments.
  * @param env - the child's environment.
  * @param stdio - the child's descriptors.
  * @param failed - what the refusal says when the child cannot be started.
- * @returns `undefined`, with this process's exit code set to the child's, or to {@link EXIT.failed} when a signal ended
- *   it.
+ * @returns how the child ended.
  * @throws {CliError} when the child cannot be started.
  */
-export function runChild(command: { readonly node: string, readonly args: readonly string[] }, env: Readonly<Record<string, string | undefined>>, stdio: StdioOptions, failed: string): Promise<CommandResult> {
+export function waitForChild(command: { readonly node: string, readonly args: readonly string[] }, env: Readonly<Record<string, string | undefined>>, stdio: StdioOptions, failed: string): Promise<ChildExit> {
   const child = spawn(command.node, [...command.args], { stdio, env })
   const forwards = FORWARDED.map(signal => [signal, (): void => { child.kill(signal) }] as const)
   const interrupt = (): void => {}
   for (const [signal, forward] of forwards) process.on(signal, forward)
   process.on('SIGINT', interrupt)
-  return new Promise<CommandResult>((resolve, reject) => {
+  return new Promise<ChildExit>((resolve, reject) => {
     const release = (): void => {
       for (const [signal, forward] of forwards) process.off(signal, forward)
       process.off('SIGINT', interrupt)
@@ -137,10 +147,24 @@ export function runChild(command: { readonly node: string, readonly args: readon
     })
     child.once('exit', (code) => {
       release()
-      process.exitCode = code ?? EXIT.failed
-      resolve(undefined)
+      resolve({ code })
     })
   })
+}
+
+/**
+ * Run `delorun` in a child process with this terminal, as {@link waitForChild} does, and end with its exit code.
+ * @param command - the Node executable, its options and the arguments.
+ * @param env - the child's environment.
+ * @param stdio - the child's descriptors.
+ * @param failed - what the refusal says when the child cannot be started.
+ * @returns `undefined`, with this process's exit code set to the child's, or to {@link EXIT.failed} when a signal ended
+ *   it.
+ * @throws {CliError} when the child cannot be started.
+ */
+export async function runChild(command: { readonly node: string, readonly args: readonly string[] }, env: Readonly<Record<string, string | undefined>>, stdio: StdioOptions, failed: string): Promise<CommandResult> {
+  process.exitCode = (await waitForChild(command, env, stdio, failed)).code ?? EXIT.failed
+  return undefined
 }
 
 /**
@@ -162,6 +186,8 @@ export function isOpen(fd: number): boolean {
 export interface HandOffRequest {
   /** The Delo home. */
   readonly home: string
+  /** The CLI profile, whose safe mode runs the signed installation. */
+  readonly profile: string
   /** The environment `delorun` was started with, which the child gets. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** Where a retention failure is reported. */
@@ -178,8 +204,8 @@ export interface HandOffDependencies {
   readonly args: readonly string[]
   /** The signed installation's check; {@link verifiedSignedRuntime} in a real start. */
   readonly signed: (home: string, version: RuntimeVersion, env: Readonly<Record<string, string | undefined>>) => Promise<SignedRuntime>
-  /** Runs the composed tree's `delorun`; {@link runChild} in a real start. */
-  readonly run: typeof runChild
+  /** Runs the composed tree's `delorun`; {@link waitForChild} in a real start. */
+  readonly run: typeof waitForChild
   /** Whether descriptor 3 is open, as an update's successor inherits it. */
   readonly handover: () => boolean
   /** Whether a home process of any profile runs, which may run from another composed tree of the runtime. */
@@ -199,7 +225,7 @@ export function processHandOff(runtime: RunningRuntime, output: CommandOutput): 
     running: { node: process.execPath, entry: String(process.argv[1]) },
     args: process.argv.slice(2),
     signed: (home, version, env) => verifiedSignedRuntime(home, version, env, logger),
-    run: runChild,
+    run: waitForChild,
     handover: () => isOpen(HANDOVER_FD),
     homeProcessRuns: home => otherDataUsers(home).some(user => user.profile !== undefined),
   }
@@ -237,32 +263,60 @@ export function quietOutput(): CommandOutput {
 }
 
 /**
- * Whether a start of `delorun` from this runtime hands off to a composed tree: it runs the signed installation from
- * the store, and the runtime's harness has approved files.
+ * Whether a start of `delorun` for a profile from this runtime hands off to a composed tree: it runs the signed
+ * installation from the store, the profile is not in safe mode, and the runtime's harness has approved files.
  * @param home - the Delo home.
+ * @param profile - the CLI profile.
  * @param runtime - the runtime the start runs.
  * @returns whether it does.
  * @throws {ChangesError} `RECORD_UNREADABLE` when the harness's record or log is not one Delo wrote.
+ * @throws {ProfileSafetyError} `SAFE_MODE_UNREADABLE` when the profile's safe-mode marker is not one Delo wrote.
  */
-export async function handsOff(home: string, runtime: RunningRuntime): Promise<boolean> {
-  return runtime.store && runtime.composed === undefined && await composition(home, runtime.version) !== undefined
+export async function handsOff(home: string, profile: string, runtime: RunningRuntime): Promise<boolean> {
+  return runtime.store && runtime.composed === undefined && readSafeMode(home, profile) === undefined && await composition(home, runtime.version) !== undefined
 }
 
 /**
- * Hand a foreground start off to the composed tree of its runtime, when the signed installation runs and its runtime
- * has approved harness files. Nothing else runs first: no lock, no token and no log.
- * @param request - the home, the environment and the output.
+ * The file a hand-off writes in the profile's run directory before it starts the composed tree's `delorun`, and which
+ * that child's start removes as its first act; a file still there after the child exited means its start never ran.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @param parent - the process id of the process that hands off.
+ * @returns `<home>/run/<profile>/hand-off-<parent>`.
+ */
+export function handOffMarker(home: string, profile: string, parent: number): string {
+  return join(runDirectory(home, profile), `hand-off-${String(parent)}`)
+}
+
+/** What a hand-off did. */
+export type HandOff =
+  /** The composed tree's start ran, or ended by a signal or for an update's successor; `ran` is this start's result. */
+  | { readonly kind: 'ran', readonly ran: CommandResult }
+  /**
+   * The composed tree's `delorun` exited with a failure `code` before its start ran, and this process was not an
+   * update's successor; nothing set this process's exit code.
+   */
+  | { readonly kind: 'not-started', readonly runtime: RuntimeVersion, readonly code: number }
+
+/**
+ * Hand a foreground start off to the composed tree of its runtime, when the signed installation runs, the profile is not
+ * in safe mode and its runtime has approved harness files. Nothing else runs first: no lock, no token and no log. A
+ * start always removes the {@link handOffMarker} its parent process wrote, the composed tree's start included.
+ * @param request - the home, the profile, the environment and the output.
  * @param dependencies - this process's runtime, entry and arguments, the store's check and the child.
- * @returns `{ ran }` with the child's result when this process handed off; undefined when it runs the start itself.
+ * @returns undefined when this process runs the start itself; `not-started` when the child exited with a failure before
+ *   its start ran outside an update; otherwise `ran`, with this process's exit code set to the child's, or to
+ *   {@link EXIT.failed} when a signal ended it.
  * @throws {CliError} when the signed installation fails its check, or the composed tree fails its check after it was
  *   rebuilt, or the child cannot be started; the start is refused.
  */
-export async function handOffToComposedTree(request: HandOffRequest, dependencies: HandOffDependencies): Promise<{ readonly ran: CommandResult } | undefined> {
+export async function handOffToComposedTree(request: HandOffRequest, dependencies: HandOffDependencies): Promise<HandOff | undefined> {
   const { runtime } = dependencies
-  const { home } = request
+  const { home, profile } = request
+  rmSync(handOffMarker(home, profile, process.ppid), { force: true })
   let tree
   try {
-    if (!await handsOff(home, runtime)) return undefined
+    if (!await handsOff(home, profile, runtime)) return undefined
     const signed = await dependencies.signed(home, runtime.version, request.env)
     tree = await prepareComposedTree(home, runtime.version, signed)
   } catch (error) {
@@ -274,8 +328,22 @@ export async function handOffToComposedTree(request: HandOffRequest, dependencie
   const retained = await retainHarness(home, { runtime: runtime.version, keep: tree.digest, removeTrees: !dependencies.homeProcessRuns(home), installed: installedRuntimes(home) })
   for (const { path, error } of retained.failed) request.output.stderr(`Delo could not remove ${path}, which it no longer runs; the next start tries again: ${error}\n`)
   const command = startEntry(dependencies.running, tree.directory)
-  const stdio: StdioOptions = dependencies.handover() ? ['inherit', 'inherit', 'inherit', HANDOVER_FD] : 'inherit'
-  return { ran: await dependencies.run({ node: command.node, args: [command.entry, ...dependencies.args] }, request.env, stdio, 'delorun: Delo could not start the harness with your changes') }
+  const handover = dependencies.handover()
+  const stdio: StdioOptions = handover ? ['inherit', 'inherit', 'inherit', HANDOVER_FD] : 'inherit'
+  const marker = handOffMarker(home, profile, process.pid)
+  mkdirSync(runDirectory(home, profile), { recursive: true, mode: 0o700 })
+  writeFileSync(marker, '', { mode: 0o600 })
+  let started: boolean
+  let end: ChildExit
+  try {
+    end = await dependencies.run({ node: command.node, args: [command.entry, ...dependencies.args] }, request.env, stdio, 'delorun: Delo could not start the harness with your changes')
+  } finally {
+    started = !existsSync(marker)
+    rmSync(marker, { force: true })
+  }
+  if (!started && !handover && end.code !== null && end.code !== EXIT.ok) return { kind: 'not-started', runtime: runtime.version, code: end.code }
+  process.exitCode = end.code ?? EXIT.failed
+  return { kind: 'ran', ran: undefined }
 }
 
 /**

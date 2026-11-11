@@ -9,15 +9,16 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyHarnessChange, attestTerminal, ChangesError, createHarnessCopy, harnessChanges, harnessCopyDirectory, harnessStatus, prepareComposedTree, readHarnessLog, readHarnessRecord, TREE_RETENTION_GRACE_MS, type ChangeId, type ContentVersion, type HarnessContext, type HarnessStatus, type SignedFile, type SignedRuntime } from '@delo/changes'
+import { applyHarnessChange, attestTerminal, ChangesError, createHarnessCopy, harnessChanges, harnessCopyDirectory, harnessLogPath, harnessStatus, prepareComposedTree, readHarnessLog, readHarnessRecord, TREE_RETENTION_GRACE_MS, type ChangeId, type ContentVersion, type HarnessContext, type HarnessStatus, type SignedFile, type SignedRuntime } from '@delo/changes'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { ensureHomeTree } from '@delo/home'
+import { enterSafeMode } from '@delo/profile-safety'
 import { RuntimeStoreError } from '@delo/runtime-store'
 import { runChanges, type ChangesCommandDependencies } from '../src/changes/command.ts'
 import { NOT_INSTALLED } from '../src/changes/harness-command.ts'
-import { handOffToComposedTree, outputLogger, quietOutput, signedRootOf, startEntry, type HandOffDependencies } from '../src/changes/harness-start.ts'
-import { startRetry } from '../src/changes/retry.ts'
+import { handOffMarker, handOffToComposedTree, handsOff, outputLogger, quietOutput, signedRootOf, startEntry, type HandOffDependencies } from '../src/changes/harness-start.ts'
+import { CHANGES_RETRY_ENV, CHANGES_STARTER_ENV, retryHandOff, startRetry } from '../src/changes/retry.ts'
 import type { CommandContext } from '../src/command.ts'
 import { harnessLines } from '../src/doctor/changes.ts'
 import { CliError, EXIT } from '../src/exit.ts'
@@ -70,6 +71,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
+  process.exitCode = undefined
   vi.unstubAllEnvs()
   for (const tree of [join(home, 'changes', 'harness', RUNTIME, 'run')]) if (existsSync(tree)) chmodTree(tree)
   rmSync(base, { recursive: true, force: true })
@@ -119,7 +121,7 @@ function handOff(overrides: Partial<HandOffDependencies> = {}): HandOffDependenc
     signed: () => Promise.resolve(signed),
     run: (command, env, stdio) => {
       started.push({ ...command, stdio, env })
-      return Promise.resolve(EXIT.ok)
+      return Promise.resolve({ code: EXIT.ok })
     },
     handover: () => false,
     homeProcessRuns: () => false,
@@ -179,7 +181,7 @@ describe('the start\'s hand-off to the composed tree', () => {
   it('a pending harness change never runs: the start runs the signed entry', async () => {
     await editStart()
     const dependencies = handOff()
-    expect(await handOffToComposedTree({ home, env: context.env, output: context }, dependencies)).toBeUndefined()
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toBeUndefined()
     expect(dependencies.started).toEqual([])
     expect(existsSync(join(home, 'changes', 'harness', RUNTIME, 'run'))).toBe(false)
   })
@@ -187,14 +189,14 @@ describe('the start\'s hand-off to the composed tree', () => {
   it('an applied change runs: the start hands off to the composed tree\'s entry with the same arguments', async () => {
     await applyHarnessChange(harness(), await editStart(), terminal())
     const dependencies = handOff({ handover: () => true })
-    expect(await handOffToComposedTree({ home, env: { ...context.env, MARK: '1' }, output: context }, dependencies)).toEqual({ ran: EXIT.ok })
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: { ...context.env, MARK: '1' }, output: context }, dependencies)).toEqual({ kind: 'ran', ran: undefined })
     const [child] = dependencies.started
     const tree = join(home, 'changes', 'harness', RUNTIME, 'run', readdirSync(join(home, 'changes', 'harness', RUNTIME, 'run'))[0]!)
     expect(child).toEqual({ node: join(tree, 'node', 'bin', 'node'), args: [join(tree, ...ENTRY.split('/')), 'start', '--foreground'], stdio: ['inherit', 'inherit', 'inherit', 3], env: { ...context.env, MARK: '1' } })
     expect(readFileSync(join(tree, START_FILE), 'utf8')).toBe('export const start = 2\n')
     expect(readFileSync(join(signed.directory, START_FILE), 'utf8')).toBe(FILES[START_FILE])
     const again = handOff()
-    await handOffToComposedTree({ home, env: context.env, output: context }, again)
+    await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, again)
     expect(again.started[0]?.stdio).toBe('inherit')
   })
 
@@ -203,7 +205,7 @@ describe('the start\'s hand-off to the composed tree', () => {
     const tree = join(home, 'changes', 'harness', RUNTIME, 'run', 'd'.repeat(64))
     for (const runtime of [runtimeOfFile(home, join(tree, ...ENTRY.split('/'))), runtimeOfFile(home, join(base, 'checkout', 'bin.js'))]) {
       const dependencies = handOff({ runtime })
-      expect(await handOffToComposedTree({ home, env: context.env, output: context }, dependencies)).toBeUndefined()
+      expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toBeUndefined()
       expect(dependencies.started).toEqual([])
     }
   })
@@ -215,7 +217,7 @@ describe('the start\'s hand-off to the composed tree', () => {
     expect(answers.questions).toEqual([`Discard every change to Delo ${RUNTIME} itself? It returns to the signed release. [y/N] `])
     expect((await readHarnessRecord(home, RUNTIME)).files).toEqual({})
     const dependencies = handOff()
-    expect(await handOffToComposedTree({ home, env: context.env, output: context }, dependencies)).toBeUndefined()
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toBeUndefined()
     expect(dependencies.started).toEqual([])
   })
 
@@ -231,19 +233,19 @@ describe('the start\'s hand-off to the composed tree', () => {
   it('refuses the start when the signed installation or the composed tree fails its check', async () => {
     await applyHarnessChange(harness(), await editStart(), terminal())
     const store = handOff({ signed: () => Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', signed.directory, 'runtime 1.2.3 differs from its signed file list')) })
-    await expect(handOffToComposedTree({ home, env: context.env, output: context }, store)).rejects.toThrow(new CliError(EXIT.failed, 'delorun: Delo 1.2.3 was not started, because its files differ from the signed release: runtime 1.2.3 differs from its signed file list. See what differs with: delorun verify'))
+    await expect(handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, store)).rejects.toThrow(new CliError(EXIT.failed, 'delorun: Delo 1.2.3 was not started, because its files differ from the signed release: runtime 1.2.3 differs from its signed file list. See what differs with: delorun verify'))
     rmSync(join(home, 'changes', 'store', 'objects'), { recursive: true })
-    await expect(handOffToComposedTree({ home, env: context.env, output: context }, handOff())).rejects.toThrow(/was not started with your changes to it/u)
-    await expect(handOffToComposedTree({ home, env: context.env, output: context }, handOff({ signed: () => Promise.reject(new Error('disk')) }))).rejects.toThrow('disk')
+    await expect(handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff())).rejects.toThrow(/was not started with your changes to it/u)
+    await expect(handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff({ signed: () => Promise.reject(new Error('disk')) }))).rejects.toThrow('disk')
     expect(existsSync(signed.directory)).toBe(true)
   })
 
   it('keeps other composed trees while a home process runs, and reports a tree it could not remove', async () => {
     await applyHarnessChange(harness(), await editStart(), terminal())
-    await handOffToComposedTree({ home, env: context.env, output: context }, handOff())
+    await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff())
     writeFileSync(join(harnessCopyDirectory(home, RUNTIME), ...START_FILE.split('/')), 'export const start = 3\n')
     await applyHarnessChange(harness(), (await harnessChanges(harness())).changes[0]!.id, terminal())
-    await handOffToComposedTree({ home, env: context.env, output: context }, handOff({ homeProcessRuns: () => true }))
+    await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff({ homeProcessRuns: () => true }))
     const runs = join(home, 'changes', 'harness', RUNTIME, 'run')
     expect(readdirSync(runs)).toHaveLength(2)
     const longAgo = new Date(Date.now() - TREE_RETENTION_GRACE_MS - 60_000)
@@ -251,7 +253,7 @@ describe('the start\'s hand-off to the composed tree', () => {
     mkdirSync(join(home, 'changes', 'harness', '0.9.0'))
     chmodSync(join(home, 'changes', 'harness'), 0o500)
     try {
-      await handOffToComposedTree({ home, env: context.env, output: context }, handOff())
+      await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff())
     } finally {
       chmodSync(join(home, 'changes', 'harness'), 0o700)
     }
@@ -261,7 +263,7 @@ describe('the start\'s hand-off to the composed tree', () => {
 
   it('a foreground start that handed off returns what the composed tree\'s start returned and runs nothing itself', async () => {
     const unreached = (): never => { throw new Error('not reached') }
-    const dependencies = { handOff: () => Promise.resolve({ ran: EXIT.changeLeftOut }), prepareProfile: unreached, runProfile: unreached, onExit: unreached, handover: unreached } as Partial<StartDependencies>
+    const dependencies = { handOff: () => Promise.resolve({ kind: 'ran' as const, ran: EXIT.changeLeftOut }), prepareProfile: unreached, runProfile: unreached, onExit: unreached, handover: unreached } as Partial<StartDependencies>
     expect(await startForeground({ home, profile: PROFILE, open: false, output: context, env: context.env }, dependencies as StartDependencies)).toBe(EXIT.changeLeftOut)
   })
 })
@@ -347,6 +349,144 @@ describe('a start that fails right after a harness change', () => {
     expect(readFileSync(join(home, 'profiles', PROFILE, 'package.json'), 'utf8')).toBe(manifest)
     expect(existsSync(join(home, 'changes', 'profiles', PROFILE, 'log.json'))).toBe(false)
     expect(warnings).toEqual([])
+  })
+})
+
+describe('a composed tree whose delorun fails before its start runs', () => {
+  const PACKAGE_FILE = 'app/package.json'
+
+  /**
+   * Apply a change of the package file, then a newer change of the start file.
+   * @returns both ids.
+   */
+  async function twoChanges(): Promise<{ readonly older: ChangeId, readonly newer: ChangeId }> {
+    await createHarnessCopy(harness(), terminal())
+    const copy = (path: string): string => join(harnessCopyDirectory(home, RUNTIME), ...path.split('/'))
+    writeFileSync(copy(PACKAGE_FILE), '{"changed":true}\n')
+    const older = (await harnessChanges(harness())).changes[0]!.id
+    await applyHarnessChange(harness(), older, terminal())
+    writeFileSync(copy(START_FILE), 'throw new Error("broken")\n')
+    const newer = (await harnessChanges(harness())).changes[0]!.id
+    await applyHarnessChange(harness(), newer, terminal())
+    return { older, newer }
+  }
+
+  /**
+   * A child that ends with each result in turn; a child whose start ran removes its parent's marker, as the composed
+   * tree's start does.
+   * @param ends - each child's exit code, null for a signal, and whether its start ran.
+   * @returns the run and what each child got.
+   */
+  function children(ends: readonly { readonly code: number | null, readonly started?: boolean }[]): { readonly run: HandOffDependencies['run'], readonly runs: { readonly files: readonly string[], readonly env: Readonly<Record<string, string | undefined>> }[] } {
+    const runs: { files: readonly string[], env: Readonly<Record<string, string | undefined>> }[] = []
+    return {
+      runs,
+      run: (command, env) => {
+        const end = ends[runs.length]!
+        const tree = dirname(dirname(dirname(dirname(dirname(dirname(command.args[0]!))))))
+        runs.push({ files: [START_FILE, PACKAGE_FILE].map(path => readFileSync(join(tree, ...path.split('/')), 'utf8')), env })
+        expect(existsSync(handOffMarker(home, PROFILE, process.pid))).toBe(true)
+        if (end.started === true) rmSync(handOffMarker(home, PROFILE, process.pid))
+        return Promise.resolve({ code: end.code })
+      },
+    }
+  }
+
+  /**
+   * A foreground start of the signed installation whose hand-off runs these children and that runs nothing itself.
+   * @param run - the children.
+   * @param env - the environment `delorun` was started with.
+   * @returns the start's result.
+   */
+  function start(run: HandOffDependencies['run'], env: Readonly<Record<string, string | undefined>> = context.env): Promise<unknown> {
+    const unreached = (): never => { throw new Error('not reached') }
+    const dependencies = { handOff: request => handOffToComposedTree(request, handOff({ run })), prepareProfile: unreached, runProfile: unreached, onExit: unreached, handover: unreached } as Partial<StartDependencies>
+    return startForeground({ home, profile: PROFILE, open: false, output: context, env }, dependencies as StartDependencies)
+  }
+
+  it('leaves the newest harness change out and starts once more through the hand-off, which composes without it', async () => {
+    const { newer } = await twoChanges()
+    const children_ = children([{ code: 1 }, { code: 0, started: true }])
+    expect(await start(children_.run)).toBeUndefined()
+    expect(process.exitCode).toBe(EXIT.ok)
+    expect(children_.runs.map(run => run.env[CHANGES_RETRY_ENV])).toEqual([undefined, '1'])
+    expect(children_.runs.map(run => run.files)).toEqual([['throw new Error("broken")\n', '{"changed":true}\n'], [FILES[START_FILE], '{"changed":true}\n']])
+    expect((await readHarnessLog(home)).entries.find(entry => entry.id === newer)).toMatchObject({ state: 'left-out-at-start', decidedFrom: 'start', leftOut: { failure: 'Delo\'s harness with your changes exited with code 1 while it loaded, before it started' } })
+    expect(context.errors.join('')).toContain(`Delo did not start with your latest change to Delo itself (${START_FILE}) (${newer})`)
+    expect(existsSync(handOffMarker(home, PROFILE, process.pid))).toBe(false)
+  })
+
+  it('a second failure names edit-harness --discard and undo, and starts no third time', async () => {
+    const { older } = await twoChanges()
+    const children_ = children([{ code: 1 }, { code: 1 }, { code: 0 }])
+    expect(await start(children_.run)).toBeUndefined()
+    expect(children_.runs).toHaveLength(2)
+    expect(process.exitCode).toBe(1)
+    expect(context.errors.join('')).toContain(`Delo did not start with your changes to Delo itself.\nTo undo the newest one: delorun changes undo ${older}.\nTo start the installed release without any of them: delorun changes edit-harness --discard.\n`)
+    expect((await readHarnessLog(home)).entries.find(entry => entry.id === older)).toMatchObject({ state: 'applied' })
+  })
+
+  it('a start marked as the second one, or one whose newest harness decision was already left out, leaves nothing out', async () => {
+    const { newer } = await twoChanges()
+    const marked = children([{ code: 3 }])
+    expect(await start(marked.run, { ...context.env, [CHANGES_RETRY_ENV]: '1' })).toBeUndefined()
+    expect(process.exitCode).toBe(3)
+    expect((await readHarnessLog(home)).entries.find(entry => entry.id === newer)).toMatchObject({ state: 'applied' })
+    await start(children([{ code: 1 }, { code: 0, started: true }]).run)
+    const again = children([{ code: 1 }])
+    await start(again.run)
+    expect(again.runs).toHaveLength(1)
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('never retries for an update\'s successor, a child whose start ran, or one a signal ended', async () => {
+    const { newer } = await twoChanges()
+    for (const [end, handover, exit] of [[{ code: 1 }, true, 1], [{ code: 7, started: true }, false, 7], [{ code: null }, false, EXIT.failed]] as const) {
+      const children_ = children([end])
+      const dependencies = handOff({ run: children_.run, handover: () => handover })
+      expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toEqual({ kind: 'ran', ran: undefined })
+      expect(process.exitCode).toBe(exit)
+      expect(children_.runs).toHaveLength(1)
+    }
+    expect((await readHarnessLog(home)).entries.find(entry => entry.id === newer)).toMatchObject({ state: 'applied' })
+  })
+
+  it('a home process started in the background ends with changeLeftOut and leaves the second start to its starter', async () => {
+    const { newer } = await twoChanges()
+    const children_ = children([{ code: 1 }])
+    expect(await start(children_.run, { ...context.env, [CHANGES_STARTER_ENV]: 'detached' })).toBeUndefined()
+    expect(process.exitCode).toBe(EXIT.changeLeftOut)
+    expect(children_.runs).toHaveLength(1)
+    expect((await readHarnessLog(home)).entries.find(entry => entry.id === newer)).toMatchObject({ state: 'left-out-at-start' })
+  })
+
+  it('a harness log Delo cannot read is reported, nothing is left out, and the words name the list', async () => {
+    await twoChanges()
+    writeFileSync(harnessLogPath(home), 'not json\n')
+    expect(await retryHandOff({ home, env: {}, output: context }, { runtime: RUNTIME, code: 1 })).toEqual({ kind: 'stop', code: 1 })
+    expect(context.errors.join('')).toContain('Delo could not leave the newest change to Delo itself out:')
+    expect(context.errors.join('')).toContain('See them with: delorun changes list.')
+  })
+
+  it('the start removes the marker its parent wrote, also when it runs the start itself', async () => {
+    mkdirSync(join(home, 'run', PROFILE), { recursive: true })
+    writeFileSync(handOffMarker(home, PROFILE, process.ppid), '')
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff())).toBeUndefined()
+    expect(existsSync(handOffMarker(home, PROFILE, process.ppid))).toBe(false)
+  })
+})
+
+describe('safe mode', () => {
+  it('runs the signed installation without the approved harness changes', async () => {
+    await applyHarnessChange(harness(), await editStart(), terminal())
+    const runtime = runtimeOfFile(home, join(signed.directory, ...ENTRY.split('/')))
+    expect(await handsOff(home, PROFILE, runtime)).toBe(true)
+    await enterSafeMode({ homeDir: home, profile: PROFILE, reason: 'spec', skipped: [] })
+    expect(await handsOff(home, PROFILE, runtime)).toBe(false)
+    const dependencies = handOff()
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toBeUndefined()
+    expect(dependencies.started).toEqual([])
+    expect(await handsOff(home, 'other', runtime)).toBe(true)
   })
 })
 
@@ -484,7 +624,7 @@ describe('every path of the harness commands', () => {
       await discardAllHarnessChanges(harness(), terminal())
       return signed
     } })
-    expect(await handOffToComposedTree({ home, env: context.env, output: context }, dependencies)).toBeUndefined()
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toBeUndefined()
     expect(dependencies.started).toEqual([])
   })
 
