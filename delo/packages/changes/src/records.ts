@@ -18,7 +18,7 @@ import { PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@delo/contract-home-layou
 import { checkPrivateDirectory, readProtectedFile, writeProtectedFile } from '@delo/home'
 import { ChangesError } from './errors.ts'
 import { CHANGE_ID_PATTERN } from './ids.ts'
-import { CHANGES_ENTRIES, changesDirectory, migrationPath, PACKAGE_NAME_PATTERN, profileChangesDirectory, protectionPath } from './paths.ts'
+import { CHANGES_ENTRIES, changesDirectory, harnessDirectory, harnessLogPath, harnessRecordPath, migrationPath, PACKAGE_NAME_PATTERN, profileChangesDirectory, protectionPath } from './paths.ts'
 import {
   ACTIVE_KINDS,
   ACTIVE_RECORD_SCHEMA,
@@ -27,6 +27,7 @@ import {
   CHANGE_LOG_SCHEMA,
   CHANGE_STATES,
   DEFAULT_PROTECTION,
+  HARNESS_RECORD_SCHEMA,
   MIGRATION_RECORD_SCHEMA,
   PROTECTION_LEVELS,
   PROTECTION_RECORD_SCHEMA,
@@ -38,6 +39,7 @@ import {
   type ChangeId,
   type ChangeLog,
   type ContentVersion,
+  type HarnessRecord,
   type MigrationRecord,
   type ProtectionLevel,
   type ProtectionRecord,
@@ -377,6 +379,32 @@ const ACTIVE_RULES: Readonly<Record<string, FieldRule>> = {
 const APPROVED_RULES: Readonly<Record<string, FieldRule>> = {
   schema: schemaRule(APPROVED_RECORD_SCHEMA),
   plugins: byPackageName({ source: required.string, version: required.version, approvedAt: required.iso, approvedAtUpgrade: { test: isTrue, expected: 'true', optional: true } }),
+}
+
+/**
+ * Whether a path names a harness file Changes may hold.
+ * @param path - the path.
+ * @returns whether it is relative to the runtime's root, `/`-separated, under `app/`, and without an empty, `.` or `..`
+ *   segment.
+ */
+export function isHarnessPath(path: string): boolean {
+  if (!path.startsWith('app/') || path.includes('\\') || path.includes('\0')) return false
+  return path.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..')
+}
+
+const HARNESS_RULES: Readonly<Record<string, FieldRule>> = {
+  schema: schemaRule(HARNESS_RECORD_SCHEMA),
+  runtime: required.string,
+  files: {
+    expected: 'an object by harness path',
+    test: (value, path, where) => {
+      for (const [file, entry] of Object.entries(objectAt(value, path, where))) {
+        if (!isHarnessPath(file)) throw unreadable(path, `${where} names ${JSON.stringify(file)}, which is not a path under app/`)
+        checkFields(entry, path, `${where}[${JSON.stringify(file)}]`, { version: required.version, signed: optional.version, change: { test: matching(CHANGE_ID_PATTERN), expected: 'a change id' }, approvedAt: required.iso })
+      }
+      return true
+    },
+  },
 }
 
 /**
@@ -888,4 +916,76 @@ export async function writeApproved(profileDir: string, record: ApprovedRecord):
  */
 export function approvedOf(record: ApprovedRecord, plugin: string): ApprovedPlugin | undefined {
   return Object.hasOwn(record.plugins, plugin) ? record.plugins[plugin] : undefined
+}
+
+/**
+ * Hold the lock of the harness's records, `changes/harness.lock`, around one read, decision and write of a harness
+ * record or the harness's change log.
+ * @param home - the Delo home.
+ * @param operation - what runs under the lock.
+ * @returns what the operation returned.
+ * @throws the lock's timeout when another process holds it longer than two minutes.
+ */
+export async function withHarnessLock<T>(home: string, operation: () => Promise<T>): Promise<T> {
+  await makeChangesDirectory(home, changesDirectory(home))
+  return withFileLock(harnessDirectory(home), operation, { waitMs: 120_000 })
+}
+
+/**
+ * Read one runtime's harness record.
+ * @param home - the Delo home.
+ * @param runtime - the runtime version.
+ * @returns the record; one with no file when the runtime has none.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the record is not one Delo wrote or names another runtime;
+ *   `INVALID_REQUEST` when the version is not a runtime version.
+ */
+export async function readHarnessRecord(home: string, runtime: string): Promise<HarnessRecord> {
+  const path = harnessRecordPath(home, runtime)
+  const value = await readRecordFile(path)
+  if (value === undefined) return { schema: HARNESS_RECORD_SCHEMA, runtime, files: {} }
+  checkFields(value, path, 'the record', HARNESS_RULES)
+  const record = value as HarnessRecord
+  if (record.runtime !== runtime) throw unreadable(path, `the record names runtime ${JSON.stringify(record.runtime)}, not ${runtime}`)
+  return record
+}
+
+/**
+ * Write one runtime's harness record. The caller holds {@link withHarnessLock}.
+ * @param home - the Delo home.
+ * @param record - the whole record.
+ * @throws {ChangesError} `INVALID_REQUEST` when the record names a path that is not under `app/` or a version that is
+ *   not a runtime version.
+ * @throws {HomeLayoutError} `HOME_MODE` when `changes/` is laxer than 0700.
+ */
+export async function writeHarnessRecord(home: string, record: HarnessRecord): Promise<void> {
+  const path = harnessRecordPath(home, record.runtime)
+  const bad = Object.keys(record.files).find(file => !isHarnessPath(file))
+  if (bad !== undefined) throw new ChangesError('INVALID_REQUEST', bad, `${JSON.stringify(bad)} is not a path under the runtime's app/ directory.`)
+  await makeChangesDirectory(home, dirname(path))
+  await writeProtectedFile(path, jsonText(record))
+}
+
+/**
+ * Read the change log of the harness's own files, which every profile shows.
+ * @param home - the Delo home.
+ * @returns the log; an empty one when there is none.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the log is not one Delo wrote.
+ */
+export async function readHarnessLog(home: string): Promise<ChangeLog> {
+  const path = harnessLogPath(home)
+  const value = await readRecordFile(path)
+  if (value === undefined) return { schema: CHANGE_LOG_SCHEMA, entries: [] }
+  assertChangeLog(value, path)
+  return value
+}
+
+/**
+ * Write the change log of the harness's own files. The caller holds {@link withHarnessLock}.
+ * @param home - the Delo home.
+ * @param log - the whole log.
+ * @throws {HomeLayoutError} `HOME_MODE` when `changes/` is laxer than 0700.
+ */
+export async function writeHarnessLog(home: string, log: ChangeLog): Promise<void> {
+  await makeChangesDirectory(home, harnessDirectory(home))
+  await writeProtectedFile(harnessLogPath(home), jsonText(log))
 }

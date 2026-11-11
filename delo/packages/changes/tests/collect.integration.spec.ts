@@ -5,9 +5,9 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { describe, expect, it, vi } from 'vitest'
 import { COLLECT_GRACE_MS, COLLECT_TIME_LIMIT_MS, collectStore, type CollectRequest } from '../src/collect.ts'
 import { changesDirectory, objectsDirectory, profileChangesDirectory, versionsDirectory } from '../src/paths.ts'
-import { attestTerminal, noteFailed, noteLoaded, openWorkSession, writeActiveRecord, writeApproved, writeChangeLog } from '../src/records.ts'
+import { attestTerminal, noteFailed, noteLoaded, openWorkSession, writeActiveRecord, writeApproved, writeChangeLog, writeHarnessLog, writeHarnessRecord } from '../src/records.ts'
 import { storeFolder, withStoreLock } from '../src/store.ts'
-import { ACTIVE_RECORD_SCHEMA, APPROVED_RECORD_SCHEMA, CHANGE_LOG_SCHEMA, type ChangeEntry, type ChangeId, type ChangeState, type ContentVersion } from '../src/types.ts'
+import { ACTIVE_RECORD_SCHEMA, APPROVED_RECORD_SCHEMA, CHANGE_LOG_SCHEMA, HARNESS_RECORD_SCHEMA, type ChangeEntry, type ChangeId, type ChangeState, type ContentVersion } from '../src/types.ts'
 import { lockOut, temporaryDirectory, writeFiles } from './support.ts'
 
 // The cases write real files; on a loaded host that takes longer than vitest's default.
@@ -151,6 +151,19 @@ describe('collectStore', () => {
       versions: versionFiles(approved, pending, appliedFrom, appliedTo, leftOut, active, sessionFrom, sessionLoaded, sessionFailed),
       objects: objectFiles('approved', 'pending', 'applied-from', 'applied-to', 'left-out', 'active', 'session-from', 'session-loaded', 'session-failed'),
     })
+  })
+
+  it('keeps the versions the harness records of every runtime and the harness log name', async () => {
+    const setup = setUp()
+    const approved = await stored(setup.home, 'approved')
+    const signed = await stored(setup.home, 'signed')
+    const logged = await stored(setup.home, 'logged')
+    const discarded = await stored(setup.home, 'discarded')
+    await writeHarnessRecord(setup.home, { schema: HARNESS_RECORD_SCHEMA, runtime: '1.2.3', files: { 'app/x.js': { version: approved, signed, change: entry(1, 'applied', {}).id, approvedAt: '2026-11-10T10:00:00.000Z' } } })
+    await writeHarnessLog(setup.home, { schema: CHANGE_LOG_SCHEMA, entries: [entry(2, 'pending', { to: logged }), entry(3, 'discarded', { to: discarded })] })
+    age(setup.home)
+    await collectStore(setup.request)
+    expect(remaining(setup.home).versions).toEqual(versionFiles(approved, signed, logged))
   })
 
   it('keeps an unreferenced version modified within the grace period, with its objects', async () => {

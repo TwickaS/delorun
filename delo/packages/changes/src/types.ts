@@ -144,6 +144,34 @@ export interface ApprovedRecord {
 /** Schema tag of {@link ApprovedRecord}. */
 export const APPROVED_RECORD_SCHEMA = 'delo.changes-approved/1'
 
+/** One file of the harness under Changes, as its runtime's {@link HarnessRecord} holds it. */
+export interface ApprovedHarnessFile {
+  /** The approved content: a content version whose one file entry is at the file's path, or the empty version when the approved change removes the file. */
+  readonly version: ContentVersion
+  /** The signed release's content of the file, as a content version with one file entry; absent when the signed file list has no such file. */
+  readonly signed?: ContentVersion
+  /** The change that approved {@link version}. */
+  readonly change: ChangeId
+  /** When it was approved, ISO 8601. */
+  readonly approvedAt: string
+}
+
+/**
+ * The file `changes/harness/<runtime>/approved.json`: the files of one installed runtime whose approved content differs
+ * from the signed release's. A runtime without the file runs its signed files. One record per runtime version, so an
+ * update writes the target's record and a rollback finds the previous runtime's record unchanged.
+ */
+export interface HarnessRecord {
+  readonly schema: typeof HARNESS_RECORD_SCHEMA
+  /** The runtime version, as contract C1's store names its directory under `runtimes/`. */
+  readonly runtime: string
+  /** By path relative to the runtime's root, `/`-separated, under `app/`. */
+  readonly files: Readonly<Record<string, ApprovedHarnessFile>>
+}
+
+/** Schema tag of {@link HarnessRecord}. */
+export const HARNESS_RECORD_SCHEMA = 'delo.changes-harness/1'
+
 /** What a change is about. */
 export interface ChangeSubject {
   /** The plugin's package name, for a plugin kind. */

@@ -175,6 +175,33 @@ export async function storeEmptyVersion(home: string): Promise<ContentVersion> {
 }
 
 /**
+ * Store one file's bytes as a content version whose one file entry is at a path, under the store's lock: the content
+ * form of one harness file (an `ApprovedHarnessFile`'s `version`).
+ * @param home - the Delo home.
+ * @param path - the entry's path, relative and `/`-separated.
+ * @param bytes - the file's bytes.
+ * @param executable - whether the owner execute bit is set.
+ * @returns the version.
+ * @throws {ChangesError} `INVALID_REQUEST` when the path is not one a version may hold.
+ * @throws the store lock's timeout when another process holds it longer than {@link STORE_LOCK_WAIT_MS}.
+ */
+export async function storeFileVersion(home: string, path: string, bytes: Buffer, executable: boolean): Promise<ContentVersion> {
+  if (!validPath(path)) throw new ChangesError('INVALID_REQUEST', path, `${JSON.stringify(path)} is not a relative path a version may hold.`)
+  const objects = objectsDirectory(home)
+  const versions = versionsDirectory(home)
+  await mkdir(objects, { recursive: true, mode: PRIVATE_DIR_MODE })
+  await mkdir(versions, { recursive: true, mode: PRIVATE_DIR_MODE })
+  const digest = brandString<ObjectDigest>(createHash('sha256').update(bytes).digest('hex'))
+  const entries: VersionEntry[] = [{ type: 'file', path, digest, size: bytes.length, executable }]
+  const version = versionOf(entries)
+  await withStoreLock(home, async () => {
+    if (!await objectExists(join(objects, digest))) await writeProtectedFile(join(objects, digest), bytes)
+    await writeProtectedFile(join(versions, `${version}.json`), `${JSON.stringify(manifestOf(entries), null, 2)}\n`)
+  })
+  return version
+}
+
+/**
  * Whether the store holds an object file by its name. Its content is checked when it is read; a symbolic link in its
  * place is not an object, so the copy replaces it.
  * @param path - the object file.

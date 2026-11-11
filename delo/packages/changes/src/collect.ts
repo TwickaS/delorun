@@ -3,7 +3,9 @@
  *
  * A version is kept when any profile under `changes/profiles/` names it: the approved record in the profile's
  * `package.json`, the `from` or `to` of a change-log entry that is `pending`, `applied` or `left-out-at-start`, an entry
- * of `active.json`, or the work session's `from`, `lastLoaded` or `lastFailed`. A version file modified less than
+ * of `active.json`, or the work session's `from`, `lastLoaded` or `lastFailed`; or when the harness names it: a file's
+ * `version` or `signed` in any runtime's record under `changes/harness/`, or the `from` or `to` of such an entry of the
+ * harness's change log. A version file modified less than
  * {@link COLLECT_GRACE_MS} ago is kept too. An object is kept when a kept version lists it. Everything else named like a
  * version file (`<sha256>.json`) or an object (`<sha256>`) is removed, and so is a temporary file the store left behind
  * (`.<name>.delo-tmp-<16 hex>`) once it is older than the grace period; other names stay.
@@ -18,8 +20,8 @@
 import { lstat, readdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { CHANGES_ENTRIES, changesDirectory, objectsDirectory, versionsDirectory } from './paths.ts'
-import { readActiveRecord, readApproved, readChangeLog, readWorkSession } from './records.ts'
+import { CHANGES_ENTRIES, changesDirectory, harnessDirectory, isRuntimeVersion, objectsDirectory, versionsDirectory } from './paths.ts'
+import { readActiveRecord, readApproved, readChangeLog, readHarnessLog, readHarnessRecord, readWorkSession } from './records.ts'
 import { readVersion, withStoreLock } from './store.ts'
 import type { ChangeState, ContentVersion } from './types.ts'
 
@@ -179,6 +181,24 @@ async function profileVersions(request: CollectRequest, profile: string): Promis
 }
 
 /**
+ * The versions the harness's records name: every runtime's record under `changes/harness/` and the harness's change log.
+ * @param home - the Delo home.
+ * @returns the version ids.
+ * @throws when a record cannot be read.
+ */
+async function harnessVersions(home: string): Promise<ContentVersion[]> {
+  const versions: (ContentVersion | undefined)[] = []
+  for (const entry of await entriesOf(harnessDirectory(home))) {
+    if (!entry.directory || !isRuntimeVersion(entry.name)) continue
+    for (const file of Object.values((await readHarnessRecord(home, entry.name)).files)) versions.push(file.version, file.signed)
+  }
+  for (const entry of (await readHarnessLog(home)).entries) {
+    if (KEPT_STATES.has(entry.state)) versions.push(entry.from, entry.to)
+  }
+  return versions.filter(version => version !== undefined)
+}
+
+/**
  * Every version and object a collection keeps.
  * @param request - the home and how profile names map to directories.
  * @param at - the time now, for the grace period.
@@ -191,6 +211,7 @@ async function keptContent(request: CollectRequest, at: number): Promise<Kept> {
     if (!entry.directory) continue
     for (const version of await profileVersions(request, entry.name)) versions.add(version)
   }
+  for (const version of await harnessVersions(request.home)) versions.add(version)
   const versionDir = versionsDirectory(request.home)
   for (const entry of await entriesOf(versionDir)) {
     const id = VERSION_FILE.exec(entry.name)?.[1]
