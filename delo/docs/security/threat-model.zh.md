@@ -104,7 +104,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 
 ### Delo Run 项目
 
-Delo Run 持有离线的 root 与 targets 密钥，以及在线的 timestamp 密钥。它可以发布一个已签名并记录在公开日志中的版本。在本人确认之前，没有客户端会安装它：npm 启动器只安装到空的运行时仓库中，`delorun update` 只在本人确认之后才应用。没有客户端会比较版本，因此被 timestamp 签名者移到更低版本的渠道会被作为更新提供；timestamp 命令拒绝这样的移动，客户端也拒绝比已存储的 timestamp 更旧的 timestamp（[C2](../contracts/c02-release-manifest.zh.md#freshness-and-rollback-protection)）。Delo Run 无法进入 home：通往 studio 的路径上没有 Delo 基础设施，它也不持有 home 的任何密钥。本人对 Delo Run 的剩余信任包括其发布，以及提供其元数据的 `delorun.com` 名称。
+Delo Run 持有离线的 root 与 targets 密钥以及在线的 timestamp 密钥。它可以发布一个已签名并记录在公开日志中的版本。在本人确认之前，没有客户端会安装它：npm 启动器只安装到空的运行时仓库中，`delorun update` 也只在本人确认后才应用。更新从不转到更低的发布：运行时仓库在安装任何内容之前，以 `TARGET_LOWER` 拒绝低于正在运行版本的通道发布或请求的版本，`delorun update` 拒绝这样的报告，只有 `delorun recover rollback` 能回退。timestamp 命令拒绝降低通道版本，客户端也拒绝比自己已存储的更旧的 timestamp，因此不持有密钥的通道宿主只能扣住更新的发布，且只到它最后提供的 timestamp 在签发 3 天后过期为止；在此期间启动仍运行已安装的发布（[C2](../contracts/c02-release-manifest.zh.md#freshness-and-rollback-protection)）。Delo Run 无法进入 home：通往 studio 的任何路径上都没有 Delo 基础设施，它也不持有 home 的任何密钥。本人对 Delo Run 的剩余信任包括其发布，以及提供其元数据的 `delorun.com` 名称。
 
 ### 上游与依赖作者
 
@@ -202,7 +202,7 @@ Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md
 
 - 离线的 targets 密钥为每个发布清单签名，离线的 root 密钥为每个角色的密钥及每次轮换签名。在线的 timestamp 密钥只为新鲜度签名，其文件在签发 3 天后过期；客户端拒绝过期或更旧的 timestamp。
 - 安装或更新需要发布日志中经过验证的包含证明，并由 root 所列的见证者共同签名。每次启动时，经过验证的发布日志失败，或缺失已存储的完整性包，都会阻止启动；离线或未知的在线检查从不阻止启动。安装时在线检查未完成的发布，会在更新报告中显示为 `unchecked`，`delorun update --yes` 不会确认它。
-- targets 密钥持有者只通过 `sign-release.ts` 为公开发布签名；在以下情况下它会拒绝：没有在 CI 之外、使用公开配方从带标签源码重建的匹配重建记录，标签没有 `delo/release/allowed-signers` 中某个密钥的签名，或提交不在发布分支上。`local-release.ts` 为它自己的通道签名一个未经重建的发布：其清单把构建者写为 `local release (no independent rebuild)`，它拒绝 `delo/release/production-keys.json` 中列出的 root 或密钥，从生产发布位置获取的启动器会拒绝它的清单。
+- targets 密钥持有者只通过 `sign-release.ts` 为公开发布签名；以下任一项不满足时它会拒绝：在 CI 之外、使用公开配方从带标签源码重建的匹配重建记录，提交位于发布分支上，targets 密钥列在 `delo/release/production-keys.json` 中，以及标签带有 `delo/release/allowed-signers` 所列密钥的签名；这两个文件都按发布分支提交的内容读取。timestamp 命令拒绝该登记册未列出的 timestamp 密钥；登记册发布时为空，因此在所有者记录密钥之前，生产签名一直停止。`local-release.ts` 为它自己的通道签名一个未经重建的发布：其清单把构建者写为 `local release (no independent rebuild)`，它拒绝 `delo/release/production-keys.json` 中列出的 root 或密钥，从生产发布位置获取的启动器会拒绝它的清单。
 - 签名命令根据 GitHub Advisory Database 检查锁文件，遇到没有有效接受的公告时拒绝。
 - 在签名、摘要与日志检查通过之前，任何文件都不会进入 `~/.delo/runtimes/`。每次启动时，npm 启动器都会根据已签名的文件列表检查每个已安装的运行时文件：它对每个文件计算哈希，或将文件的身份与上次计算哈希后记录的身份比较，并默认至少每 7 天对每个文件计算一次哈希。不改变文件变更时间的存储损坏，由该完整检查或 `delorun verify` 发现，而不是由下一次启动发现。
 - npm 启动器是安装前的信任锚：`npx delorun` 会在任何 Delo 检查之前运行 npm 提供的启动器。每次启动都以启动器附带的最新 root 为锚，从不以更旧的已存储 root 为锚，因此被附带 root 撤销的 targets 密钥不再能通过验证。设置会安装固定为当前运行的启动器版本的 `delorun` 命令，[信任页面](../guide/trust.zh.md#checking-it-yourself)说明了如何通过带外方式核查该版本。
@@ -283,7 +283,7 @@ Delo 没有自己的遥测。在 CLI profile 中，DeepSeek 的会话日志上�
 | 见证者的独立性 | 检查的是所列见证者的共同签名；它独立于日志与 Delo 与否，取决于 root 列出了哪些见证者 |
 | 日志条目或重建能说明什么 | 已记录、已重建的发布来自带标签的源码；它仍可能含有缺陷或漏洞，重建也无法证实签名者的机器与工具链未被攻破 |
 | 公告覆盖范围 | 公告检查不覆盖 Node 二进制、原生插件的工具链，也不覆盖没有公开公告的漏洞 |
-| 不比较版本 | 只要渠道的发布与正在运行的发布不同（包括更低的版本），`delorun update` 就会提供它；timestamp 命令拒绝降低渠道版本，这是唯一的保护 |
+| 被扣住的发布 | 不持有密钥的通道宿主无法让 home 转到更低的发布，运行时仓库与 `delorun update` 会拒绝；它可以让 home 停留在其发布上，直到它最后提供的 timestamp 在签发 3 天后过期，在此期间启动仍保留已安装的发布 |
 | 遮盖 | 未登记且不匹配任何所列形式的密钥可能进入日志；捕获的输出可能包含 chat 与文件文本，直到保留期限或清除将其移除 |
 | 日志保留 | 过期记录会一直保留，直到下一次 `delorun` 调用或 `delorun logs --prune` |
 | 清除后的残留 | 已清除 chat 的片段会留在进程日志中，直到其保留期限将其移除，除非本人在清除时清理它们；缩放后的图片留在请求图片缓存中；另一个浏览器 profile 中的草稿，以及从 `delorun trash` 清除后的每份草稿，都会保留 |

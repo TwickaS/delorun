@@ -39,7 +39,7 @@ description: "npm 作为 delorun 提供的 Delo 启动器：它通过 @delo/inst
 
 ## 启动流程
 
-`runLauncher` 先尝试启动，仅在存储回答 `NO_ACTIVE_RUNTIME` 时才安装。启动会读取 `trust/root.json`（本 home 最近校验通过的根）并交给存储，由存储以其完整哈希的间隔对 `current` 运行约定 C2 的启动检查，并构建约定 C1 的启动协议 1 命令。该根只经由启动器随包携带的根获信（见[它随包携带的根](#the-roots-it-ships)）；没有已存储的根时按没有运行时的存储处理，因为本 home 还没有校验过任何内容。在运行时启动之前，启动器通过 `@delo/release-verify` 运行约定 C18 的启动检查：先离线校验已存储的发布日志 bundle，再依据根所指的日志进行在线检查，并把状态与校验通过的检查点记录在 `trust/` 下。未能完成的检查会打印警告并照常启动；可校验的失败，或缺失已存储的 bundle（每次经由存储的安装都会保留它），会打印拒绝信息，指明 `delorun verify` 与重新安装，并以 1 退出而不启动；`delorun verify` 本身例外，它会启动，以便对方看到每项检查。运行时启动时，`DELO_LAUNCHER_ROOTS` 被设为启动器的 `roots/` 目录，`DELO_LAUNCHER_VERSION` 被设为启动器自身 `package.json` 的 `version`；`delorun setup` 安装 `delorun` 命令时固定到该版本，`delorun verify` 则把它与发布已签名的 `npm` 条目比对。
+`runLauncher` 先尝试启动，仅在存储回答 `NO_ACTIVE_RUNTIME` 时才安装。启动会读取 `trust/root.json`（本 home 最近校验通过的根）并交给存储，由存储以其完整哈希的间隔对 `current` 运行约定 C2 的启动检查，并构建约定 C1 的启动协议 1 命令。该根只经由启动器随包携带的根获信（见[它随包携带的根](#the-roots-it-ships)）；没有已存储的根时按没有运行时的存储处理，因为本 home 还没有校验过任何内容。在运行时启动之前，启动器通过 `@delo/release-verify` 运行约定 C18 的启动检查：先离线校验已存储的发布日志 bundle，再依据根所指的日志进行在线检查，并把状态与校验通过的检查点记录在 `trust/` 下。未能完成的检查会打印警告并照常启动；可校验的失败会打印拒绝信息，指明 `delorun verify` 与重新安装，并以 1 退出而不启动；`delorun verify` 本身例外，它会启动，以便对方看到每项检查。缺失已存储的 bundle（每次经由存储的安装都会保留它）会以同样方式被拒绝，拒绝信息指明 bundle 的路径，并提供 `delorun recover rollback` 或恢复该文件；随后 `delorun recover rollback` 会在 `previous` 通过其自身的启动检查与发布日志检查之后启动它，与 `current` 未通过启动检查时一样。运行时启动时，`DELO_LAUNCHER_ROOTS` 被设为启动器的 `roots/` 目录，`DELO_LAUNCHER_VERSION` 被设为启动器自身 `package.json` 的 `version`，读不出时则不设置；继承来的 `DELO_LAUNCHER_*` 变量从不传到运行时；`delorun setup` 安装 `delorun` 命令时固定到该版本，`delorun verify` 则把它与发布已签名的 `npm` 条目比对。
 
 当 `current` 未通过启动检查时，启动器会查找上一次更新所替换的版本，只读取 home 而不写入任何内容：已存储的根必须锚定在随包携带的根上，存储必须指明一个 `previous`，且 `previous` 必须通过同样的启动检查。存在这样的 `previous` 时，结果取决于命令。不带参数的 `delorun`、`delorun start` 与 `delorun recover rollback`，在其周围只有 `--profile <name>` 或 `--profile=<name>` 选项且 `--` 之后没有内容时，会打印一行，对 `previous` 运行发布日志启动检查，并以 `delorun recover rollback` 代替对方的参数启动它，profile 按启动协议 1 的方式经由 `DELO_PROFILE` 传递：
 
@@ -95,7 +95,7 @@ Warning: Release 0.1.0 has not been checked against the release log; Delo checks
 
 启动器只通过自己包内 `roots/` 目录中的根文件（`1.root.json`、`2.root.json` 及以后）信任一个发布。随包携带的根必须构成一条链：每个根既由前一个根签名，也由自身的键签名；启动器在读取时检查这一点，构建在打包时检查这一点。更新的根只能从本包携带的最新根逐级走到，因此根版本出现缺号的包会拒绝任何安装，而不会信任网络提供的内容。完全没有根的包会以 `NO_TRUSTED_ROOT` 拒绝任何安装，并提示对方改用发布页面上的安装脚本。该规则即 `@delo/install` 的 `readShippedRoots`，本启动器启动的运行时经由 `DELO_LAUNCHER_ROOTS` 对同一目录应用它。
 
-同一批根也是启动的锚点。存储的根会在存储运行启动检查之前被读回并与之核对：在启动器携带的某个版本上，存储的根必须正是该根（键与角色一致），比携带的最旧根更旧的存储根会被拒绝，因此未经安装校验的根无法让无关运行时看起来已签名。比携带的最新根更旧的存储根不是锚点：启动检查在携带的最新根下运行，因此被该根撤销的 targets 密钥会让启动失败，而存储的文件保持原样，直到下一次安装或更新存储它所走到的根。比携带的所有根都新的存储根，只有在安装于 `trust/roots/` 下走过的链能到达它时才被信任：从携带的某个根到该根的每个版本，都由前一个根的键与自身的键共同签名。没有携带的根作为起点的存储根会被拒绝，即 `RUNTIME_CHANGED`，因此还原或同步放在 `trust/` 下的根不会成为锚点。日后随包携带了该更新根的启动器会再精确核对它。运行时经由 `DELO_LAUNCHER_ROOTS` 把每次更新、回滚与健康检查都锚定在同一批根上，因此同一用户的进程写到 `trust/root.json` 上的根在那里同样会被拒绝。
+同一批根也是启动的锚点。存储的根会在存储运行启动检查之前被读回并与之核对：在启动器携带的某个版本上，存储的根必须正是该根（键与角色一致），因此未经安装校验的根无法让无关运行时看起来已签名。比携带的最新根更旧的存储根（包括比携带的所有根都旧的存储根）不是锚点：启动检查在携带的最新根下运行，因此被该根撤销的 targets 密钥会让启动失败，而存储的文件保持原样，直到下一次安装或更新存储它所走到的根。比携带的所有根都新的存储根，只有在安装于 `trust/roots/` 下走过的链能到达它时才被信任：从携带的某个根到该根的每个版本，都由前一个根的键与自身的键共同签名。没有携带的根作为起点的存储根会被拒绝，即 `RUNTIME_CHANGED`，因此还原或同步放在 `trust/` 下的根不会成为锚点。日后随包携带了该更新根的启动器会再精确核对它。运行时经由 `DELO_LAUNCHER_ROOTS` 把每次更新、回滚与健康检查都锚定在同一批根上，因此同一用户的进程写到 `trust/root.json` 上的根在那里同样会被拒绝。
 
 <a id="refusals"></a>
 

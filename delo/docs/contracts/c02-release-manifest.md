@@ -122,7 +122,7 @@ The npm launcher embeds the root versions it is packed with, and refuses every i
 | `root` | `{ "version", "sha256" }` | The newest root version and its file digest. |
 | `channels.stable`, `channels.beta` | `{ "release": <version>, "manifest": FileRef }` | Each channel's current release and its manifest file. |
 
-The timestamp command, `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts`, signs it; the scheduled re-signing every 24 hours is in the [release workflow design](../design/release-workflow.md) and is not built. `channels.stable` names a stable release; `channels.beta` names a beta release or a stable release. The timestamp command refuses to move a channel to a lower version than the previous timestamp names for it. A `FileRef` is `{ "name", "length", "sha256" }`: the file name, one path segment matching `^[A-Za-z0-9._+-]+$` other than `.` and `..`; its length in bytes; and the lowercase hex SHA-256 of its bytes.
+The timestamp command, `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts`, signs it, and refuses a timestamp key that `delo/release/production-keys.json`, as the release branch commits it, does not list; the scheduled re-signing every 24 hours is in the [release workflow design](../design/release-workflow.md) and is not built. `channels.stable` names a stable release; `channels.beta` names a beta release or a stable release. The timestamp command refuses to move a channel to a lower version than the previous timestamp names for it. A `FileRef` is `{ "name", "length", "sha256" }`: the file name, one path segment matching `^[A-Za-z0-9._+-]+$` other than `.` and `..`; its length in bytes; and the lowercase hex SHA-256 of its bytes.
 
 ## Release manifest
 
@@ -220,8 +220,9 @@ The signing command, `node_modules/.bin/tsx delo/apps/release/src/sign-release.t
 
 It also refuses, before it writes anything, when:
 
-- the release tag is not an annotated tag whose `tag` header names it, carrying an SSH signature that `git verify-tag` verifies with a key listed in `delo/release/allowed-signers` (`--allowed-signers`); the committed file lists no key until the owner adds the release signers' keys, so every tag is refused until then;
 - the release commit is not an ancestor of the release branch, `origin/v5` unless `--release-branch` names another;
+- the targets key is not listed in `delo/release/production-keys.json` as the release branch commits it; the registry lists no key until the owner records the keys of the key ceremony, so signing stops until then;
+- the release tag is not an annotated tag whose `tag` header names it, carrying an SSH signature that `git verify-tag` verifies with a key listed in `delo/release/allowed-signers` as the release branch commits it, never the working tree's copy; the committed file lists no key until the owner adds the release signers' keys, so every tag is refused until then;
 - the draft's `install.sh` or `install.ps1` is not a zero-length placeholder, because the rebuild comparison does not cover the install scripts yet;
 - an `npm` entry's packed tarball, `<name>-<version>.tgz` in the release directory, is missing, or its `sha512-` integrity, or the name and version in its `package/package.json`, differ from the entry.
 
@@ -296,7 +297,7 @@ Each file's `schema` names its major version; a change that an older reader woul
 
 - R1. Root and targets keys are offline; the timestamp key is online and signs only freshness; the catalogue key signs only [C13](c13-catalogue-revocation.md)'s files.
 - R2. Timestamp metadata expires 3 days after issue; a client refuses an expired or older timestamp, and `delorun update` does not offer a manifest the timestamp does not name for the channel. Re-signing every 24 hours is not built ([release workflow design](../design/release-workflow.md)).
-- R3. No client downgrades on its own; a person-requested rollback reaches only a signed, logged release. Partly built: nothing installs or switches without the person's confirmation, and no client compares versions ([freshness and rollback protection](#freshness-and-rollback-protection)).
+- R3. No client downgrades on its own; a person-requested rollback reaches only a signed, logged release. Built for the CLI home: nothing installs or switches without the person's confirmation, the runtime store refuses an update target lower than the running version with `TARGET_LOWER`, `delorun update` refuses such a report, and `delorun recover rollback` reaches only the version `previous` names ([freshness and rollback protection](#freshness-and-rollback-protection)).
 - R4. Rotation is by root version, signed by the old and new root thresholds; a revoked targets key verifies nothing.
 - R5. The CLI launcher checks every runtime file against the signed file list at every start, by its hash or by an identity recorded after its last hash; one changed, missing or extra file stops the start. Every file is hashed at least once per configured interval, at most 30 days.
 - R6. The desktop app verifies the manifest, the file digests and the log entry before every update applies, on every platform. Not built: the desktop app is upstream's ([update and rollback design](../design/update-and-rollback.md#the-desktop-app)).
@@ -331,6 +332,9 @@ Each file's `schema` names its major version; a change that an older reader woul
 | `sign-release-refuses-unsigned-tag` | release-chain | Signing refuses a lightweight or unsigned release tag, one signed by a key `allowed-signers` does not list, one whose tag object names another tag, and any tag while the allowed-signers file lists no key. |
 | `sign-release-refuses-commit-off-release-branch` | release-chain | Signing refuses a release commit that is not an ancestor of the release branch, and signs once the branch holds it. |
 | `sign-release-refuses-install-script` | release-chain | Signing refuses a draft whose `install.sh` or `install.ps1` is not a zero-length placeholder. |
+| `sign-release-refuses-unlisted-production-key` | release-chain | Signing refuses a targets key the release branch's `production-keys.json` does not list, and every key while it lists none. |
+| `sign-timestamp-refuses-unlisted-production-key` | release-chain | The timestamp command refuses a timestamp key the release branch's `production-keys.json` does not list, and every key while it lists none. |
+| `sign-release-reads-allowed-signers-from-the-release-branch` | release-chain | A signer added to the working tree's `allowed-signers` and not committed on the release branch does not verify the tag. |
 | `sign-release-refuses-npm-integrity-mismatch` | release-chain | Signing refuses an `npm` entry whose packed tarball's integrity differs from the entry. |
 | `local-release-refuses-production-keys` | release-chain | A local release refuses a root file, or a root, targets or timestamp key id, that `production-keys.json` lists, and writes nothing. |
 | `c02-start-anchors-on-newest-shipped-root` | release-chain | A runtime signed by a targets key that the newest shipped root revoked fails the start check though the stored root is the older one that lists the key, and nothing is spawned. |

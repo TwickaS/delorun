@@ -134,7 +134,7 @@ npm 启动器内嵌打包时所带的根版本，不内嵌任何根版本时拒�
 | `root` | `{ "version", "sha256" }` | 最新的根版本及其文件摘要。 |
 | `channels.stable`、`channels.beta` | `{ "release": <version>, "manifest": FileRef }` | 每个通道当前的发布及其 manifest 文件。 |
 
-时间戳命令 `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts` 签名它；每 24 小时一次的定时重新签名见[发布工作流设计](../design/release-workflow.md)，尚未构建。`channels.stable` 指明一个 stable 发布；`channels.beta` 指明一个 beta 发布或一个 stable 发布。时间戳命令拒绝让某个通道指向比上一个时间戳为它指明的版本更低的版本。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名，即匹配 `^[A-Za-z0-9._+-]+$` 且不为 `.` 或 `..` 的单个路径段；以字节计的长度；以及其字节的小写十六进制 SHA-256。
+时间戳命令 `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts` 签名它，并拒绝发布分支所提交的 `delo/release/production-keys.json` 未列出的 timestamp 密钥；每 24 小时一次的定时重新签名见[发布工作流设计](../design/release-workflow.md)，尚未构建。`channels.stable` 指明一个 stable 发布；`channels.beta` 指明一个 beta 发布或一个 stable 发布。时间戳命令拒绝让某个通道指向比上一个时间戳为它指明的版本更低的版本。`FileRef` 为 `{ "name", "length", "sha256" }`：文件名，即匹配 `^[A-Za-z0-9._+-]+$` 且不为 `.` 或 `..` 的单个路径段；以字节计的长度；以及其字节的小写十六进制 SHA-256。
 
 <a id="release-manifest"></a>
 
@@ -244,8 +244,9 @@ CLI 运行时的每次启动时，npm 启动器用它携带的最新根（或者
 
 在写入任何内容之前，它在下列情况下同样拒绝：
 
-- 发布标签不是其 `tag` 头指明自身的附注标签，或不带可由 `git verify-tag` 用 `delo/release/allowed-signers`（`--allowed-signers`）中所列密钥验证的 SSH 签名；在所有者添加发布签名者的密钥之前，已提交的该文件不列出任何密钥，因此在此之前每个标签都会被拒绝；
 - 发布提交不是发布分支（`origin/v5`，除非 `--release-branch` 指定其他分支）的祖先；
+- targets 密钥未列在发布分支所提交的 `delo/release/production-keys.json` 中；在所有者记录密钥仪式的密钥之前，该登记册不列出任何密钥，因此在此之前签名会停止；
+- 发布标签不是其 `tag` 头指明自身的附注标签，或不带可由 `git verify-tag` 用发布分支所提交的 `delo/release/allowed-signers`（而非工作树中的副本）中所列密钥验证的 SSH 签名；在所有者添加发布签名者的密钥之前，已提交的该文件不列出任何密钥，因此在此之前每个标签都会被拒绝；
 - 草稿的 `install.sh` 或 `install.ps1` 不是零长度的占位文件，因为重建比较尚未覆盖安装脚本；
 - 某个 `npm` 条目的打包 tarball（发布目录中的 `<name>-<version>.tgz`）缺失，或其 `sha512-` integrity，或其 `package/package.json` 中的名称与版本，与该条目不同。
 
@@ -336,7 +337,7 @@ acceptances:
 
 - R1. 根密钥与 targets 密钥离线；时间戳密钥在线，且只签名新鲜度；插件索引密钥只签名 [C13](c13-catalogue-revocation.zh.md) 的文件。
 - R2. 时间戳元数据在签发 3 天后过期；客户端拒绝已过期或更旧的时间戳，`delorun update` 不提供时间戳未为该通道指明的 manifest。每 24 小时重新签名尚未构建（[发布工作流设计](../design/release-workflow.md)）。
-- R3. 任何客户端都不会自行降级；本人请求的回滚只能到达已签名、已记录日志的发布。部分构建：没有本人的确认，任何内容都不会安装或切换，且没有客户端比较版本（[新鲜度与回滚保护](#freshness-and-rollback-protection)）。
+- R3. 任何客户端都不会自行降级；本人请求的回滚只能到达已签名、已记录日志的发布。已为 CLI home 构建：没有本人的确认，任何内容都不会安装或切换，运行时仓库以 `TARGET_LOWER` 拒绝低于正在运行版本的更新目标，`delorun update` 拒绝这样的报告，`delorun recover rollback` 只能到达 `previous` 指向的版本（[新鲜度与回滚保护](#freshness-and-rollback-protection)）。
 - R4. 轮换通过根版本进行，由旧根与新根的阈值签名；被吊销的 targets 密钥不验证任何内容。
 - R5. CLI 启动器在每次启动时，按哈希或按其上次哈希之后记录的身份，对照已签名的文件列表检查每个运行时文件；一个被改动、缺失或多出的文件就会停止启动。每个文件在每个配置的间隔内至少被哈希一次，间隔最长 30 天。
 - R6. 桌面应用在每次更新应用之前、在每个平台上，都验证 manifest、文件摘要与日志条目。尚未构建：桌面应用是上游的（[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)）。
@@ -372,6 +373,9 @@ acceptances:
 | `sign-release-refuses-unsigned-tag` | release-chain | 签名拒绝轻量或未签名的发布标签、由 `allowed-signers` 未列出的密钥签名的标签、其标签对象指明另一个标签的标签，并在 allowed-signers 文件不列出任何密钥时拒绝任何标签。 |
 | `sign-release-refuses-commit-off-release-branch` | release-chain | 签名拒绝不是发布分支祖先的发布提交，并在分支包含它之后签名。 |
 | `sign-release-refuses-install-script` | release-chain | 签名拒绝 `install.sh` 或 `install.ps1` 不是零长度占位文件的草稿。 |
+| `sign-release-refuses-unlisted-production-key` | release-chain | 签名拒绝发布分支的 `production-keys.json` 未列出的 targets 密钥，并在其不列出任何密钥时拒绝所有密钥。 |
+| `sign-timestamp-refuses-unlisted-production-key` | release-chain | 时间戳命令拒绝发布分支的 `production-keys.json` 未列出的 timestamp 密钥，并在其不列出任何密钥时拒绝所有密钥。 |
+| `sign-release-reads-allowed-signers-from-the-release-branch` | release-chain | 只加入工作树 `allowed-signers`、未在发布分支上提交的签名者不能验证标签。 |
 | `sign-release-refuses-npm-integrity-mismatch` | release-chain | 签名拒绝其打包 tarball 的 integrity 与条目不同的 `npm` 条目。 |
 | `local-release-refuses-production-keys` | release-chain | 本地发布拒绝 `production-keys.json` 所列的根文件或根、targets、时间戳密钥 id，且不写入任何内容。 |
 | `c02-start-anchors-on-newest-shipped-root` | release-chain | 由携带的最新根所撤销的 targets 密钥签名的运行时无法通过启动检查，即使已存储的根是列出该密钥的较旧根，且不会启动任何进程。 |

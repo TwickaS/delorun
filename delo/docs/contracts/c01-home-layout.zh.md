@@ -203,7 +203,7 @@ runtimes/
 只有当启动器既理解仓库、又理解运行时的启动接口时，它才运行活动运行时。
 
 - `store.json` 记录仓库布局编号，当前为 1。只有仓库的某个条目移动或改变含义时，布局编号才改变。
-- 每个运行时的已签名 manifest（[C2](c02-release-manifest.zh.md)）记录其启动协议编号，当前为 1。启动协议规定运行时的入口文件、启动器传入的参数以及它设置的环境变量（`DSH_HOME`、`DELO_HOME`、`DELO_PROFILE`；`DELO_LAUNCHER_ROOTS`，即启动器自带的发布根所在的目录，`delorun verify`、每次更新、每次回滚以及健康检查的启动检查都以它为所保存的根的锚点。没有它而启动的运行时不安装、不更新、也不回滚到任何版本，以 `ROOT_NOT_ANCHORED` 拒绝，其 `delorun verify` 只按所保存的根自身的签名检查它，并说明这一点；以及 `DELO_LAUNCHER_VERSION`，即启动器包自身的版本，`delorun setup` 把它安装的 `delorun` 命令固定到该版本，`delorun verify` 把它与发布版本已签名的 `npm` 条目比较。没有它而启动的运行时不提供该命令的安装；该变量在启动协议 1 中是可选的，因此不设置它的启动器仍能启动该协议的每个运行时）。
+- 每个运行时的已签名 manifest（[C2](c02-release-manifest.zh.md)）记录其启动协议编号，当前为 1。启动协议规定运行时的入口文件、启动器传入的参数以及它设置的环境变量（`DSH_HOME`、`DELO_HOME`、`DELO_PROFILE`；`DELO_LAUNCHER_ROOTS`，即启动器自带的发布根所在的目录，`delorun verify`、每次更新、每次回滚以及健康检查的启动检查都以它为所保存的根的锚点。没有它而启动的运行时不安装、不更新、也不回滚到任何版本，以 `ROOT_NOT_ANCHORED` 拒绝，其 `delorun verify` 只按所保存的根自身的签名检查它，并说明这一点；以及 `DELO_LAUNCHER_VERSION`，即启动器包自身的版本，`delorun setup` 把它安装的 `delorun` 命令固定到该版本，`delorun verify` 把它与发布版本已签名的 `npm` 条目比较。启动器会丢弃所有继承来的 `DELO_LAUNCHER_*` 变量，因此运行时只看到它设置的值。没有该版本而启动的运行时不提供该命令的安装；该变量在启动协议 1 中是可选的，因此不设置它的启动器仍能启动该协议的每个运行时）。
 - 启动器支持仓库的布局编号和运行时的启动协议编号时，才运行 `current`。否则它以 `RUNTIME_INCOMPATIBLE` 停止，给出两个编号；运行时较旧时提供更新流程，启动器较旧时提供启动器更新。它既不改动 `current`，也不改动仓库的任何其他文件。
 
 <a id="the-npm-launcher-and-the-install-script"></a>
