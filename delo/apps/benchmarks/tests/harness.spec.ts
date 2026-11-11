@@ -221,16 +221,3 @@ describe('machine facts', () => {
     expect(live === undefined || live >= 0).toBe(true)
   })
 })
-
-describe('the base closure build', () => {
-  it('waits while another closure build runs, and not at all when none does', async () => {
-    const { waitForOtherClosureBuilds } = await import('../src/fixtures/closure.ts')
-    const logged: string[] = []
-    const answers = [[41, 42], [42], []]
-    let pauses = 0
-    await waitForOtherClosureBuilds(text => { logged.push(text) }, () => answers.shift()!, async () => { pauses++ })
-    expect(pauses).toBe(2)
-    expect(logged).toEqual(['waiting for the closure build in process 41, 42, which uses the same build root', 'waiting for the closure build in process 42, which uses the same build root'])
-    await waitForOtherClosureBuilds(() => { throw new Error('no wait expected') }, () => [], async () => { throw new Error('no pause expected') })
-  })
-})

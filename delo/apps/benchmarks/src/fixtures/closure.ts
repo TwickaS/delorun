@@ -82,13 +82,11 @@ export async function buildBase(repository: string, cache: string, commit: strin
   const building = `${target}.building`
   removeTree(building)
   mkdirSync(building, { recursive: true })
-  await waitForOtherClosureBuilds(log)
   log(`building the base closure of ${commit.slice(0, 12)} with the release recipe; this takes minutes`)
-  const shims = cycleTolerantPnpm(join(cache, 'build-shims'))
   const finished = await run({
     command: join(repository, 'node_modules/.bin/tsx'),
     args: [join(repository, 'delo/apps/release/src/build-closure.ts'), '--version', BASE_VERSION, '--out', building, '--platform', BENCH_PLATFORM, '--artifacts', 'existing', '--commit', commit],
-    env: { ...process.env, PATH: `${shims}:${process.env.PATH ?? ''}` },
+    env: process.env,
     cwd: repository,
     timeoutMs: 3_600_000,
     onLine: line => { log(`  ${line.text}`) },
@@ -97,49 +95,6 @@ export async function buildBase(repository: string, cache: string, commit: strin
   removeTree(target)
   renameSync(building, target)
   return { directory: target, version: BASE_VERSION }
-}
-
-/**
- * Wait while another `build-closure.ts` runs on this machine: the recipe's build root is one fixed directory, and two
- * builds at once remove each other's.
- * @param log - receives progress text.
- * @param running - lists the other builds' process ids; `pgrep` by default.
- * @param pause - waits between checks.
- */
-export async function waitForOtherClosureBuilds(log: (text: string) => void, running: () => readonly number[] = otherClosureBuilds, pause: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 10_000))): Promise<void> {
-  for (let others = running(); others.length > 0; others = running()) {
-    log(`waiting for the closure build in process ${others.join(', ')}, which uses the same build root`)
-    await pause()
-  }
-}
-
-/**
- * The process ids of `build-closure.ts` runs on this machine.
- * @returns the ids.
- */
-function otherClosureBuilds(): readonly number[] {
-  try {
-    return execFileSync('pgrep', ['-f', 'release/src/build-closure\\.ts'], { encoding: 'utf8' }).split('\n').map(Number).filter(pid => pid > 0 && pid !== process.pid)
-  } catch (_none) {
-    // pgrep exits 1 when nothing matches.
-    return []
-  }
-}
-
-/**
- * A `pnpm` that runs the `pnpm` on `PATH` with workspace cycles allowed. The recipe's `pnpm --filter ./delo/packages/*
- * run build` stops on the cycle through `@delo/release`, `@delo/runtime-closure` and `@delo/cli` (`ERR_PNPM_TASK_CYCLE`),
- * though only packages outside the cycle have a build script; the recipe passes no variable through to its steps but
- * `PATH`, so the benchmark's base build puts this first on it. A published release does not use it.
- * @param directory - where to write it.
- * @returns the directory to put first on `PATH`.
- * @throws {Error} when no `pnpm` is on `PATH`.
- */
-export function cycleTolerantPnpm(directory: string): string {
-  const pnpm = execFileSync('sh', ['-c', 'command -v pnpm'], { encoding: 'utf8' }).trim()
-  mkdirSync(directory, { recursive: true })
-  writeFileSync(join(directory, 'pnpm'), `#!/bin/sh\npnpm_config_ignore_workspace_cycles=true exec '${pnpm}' "$@"\n`, { mode: 0o755 })
-  return directory
 }
 
 /**
