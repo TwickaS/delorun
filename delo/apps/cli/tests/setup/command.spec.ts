@@ -75,7 +75,7 @@ describe('delorun setup', { timeout: 60_000 }, () => {
   it('--check-key without --provider is refused: --yes alone chooses no provider whose key it could check', async () => {
     const error = await refusal(['--yes', '--check-key'])
     expect(error.exit).toBe(EXIT.usage)
-    expect(error.message).toBe('delorun setup --yes: --check-key checks the chosen provider\'s key; name one with --provider')
+    expect(error.message).toBe('delorun setup --yes: --check-key checks the chosen provider\'s key; name a provider with --provider')
   })
 
   it('takes --provider and its flags with --yes, reading the key from the provider\'s variable, which a typed key never replaces', async () => {
@@ -102,6 +102,18 @@ describe('delorun setup', { timeout: 60_000 }, () => {
     expect(record.modelProvider).toEqual({ id: 'openai-compatible', credential: { source: 'environment', name: 'LOCAL_KEY' }, baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen3:8b' })
     expect(readFileSync(join(osHome, '.delo', 'profiles', 'default', 'cordis.patch.yml'), 'utf8')).toContain('baseURL: http://127.0.0.1:11434/v1')
     expect(lines.join('')).toContain('Updated the key section of the profile default.')
+  })
+
+  it('warns on standard error, without refusing, when the flags name an endpoint another computer serves over plain http', async () => {
+    context = { ...context, env: { ...context.env, OPENAI_COMPATIBLE_API_KEY: 'k' } }
+    expect(await setupCommand.run(['--yes', '--provider', 'openai-compatible', '--base-url', 'http://192.0.2.20:8000/v1', '--model', 'local'], context)).toBe(EXIT.ok)
+    expect(lines.join('')).toContain('delorun setup --yes: warning: http://192.0.2.20:8000 is reached over plain http')
+  })
+
+  it('names the document\'s modelProvider, not the flags, when --config --check-key has no provider', async () => {
+    const document = join(osHome, 'none.json')
+    writeFileSync(document, JSON.stringify({ schemaVersion: 4, modelProvider: null, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
+    expect((await refusal(['--config', document, '--check-key'])).message).toBe('delorun setup --config: --check-key checks the chosen provider\'s key; name a provider in the document\'s modelProvider')
   })
 
   it('--no-update-check with --yes writes the release-check row off', async () => {

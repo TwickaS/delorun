@@ -167,6 +167,17 @@ describe('the live key check of an OpenAI-compatible endpoint', () => {
     expect(seen).toEqual([{ url: '/v1/models', authorization: `Bearer ${KEY}` }, { url: '/v1/models', authorization: 'Bearer another-key' }])
   })
 
+  it('settles on the status alone: an endpoint that sends its headers and then holds the body does not keep the check waiting', async () => {
+    const origin = await endpoint((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      // The body starts and never ends, as from a server that streams or stalls.
+      response.write('{"data":[')
+    })
+    const started = Date.now()
+    expect(await liveKeyCheck({}, 5_000)({ provider: SETUP_PROVIDERS['openai-compatible'], baseURL: `${origin}/v1` }, KEY)).toEqual({ ok: true })
+    expect(Date.now() - started).toBeLessThan(2_000)
+  })
+
   it('live key check sends the key to the provider origin only: a redirect to another origin fails, and that origin receives nothing', async () => {
     const elsewhere: (string | undefined)[] = []
     const other = await endpoint((request, response) => {

@@ -32,6 +32,15 @@ import { isSetupProviderId, SETUP_PROVIDERS, type ProviderCatalog } from './prov
 /** An environment variable name. A credential value never matches it, so one passed as a name is refused. */
 const ENVIRONMENT_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/
 
+/**
+ * A model id: the characters provider catalogs and servers use in model names. Setup refuses any other text in a model
+ * field, so a document or flag cannot carry a key with spaces or quotes there, and a refusal never echoes the value.
+ */
+const MODEL_ID = /^[A-Za-z0-9._:/@~+-]{1,200}$/
+
+/** The characters a base URL may hold: no whitespace, and no `?`, `#` or `@`, which a query, fragment or user name needs. */
+const BASE_URL_TEXT = /^[A-Za-z0-9._~:/[\]%-]{1,2000}$/
+
 /** The ports a studio may listen on without privileges. */
 const MIN_PORT = 1024
 const MAX_PORT = 65_535
@@ -49,16 +58,23 @@ const modelProvider = z.strictObject({
   id: z.enum(SETUP_PROVIDER_IDS),
   credential: modelCredential,
   baseURL: z.string().min(1).nullable(),
-  model: z.string().trim().min(1).nullable(),
+  model: z.string().nullable(),
 }).superRefine((answer, context) => {
   const custom = SETUP_PROVIDERS[answer.id].adapter === 'custom'
   if (custom !== (answer.baseURL !== null)) context.addIssue({ code: 'custom', path: ['baseURL'], message: custom ? 'is needed for openai-compatible' : 'is set for openai-compatible only' })
-  else if (answer.baseURL !== null && baseURLProblem(answer.baseURL) !== undefined) context.addIssue({ code: 'custom', path: ['baseURL'], message: 'must be an http or https URL' })
+  else if (answer.baseURL !== null && baseURLProblem(answer.baseURL) !== undefined) context.addIssue({ code: 'custom', path: ['baseURL'], message: BASE_URL_RULE })
+  if (answer.model !== null && !MODEL_ID.test(answer.model)) context.addIssue({ code: 'custom', path: ['model'], message: MODEL_RULE })
   if (answer.model === null && answer.id !== SETUP_DEFAULT_PROVIDER_ID) context.addIssue({ code: 'custom', path: ['model'], message: `is needed for ${answer.id}` })
 })
 
-/** The provider answer of a version-2 or version-3 document, which setup of those versions applied as DeepSeek's. */
+/**
+ * The provider answer of a version-2 or version-3 document, which setup of those versions applied as DeepSeek's. Its id
+ * must be DeepSeek's: another id would now name another provider, which only a version-4 document can set up.
+ */
 const earlierModelProvider = z.strictObject({ id: z.string().min(1), credential: modelCredential })
+  .superRefine((answer, context) => {
+    if (answer.id !== SETUP_DEFAULT_PROVIDER_ID) context.addIssue({ code: 'custom', path: ['id'], message: `needs schemaVersion ${String(SETUP_ANSWERS_SCHEMA_VERSION)} to name a provider other than ${SETUP_DEFAULT_PROVIDER_ID}` })
+  })
   .transform(({ credential }): ModelProviderAnswer => ({ id: SETUP_DEFAULT_PROVIDER_ID, credential, baseURL: null, model: null }))
 
 const reach = z.strictObject({
@@ -108,19 +124,54 @@ function schemaFor(document: unknown): typeof answersSchema | typeof version3Sch
   return version === 3 ? version3Schema : answersSchema
 }
 
+/** What a base URL must be, as a refusal states it. */
+const BASE_URL_RULE = 'must be an http or https URL without a user name, password, query or fragment'
+
+/** What a model id must be, as a refusal states it. */
+const MODEL_RULE = 'must be a model id: letters, digits and . _ : / @ ~ + -'
+
 /**
- * The check of a base URL a person gives for an endpoint.
+ * The check of a base URL a person gives for an endpoint: an `http` or `https` URL with no user name, password, query
+ * or fragment, so the URL carries no credential and the key check's path joins it cleanly.
  * @param value - the entry.
- * @returns the message to show, or `undefined` for an `http` or `https` URL.
+ * @returns the message to show, which never repeats the entry, or `undefined` for a usable base URL.
  */
 export function baseURLProblem(value: string): string | undefined {
+  const problem = 'Enter an http or https URL without a user name, password, query or fragment, such as http://127.0.0.1:11434/v1.'
+  if (!BASE_URL_TEXT.test(value)) return problem
+  let url: URL
   try {
-    const url = new URL(value)
-    return url.protocol === 'https:' || url.protocol === 'http:' ? undefined : 'Enter an http or https URL.'
+    url = new URL(value)
   } catch {
     // `new URL` rejects text that is not a URL.
-    return 'Enter an http or https URL, such as http://127.0.0.1:11434/v1.'
+    return problem
   }
+  const bare = url.username === '' && url.password === '' && url.search === '' && url.hash === ''
+  return (url.protocol === 'https:' || url.protocol === 'http:') && bare ? undefined : problem
+}
+
+/**
+ * The warning for a base URL whose requests anyone on the network path can read: plain `http` to a host other than
+ * this computer's loopback addresses. It is a warning, not a refusal, because a server on the local network may offer
+ * nothing else.
+ * @param value - a base URL {@link baseURLProblem} accepts.
+ * @returns the warning, or `undefined` for `https` or a loopback host.
+ */
+export function baseURLWarning(value: string): string | undefined {
+  const url = new URL(value)
+  if (url.protocol !== 'http:') return undefined
+  const host = url.hostname
+  if (host === 'localhost' || host === '[::1]' || /^127(?:\.\d{1,3}){3}$/u.test(host)) return undefined
+  return `${url.origin} is reached over plain http, so the key and every prompt cross the network unencrypted; use https unless the network to it is your own.`
+}
+
+/**
+ * The check of a model id a person types.
+ * @param value - the entry.
+ * @returns the message to show, which never repeats the entry, or `undefined` for a model id.
+ */
+export function modelIdProblem(value: string): string | undefined {
+  return MODEL_ID.test(value) ? undefined : 'Enter the model id: letters, digits and . _ : / @ ~ + -.'
 }
 
 /**
@@ -175,7 +226,7 @@ export function readAnswersDocument(path: string): SetupAnswers {
     // Only a version-2 document lacks the field at the top level.
     if (issue.code === 'unrecognized_keys' && field === '' && issue.keys.includes('updateCheck')) throw refusal('updateCheck', `needs schemaVersion ${String(SETUP_ANSWERS_SCHEMA_VERSION)}`)
     if (issue.code === 'unrecognized_keys' && field === 'modelProvider' && (issue.keys.includes('baseURL') || issue.keys.includes('model'))) throw refusal('modelProvider', `needs schemaVersion ${String(SETUP_ANSWERS_SCHEMA_VERSION)} to name a base URL or a model`)
-    if (field === 'modelProvider.id') throw refusal(field, `must be one of ${SETUP_PROVIDER_IDS.join(', ')}`)
+    if (field === 'modelProvider.id' && issue.code !== 'custom') throw refusal(field, `must be one of ${SETUP_PROVIDER_IDS.join(', ')}`)
     if (issue.code === 'custom') throw refusal(field, issue.message)
     if (issue.code === 'unrecognized_keys') throw refusal(field === '' ? 'the document' : field, 'holds a field the answers document does not define; a credential value is never accepted in it')
     if (field === 'modelProvider.credential.name') throw refusal(field, 'must be the name of an environment variable; a credential value is never accepted in it')
@@ -222,16 +273,18 @@ export interface ProviderChoice {
  */
 export function chosenProvider(choice: ProviderChoice): ModelProviderAnswer {
   const usage = (text: string): CliError => new CliError(EXIT.usage, `delorun setup --provider: ${text}`)
-  if (!isSetupProviderId(choice.id)) throw usage(`there is no provider ${JSON.stringify(choice.id)}; choose one of ${SETUP_PROVIDER_IDS.join(', ')}`)
+  // The flag's text is not repeated: it could be a key typed in the wrong place.
+  if (!isSetupProviderId(choice.id)) throw usage(`--provider names no provider setup offers; choose one of ${SETUP_PROVIDER_IDS.join(', ')}`)
   const provider = SETUP_PROVIDERS[choice.id]
   const name = choice.keyEnv ?? provider.keyVariable
   // A key passed where a variable name belongs is refused without being echoed.
   if (!ENVIRONMENT_NAME.test(name)) throw usage('--key-env must be the name of an environment variable; a key is never accepted on the command line')
   if (provider.adapter === 'custom' && choice.baseURL === undefined) throw usage(`${provider.id} needs --base-url, the endpoint's base URL`)
   if (provider.adapter !== 'custom' && choice.baseURL !== undefined) throw usage(`--base-url applies to openai-compatible only; ${provider.id} uses the endpoint its adapter ships`)
-  if (choice.baseURL !== undefined && baseURLProblem(choice.baseURL) !== undefined) throw usage('--base-url must be an http or https URL')
+  if (choice.baseURL !== undefined && baseURLProblem(choice.baseURL) !== undefined) throw usage(`--base-url ${BASE_URL_RULE}`)
   const model = choice.model?.trim()
   if ((model === undefined || model === '') && provider.adapter !== 'deepseek') throw usage(`${provider.id} needs --model, the model new chats start on`)
+  if (model !== undefined && model !== '' && !MODEL_ID.test(model)) throw usage(`--model ${MODEL_RULE}`)
   return { id: provider.id, credential: { source: 'environment', name }, baseURL: choice.baseURL ?? null, model: model === undefined || model === '' ? null : model }
 }
 
@@ -241,12 +294,13 @@ export function chosenProvider(choice: ProviderChoice): ModelProviderAnswer {
  * @param answer - the provider answer, or `null`.
  * @param catalog - the installed catalogs.
  * @param source - the form the answer came from, which starts the message.
- * @throws {CliError} `EXIT.failed` for a model the catalog does not list.
+ * @param field - the flag or document field that named the model.
+ * @throws {CliError} `EXIT.failed` for a model the catalog does not list; the message names the field and not its value.
  */
-export function checkCatalogModel(answer: ModelProviderAnswer | null, catalog: ProviderCatalog, source: string): void {
+export function checkCatalogModel(answer: ModelProviderAnswer | null, catalog: ProviderCatalog, source: string, field: string): void {
   if (answer === null || answer.model === null || SETUP_PROVIDERS[answer.id].adapter === 'custom') return
   if (!catalog.models(answer.id).some(model => model.id === answer.model)) {
-    throw new CliError(EXIT.failed, `${source}: ${answer.id} serves no model ${JSON.stringify(answer.model)}; delorun setup key lists the models it serves`)
+    throw new CliError(EXIT.failed, `${source}: ${field} names a model that is not in ${answer.id}'s installed catalog; delorun setup key lists the models it serves`)
   }
 }
 

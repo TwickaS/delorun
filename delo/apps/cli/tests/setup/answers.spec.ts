@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { REMOVED_ANSWER_KEYS, SETUP_DEFAULTS } from '@delo/contract-setup-answers'
-import { checkCatalogModel, chosenProvider, readAnswersDocument, yesAnswers, type ProviderChoice } from '../../src/setup/answers.ts'
+import { baseURLWarning, checkCatalogModel, chosenProvider, readAnswersDocument, yesAnswers, type ProviderChoice } from '../../src/setup/answers.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { installedCatalog } from '../../src/setup/providers.ts'
 
@@ -76,10 +76,35 @@ describe('the answers document', () => {
     expect(refusal(write('version-2-unknown.json', { ...version2, apiKey: 'sk-SECRET-VALUE-81' }))).toContain('the document holds a field the answers document does not define')
   })
 
-  it('reads a version-3 document\'s provider as DeepSeek with the profile\'s default model, whatever id it named, as setup of that version applied it', () => {
-    const version3 = { ...BASE, schemaVersion: 3, updateCheck: false, modelProvider: { id: 'anything', credential: { source: 'environment', name: 'OTHER_KEY' } } }
+  it('reads a version-3 document\'s provider as DeepSeek with the profile\'s default model, as setup of that version applied it', () => {
+    const version3 = { ...BASE, schemaVersion: 3, updateCheck: false, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'OTHER_KEY' } } }
     expect(readAnswersDocument(write('version-3.json', version3))).toMatchObject({ schemaVersion: 4, updateCheck: false, modelProvider: { ...DEEPSEEK, credential: { source: 'environment', name: 'OTHER_KEY' } } })
     expect(refusal(write('version-3-model.json', { ...version3, modelProvider: { ...version3.modelProvider, model: 'x' } }))).toBe('delorun setup --config: modelProvider needs schemaVersion 4 to name a base URL or a model')
+  })
+
+  it('refuses a version-2 or version-3 document that names another provider, which only version 4 sets up', () => {
+    for (const schemaVersion of [2, 3]) {
+      const earlier = { ...BASE, schemaVersion, modelProvider: { id: 'anthropic', credential: { source: 'environment', name: 'ANTHROPIC_API_KEY' } } }
+      expect(refusal(write(`version-${String(schemaVersion)}-other.json`, earlier))).toBe('delorun setup --config: modelProvider.id needs schemaVersion 4 to name a provider other than deepseek-official')
+    }
+  })
+
+  it('refuses a base URL with a user name, password, query or fragment, and a model that is not an id, without echoing either', () => {
+    const custom = { id: 'openai-compatible', credential: { source: 'environment', name: 'LOCAL_KEY' }, baseURL: 'http://127.0.0.1:8000/v1', model: 'local' }
+    for (const baseURL of ['https://user:sk-SECRET-VALUE-91@gw.example/v1', 'https://@gw.example/v1', 'https://gw.example/v1?key=sk-SECRET-VALUE-91', 'https://gw.example/v1#sk-SECRET-VALUE-91', 'https://gw.example/v1?', 'https://gw.example/ v1']) {
+      const message = refusal(write('url.json', { ...BASE, modelProvider: { ...custom, baseURL } }))
+      expect(message).toBe('delorun setup --config: modelProvider.baseURL must be an http or https URL without a user name, password, query or fragment')
+    }
+    for (const model of ['sk SECRET-VALUE-92', '"sk-SECRET-VALUE-92"', '', 'a'.repeat(201)]) {
+      const message = refusal(write('model.json', { ...BASE, modelProvider: { ...custom, model } }))
+      expect(message).toBe('delorun setup --config: modelProvider.model must be a model id: letters, digits and . _ : / @ ~ + -')
+    }
+  })
+
+  it('warns about a base URL that reaches another computer over plain http, and not about https or this computer', () => {
+    expect(baseURLWarning('http://192.0.2.20:8000/v1')).toBe('http://192.0.2.20:8000 is reached over plain http, so the key and every prompt cross the network unencrypted; use https unless the network to it is your own.')
+    expect(baseURLWarning('http://gw.example/v1')).toContain('plain http')
+    for (const quiet of ['https://gw.example/v1', 'http://localhost:11434/v1', 'http://127.0.0.1:8000/v1', 'http://127.4.5.6/v1', 'http://[::1]:8000/v1']) expect(baseURLWarning(quiet)).toBeUndefined()
   })
 
   it('reads every provider setup offers, with the fields each needs, and refuses one it does not offer', () => {
@@ -92,7 +117,7 @@ describe('the answers document', () => {
     expect(refusal(write('no-model.json', { ...BASE, modelProvider: { ...anthropic, model: null } }))).toBe('delorun setup --config: modelProvider.model is needed for anthropic')
     expect(refusal(write('no-url.json', { ...BASE, modelProvider: { ...custom, baseURL: null } }))).toBe('delorun setup --config: modelProvider.baseURL is needed for openai-compatible')
     expect(refusal(write('stray-url.json', { ...BASE, modelProvider: { ...anthropic, baseURL: 'https://x.example' } }))).toBe('delorun setup --config: modelProvider.baseURL is set for openai-compatible only')
-    expect(refusal(write('bad-url.json', { ...BASE, modelProvider: { ...custom, baseURL: 'ftp://x.example' } }))).toBe('delorun setup --config: modelProvider.baseURL must be an http or https URL')
+    expect(refusal(write('bad-url.json', { ...BASE, modelProvider: { ...custom, baseURL: 'ftp://x.example' } }))).toBe('delorun setup --config: modelProvider.baseURL must be an http or https URL without a user name, password, query or fragment')
   })
 
   it('refuses a document that carries a removed question, naming the removed keys and no value', () => {
@@ -169,23 +194,34 @@ describe('the answers document', () => {
       return ''
     }
     const none = { model: undefined, baseURL: undefined, keyEnv: undefined }
-    expect(usage({ ...none, id: 'acme' })).toContain('there is no provider "acme"; choose one of anthropic, deepseek-official')
+    expect(usage({ ...none, id: 'sk-SECRET-VALUE-93' })).toBe('delorun setup --provider: --provider names no provider setup offers; choose one of anthropic, deepseek-official, google, groq, mistral, moonshotai, openai, openai-compatible, openrouter, together, xai')
+    expect(usage({ ...none, id: 'openai', model: 'sk SECRET-VALUE-94' })).toBe('delorun setup --provider: --model must be a model id: letters, digits and . _ : / @ ~ + -')
+    expect(usage({ ...none, id: 'openai-compatible', model: 'm', baseURL: 'https://u:sk-SECRET-VALUE-95@gw.example/v1' })).toBe('delorun setup --provider: --base-url must be an http or https URL without a user name, password, query or fragment')
     expect(usage({ ...none, id: 'openai' })).toBe('delorun setup --provider: openai needs --model, the model new chats start on')
     expect(usage({ ...none, id: 'openai-compatible', model: 'm' })).toBe('delorun setup --provider: openai-compatible needs --base-url, the endpoint\'s base URL')
     expect(usage({ ...none, id: 'openai', model: 'm', baseURL: 'https://x.example' })).toContain('--base-url applies to openai-compatible only')
-    expect(usage({ ...none, id: 'openai-compatible', model: 'm', baseURL: 'not a url' })).toBe('delorun setup --provider: --base-url must be an http or https URL')
-    const carried = usage({ ...none, id: 'openai', model: 'm', keyEnv: 'sk-SECRET-VALUE-90' })
-    expect(carried).toContain('--key-env must be the name of an environment variable')
-    expect(carried).not.toContain('sk-SECRET-VALUE-90')
+    expect(usage({ ...none, id: 'openai-compatible', model: 'm', baseURL: 'not a url' })).toBe('delorun setup --provider: --base-url must be an http or https URL without a user name, password, query or fragment')
+  })
+
+  it('--key-env carrying a key is refused', () => {
+    let error: unknown
+    try {
+      chosenProvider({ id: 'openai', model: 'm', baseURL: undefined, keyEnv: 'sk-SECRET-VALUE-90' })
+    } catch (caught) {
+      error = caught
+    }
+    expect((error as CliError).exit).toBe(EXIT.usage)
+    expect((error as Error).message).toContain('--key-env must be the name of an environment variable')
+    expect((error as Error).message).not.toContain('sk-SECRET-VALUE-90')
   })
 
   it('refuses a model the provider\'s installed catalog does not list, and accepts any model of the custom endpoint', async () => {
     const catalog = await installedCatalog()
     const [first] = catalog.models('openai')
-    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: first?.id ?? '' }, catalog, 'here') }).not.toThrow()
-    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here') }).toThrow('here: openai serves no model "no-such-model"')
-    expect(() => { checkCatalogModel({ id: 'deepseek-official', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here') }).toThrow('deepseek-official serves no model')
-    expect(() => { checkCatalogModel({ id: 'openai-compatible', credential: { source: 'prompt' }, baseURL: 'http://x.example', model: 'anything' }, catalog, 'here') }).not.toThrow()
-    expect(() => { checkCatalogModel(null, catalog, 'here') }).not.toThrow()
+    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: first?.id ?? '' }, catalog, 'here', '--model') }).not.toThrow()
+    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here', '--model') }).toThrow('here: --model names a model that is not in openai\'s installed catalog; delorun setup key lists the models it serves')
+    expect(() => { checkCatalogModel({ id: 'deepseek-official', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here', '--model') }).toThrow('not in deepseek-official\'s installed catalog')
+    expect(() => { checkCatalogModel({ id: 'openai-compatible', credential: { source: 'prompt' }, baseURL: 'http://x.example', model: 'anything' }, catalog, 'here', '--model') }).not.toThrow()
+    expect(() => { checkCatalogModel(null, catalog, 'here', '--model') }).not.toThrow()
   })
 })

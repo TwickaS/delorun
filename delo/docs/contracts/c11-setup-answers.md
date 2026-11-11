@@ -74,7 +74,7 @@ Setup asks these questions, in this order. The default applies when the person a
 | Model provider | `key` | One of the providers of [Model providers](#model-providers), or none for now. | DeepSeek in a terminal; none with `--yes`. |
 | Base URL and model id | `key` | Asked for an `openai-compatible` endpoint only, in both modes. | None. |
 | Model key | `key` | Typed at the prompt, or read from the provider's variable at each start. | Typed at the prompt. |
-| Model | `key` | One model of the provider's installed catalog. Asked in Full, and in Quick for every provider but DeepSeek, whose default is the profile's. | The catalog's first model; for DeepSeek, the profile's default. |
+| Model | `key` | One model of the provider's installed catalog. Asked in Full, and in Quick for every provider but DeepSeek, whose default is the profile's. | The provider's recommended model in setup's provider table, a current general chat model its catalog lists; for DeepSeek, the profile's default. |
 | Prompts | `prompts` | Safer prompts, or Same as stock. | Safer prompts |
 | Keep running in the background | `background` | Yes or no. | Yes |
 | Reach this studio from your phone over your own tailnet (Tailscale)? | `reach` | Yes or no. | No |
@@ -82,7 +82,7 @@ Setup asks these questions, in this order. The default applies when the person a
 
 Reach beyond the person's tailnet, a passkey or OIDC identity factor and the runtime are not asked yet; their packages add them. Setup reads a stock home only to copy from it, and never modifies it. Setup's import copies the data alone: no profile, settings layer, instructions, skill or stored key, which can change what Delo runs or what the agent is told; `delorun import-home` copies each of those after its own yes.
 
-The live key check sends one authenticated `GET` of a metadata endpoint to the provider's origin, and to no other; redirects fail, and the response body is never read. It never requests a completion. A failed check prints its reason, which names the origin and the HTTP status and never the key, and lets the person enter the key again or continue without a successful check. `--yes`, `--config` and a key read from the environment skip the check unless `--check-key` is given; with `--check-key` a key the provider does not accept stops an unattended run.
+The live key check sends one authenticated `GET` of a metadata endpoint to the provider's origin, and to no other; redirects fail. DeepSeek's check goes through upstream's model-listing client, which parses the response body; every other check settles on the status and never reads the body. No check prints the body, and none requests a completion. A failed check prints its reason, which names the origin and the HTTP status and never the key, and lets the person enter the key again or continue without a successful check. `--yes`, `--config` and a key read from the environment skip the check unless `--check-key` is given; with `--check-key` a key the provider does not accept stops an unattended run.
 
 <a id="model-providers"></a>
 ### Model providers
@@ -105,6 +105,10 @@ Setup offers the providers below, listed by name so that none is placed ahead of
 
 Each catalog provider's path is appended to the endpoint pi-ai's installed catalog ships for it. A typed key is stored under the key variable, which is the credential reference the adapter reads; a key read from the environment is read from the key variable, or from the variable `--key-env` or a document names. An endpoint that answers its model listing without any key also passes the `openai-compatible` check.
 
+The key variables are the names each provider's own tools read, and some differ from the reference Settings → Models derives from the route when it stores a key: setup uses `GEMINI_API_KEY` where the studio derives `GOOGLE_API_KEY`, and `MOONSHOT_API_KEY` where it derives `MOONSHOTAI_API_KEY`. The route's `apiKeyEnv` records the variable setup used, so the adapter and the studio read the key from it.
+
+A base URL is an `http` or `https` URL with no user name, password, query or fragment, so it carries no credential; setup refuses any other, without repeating it. A base URL that reaches a host other than this computer's loopback addresses (`localhost`, `127.0.0.0/8`, `::1`) over plain `http` is accepted with a warning, a note in a terminal and a line on standard error otherwise, because the key and every prompt then cross the network unencrypted. A model id holds letters, digits and `. _ : / @ ~ + -` only, up to 200 characters.
+
 <a id="answer-schema"></a>
 ### Answer schema
 
@@ -126,12 +130,12 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 | Field | Type and values | Default | Rule |
 | --- | --- | --- | --- |
-| `schemaVersion` | Integer `4`, or `2` or `3` for a document written before the provider question. | `4` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, whatever id it names, because setup of those versions applied DeepSeek's key and no other provider. |
-| `modelProvider` | An object with the four fields below, or `null` for no provider. | The object with each field's default in a terminal; `null` with `--yes` unless `--provider` is given. | `null` writes no provider row. |
+| `schemaVersion` | Integer `4`, or `2` or `3` for a document written before the provider question. | `4` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
+| `modelProvider` | An object with the four fields below, or `null` for no provider. | The object with each field's default in a terminal; `null` with `--yes` unless `--provider` is given. | `null` writes no provider row and leaves the rows already there, so new chats keep the model the profile selected; setup says which. |
 | `modelProvider.id` | An id of [Model providers](#model-providers). | `deepseek-official` | Any other id is refused, naming the ids setup accepts. |
 | `modelProvider.credential` | `{ "source": "prompt" }` or `{ "source": "environment", "name": "<variable>" }`. | `{ "source": "prompt" }` | `prompt` is accepted only in the interactive form. |
-| `modelProvider.baseURL` | An `http` or `https` URL, or `null`. | `null` | Set for `openai-compatible` and `null` for every other provider. |
-| `modelProvider.model` | A model id, or `null`. | `null` | `null` only for `deepseek-official`, where it keeps the profile's default model. Every other provider names a model, which must be in the provider's installed catalog unless the provider is `openai-compatible`. |
+| `modelProvider.baseURL` | An `http` or `https` URL, or `null`. | `null` | Set for `openai-compatible` and `null` for every other provider, under the base URL rule of [Model providers](#model-providers). |
+| `modelProvider.model` | A model id, or `null`. | `null` | `null` only for `deepseek-official`, where it keeps the profile's default model. Every other provider names a model, which must be in the provider's installed catalog unless the provider is `openai-compatible`. A model that is not a model id, or not in the catalog, is refused naming the field and not its value. |
 | `prompts` | `safer` or `stock`. | `safer` | Sets the prompt switches of the parity registry. |
 | `background` | Boolean. | `true` | Read back by the start commands. |
 | `profile.name` | A profile name, or `null` for the profile the command line selected. | `null` | Upstream's profile-name rules; `desktop` is refused. |
@@ -228,7 +232,9 @@ Denial tests:
 | `config file carrying a credential value is refused` | A document with a credential value in any field is refused, and the value is not echoed. |
 | `live key check sends the key to the provider origin only` | For every provider, the check's request goes to one origin, with redirects refused, and the key is in no URL, message or output; a redirect to another origin fails, and that origin receives nothing. |
 | `--key-env carrying a key is refused` | A `--key-env` value that is not a variable name is refused with the usage code, and the value is not echoed. |
-| `typed key is never printed` | The recorded screen of a run holds no part of the typed key. |
+| `refuses a base URL with a user name, password, query or fragment, and a model that is not an id, without echoing either` | A document whose base URL carries a credential, a query or a fragment, or whose model is not a model id, is refused naming the field, and the value is not echoed. |
+| `settles on the status alone: an endpoint that sends its headers and then holds the body does not keep the check waiting` | A non-DeepSeek check resolves on the response status while the body never ends. |
+| `typed key is never printed` | The recorded screen of a run holds no part of the typed key, and no file under the home but `.credentials.yaml` holds it, for DeepSeek and for a pi-ai provider. |
 | `default-profile run sends no analytics or upload` | A network fixture records no request to an analytics destination and no session-log upload in a default profile. |
 | `default-profile model request carries no dsh_session_log` | A model request from a default profile has no `dsh_session_log` field. |
 | `update-notice-off-at-first-start` | After a Full setup that answers No, and after `--yes --no-update-check`, the profile the first start composes has the `delo-update-check` row with `enabled: false`, and the row mounts no check service. |

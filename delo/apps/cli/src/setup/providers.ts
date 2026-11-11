@@ -11,7 +11,7 @@
 import { fileURLToPath } from 'node:url'
 import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE, SETUP_PROVIDER_IDS, type ModelProviderAnswer, type SetupProviderId } from '@delo/contract-setup-answers'
-import { updateRowConfig, type InheritedRow } from './writes.ts'
+import { readPatchRow, updateRowConfig, type InheritedRow } from './writes.ts'
 
 /**
  * The request that checks a key: `deepseek` is DeepSeek's model listing through upstream's listing client; `anthropic`
@@ -49,21 +49,26 @@ export interface SetupProvider {
   readonly keyVariable: string
   /** How setup checks a key. */
   readonly check: KeyCheckSpec
+  /**
+   * The model the model question starts on: a current general chat model of the provider's installed catalog, or for
+   * DeepSeek the profile's default; `undefined` for the custom endpoint, whose models setup does not know.
+   */
+  readonly defaultModel: string | undefined
 }
 
 /** The providers setup offers, by id. Each catalog provider's endpoint is read from pi-ai's installed catalog. */
 export const SETUP_PROVIDERS: Readonly<Record<SetupProviderId, SetupProvider>> = {
-  'anthropic': { id: 'anthropic', label: 'Anthropic', adapter: 'catalog', keyVariable: 'ANTHROPIC_API_KEY', check: { kind: 'anthropic', path: '/v1/models?limit=1' } },
-  'deepseek-official': { id: 'deepseek-official', label: 'DeepSeek', adapter: 'deepseek', keyVariable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, check: { kind: 'deepseek', path: '/models' } },
-  'google': { id: 'google', label: 'Google Gemini', adapter: 'catalog', keyVariable: 'GEMINI_API_KEY', check: { kind: 'google', path: '/models?pageSize=1' } },
-  'groq': { id: 'groq', label: 'Groq', adapter: 'catalog', keyVariable: 'GROQ_API_KEY', check: { kind: 'bearer', path: '/models' } },
-  'mistral': { id: 'mistral', label: 'Mistral', adapter: 'catalog', keyVariable: 'MISTRAL_API_KEY', check: { kind: 'bearer', path: '/v1/models' } },
-  'moonshotai': { id: 'moonshotai', label: 'Moonshot AI', adapter: 'catalog', keyVariable: 'MOONSHOT_API_KEY', check: { kind: 'bearer', path: '/models' } },
-  'openai': { id: 'openai', label: 'OpenAI', adapter: 'catalog', keyVariable: 'OPENAI_API_KEY', check: { kind: 'bearer', path: '/models' } },
-  'openai-compatible': { id: 'openai-compatible', label: 'OpenAI-compatible endpoint', adapter: 'custom', keyVariable: 'OPENAI_COMPATIBLE_API_KEY', check: { kind: 'bearer', path: '/models' } },
-  'openrouter': { id: 'openrouter', label: 'OpenRouter', adapter: 'catalog', keyVariable: 'OPENROUTER_API_KEY', check: { kind: 'bearer', path: '/key' } },
-  'together': { id: 'together', label: 'Together AI', adapter: 'catalog', keyVariable: 'TOGETHER_API_KEY', check: { kind: 'bearer', path: '/models' } },
-  'xai': { id: 'xai', label: 'xAI', adapter: 'catalog', keyVariable: 'XAI_API_KEY', check: { kind: 'bearer', path: '/models' } },
+  'anthropic': { id: 'anthropic', label: 'Anthropic', adapter: 'catalog', keyVariable: 'ANTHROPIC_API_KEY', check: { kind: 'anthropic', path: '/v1/models?limit=1' }, defaultModel: 'claude-sonnet-5-5' },
+  'deepseek-official': { id: 'deepseek-official', label: 'DeepSeek', adapter: 'deepseek', keyVariable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, check: { kind: 'deepseek', path: '/models' }, defaultModel: 'deepseek-flash' },
+  'google': { id: 'google', label: 'Google Gemini', adapter: 'catalog', keyVariable: 'GEMINI_API_KEY', check: { kind: 'google', path: '/models?pageSize=1' }, defaultModel: 'gemini-3.8-flash' },
+  'groq': { id: 'groq', label: 'Groq', adapter: 'catalog', keyVariable: 'GROQ_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'openai/gpt-oss-120b' },
+  'mistral': { id: 'mistral', label: 'Mistral', adapter: 'catalog', keyVariable: 'MISTRAL_API_KEY', check: { kind: 'bearer', path: '/v1/models' }, defaultModel: 'mistral-large-latest' },
+  'moonshotai': { id: 'moonshotai', label: 'Moonshot AI', adapter: 'catalog', keyVariable: 'MOONSHOT_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'kimi-k3' },
+  'openai': { id: 'openai', label: 'OpenAI', adapter: 'catalog', keyVariable: 'OPENAI_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'gpt-6.1-sol' },
+  'openai-compatible': { id: 'openai-compatible', label: 'OpenAI-compatible endpoint', adapter: 'custom', keyVariable: 'OPENAI_COMPATIBLE_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: undefined },
+  'openrouter': { id: 'openrouter', label: 'OpenRouter', adapter: 'catalog', keyVariable: 'OPENROUTER_API_KEY', check: { kind: 'bearer', path: '/key' }, defaultModel: 'anthropic/claude-sonnet-5.5' },
+  'together': { id: 'together', label: 'Together AI', adapter: 'catalog', keyVariable: 'TOGETHER_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'Qwen/Qwen3.7-Max' },
+  'xai': { id: 'xai', label: 'xAI', adapter: 'catalog', keyVariable: 'XAI_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'grok-4.7' },
 }
 
 /** The providers in the order setup lists them: by label, so none is placed ahead of another. */
@@ -222,4 +227,43 @@ export function writeProviderRows(patchPath: string, answer: ModelProviderAnswer
   updateRowConfig(patchPath, rows.defaultModel, current => (answer.model === null
     ? rows.defaultModel.config
     : { ...without(current, 'reasoningEffort'), provider: answer.id, model: answer.model }))
+}
+
+/** The model new chats start on in a profile: its route and model id. */
+export interface ModelSelection {
+  /** The provider route. */
+  readonly provider: string
+  /** The model id. */
+  readonly model: string
+}
+
+/**
+ * The model new chats start on in a profile, as its patch selects it: the `agent-default-model` row setup, Settings
+ * → Models and the model picker write, or the base bundle's when the patch sets none.
+ * @param patchPath - the profile's `cordis.patch.yml`.
+ * @param command - the command that starts a refusal's message.
+ * @param rows - the rows as the bundle inserts them; the installed base bundle's by default.
+ * @returns the selection.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list.
+ */
+export function profileModelSelection(patchPath: string, command: string, rows: ProviderRows = baseProviderRows()): ModelSelection {
+  const config = { ...rows.defaultModel.config, ...readPatchRow(patchPath, PROVIDER_ROW_IDS.defaultModel, command) }
+  return { provider: String(config['provider']), model: String(config['model']) }
+}
+
+/**
+ * The credential reference a provider route reads its key from in a profile: the `apiKeyEnv` its row names, or the
+ * variable setup stores a provider's key under when the row names none.
+ * @param patchPath - the profile's `cordis.patch.yml`.
+ * @param route - the provider route.
+ * @param command - the command that starts a refusal's message.
+ * @returns the reference, or `undefined` for a route setup does not offer whose row names none.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list.
+ */
+export function routeKeyReference(patchPath: string, route: string, command: string): string | undefined {
+  const named = route === 'deepseek-official'
+    ? readPatchRow(patchPath, PROVIDER_ROW_IDS.deepseek, command)?.['apiKeyEnv']
+    : recordOf(recordOf(readPatchRow(patchPath, PROVIDER_ROW_IDS.piAi, command)?.['providers'])[route])['apiKeyEnv']
+  if (typeof named === 'string' && named !== '') return named
+  return isSetupProviderId(route) ? SETUP_PROVIDERS[route].keyVariable : undefined
 }

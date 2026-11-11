@@ -26,9 +26,9 @@ Setup's model provider question is `Which model provider should Delorun use?`. Q
 1. For an OpenAI-compatible endpoint, the base URL and the model id.
 2. `Where does the <provider> key come from?`: **Enter the key now**, which stores it in your home's credentials file, or **Read `<VARIABLE>` from the environment at each start**.
 3. For a typed key, the key itself, which setup checks before it stores it.
-4. The model new chats start on, from the provider's model list. Full asks it for every provider; Quick asks it for every provider except DeepSeek, which starts on the profile's default model, DeepSeek-V4.1-Flash.
+4. The model new chats start on, from the provider's model list, starting on a current general model of that provider. Full asks it for every provider; Quick asks it for every provider except DeepSeek, which starts on the profile's default model, DeepSeek-V4.1-Flash.
 
-**None for now** sets up no provider. Setup then tells you how to add one, and new chats start on the profile's default model, DeepSeek's, which reads its key from `DEEPSEEK_API_KEY`. You can change the model of any chat in the studio's model picker.
+**None for now** changes no provider setting: new chats keep the model the profile already uses, DeepSeek-V4.1-Flash on a new profile, and setup tells you which model that is and how to add a provider. You can change the model of any chat in the studio's model picker.
 
 ## The providers
 
@@ -46,13 +46,13 @@ Setup's model provider question is `Which model provider should Delorun use?`. Q
 | Together AI | `together` | `TOGETHER_API_KEY` | The key and the model |
 | xAI | `xai` | `XAI_API_KEY` | The key and the model |
 
-The model list of each provider is the list installed with Delorun. Every provider but the OpenAI-compatible endpoint uses the address the provider publishes. DeepSeek also reads `DEEPSEEK_BASE_URL` when you set it, as DeepSeek Harness does.
+The model list of each provider is the list installed with Delorun. Some key variables differ from the name the studio's Settings → Models would give the key it stores: Google Gemini uses `GEMINI_API_KEY` and Moonshot AI `MOONSHOT_API_KEY`, the names those providers' own tools read. Setup records the variable it used, so the studio reads the key from the same place. Every provider but the OpenAI-compatible endpoint uses the address the provider publishes. DeepSeek also reads `DEEPSEEK_BASE_URL` when you set it, as DeepSeek Harness does.
 
 ## An OpenAI-compatible endpoint
 
 Choose **OpenAI-compatible endpoint** for any server that speaks OpenAI's Chat Completions API: a gateway, a hosted service not in the list, or a server on your own computer such as Ollama, LM Studio or vLLM. Setup asks:
 
-- **Base URL of the endpoint**: the address that comes before `/chat/completions`, such as `http://127.0.0.1:11434/v1`.
+- **Base URL of the endpoint**: the address that comes before `/chat/completions`, such as `http://127.0.0.1:11434/v1`. It cannot hold a user name, password, query or fragment; put the key in the key question instead. Plain `http` to another computer works, but setup warns you, because the key and your prompts then cross the network unencrypted.
 - **Model id the endpoint serves**: the name the server knows the model by, such as `qwen3:8b`.
 - **The key**. A server that needs no key still needs some text here, because the adapter always sends one; enter any text.
 
@@ -66,7 +66,7 @@ A key read from the environment is not checked unless you run setup with `--chec
 
 ## Where the key is kept
 
-A typed key is stored in `.credentials.yaml` in your Delorun home, which only you can read, under the provider's key variable. A key read from the environment is not stored: Delorun reads the variable each time it starts, from the environment it starts in, the `.env` file of the folder you start it from, or the `.env` file of your home. The setup answers, the profile and the logs never hold a key. `delorun doctor` checks that the chosen provider's key is set and well formed, without sending it anywhere.
+A typed key is stored in `.credentials.yaml` in your Delorun home, which only you can read, under the provider's key variable. A key read from the environment is not stored: Delorun reads the variable each time it starts, from the environment it starts in, the `.env` file of the folder you start it from, or the `.env` file of your home. The setup answers, the profile and the logs never hold a key. `delorun doctor` checks that the key of the provider new chats start on is set and well formed, without sending it anywhere.
 
 ## Set up without questions
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parse } from 'yaml'
@@ -79,6 +79,14 @@ function patchOf(profile = PROFILE): { id: string, config: Record<string, unknow
  */
 function recordOf(profile = PROFILE): { sections: { id: string, status: string }[], background: boolean, prompts: string, profile: { name: string | null, port: number | null }, modelProvider: unknown } {
   return JSON.parse(readFileSync(join(profileDirectory(home, profile), 'setup-answers.json'), 'utf8')) as ReturnType<typeof recordOf>
+}
+
+/**
+ * @param root - a directory.
+ * @returns every regular file under it, at any depth.
+ */
+function filesUnder(root: string): string[] {
+  return readdirSync(root, { withFileTypes: true, recursive: true }).filter(entry => entry.isFile()).map(entry => join(entry.parentPath, entry.name))
 }
 
 /** @returns the screen as one text, the profile directory shown as a placeholder. */
@@ -203,13 +211,18 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })
 
-  it('never prints the typed key, and keeps it out of every file setup writes except the credentials document', async () => {
-    expect(await interactive(QUICK_SCRIPT)).toBe(EXIT.ok)
+  it.each([
+    ['DeepSeek', QUICK_SCRIPT],
+    ['a pi-ai provider', ['quick', 'anthropic', 'prompt', TYPED_KEY, 'claude-sonnet-5-5', 'safer', 'save', true]],
+  ] as const)('typed key is never printed, and for %s no file under the home holds it but the credentials document', async (_, script) => {
+    expect(await interactive(script)).toBe(EXIT.ok)
     expect(recording.screen.join('\n')).not.toContain(TYPED_KEY)
     expect(recording.asked.join('\n')).not.toContain(TYPED_KEY)
-    for (const file of [join(profileDirectory(home, PROFILE), 'setup-answers.json'), join(profileDirectory(home, PROFILE), 'cordis.patch.yml')]) {
-      expect(readFileSync(file, 'utf8')).not.toContain(TYPED_KEY)
-    }
+    const files = filesUnder(home).filter(file => file !== join(home, '.credentials.yaml'))
+    expect(files).toContain(join(profileDirectory(home, PROFILE), 'cordis.patch.yml'))
+    expect(files).toContain(join(profileDirectory(home, PROFILE), 'setup-answers.json'))
+    for (const file of files) expect(readFileSync(file, 'utf8'), file).not.toContain(TYPED_KEY)
+    expect(readFileSync(join(home, '.credentials.yaml'), 'utf8')).toContain(TYPED_KEY)
     expect(existsSync(join(runDirectory(home, PROFILE), 'setup-progress.json'))).toBe(false)
   })
 
@@ -892,7 +905,7 @@ describe('the model provider question', { timeout: TIMEOUT_MS }, () => {
   it('asks an OpenAI-compatible endpoint\'s base URL and model in both modes, refusing a URL that is not http or https, and goes back inside the section', async () => {
     const script = ['quick', 'openai-compatible', 'ftp://host', 'http://127.0.0.1:11434/v1', 'qwen3:8b', BACK_CHOICE, '', 'http://127.0.0.1:11434/v1', 'llama3.3', 'environment', 'safer', 'save', false]
     expect(await interactive(script, { env: { OPENAI_COMPATIBLE_API_KEY: 'local' } })).toBe(EXIT.ok)
-    expect(screen()).toContain('! Enter an http or https URL.')
+    expect(screen()).toContain('! Enter an http or https URL without a user name, password, query or fragment')
     expect(recordOf().modelProvider).toEqual({ id: 'openai-compatible', credential: { source: 'environment', name: 'OPENAI_COMPATIBLE_API_KEY' }, baseURL: 'http://127.0.0.1:11434/v1', model: 'llama3.3' })
     expect(new Map(patchOf().map(row => [row.id, row.config])).get('llm-pi-ai')).toEqual({
       providers: { 'openai-compatible': { displayName: 'OpenAI-compatible endpoint', apiKeyEnv: 'OPENAI_COMPATIBLE_API_KEY', api: 'openai-completions', baseURL: 'http://127.0.0.1:11434/v1', models: [{ id: 'llama3.3' }] } },
@@ -911,8 +924,37 @@ describe('the model provider question', { timeout: TIMEOUT_MS }, () => {
     expect(recordOf().modelProvider).toBeNull()
     expect(patchOf().map(row => row.id)).not.toContain('agent-default-model')
     expect(screen()).toContain('  Model provider: none for now; add one later with delorun setup key\n')
-    expect(screen()).toContain('No model provider is set up. Choose one with delorun setup key')
+    expect(screen()).toContain('No model provider was set up now, and no provider setting changed. New chats still start on deepseek-flash from DeepSeek, which reads its key from DEEPSEEK_API_KEY unless the profile names another variable.')
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
+  })
+
+  it('starts the model question on the provider\'s recommended model, not the catalog\'s first', async () => {
+    expect(await interactive(['quick', 'openai', 'environment', 'gpt-6.1-sol', 'safer', 'save', false])).toBe(EXIT.ok)
+    expect(screen()).toContain('> gpt-6.1-sol')
+    expect(screen()).not.toContain('> gpt-4\n')
+  })
+
+  it('warns, without refusing, about an endpoint another computer serves over plain http', async () => {
+    expect(await interactive(['quick', 'openai-compatible', 'http://192.0.2.20:8000/v1', 'local', 'environment', 'safer', 'save', false])).toBe(EXIT.ok)
+    expect(screen()).toContain('# Plain http\n  http://192.0.2.20:8000 is reached over plain http')
+    recording.screen.length = 0
+    rmSync(profileDirectory(home, PROFILE), { recursive: true })
+    expect(await interactive(['quick', 'openai-compatible', 'http://127.0.0.1:8000/v1', 'local', 'environment', 'safer', 'save', false])).toBe(EXIT.ok)
+    expect(screen()).not.toContain('Plain http')
+  })
+
+  it('leaves the provider rows as they are with "None for now" after another provider, and says which model new chats still use', async () => {
+    expect(await interactive(['quick', 'groq', 'environment', 'openai/gpt-oss-120b', 'safer', 'save', false])).toBe(EXIT.ok)
+    const before = patchOf()
+    recording.screen.length = 0
+    const request: SetupRequest = {
+      home, profile: PROFILE, env: {}, output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
+      form: { kind: 'interactive', prompter: scriptedPrompter(['none'], recording) },
+    }
+    expect(await runSection(request, 'key')).toBe(EXIT.ok)
+    expect(patchOf()).toEqual(before)
+    expect(recordOf().modelProvider).toBeNull()
+    expect(screen()).toContain('New chats still start on openai/gpt-oss-120b from Groq, which reads its key from GROQ_API_KEY unless the profile names another variable.')
   })
 
   it('offers the earlier answer again when the section runs again, and keeps the other routes when the provider changes', async () => {

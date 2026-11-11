@@ -59,6 +59,21 @@ describe('the providers setup offers', () => {
     }
   })
 
+  it('starts each provider\'s model question on a model its installed catalog lists, and DeepSeek\'s on the profile\'s default', async () => {
+    const catalog = await installedCatalog()
+    for (const provider of PROVIDERS_BY_LABEL.filter(each => each.adapter !== 'custom')) {
+      expect(catalog.models(provider.id).map(model => model.id)).toContain(provider.defaultModel)
+    }
+    expect(SETUP_PROVIDERS['deepseek-official'].defaultModel).toBe(baseProviderRows().defaultModel.config['model'])
+    expect(SETUP_PROVIDERS['openai-compatible'].defaultModel).toBeUndefined()
+  })
+
+  it('reads the same pi-ai package the adapter serves the catalog from, so setup and the adapter list the same providers and models', () => {
+    const dependency = (manifest: string): unknown => (JSON.parse(readFileSync(manifest, 'utf8')) as { dependencies: Record<string, string> }).dependencies['@earendil-works/pi-ai']
+    const adapter = join(import.meta.dirname, '../../../../../packages/llm/llm-pi-ai/package.json')
+    expect(dependency(join(import.meta.dirname, '../../package.json'))).toBe(dependency(adapter))
+  })
+
   it('lists DeepSeek\'s built-in models, starting with the base bundle\'s default, and none for the custom endpoint', async () => {
     const catalog = await installedCatalog()
     expect(catalog.models('deepseek-official')[0]?.id).toBe(baseProviderRows().defaultModel.config['model'])

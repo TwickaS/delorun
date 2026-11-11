@@ -24,7 +24,7 @@ import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delo/home'
 import { Redactor, resolveSurface, SurfaceLog } from '@delo/logs'
 import { SETUP_DEFAULTS, type ModelProviderAnswer, type SetupAnswers } from '@delo/contract-setup-answers'
-import { checkCatalogModel, chosenProvider, parseAnswers, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
+import { baseURLWarning, checkCatalogModel, chosenProvider, parseAnswers, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
 import { computerEnding, finishSetup, type Ending } from './ending.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
@@ -152,26 +152,45 @@ function sectionEnvironment(request: SetupRequest, profileExists: boolean): Sect
   }
 }
 
+/** An unattended form that names its provider without a question. */
+interface UnattendedForm {
+  /** The command, which starts a refusal's message. */
+  readonly source: string
+  /** Where the form names its provider and model: the flags, or the document's `modelProvider`. */
+  readonly provider: string
+  /** The flag or document field that names the model. */
+  readonly modelField: string
+}
+
+/** The flags of `--yes` and `delorun setup key`. */
+const FLAGS_FORM = (source: string): UnattendedForm => ({ source, provider: 'with --provider', modelField: '--model' })
+
+/** The `--config` document. */
+const CONFIG_FORM: UnattendedForm = { source: 'delorun setup --config', provider: 'in the document\'s modelProvider', modelField: 'modelProvider.model' }
+
 /**
- * Check a provider answer of an unattended form: its model against the installed catalog, and, when `--check-key`
- * asks for it, the key it reads from the environment.
+ * Check a provider answer of an unattended form: its model against the installed catalog, its base URL, and, when
+ * `--check-key` asks for it, the key it reads from the environment. A base URL that reaches another computer over plain
+ * `http` is accepted with a warning on standard error.
  * @param request - the run.
  * @param answer - the provider answer, or `null`.
- * @param source - the form, which starts a refusal's message.
+ * @param form - the form, which shapes the messages.
  * @throws {CliError} `EXIT.usage` for `--check-key` without a provider; `EXIT.failed` for a model the catalog does not
  *   list, an unset variable, or a key the provider does not accept; the message never holds the key.
  */
-async function checkUnattendedProvider(request: SetupRequest, answer: ModelProviderAnswer | null, source: string): Promise<void> {
+async function checkUnattendedProvider(request: SetupRequest, answer: ModelProviderAnswer | null, form: UnattendedForm): Promise<void> {
   if (answer === null) {
-    if (request.checkEnvironmentKey === true) throw new CliError(EXIT.usage, `${source}: --check-key checks the chosen provider's key; name one with --provider`)
+    if (request.checkEnvironmentKey === true) throw new CliError(EXIT.usage, `${form.source}: --check-key checks the chosen provider's key; name a provider ${form.provider}`)
     return
   }
   const catalog = await (request.catalog ?? installedCatalog)()
-  checkCatalogModel(answer, catalog, source)
+  checkCatalogModel(answer, catalog, form.source, form.modelField)
+  const warning = answer.baseURL === null ? undefined : baseURLWarning(answer.baseURL)
+  if (warning !== undefined) request.output.stderr(`${form.source}: warning: ${warning}\n`)
   if (answer.credential.source !== 'environment') return
   const name = answer.credential.name
   const key = request.env[name] ?? ''
-  if (key === '') throw new CliError(EXIT.failed, `${source}: ${name} is not set; set it to the ${SETUP_PROVIDERS[answer.id].label} key`)
+  if (key === '') throw new CliError(EXIT.failed, `${form.source}: ${name} is not set; set it to the ${SETUP_PROVIDERS[answer.id].label} key`)
   if (request.checkEnvironmentKey !== true) return
   const result = await (request.keyCheck ?? liveKeyCheck(request.env))(keyTarget(SETUP_PROVIDERS[answer.id], answer.baseURL, catalog), key)
   if (!result.ok) throw new CliError(EXIT.failed, `delorun setup: the key in ${name} was not accepted: ${result.reason}`)
@@ -188,13 +207,13 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry):
   const flags: Partial<SetupAnswers> = request.noUpdateCheck === true ? { updateCheck: false } : {}
   if (form.kind === 'yes') {
     const answers = { ...yesAnswers(env, request.providerChoice), ...flags, sections: unattendedRecord(registry.all()) }
-    await checkUnattendedProvider(request, answers.modelProvider, 'delorun setup --yes')
+    await checkUnattendedProvider(request, answers.modelProvider, FLAGS_FORM('delorun setup --yes'))
     return { answers, secret: undefined }
   }
   if (form.kind === 'config') {
     const document = readAnswersDocument(form.path)
     const answers = { ...document, ...flags, sections: unattendedRecord(registry.all()) }
-    await checkUnattendedProvider(request, answers.modelProvider, 'delorun setup --config')
+    await checkUnattendedProvider(request, answers.modelProvider, CONFIG_FORM)
     return { answers, secret: undefined }
   }
   return askAnswers(prompterFor(form), registry, sectionEnvironment(request, false), { ...SETUP_DEFAULTS, ...flags })
@@ -323,7 +342,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
  * @param directory - the profile's directory.
  * @returns the recorded answers, or the defaults when there is no usable record.
  */
-export function recordedAnswers(directory: string): SetupAnswers {
+function recordedAnswers(directory: string): SetupAnswers {
   const path = join(directory, ANSWERS_FILENAME)
   if (!existsSync(path)) return SETUP_DEFAULTS
   try {
@@ -362,7 +381,7 @@ export async function runSection(request: SetupRequest, id: string): Promise<Exi
   } else {
     // The flags answer the section's questions, so it runs without a terminal; the key is read from the environment.
     const answer = chosenProvider(request.providerChoice)
-    await checkUnattendedProvider(request, answer, 'delorun setup key')
+    await checkUnattendedProvider(request, answer, FLAGS_FORM('delorun setup key'))
     given = { answers: { modelProvider: answer }, status: 'answered' }
   }
   const answers: SetupAnswers = { ...draft.answers, ...given.answers, sections: withRecord(draft.answers.sections, section.id, given.status) }

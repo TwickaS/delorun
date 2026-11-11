@@ -139,7 +139,7 @@ describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
 
   it('--yes without --provider sets up no provider, writes no provider row and says how to add one', async () => {
     expect(await setup({ kind: 'yes' }, {})).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('No model provider is set up. Choose one with delorun setup key')
+    expect(lines.join('')).toContain('No model provider was set up now, and no provider setting changed. New chats still start on deepseek-flash from DeepSeek')
     expect(readFileSync(join(profileDirectory(home, PROFILE), 'cordis.patch.yml'), 'utf8')).not.toMatch(/llm-|agent-default-model/u)
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })

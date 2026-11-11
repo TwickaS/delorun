@@ -4,16 +4,17 @@
  * `openai-compatible` endpoint its base URL and model, then where the key comes from and, for a typed key, the key,
  * which one live request checks before it is stored. Full then asks the model of every provider; Quick asks it only
  * of a provider without a default model in the profile, which is every provider but DeepSeek. Each later question can
- * go back to the one before it. "None for now" writes nothing and says how to add a provider.
+ * go back to the one before it. "None for now" writes nothing, leaves the provider rows as they are, and says which model
+ * new chats still start on and how to add a provider.
  *
  * @module @delo/cli/setup/provider-section
  */
 import { join } from 'node:path'
 import type { ModelCredential, ModelProviderAnswer, SetupAnswers } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
-import { baseURLProblem } from './answers.ts'
+import { baseURLProblem, baseURLWarning, modelIdProblem } from './answers.ts'
 import type { KeyTarget } from './key-check.ts'
-import { PROVIDERS_BY_LABEL, SETUP_PROVIDERS, writeProviderRows, type ProviderCatalog, type SetupProvider } from './providers.ts'
+import { isSetupProviderId, profileModelSelection, PROVIDERS_BY_LABEL, SETUP_PROVIDERS, writeProviderRows, type ModelSelection, type ProviderCatalog, type SetupProvider } from './providers.ts'
 import type { Draft, SectionAnswer, SectionEnvironment, SetupSection } from './sections.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { storeCredential } from './writes.ts'
@@ -21,8 +22,17 @@ import { storeCredential } from './writes.ts'
 /** The value of the provider question's "None for now" choice; no provider id uses it. */
 const NO_PROVIDER = 'none'
 
-/** What a run without a provider prints: how to add one, and what new chats use until then. */
-export const NO_PROVIDER_NOTE = 'No model provider is set up. Choose one with delorun setup key, in a terminal or with --provider <id> and its flags; the studio\'s Settings → Models adds one too. Until then new chats start on the profile\'s default model, DeepSeek\'s, which reads its key from DEEPSEEK_API_KEY.'
+/**
+ * What a run that sets up no provider prints: the model new chats still start on, which no answer changed, and how to
+ * add a provider.
+ * @param selection - the profile's model selection.
+ * @returns the note.
+ */
+export function noProviderNote(selection: ModelSelection): string {
+  const known = isSetupProviderId(selection.provider) ? SETUP_PROVIDERS[selection.provider] : undefined
+  const key = known === undefined ? '' : `, which reads its key from ${known.keyVariable} unless the profile names another variable`
+  return `No model provider was set up now, and no provider setting changed. New chats still start on ${selection.model} from ${known?.label ?? selection.provider}${key}. Choose a provider with delorun setup key, in a terminal or with --provider <id> and its flags; the studio's Settings → Models adds one too.`
+}
 
 /** The section's answers while it asks. */
 interface Choice {
@@ -122,10 +132,14 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
     }
     case 'endpoint': {
       const entered = await io.text('Base URL of the endpoint', choice.baseURL ?? '', baseURLProblem)
-      return entered === BACK ? BACK : { choice: { ...choice, baseURL: entered.trim() }, next: 'endpoint-model' }
+      if (entered === BACK) return BACK
+      const baseURL = entered.trim()
+      const warning = baseURLWarning(baseURL)
+      if (warning !== undefined) io.note(warning, 'Plain http')
+      return { choice: { ...choice, baseURL }, next: 'endpoint-model' }
     }
     case 'endpoint-model': {
-      const entered = await io.text('Model id the endpoint serves', choice.model ?? '', value => (value === '' ? 'Enter the model id.' : undefined))
+      const entered = await io.text('Model id the endpoint serves', choice.model ?? '', modelIdProblem)
       return entered === BACK ? BACK : { choice: { ...choice, model: entered.trim() }, next: 'source' }
     }
     case 'source': {
@@ -156,7 +170,7 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
       if (first === undefined) throw new CliError(EXIT.failed, `delorun setup: the installed catalog lists no model of ${provider.label}; set it up in the studio's Settings → Models`)
       const picked = await io.select(`Which ${provider.label} model should new chats start on?`, models.map(model => ({
         value: model.id, label: model.id, hint: model.name === model.id ? undefined : model.name,
-      })), models.some(model => model.id === choice.model) ? choice.model as string : first.id)
+      })), [choice.model, provider.defaultModel].find(candidate => models.some(model => model.id === candidate)) ?? first.id)
       return picked === BACK ? BACK : { choice: { ...choice, model: picked }, next: 'done' }
     }
   }
@@ -228,7 +242,7 @@ export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupS
     },
     async apply(context, answers) {
       const answer = answers.modelProvider
-      if (answer === null) return NO_PROVIDER_NOTE
+      if (answer === null) return noProviderNote(profileModelSelection(join(context.directory, 'cordis.patch.yml'), 'delorun setup'))
       if (answer.credential.source === 'prompt') {
         if (context.secret === undefined) throw new CliError(EXIT.failed, 'delorun setup: the model key was not entered; run delorun setup in a terminal to finish')
         await storeCredential(context.home, SETUP_PROVIDERS[answer.id].keyVariable, context.secret)
