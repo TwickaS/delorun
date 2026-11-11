@@ -39,6 +39,9 @@ export class HostRequestError extends Error {
 /** The Host error code of a refusal that only the home's own computer may perform. */
 export const LOOPBACK_REQUIRED = 'LOOPBACK_REQUIRED'
 
+/** A request's state in a section: not answered yet, answered, or failed with the sentence to show. */
+export type Loaded<T> = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly value: T } | { readonly kind: 'failed'; readonly text: string }
+
 /** A predicate over one decoded JSON value. */
 export type Check = (value: unknown) => boolean
 
@@ -46,6 +49,8 @@ export type Check = (value: unknown) => boolean
 export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 /** Whether a decoded value is a string. */
 export const isString: Check = value => typeof value === 'string'
+/** Whether a decoded value is a boolean. */
+export const isBoolean: Check = value => typeof value === 'boolean'
 /** Whether a decoded value is a finite number, such as a time in milliseconds. */
 export const isTime: Check = value => typeof value === 'number' && Number.isFinite(value)
 /** A check that also accepts null. */
@@ -127,4 +132,58 @@ export function hostFailureOf(error: unknown): HostFailure {
 export function isRefused(error: unknown, code: string): boolean {
   const failure = hostFailureOf(error)
   return failure.kind === 'refused' && failure.code === code
+}
+
+/**
+ * Read one route that a profile may not serve.
+ * @param fetch - the request function.
+ * @param path - the route.
+ * @param check - the answer's validation.
+ * @returns the validated answer, or undefined when the route answers 404, as a route this profile does not mount does.
+ * @throws {HostRequestError} for any other refusal, an unreachable Host or an answer that fails validation.
+ */
+export async function readServedRoute<T>(fetch: HostFetch, path: string, check: Check): Promise<T | undefined> {
+  try {
+    return await call<T>(fetch, path, check)
+  } catch (error) {
+    const failure = hostFailureOf(error)
+    if (failure.kind !== 'unreachable' && failure.status === 404) return undefined
+    throw error
+  }
+}
+
+/** The sentences a section shows for each kind of {@link HostFailure}. */
+export interface FailureSentences {
+  /**
+   * The sentence for a refusal.
+   * @param code - the Host error code.
+   * @param message - the Host's own sentence.
+   * @returns the sentence to show.
+   */
+  refused(code: string, message: string): string
+  /** The sentence for a Host that did not answer. */
+  readonly unreachable: string
+  /** The sentence for an answer that could not be read. */
+  readonly unreadable: string
+}
+
+/**
+ * The sentence for a failed request.
+ * @param error - the caught error.
+ * @param sentences - the section's sentences.
+ * @returns the sentence for the error's {@link HostFailure}.
+ */
+export function failureSentence(error: unknown, sentences: FailureSentences): string {
+  const failure = hostFailureOf(error)
+  switch (failure.kind) {
+    case 'refused':
+      return sentences.refused(failure.code, failure.message)
+    case 'unreachable':
+      return sentences.unreachable
+    case 'unreadable':
+      return sentences.unreadable
+    /* v8 ignore next 2 -- HostFailure is a closed union, so the default holds no reachable statement. */
+    default:
+      return failure satisfies never
+  }
 }

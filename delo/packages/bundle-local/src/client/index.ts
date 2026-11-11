@@ -5,8 +5,9 @@
  * only its own row's `config.enabled` through upstream's configuration form, into the active profile's
  * `cordis.patch.yml`.
  *
- * It also registers the Devices section, which shows the reach state and manages the devices the home approved, and
- * the notice that an answer the home refused, such as a full-access grant from a remote studio, must be given at the
+ * It also registers the Devices section, which shows the reach state and manages the devices the home approved; the
+ * Network section, which sets each workspace's network for sandboxed commands and `web_fetch` at the home's own
+ * computer; and the notice that an answer the home refused, such as a full-access grant from a remote studio, must be given at the
  * home's own computer. The consent surfaces of Delo's two consent plugins come from here too: the full-access consent,
  * which upstream's permission control asks through the `permissionSwitchConsent` service before a chat switches to
  * full access in a workspace without a grant; the approval card's action for a request that asks for full access; the
@@ -15,8 +16,8 @@
  * which answer only the home's own computer, but for the waiting servers' names, and are absent while the plugin's
  * switch is off.
  *
- * Other surfaces open the sections with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)` or
- * `ctx.settingsShell.openSection(DEVICES_SECTION_ID)`.
+ * Other surfaces open the sections with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)`,
+ * `ctx.settingsShell.openSection(DEVICES_SECTION_ID)` or `ctx.settingsShell.openSection(NETWORK_SECTION_ID)`.
  * @module @delo/bundle-local/client
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -36,6 +37,8 @@ import { en as devicesEn, zh as devicesZh, type DevicesLocaleKey } from './devic
 import type { HostFetch } from './devices-api.ts'
 import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
+import { en as networkEn, zh as networkZh, type NetworkLocaleKey } from './network-locales.ts'
+import { NetworkSection, type NetworkSectionInjected } from './NetworkSection.tsx'
 import { OptIn, type OptInSettings } from './opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
 import { overrideTitle } from './title.ts'
@@ -62,15 +65,21 @@ export type { FullAccessActionInjected, FullAccessActionProps } from './FullAcce
 export type { McpReviewSource, McpReviewState, McpServerReviewProps } from './McpServerReview.tsx'
 export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaitingNotice.tsx'
 export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
+export type { NetworkLocaleKey } from './network-locales.ts'
 export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
 export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
 export type { OptInMutation, OptInSettings } from './opt-in.ts'
 export type { OptInId, PrivacySectionInjected, PrivacySectionProps } from './PrivacySection.tsx'
 export type { DevicesSectionInjected, DevicesSectionProps } from './DevicesSection.tsx'
+export type { NetworkSectionInjected, NetworkSectionProps } from './NetworkSection.tsx'
 export {
   DEVICE_ROUTES, HostRequestError, readReachStatus, REACH_STATES,
   type HostFailure, type HostFetch, type ReachOptionStatus, type ReachState, type ReachStatus,
 } from './devices-api.ts'
+export {
+  NETWORK_ACCESSES, NETWORK_ROUTES, readNetworks,
+  type NetworkAccess, type NetworkList, type NetworkWorkspace, type WorkspaceNetwork,
+} from './network-api.ts'
 
 /** What `ctx.deloNotice` shares: the acknowledgement of Delo's preview notice on this browser. */
 export interface DeloNoticeService {
@@ -98,6 +107,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'deloDevices': DevicesLocaleKey
     /** The full-access consent, the approval card's action, the MCP server review and notice, and the Permissions section. */
     'deloConsents': ConsentsLocaleKey
+    /** The Network section's copy. */
+    'deloNetwork': NetworkLocaleKey
   }
 }
 
@@ -106,6 +117,9 @@ export const NS = 'deloPrivacy'
 
 /** Dictionary namespace of the Devices section and the remote refused-answer notice. */
 export const DEVICES_NS = 'deloDevices'
+
+/** Dictionary namespace of the Network section. */
+export const NETWORK_NS = 'deloNetwork'
 
 /** The `settings.section` id of the Privacy section, which setup and other surfaces open. */
 export const PRIVACY_SECTION_ID = 'delo-privacy'
@@ -134,6 +148,12 @@ export const DEVICES_SECTION_ID = 'delo-devices'
 
 /** The Devices section's place in the Settings navigation: right after Privacy. */
 export const DEVICES_SECTION_ORDER = 21
+
+/** The `settings.section` id of the Network section. */
+export const NETWORK_SECTION_ID = 'delo-network'
+
+/** The Network section's place in the Settings navigation: right after Permissions. */
+export const NETWORK_SECTION_ORDER = 23
 
 /** The `shell.overlay` id of the remote studio's refused-answer notice. */
 export const REMOTE_NOTICE_ID = 'delo-remote-full-access'
@@ -166,7 +186,7 @@ export const FULL_ACCESS_ACTION_ID = 'delo-full-access'
 export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Register the Privacy and Devices sections, the Delo sidebar brand, the product name as the document title, Delo's
+ * Register the Privacy, Devices and Network sections, the Delo sidebar brand, the product name as the document title, Delo's
  * preview notice, `ctx.deloNotice`, the refused-answer notice, and, when the harness printed both versions into the
  * page, the version row that names Delo's version and the DeepSeek Harness version. All of them come from this bundle's
  * `delo-privacy` row, which the parity composition leaves disabled, so upstream's brand, title and notice stay in the
@@ -235,6 +255,17 @@ export function apply(ctx: Context): void {
     locale: DEVICES_NS,
     inject: devicesFace,
   }, DevicesSection))
+  ctx.effect(() => ctx.locale.register(NETWORK_NS, { en: networkEn, zh: networkZh }), 'delo-network: section dictionaries')
+  const networkT = ctx.locale.bind(NETWORK_NS)
+  const networkFace = (): NetworkSectionInjected => ({ fetch: browserFetch })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: NETWORK_SECTION_ID,
+    order: NETWORK_SECTION_ORDER,
+    label: () => networkT('nav'),
+    locale: NETWORK_NS,
+    inject: networkFace,
+  }, NetworkSection))
   applyRemoteNotice(ctx)
   applyConsents(ctx, browserFetch)
 }
