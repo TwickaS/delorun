@@ -12,10 +12,13 @@
  * and only the target path is untrusted, so canonicalize-then-contain is the
  * complete answer to this surface. This is containment, not a security
  * boundary; kernel-grade isolation of untrusted CODE stays `ctx.shell`'s job
- * (`@deepseek-ai/dsh-bash-sandbox`). The residual
- * TOCTOU (an ancestor symlink swapped between the containment re-check and the
- * syscall) is narrowed by re-canonicalizing immediately before delegating and
- * is accepted for this threat model.
+ * (`@deepseek-ai/dsh-bash-sandbox`). An ancestor swapped for a link between
+ * the containment re-check and the syscall is caught by the local backend:
+ * every edit, write, create and delete holds the target's directory open and
+ * confirms it is the checked one, and on Linux reaches the entry through that
+ * descriptor, so the swap fails the mutation with `FS_IO_ERROR`; outside Linux
+ * the backend confirms by path, and a link swapped in and restored between its
+ * lookups is not detected.
  *
  * Per-call policy: `read-only` denies every mutation; `workspace-write` allows
  * a mutation only when the target canonicalizes under the policy's workspace

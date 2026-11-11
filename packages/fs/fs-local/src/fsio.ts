@@ -7,7 +7,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { constants as fsConstants, createReadStream, realpath as realpathCallback } from 'node:fs'
-import { chmod, link, lstat, mkdir, open, readFile, readdir, readlink, rename, rm, stat } from 'node:fs/promises'
+import { chmod, link, lstat, mkdir, open, readdir, readlink, rename, rm, rmdir, stat } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import type { BigIntStats, Dirent, Stats } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
@@ -55,22 +55,6 @@ function isPermissionError(error: unknown): boolean {
 
 function throwIfAborted(signal: AbortSignal | undefined, verb: string): void {
   if (signal?.aborted) throw new FsError(`${verb} aborted`, 'FS_ABORTED')
-}
-
-/**
- * `readFile` with the supplied signal, translating a mid-read `AbortError` into
- * the seam's structured `FsError('FS_ABORTED')` (Node rejects an aborted
- * `readFile` with a bare `AbortError`, which would otherwise escape the seam's
- * error taxonomy — the streaming/write paths translate it the same way).
- */
-async function readFileAbortable(absolutePath: string, verb: 'read' | 'edit', signal?: AbortSignal): Promise<Buffer> {
-  try {
-    return await readFile(absolutePath, signal ? { signal } : {})
-  } catch (error: unknown) {
-    /* v8 ignore next 2 -- a non-abort readFile rejection needs a permission/IO fault racing an open file. */
-    if (!isAbortError(error)) throw error
-    throw new FsError(`${verb} aborted`, 'FS_ABORTED')
-  }
 }
 
 /** Opaque version token from high-resolution identity and freshness metadata. */
@@ -430,8 +414,11 @@ async function statRegularFile(target: LocalTarget, verb: 'read', signal?: Abort
   return info
 }
 
-/** The failure of a read whose opened file is not the one its target key names. */
-function changedWhileOpenedError(verb: 'read' | 'list', target: LocalTarget): FsError {
+/** The operations whose path the descriptor checks below confirm. */
+type PathVerb = 'read' | 'list' | 'edit' | 'write' | 'delete'
+
+/** The failure of an operation whose opened file or directory is not the one its target key names. */
+function changedWhileOpenedError(verb: PathVerb, target: LocalTarget): FsError {
   return new FsError(`cannot ${verb} "${target.displayPath}": the path changed while it was opened; retry`, 'FS_IO_ERROR')
 }
 
@@ -447,7 +434,7 @@ function changedWhileOpenedError(verb: 'read' | 'list', target: LocalTarget): Fs
  * @param verb - the operation, for the error.
  * @throws {FsError} `FS_IO_ERROR` when the descriptor is another file.
  */
-async function assertOpenedTarget(handle: FileHandle, target: LocalTarget, verb: 'read' | 'list'): Promise<void> {
+async function assertOpenedTarget(handle: FileHandle, target: LocalTarget, verb: PathVerb): Promise<void> {
   if (process.platform === 'linux') {
     let opened: string | undefined
     try {
@@ -723,6 +710,124 @@ function writeIoError(path: string, error: unknown): unknown {
   return error
 }
 
+/** A directory confirmed to be a canonical path, and the spelling that reaches an entry of it. */
+interface HeldDirectory {
+  /**
+   * The path of one entry. On Linux it goes through the held descriptor (`/proc/self/fd/<n>/<name>`), so a component
+   * of the directory's path replaced by a link after the check cannot redirect it; elsewhere it is the joined path.
+   */
+  readonly entry: (name: string) => string
+  /** Whether {@link entry} goes through the held descriptor. */
+  readonly pinned: boolean
+  /** Release the descriptor. */
+  readonly close: () => Promise<void>
+}
+
+/**
+ * Open a directory and confirm it is the canonical `path` ({@link assertOpenedTarget}), so the entries a mutation
+ * creates, replaces or removes lie in the directory the caller's checks saw.
+ * @param path - the canonical directory.
+ * @param displayPath - the caller-facing path of the file being changed, for errors.
+ * @param verb - the operation, for errors.
+ * @returns the held directory.
+ * @throws {FsError} `FS_IO_ERROR` when the path names another directory.
+ */
+async function holdDirectory(path: string, displayPath: string, verb: PathVerb): Promise<HeldDirectory> {
+  const handle = await open(path, fsConstants.O_RDONLY | (process.platform === 'win32' ? 0 : fsConstants.O_DIRECTORY))
+  try {
+    await assertOpenedTarget(handle, { displayPath, targetKey: FsTargetKey(path) }, verb)
+  } catch (error: unknown) {
+    await handle.close()
+    throw error
+  }
+  const pinned = process.platform === 'linux' && await readlink(`/proc/self/fd/${handle.fd}`).then(() => true, () => false)
+  return {
+    entry: name => pinned ? `/proc/self/fd/${handle.fd}/${name}` : join(path, name),
+    pinned,
+    close: () => handle.close(),
+  }
+}
+
+/**
+ * Create the missing directories of a canonical path one at a time, confirming after each that it was created where
+ * the path names, so a component replaced by a link to elsewhere (such as a protected home) between the caller's check
+ * and the creation leaves no directory there: a directory created elsewhere is removed and the write refused.
+ * @param directory - the canonical directory to ensure.
+ * @param displayPath - the caller-facing path of the file being written, for errors.
+ * @throws {FsError} `FS_IO_ERROR` when a created directory is not where the path names.
+ */
+async function ensureDirectory(directory: string, displayPath: string): Promise<void> {
+  const missing: string[] = []
+  let ancestor = directory
+  while ((await probeNoFollow(ancestor)) === null) {
+    const parent = dirname(ancestor)
+    /* v8 ignore next -- the filesystem root always exists. */
+    if (parent === ancestor) break
+    missing.unshift(ancestor)
+    ancestor = parent
+  }
+  for (const path of missing) {
+    try {
+      await mkdir(path)
+    } catch (error: unknown) {
+      /* v8 ignore next -- a concurrent creator; the check below decides. */
+      if (!isEEXIST(error)) throw error
+    }
+    const created = await realpath(path)
+    if (created !== path) {
+      // The directory was made through a link; remove it where it landed if it is still empty.
+      try {
+        await rmdir(created)
+      } catch (_notEmpty) {
+        // rmdir removes only an empty directory: one another process already filled stays, and the write is refused.
+      }
+      throw new FsError(`cannot write "${displayPath}": the path changed while it was written; retry`, 'FS_IO_ERROR')
+    }
+  }
+}
+
+/**
+ * Confirm a staging directory reached by name lies in the directory the caller checked; otherwise remove it where it
+ * landed and refuse the write.
+ * @param stagingDir - the staging directory as created.
+ * @param expected - its path in the checked directory.
+ * @param displayPath - the caller-facing path, for errors.
+ * @throws {FsError} `FS_IO_ERROR` when it lies elsewhere.
+ */
+async function assertStagedIn(stagingDir: string, expected: string, displayPath: string): Promise<void> {
+  const actual = await realpath(stagingDir)
+  if (actual === expected) return
+  await rm(actual, { recursive: true, force: true })
+  throw new FsError(`cannot write "${displayPath}": the path changed while it was written; retry`, 'FS_IO_ERROR')
+}
+
+/**
+ * Confirm the file a publication reached by name produced is the staged file at the checked path; a file published
+ * through a replaced component is removed from the directory the staging directory lies in, and the write refused.
+ * @param absolutePath - the checked destination.
+ * @param stagingDir - the staging directory, whose real parent holds a misplaced publication.
+ * @param staged - the staged file's identity.
+ * @param displayPath - the caller-facing path, for errors.
+ * @throws {FsError} `FS_IO_ERROR` when the publication is elsewhere.
+ */
+/* v8 ignore start -- Linux publishes through the held descriptor; native macOS and Windows coverage takes this path. */
+async function assertPublishedAt(
+  absolutePath: string,
+  stagingDir: string,
+  staged: BigIntStats | undefined,
+  displayPath: string,
+): Promise<void> {
+  const isStaged = (info: BigIntStats | null): boolean =>
+    info !== null && staged !== undefined && info.dev === staged.dev && info.ino === staged.ino
+  const published = await probeStats(absolutePath, path => stat(path, { bigint: true }))
+  const canonical = await realpath(absolutePath).catch(() => undefined)
+  if (isStaged(published) && canonical === absolutePath) return
+  const landed = join(dirname(await realpath(stagingDir)), basename(absolutePath))
+  if (isStaged(await probeStats(landed, path => lstat(path, { bigint: true })))) await rm(landed, { force: true })
+  throw new FsError(`cannot write "${displayPath}": the path changed while it was written; retry`, 'FS_IO_ERROR')
+}
+/* v8 ignore stop */
+
 /**
  * Atomically replace a file through a private, synced staging file in the same directory.
  * POSIX protects the staging directory and file with `0o700` and `0o600`. A new Windows file
@@ -739,6 +844,12 @@ function writeIoError(path: string, error: unknown): unknown {
  * file is preserved and this write is rejected with `FS_NOT_OBSERVED`; `existingDestination`
  * states whether Windows must preserve destination security and defaults to mode presence,
  * while moves pass destination presence separately from the source mode.
+ *
+ * The destination's directory is created one missing component at a time and each confirmed where the path names it
+ * ({@link ensureDirectory}), then held open and confirmed ({@link holdDirectory}): on Linux every staging and publishing
+ * step reaches the directory through that descriptor, so a component replaced by a link after the caller's checks, such
+ * as a sandbox fence's, cannot move the write elsewhere; outside Linux the staging directory and the published file are
+ * confirmed by path. A write the path change would redirect fails with `FS_IO_ERROR` and leaves no file elsewhere.
  */
 export async function writeFileAtomic(
   absolutePath: string,
@@ -752,11 +863,40 @@ export async function writeFileAtomic(
   const existingDestination = options.existingDestination ?? mode !== undefined
   throwIfAborted(signal, 'write')
   const directory = dirname(absolutePath)
-  try { await mkdir(directory, { recursive: true }) } catch (error) { throw writeIoError(displayPath, error) }
+  let held: HeldDirectory
+  try {
+    await ensureDirectory(directory, displayPath)
+    held = await holdDirectory(directory, displayPath, 'write')
+  } catch (error) {
+    throw error instanceof FsError ? error : writeIoError(displayPath, error)
+  }
+  try {
+    await writeStagedFile(absolutePath, held, content, mode, signal, internals, { ...options, displayPath, existingDestination })
+  } finally {
+    await held.close()
+  }
+}
 
+/**
+ * Stage and publish one file inside a held directory (see {@link writeFileAtomic}). Outside Linux, where entries are
+ * reached by name, the staging directory is confirmed to lie in the held directory before publication and the published
+ * file to be the staged one after it; a file published elsewhere is removed and the write refused.
+ */
+async function writeStagedFile(
+  absolutePath: string,
+  held: HeldDirectory,
+  content: string,
+  mode: number | undefined,
+  signal: AbortSignal | undefined,
+  internals: FsIoInternals,
+  options: { displayPath: string; createIfAbsent?: boolean; existingDestination: boolean },
+): Promise<void> {
+  const { displayPath, existingDestination } = options
+  const directory = dirname(absolutePath)
+  const destination = held.entry(basename(absolutePath))
   throwIfAborted(signal, 'write')
   const stagingDirName = internals.tempDirName?.(absolutePath) ?? `.${basename(absolutePath)}.${process.pid}.${randomUUID()}.tmpdir`
-  const stagingDir = join(directory, stagingDirName)
+  const stagingDir = held.entry(stagingDirName)
   const tempName = internals.tempName?.(absolutePath) ?? `${basename(absolutePath)}.tmp`
   const tempPath = join(stagingDir, tempName)
   const platform = internals.platform ?? process.platform
@@ -769,29 +909,33 @@ export async function writeFileAtomic(
     ?? (path => rm(path, { recursive: true, force: true }))
   let handle: Awaited<ReturnType<typeof open>> | undefined
   let stagingCreated = false
+  let staged: BigIntStats | undefined
   try {
     await mkdir(stagingDir, { mode: 0o700 })
     stagingCreated = true
+    if (!held.pinned) await assertStagedIn(stagingDir, join(directory, stagingDirName), displayPath)
     await chmod(stagingDir, 0o700)
 
     handle = await open(tempPath, 'wx', 0o600)
     await handle.chmod(0o600)
     if (platform === 'win32' && existingDestination) {
+      // Windows reaches entries by name ({@link HeldDirectory.pinned} is false there).
       await copyFileDacl(absolutePath, tempPath)
     }
     await handle.writeFile(content, { encoding: 'utf8', ...signal ? { signal } : {} })
     await handle.sync()
     await internals.inspectTemp?.({ stagingDir, tempPath })
     if (mode !== undefined) await handle.chmod(mode)
+    staged = await handle.stat({ bigint: true })
     await handle.close()
     handle = undefined
 
     throwIfAborted(signal, 'write')
     if (options.createIfAbsent) {
       try {
-        await linkFile(tempPath, absolutePath)
+        await linkFile(tempPath, destination)
       } catch (error: unknown) {
-        await throwGuardedCreateFailure(error, absolutePath, displayPath, inspectPublicationTarget)
+        await throwGuardedCreateFailure(error, destination, displayPath, inspectPublicationTarget)
       }
     } else if (platform === 'win32' && existingDestination) {
       try {
@@ -800,11 +944,12 @@ export async function writeFileAtomic(
         // If the observed target disappears during staging, the protected DACL
         // already copied to the temp remains authoritative for recreation.
         if (!isENOENT(error)) throw error
-        await rename(tempPath, absolutePath)
+        await rename(tempPath, destination)
       }
     } else {
-      await rename(tempPath, absolutePath)
+      await rename(tempPath, destination)
     }
+    if (!held.pinned) await assertPublishedAt(absolutePath, stagingDir, staged, displayPath)
     try {
       await removeStagingDir(stagingDir)
     } catch (_committedStagingCleanupFailure) {
@@ -827,18 +972,25 @@ export async function writeFileAtomic(
 }
 
 /**
- * Remove one resolved file without recursive traversal.
+ * Remove one resolved file without recursive traversal, through its directory held open and confirmed
+ * ({@link holdDirectory}), so a directory on the path replaced by a link after the caller's checks cannot redirect the
+ * removal (`FS_IO_ERROR`).
  * @param absolutePath - resolved file identity; a concurrently substituted directory is refused.
  * @param displayPath - caller-facing source path for diagnostics.
  * @param internals - optional source-removal fault injection; omission uses non-recursive rm.
  * @returns once removal completes; permission and other failures use filesystem error codes.
  */
 export async function removeFile(absolutePath: string, displayPath: string, internals: FsIoInternals = {}): Promise<void> {
+  let held: HeldDirectory | undefined
   try {
-    await (internals.removeFile ?? rm)(absolutePath)
+    held = await holdDirectory(dirname(absolutePath), displayPath, 'delete')
+    await (internals.removeFile ?? rm)(held.entry(basename(absolutePath)))
   } catch (error: unknown) {
+    if (error instanceof FsError) throw error
     throw new FsError(`cannot delete "${displayPath}": ${errorMessage(error)}`,
       isPermissionError(error) ? 'FS_PERMISSION_DENIED' : 'FS_IO_ERROR', { cause: error })
+  } finally {
+    await held?.close()
   }
 }
 
@@ -901,7 +1053,18 @@ export async function readForEdit(
   signal?: AbortSignal,
 ): Promise<{ content: string; lineEndings: LineEndings }> {
   throwIfAborted(signal, 'edit')
-  const buffer = await readFileAbortable(absolutePath, 'edit', signal)
+  const handle = await open(absolutePath, READ_FLAGS)
+  let buffer: Buffer
+  try {
+    await assertOpenedTarget(handle, { displayPath, targetKey: FsTargetKey(absolutePath) }, 'edit')
+    buffer = await handle.readFile(signal ? { signal } : {})
+  } catch (error: unknown) {
+    /* v8 ignore next -- a mid-read abort needs cancellation racing an active read. */
+    if (isAbortError(error)) throw new FsError('edit aborted', 'FS_ABORTED')
+    throw error
+  } finally {
+    await handle.close()
+  }
   throwIfAborted(signal, 'edit')
   if (buffer.includes(0)) throw new FsError(`cannot edit "${displayPath}": binary file`, 'FS_NOT_TEXT')
   const raw = decodeUtf8(buffer, 'edit', displayPath)
@@ -927,7 +1090,7 @@ export async function readTextForDiff(
 ): Promise<string | null> {
   throwIfAborted(signal, 'read')
   try {
-    const handle = await open(absolutePath, 'r')
+    const handle = await open(absolutePath, READ_FLAGS)
     let buffer: Buffer
     let total = 0
     let openedSize = 0
@@ -947,6 +1110,8 @@ export async function readTextForDiff(
         if (bytesRead === 0) break
         total += bytesRead
       }
+      // A path redirected since the caller's checks must not hand its content back as the change's basis.
+      await assertOpenedTarget(handle, { displayPath: absolutePath, targetKey: FsTargetKey(absolutePath) }, 'read')
     } finally {
       await handle.close()
     }

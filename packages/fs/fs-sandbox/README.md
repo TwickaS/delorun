@@ -78,7 +78,7 @@ Each mutation resolves the per-call policy (`danger-full-access` returns the cal
 
 ### Threat model
 
-The residual resolve-to-syscall TOCTOU is narrowed by re-canonicalizing immediately before the write and is accepted for this threat model; a kernel-tight boundary would need `openat2`-class primitives whose portability cost is not worth it here. A denial is a structured `FsError`, not stderr inference — an in-process fence knows exactly what it refused.
+A directory on the path swapped for a link between the check and the syscall is caught by `fs-local`, which every mutation delegates to: it holds the target's directory open, confirms it is the checked one, and on Linux reaches the entry through that descriptor, so the swap fails with `FS_IO_ERROR`; outside Linux it confirms by path, and a link swapped in and restored between its lookups is not detected. A denial is a structured `FsError`, not stderr inference — an in-process fence knows exactly what it refused.
 
 </details>
 
@@ -122,7 +122,7 @@ A standing-policy change appends an owner-rendered superseding runtime-context s
 
 These limits define when the sandbox backend is a poor fit or needs special operational care. They are current package constraints, not a general sandbox comparison or a task backlog.
 
-- **A policy fence, not a kernel boundary** — the check is trusted code over a model-controlled path, so the residual resolve-to-syscall TOCTOU is narrowed (by the in-place re-canonicalization) but not eliminated; adversarial host processes are out of scope. Kernel-grade isolation of untrusted code stays `ctx.shell`'s. A confined command running at the same time can swap a directory on the target's path for a link between the check and the write, sending the write outside the workspace or under the protected home; [descriptor-based writes](https://github.com/Delo-Run/delo/issues/71) would close it.
+- **A policy fence, not a kernel boundary** — the check is trusted code over a model-controlled path, so the resolve-to-syscall race is closed by `fs-local`'s held directory on Linux and narrowed elsewhere; adversarial host processes are out of scope. Kernel-grade isolation of untrusted code stays `ctx.shell`'s. Outside Linux a confined command running at the same time can still swap a directory on the target's path for a link and restore it between `fs-local`'s path confirmations.
 - **Fence-vs-runner parity is derived from one owner** — the writable set comes from `writableRoots`, shared with the Seatbelt profile; a runner profile that defines its writable set elsewhere would drift.
 - **Requires `ctx.sandboxPolicy`** — tools use it to resolve each session policy and the backend uses it for agentless-call fallbacks; the backend does not confine without it composed.
 
