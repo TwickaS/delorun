@@ -22,7 +22,11 @@
  *   as a chat copied from a stock DeepSeek Harness home, to the safer preset;
  * - it asks the person once per workspace for full access
  *   ({@link PermissionDefaults.select}), and records the consent in the home's
- *   protected state ([`./store.ts`](./store.ts)).
+ *   protected state ([`./store.ts`](./store.ts));
+ * - it records the answer the studio's consent and `delorun workspace
+ *   full-access` ask at the home's own computer
+ *   ({@link PermissionDefaults.setFullAccess}, {@link PermissionDefaults.reload}),
+ *   over routes that refuse every other arrival ([`./routes.ts`](./routes.ts)).
  *
  * Every registration sits behind the C16 switch `permission_defaults`
  * ({@link Config.enabled}), off by default: off, the plugin mounts nothing, the
@@ -33,8 +37,9 @@
  */
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-permission-presets'
-import type { Session } from '@deepseek-ai/dsh-session'
+import { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxModeGuard } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
@@ -54,6 +59,9 @@ import {
   type WorkspacePermission,
 } from './store.ts'
 import { NO_WORKSPACE, workspaceKey } from './workspace.ts'
+import { FullAccessChangeError, fullAccessNote, permissionEntriesDigest, workspaceAccessOf } from './review.ts'
+import type { SetFullAccessRequest, WorkspaceAccess, WorkspacesAnswer } from './wire.ts'
+import { registerPermissionRoutes } from './routes.ts'
 
 export {
   defaultPresetOf,
@@ -74,6 +82,12 @@ export {
 } from './store.ts'
 export type { PermissionPresetName, PermissionStoreRead, WorkspacePermission } from './store.ts'
 export { NO_WORKSPACE, workspaceKey } from './workspace.ts'
+export { FULL_ACCESS_REVIEW_VERSION, FullAccessChangeError, fullAccessNote, fullAccessReviewId, permissionEntriesDigest, REVIEW_ID_LENGTH, REVIEW_ID_PATTERN, workspaceAccessOf } from './review.ts'
+export {
+  MAX_PERMISSION_REQUEST_BYTES, PERMISSION_REFUSAL_CODES, PERMISSION_ROUTES,
+  type PermissionRefusalCode, type ReviewAnswer, type ReviewRequest, type SetFullAccessAnswer, type SetFullAccessRequest,
+  type WorkspaceAccess, type WorkspacesAnswer,
+} from './wire.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'permission-defaults'
@@ -118,15 +132,12 @@ export class FullAccessConsentRefusedError extends Error {
   }
 }
 
-/**
- * What the person is told before full access is granted for a workspace: the
- * preset, the folder it covers, and what it drops. Sentence case, one effect
- * per sentence, so the answer is a decision about that workspace only.
- * @param workspace - the workspace directory the consent would cover.
- * @returns the ask's text.
- */
-export function fullAccessNote(workspace: string): string {
-  return `Turn on full access for the workspace ${JSON.stringify(workspace)}? Chats in this workspace could then write anywhere on this machine and start commands that run outside the sandbox, without asking again. The answer covers this workspace only, and you can go back to the safer preset at any time.`
+/** What turning a workspace's full access on or off did. */
+export interface FullAccessChange {
+  /** The workspace's full access after the change. */
+  readonly access: WorkspaceAccess
+  /** How many open chats in the workspace were set back to the safer preset; 0 when full access was turned on. */
+  readonly chats: number
 }
 
 /**
@@ -140,7 +151,7 @@ export function fullAccessNote(workspace: string): string {
 export function fullAccessRefusal(workspace: string, problem?: string): string {
   const where = workspace === NO_WORKSPACE ? 'a chat with no workspace folder' : `the workspace ${JSON.stringify(workspace)}`
   const unreadable = problem === undefined ? '' : ` The permission store could not be read, so no consent counts (${problem}).`
-  return `full access for ${where} needs one consent for that workspace first; allow the full-access request for this workspace, or keep the safer preset "${SAFER_PRESET}".${unreadable}`
+  return `full access for ${where} needs one consent for that workspace first: the person turns it on at the home's own computer, in the studio's Settings, Workspace access, or with \`delorun workspace full-access <folder> on\`; until then keep the safer preset "${SAFER_PRESET}".${unreadable}`
 }
 
 /**
@@ -174,7 +185,7 @@ export class PermissionDefaults extends Service {
    * only guess.
    */
   protected async [Service.init](): Promise<void> {
-    await this.reload()
+    await this.load()
     this.ctx.provide('sandboxModeGuard', this.guard())
     // Prepend: the seed must land before upstream's pin, which fills every
     // still-unset knob with the deployment default on the same event.
@@ -221,6 +232,88 @@ export class PermissionDefaults extends Service {
   }
 
   /**
+   * Every workspace a surface may show: the registered workspaces, the workspaces the store holds an entry for, and the
+   * folders of the open chats, each once by its key, with its full access as the entries in memory hold it.
+   * @returns the workspaces sorted by key, and the store's problem when it cannot be read.
+   */
+  workspaces(): WorkspacesAnswer {
+    const titles = new Map<string, string>()
+    for (const workspace of this.ctx.get('workspaceRegistry')?.list() ?? []) titles.set(workspaceKey(workspace.path), workspace.title)
+    const keys = new Set<string>([...titles.keys(), ...this.entries.keys()])
+    for (const agent of this.ctx.get('agents')?.list() ?? []) keys.add(workspaceKey(agent.session.header.cwd ?? ''))
+    keys.delete(NO_WORKSPACE)
+    const workspaces = [...keys].sort().map(key => workspaceAccessOf(this.entries, key, titles.get(key)))
+    return this.problem === undefined ? { workspaces } : { workspaces, storeProblem: this.problem }
+  }
+
+  /**
+   * The full access of one open chat's workspace, which the studio's consent shows before the person picks full access
+   * in that chat.
+   * @param sessionId - the chat's session id.
+   * @returns the workspace's full access.
+   * @throws {FullAccessChangeError} `UNKNOWN_CHAT` when no open chat has the id, `NO_WORKSPACE` when it has no folder.
+   */
+  reviewChat(sessionId: string): WorkspaceAccess {
+    const agent = this.ctx.get('agents')?.get(SessionId(sessionId))
+    if (agent === undefined) throw new FullAccessChangeError('UNKNOWN_CHAT', 'no open chat has this id')
+    const workspace = workspaceKey(agent.session.header.cwd ?? '')
+    if (workspace === NO_WORKSPACE) {
+      throw new FullAccessChangeError('NO_WORKSPACE', 'this chat has no workspace folder, so it has no per-workspace permission')
+    }
+    return workspaceAccessOf(this.entries, workspace, this.titleOf(workspace))
+  }
+
+  /**
+   * Turn one workspace's full access on or off after the person answered a surface's consent at the home's own
+   * computer; the route that calls this refuses every other arrival first. On records the grant, so the guard lets a
+   * chat in the workspace switch to full access and new chats there start with it; off withdraws the grant, records
+   * the safer preset and sets every open chat of the workspace that runs with full access back to the safer preset,
+   * which appends that chat's `sandbox/mode` and `permission/preset` events. The change is written to the store before
+   * it is remembered, and one line without the folder's path goes to the Host's log.
+   * @param request - the workspace the consent named, the review id it was shown with, on or off, and the answer.
+   * @returns the workspace's full access after the change, and how many open chats were set back.
+   * @throws {FullAccessChangeError} `UNCONFIRMED` without the person's answer, `UNKNOWN_WORKSPACE` for a folder no
+   *   surface shows, `STALE_REVIEW` when the workspace's full access changed after the consent was shown, and
+   *   `STORE_REFUSED` when the store cannot be read or written; each records nothing.
+   */
+  async setFullAccess(request: SetFullAccessRequest): Promise<FullAccessChange> {
+    if (!request.confirmed) throw new FullAccessChangeError('UNCONFIRMED', 'the person has not confirmed the change, so nothing is recorded')
+    const workspace = workspaceKey(request.workspace)
+    if (workspace === NO_WORKSPACE || !this.workspaces().workspaces.some(access => access.workspace === workspace)) {
+      throw new FullAccessChangeError('UNKNOWN_WORKSPACE', 'the studio does not know this workspace')
+    }
+    return this.serial(async () => {
+      const entries = await this.readForChange()
+      if (workspaceAccessOf(entries, workspace).reviewId !== request.reviewId) {
+        throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
+      }
+      await this.write(entries, workspace, request.on ? FULL_ACCESS_PRESET : SAFER_PRESET)
+      const chats = request.on ? 0 : this.withdrawOpenChats(workspace)
+      const grants = [...this.entries.values()].filter(entry => entry.fullAccessGrantedAt !== null).length
+      this.ctx.logger.info(`permission-defaults: full access turned ${request.on ? 'on' : 'off'} for one workspace at the home's computer; ${String(grants)} workspace(s) hold a grant`)
+      return { access: workspaceAccessOf(this.entries, workspace, this.titleOf(workspace)), chats }
+    })
+  }
+
+  /**
+   * Read the store again, after another process at the home's computer — `delorun workspace full-access` — changed it,
+   * and set the open chats of every workspace that lost its grant back to the safer preset.
+   * @returns the digest of the entries now in memory ({@link permissionEntriesDigest}), which the writer compares with
+   *   what it wrote, and the store's problem when it cannot be read.
+   */
+  reload(): Promise<{ readonly digest: string, readonly storeProblem?: string }> {
+    return this.serial(async () => {
+      const before = this.entries
+      await this.load()
+      for (const [workspace, entry] of before) {
+        if (entry.fullAccessGrantedAt !== null && !fullAccessGranted(this.entries, workspace)) this.withdrawOpenChats(workspace)
+      }
+      const digest = permissionEntriesDigest(this.entries)
+      return this.problem === undefined ? { digest } : { digest, storeProblem: this.problem }
+    })
+  }
+
+  /**
    * The one write path a surface uses to choose a workspace's preset. Full
    * access asks the person once for that workspace
    * ({@link fullAccessNote}); the safer preset never asks, and explicitly
@@ -233,8 +326,9 @@ export class PermissionDefaults extends Service {
    * @param preset - the preset to select for the workspace.
    * @returns when the preset is recorded and applied.
    * @throws {FullAccessConsentRefusedError} when the ask was refused,
-   *   cancelled, unanswerable, or no approval service can carry it, and when
-   *   the store cannot be read or written.
+   *   cancelled, unanswerable, or no approval service can carry it.
+   * @throws {FullAccessChangeError} `STORE_REFUSED` when the store cannot be
+   *   read or written.
    */
   async select(agent: Agent, preset: PermissionPresetName): Promise<void> {
     const workspace = workspaceKey(agent.session.header.cwd ?? '')
@@ -291,22 +385,78 @@ export class PermissionDefaults extends Service {
    * @param workspace - the workspace key.
    * @param preset - the preset to record.
    * @returns when the store holds the entry.
-   * @throws when the store cannot be written, or was already refused.
+   * @throws when the store cannot be read or written.
    */
   private record(workspace: string, preset: PermissionPresetName): Promise<void> {
-    return this.serial(async () => {
-      if (this.problem !== undefined) {
-        throw new Error(`the permission store is refused, so no permission is recorded: ${this.problem}`)
-      }
-      const previous = this.entries.get(workspace)
-      const next = new Map(this.entries)
-      next.set(workspace, {
-        preset,
-        fullAccessGrantedAt: preset === FULL_ACCESS_PRESET ? previous?.fullAccessGrantedAt ?? Date.now() : null,
-      })
-      await writePermissionStore(permissionStorePath((await resolveDeloHome(process.env)).path), next)
-      this.entries = next
+    return this.serial(async () => { await this.write(await this.readForChange(), workspace, preset) })
+  }
+
+  /**
+   * The store's entries as the file holds them now, for a change: another process at the home's computer may have
+   * written the file since this service read it, and a change made over the entries in memory would undo that write.
+   * The entries in memory follow the read.
+   * @returns the entries.
+   * @throws {FullAccessChangeError} `STORE_REFUSED` when the home cannot be resolved or the store is refused; no
+   *   change is made over a store that cannot be read.
+   */
+  private async readForChange(): Promise<ReadonlyMap<string, WorkspacePermission>> {
+    await this.load()
+    if (this.problem !== undefined) {
+      throw new FullAccessChangeError('STORE_REFUSED', `the permission store is refused, so no permission is recorded: ${this.problem}`)
+    }
+    return this.entries
+  }
+
+  /**
+   * Write one workspace's preset over the entries just read, and remember the result.
+   * @param entries - the entries the file holds now.
+   * @param workspace - the workspace key.
+   * @param preset - the preset; full access keeps an earlier grant's time or records now, the safer preset records no grant.
+   * @throws {FullAccessChangeError} `STORE_REFUSED` when the store cannot be written; the entries in memory are unchanged then.
+   */
+  private async write(entries: ReadonlyMap<string, WorkspacePermission>, workspace: string, preset: PermissionPresetName): Promise<void> {
+    const next = new Map(entries)
+    next.set(workspace, {
+      preset,
+      fullAccessGrantedAt: preset === FULL_ACCESS_PRESET ? entries.get(workspace)?.fullAccessGrantedAt ?? Date.now() : null,
     })
+    try {
+      await writePermissionStore(permissionStorePath((await resolveDeloHome(process.env)).path), next)
+    } catch (error) {
+      throw new FullAccessChangeError('STORE_REFUSED', `the permission store could not be written, so no permission is recorded (${reasonOf(error)})`, { cause: error })
+    }
+    this.entries = next
+  }
+
+  /**
+   * Set every open chat of a workspace that runs with full access back to the safer preset, after its grant was
+   * withdrawn. A chat that cannot be set is named in the Host's log and counted out, so the caller reports how many
+   * were set.
+   * @param workspace - the workspace key.
+   * @returns how many chats were set back.
+   */
+  private withdrawOpenChats(workspace: string): number {
+    let chats = 0
+    for (const agent of this.ctx.get('agents')?.list() ?? []) {
+      const session = agent.session
+      if (workspaceKey(session.header.cwd ?? '') !== workspace || this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET) continue
+      try {
+        this.ctx.permissionPresets.set(session, SAFER_PRESET)
+        chats++
+      } catch (error) {
+        this.ctx.logger.warn(`permission-defaults: the chat ${String(session.id)} keeps full access after its workspace's grant was withdrawn, because it could not be set to the safer preset: ${reasonOf(error)}`)
+      }
+    }
+    return chats
+  }
+
+  /**
+   * The title of the registered workspace at a key.
+   * @param workspace - the workspace key.
+   * @returns the title, or undefined when no registered workspace is at the key.
+   */
+  private titleOf(workspace: string): string | undefined {
+    return this.ctx.get('workspaceRegistry')?.list().find(entry => workspaceKey(entry.path) === workspace)?.title
   }
 
   /**
@@ -365,10 +515,10 @@ export class PermissionDefaults extends Service {
   }
 
   /**
-   * The store's entries, read once for this service.
+   * Read the store's entries into memory; a store that cannot be read leaves no entry and names its problem.
    * @returns when the entries are in memory.
    */
-  private async reload(): Promise<void> {
+  private async load(): Promise<void> {
     let read: PermissionStoreRead
     try {
       read = await readPermissionStore(permissionStorePath((await resolveDeloHome(process.env)).path))
@@ -402,11 +552,20 @@ export class PermissionDefaults extends Service {
   }
 }
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Delo's per-workspace permission defaults, mounted while the `permission_defaults` switch is on. */
+    permissionDefaults: PermissionDefaults
+  }
+}
+
 /**
  * With the `permission_defaults` switch on: mount the service, whose guard
  * refuses a full-access mode change for a workspace nobody consented to, which
  * seeds each new chat with its workspace's preset, and which records the one
- * consent. Off, mount nothing, so upstream's own seeding and mode switches
+ * consent, and, where a Connection serves the studio, the routes of the
+ * studio's consent and its Workspace access section ([`./routes.ts`](./routes.ts)).
+ * Off, mount nothing, so upstream's own seeding and mode switches
  * stand, which is what the parity composition asserts.
  * @param ctx - the plugin context.
  * @param config - the switch, defaulted by the schema above.
@@ -419,6 +578,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // Awaited, with the service's own injections declared on the plugin, so the store is read and the guard provided
   // before the Loader counts this row as started.
   await ctx.plugin(PermissionDefaults).await()
+  // The studio's routes, in a profile that serves a studio.
+  ctx.inject(['connection', 'permissionDefaults'], (child) => { registerPermissionRoutes(child) })
 }
 
 /**

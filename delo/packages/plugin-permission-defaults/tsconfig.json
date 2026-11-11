@@ -24,6 +24,8 @@
     { "path": "../../../packages/shell/shell" },
     { "path": "../../../packages/shell/tool-bash" },
     { "path": "../../../packages/test-support/agent-loop-testkit" },
-    { "path": "../../../packages/test-support/tool-testkit" }
+    { "path": "../../../packages/test-support/tool-testkit" },
+    { "path": "../../../packages/client/connection/tsconfig.host.json" },
+    { "path": "../../../packages/workspace/workspace" }
   ]
 }
