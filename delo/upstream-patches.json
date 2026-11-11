@@ -1987,6 +1987,48 @@
       "class": "delo-feature",
       "feature": "fork-gates",
       "reason": "Also reads documentation paths under delo/docs/ and delo/.agents/notes/, so an upstream source comment that names a missing Delo document fails the check instead of being read as a root docs/ path."
+    },
+    {
+      "path": "packages/boot/doctor/locale/de.json",
+      "class": "delo-feature",
+      "feature": "doctor",
+      "reason": "Delo's doctor bundle title and description in German, which upstream's locale-metadata check requires for every shipped language."
+    },
+    {
+      "path": "packages/boot/doctor/locale/es.json",
+      "class": "delo-feature",
+      "feature": "doctor",
+      "reason": "Delo's doctor bundle title and description in Spanish, which upstream's locale-metadata check requires for every shipped language."
+    },
+    {
+      "path": "packages/boot/doctor/locale/fr.json",
+      "class": "delo-feature",
+      "feature": "doctor",
+      "reason": "Delo's doctor bundle title and description in French, which upstream's locale-metadata check requires for every shipped language."
+    },
+    {
+      "path": "packages/boot/doctor/locale/ja.json",
+      "class": "delo-feature",
+      "feature": "doctor",
+      "reason": "Delo's doctor bundle title and description in Japanese, which upstream's locale-metadata check requires for every shipped language."
+    },
+    {
+      "path": "packages/boot/doctor/locale/pt.json",
+      "class": "delo-feature",
+      "feature": "doctor",
+      "reason": "Delo's doctor bundle title and description in Portuguese, which upstream's locale-metadata check requires for every shipped language."
+    },
+    {
+      "path": "packages/boot/doctor/locale/ru.json",
+      "class": "delo-feature",
+      "feature": "doctor",
+      "reason": "Delo's doctor bundle title and description in Russian, which upstream's locale-metadata check requires for every shipped language."
+    },
+    {
+      "path": "packages/boot/doctor/locale/zh.json",
+      "class": "delo-feature",
+      "feature": "doctor",
+      "reason": "Delo's doctor bundle title and description in Chinese, which upstream's locale-metadata check requires for every shipped language."
     }
   ],
   "retired": []

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Profil de diagnostic",
+    "description": "Vérifie la machine et la composition sur lesquelles dsh s’exécute, affiche une ligne par vérification, puis se termine."
+  }
+}
