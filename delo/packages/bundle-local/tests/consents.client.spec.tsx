@@ -439,9 +439,8 @@ describe('the notice that an MCP server waits', () => {
  * @returns the render result.
  */
 function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}) {
-  const notify = vi.fn<PermissionsSectionProps['notify']>()
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, notify, ...faces } as PermissionsSectionProps
-  return { notify, ...render(<PermissionsSection {...props} />) }
+  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces } as PermissionsSectionProps
+  return render(<PermissionsSection {...props} />)
 }
 
 /**
@@ -462,6 +461,8 @@ describe('the Permissions section', () => {
     renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON, other] } } }), { ask })
     await settle()
     expect(within(rowOf('site')).getByRole('button', { name: en['access.revoke'] })).toBeTruthy()
+    // A grant makes the workspace's new chats start with full access, which the row says.
+    expect(within(rowOf('site')).getByText(en['access.newChats'])).toBeTruthy()
     const others = screen.getByText('Other workspaces (1)').closest('details')
     if (others === null) throw new Error('no disclosure')
     expect(others.open).toBe(false)
@@ -475,14 +476,14 @@ describe('the Permissions section', () => {
       [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON] } },
       [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: { ...OFF, reviewId: 'c'.repeat(32) }, chats: 2 } },
     })
-    const { notify } = renderPermissions(host)
+    renderPermissions(host)
     await settle()
     fireEvent.click(within(rowOf('site')).getByRole('button', { name: en['access.revoke'] }))
     await settle()
     expect(host.received.find(request => request.key === `POST ${PERMISSION_ROUTES.setFullAccess}`)?.body)
       .toEqual({ workspace: ON.workspace, reviewId: ON.reviewId, on: false, confirmed: true })
-    // The outcome is a toast, so the list's refresh does not remove it.
-    expect(notify).toHaveBeenCalledWith('site is back on the safer preset. Chats switched back: 2.', false)
+    // The outcome belongs to the section, not to the row the list's refresh removes.
+    expect(screen.getByRole('status').textContent).toBe('site is back on the safer preset. Chats switched back: 2.')
   })
 
   it('lists a waiting server with what changed, opens its review, and declines it in place', async () => {
@@ -491,14 +492,14 @@ describe('the Permissions section', () => {
       [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, change: 'arguments' }]),
       [`POST ${MCP_CONSENT_ROUTES.decline}`]: { status: 200, body: { declined: true } },
     })
-    const { notify } = renderPermissions(host, { review })
+    renderPermissions(host, { review })
     await settle()
     const row = rowOf('files')
     expect(within(row).getByText(en['mcp.change.arguments'])).toBeTruthy()
     fireEvent.click(within(row).getByRole('button', { name: en['mcp.review'] }))
     await settle()
     expect(review).toHaveBeenCalledWith({ ...SERVER, change: 'arguments' })
-    expect(notify).toHaveBeenCalledWith('files is allowed and running.', false)
+    expect(screen.getByRole('status').textContent).toBe('files is allowed and running.')
     fireEvent.click(within(rowOf('files')).getByRole('button', { name: en['mcp.decline'] }))
     await settle()
     expect(host.received.find(request => request.key === `POST ${MCP_CONSENT_ROUTES.decline}`)?.body).toEqual({ serverName: 'files', reviewId: SERVER.reviewId })
@@ -509,14 +510,14 @@ describe('the Permissions section', () => {
       [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([], [ACCEPTED]),
       [`POST ${MCP_CONSENT_ROUTES.revoke}`]: { status: 200, body: { stopped: 1 } },
     })
-    const { notify } = renderPermissions(host)
+    renderPermissions(host)
     await settle()
     const row = rowOf('git')
     expect(within(row).getByText('uvx')).toBeTruthy()
     fireEvent.click(within(row).getByRole('button', { name: en['mcp.revoke'] }))
     await settle()
     expect(host.received.find(request => request.key === `POST ${MCP_CONSENT_ROUTES.revoke}`)?.body).toEqual({ acceptanceId: ACCEPTED.acceptanceId, confirmed: true })
-    expect(notify).toHaveBeenCalledWith('Revoked. Servers stopped: 1.', false)
+    expect(screen.getByRole('status').textContent).toBe('Revoked. Servers stopped: 1.')
   })
 
   it('names a stale revoke and keeps the grant listed', async () => {
@@ -524,11 +525,11 @@ describe('the Permissions section', () => {
       [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([], [ACCEPTED]),
       [`POST ${MCP_CONSENT_ROUTES.revoke}`]: refusal(409, 'STALE_REVIEW'),
     })
-    const { notify } = renderPermissions(host)
+    renderPermissions(host)
     await settle()
     fireEvent.click(within(rowOf('git')).getByRole('button', { name: en['mcp.revoke'] }))
     await settle()
-    expect(notify).toHaveBeenCalledWith(en['failed.stale'], true)
+    expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
     expect(rowOf('git')).toBeTruthy()
   })
 

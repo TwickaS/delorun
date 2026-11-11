@@ -156,7 +156,7 @@ export const MCP_REVIEW_ID = 'delo-mcp-review'
 /** The `shell.overlay` id of the notice that an MCP server waits. */
 export const MCP_WAITING_NOTICE_ID = 'delo-mcp-waiting'
 
-/** The `shell.overlay` id of the toast that shows a Permissions answer's outcome. */
+/** The `shell.overlay` id of the toast that shows the outcome of an answer given outside Settings. */
 export const CONSENT_TOAST_ID = 'delo-consents-toast'
 
 /** The `conversation.approval.action` id of the full-access action. */
@@ -288,7 +288,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: () => ({ hooks: toast.hooks, dismiss: toast.dismiss }),
   }, ConsentToast))
-  const permissionsFace = (): PermissionsSectionInjected => ({ fetch, ask: consent.ask, review: review.ask, notify: toast.show })
+  const permissionsFace = (): PermissionsSectionInjected => ({ fetch, ask: consent.ask, review: review.ask })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: PERMISSIONS_SECTION_ID,

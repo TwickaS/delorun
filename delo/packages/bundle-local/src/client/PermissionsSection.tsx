@@ -6,19 +6,19 @@
  * servers the person declined or revoked, which stay stopped until allowed, and the allowed servers with their starts;
  * revoking one stops that server until the person allows it again. Every request goes to the home through the injected `fetch`; the home answers only its own
  * computer, and the section says in place on a remote studio that the answer is given at the computer. Each answer's
- * outcome is a toast, so a list that changes after the answer does not take it with it.
+ * outcome is one line under the section's introduction, which no list owns, so a list that changes after the answer
+ * does not take it with it, and nothing covers the Settings dialog.
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  declineServer, readServers, readWorkspaces, revokeServer, setFullAccess,
+  declineServer, FULL_ACCESS_PRESET, readServers, readWorkspaces, revokeServer, setFullAccess,
   type AcceptedServer, type PendingServer, type PendingServersAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from './consents-api.ts'
 import { consentFailureOf, consentFailureText, FULL_ACCESS_COMMAND, workspaceName, type FullAccessConsentSource } from './FullAccessConsent.tsx'
 import { serverChangeText, ServerStart, type McpReviewSource } from './McpServerReview.tsx'
-import type { ConsentToastSource } from './ConsentToast.tsx'
 import type { HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -33,8 +33,6 @@ export interface PermissionsSectionInjected {
   ask: FullAccessConsentSource['ask']
   /** Shows a waiting MCP server's review and waits for the person's answer. */
   review: McpReviewSource['ask']
-  /** Shows an answer's outcome as a toast. */
-  notify: ConsentToastSource['show']
 }
 
 /** Props the renderer binds for the section. */
@@ -81,10 +79,11 @@ async function listing<T>(t: Translate, read: () => Promise<T | undefined>): Pro
  * @param props - the copy, the request function, the consent and the review.
  * @returns the section.
  */
-export function PermissionsSection({ t, fetch, ask, review, notify }: PermissionsSectionProps): ReactNode {
+export function PermissionsSection({ t, fetch, ask, review }: PermissionsSectionProps): ReactNode {
   const [workspaces, setWorkspaces] = useState<Listing<WorkspacesAnswer>>({ kind: 'loading' })
   const [servers, setServers] = useState<Listing<PendingServersAnswer>>({ kind: 'loading' })
   const [busy, setBusy] = useState(false)
+  const [outcome, setOutcome] = useState<{ readonly text: string; readonly failed: boolean } | undefined>()
 
   const refresh = useCallback(async (): Promise<void> => {
     const [nextWorkspaces, nextServers] = await Promise.all([listing(t, () => readWorkspaces(fetch)), listing(t, () => readServers(fetch))])
@@ -95,11 +94,12 @@ export function PermissionsSection({ t, fetch, ask, review, notify }: Permission
 
   const answer = async (action: () => Promise<string | undefined>, failureAction: 'action.changeAccess' | 'action.answerServer'): Promise<void> => {
     setBusy(true)
+    setOutcome(undefined)
     try {
       const text = await action()
-      if (text !== undefined) notify(text, false)
+      if (text !== undefined) setOutcome({ text, failed: false })
     } catch (error) {
-      notify(consentFailureText(t, consentFailureOf(error), failureAction), true)
+      setOutcome({ text: consentFailureText(t, consentFailureOf(error), failureAction), failed: true })
     } finally {
       setBusy(false)
     }
@@ -131,6 +131,7 @@ export function PermissionsSection({ t, fetch, ask, review, notify }: Permission
   return <div className={css.section}>
     <h2 className={css.heading}>{t('permissions.title')}</h2>
     <p className={css.intro}>{t('permissions.intro')}</p>
+    {outcome === undefined ? null : <p className={outcome.failed ? css.failed : css.line} role={outcome.failed ? 'alert' : 'status'}>{outcome.text}</p>}
     {remote
       ? <p className={css.line} role="status">{t('permissions.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code> <code className={css.command}>{MCP_COMMAND}</code></p>
       : null}
@@ -183,6 +184,7 @@ function FullAccessGroup({ t, listing, busy, allow, revoke }: GroupProps<Workspa
       <div className={css.title}>{workspaceName(access)}</div>
       <div className={css.description}>{access.workspace}</div>
       {access.grantedAt === null ? null : <div className={css.description} data-full-access="on">{t('access.granted', { time: formatTime(t, access.grantedAt) })}</div>}
+      {access.grantedAt !== null && access.preset === FULL_ACCESS_PRESET ? <div className={css.description}>{t('access.newChats')}</div> : null}
     </div>
     {action}
   </li>

@@ -1,7 +1,6 @@
 /**
- * The outcome of an answer given in the Permissions section, such as a revoke, shown as one toast in `shell.overlay`.
- * The toast lives outside the section, so a list that changes after the answer, or a section that closes, does not
- * take the outcome with it.
+ * The outcome of an answer given outside Settings, such as allowing a server from the waiting notice, shown as one
+ * toast in `shell.overlay`, so the outcome outlives the review dialog that closed.
  */
 import type { ReactNode } from 'react'
 import { IconWarningOutlineRegular, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
