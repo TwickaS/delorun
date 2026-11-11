@@ -25,11 +25,9 @@ export type Tier = 'pre-commit' | 'changed' | 'full'
  */
 export type GateTier = 'lane' | 'agent' | 'merge'
 
-/** The repository gates the lane tier leaves to the agent and merge tiers, because they take minutes rather than seconds. */
-export const LANE_LEFT_OUT: readonly string[] = ['gates:docs']
-
 /**
- * Whether the lane tier keeps a check: the boundary check, the JSDoc rules, every repository gate but {@link LANE_LEFT_OUT}, the typecheck of
+ * Whether the lane tier keeps a check: the boundary check, the JSDoc rules, every repository gate but the ones marked
+ * {@link Check.laneLeftOut} or {@link Check.mergeOnly}, the typecheck of
  * a Delo program in a changed package, and the fork suite when a package changed. Every other check is left to the agent
  * and merge tiers; a kept check's needs are still planned.
  * @param check - the check.
@@ -38,7 +36,7 @@ export const LANE_LEFT_OUT: readonly string[] = ['gates:docs']
  */
 export function laneKeeps(check: Check, touchedDirs: ReadonlySet<string>): boolean {
   if (check.id === 'boundary' || check.id === 'jsdoc') return true
-  if (check.group === 'gates') return !LANE_LEFT_OUT.includes(check.id)
+  if (check.group === 'gates') return check.laneLeftOut !== true && check.mergeOnly !== true
   if (check.group === 'typecheck') {
     const dir = packageDirOf(String(check.command[check.command.indexOf('-p') + 1]))
     return dir !== undefined && touchedDirs.has(dir)
@@ -83,6 +81,8 @@ export interface Check {
   readonly pnpmScript?: boolean
   /** Runs only in the merge tier and the full gate, or when `--only` names it; the agent tier leaves it out. */
   readonly mergeOnly?: true
+  /** A repository gate that takes minutes rather than seconds, which the lane tier leaves to the agent and merge tiers. */
+  readonly laneLeftOut?: true
   /** The tiers that select the check by default. */
   readonly tiers: readonly Tier[]
   /** The CPUs it keeps busy, which the runner budgets. */
@@ -446,9 +446,11 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       title: gate.title,
       cwd: '',
       command: [...gate.command],
-      needs: [],
+      needs: gate.builtArtifacts === true ? built : [],
       ...gate.inputs === undefined ? {} : { inputs: gate.inputs },
       ...gate.history === true ? { history: true } : {},
+      ...gate.tier === 'agent' ? { laneLeftOut: true } : {},
+      ...gate.tier === 'merge' ? { mergeOnly: true } : {},
       tiers: gate.staged === true ? ['pre-commit', 'changed', 'full'] : ['changed', 'full'],
       cpus: 1,
     })

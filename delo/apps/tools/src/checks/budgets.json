@@ -27,6 +27,24 @@
     "generate:native": { "memoryGiB": 1 },
     "benchmark:delo": { "memoryGiB": 6, "exclusive": true },
     "docs-site": { "memoryGiB": 2, "seconds": 900 },
-    "generated:notices": { "memoryGiB": 1, "seconds": 120 }
+    "generated:notices": { "memoryGiB": 1, "seconds": 120 },
+    "gates:lint": { "memoryGiB": 10.5 },
+    "gates:package-dependencies": { "memoryGiB": 5 },
+    "gates:optional-dependency-imports": { "memoryGiB": 4 },
+    "gates:docs-site-build": { "memoryGiB": 3.5 },
+    "gates:doc-graphs": { "memoryGiB": 3.5 },
+    "gates:plugin-record-callers": { "memoryGiB": 2.5 },
+    "gates:persistence-catalog": { "memoryGiB": 2.25 },
+    "gates:persistence-changes": { "memoryGiB": 2 },
+    "gates:client-packages": { "memoryGiB": 2 },
+    "gates:export-jsdoc": { "memoryGiB": 2 },
+    "gates:cordis-catalog": { "memoryGiB": 1.5 },
+    "gates:cordis-inspect-catalog": { "memoryGiB": 1 },
+    "gates:mermaid": { "memoryGiB": 1 },
+    "gates:publint": { "memoryGiB": 1 },
+    "gates:node-next-types": { "memoryGiB": 1 },
+    "gates:persistence-formats": { "memoryGiB": 0.75 },
+    "gates:duplication": { "memoryGiB": 0.75 },
+    "gates:config-catalog": { "memoryGiB": 0.75 }
   }
 }

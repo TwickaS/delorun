@@ -25,4 +25,11 @@ export interface GateCheck {
    * A tree pass covers such a gate only at the same HEAD commit and range base (`checks/tree-pass.ts`).
    */
   readonly history?: boolean
+  /**
+   * The lightest gate tier that runs it. Absent, every tier runs it; `agent` leaves it out of the lane tier, for a gate
+   * that takes minutes rather than seconds; `merge` runs it only in the merge tier, the full gate, or when `--only` names it.
+   */
+  readonly tier?: 'agent' | 'merge'
+  /** True when it reads upstream's built output, so it waits for `build:artifacts` whenever that build is missing or stale. */
+  readonly builtArtifacts?: true
 }

@@ -8,9 +8,10 @@
  * ```
  *
  * A change run has a gate tier. The agent tier, the default of `--changed`, leaves out the merge-only checks
- * (`Check.mergeOnly`: the recorded-session replays, the web lane and the Docker lane); the merge tier runs them too, and only
- * its pass lets a commit reach the trunk; the lane tier, a branch push's default, runs the mechanical rules, the changed
- * packages' typecheck and their own specs (`laneKeeps` in `checks/plan.ts`). `--tier lane|agent|merge` chooses it. A push
+ * (`Check.mergeOnly`: the recorded-session replays, the web lane, the Docker lane and the merge-tier gates); the merge tier
+ * runs them too, and only its pass lets a commit reach the trunk; the lane tier, a branch push's default, runs the
+ * mechanical rules, the changed packages' typecheck and their own specs (`laneKeeps` in `checks/plan.ts`).
+ * `--tier lane|agent|merge` chooses it. A push
  * takes the merge tier when a pushed ref is `refs/heads/v5` whatever else is set, or when `DELO_TIER=merge` is set, and
  * the agent tier with `DELO_TIER=agent`. `--preflight` is the lane tier without the test lanes.
  *

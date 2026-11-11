@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GATES } from '../src/checks/gates/index.ts'
+import { UPSTREAM_GATES } from '../src/checks/gates/upstream.ts'
 import { checkEnvironment, cgroupBudget, removeScratch, scratchDir, scratchPlace, statfsOf, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delo/contract-parity-composition'
 import { affectsParity, declaredBuildOutputs, declineClosureOffHost, declineUnansweredDocker, JOURNEY_SPEC, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDeloBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
@@ -277,7 +278,7 @@ describe('the gate tiers', () => {
   })
 
   it('keeps the mechanical rules, the changed packages\' typecheck and their own specs in the lane tier, and names the rest', () => {
-    const checks = catalog(dockerTree, { ...HOST, gates: [gate('gates:commits', { history: true }), gate('gates:docs')] })
+    const checks = catalog(dockerTree, { ...HOST, gates: [gate('gates:commits', { history: true }), gate('gates:docs', { tier: 'agent' })] })
     const changed = { base: 'v5', paths: ['delo/packages/providers/src/index.ts', 'packages/core/session/src/index.ts'] }
     const lane = select(checks, dockerTree, { ...NONE, changed, tier: 'lane' })
     expect(ids(lane)).toEqual(['boundary', 'gates:commits', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:providers', 'generate:native', 'tests:fork', 'tests:fork:integration'])
@@ -302,6 +303,25 @@ describe('the gate tiers', () => {
   it('runs the full gate in whole whatever the tier says', () => {
     expect(ids(select(CHECKS, TREE, { ...NONE, tier: 'agent' }))).toEqual(ids(select(CHECKS, TREE, NONE)))
     expect(leftForMerge(CHECKS, TREE, { ...NONE, tier: 'agent' })).toEqual([])
+  })
+
+  it('runs a gate in the tiers its own tier allows, and has a gate that reads built output wait for a stale build', () => {
+    const gates = [gate('gates:quick'), gate('gates:slow', { tier: 'agent' }), gate('gates:heavy', { tier: 'merge', builtArtifacts: true })]
+    const checks = catalog(TREE, { ...HOST, staleRuntime: ['apps/cli'], gates })
+    const changed = { base: 'v5', paths: ['README.md'] }
+    const tiers = Object.fromEntries((['lane', 'agent', 'merge'] as const).map(tier => [tier, ids(select(checks, TREE, { ...NONE, changed, tier })).filter(id => id.startsWith('gates:'))]))
+    expect(tiers).toEqual({ lane: ['gates:quick'], agent: ['gates:quick', 'gates:slow'], merge: ['gates:quick', 'gates:slow', 'gates:heavy'] })
+    expect(checks.find(check => check.id === 'gates:heavy')).toMatchObject({ mergeOnly: true, needs: ['build:artifacts'] })
+    expect(catalog(TREE, { ...HOST, gates }).find(check => check.id === 'gates:heavy')?.needs).toEqual([])
+    expect(ids(select(checks, TREE, NONE)).filter(id => id.startsWith('gates:'))).toEqual(['gates:quick', 'gates:slow', 'gates:heavy'])
+  })
+
+  it('runs each of upstream\'s gates once, through its package script or its spec files', () => {
+    const upstream = GATES.filter(entry => UPSTREAM_GATES.includes(entry))
+    expect(upstream).toHaveLength(UPSTREAM_GATES.length)
+    expect(new Set(GATES.map(entry => entry.id)).size).toBe(GATES.length)
+    for (const entry of UPSTREAM_GATES) expect(entry.command.slice(0, 3).join(' ')).toMatch(/^(pnpm run --silent|node_modules\/\.bin\/vitest run \S+)/)
+    expect(GATES.find(entry => entry.id === 'gates:docs')?.tier).toBe('agent')
   })
 
   it('declares the documentation gate\'s own source among its inputs, so an edit to the gate reruns it', () => {

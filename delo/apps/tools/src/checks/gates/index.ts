@@ -6,6 +6,7 @@
  * @module @delo/tools/checks/gates
  */
 import type { GateCheck } from '../types.ts'
+import { UPSTREAM_GATES } from './upstream.ts'
 
 const TSX = 'node_modules/.bin/tsx'
 const GATE_DIR = 'delo/apps/tools/src/checks/gates'
@@ -81,8 +82,9 @@ export const FUNDAMENTALS_INPUTS: readonly string[] = [
 export const RANGE_BASE = 'origin/v5'
 
 /**
- * The repository gates the runner schedules, in catalogue order. A gate's command runs from the repository root and
- * passes on exit 0; at pre-commit the runner appends the staged paths to the command of each staged gate.
+ * The repository gates the runner schedules, in catalogue order: Delo's own, then upstream's ({@link UPSTREAM_GATES}). A
+ * gate's command runs from the repository root and passes on exit 0; at pre-commit the runner appends the staged paths to
+ * the command of each staged gate.
  */
 export const GATES: readonly GateCheck[] = [
   {
@@ -177,6 +179,7 @@ export const GATES: readonly GateCheck[] = [
     title: 'Upstream documentation checks over delo/docs',
     command: [TSX, `${GATE_DIR}/docs.ts`],
     inputs: ['**/*.md', '**/*.i18n.yaml', 'scripts/**', 'packages/**', 'tsconfig*.json', `${GATE_DIR}/docs.ts`],
+    tier: 'agent',
   },
   {
     id: 'gates:fundamentals',
@@ -184,4 +187,5 @@ export const GATES: readonly GateCheck[] = [
     command: [TSX, `${GATE_DIR}/fundamentals.ts`],
     inputs: FUNDAMENTALS_INPUTS,
   },
+  ...UPSTREAM_GATES,
 ]
