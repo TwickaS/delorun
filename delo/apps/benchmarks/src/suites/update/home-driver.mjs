@@ -47,7 +47,7 @@ const { prepareHome } = await import('@delo/cli/src/command.js')
 const { startForeground, upstreamDependencies } = await import('@delo/cli/src/start.js')
 const { homeUpdateSupport } = await import('@delo/cli/src/update/support.js')
 const { storeReportSources } = await import('@delo/cli/src/update/sources.js')
-const { storeChannelOpener } = await import('@delo/cli/src/update/store-support.js')
+const { fullCheckDaysOf, storeChannelOpener } = await import('@delo/cli/src/update/store-support.js')
 const { launcherAnchor } = await import('@delo/cli/src/update/trusted-root.js')
 const { releaseLogStartCheck } = await import('@delo/cli/src/update/release-check.js')
 const { runtimePlatformOf } = await import('@delo/cli/src/update/channel.js')
@@ -62,7 +62,8 @@ const cli = upstreamDependencies()
 function updates(homePath, profileName, running, logger, env) {
   const store = new RuntimeStore({ home: homePath, platform: runtimePlatformOf(process.platform, process.arch), logger })
   const anchor = launcherAnchor(homePath, env)
-  const opener = storeChannelOpener(homePath, store, running, anchor)
+  const fullCheckDays = fullCheckDaysOf(env)
+  const opener = storeChannelOpener(homePath, store, running, anchor, fullCheckDays)
   const openChannel = async (line) => {
     mark('channel.open:start')
     const channel = await opener((text) => {
@@ -72,7 +73,7 @@ function updates(homePath, profileName, running, logger, env) {
     mark('channel.open:end')
     return timed(channel, 'channel', ['resolve', 'fill', 'recordInstalled'])
   }
-  const sources = storeReportSources({ home: homePath, profile: profileName, store, running, root: anchor.root })
+  const sources = storeReportSources({ home: homePath, profile: profileName, store, running, root: anchor.root, fullCheckDays })
   const timedSources = Object.fromEntries(Object.entries(sources).map(([name, read]) => [name, name === 'now' ? read : async (...args) => {
     mark(`report.${name}:start`)
     try {
@@ -82,7 +83,7 @@ function updates(homePath, profileName, running, logger, env) {
     }
   }]))
   const support = homeUpdateSupport({
-    home: homePath, profile: profileName, store, root: anchor.root,
+    home: homePath, profile: profileName, store, root: anchor.root, fullCheckDays,
     preLaunch: (version, root) => releaseLogStartCheck(homePath, store.paths.platform, version, root),
     openChannel, sources: timedSources, now: () => new Date(),
   })

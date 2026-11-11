@@ -8,13 +8,14 @@ English
 
 ## Summary
 
-The `update` suite times a real `delorun update` from one local release to the next, step by step, and the ways back: `delorun update --check`, a rollback with no data copy to restore and a rollback that restores one. On the trunk with the update repair and the fast launcher start check, an update commits in about 90 seconds and a rollback takes about 50. Unpacking the new runtime, stopping the running Host, the start check of the running runtime before the channel opens, the time before the store's prepare begins and the target's health check take most of it; downloading, verifying the release, the report, the copy and the switch take about two seconds together.
+The `update` suite times a real `delorun update` from one local release to the next, step by step, and the ways back: `delorun update --check`, a rollback with no data copy to restore and a rollback that restores one. Since an update runs the launcher's start check instead of hashing whole runtimes, and unpacks several files at once, a 400-chat update commits in about 46 seconds on a loaded machine, against about 92 before. Unpacking the new runtime and the time before the store's prepare begins take most of what remains; the checks, stopping the Host, downloading, verifying the release, the report, the copy and the switch take about seven seconds together.
 
 ## Contents
 
 - [Scenarios](#scenarios)
 - [How the steps are timed](#how-the-steps-are-timed)
 - [Running the suite](#running-the-suite)
+- [Start checks and parallel unpacking](#start-checks-and-parallel-unpacking)
 - [Record of 2026-11-11](#record-of-2026-11-11)
 - [Record of 2026-11-10](#record-of-2026-11-10)
 - [The slowest steps](#the-slowest-steps)
@@ -40,6 +41,21 @@ Three sources give the step boundaries: those timing records, the home log's `up
 ## Running the suite
 
 `pnpm run benchmark:delo -- --suite update` after `--prepare`; `--scenario same-format` runs one scenario. Each repetition installs a runtime of about 770 MB in 35,287 files and, with a copy, writes the chat data again, so run the large scenarios only on a quiet disk.
+
+## Start checks and parallel unpacking
+
+Three repetitions of `changed-format-large` before and after the update ran the launcher's start check on the runtimes it reads and starts, and unpacking wrote up to 16 files at once ([start check design](../design/start-check.md#decisions)), on 2026-11-11 between 05:35 and 06:40 UTC on the machine and Node of the record below, shared with other lanes. Before: load average 10 to 20, storage pressure at most 8.5%. After: load average 20 to 31, storage pressure at most 11.8%. Medians in seconds, measured on a loaded machine; they show the size of the change, not what a quiet machine takes:
+
+| Item | Before | After |
+| --- | --- | --- |
+| `total`, command start to commit | 91.8 | 46.4 |
+| `running-check` | 14.3 | 0.8 |
+| `download-unpack` | 27.1 | 19.0 |
+| `stop-host`, which held the full hash of the target before the switch | 13.9 | 1.0 |
+| `health-check`, H1's full hash of the target before | 13.2 | 1.3 |
+| `rollback` | 83.0 | 51.7 |
+
+`stop-host` was not the Host's shutdown: the home process stops its Host in 0.15 to 0.25 s, and the step held the full hash of the target the update ran before the switch. Unpacking alone (`extractArchive` of the real 32,449-file closure, `delo/apps/install/tests/timing/extract-timing.ts`, interleaved runs at load average 6 to 12) took 15.3 to 18.4 s before and 8.6 to 10.1 s after; reading and hashing the archive takes 4 to 5 s of it. All six repetitions committed.
 
 ## Record of 2026-11-11
 
@@ -68,7 +84,7 @@ Three repetitions of each scenario (two of `changed-format-large`, whose third f
 
 ### What failed or surprised
 
-- One of three `changed-format-large` repetitions failed its health check on criterion `H3-only-named-disabled` and rolled back automatically; the other two committed. A rerun with `--keep-roots` keeps the home log that names the row.
+- One of three `changed-format-large` repetitions failed its health check on criterion `H3-only-named-disabled` and rolled back automatically; the other two committed. Docker Desktop started at 04:10 UTC, during that scenario: the successor's start denied the Docker socket's real path, which the running Host's start had not, and H3 read the sandbox row's changed settings as a change the report did not name. H3 now compares the sandbox row's protection on its own and leaves out the sockets a start finds on the computer ([C3](../contracts/c03-update-report.md#health-check)); four reruns committed.
 - Synthetic plugins that declare no `engines.dsh` make the report name each one as unpredictable, and `update --yes` then refuses to confirm, as it should; the fixture now declares ranges.
 - Before the update repair, the trunk could not build a closure, and every update failed at the report or the health check; [the record of 2026-11-10](#record-of-2026-11-10) keeps the details.
 
@@ -78,6 +94,6 @@ On the trunk before the update repair, one repetition of `same-format` on a clos
 
 ## The slowest steps
 
-1. **Unpacking the target, about 30 s.** `download-unpack` is nearly all unpacking: the 186 to 193 MB archive downloads over loopback in under a second, then 35,287 files (about 770 MB) are written into staging.
-2. **Stopping the running Host, 10 to 16 s.** The update waits for the Host to shut down before it copies the data and switches; `delorun stop` takes as long (see [commands and start](commands-and-start.md)), so the cost is the Host's shutdown, not the update's.
-3. **The checks of whole runtimes, 10 to 14 s each.** `running-check` is the store's start check of the running runtime before the channel opens, and the target's `health-check` runs H1 over the target's files; each takes as long as a full read of a runtime's files, while the launcher's own start check now takes under a second. The 10 to 12 s before the store's prepare begins (`cli-start`; 1.3 s when an earlier `--check` already ran) is work the first request does before the prepare, which the timing records do not split further.
+1. **Unpacking the target, about 19 s on a loaded machine.** `download-unpack` is nearly all unpacking: the 186 to 193 MB archive downloads over loopback in under a second, reading and hashing it takes 4 to 5 s, and writing 35,287 files (about 770 MB) into staging, 16 at a time, the rest.
+2. **Before the store's prepare begins, 12 to 15 s.** `cli-start` (1.3 s when an earlier `--check` already ran) is work the first request does before the prepare, which the timing records do not split further.
+3. **The checks, under a second each.** `running-check`, the check before the switch and H1 are the launcher's start check; a runtime is hashed in full there only when a start would hash it, and on `delorun verify` and a rollback's report.
