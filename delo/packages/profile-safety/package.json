@@ -13,10 +13,14 @@
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@deepseek-ai/dsh-settings": "workspace:*",
     "@delo/contract-plugin-versions": "workspace:*",
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/contract-update-report": "workspace:*",
     "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "workspace:~"
   },
   "delo": {
     "state": "shipped"

@@ -74,6 +74,8 @@ CLI profile 为 `default`，或由 `DELO_PROFILE` 或 `--profile` 选定的名�
 
 在加载 profile 之前，若某个 CLI profile 的组合包列表列出了 `@delo/bundle-local` 却没有列出 studio 组合包（setup 在 studio 组合包出现之前就是这样创建 profile 的），启动过程会把 `@delo/bundle-studio` 加入其中（[`studio-bundle.ts`](src/studio-bundle.ts)），使用 setup 链接 Delo 组合包的同一操作，其输出写入 home 进程的日志。它打印进度行，并在加入组合包后打印一行；已列出该组合包的 profile，或不是由 Delo 的 setup 创建的 profile，保持原样。无法加入该组合包时，启动以库存外观继续，并说明原因。这一加入是该 profile 的一次性变更之一：完成后，profile 的 `delo-migrations.json` 会列出它，此后任何启动都不会再次加入该组合包，因此移除 studio 组合包的人会保留库存外观。无法读取的记录不会加入任何内容：启动会给出警告，写明该文件，并说明删除它会让下一次启动应用这些变更（[C1](../../docs/contracts/c01-home-layout.zh.md#profiles)）。
 
+插件的密钥从不进入 patch 文件（[约定 C1](../../docs/contracts/c01-home-layout.zh.md#secrets)）。在它启动的每个 Host 上，`delorun` 都会拒绝把 schema 角色为 `secret` 的配置字段（例如上游网页搜索插件的 DeepSeek API 密钥）的值保存到 profile patch 的配置修改，无论请求来自 studio 的设置、智能体的 `configure` 操作还是配置编辑器的其他调用方；profile 历史也不保存其 profile patch 或 home patch 含有此类值的版本，包括更新的快照。profile patch 或 home 的 `cordis.patch.yml` 含有此类值时，启动或 `delorun headless` 运行会像未激活的行一样被拒绝，并指明每个文件与字段（从不包含值本身），以及如何把值移入 `.credentials.yaml` 并在插件的 `credential-ref` 字段中指明它（[密钥字段](src/secret-fields.ts)）。
+
 <a id="setup"></a>
 
 ## Setup

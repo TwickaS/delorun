@@ -74,6 +74,7 @@ function recording(seen: RunProfileOptions[], stops: string[], overrides: readon
       seen.push(options)
       const rows = (): BootedRow[] => composedBootRows(deloHome, options, overrides)
       return Promise.resolve({
+        configSchemas: () => [],
         rows,
         providerOf: composedProviders(rows),
         releaseTurns: () => undefined,

@@ -32,6 +32,7 @@ import { prepareHome } from '../../src/command.ts'
 import { CliError } from '../../src/exit.ts'
 import { runHeadless, type HeadlessDependencies } from '../../src/headless.ts'
 import { bootedRows, serviceProvider, upstreamDependencies, type BootedProfile } from '../../src/start.ts'
+import { configSchemasOf } from '../../src/secret-fields.ts'
 
 type Mode = 'probe' | 'permission-mode' | 'disable-guard' | 'replace-guard'
 const mode = (process.argv[2] ?? 'probe') as Mode
@@ -77,6 +78,7 @@ const dependencies: HeadlessDependencies = {
     if (mode === 'probe') heldTurn = await startHeldTurn(ctx)
     ctx.on('session/event', (_session, event) => { if (event.type === 'sandbox/mode') modeEvents.push(event.data.mode) })
     return {
+      configSchemas: configSchemasOf(ctx),
       rows: () => bootedRows(ctx),
       providerOf: name => serviceProvider(ctx, name),
       releaseTurns: () => { releases += 1; ctx.get('deloTurnGate')?.release() },

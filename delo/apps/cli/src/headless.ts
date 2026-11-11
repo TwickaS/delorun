@@ -30,6 +30,7 @@ import { CliError, EXIT } from './exit.ts'
 import { isRecord, rowPatches, type PatchLayer } from './patch-layers.ts'
 import { runPreStartSteps, type PreStartStep } from './pre-start.ts'
 import { printable } from './terminal-text.ts'
+import { assertNoSecretValues } from './secret-fields.ts'
 import type { BootedProfile } from './start.ts'
 
 /** The upstream profile `delorun headless` boots, which contract C1 reserves as a CLI profile name. */
@@ -179,9 +180,9 @@ export function refuseLauncherOptions(args: readonly string[]): void {
  * @param request - the home, the arguments, the output and the environment.
  * @param dependencies - the profile preparation, the approved plugin content step, the environment loader and the runner.
  * @returns `undefined`: upstream's profile runner sets the exit code when the task ends.
- * @throws {CliError} when an argument is refused, the composition refuses, the profile fails to boot, or the booted
- *   rows break an invariant, which first tears the profile down within `REFUSED_HOST_STOP_S`, without ending the
- *   process.
+ * @throws {CliError} when an argument is refused, the composition refuses, the profile fails to boot, the booted
+ *   rows break an invariant, or a patch file holds a value for a secret-role field, which first tears the profile
+ *   down within `REFUSED_HOST_STOP_S`, without ending the process.
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran; upstream's bounded shutdown
  *   then ends the process with {@link EXIT.failed} in the next turn of the event loop.
  */
@@ -210,6 +211,7 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
   }
   try {
     assertDeloInvariants(composed, booted)
+    assertNoSecretValues(request.home, HEADLESS_PROFILE, booted.configSchemas, 'delorun headless')
   } catch (error) {
     // The refused profile stops through its own teardown, which ends no process, so the refusal is reported.
     await refuseBootedHost(() => booted.dispose(), error).catch((failure: unknown) => {

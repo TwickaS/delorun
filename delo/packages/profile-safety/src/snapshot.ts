@@ -22,6 +22,7 @@ import {
   writeProfileVersion,
   type ProfileChangedBy,
   type ProfileVersionId,
+  type VersionAdmission,
 } from '@deepseek-ai/dsh-plugin-manager/history'
 import type { VersionAxis } from '@delo/contract-plugin-versions'
 import { EXEMPTION_FILES } from '@delo/contract-plugin-versions'
@@ -83,6 +84,11 @@ export interface HistoryOptions {
   readonly git?: string
   /** The bound on one git run; {@link HISTORY_TIMEOUT_MS} by default. */
   readonly timeoutMs?: number
+  /**
+   * Decides before each version is saved whether it may be, such as the one `secretFieldAdmission` builds; a refused
+   * snapshot is `SNAPSHOT_FAILED` with the reason. Without one every version is saved.
+   */
+  readonly admit?: VersionAdmission
 }
 
 /**
@@ -104,11 +110,11 @@ export async function historyGitProblem(options: Pick<HistoryOptions, 'git' | 't
 
 /**
  * Open a profile's history over {@link PROFILE_SAFETY_FILES}.
- * @param options - the profile directory and, optionally, the git command and its timeout.
+ * @param options - the profile directory and, optionally, the git command, its timeout and the version admission.
  * @returns the history to record snapshots and read versions with.
  */
 export function openHistory(options: HistoryOptions): ProfileHistory {
-  return new ProfileHistory(options.profileDir, PROFILE_SAFETY_FILES, options.git ?? 'git', options.timeoutMs ?? HISTORY_TIMEOUT_MS)
+  return new ProfileHistory(options.profileDir, PROFILE_SAFETY_FILES, options.git ?? 'git', options.timeoutMs ?? HISTORY_TIMEOUT_MS, options.admit)
 }
 
 /** What {@link recordSnapshot} needs. */

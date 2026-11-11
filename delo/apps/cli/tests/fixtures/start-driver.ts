@@ -24,6 +24,7 @@ import { prepareHome } from '../../src/command.ts'
 import { CliError } from '../../src/exit.ts'
 import type {} from '@delo/bundle-local/update-gate'
 import { bootedRows, serviceProvider, startForeground, upstreamDependencies, type BootedProfile } from '../../src/start.ts'
+import { configSchemasOf } from '../../src/secret-fields.ts'
 
 const context = {
   env: { ...process.env },
@@ -89,7 +90,7 @@ try {
       root = ctx
       const row = [...ctx.get('loader')?.entries() ?? []].find(entry => entry.options.id === 'session-log-deepseek')
       sessionLogEnabled = (row?.options.config as { enabled?: unknown } | undefined)?.enabled
-      const profile: BootedProfile = { rows: () => (rowsAtBoot = bootedRows(ctx)), providerOf: name => serviceProvider(ctx, name), releaseTurns: () => { ctx.get('deloTurnGate')?.release() }, shutdown: code => shutdown.shutdown(code), dispose: async () => { await ctx.fiber.dispose() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) }
+      const profile: BootedProfile = { configSchemas: configSchemasOf(ctx), rows: () => (rowsAtBoot = bootedRows(ctx)), providerOf: name => serviceProvider(ctx, name), releaseTurns: () => { ctx.get('deloTurnGate')?.release() }, shutdown: code => shutdown.shutdown(code), dispose: async () => { await ctx.fiber.dispose() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) }
       booted = profile
       return profile
     },

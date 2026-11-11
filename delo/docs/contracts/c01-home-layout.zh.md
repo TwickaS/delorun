@@ -126,6 +126,7 @@ Delo 在 home 顶层添加标为 Delo 的条目。其他每个条目都属于上
 Delo 的密钥是 C4 至 C7 定义的 home-auth 密钥、中继与 TLS 密钥以及会话密钥。每个密钥存放在 `secrets/<owner>/` 下的一个文件中，由所属约定命名该文件并规定其格式。上游的模型密钥与浏览器会话密钥留在上游的 `.credentials.yaml` 中，它同样位于 home 之下。
 
 - 密钥从不出现在 profile、`cordis.yml`、patch 文件、命令的环境、命令行或日志中。
+- 插件的凭据也不例外：其 schema 赋予 `secret` 角色的配置字段，例如网页搜索插件的 DeepSeek API 密钥。无论来自工作室的设置、智能体还是上游配置编辑器的其他调用方，会把其值保存到 profile patch 的配置修改都会在写入文件之前被拒绝。profile 历史不保存其 profile patch 或 home patch 副本含有此类值的版本；profile patch 或 home patch 含有此类值时，启动被拒绝，并指明文件、字段以及如何把值移入 `.credentials.yaml`。工作室的密钥输入框与 `delorun setup` 把密钥写到那里，插件在其 `credential-ref` 字段（例如 `apiKeyEnv`）中指明所存密钥的名称。`!!js` 表达式不算值。只检查已加载插件的行，因为只有已加载插件的 schema 标出其密钥字段。
 - 在 CLI profile 中，只要方言强制执行 `home-read`，home 的限制规则就拒绝受限命令读取 `secrets/` 与上游的凭据文件（[限制规则](#confinement-rules)）。
 - Delo 不把这些密钥存入操作系统密钥库。在 Linux 上，Secret Service 通过 D-Bus 访问，而 D-Bus 对受限命令仍可访问；在 macOS 上，钥匙串条目的访问列表信任运行时的 `node` 可执行文件，而受限命令同样运行它。只要方言强制执行读取规则，放在每种方言都拒绝的目录中的文件就能使受限命令无法读取这些密钥。
 
@@ -319,7 +320,7 @@ runtimes/
 ### 要求
 
 1. home 的权限为 0700，其受保护文件为 0600。组件拒绝权限更宽、是符号链接或属于其他用户的受保护文件；home、`secrets/` 或 `run/<profile>/` 权限更宽时，home 进程拒绝启动。`delorun verify` 检查其中每一项，并打印 `chmod` 修复命令，Windows 上为 `icacls` 修复命令。尚未构建：`verify` 检查以及每项 Windows 检查。
-2. Delo 的密钥存放在 `secrets/` 下的文件中，在 CLI profile 中强制执行 `home-read` 的方言上，每种方言都拒绝读取该目录。上游的凭据文件位于 home 之下，适用同一规则。读取豁免路径、profile、patch 文件、命令的环境或命令行以及日志中都不写入任何密钥。
+2. Delo 的密钥存放在 `secrets/` 下的文件中，在 CLI profile 中强制执行 `home-read` 的方言上，每种方言都拒绝读取该目录。上游的凭据文件位于 home 之下，适用同一规则。读取豁免路径、profile、patch 文件、命令的环境或命令行以及日志中都不写入任何密钥。已加载插件的密钥角色配置字段的值会被配置编辑器、profile 历史和启动检查拒绝（[密钥](#secrets)）。
 3. 在任何方言上，受限命令都不能写入 home 下的任何内容；在强制执行 `home-read` 的方言上，除读取豁免外，它也不能读取 home 下的任何内容。
 4. 在强制执行 `home-connect` 与 `docker-connect` 的方言上，受限命令不能连接 home 的通道，也不能连接位于真实路径的 Docker 套接字。bwrap 在 home 上挂载一个空 tmpfs，并把 `/dev/null` 绑定到 Docker 套接字的真实路径上，从不绑定到其父目录，因为 `/run/user/<uid>/` 还存放着 ssh-agent 套接字。Seatbelt 拒绝对 home 的 `file-read*`，并拒绝对每个通道套接字与两个 Docker 套接字路径的 `remote unix-socket` 路径字面量的 `network-outbound`。Landlock 无法拒绝对路径名套接字的连接，因此在 Landlock 上 `home-connect` 与 `docker-connect` 报告为 `not-enforced`。
 5. 在 Landlock 下，对 home 的读取拒绝使启动令牌不可读，因此受限命令可以连接任一通道，但其请求认证失败，`delorun verify` 会报告这一状态。尚未构建：该报告。
@@ -352,6 +353,7 @@ runtimes/
 | `launcher-leaves-current` | 较新的启动器与较旧的启动器都使 `current` 与 `previous` 保持逐字节不变 |
 | `pointer-switch-interrupted` | 在两次指针写入之前、之间与之后杀死执行切换的进程，`current` 都指向一个完整的已安装版本 |
 | `install-verify-first` | 错误的签名、错误的文件哈希、缺失的日志条目以及含 `..` 的归档条目，都不会在 `runtimes/<version>/` 下留下任何内容，也不留下暂存目录 |
+| `secret-field-refused` | 在已启动的 Host 上，从设置保存密钥角色字段的值被拒绝，profile patch 与每个历史版本都不含该值；手工写入此类值的 patch 不会被保存为版本；home patch 含有此类值时，更新的快照以 `SNAPSHOT_FAILED` 失败；patch 含有此类值时启动被拒绝，并指明文件与字段而不含值本身 |
 | `reserved-profile-refused` | 启动器、`delorun --profile <name>` 与 `DELO_PROFILE=<name>` 拒绝 `desktop`、`headless`、`data-users` 与 `node_modules`，并写明该名称及原因；持有名为 `data-users` 的 CLI profile 的 home 样例在启动时被拒绝，该 profile 逐字节不变，且不创建任何运行目录；普通名称（包括 `web` 与 `tui`）被接受 |
 | `dsh-home-untouched` | 在继承了 `DSH_HOME` 的首次运行之后，`~/.dsh` 样例逐字节不变，且运行时以设为 Delo home 的 `DSH_HOME` 运行 |
 | `wsl-interop-denied` | 在启用了互操作的 WSL 下，在 bwrap 上，受限命令无法按其 `/mnt/c` 路径、按裸名称、作为其工作区中的副本、通过 `/init`，或以 `WSL_INTEROP` 指明每个互操作套接字来启动 `whoami.exe`；它无法连接任何互操作套接字，看到的 `/run/WSL` 为空，看不到可写的 `binfmt_misc` 挂载，其中也既没有 `register` 也没有 `WSLInterop`；它能读写 Windows 驱动器上的工作区。不在 WSL 下时，每个用例按名称跳过并给出原因 |

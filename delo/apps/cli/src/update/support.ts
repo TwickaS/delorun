@@ -11,7 +11,7 @@ import type { RuntimeVersion } from '@delo/contract-home-layout'
 import type { UpdateJournal } from '@delo/contract-home-process'
 import { HomeProcessError, type ProfileSnapshots, type RollbackSteps, type SessionDataCopies, type UpdateSupport } from '@delo/home-process'
 import { historyGitProblem, readSafetyRecord, recordSnapshot, rollbackToSnapshot, withProfileLock, withUpdate, writeSafetyRecord } from '@delo/profile-safety'
-import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
+import type { ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { assertSoleDataUser, DataInUseError } from '../home-exclusion.ts'
 import { describeFailure, renderRefusal } from '@delo/home'
 import { isInstallError } from '@delo/install'
@@ -44,6 +44,11 @@ export interface UpdateSupportOptions {
   readonly now: () => Date
   /** How long an update's snapshot and a rollback wait for the profile's writer lock; `PROFILE_LOCK_WAIT_MS` by default. */
   readonly profileLockWaitMs?: number
+  /**
+   * Decides whether an update's snapshot may be saved, as the running Host's secret-field check does
+   * ([secret fields](../secret-fields.ts)); every snapshot is saved without one.
+   */
+  readonly admitVersion?: VersionAdmission
 }
 
 /**
@@ -56,13 +61,14 @@ export interface UpdateSupportOptions {
  * @param profile - the CLI profile.
  * @param now - the clock.
  * @param lockWaitMs - how long `save` and `committed` wait for the profile's writer lock; `PROFILE_LOCK_WAIT_MS` by default.
+ * @param admit - decides whether a snapshot may be saved; a refused snapshot is `SNAPSHOT_FAILED` and the update stops.
  * @returns the snapshots, whose `restore` brings back the version the update record names; the caller holds the lock.
  */
-export function profileSnapshots(home: string, profile: string, now: () => Date, lockWaitMs?: number): ProfileSnapshots & { restore(record: Pick<UpdateJournal, 'from' | 'to' | 'snapshot'>): Promise<void> } {
+export function profileSnapshots(home: string, profile: string, now: () => Date, lockWaitMs?: number, admit?: VersionAdmission): ProfileSnapshots & { restore(record: Pick<UpdateJournal, 'from' | 'to' | 'snapshot'>): Promise<void> } {
   const profileDir = join(home, 'profiles', profile)
   return {
     save: (from, to, report) => withProfileLock(profileDir, 'SNAPSHOT_FAILED', async () => {
-      const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: `Before update to Delo ${to}`, changedBy: { kind: 'person' }, report })
+      const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: `Before update to Delo ${to}`, changedBy: { kind: 'person' }, report, ...admit === undefined ? {} : { admit } })
       await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from, to, at: now().toISOString(), state: 'applying', snapshot }))
       return snapshot
     }, lockWaitMs),
@@ -266,5 +272,5 @@ export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport 
     ...options.preLaunch === undefined ? {} : { preLaunch: options.preLaunch },
     report: { build: version => buildFromSources('cli-home', options.sources, version) },
   }, options.home)
-  return { store, snapshots: profileSnapshots(options.home, options.profile, options.now, options.profileLockWaitMs), copies: sessionDataCopies(options) }
+  return { store, snapshots: profileSnapshots(options.home, options.profile, options.now, options.profileLockWaitMs, options.admitVersion), copies: sessionDataCopies(options) }
 }

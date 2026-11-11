@@ -12,6 +12,7 @@
   "references": [
     { "path": "../../../packages/boot/app-boot" },
     { "path": "../../../packages/boot/plugin-manager" },
+    { "path": "../../../packages/settings/settings" },
     { "path": "../../../packages/util/atomic-write" },
     { "path": "../../../packages/util/brand" }
   ]

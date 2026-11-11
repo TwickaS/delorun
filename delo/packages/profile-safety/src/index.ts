@@ -12,7 +12,8 @@
  * {@link planRestore} lists the plugins, build decisions and exemptions an undo or restore changes before anything is
  * written, and brings revoked plugin versions back disabled with their reason; {@link ejectPlugin} takes a plugin out
  * while keeping every row and setting the person wrote for it; safe mode starts the home without third-party plugins
- * and changes no profile file; {@link recover} is `delorun recover`.
+ * and changes no profile file; {@link recover} is `delorun recover`. {@link secretFieldAdmission} keeps a value for a
+ * plugin's secret-role field out of every history version (contract C1).
  *
  * @module @delo/profile-safety
  */
@@ -111,5 +112,17 @@ export {
 } from './safe-mode.ts'
 
 export { DELO_BUNDLE, ejectPlugin, type EjectRequest, type EjectResult } from './eject.ts'
+
+export {
+  describeSecretField,
+  describeSecretValues,
+  secretFieldAdmission,
+  secretFieldsSet,
+  secretValuesInPatch,
+  secretValuesInVersion,
+  type ConfigSchemasOf,
+  type SecretField,
+  type SecretValuePlace,
+} from './secrets.ts'
 
 export { recover, recoverTarget, type RecoverAction, type RecoverReport, type RecoverRequest, type RecoverVersion } from './recover.ts'

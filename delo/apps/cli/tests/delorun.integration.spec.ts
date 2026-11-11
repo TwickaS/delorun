@@ -251,7 +251,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
         const booted = (): BootedRow[] => composedBootRows(deloHome, options, rows)
-        return Promise.resolve({ rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
+        return Promise.resolve({ configSchemas: () => [], rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => () => Promise.resolve('answered'),

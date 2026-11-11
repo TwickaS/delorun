@@ -1282,6 +1282,9 @@ importers:
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-config-editor':
+        specifier: workspace:*
+        version: link:../../../packages/boot/config-editor
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../../packages/util/home-paths
@@ -1439,12 +1442,18 @@ importers:
       '@deepseek-ai/dsh-session-persistence-jsonl':
         specifier: workspace:*
         version: link:../../../packages/session/session-persistence-jsonl
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:*
+        version: link:../../../packages/settings/settings
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../../packages/typert/protocol
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       '@delo/plugin-main-chat':
         specifier: workspace:*
         version: link:../../packages/plugin-main-chat
@@ -2996,6 +3005,9 @@ importers:
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../../packages/boot/plugin-manager
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:*
+        version: link:../../../packages/settings/settings
       '@delo/contract-plugin-versions':
         specifier: workspace:*
         version: link:../contract-plugin-versions
@@ -3008,6 +3020,10 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+    devDependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
 
   delo/packages/reach:
     dependencies:

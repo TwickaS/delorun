@@ -52,6 +52,9 @@ import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
 import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
+import { assertNoSecretValues, configSchemasOf, guardSecretFields } from './secret-fields.ts'
+import { secretFieldAdmission, type ConfigSchemasOf } from '@delo/profile-safety'
+import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
 import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/runtime.ts'
 import { checkStoredRuntime, fullCheckDaysOf, storeUpdateSupport } from './update/store-support.ts'
@@ -113,9 +116,10 @@ export interface StartDependencies {
    * @param running - the version this process runs.
    * @param logger - the home process's logger.
    * @param env - the environment `delorun` was started with, read for the launcher's release roots.
+   * @param admitVersion - decides whether an update's snapshot may be saved: the running Host's secret-field check.
    * @returns the support.
    */
-  readonly updates: (home: string, profile: string, running: RuntimeVersion, logger: DeloLogger, env: Readonly<Record<string, string | undefined>>) => UpdateSupport
+  readonly updates: (home: string, profile: string, running: RuntimeVersion, logger: DeloLogger, env: Readonly<Record<string, string | undefined>>, admitVersion: VersionAdmission) => UpdateSupport
   /**
    * The handover pipe when this process was started as an update's successor, which inherits it as file descriptor 3.
    * @returns the pipe, or `undefined` for a fresh start.
@@ -208,6 +212,8 @@ export interface BootedProfile {
   readonly devices?: () => LocalDeviceApproval | undefined
   /** The consents of `@delo/plugin-permission-defaults` and `@delo/plugin-mcp-consent`, each read per operation. */
   readonly consents?: () => LocalConsents
+  /** The Config schemas of the Loader's rows by row id, which the secret-field checks read ([secret fields](./secret-fields.ts)). */
+  readonly configSchemas: ConfigSchemasOf
 }
 
 /**
@@ -313,7 +319,8 @@ export interface UpstreamProcessHandlers {
 
 /**
  * Boot a profile with upstream's profile runner and read it as the start reads a booted profile, with H2's health route
- * on its web server ({@link serveHealth}).
+ * on its web server ({@link serveHealth}) and the refusals that keep secret-role values out of its patch files and
+ * history ({@link guardSecretFields}).
  * @param options - the runner's options.
  * @param handlers - which of upstream's per-run process handlers the runner installs.
  * @returns the booted profile.
@@ -325,7 +332,10 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
   const packageManager = shippedPackageManager()
   const { ctx, shutdown } = await runProfile({ ...options, signals: handlers.signals, failLoud: handlers.failLoud, ...packageManager === undefined ? {} : { packageManager } })
   serveHealth(ctx)
+  const configSchemas = configSchemasOf(ctx)
+  guardSecretFields(ctx, configSchemas)
   return {
+    configSchemas,
     rows: () => bootedRows(ctx),
     providerOf: name => serviceProvider(ctx, name),
     shutdown: code => shutdown.shutdown(code),
@@ -462,7 +472,8 @@ export async function startForeground(request: StartRequest, dependencies: Start
       probe: dependencies.probe(request.home, request.profile),
       logger: homeLog.logger,
       redactor: homeLog.redactor,
-      updates: runtime.store ? dependencies.updates(request.home, request.profile, running, homeLog.logger, request.env) : undefined,
+      // An update's snapshot is held to the secret-field check of the Host that runs when it is taken.
+      updates: runtime.store ? dependencies.updates(request.home, request.profile, running, homeLog.logger, request.env, files => current === undefined ? undefined : secretFieldAdmission(current.configSchemas)(files)) : undefined,
       supervisor: undefined,
       onSignal: dependencies.onSignal,
       onExit: dependencies.onExit,
@@ -505,8 +516,9 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * Before the boot it sets {@link DEFAULT_WORKSPACE_ENV} to the studio's first-use workspace folder
  * ([default workspace](./default-workspace.ts)).
  * @throws {CliError} when the profile skipped a Delo bundle, no folder can hold the default workspace, the profile fails
- *   to boot, a row of a Delo bundle did not activate, or the composed or booted profile breaks an invariant; a refused
- *   Host is first torn down within the home process's bound, without ending the process.
+ *   to boot, a row of a Delo bundle did not activate, the composed or booted profile breaks an invariant, or a patch
+ *   file holds a value for a secret-role field; a refused Host is first torn down within the home process's bound,
+ *   without ending the process.
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
@@ -543,6 +555,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     const inactive = inactiveDeloRows(booted.rows(), deloRowIds(composed.resolvedProfile.profile))
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
     assertDeloInvariants(composed, booted)
+    assertNoSecretValues(request.home, request.profile, booted.configSchemas, 'delorun')
   } catch (error) {
     // The refused Host stops through its own teardown, which ends no process, so the home process's failed start runs.
     await refuseBootedHost(() => booted.dispose(), error).catch(async (failure: unknown) => {

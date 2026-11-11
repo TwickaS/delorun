@@ -10,7 +10,7 @@ description: "@delo/profile-safety 库：约定 C3 中拒绝会丢失本人对 p
 
 ## 摘要
 
-本包让本人的 profile 在更新之后仍然是本人的。约定 [C3](../../docs/contracts/c03-update-report.zh.md) 要求任何更新都不得停用、删除或更改报告未列明的插件、bundle 或行，也要求撤销与恢复在写入任何内容之前列出它们会带回什么；本包负责做出这一判断并执行它。在更新改动任何文件之前，携带检查会把本人留下的 profile 与目标发布将留下的 profile 相比较，并在目标会删除本人添加的行、本地插件或设置，会重排或改写本人选择的 bundle 列表，或会把本人 eject 过的插件放回来时，以带类型的原因在任何改动发生之前拒绝。它写入的历史是上游 profile 历史的扩展，增加了 Delo 那一轴的豁免文件、Delo 自己的记录、home patch 的副本与更新报告，因此一个版本能带回整个 profile。eject 会移除插件，同时保留本人为它写的每一行与每一项设置；安全模式在不加载第三方插件的情况下启动，并且不修改 profile 中的任何文件；`delorun recover` 是报告 profile 在更新之后处于何种状态并执行回退方式的命令。
+本包让本人的 profile 在更新之后仍然是本人的。约定 [C3](../../docs/contracts/c03-update-report.zh.md) 要求任何更新都不得停用、删除或更改报告未列明的插件、bundle 或行，也要求撤销与恢复在写入任何内容之前列出它们会带回什么；本包负责做出这一判断并执行它。在更新改动任何文件之前，携带检查会把本人留下的 profile 与目标发布将留下的 profile 相比较，并在目标会删除本人添加的行、本地插件或设置，会重排或改写本人选择的 bundle 列表，或会把本人 eject 过的插件放回来时，以带类型的原因在任何改动发生之前拒绝。它写入的历史是上游 profile 历史的扩展，增加了 Delo 那一轴的豁免文件、Delo 自己的记录、home patch 的副本与更新报告，因此一个版本能带回整个 profile。借助 `delorun` 提供的准入，任何版本都不含插件密钥字段的值（[C1](../../docs/contracts/c01-home-layout.zh.md#secrets)）。eject 会移除插件，同时保留本人为它写的每一行与每一项设置；安全模式在不加载第三方插件的情况下启动，并且不修改 profile 中的任何文件；`delorun recover` 是报告 profile 在更新之后处于何种状态并执行回退方式的命令。
 
 <a id="contents"></a>
 
@@ -20,6 +20,7 @@ description: "@delo/profile-safety 库：约定 C3 中拒绝会丢失本人对 p
 - [携带检查](#the-carry-check)
 - [profile 中包含什么](#what-a-profile-holds)
 - [扩展后的历史](#the-extended-history)
+- [密钥字段](#secret-fields)
 - [撤销、恢复与回滚](#undo-restore-and-rollback)
 - [eject](#eject)
 - [安全模式](#safe-mode)
@@ -79,6 +80,12 @@ manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝�
 
 上游的 profile 历史跟踪插件管理写入的五个文件。Delo 的历史 `PROFILE_SAFETY_FILES` 包含这五个文件，另加四个：约定 C17 中 Delo 那一轴的 `delo-compatibility.json`、保存 eject 与恢复时保持停用的插件的 Delo 自有记录 `delo-safety.json`、作为 home patch 副本的 `home-cordis.patch.yml`，以及保存更新所见报告的 `delo-update-report.json`。`recordSnapshot` 写入更新在改动任何内容之前取得的那个版本，而约定 C3 的快照正是该版本。profile 与 home patch 之外的任何内容都不会被触碰。
 
+<a id="secret-fields"></a>
+
+## 密钥字段
+
+约定 [C1](../../docs/contracts/c01-home-layout.zh.md#secrets) 不让任何密钥进入 patch 文件，而历史会把 patch 文件保存在 git 中。插件用 schema 角色 `secret` 标记保存凭据的配置字段；其值应放在上游的 `.credentials.yaml` 中，插件在 `credential-ref` 字段（例如 `apiKeyEnv`）中指明它的名称。`secretValuesInPatch` 按每行的 id，用已加载插件的 Config schema 读取一个 patch 层的行，包括 `insert` 列表或分组添加的行，并返回每个含有密钥字段值的位置：文件、行与字段路径，以及旁边的引用字段，从不包含值本身。`!!js` 表达式是代码而不是值，不是 YAML 的文本不做检查。`secretFieldAdmission` 把它变成上游 `ProfileHistory` 的准入：作为 `admit` 传给 `openHistory` 或 `recordSnapshot` 后，它拒绝 profile patch 或 home patch 副本含有此类值的版本，此时 `recordSnapshot` 以 `SNAPSHOT_FAILED` 失败并指明每个位置。`delorun` 把同一准入交给插件管理器的历史，并用 `secretFieldsSet` 在配置修改保存之前拒绝它（[密钥字段](../../apps/cli/src/secret-fields.ts)）。
+
 <a id="undo-restore-and-rollback"></a>
 
 ## 撤销、恢复与回滚
@@ -118,6 +125,7 @@ manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝�
 - 更新本身：更新前报告、暂存、切换、健康检查以及运行时仓库的回滚属于更新与运行时仓库的工作包。本包判断 profile 是否能经受它们，并在之后带回 profile。
 - home 锁。约定 C1 要求 `delorun recover` 在改动仓库期间持有 profile 的 home 锁；运行运行时切换的 CLI 命令负责这一点，而本包的恢复只触碰 profile 与 home patch。
 - 客户端界面。studio 的更新界面、撤销与恢复提示以及安全模式开关渲染本包返回的计划。
+- 未加载插件的密钥字段。只有已加载插件的 schema 标出其密钥字段，因此停用或缺失插件的行要等它加载后才会检查。
 - 插件审计。恢复会列出它带回的插件版本，这是约定 C13 对安装的要求；Delo 自身不运行插件审计。
 
 <a id="development"></a>

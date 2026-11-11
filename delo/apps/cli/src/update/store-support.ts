@@ -9,6 +9,7 @@
  * @module @delo/cli/update/store-support
  */
 import type { RuntimeVersion } from '@delo/contract-home-layout'
+import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import type { UpdateSupport } from '@delo/home-process'
 import type { DeloLogger } from '@delo/logs'
 import { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, type OpenUpdateChannel, type TrustedRootSource } from '@delo/runtime-store'
@@ -55,15 +56,17 @@ export function storeChannelOpener(home: string, store: RuntimeStore, running: R
  * @param logger - the home process's logger.
  * @param env - the environment `delorun` was started with, read for the launcher's roots and the interval of the start
  *   check's full hash.
+ * @param admitVersion - decides whether an update's snapshot may be saved; every snapshot is saved without one.
  * @returns the support.
  * @throws {Error} when Delo publishes no runtime for this machine's platform, or the interval is invalid.
  */
-export function storeUpdateSupport(home: string, profile: string, running: RuntimeVersion, logger: DeloLogger, env: Readonly<Record<string, string | undefined>>): UpdateSupport {
+export function storeUpdateSupport(home: string, profile: string, running: RuntimeVersion, logger: DeloLogger, env: Readonly<Record<string, string | undefined>>, admitVersion?: VersionAdmission): UpdateSupport {
   const store = new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger })
   const anchor = launcherAnchor(home, env)
   const fullCheckDays = fullCheckDaysOf(env)
   return homeUpdateSupport({
     home, profile, store, root: anchor.root, fullCheckDays, preLaunch: (version, root) => releaseLogStartCheck(home, store.paths.platform, version, root), openChannel: storeChannelOpener(home, store, running, anchor, fullCheckDays), sources: storeReportSources({ home, profile, store, running, root: anchor.root, fullCheckDays }), now: () => new Date(),
+    ...admitVersion === undefined ? {} : { admitVersion },
   })
 }
 

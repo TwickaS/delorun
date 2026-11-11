@@ -6,6 +6,7 @@
 import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import z from '@deepseek-ai/schemastery'
 import { describe, expect, it } from 'vitest'
 import { ProfileSafetyError } from '../src/errors.ts'
 import {
@@ -15,6 +16,7 @@ import {
   SAFETY_RECORD_FILENAME,
   UPDATE_REPORT_FILENAME,
 } from '../src/files.ts'
+import { secretFieldAdmission } from '../src/secrets.ts'
 import { currentFiles, historyGitProblem, openHistory, recordSnapshot, rollbackToSnapshot } from '../src/snapshot.ts'
 import { fixture, readTree, report, rowItem, text } from './support.ts'
 
@@ -111,6 +113,28 @@ describe.skipIf(!hasGit)('recordSnapshot', () => {
       expect(failure).toBeInstanceOf(ProfileSafetyError)
       expect((failure as ProfileSafetyError).code).toBe('SNAPSHOT_FAILED')
       expect((failure as ProfileSafetyError).refused).toBe(false)
+    } finally {
+      profile.remove()
+    }
+  })
+
+  it('refuses with SNAPSHOT_FAILED and saves nothing when a patch layer holds a value for a secret-role field', async () => {
+    const profile = fixture({ homePatch: [{ id: 'web-deepseek-api', config: { apiKey: 'sk-home-secret' } }] })
+    try {
+      const schema = z.object({ apiKey: z.string().role('secret'), apiKeyEnv: z.string().role('credential-ref') })
+      const admit = secretFieldAdmission(entryId => entryId === 'web-deepseek-api' ? [schema] : [])
+      const history = openHistory({ profileDir: profile.profileDir, admit })
+      const request = { profileDir: profile.profileDir, homeDir: profile.homeDir, summary: 'Before update to Delo 1.0.1', changedBy: { kind: 'person' as const }, history }
+      const failure = await recordSnapshot(request).catch((error: unknown) => error)
+      expect(failure).toBeInstanceOf(ProfileSafetyError)
+      expect((failure as ProfileSafetyError).code).toBe('SNAPSHOT_FAILED')
+      expect((failure as ProfileSafetyError).detail).toContain('home-cordis.patch.yml holds a value for the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead)')
+      expect((failure as ProfileSafetyError).detail).not.toContain('sk-home-secret')
+      expect(await history.list(10)).toEqual([])
+      writeFileSync(join(profile.homeDir, 'cordis.patch.yml'), JSON.stringify([{ id: 'web-deepseek-api', config: { apiKeyEnv: 'MY_SEARCH_KEY' } }]))
+      const snapshot = await recordSnapshot(request)
+      expect((await history.filesAt(snapshot)).get(HOME_PATCH_COPY_FILENAME)).toContain('MY_SEARCH_KEY')
+      expect(execFileSync('git', ['--git-dir', join(profile.profileDir, '.plugin-manager', 'history'), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain('sk-home-secret')
     } finally {
       profile.remove()
     }
