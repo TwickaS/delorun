@@ -110,21 +110,6 @@ export interface ConnectionTrustRequest {
   readonly url?: string | undefined
 }
 
-/**
- * Allowances one arrival route declares about its own traffic. Every check
- * applies by default; each field names a shape the route is reached with, never
- * a caller it trusts.
- */
-export interface ConnectionTrustOptions {
-  /**
-   * Accept a `sec-fetch-site: cross-site` marker on a document navigation. An
-   * arrival route (an OAuth callback a foreign site redirects the browser to)
-   * is reached exactly that way, and the navigated response is a document its
-   * initiator cannot read. The Host and Origin fences still apply.
-   */
-  readonly crossSiteArrival?: boolean
-}
-
 /** HTTP status returned before dispatch, or undefined when the request may proceed. */
 export type ConnectionRequestRejection = 401 | 403 | undefined
 
@@ -271,10 +256,9 @@ export interface HostConnectionHandle {
    * Apply Connection's Host/Origin checks and browser authentication to
    * another Web route.
    * @param request - request headers from the HTTP or upgrade request.
-   * @param options - allowances the route declares about its own arrival traffic.
    * @returns rejection status, or undefined when the route may accept the request.
    */
-  requestRejection(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): ConnectionRequestRejection
+  requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection
 
   /**
    * Admit an HTTP request against its signed browser or API credential and live Peer.

@@ -224,6 +224,29 @@ describe('isTrustedApiRequest', () => {
     expect(call({ host: '127.0.0.1:3080', 'sec-fetch-site': 'same-site' }, 'http://127.0.0.1:3080/api/goals/set')).toBe(false)
   })
 
+  it('reads the target as the router does, so no dot-segment spelling of /api skips the origin rule', () => {
+    const call = (url: string): boolean =>
+      isTrustedApiRequest({ headers: { host: '127.0.0.1:3080', 'sec-fetch-site': 'same-site' }, method: 'POST', url }, [])
+    // The router resolves each of these to /api/goals/set before it matches a route.
+    for (const url of [
+      '/x/../api/goals/set',
+      '/x/./../api/goals/set',
+      '/x/%2e%2e/api/goals/set',
+      '/x/%2E%2e/api/goals/set',
+      '/x/.%2e/api/goals/set',
+      '/./api/goals/set',
+      '/x\\..\\api/goals/set',
+      '/../api/goals/set?x=1',
+    ]) {
+      expect(new URL(url, 'http://dsh.invalid').pathname).toBe('/api/goals/set')
+      expect(call(url), url).toBe(false)
+    }
+    // A target that leaves the channel after normalization is outside it, and
+    // an unparsable one gets the channel's rule.
+    expect(call('/api/../connect')).toBe(true)
+    expect(call('http://[')).toBe(false)
+  })
+
   it('lets a caller with no browser markers reach only a destination a browser would have marked', () => {
     const post = (host: string, trustedHosts: readonly string[] = [], bindHost?: string, protocol: 'http:' | 'https:' = 'http:'): boolean =>
       isTrustedApiRequest({ headers: { host }, method: 'POST', url: '/api/goals/set' }, trustedHosts, bindHost, protocol)
@@ -244,20 +267,5 @@ describe('isTrustedApiRequest', () => {
     expect(forged({ host: '127.0.0.1:3080', origin: 'http://evil.example' })).toBe(false)
     expect(forged({ host: '127.0.0.1:3080', origin: 'null' })).toBe(false)
     expect(forged({ host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site' })).toBe(false)
-  })
-
-  it('accepts a cross-site arrival only where the route declares one, and only for a navigation', () => {
-    const arrival = { host: '127.0.0.1:3080', 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' }
-    const redirect = { headers: arrival, method: 'GET', url: '/oauth/callback?code=c&state=s' }
-    // A foreign site redirects the browser here: the default fence refuses the marker.
-    expect(isTrustedApiRequest(redirect, [])).toBe(false)
-    expect(isTrustedApiRequest(redirect, [], undefined, 'http:', { crossSiteArrival: true })).toBe(true)
-    // The Host fence keeps binding the arrival.
-    expect(isTrustedApiRequest({ ...redirect, headers: { ...arrival, host: 'evil.example' } }, [], undefined, 'http:', { crossSiteArrival: true })).toBe(false)
-    // A subresource request is not a navigation, so the allowance never covers it.
-    expect(isTrustedApiRequest({
-      ...redirect,
-      headers: { ...arrival, 'sec-fetch-mode': 'no-cors' },
-    }, [], undefined, 'http:', { crossSiteArrival: true })).toBe(false)
   })
 })

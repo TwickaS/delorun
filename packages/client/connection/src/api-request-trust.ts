@@ -14,7 +14,7 @@
 
 import { API_PATH } from './api-path.ts'
 import { isLoopbackHostname } from './loopback-hostname.ts'
-import type { ConnectionTrustOptions, ConnectionTrustRequest } from './rpc.ts'
+import type { ConnectionTrustRequest } from './rpc.ts'
 
 type TrustHeaders = ConnectionTrustRequest['headers']
 
@@ -85,14 +85,23 @@ function hasOneHostLine(request: ConnectionTrustRequest): boolean {
 }
 
 /**
- * Whether a request target reaches the shared `/api` channel.
+ * Whether a request target reaches the shared `/api` channel. The target is
+ * read as the webserver's router reads it, through WHATWG URL parsing, which
+ * removes dot segments (`/x/../api`, `/x/%2e%2e/api`) and reads `\` as `/`,
+ * so no spelling routes to `/api` while this check reads another path.
  * @param url - the request target, relative or absolute; undefined when the carrier reports none.
- * @returns true for `/api` and every path below it; an absent target counts as `/api`,
- *   because the channel this fence guards is the only caller.
+ * @returns true for `/api` and every path below it; an absent or unparsable
+ *   target counts as `/api`, because the channel this fence guards is the only caller.
  */
 function isApiTarget(url: string | undefined): boolean {
   if (url === undefined) return true
-  const path = url.startsWith('/') ? url.split('?', 1)[0] ?? url : new URL(url, 'http://dsh.invalid').pathname
+  let path: string
+  try {
+    path = new URL(url, 'http://dsh.invalid').pathname
+  } catch {
+    // An unparsable target is answered by the router's own failure; until then it gets the stricter rule.
+    return true
+  }
   return path === API_PATH || path.startsWith(`${API_PATH}/`)
 }
 
@@ -129,11 +138,6 @@ function needsOriginAccount(request: ConnectionTrustRequest): boolean {
  */
 function isBrowserMarkedDestination(hostUrl: URL, protocol: 'http:' | 'https:'): boolean {
   return protocol === 'https:' || isLoopbackHostname(hostUrl.hostname)
-}
-
-/** Whether a request is a browser document navigation, whose response the initiator's page cannot read. */
-function isDocumentNavigation(headers: TrustHeaders): boolean {
-  return header(headers, 'sec-fetch-mode') === 'navigate'
 }
 
 /**
@@ -216,7 +220,6 @@ function isBindAddressAuthority(hostUrl: URL, bindHost: string | undefined): boo
  * @param trustedHosts - non-loopback authorities this deployment serves: exact `host:port`, or port-less `host` matching any port.
  * @param bindHost - the listener's own bind IP literal, accepted on any port independently of `trustedHosts`.
  * @param protocol - listener protocol for default Host ports; HTTP when no Web carrier is mounted.
- * @param options - route-level allowances; the defaults apply every check.
  * @returns true when the Host is ours (loopback, the bind address, or trusted), it appears
  *   exactly once, and any attached browser markers are same-origin. A state-changing `/api`
  *   request with no markers at all passes only toward loopback or an HTTPS listener.
@@ -226,7 +229,6 @@ export function isTrustedApiRequest(
   trustedHosts: readonly string[],
   bindHost?: string,
   protocol: 'http:' | 'https:' = 'http:',
-  options: ConnectionTrustOptions = {},
 ): boolean {
   // Host fence (DNS-rebinding defense), applied to every request: the browser
   // fills Host from the URL it believes it is talking to, so a rebound page
@@ -245,11 +247,7 @@ export function isTrustedApiRequest(
   const site = header(request.headers, 'sec-fetch-site')
   // Cross-site fence: modern browsers label the initiator relationship on
   // every fetch; an explicit cross-site marker is refused regardless of Origin.
-  // An arrival route may accept it on a document navigation: the response is
-  // the new document, which the initiator's page cannot read, and the Host and
-  // Origin fences still bind the request.
-  const arrival = site === 'cross-site' && options.crossSiteArrival === true && isDocumentNavigation(request.headers)
-  if (site === 'cross-site' && !arrival) return false
+  if (site === 'cross-site') return false
   // Origin fence: when a browser attaches an Origin it must be exactly this
   // authority (compared through the same normalization as the Host). Absent
   // Origin is fine for a read — the Host fence above already bound the request.

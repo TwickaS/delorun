@@ -30,7 +30,6 @@ import type {
   ConnectionRpcHandler,
   ConnectionRpcResult,
   ConnectionRequestRejection,
-  ConnectionTrustOptions,
   ConnectionTrustRequest,
   HostConnectionRpc,
 } from './rpc.ts'
@@ -146,8 +145,8 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
   }
 
   /** Apply the Host/Origin fence and require an authenticated live Peer. */
-  requestRejection(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): ConnectionRequestRejection {
-    const admission = this.admit(request, options)
+  requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection {
+    const admission = this.admit(request)
     return 'rejection' in admission ? admission.rejection : undefined
   }
 
@@ -158,12 +157,12 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
    * loaded, else the built-in admission, where browser requests share an owner
    * Peer and API HTTP does not depend on an attached socket.
    */
-  admit(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): PeerAdmission {
+  admit(request: ConnectionTrustRequest): PeerAdmission {
     if (this.reach.requests.has(request)) {
       const peer = this.reach.requests.get(request)
       return peer === undefined || this.disposed ? { rejection: 401 } : { peer }
     }
-    if (!this.isTrusted(request, options)) return { rejection: 403 }
+    if (!this.isTrusted(request)) return { rejection: 403 }
     if (this.disposed) return { rejection: 401 }
     const authenticator = this.owner.get('authenticator')
     return peerAdmission(authenticator === undefined ? this.builtinAdmission(request) : authenticator.admit(request, LOOPBACK_LISTENER))
@@ -223,9 +222,9 @@ export class HostConnectionService extends Service implements HostConnectionAdmi
     }
   }
 
-  private isTrusted(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): boolean {
+  private isTrusted(request: ConnectionTrustRequest): boolean {
     const carrier = this.owner.get('webServer')
-    return isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:', options)
+    return isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:')
   }
 
   private publishPeer(interactions: ConnectionInteractions): PeerId {

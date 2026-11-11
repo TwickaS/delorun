@@ -30,7 +30,6 @@ export type {
   ConnectionRequestRejection,
   ConnectionRpcResult,
   ConnectionRequestBodyMode,
-  ConnectionTrustOptions,
   ConnectionTrustRequest,
   ClientRequest,
   HostConnectionHandle,
