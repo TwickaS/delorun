@@ -99,6 +99,12 @@ The loopback listener applies upstream's fence and calls `admit` for its routes 
 
 **Arrival fails closed.** The provider stamps every request a reach listener passes to `admit` with that listener's id before any route runs. A route that answers only on the loopback listener, such as the owner claim and the device routes of [C5](c05-device-approval.md), treats a request as loopback only when it carries no stamp and the loopback listener's own socket accepted it: the socket's local port is the configured listener's bound port and its local address a loopback address. A request with neither is never loopback, so a reach listener that forwarded a request without a stamp gains nothing, and the route also requires a loopback `Host`.
 
+The loopback listener's fence is upstream's `api-request-trust.ts` with Delo's recorded edits, applied to `/api` and to every route that calls `requestRejection`, such as the studio's dist files other than its install files:
+
+- **`Host`.** The `Host` must be a loopback name or address, the listener's bind address, or a `trustedHosts` entry, written as a bare authority. Every listener of upstream's web server answers a request or upgrade with more than one `Host` line `400` before the fence or any route runs.
+- **Origin account.** A present `Origin` must be the listener's own origin, and `Sec-Fetch-Site: cross-site` is refused. A state-changing request (any method but `GET`, `HEAD` and `OPTIONS`) whose target is `/api` or below must also state its origin: an `Origin`, or `Sec-Fetch-Site: same-origin` or `none`; `same-site` and `cross-origin` are refused. The target is read as the router reads it, through WHATWG URL parsing, so a dot segment (`/x/../api`) or its percent-encoded spelling (`/x/%2e%2e/api`) cannot move a request out of the rule.
+- **Markerless requests.** A state-changing `/api` request with neither `Origin` nor `Sec-Fetch-Site` passes only toward a loopback `Host` or a listener whose scheme is `https`, where a browser that sends Fetch-Metadata always attaches it, so a missing marker names a non-browser caller such as a script, `curl` or the desktop forwarder. Over plain HTTP toward any other authority, a `trustedHosts` name or a non-loopback bind address, it is refused with `403`: a browser withholds the markers there and a no-referrer form post withholds `Origin` too, so the request cannot be told apart from a forged one. A script calling such a listener sends `Origin` naming it ([upgrade guide](../../../docs/upgrade-guide/v0.2.2-rc.1/api-origin-over-plain-http/guide.md)).
+
 <a id="pre-login-allowlist"></a>
 ### Pre-login allowlist
 
@@ -288,6 +294,10 @@ Denial tests:
 | `keeps the reusable process token when the mode is off` | With the switch at its parity value, the process token signs in repeatedly, as upstream's does. |
 | `studio-open-token-person-only` | Only the start token from the token file obtains a link; the Host's channel token and a caller without the start token are refused, and the home log holds no link. |
 | `setup-ending-signs-in` | Setup's ending opens a link from the home process that signs in once against a real connection, and a second use is refused with the `delorun open` instruction. |
+| `reads the target as the router does, so no dot-segment spelling of /api skips the origin rule` | A state-changing request whose target reaches `/api` only after dot-segment removal, plain or percent-encoded, is held to the origin rule and refused with a `same-site` marker. |
+| `lets a caller with no browser markers reach only a destination a browser would have marked` | A markerless state-changing `/api` request passes toward loopback and HTTPS and is refused toward a `trustedHosts` name or a bind address over plain HTTP. |
+| `are answered 400 on the configured and an additional listener before any gate, route, resource, upgrade or fallback runs` | A request or upgrade with two `Host` lines is answered 400 on both kinds of listener, and no gate, handler, resource, upgrade handler or fallback runs. |
+| `keeps public only the exact dist-root install files, so a look-alike chunk or a nested copy stays fenced` | A dist file named like an install file, or a copy of one in a subdirectory, needs sign-in; only the fixed root files and the root-level icons the manifest lists are public. |
 
 <a id="what-this-does-not-prove"></a>
 ### What this does not prove

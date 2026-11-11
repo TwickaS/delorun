@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/api-origin-over-plain-http/guide.md
+/:
+  en: 2d5b6bec452606e4
+  zh: b58c62a63c03f5a5
+/state-changing-api-requests-over-plain-http-state-their-origin:
+  en: e2a43530231cbe2a
+  zh: 2570811e9c848558
+/state-changing-api-requests-over-plain-http-state-their-origin/change:
+  en: 2894bf4689901eec
+  zh: 248c284adb800d59
+/state-changing-api-requests-over-plain-http-state-their-origin/migration:
+  en: 45d714611551ff6d
+  zh: 536f315c2800ba4c
