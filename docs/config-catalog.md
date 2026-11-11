@@ -2973,7 +2973,7 @@ export interface Config {
    * Absolute paths of directories that hold only sockets confined commands cannot connect to, such as Docker
    * Desktop's control-socket directories. bwrap hides each one under an empty read-only tmpfs, so a socket created
    * there later is hidden too; Seatbelt denies each entry present at the wrap by its path; Landlock cannot express it.
-   * Never name a directory that also holds sockets commands need, such as `$XDG_RUNTIME_DIR`.
+   * Every socket in a named directory is denied, so naming one that also holds sockets commands need cuts those off too.
    */
   deniedSocketDirectories?: string[]
   /**
@@ -2986,6 +2986,14 @@ export interface Config {
    * exist at a wrap denies and refuses nothing.
    */
   escapeSocketDirectories?: string[]
+  /**
+   * Whether bwrap gives `read-only` commands an empty read-only `/tmp`, into which a workspace root under `/tmp` is
+   * bound read-only, as it gives `workspace-write` commands an empty writable one, and hides every other mount of the
+   * host's `/tmp` found at a wrap, such as WSLg's `/mnt/wslg/distro/tmp`, in both modes. The host's `/tmp` holds
+   * sockets of the person's programs, such as a tmux server's and an ssh-agent's, under names no list can predict.
+   * Landlock and Seatbelt cannot express it and leave it out. Off: `read-only` commands read the host's `/tmp`.
+   */
+  privateTmp?: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-local -->
