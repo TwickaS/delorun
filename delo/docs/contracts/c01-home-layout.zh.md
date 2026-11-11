@@ -195,7 +195,7 @@ runtimes/
 | `home-connect` | 连接 home 各通道的套接字或管道 |
 | `docker-connect` | 连接位于其真实路径的 Docker 套接字 |
 
-- **读取豁免。** 受限命令可以读取并执行 `runtimes/`、`skills/` 与 `dsh-runtimes/`。PTC worker 与其他受限进程运行 `runtimes/` 中运行时自带的 `node`，命令运行 `skills/` 中本人的 skill 脚本，桌面应用的工作区依赖从 `dsh-runtimes/` 运行。豁免路径下不写入任何密钥；保存密钥的组件使用 `secrets/`。
+- **读取豁免。** 受限命令可以读取并执行 `runtimes/`、`skills/` 与 `dsh-runtimes/`。PTC worker 与其他受限进程运行 `runtimes/` 中运行时自带的 `node`，命令运行 `skills/` 中本人的 skill 脚本，桌面应用的工作区依赖从 `dsh-runtimes/` 运行。豁免路径下不写入任何密钥；保存密钥的组件使用 `secrets/`。面向模型的文件与搜索工具还可以读取 `spill/`，其中保存了对聊天而言过长、供模型读取的工具输出；受限命令不能读取它，任何 runner 都不授予它。
 - **可写根目录。** home 从不位于可写根目录之内。工作区根目录或附加可写根目录在解析符号链接后等于 home、位于其内或包含它时，`workspace-write` 以 `HOME_IN_WRITABLE_ROOT` 被拒绝。根目录包含 home 的工作区（例如 `~`）仍可运行 `read-only` 命令。
 - **Docker 套接字。** 该套接字位于 home 之外。Delo 从当前 Docker context 解析其路径：rootful 引擎为 `/var/run/docker.sock`，rootless 引擎为 `$XDG_RUNTIME_DIR/docker.sock`，或 Docker Desktop 的 context 所指的路径。该规则同时覆盖 context 的路径及其解析后的真实路径、到达同一套接字的其他每个挂载（例如 WSL 下 Docker Desktop 的 `/mnt/wsl/docker-desktop-bind-mounts/<distro>/docker.sock`），以及 Docker Desktop 控制套接字目录中的每个套接字，Delo 把这些目录列为被拒绝的套接字目录：WSL 下为 `/mnt/wsl/docker-desktop/shared-sockets/host-services/`（其中 `backend.sock` 对所有用户可写，控制引擎的设置与重启）和 `/mnt/wsl/docker-desktop/shared-sockets/guest-services/`，Linux 上为 `~/.docker/desktop/`，macOS 上为 `~/Library/Containers/com.docker.docker/Data/` 与 `~/.docker/run/`。bwrap 隐藏每个这样的目录，因此之后在其中创建的套接字也被隐藏；Seatbelt 拒绝包装命令时其中存在的每个套接字。端点为 TCP 或 SSH 的 context 使用网络，而没有方言限制网络，因此对它不强制执行 `docker-connect`。
 - **其他套接字。** 其他 `AF_UNIX` 套接字（例如 ssh-agent 套接字、D-Bus 与显示服务器）以及网络，对受限命令仍可访问。
