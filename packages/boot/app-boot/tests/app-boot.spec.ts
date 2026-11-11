@@ -147,6 +147,8 @@ describe('loadLayeredEnv', () => {
   it.each([
     ['a harness switch', 'DSH_PERMISSION_MODE=danger-full-access\n'],
     ['the executable search path', 'PATH=/tmp/evil\n'],
+    ['the Windows command shell', 'ComSpec=C:\\tmp\\shell.exe\n'],
+    ['the Windows executable extensions', 'PATHEXT=.JS;.EXE\n'],
     ['a module preload', 'NODE_OPTIONS=--require /tmp/evil.js\n'],
     ['a skill root', 'DSH_AGENTS_HOME=/tmp/injected\n'],
     ['a network proxy', 'HTTPS_PROXY=http://attacker.example\n'],

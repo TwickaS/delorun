@@ -264,25 +264,25 @@
       "path": "packages/boot/app-boot/README.i18n.yaml",
       "class": "security",
       "reason": "Re-records the `/use-this-package/profiles` section hashes of both README sides after the `.env` refusal bullet changed in each, so the bilingual pairing gate reports the pair consistent. Lead verdict (2026-11-11): kept; re-recorded translation hashes for the home `.env` bullet.",
-      "sha256": "cdb84198530a79055e83c36c7dfbb808736f234bbd3653e76ba7fb6e8469d438"
+      "sha256": "f8ae426d8998c8c1b62ad7d4d0338ab226bd356eab39eda50b4c22608deab55b"
     },
     {
       "path": "packages/boot/app-boot/README.md",
       "class": "security",
-      "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix. Lead verdict (2026-11-11): kept; documents the home `.env` refusal that `homeEnvRefusal` implements.",
-      "sha256": "a721379a0df85f194b8e55fcc563ac3297634c63181701c009a4ae5bfcc81ff8"
+      "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix. The refused names include `PATHEXT` and `COMSPEC`.",
+      "sha256": "5c758c20427e87e55795bdc3b341942a27e66dec0fd4377d17d49f0196b81d1b"
     },
     {
       "path": "packages/boot/app-boot/README.zh.md",
       "class": "security",
       "reason": "The Chinese counterpart of the Harness-home `.env` refusal bullet. Lead verdict (2026-11-11): kept; the Chinese twin of the home `.env` refusal bullet.",
-      "sha256": "b1676fd278f5322d6368e20a4bb5746f7d8397bad5da4caa7f3907574d30d7da"
+      "sha256": "6331fe81f085f475beb2060ebb5214d2439591f80dc5c337be109110cd7630cc"
     },
     {
       "path": "packages/boot/app-boot/src/index.ts",
       "class": "delo-feature",
       "feature": "code-refusal-switch",
-      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delo axis from `./plugin-compatibility.ts`: `DELO_VERSION_ENV`, `evaluateDeloRequirement`, `getDeloRuntimeVersion` and the `DeloRequirement` type."
+      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delo axis from `./plugin-compatibility.ts`: `DELO_VERSION_ENV`, `evaluateDeloRequirement`, `getDeloRuntimeVersion` and the `DeloRequirement` type. `COMSPEC` and `PATHEXT` join `BOOTSTRAP_NAMES`, so a discovered `.env` cannot choose the Windows command shell or the extensions the `PATH` lookup tries."
     },
     {
       "path": "packages/boot/app-boot/src/plugin-compatibility.ts",
@@ -293,8 +293,8 @@
     {
       "path": "packages/boot/app-boot/tests/app-boot.spec.ts",
       "class": "security",
-      "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600. Lead verdict (2026-11-11): kept; proves that a group- or other-readable file, a symbolic link and a foreign owner each stop boot without leaking values, and that a 0600 file loads.",
-      "sha256": "567a82b8404710a9f5840592593b0cb00b2f14d095492408eba8e10833c486d9"
+      "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600. A `.env` that sets `ComSpec` or `PATHEXT` stops launch.",
+      "sha256": "9e0453ea12628da6505b602d013759d7757c91c8049ea3b5c05dfa8eb6433fe4"
     },
     {
       "path": "packages/boot/config-editor/src/index.ts",

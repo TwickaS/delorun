@@ -137,7 +137,7 @@ export function loadEnv(
 /** Exact names no discovered file may set. */
 const BOOTSTRAP_NAMES = new Set([
   // Process launch and module resolution.
-  'PATH', 'HOME', 'USERPROFILE', 'SHELL',
+  'PATH', 'HOME', 'USERPROFILE', 'SHELL', 'COMSPEC', 'PATHEXT',
   'NODE_OPTIONS', 'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
   'LD_PRELOAD', 'LD_LIBRARY_PATH', 'LD_AUDIT',
   // Interpreter startup hooks.

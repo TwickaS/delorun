@@ -15,6 +15,7 @@ stdio MCP 服务器的添加时同意现在覆盖命令、其参数、其工作�
 - `@delo/plugin-mcp-consent` 中的 `DeloMcpConsent.accept(command, args)` 改为 `accept(start)`，其中 `start` 带有 `command`、`args`、`cwd`、`env`、绝对路径 `resolvedCommand` 与 `resolvedCwd`，以及可能存在的 `resolvedShell`。
 - 接受存储，即 Delo home 下的 `secrets/mcp-add-consent/acceptances.json`，升级到版本 4：每条接受以上述各项为键，并保存环境的摘要而非其值。版本 1、2 与 3 的存储被视为已被取代：其中的接受都不生效，因此它们接受过的每个 stdio 服务器都会被再次询问。向其中接受会写出只含这条新接受的版本 4 存储。
 - 提供 `mcpAddConsent` 服务的插件以模块导出 `providesMcpAddConsent = true` 声明这一点。mcp-client 行会等待每个作此声明的 Loader 行；该行未能启动时，以 `McpConsentUnavailableError` 让服务器保持停止。
+- 被发现的 `.env` 设置 `COMSPEC` 或 `PATHEXT` 时会停止启动，与设置 `PATH` 时相同；请改为导出它们。
 
 受影响的是构造 `McpConsentRefusedError`、调用 `accept`、提供自己的 `McpAddConsent` 或读取存储文件的插件，以及存储中仍有更早接受记录的每个人。
 

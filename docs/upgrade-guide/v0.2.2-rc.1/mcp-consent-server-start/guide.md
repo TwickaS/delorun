@@ -15,6 +15,7 @@ A stdio MCP server's add-time consent now covers the command, its arguments, its
 - `DeloMcpConsent.accept(command, args)` from `@delo/plugin-mcp-consent` is now `accept(start)`, where `start` carries `command`, `args`, `cwd`, `env`, absolute `resolvedCommand` and `resolvedCwd`, and any `resolvedShell`.
 - The acceptance store, `secrets/mcp-add-consent/acceptances.json` under the Delo home, moves to version 4, which keys each acceptance on all of these and keeps an environment digest instead of values. Version 1, 2 and 3 stores are superseded: none of their acceptances count, so each stdio server they accepted asks again. Accepting into one writes a version 4 store holding only the new acceptance.
 - A plugin that provides an `mcpAddConsent` service declares it with the module export `providesMcpAddConsent = true`. An mcp-client row waits for every Loader row that declares it, and keeps its server stopped with `McpConsentUnavailableError` when such a row fails to start.
+- A discovered `.env` setting `COMSPEC` or `PATHEXT` stops launch, as for `PATH`; export them instead.
 
 This affects plugins that construct `McpConsentRefusedError`, call `accept`, provide their own `McpAddConsent`, or read the store file, and every person whose store holds earlier acceptances.
 
