@@ -72,6 +72,7 @@ Updates stay manual: `delorun update` shows its report, asks, copies the chat da
 ## What this does not protect against
 
 - The hosts see the machine's address and the time of each check, as for every other integrity request ([threat model](../security/threat-model.md#the-network)).
+- The check reads no runtime archive, so a release whose archive does not match its signed file list is still noticed; `delorun update` and `delorun update --report` download the archive and refuse it before anything is installed.
 - The notice does not run the online log check. A release whose signed bundle verifies but which the log does not hold is noticed, and `delorun update` refuses it.
 - A host that withholds a newer release is noticed only when the timestamp expires; until then the notice shows the release the timestamp names. The online timestamp key alone can freeze freshness the same way, and can name only a manifest the offline targets key signed, at a version not below the last one recorded.
 - A process running with the person's own access can write the record under `run/<profile>/` and so choose what the notice says; the record's reader refuses a summary with a control character, so it cannot rewrite the terminal.
