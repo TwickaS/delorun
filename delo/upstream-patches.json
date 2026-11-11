@@ -161,43 +161,43 @@
     {
       "path": "native/system/package.json",
       "class": "security",
-      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes.",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes. Lead verdict (2026-11-11): kept; only the version moves to 0.2.0, the same in every package, matching the launcher's stricter grant-path rule.",
       "sha256": "9f062450a8ff73c027bd8f5513a553a816850d6776f9802dee258353140b31aa"
     },
     {
       "path": "native/system/packages/darwin-arm64/package.json",
       "class": "security",
-      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes.",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes. Lead verdict (2026-11-11): kept; version 0.2.0, matching the other native packages.",
       "sha256": "145e0666de47f1a993d1a0bcdacd90673ce8ad9570de6da7b0f9b9905b685a5c"
     },
     {
       "path": "native/system/packages/darwin-x64/package.json",
       "class": "security",
-      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes.",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes. Lead verdict (2026-11-11): kept; version 0.2.0, matching the other native packages.",
       "sha256": "c7f9cfc2ff4b02b7b8671c0c300ae32f7184bf24c34804eae308359cf22f5a64"
     },
     {
       "path": "native/system/packages/entry/package.json",
       "class": "security",
-      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes.",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes. Lead verdict (2026-11-11): kept; version 0.2.0, matching the other native packages.",
       "sha256": "24f3a8dadc6c3f65da1efe223af46e78407c659ef5386196d72ce334234fefd4"
     },
     {
       "path": "native/system/packages/entry/src/main.c",
       "class": "security",
-      "reason": "Protected home (C1), review of #66: `landlock-run` opens every grant root with `openat2(RESOLVE_NO_SYMLINKS)` instead of `open(O_PATH)`, so a grant path swapped for a symbolic link between the caller's check and the launch fails the run (exit 125, `cannot open rule path`) instead of granting the link's target; the review won a write grant on the home in 1 of 52 races without it. `struct open_how` and the flag are defined locally, as the Landlock UAPI is. Callers must pass resolved paths; sandbox-local does. Stricter only; the CLI contract changes, so the native package family moves to 0.2.0 with a release note (lead decision on #66). Review of #66: takes `struct open_how` and `RESOLVE_NO_SYMLINKS` from <linux/openat2.h> when the toolchain has it and defines them otherwise, guarded.",
+      "reason": "Protected home (C1), review of #66: `landlock-run` opens every grant root with `openat2(RESOLVE_NO_SYMLINKS)` instead of `open(O_PATH)`, so a grant path swapped for a symbolic link between the caller's check and the launch fails the run (exit 125, `cannot open rule path`) instead of granting the link's target; the review won a write grant on the home in 1 of 52 races without it. `struct open_how` and the flag are defined locally, as the Landlock UAPI is. Callers must pass resolved paths; sandbox-local does. Stricter only; the CLI contract changes, so the native package family moves to 0.2.0 with a release note (lead decision on #66). Review of #66: takes `struct open_how` and `RESOLVE_NO_SYMLINKS` from <linux/openat2.h> when the toolchain has it and defines them otherwise, guarded. Lead verdict (2026-11-11): kept; grant roots open through openat2 with RESOLVE_NO_SYMLINKS, so a link anywhere in the path stops the command with 125 before it starts; a host whose seccomp blocks openat2 refuses every confined command, which fails closed.",
       "sha256": "d939cf1642f8e1af87c2b356535b918a668f9582e6fa9e8365595e4d83e7feb1"
     },
     {
       "path": "native/system/packages/linux-arm64/package.json",
       "class": "security",
-      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes.",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes. Lead verdict (2026-11-11): kept; version 0.2.0, matching the other native packages.",
       "sha256": "1c36e7a4bbd75ab14996d41c75881d1df8e37f57f5683cb265b13aad5f9dde43"
     },
     {
       "path": "native/system/packages/linux-x64/package.json",
       "class": "security",
-      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes.",
+      "reason": "Native package family version 0.2.0 (from upstream's 0.1.2), bumped with `release:bump minor` because `landlock-run` now refuses grant paths that name a symbolic link, a change to its CLI contract (lead decision on #66). Only the version field changes. Lead verdict (2026-11-11): kept; version 0.2.0, matching the other native packages.",
       "sha256": "27a9e8c19d4460709af99ced1ddf379dab5a373734bee1779f6159fd559ccf3c"
     },
     {
@@ -263,19 +263,19 @@
     {
       "path": "packages/boot/app-boot/README.i18n.yaml",
       "class": "security",
-      "reason": "Re-records the `/use-this-package/profiles` section hashes of both README sides after the `.env` refusal bullet changed in each, so the bilingual pairing gate reports the pair consistent.",
+      "reason": "Re-records the `/use-this-package/profiles` section hashes of both README sides after the `.env` refusal bullet changed in each, so the bilingual pairing gate reports the pair consistent. Lead verdict (2026-11-11): kept; re-recorded translation hashes for the home `.env` bullet.",
       "sha256": "cdb84198530a79055e83c36c7dfbb808736f234bbd3653e76ba7fb6e8469d438"
     },
     {
       "path": "packages/boot/app-boot/README.md",
       "class": "security",
-      "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix.",
+      "reason": "Documents the Harness-home `.env` refusal beside the existing layer rules: the file must be the user's own owner-only regular file, and the bullet names the `chmod 600` fix. Lead verdict (2026-11-11): kept; documents the home `.env` refusal that `homeEnvRefusal` implements.",
       "sha256": "a721379a0df85f194b8e55fcc563ac3297634c63181701c009a4ae5bfcc81ff8"
     },
     {
       "path": "packages/boot/app-boot/README.zh.md",
       "class": "security",
-      "reason": "The Chinese counterpart of the Harness-home `.env` refusal bullet.",
+      "reason": "The Chinese counterpart of the Harness-home `.env` refusal bullet. Lead verdict (2026-11-11): kept; the Chinese twin of the home `.env` refusal bullet.",
       "sha256": "b1676fd278f5322d6368e20a4bb5746f7d8397bad5da4caa7f3907574d30d7da"
     },
     {
@@ -293,7 +293,7 @@
     {
       "path": "packages/boot/app-boot/tests/app-boot.spec.ts",
       "class": "security",
-      "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600.",
+      "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600. Lead verdict (2026-11-11): kept; proves that a group- or other-readable file, a symbolic link and a foreign owner each stop boot without leaking values, and that a 0600 file loads.",
       "sha256": "567a82b8404710a9f5840592593b0cb00b2f14d095492408eba8e10833c486d9"
     },
     {
@@ -425,8 +425,8 @@
     {
       "path": "packages/client/connection/src/index.ts",
       "class": "security",
-      "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types including `MintedCredential`, emits `authenticator/minted` from `BrowserAuth`'s mint callback, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`. The `/api` route adds a provider's `setCookie` to its response. For a Peer admitted on a reach listener, the index injections add the `__DSH_REMOTE_MEDIA__` global with the value `placeholder`; `reachContentSecurityPolicy` is exported. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. One-time launch tokens (C4): the Config fields `oneTimeLaunchTokens` (C16 switch `one_time_launch_tokens`, default false) and `reopenHint` (default upstream's text) reach `BrowserAuth`, and with one-time tokens on, a `webserver/request` listener consumes the tokens of loopback requests outside the exchanges. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10).",
-      "sha256": "4f492e975b683e96dec7553b6b537cdb5f1298849d854aa1bb49856c69155e73"
+      "reason": "Admission seam (C4): exports the `Authenticator` Service Definition, its types including `MintedCredential`, emits `authenticator/minted` from `BrowserAuth`'s mint callback, `LOOPBACK_LISTENER`, the reach listener types and `REACH_REFUSAL_STATUS`. The `/api` route adds a provider's `setCookie` to its response. For a Peer admitted on a reach listener, the index injections add the `__DSH_REMOTE_MEDIA__` global with the value `placeholder`; `reachContentSecurityPolicy` is exported. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. One-time launch tokens (C4): the Config fields `oneTimeLaunchTokens` (C16 switch `one_time_launch_tokens`, default false) and `reopenHint` (default upstream's text) reach `BrowserAuth`, and with one-time tokens on, a `webserver/request` listener consumes the tokens of loopback requests outside the exchanges. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Lead verdict (2026-11-11): kept; re-exports without the removed trust options.",
+      "sha256": "f926175669cf07e3288d8b24c34c06fa2bef268a5a77feea9477be7a6aecff93"
     },
     {
       "path": "packages/client/connection/src/reach.ts",
@@ -437,14 +437,14 @@
     {
       "path": "packages/client/connection/src/rpc-host.ts",
       "class": "security",
-      "reason": "Admission seam (C4): `admit` returns the dispatcher's Peer for a request a reach listener dispatched and refuses one it admitted as pre-login; a loopback request keeps the Host/Origin fence and then goes to the loaded authenticator provider, or to `builtinAdmission`, upstream's cookie admission unchanged, when none is loaded. `authorizeIndex` answers a reach request by its dispatcher's admission. `ctx.connection` gains `builtinAdmission` and `openReachListener`. A provider's `setCookie` reaches the RPC-channel response, `closeReachConnections` ends the reach connections of a session or device, and with a provider loaded the loopback index is admitted by it and the launch-token exchange at the root and `/connect` runs only while its loopback policy accepts the token. `isReachPeer` reports whether a Peer was admitted on a reach listener. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `ctx.connection.oneTimeLaunchTokens` reports the mode, the reach state consumes the tokens a reach request presents, `/connect` and index requests refused by the fence or a provider policy consume theirs, and `consumeStrayLaunchTokens` consumes those of any other loopback request. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). The shared Fetch handler asks an exact route's optional `admitPeer(request, peer)` hook before admitting a non-owner Peer and answers 403 unless it returns true; a route without the hook keeps upstream's owner-only behaviour.",
-      "sha256": "236540af8018e83aa17ba2f38de6007752df2d050411b3c19ce3b67a20725c6e"
+      "reason": "Admission seam (C4): `admit` returns the dispatcher's Peer for a request a reach listener dispatched and refuses one it admitted as pre-login; a loopback request keeps the Host/Origin fence and then goes to the loaded authenticator provider, or to `builtinAdmission`, upstream's cookie admission unchanged, when none is loaded. `authorizeIndex` answers a reach request by its dispatcher's admission. `ctx.connection` gains `builtinAdmission` and `openReachListener`. A provider's `setCookie` reaches the RPC-channel response, `closeReachConnections` ends the reach connections of a session or device, and with a provider loaded the loopback index is admitted by it and the launch-token exchange at the root and `/connect` runs only while its loopback policy accepts the token. `isReachPeer` reports whether a Peer was admitted on a reach listener. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `ctx.connection.oneTimeLaunchTokens` reports the mode, the reach state consumes the tokens a reach request presents, `/connect` and index requests refused by the fence or a provider policy consume theirs, and `consumeStrayLaunchTokens` consumes those of any other loopback request. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). The shared Fetch handler asks an exact route's optional `admitPeer(request, peer)` hook before admitting a non-owner Peer and answers 403 unless it returns true; a route without the hook keeps upstream's owner-only behaviour. Lead verdict (2026-11-11): kept; the unused trust options and cross-site navigation allowance are removed, so every route is admitted under the same full check.",
+      "sha256": "11bfd3c6a146fd3c2e9dc2daac1198e091f8b5020a445b4ff7facb2023153345"
     },
     {
       "path": "packages/client/connection/src/rpc.ts",
       "class": "security",
-      "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `HostConnectionHandle.oneTimeLaunchTokens` reports whether `authenticatedUrl` mints a one-time token per call. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). An exact Fetch route may declare `admitPeer(request, peer)`, the hook through which it admits a non-owner Peer; a route without it keeps upstream's owner-only behaviour.",
-      "sha256": "796e0301f6dcc0738b7709fb63db027155c63922820548d14e8d5bd5d5ab614d"
+      "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `HostConnectionHandle.oneTimeLaunchTokens` reports whether `authenticatedUrl` mints a one-time token per call. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). An exact Fetch route may declare `admitPeer(request, peer)`, the hook through which it admits a non-owner Peer; a route without it keeps upstream's owner-only behaviour. Lead verdict (2026-11-11): kept; the unused trust options are removed.",
+      "sha256": "3bf31f7620d956d1dc397121fcb2e04b67316e2ac7e029210dfab21ea06295be"
     },
     {
       "path": "packages/client/connection/tests/minted.host.spec.ts",
@@ -455,8 +455,8 @@
     {
       "path": "packages/client/connection/tests/reach.host.spec.ts",
       "class": "security",
-      "reason": "Admission seam (C4): proves the reach dispatcher's refusals and their order over a real web server, that every route, upgrade, `/api` and the fallback answer 401 before sign-in, that pre-login requests reach only their listed route, that a listener opens only with a provider serving a valid reach policy and closes and stays closed when its provider is removed or replaced, and that loopback admission keeps the fence before a loaded provider. It also proves identity-header removal from every view on requests and upgrades, the refusal of non-origin-form targets and duplicate `Host` lines, that a policy withdrawn while binding opens no listener, that `closeReachConnections` ends exactly the matching streams and upgraded sockets, and that loopback index and `/connect` requests consult a loaded provider and receive its `setCookie`. Covers the reach response headers, the full policy text and a fresh nonce per response, on admitted, pre-login and refused responses and refused upgrades. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): proves that a one-time token presented on a reach listener is refused there and no longer signs in on the loopback listener. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10).",
-      "sha256": "02609de5d29d4a44d7adcb7da1b04850f499a844ed9e3df74b17cb701fa0a7a1"
+      "reason": "Admission seam (C4): proves the reach dispatcher's refusals and their order over a real web server, that every route, upgrade, `/api` and the fallback answer 401 before sign-in, that pre-login requests reach only their listed route, that a listener opens only with a provider serving a valid reach policy and closes and stays closed when its provider is removed or replaced, and that loopback admission keeps the fence before a loaded provider. It also proves identity-header removal from every view on requests and upgrades, the refusal of non-origin-form targets and duplicate `Host` lines, that a policy withdrawn while binding opens no listener, that `closeReachConnections` ends exactly the matching streams and upgraded sockets, and that loopback index and `/connect` requests consult a loaded provider and receive its `setCookie`. Covers the reach response headers, the full policy text and a fresh nonce per response, on admitted, pre-login and refused responses and refused upgrades. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): proves that a one-time token presented on a reach listener is refused there and no longer signs in on the loopback listener. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Lead verdict (2026-11-11): kept; expects 400 for a repeated Host line ahead of the reach gate's own check.",
+      "sha256": "cedb9f96b79c3045d9cdcc9985675599cf42685f76caf180d7cdcc6a74822d4b"
     },
     {
       "path": "packages/client/locale/src/client/index.ts",
@@ -473,13 +473,13 @@
     {
       "path": "packages/client/modules/src/client/manifest.ts",
       "class": "security",
-      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the page boots the default delo-plugin-loader policy beside the nonce shim, feature-detected, and the plugin loader routes its HTML and script-URL paths through it; a community plugin raw innerHTML assignment renders with its scripts removed.",
+      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the page boots the default delo-plugin-loader policy beside the nonce shim, feature-detected, and the plugin loader routes its HTML and script-URL paths through it; a community plugin raw innerHTML assignment renders with its scripts removed. Lead verdict (2026-11-11): kept; re-registers the loader policy's allowlist on every manifest change.",
       "sha256": "0dbebae7d66f0d784c213f21e10425cdc140af5b8e4620783d5028eb7b543bc8"
     },
     {
       "path": "packages/client/modules/src/client/system.ts",
       "class": "security",
-      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the page boots the default delo-plugin-loader policy beside the nonce shim, feature-detected, and the plugin loader routes its HTML and script-URL paths through it; a community plugin raw innerHTML assignment renders with its scripts removed.",
+      "reason": "Reach Trusted Types (C4, WP5.1 PR 3): the page boots the default delo-plugin-loader policy beside the nonce shim, feature-detected, and the plugin loader routes its HTML and script-URL paths through it; a community plugin raw innerHTML assignment renders with its scripts removed. Lead verdict (2026-11-11): kept; the bundle loader sets script.src through the delo-plugin-loader policy when the page created one and fails the load without a request when the policy refuses the URL; without the policy it sets the URL as upstream does.",
       "sha256": "567c3224eb59f039d4d7f3e3fd1a8debc08f2dc8e42858ebdb0f8b22781dfbab"
     },
     {
@@ -1103,25 +1103,25 @@
     {
       "path": "packages/fs/fs-sandbox/src/index.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): under `workspace-write` the write fence also refuses every target that canonicalizes under the mounted sandbox provider's `protectedHome` with `FS_SANDBOX_DENIED`, so the write tools cannot write into the home from a workspace that contains it. It reads the provider through `ctx.get('sandbox')`, adding no injection; without a provider or a protected home the fence is upstream's. Lead decision on the review of #66 (close the write-tool gap in this PR); stricter only. The fence also refuses every other root of the provider's `protectedReads`, such as a second mount of the home the provider found.",
+      "reason": "Protected home and denied sockets (C1's confinement rules): under `workspace-write` the write fence also refuses every target that canonicalizes under the mounted sandbox provider's `protectedHome` with `FS_SANDBOX_DENIED`, so the write tools cannot write into the home from a workspace that contains it. It reads the provider through `ctx.get('sandbox')`, adding no injection; without a provider or a protected home the fence is upstream's. Lead decision on the review of #66 (close the write-tool gap in this PR); stricter only. The fence also refuses every other root of the provider's `protectedReads`, such as a second mount of the home the provider found. Lead verdict (2026-11-11): kept; the write fence refuses a target under the protected home or any other mount of it that the provider reports.",
       "sha256": "415e3eaeeff4770bf2fe1fba24010e7972cc9832e4319556ef633d7159935653"
     },
     {
       "path": "packages/fs/tool-fs-search/src/glob.ts",
       "class": "security",
-      "reason": "Protected home, read fence: runs ripgrep through `runRipgrep` with the requested root and an argv builder, keeps each output path through the run's `keep` and respells it through `display`; `buildGlobCommand` takes the root spelling ripgrep receives as an optional second argument, defaulting to the requested path, and still decides pruning from the requested path.",
+      "reason": "Protected home, read fence: runs ripgrep through `runRipgrep` with the requested root and an argv builder, keeps each output path through the run's `keep` and respells it through `display`; `buildGlobCommand` takes the root spelling ripgrep receives as an optional second argument, defaulting to the requested path, and still decides pruning from the requested path. Lead verdict (2026-11-11): kept; glob runs through the confined, root-pinned search in search-core.",
       "sha256": "148ad30ed9eacc5797e9ba68a721cf89bdedf07fe69164586116b5191f95775f"
     },
     {
       "path": "packages/fs/tool-fs-search/src/grep.ts",
       "class": "security",
-      "reason": "Protected home, read fence: runs ripgrep through `runRipgrep` with the requested root and an argv builder, keeps each match through the run's `keep` and respells its path through `display`; `buildGrepCommand` takes the root spelling ripgrep receives as an optional second argument, defaulting to the requested path.",
+      "reason": "Protected home, read fence: runs ripgrep through `runRipgrep` with the requested root and an argv builder, keeps each match through the run's `keep` and respells its path through `display`; `buildGrepCommand` takes the root spelling ripgrep receives as an optional second argument, defaulting to the requested path. Lead verdict (2026-11-11): kept; grep runs through the confined, root-pinned search in search-core.",
       "sha256": "4bed1a55fec93cb0fbad7d6ed563cc0d48de1acc1d31c0d1df5a2f5c6b24487a"
     },
     {
       "path": "packages/fs/tool-fs-search/src/search-core.ts",
       "class": "security",
-      "reason": "Protected home, read fence: when the sandbox provider reports `protectedReads` and the call does not run under `danger-full-access`, `runRipgrep` resolves the search root to its canonical path before ripgrep starts and refuses a protected root with the new `SEARCH_SANDBOX_DENIED`, passes ripgrep the canonical path (or runs it in the canonical directory when no path was given), wraps it through `ctx.sandbox.confine` under a `read-only` policy so the kernel's home rule holds at every depth, classifies a sandbox runner failure as `SEARCH_FAILED` before exit 1 can read as no matches, accepts an exit 2 whose diagnostics are only access denials under protected paths, drops each output path outside the canonical root or under a protected root, and refuses the search when the root resolves differently afterwards. A root under a tool-readable entry runs unconfined. `runRipgrep` takes a `RipgrepSearch` (root plus argv builder) and returns `keep` and `display` with the run. Without protected reads the spawn is upstream's.",
+      "reason": "Protected home, read fence: when the sandbox provider reports `protectedReads` and the call does not run under `danger-full-access`, `runRipgrep` resolves the search root to its canonical path before ripgrep starts and refuses a protected root with the new `SEARCH_SANDBOX_DENIED`, passes ripgrep the canonical path (or runs it in the canonical directory when no path was given), wraps it through `ctx.sandbox.confine` under a `read-only` policy so the kernel's home rule holds at every depth, classifies a sandbox runner failure as `SEARCH_FAILED` before exit 1 can read as no matches, accepts an exit 2 whose diagnostics are only access denials under protected paths, drops each output path outside the canonical root or under a protected root, and refuses the search when the root resolves differently afterwards. A root under a tool-readable entry runs unconfined. `runRipgrep` takes a `RipgrepSearch` (root plus argv builder) and returns `keep` and `display` with the run. Without protected reads the spawn is upstream's. Lead verdict (2026-11-11): kept; grep and glob resolve their root to its real path before ripgrep starts, refuse a root under the protected home, run ripgrep confined read-only and fail when it cannot be confined, drop output paths outside the root or under the home, and refuse a search whose root resolves differently afterwards.",
       "sha256": "6dc56627068b906b8be278faea85d9f920da4c21fbacbeed38ed0082fe2de75c"
     },
     {
@@ -1133,31 +1133,31 @@
     {
       "path": "packages/fs/tool-fs/src/index.ts",
       "class": "security",
-      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. Protected home: exports `refuseProtectedRead` so `dsh-tool-str-replace-editor` applies the same check.",
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. Protected home: exports `refuseProtectedRead` so `dsh-tool-str-replace-editor` applies the same check. Lead verdict (2026-11-11): kept; with no writeConsent service the gate calls next() as upstream does, and a refusal writes nothing.",
       "sha256": "133b0ca44037dc3f7caa4f8d89dd7ce2c753e7c15d2b049ce8604840e7d7f783"
     },
     {
       "path": "packages/fs/tool-fs/src/patch/plan.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): `apply_patch` applies the protected-read refusal to every target before its preflight reads them.",
+      "reason": "Protected home, read fence (review of #66): `apply_patch` applies the protected-read refusal to every target before its preflight reads them. Lead verdict (2026-11-11): kept; apply_patch applies the protected-read refusal to every target before its preflight reads them.",
       "sha256": "ccdb7cfe6f3be88ba945081b901c591eaaa5310cd5cab3c3deaaa1ae8b8bafcb"
     },
     {
       "path": "packages/fs/tool-fs/src/read-target.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes.",
+      "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes. Lead verdict (2026-11-11): kept; the protected-read refusal runs on the canonical target before any read and is skipped only under danger-full-access; the read itself is confirmed on the opened descriptor in fs-local.",
       "sha256": "1f6fbd3db4b364620bb9e4308cc5c6924d387a02fccd234f862545e5529741b4"
     },
     {
       "path": "packages/fs/tool-fs/src/sandbox.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): `mapError` passes a `FS_SANDBOX_DENIED` through unchanged when no policy is stamped, which the protected-read refusal raises without a confining backend, instead of failing on the missing mode.",
+      "reason": "Protected home, read fence (review of #66): `mapError` passes a `FS_SANDBOX_DENIED` through unchanged when no policy is stamped, which the protected-read refusal raises without a confining backend, instead of failing on the missing mode. Lead verdict (2026-11-11): kept; mapError passes an unstamped FS_SANDBOX_DENIED through instead of failing on the missing mode.",
       "sha256": "b23b55ac98c25d89b21c9c5a91db7dda3911a0ef6657a13357ef3bceada7854b"
     },
     {
       "path": "packages/fs/tool-str-replace-editor/src/index.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): every command resolves its path through `dsh-tool-fs`'s shared `refuseProtectedRead`, so `view` cannot read or list under the protected home and its aliases outside the readable and tool-readable entries, unless the call runs under `danger-full-access`.",
+      "reason": "Protected home, read fence (review of #66): every command resolves its path through `dsh-tool-fs`'s shared `refuseProtectedRead`, so `view` cannot read or list under the protected home and its aliases outside the readable and tool-readable entries, unless the call runs under `danger-full-access`. Lead verdict (2026-11-11): kept; view and edit call the shared refuseProtectedRead from dsh-tool-fs instead of a private copy, and a target swapped after the check fails on the opened descriptor.",
       "sha256": "648c19c45e0ce139f656062dd7631199e6986e8308aef4ff6e55a75bbf5d2870"
     },
     {
@@ -1169,8 +1169,8 @@
     {
       "path": "packages/host/webserver/src/index.ts",
       "class": "security",
-      "reason": "Admission seam (C4): `openListener` opens additional listeners on the same routes, bound only to an OS-assigned port on `127.0.0.1` or to handed-in byte streams with TLS at the listener, never to a configured host or port. Each listener's gate decides every request and upgrade request before any route, upgrade handler or the fallback: a refusal dispatches nothing, a pass may carry the Peer resources receive, headers pinned through the route's own, and an `only` route outside which the gate's refusal answers. Dispatch moves into `dispatchRequest` and `dispatchUpgrade`, which the configured listener uses without a gate, so its behaviour is unchanged. Every upgrade socket of an additional listener gets its error handler and is tracked before the gate runs, a refused upgrade is destroyed once its refusal is written, and ids are reserved before the bind, so a reset or half-open refused client cannot crash the process or hold close open, and two opens of one id cannot both bind. A pass decision may carry a nonce, which the index renderer receives for that response through an async-local store. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): the `webserver/request` event is emitted for each request and upgrade request the main listener receives, before routing, so Connection can consume a launch token a request presents outside the exchanges; a listener that throws is logged and the request is routed regardless. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10).",
-      "sha256": "2e9dc32f3a64ede79ee23e280dcd207d0a515d710e35ef86c9e46d833f583081"
+      "reason": "Admission seam (C4): `openListener` opens additional listeners on the same routes, bound only to an OS-assigned port on `127.0.0.1` or to handed-in byte streams with TLS at the listener, never to a configured host or port. Each listener's gate decides every request and upgrade request before any route, upgrade handler or the fallback: a refusal dispatches nothing, a pass may carry the Peer resources receive, headers pinned through the route's own, and an `only` route outside which the gate's refusal answers. Dispatch moves into `dispatchRequest` and `dispatchUpgrade`, which the configured listener uses without a gate, so its behaviour is unchanged. Every upgrade socket of an additional listener gets its error handler and is tracked before the gate runs, a refused upgrade is destroyed once its refusal is written, and ids are reserved before the bind, so a reset or half-open refused client cannot crash the process or hold close open, and two opens of one id cannot both bind. A pass decision may carry a nonce, which the index renderer receives for that response through an async-local store. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): the `webserver/request` event is emitted for each request and upgrade request the main listener receives, before routing, so Connection can consume a launch token a request presents outside the exchanges; a listener that throws is logged and the request is routed regardless. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Lead verdict (2026-11-11): kept; every listener answers 400 to a request or upgrade with more than one Host line, counted from the raw headers regardless of case, before any gate, route, upgrade handler or fallback runs.",
+      "sha256": "aa4fc725414fb0c52fd47993fc9dd758f8b9ae20dd5924863c1ce79ac587d7f0"
     },
     {
       "path": "packages/host/webserver/src/injections.ts",
@@ -1181,19 +1181,19 @@
     {
       "path": "packages/host/webserver/tests/listeners.spec.ts",
       "class": "security",
-      "reason": "Admission seam (C4): proves that an additional listener's gate runs before every route, upgrade and the fallback, that refusals and `only` dispatch nothing else, that a pass's Peer and pinned headers reach the response, that `streams` listeners end TLS and expose SNI, that close and service disposal end every connection, and that the configured listener stays ungated. It also proves that refused upgrades reset at once raise no uncaught error, that a half-open refused client is destroyed and close settles, and that a concurrent open of one id fails. Covers the nonce on every inline element the index renderer emits. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges.",
-      "sha256": "e5bbd8554be98b06c9d2f217cf7c24ca8356716a9c23d0be4a18f49954004405"
+      "reason": "Admission seam (C4): proves that an additional listener's gate runs before every route, upgrade and the fallback, that refusals and `only` dispatch nothing else, that a pass's Peer and pinned headers reach the response, that `streams` listeners end TLS and expose SNI, that close and service disposal end every connection, and that the configured listener stays ungated. It also proves that refused upgrades reset at once raise no uncaught error, that a half-open refused client is destroyed and close settles, and that a concurrent open of one id fails. Covers the nonce on every inline element the index renderer emits. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. Lead verdict (2026-11-11): kept; proves every listener answers 400 to a repeated Host line before any route.",
+      "sha256": "debe63e3f11db21563ce19fc9b545223ac9f9131ce2f245d75ce5811bd27080f"
     },
     {
       "path": "packages/identity/anonymous-user-id/src/index.ts",
       "class": "security",
-      "reason": "F13: the anonymous user id is written at 0600 and the harness home this module creates at 0700, so an upstream-only run that never runs Delo's `ensureHomeTree` leaves neither readable by another local user.",
+      "reason": "F13: the anonymous user id is written at 0600 and the harness home this module creates at 0700, so an upstream-only run that never runs Delo's `ensureHomeTree` leaves neither readable by another local user. Lead verdict (2026-11-11): kept; the id file is created 0600 and a new home 0700, and existing files and homes are left as they are.",
       "sha256": "281d30b7ea728ed19e03b3c1126fc940b095c6d27870ece87047c9a92c599811"
     },
     {
       "path": "packages/identity/anonymous-user-id/tests/anonymous-user-id.spec.ts",
       "class": "security",
-      "reason": "Pins the id file's 0600 mode and the created home's 0700 mode with a 0022 umask.",
+      "reason": "Pins the id file's 0600 mode and the created home's 0700 mode with a 0022 umask. Lead verdict (2026-11-11): kept; pins both modes under a 0022 umask.",
       "sha256": "b6d8edcd8e373383494d785c8a0b704f0cd77e92d2554daf5ad661c301158279"
     },
     {
@@ -1205,31 +1205,31 @@
     {
       "path": "packages/mcp/mcp-client/src/consent.ts",
       "class": "security",
-      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): new module. The `McpAddConsent` Service Definition the mcp-client reads through the optional `ctx.get('mcpAddConsent')` lookup, the `McpServerCommand` a review judges (the server's namespace, the executable and its arguments) and the `McpConsentDecision` it returns, and `McpConsentRefusedError`, whose message names the command and arguments being granted, carries the provider's reason and states that a server command runs outside the agent sandbox. `McpServerCommand` also carries the configured `env` and `cwd`, the refusal names the working directory and the environment variable names without values, `McpConsentUnavailableError` keeps a server stopped when a row that declares the consent provider (module export `providesMcpAddConsent`) did not start, and `findMcpAddConsent` waits for the Loader's declaring rows instead of depending on row order.",
+      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): new module. The `McpAddConsent` Service Definition the mcp-client reads through the optional `ctx.get('mcpAddConsent')` lookup, the `McpServerCommand` a review judges (the server's namespace, the executable and its arguments) and the `McpConsentDecision` it returns, and `McpConsentRefusedError`, whose message names the command and arguments being granted, carries the provider's reason and states that a server command runs outside the agent sandbox. `McpServerCommand` also carries the configured `env` and `cwd`, the refusal names the working directory and the environment variable names without values, `McpConsentUnavailableError` keeps a server stopped when a row that declares the consent provider (module export `providesMcpAddConsent`) did not start, and `findMcpAddConsent` waits for the Loader's declaring rows instead of depending on row order. Lead verdict (2026-11-11): kept; a stdio server start is reviewed with its command, arguments, working directory and environment, and waits for any row that declares a consent provider whatever the row order; a declared provider that did not start keeps the server stopped.",
       "sha256": "757a4efe65fe4fd059034be67508cbd23a69cc6bbdc9bd9179b60e621960c0e5"
     },
     {
       "path": "packages/mcp/mcp-client/src/index.ts",
       "class": "security",
-      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): before a stdio server starts, the plugin consults the mounted consent with the configured server name, command and arguments, and a refusal throws the typed `McpConsentRefusedError` at load, which leaves the server stopped with the typed reason. Without a mounted service — or for a Streamable HTTP server, which starts no local command — activation is exactly upstream's. The review also receives the configured environment and working directory, and the lookup goes through `findMcpAddConsent`, so a server row that starts before the consent row waits for it.",
+      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): before a stdio server starts, the plugin consults the mounted consent with the configured server name, command and arguments, and a refusal throws the typed `McpConsentRefusedError` at load, which leaves the server stopped with the typed reason. Without a mounted service — or for a Streamable HTTP server, which starts no local command — activation is exactly upstream's. The review also receives the configured environment and working directory, and the lookup goes through `findMcpAddConsent`, so a server row that starts before the consent row waits for it. Lead verdict (2026-11-11): kept; passes the reviewed start, including working directory and environment, to the consent check.",
       "sha256": "6dc0777c959f96aa38aa0fdf04b43cddeaf06caade003cfc4cfa55fbffbbf834"
     },
     {
       "path": "packages/mcp/mcp-client/src/transport.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): the stdio child environment is built by one exported merge, `buildChildEnv`, over the subprocess seam's `scrubbedParentEnv()`, so an MCP server inherits the value-shape pass (URL user information, webhook URLs, PEM private key blocks, credential-file paths and agent sockets) and the explicit denylist. A credential reaches the child only through the configured `env`, which merges after the scrub.",
+      "reason": "Ambient credential scrub (H3): the stdio child environment is built by one exported merge, `buildChildEnv`, over the subprocess seam's `scrubbedParentEnv()`, so an MCP server inherits the value-shape pass (URL user information, webhook URLs, PEM private key blocks, credential-file paths and agent sockets) and the explicit denylist. A credential reaches the child only through the configured `env`, which merges after the scrub. Lead verdict (2026-11-11): kept; the stdio child environment is the scrubbed parent environment with the configured env merged over it.",
       "sha256": "9587550aa2ce67f2e5cea3aa09105e6afafac844de7cadf34d413aaa7c3a5837"
     },
     {
       "path": "packages/mcp/mcp-client/tests/consent.spec.ts",
       "class": "security",
-      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): covers the seam. A server starts exactly as upstream does with no service mounted, a held review starts no child process and registers no tool until it allows, a refusal leaves the server stopped with the typed reason as the load failure and as the typed error without failing the startup path when not fatal, the service reviews the command at every boot so a changed command reaches it again, and a Streamable HTTP server is never held. Also covers the working directory and environment in the review and the refusal, a server row that starts before the declared consent row, a declared consent row that fails, and a declared row that registers no consent.",
+      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): covers the seam. A server starts exactly as upstream does with no service mounted, a held review starts no child process and registers no tool until it allows, a refusal leaves the server stopped with the typed reason as the load failure and as the typed error without failing the startup path when not fatal, the service reviews the command at every boot so a changed command reaches it again, and a Streamable HTTP server is never held. Also covers the working directory and environment in the review and the refusal, a server row that starts before the declared consent row, a declared consent row that fails, and a declared row that registers no consent. Lead verdict (2026-11-11): kept; covers the row-order wait, a declared consent row that fails to start, and the review of working directory and environment.",
       "sha256": "df0cafafbf6f081015e45183d0d02114d6c859f07071983fcc2f962f80021076"
     },
     {
       "path": "packages/mcp/mcp-client/tests/mcp-client.spec.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through — a denylisted name with an agent-socket value reaches the child because the config named it.",
+      "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through — a denylisted name with an agent-socket value reaches the child because the config named it. Lead verdict (2026-11-11): kept; shows the configured env is the only pass-through to the stdio child.",
       "sha256": "8a891a97f02b9750594332e045dcfe436928ca388200810eb2c03c5fe92a895a"
     },
     {
@@ -1259,7 +1259,7 @@
     {
       "path": "packages/sandbox/sandbox-local/src/mounts.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): finds the other paths that reach a protected path: mounts of the same filesystem from `/proc/self/mountinfo` (a mount of the path or a directory above it, or a bind mount of a part of it), each confirmed by device and inode, and the macOS Data-volume firmlink spelling; an unreadable Linux mount table fails the wrap closed. Review of #66 found the home readable through WSLg's `/mnt/wslg/distro` and Docker reachable through Docker Desktop's bind mount of its socket. Lead decision on #66: parses each mount's filesystem type and reports alias coverage as `unknown` where the path's device is not in the table or its filesystem is btrfs, bcachefs or overlayfs.",
+      "reason": "Protected home and denied sockets (C1's confinement rules): finds the other paths that reach a protected path: mounts of the same filesystem from `/proc/self/mountinfo` (a mount of the path or a directory above it, or a bind mount of a part of it), each confirmed by device and inode, and the macOS Data-volume firmlink spelling; an unreadable Linux mount table fails the wrap closed. Review of #66 found the home readable through WSLg's `/mnt/wslg/distro` and Docker reachable through Docker Desktop's bind mount of its socket. Lead decision on #66: parses each mount's filesystem type and reports alias coverage as `unknown` where the path's device is not in the table or its filesystem is btrfs, bcachefs or overlayfs. Lead verdict (2026-11-11): kept; aliases come from /proc/self/mountinfo confirmed by device and inode, an unreadable mount table fails closed, and btrfs, bcachefs, overlay or an unlisted device report alias coverage as unknown and confine without the aliases.",
       "sha256": "066f4a9615d1d0a1289fdd4c7a617a87971233294429735121c751023878fe6d"
     },
     {
@@ -1277,7 +1277,7 @@
     {
       "path": "packages/sandbox/sandbox-policy/src/session-mode.ts",
       "class": "security",
-      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream.",
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. Lead verdict (2026-11-11): kept; with no sandboxModeGuard setSandboxMode appends as upstream does, and a refusal appends no sandbox/mode event; a fresh session's default preset and a delegated child's mode do not consult the guard.",
       "sha256": "6987b64d2225dfdb1e30aaa8cead6582ddc773ab3ab2ea18d7b87f26af2bdca2"
     },
     {
@@ -1457,49 +1457,49 @@
     {
       "path": "packages/spill/spill-local/package.json",
       "class": "security",
-      "reason": "Declares `@deepseek-ai/dsh-home-paths` (`privateRoot` resolves `$DSH_HOME`) and the test-only `@deepseek-ai/dsh-sandbox-local` the confinement spec wraps a command through. Also declares `@deepseek-ai/dsh-llm` for `HarnessError` and `@deepseek-ai/dsh-sandbox` for the type of the optional `ctx.sandbox` lookup.",
+      "reason": "Declares `@deepseek-ai/dsh-home-paths` (`privateRoot` resolves `$DSH_HOME`) and the test-only `@deepseek-ai/dsh-sandbox-local` the confinement spec wraps a command through. Also declares `@deepseek-ai/dsh-llm` for `HarnessError` and `@deepseek-ai/dsh-sandbox` for the type of the optional `ctx.sandbox` lookup. Lead verdict (2026-11-11): kept; declares the sandbox dependency the spill root check reads.",
       "sha256": "7614dfc6a2a068d652527ca4b955ca8039d8b945e2fc7e84d4cfbabd53989dfe"
     },
     {
       "path": "packages/spill/spill-local/src/index.ts",
       "class": "security",
-      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses. `saveText` refuses the temp fallback root with `SpillRootUnprotectedError` (`SPILL_ROOT_UNPROTECTED`) while the mounted sandbox provider reports a `protectedHome`, and re-exports `privateRootFallbackCause`.",
+      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses. `saveText` refuses the temp fallback root with `SpillRootUnprotectedError` (`SPILL_ROOT_UNPROTECTED`) while the mounted sandbox provider reports a `protectedHome`, and re-exports `privateRootFallbackCause`. Lead verdict (2026-11-11): kept; the spill notice names a path the read tools may read.",
       "sha256": "9b099ccb22879d69e38e2817d31fc5a398cd3aae61278a48ce84b3887f85feef"
     },
     {
       "path": "packages/spill/spill-local/src/store.ts",
       "class": "security",
-      "reason": "F2: the default spill root is the home's own `<home>/spill`, created 0700 from `$DSH_HOME`, instead of `mkdtemp` under the OS temp dir. The temp dir is granted to every confined command, so a spill written there was readable from inside any home's sandbox, and `discoverDefaultRoots` listed every home's roots. The temp root stays only for a home that cannot host the spill directory. An existing `<home>/spill` is tightened to 0700 on POSIX, a link or non-directory there falls back like an unwritable home, and `privateRootFallbackCause` reports why a home's root is the temp fallback.",
+      "reason": "F2: the default spill root is the home's own `<home>/spill`, created 0700 from `$DSH_HOME`, instead of `mkdtemp` under the OS temp dir. The temp dir is granted to every confined command, so a spill written there was readable from inside any home's sandbox, and `discoverDefaultRoots` listed every home's roots. The temp root stays only for a home that cannot host the spill directory. An existing `<home>/spill` is tightened to 0700 on POSIX, a link or non-directory there falls back like an unwritable home, and `privateRootFallbackCause` reports why a home's root is the temp fallback. Lead verdict (2026-11-11): kept; spill files go only to a 0700 spill/ directory in the home that must not be a link, and with a protected home the output stays in the chat instead of going to a temp directory.",
       "sha256": "9fcf6df900cfa24da9100c614166f15aa17fba21e899fb79f0621c342a6befb4"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-local.spec.ts",
       "class": "security",
-      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill. Also proves an existing spill directory is tightened to owner-only, a link at the spill path is not written through, and the temp fallback is refused while the sandbox protects the home.",
+      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill. Also proves an existing spill directory is tightened to owner-only, a link at the spill path is not written through, and the temp fallback is refused while the sandbox protects the home. Lead verdict (2026-11-11): kept; covers the 0700 tightening, refusing to write through a link, and refusing the temp root under a protected home.",
       "sha256": "bb6240afffa2803753b68b99db12c04dd4d9b9528ecf31a22ec6aaab7fef7752"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-root-confinement.spec.ts",
       "class": "security",
-      "reason": "A denial spec against a real runner: under the home-protected profile a confined command reads a workspace control file and cannot read the spilled tool output beside it.",
+      "reason": "A denial spec against a real runner: under the home-protected profile a confined command reads a workspace control file and cannot read the spilled tool output beside it. Lead verdict (2026-11-11): kept; proves spill files stay under the home's spill directory.",
       "sha256": "830a96a8e530552a0f3ad6f5c9470044f210471a3e8593f9658bcb3fac599ac0"
     },
     {
       "path": "packages/spill/spill-local/tsconfig.json",
       "class": "security",
-      "reason": "The `home-paths` project reference for the new import. Also the `llm` and `sandbox` project references.",
+      "reason": "The `home-paths` project reference for the new import. Also the `llm` and `sandbox` project references. Lead verdict (2026-11-11): kept; the matching project reference.",
       "sha256": "47c2d2c1a72995885aa935ce8f4458a1f2c73ce3c2d8c358fae07c111890b71c"
     },
     {
       "path": "packages/subprocess/subprocess/src/index.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*PASSPHRASE*`, `MYSQL_PWD`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a user name alone included, a webhook URL, a PEM private key block, a credential-file path or an agent socket. A `*PATH` search list loses only its elements that name a credential file or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through.",
+      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*PASSPHRASE*`, `MYSQL_PWD`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a user name alone included, a webhook URL, a PEM private key block, a credential-file path or an agent socket. A `*PATH` search list loses only its elements that name a credential file or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through. Lead verdict (2026-11-11): kept; child processes lose credential-named variables and URL values with user information, and a PATH-like list loses only its credential-file and agent-socket elements.",
       "sha256": "a9a69de9b1f6a46689e33814d40c46e52425d98d2c0bf3a1d6885b30cba9d423"
     },
     {
       "path": "packages/subprocess/subprocess/tests/env.spec.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive. Also covers token-only URL user information, Sentry DSNs, a user name alone, scp-style remotes and query `@`, and per-element removal from search paths.",
+      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive. Also covers token-only URL user information, Sentry DSNs, a user name alone, scp-style remotes and query `@`, and per-element removal from search paths. Lead verdict (2026-11-11): kept; covers credential names, URL user information with and without a password, and per-element filtering of PATH-like lists.",
       "sha256": "313a27fe116a56bf98f3ebf7daeb90242742bad0b82825344b8831989753231a"
     },
     {
@@ -1529,14 +1529,14 @@
     {
       "path": "packages/web/web-fetch-http/src/index.ts",
       "class": "security",
-      "reason": "web_fetch guard seam (A100): the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted; without it the provider is byte-identical to upstream.",
+      "reason": "web_fetch guard seam (A100): the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted; without it the provider is byte-identical to upstream. Lead verdict (2026-11-11): kept; reads fetchGuard per hop and, with no guard mounted, makes no lookup or check and sets no dispatcher, as upstream does.",
       "sha256": "f3cbb2a582ea59c1053462a10609490c2b8a81aa3d055592c44e064c3a9a5fc5"
     },
     {
       "path": "packages/web/web-fetch-http/src/provider.ts",
       "class": "security",
-      "reason": "web_fetch guard seam: the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted, through `node:dns/promises` so the worker packer's stub serves the preview; without a guard the provider fetches as upstream does. Lead verdict: kept; the DNS module change resolves the same addresses and moves no refusal (2026-11-10).",
-      "sha256": "ecda656e43b1ec29af844a146d48f14411aa443db4cdc319ee831460e7df7b35"
+      "reason": "web_fetch guard seam: the provider consults an optional FetchGuard service before each fetch hop and resolves the hostname only when one is mounted, through `node:dns/promises` so the worker packer's stub serves the preview; without a guard the provider fetches as upstream does. Lead verdict: kept; the DNS module change resolves the same addresses and moves no refusal (2026-11-10). Lead verdict (2026-11-11): kept; an IPv6 literal reaches the fetch guard as its unbracketed address with no DNS lookup, and the connection goes to that same address.",
+      "sha256": "86a31bdc15513a0d3014962cc28e1c88d745e2222050c2442d0c69c137e2ec69"
     },
     {
       "path": "pnpm-workspace.yaml",
@@ -1661,103 +1661,103 @@
     {
       "path": "packages/client/connection/src/api-request-trust.ts",
       "class": "security",
-      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. A state-changing /api request that carries neither Origin nor Sec-Fetch-Site is accepted toward a loopback Host or an HTTPS listener, where a Fetch-Metadata browser always sends a marker, and refused toward any other plain-HTTP destination; a marker that is present and not same-origin or none is refused. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "b8c4c47175962921f930f71e7fcf2fce9e6fbb0a00f2cc31f5dc2b0a1d46f90b"
+      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot — with exactly one Host line in the raw header list, and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. A state-changing /api request that carries neither Origin nor Sec-Fetch-Site is accepted toward a loopback Host or an HTTPS listener, where a Fetch-Metadata browser always sends a marker, and refused toward any other plain-HTTP destination; a marker that is present and not same-origin or none is refused. Lead verdict (2026-11-11): kept; the /api target is read with the same URL parse the router uses, so no dot-segment, percent-encoded or backslash spelling reaches /api without the origin rule, and a cross-site request is refused on every route.",
+      "sha256": "54df381e0c500f0138a01af35badb066900853518c23de6ac814549687011680"
     },
     {
       "path": "packages/client/connection/tests/api-request-trust.host.spec.ts",
       "class": "security",
-      "reason": "Specs of the tightened /api trust fence: every Host spelling the URL parser would repair, a repeated Host line node:http keeps only the first of, a state-changing /api request that states no origin, and the cross-site arrival a route declares for a navigation only. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "73c586a044f6399810be457c8491ef99574384be9525a885945e5c25d44777db"
+      "reason": "Specs of the tightened /api trust fence: every Host spelling the URL parser would repair, a repeated Host line node:http keeps only the first of, a state-changing /api request that states no origin, and the cross-site arrival a route declares for a navigation only. Lead verdict (2026-11-11): kept; covers every refused Host spelling, repeated Host lines, the origin account and dot-segment /api targets.",
+      "sha256": "17236b3e4135a9b1fb201406d537de70f2c792c03aab6ebbfebd63ded6910e32"
     },
     {
       "path": "packages/client/connection/tests/fetch-routes.host.spec.ts",
       "class": "security",
-      "reason": "Spec of the exact-route media-type gate: a body arriving with any media type but the route's own is refused, which the streaming upload route relies on. Lead verdict: pending; no lead review of this change is recorded yet. It also covers the `admitPeer` hook: a non-owner Peer is admitted to an exact route only when the route's hook returns true, and a route without the hook stays owner-only.",
+      "reason": "Spec of the exact-route media-type gate: a body arriving with any media type but the route's own is refused, which the streaming upload route relies on. It also covers the `admitPeer` hook: a non-owner Peer is admitted to an exact route only when the route's hook returns true, and a route without the hook stays owner-only. Lead verdict (2026-11-11): kept; covers the raw upload route's media-type gate and its admission of a non-owner Peer only for the named Session.",
       "sha256": "7a0a79afc2518a3e2de3a35749493f5a0ca37a6b4aa5618fe405599715274aec"
     },
     {
       "path": "packages/client/connection/tests/node-half.host.spec.ts",
       "class": "security",
-      "reason": "Harness of the node-half specs: a JSON POST carries the Origin a browser attaches, so the specs exercise the origin-account rule rather than the path a non-browser client takes. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "Harness of the node-half specs: a JSON POST carries the Origin a browser attaches, so the specs exercise the origin-account rule rather than the path a non-browser client takes. Lead verdict (2026-11-11): kept; a JSON POST carries the Origin a browser attaches, so the specs exercise the origin rule.",
       "sha256": "1a104f0f8d3b2b2a20e1edf348ef1b1ea347c663db5ea695fab4829f16b9c94f"
     },
     {
       "path": "packages/client/file-upload/src/index.ts",
       "class": "security",
-      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. Lead verdict: pending; no lead review of this change is recorded yet. The raw upload route declares the `admitPeer` hook, which admits a non-owner Peer only for the Session remote access lets it upload to; without the hook the route keeps upstream's owner-only behaviour.",
+      "reason": "Declares the streaming upload route's media type (application/octet-stream): the body is raw bytes, not JSON, and the exact-route gate refuses every other declared type. The raw upload route declares the `admitPeer` hook, which admits a non-owner Peer only for the Session remote access lets it upload to; without the hook the route keeps upstream's owner-only behaviour. Lead verdict (2026-11-11): kept; the raw upload route refuses any media type but application/octet-stream, and a non-owner Peer passes only when remote access allows fileUploads/upload, which also stages prompt images, on the Session the request names.",
       "sha256": "113fd54d90ec0f66410f47b278e3502f541285ecf2ac82f810404b4847c970eb"
     },
     {
       "path": "packages/client/hmr/package.json",
       "class": "security",
-      "reason": "Development dependency on @deepseek-ai/dsh-client-connection for the Context merge the transport now reads; the peer set is unchanged. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "Development dependency on @deepseek-ai/dsh-client-connection for the Context merge the transport now reads; the peer set is unchanged. Lead verdict (2026-11-11): kept; requires connection, so the event stream does not mount without the fence.",
       "sha256": "12459b4814bc9bc84b6cdb8f954e01b69d1dd999b8865d4909fa84d9f8299409"
     },
     {
       "path": "packages/client/hmr/src/index.ts",
       "class": "security",
-      "reason": "The /plugins/events SSE stream names the module graph, the plugin inventory and the release commit, so every request asks the composition's `connection` fence for a rejection before the channel opens: a rebound page carrying the attacker's authority reads nothing, nor does an unauthenticated caller. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "The /plugins/events SSE stream names the module graph, the plugin inventory and the release commit, so every request asks the composition's `connection` fence for a rejection before the channel opens: a rebound page carrying the attacker's authority reads nothing, nor does an unauthenticated caller. Lead verdict (2026-11-11): kept; /plugins/events asks connection.requestRejection before writing anything, so a rebound or unauthenticated caller gets the status and no frame.",
       "sha256": "9a2146cd93d0c4513411c3a672bd229b786fdf494f434bf0626e3e418212a3d0"
     },
     {
       "path": "packages/client/hmr/tests/node-half.client.spec.ts",
       "class": "security",
-      "reason": "Specs of the gated event stream: a refused authority gets the fence's status and no frame, the loopback authority streams, and the mount helper's fence type takes the request. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "50babfeb575d2cc90a745b557c6a9e785bb940e5e9fae33584786e9f2a9cb7be"
+      "reason": "Specs of the gated event stream: a refused authority gets the fence's status and no frame, the loopback authority streams, and the mount helper's fence type takes the request. Lead verdict (2026-11-11): kept; proves a refused authority gets the fence's status and no frame on /plugins/events.",
+      "sha256": "e9b6147c8b819bd2c12d8cb3a09b58a3953b324e4e462ecefa8ce8511665b809"
     },
     {
       "path": "packages/client/hmr/tsconfig.json",
       "class": "security",
-      "reason": "Project reference to the connection package's host project, which declares the `connection` Context merge this package's route handler reads. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "Project reference to the connection package's host project, which declares the `connection` Context merge this package's route handler reads. Lead verdict (2026-11-11): kept; project reference to the connection package.",
       "sha256": "440b6d3aa8dea7750d00c421b77b6a5d3e3f0ce7e36f1f2abeed3f0f8de72f44"
     },
     {
       "path": "packages/client/modules/src/index.ts",
       "class": "security",
-      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request — which arrives with no admitted Peer — asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request — which arrives with no admitted Peer — asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict (2026-11-11): kept; an HTTP request to /plugins with no Peer passes the connection fence before any bundle is read, and the route does not register without connection.",
       "sha256": "246cc74cbe22db5ec8d1e60a50555034bb60c85945217da9d4b1f05e1b1dfc45"
     },
     {
       "path": "packages/client/modules/tests/node-half.client.spec.ts",
       "class": "security",
-      "reason": "Spec of the gated bundle route: a request over HTTP without an admitted Peer takes the fence's refusal before a bundle is read. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "Spec of the gated bundle route: a request over HTTP without an admitted Peer takes the fence's refusal before a bundle is read. Lead verdict (2026-11-11): kept; covers the /plugins fence refusal before any bundle read.",
       "sha256": "175076e97d0240e58f760c22b960b3eac8af8be3178ffb02b2b2491ce433dc9a"
     },
     {
       "path": "packages/client/modules/tests/package-assets.client.spec.ts",
       "class": "security",
-      "reason": "Composition of the carrier spec: provides an admitting `connection` service, which the bundle route now injects. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "reason": "Composition of the carrier spec: provides an admitting `connection` service, which the bundle route now injects. Lead verdict (2026-11-11): kept; covers the gated plugin asset reads.",
       "sha256": "b5e21df2ef3627f2c02a089493b9685c5ccfe8b4551ffd5716893265930ce076"
     },
     {
       "path": "packages/host/frontend-static/src/index.ts",
       "class": "security",
-      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "36fc8a466462f9715408937d2cbb76933089bb4f386c513c534adc9722315c9b"
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check.",
+      "sha256": "00be066fd596b6506b22d2e7f3e2e1b2b5dacf1ed93349670cb02028a3a706ed"
     },
     {
       "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
       "class": "security",
-      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict: pending; no lead review of this change is recorded yet.",
-      "sha256": "bbbde1a5077c40ef425145fa968cec797392a792c65e5dc00924882862088e9b"
+      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public.",
+      "sha256": "fb2821159d2ed698e9eab344fd569e43fb88b00b60d9426b88c2ee39cfdca8ab"
     },
     {
       "path": "packages/web/web-fetch-http/package.json",
       "class": "security",
-      "reason": "web_fetch guard pin (B3): promotes `@deepseek-ai/dsh-http-proxy` from a development dependency to a dependency, because the provider now asks the installed proxy policy whether a hop is tunnelled before it pins the guard's approved addresses; the dependency itself was already there.",
+      "reason": "web_fetch guard pin (B3): promotes `@deepseek-ai/dsh-http-proxy` from a development dependency to a dependency, because the provider now asks the installed proxy policy whether a hop is tunnelled before it pins the guard's approved addresses; the dependency itself was already there. Lead verdict (2026-11-11): kept; dsh-http-proxy moves to runtime dependencies because the provider chooses between the proxy and the pinned agent at runtime.",
       "sha256": "99c21a40e028bc094a9b80dc88a9402f3e8a9fb6af8ea0bec9a5b7e68c80fa03"
     },
     {
       "path": "packages/web/web-fetch-http/tests/proxy.spec.ts",
       "class": "security",
-      "reason": "web_fetch guard pin (B3): proves a hop with a mounted guard and an installed proxy keeps the proxy dispatcher rather than the pinned agent, so the pin applies to a direct connection only and the person's proxy is never bypassed.",
-      "sha256": "dc1348471da94085717ec4c1d33ca80686ce3a833523a775d3a48172fa42a3c8"
+      "reason": "web_fetch guard pin (B3): proves a hop with a mounted guard and an installed proxy keeps the proxy dispatcher rather than the pinned agent, so the pin applies to a direct connection only and the person's proxy is never bypassed. Lead verdict (2026-11-11): kept; shows a guarded hop still goes through the installed proxy, with typed DNS mocks.",
+      "sha256": "4441b1b6be9f9b32ba8cd4df50f294307dc9da130e886c39149b89c1a340ad03"
     },
     {
       "path": "packages/web/web-fetch-http/tsconfig.json",
       "class": "security",
-      "reason": "web_fetch guard pin (B3): the project reference to `../../util/http-proxy`, whose proxy policy the provider reads before it chooses a dispatcher.",
+      "reason": "web_fetch guard pin (B3): the project reference to `../../util/http-proxy`, whose proxy policy the provider reads before it chooses a dispatcher. Lead verdict (2026-11-11): kept; the matching project reference.",
       "sha256": "2923379a708373d358a8cfc62798a192d2211c50a6c16d77807edad5d8170984"
     },
     {
@@ -1787,7 +1787,7 @@
     {
       "path": "packages/deliverables/tool-present/src/index.ts",
       "class": "security",
-      "reason": "`present` refuses a path under the sandbox provider's protected home, outside its readable entries, with `FS_SANDBOX_DENIED` before it inspects the path, as `read` does.",
+      "reason": "`present` refuses a path under the sandbox provider's protected home, outside its readable entries, with `FS_SANDBOX_DENIED` before it inspects the path, as `read` does. Lead verdict (2026-11-11): kept; `present` refuses a protected-home path with `FS_SANDBOX_DENIED` before any stat, with the same guard and mode resolution as `read`, and behaves as upstream without a sandbox provider or under full access.",
       "sha256": "7b62dcc52dac4c684fdc723dabf42157a83c3a1e14b3ed8100719d24b51cc03f"
     },
     {
@@ -1919,67 +1919,67 @@
     {
       "path": "packages/api/gateway/src/index.ts",
       "class": "security",
-      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's.",
+      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's. Lead verdict (2026-11-11): kept; a non-owner Peer receives and answers a scoped waterfall only while its policy allows `event:<name>`, checked again at the answer with the answering stream, Peer and delivery, and a refused answer leaves the event pending; with no guard and no allowing policy non-owners are refused as upstream does. A global `event:` grant for a waterfall covers every Session.",
       "sha256": "17e4a1a463826137f142169b9342e07080d6ca7dea60e22e2a8c1412ac4bb100"
     },
     {
       "path": "packages/api/gateway/src/types.ts",
       "class": "security",
-      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's.",
+      "reason": "An optional remoteAnswerGuard is checked before a remote Client's answer to a forwarded prompt is applied, so a Host can refuse an answer that would grant full access; and a non-owner Peer receives and answers a scoped waterfall only while its remote-access policy allows `event:<name>` on the global resource, checked at delivery and again at the answer. Absent a guard and a policy allowing it, behaviour is upstream's. Lead verdict (2026-11-11): kept; the types of the scoped waterfall delivery and the optional answer guard, which reads `grants` from the Host's own request.",
       "sha256": "51b6a708dd5b373dd372c94ac0cd35dd99fdb7a859caaf1430651f72c0411e88"
     },
     {
       "path": "packages/interaction/user-approval/src/types.ts",
       "class": "security",
-      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it.",
+      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it. Lead verdict (2026-11-11): kept; `grants` comes only from a pre-execute decision or a direct approval request, never from model arguments.",
       "sha256": "30a91c4260f0a9106c2cd39863bd9a89b333fd6470f32360019f4dbb74d110f3"
     },
     {
       "path": "packages/api/gateway/src/client/index.ts",
       "class": "security",
-      "reason": "Declares the client event `remote/answer-refused`, which the Client emits when the Host refuses a forwarded prompt's answer with LOOPBACK_REQUIRED; nothing emits it in upstream's own compositions.",
+      "reason": "Declares the client event `remote/answer-refused`, which the Client emits when the Host refuses a forwarded prompt's answer with LOOPBACK_REQUIRED; nothing emits it in upstream's own compositions. Lead verdict (2026-11-11): kept; only a `LOOPBACK_REQUIRED` failure becomes `remote/answer-refused` and keeps the event stream, and every other failure ends the generation as upstream does.",
       "sha256": "0fddfa25da7f3c6edd39caedfebccf9fa01adda19bb53c7629862bffca44782b"
     },
     {
       "path": "packages/api/gateway/src/client/remote-events.ts",
       "class": "security",
-      "reason": "When the Host refuses a forwarded prompt's answer with LOOPBACK_REQUIRED, the Client emits `remote/answer-refused` and keeps the event stream instead of failing the generation; every other refusal keeps upstream's behaviour.",
+      "reason": "When the Host refuses a forwarded prompt's answer with LOOPBACK_REQUIRED, the Client emits `remote/answer-refused` and keeps the event stream instead of failing the generation; every other refusal keeps upstream's behaviour. Lead verdict (2026-11-11): kept; `details` is checked to be an object before `action` is read, and a throwing listener is contained.",
       "sha256": "9664d32b92399589ec764650943977dc084aaa2cff1d6891bfc65bd91c6bdabb"
     },
     {
       "path": "packages/client/file-upload/src/http-route.ts",
       "class": "security",
-      "reason": "The raw upload route admits a non-owner Peer only when remote access allows `fileUploads/upload` on the Session the query names; without remote access or a Session it refuses, and owner behaviour is upstream's.",
+      "reason": "The raw upload route admits a non-owner Peer only when remote access allows `fileUploads/upload` on the Session the query names; without remote access or a Session it refuses, and owner behaviour is upstream's. Lead verdict (2026-11-11): kept; the route admits a non-owner Peer only for the Session its sessionId names and refuses before reading the body without remote access or a Session.",
       "sha256": "6e1cbdd6574e45876d195bcb2e20e9584a91dbfb2a41f3eeb5df82587a35beaf"
     },
     {
       "path": "packages/api/remote-access/src/index.ts",
       "class": "security",
-      "reason": "The snapshot's grants group a policy's bindings by resource once, in first-binding order, instead of comparing every binding with every other, so a snapshot is linear in the bindings; the grants are the same, which a spec checks against the earlier computation on generated policies.",
+      "reason": "The snapshot's grants group a policy's bindings by resource once, in first-binding order, instead of comparing every binding with every other, so a snapshot is linear in the bindings; the grants are the same, which a spec checks against the earlier computation on generated policies. Lead verdict (2026-11-11): kept; grouping bindings by kind and id gives the same matches as `sameResource` and affects only the advisory snapshot, never `decide`, pinned by a 500-seed comparison.",
       "sha256": "7adf0db37907a2834d62345d4bbe9216c0b872176fbaa09961f49825836ad56c"
     },
     {
       "path": "packages/core/tools/src/contracts.ts",
       "class": "security",
-      "reason": "A tool's `ask` decision may carry an approval `grants` marker, which the pipeline puts on the approval request, so a Delo guard can mark a prompt that only the home's own computer may grant; without a marker, behaviour is upstream's.",
+      "reason": "A tool's `ask` decision may carry an approval `grants` marker, which the pipeline puts on the approval request, so a Delo guard can mark a prompt that only the home's own computer may grant; without a marker, behaviour is upstream's. Lead verdict (2026-11-11): kept; declares the optional `grants` marker a pre-execute decision may carry, which no model argument can set.",
       "sha256": "990c6ef6dbcce2e142c3ac466f482ef51ab7aa41b1ebb89e861703a1edf514fb"
     },
     {
       "path": "packages/core/tools/src/pipeline.ts",
       "class": "security",
-      "reason": "Passes an `ask` decision's `grants` marker onto the approval request it raises; without a marker, behaviour is upstream's.",
+      "reason": "Passes an `ask` decision's `grants` marker onto the approval request it raises; without a marker, behaviour is upstream's. Lead verdict (2026-11-11): kept; copies `grants` onto the approval request without changing any outcome, with tests for set and unset.",
       "sha256": "2cef487bb80be456f4eb8b493ca8cad8176b4c603a94d5659902395801ad8782"
     },
     {
       "path": "packages/interaction/user-approval/src/index.ts",
       "class": "security",
-      "reason": "Exports the `ApprovalGrant` marker type, so Delo plugins can mark prompts that only the home's own computer may grant.",
+      "reason": "Exports the `ApprovalGrant` marker type, so Delo plugins can mark prompts that only the home's own computer may grant. Lead verdict (2026-11-11): kept; the approval audit events list their fields explicitly, so the `grants` marker is never stored, and no outcome changes.",
       "sha256": "6665282b9987bd80b84ecc92e929d32db98394ced3798e29feb764f56c2eb74d"
     },
     {
       "path": "packages/fs/fs-local/src/fsio.ts",
       "class": "security",
-      "reason": "Protected home, read fence: a read or listing opens the target key and confirms the descriptor is the file or directory the key names before reading through it, so a read tool's protected-read check on the key covers the content when a component of the key is swapped for a link between the check and the open. On Linux the descriptor's `/proc/self/fd` path must equal the key and a listing reads its entries through that descriptor; elsewhere the descriptor's device and inode must equal the key's after the open and the key must still be its own realpath. A mismatch fails with `FS_IO_ERROR`. Reads open with `O_NONBLOCK` outside Windows so a FIFO swapped in after the regular-file check cannot block the open. Content, errors and limits are otherwise upstream's.",
+      "reason": "Protected home, read fence: a read or listing opens the target key and confirms the descriptor is the file or directory the key names before reading through it, so a read tool's protected-read check on the key covers the content when a component of the key is swapped for a link between the check and the open. On Linux the descriptor's `/proc/self/fd` path must equal the key and a listing reads its entries through that descriptor; elsewhere the descriptor's device and inode must equal the key's after the open and the key must still be its own realpath. A mismatch fails with `FS_IO_ERROR`. Reads open with `O_NONBLOCK` outside Windows so a FIFO swapped in after the regular-file check cannot block the open. Content, errors and limits are otherwise upstream's. Lead verdict (2026-11-11): kept; each read and each listing of the requested directory opens the target and confirms the descriptor is that target (its /proc/self/fd path on Linux, device and inode elsewhere), so a link swapped in after the check fails the read with FS_IO_ERROR.",
       "sha256": "c9ecfb2f19a574d05d80a0917300c6a72ecbb3d9a7ab9290113dc87c09131d42"
     },
     {
@@ -2029,6 +2029,12 @@
       "class": "delo-feature",
       "feature": "doctor",
       "reason": "Delo's doctor bundle title and description in Chinese, which upstream's locale-metadata check requires for every shipped language."
+    },
+    {
+      "path": "packages/experimental/webworker-runtime/src/transport/synthetic-http.ts",
+      "class": "security",
+      "reason": "Tunnelled requests in the browser preview carry one raw header line per name, so the web server's repeated-Host check reads them. Lead verdict (2026-11-11): kept; tunnelled requests carry one raw header line per name, so the repeated-Host check reads them without throwing.",
+      "sha256": "29e8303e3b605120dbcbe78d967ee1ea4715df3d3b3b0b91a8488b4567bae2dc"
     }
   ],
   "retired": []
