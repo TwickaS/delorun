@@ -89,6 +89,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloChatStates.set': { device: 'refused', reason: 'snoozing or settling a chat is not in the device rule' },
   '/api/deloOnboarding.setupRecord': { device: 'refused', reason: 'what the terminal setup recorded serves onboarding at the computer' },
   '/api/deloOnboarding.addWorkspace': { device: 'refused', reason: 'adds a folder as a workspace, which is workspace management the home\'s computer keeps', refusal: 'LOOPBACK_ONLY' },
+  '/api/deloNetwork.list': { device: 'refused', reason: 'lists each workspace\'s network setting, which is read and changed only at the home\'s computer', refusal: 'LOOPBACK_ONLY' },
+  '/api/deloNetwork.set': { device: 'refused', reason: 'changes a workspace\'s network, which only the person at the home\'s computer chooses', refusal: 'LOOPBACK_ONLY' },
   '/api/deloMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
   '/api/deloMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
   '/api/deloUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },

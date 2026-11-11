@@ -176,7 +176,7 @@ export const ROW_SERVICES: Readonly<Record<string, readonly string[]>> = {
   'delo-instruction-consent': ['writeConsent'],
   'delo-mcp-consent': ['mcpAddConsent'],
   'delo-schedule-consent': ['scheduleConsent'],
-  'delo-permission-defaults': ['permissionDefaults', 'sandboxModeGuard'],
+  'delo-permission-defaults': ['permissionDefaults', 'sandboxModeGuard', 'deloCommandNetwork', 'sandboxNetwork'],
 }
 
 /**

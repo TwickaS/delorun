@@ -41,6 +41,7 @@ Under `/api`, an exact Fetch route answers a device only when it admits that Pee
 | `/api/deloChatStates.list`, `/api/deloChatStates.set` | Refused | Snooze and settle states order the chat list at the computer; a device renders every chat without them. |
 | `/api/deloOnboarding.setupRecord` | Refused | What terminal setup recorded serves onboarding at the computer. |
 | `/api/deloOnboarding.addWorkspace` | Refused, `LOOPBACK_ONLY` | Adding a folder as a workspace is workspace management, which the home's computer keeps; onboarding refuses it off the loopback listener before upstream's gate. |
+| `/api/deloNetwork.list`, `/api/deloNetwork.set` | Refused, `LOOPBACK_ONLY` | A workspace's network for its sandboxed commands is read and changed only at the home's computer; the permission defaults refuse both off the loopback listener before upstream's gate. |
 | `/api/deloMainChat.open`, `/api/deloMainChat.reports` | Refused | Opening the main chat chooses its preset, and the report count marks the computer's sidebar; a device reads the main chat through `session/page`. |
 | `/api/deloUpdateCheck.notice` | Refused | The notice names the running release and how many plugins an update would turn off, and an update runs only at the computer. |
 | `/api/deloTrash.*` | Refused | Moving to, restoring from or deleting from the trash is not in the device rule. |

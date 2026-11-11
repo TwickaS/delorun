@@ -60,6 +60,13 @@
       "sources": ["delo/apps/cli/src/verify/index.ts"]
     },
     {
+      "id": "egress-proxy",
+      "purpose": "Delo's egress proxy, which forwards a sandboxed command's own request to a host on its workspace's network allowlist, after looking up only listed names and refusing private, loopback and link-local addresses. It runs only for a workspace whose network the person set to allowlist, and sends only what the command sends.",
+      "sources": [
+        "delo/packages/plugin-permission-defaults/src/egress-proxy.ts"
+      ]
+    },
+    {
       "id": "key-check",
       "purpose": "Setup's live check of a typed model key, through upstream's model-listing client, to the provider's origin only.",
       "sources": ["delo/apps/cli/src/setup/key-check.ts"]

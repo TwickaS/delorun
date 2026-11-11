@@ -51,6 +51,8 @@ The user guide is for people who install and use Delorun, the community fork of 
 
 [What Delorun protects](safety.md) explains, in plain language, the sandbox and the protected home on each platform, full access, the consents, the `web_fetch` guard, release checks, and what Delorun does not protect against.
 
+[Prompt injection and data exfiltration](prompt-injection.md) names the three things an attack needs, what each workspace network setting closes for sandboxed commands and `web_fetch`, and what stays open whatever you choose.
+
 [What you trust when you use Delorun](trust.md) states what runs on your computer, what Delo Run can and cannot do, what each reach option shows its provider and what leaves your machine.
 
 ## When something goes wrong

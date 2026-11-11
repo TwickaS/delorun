@@ -175,6 +175,7 @@ export const PARITY_SWITCHES = [
     // behaviour the switch turns off at its parity value.
     sources: [
       'delo/packages/plugin-permission-defaults/src/index.ts',
+      'delo/packages/plugin-permission-defaults/src/command-network.ts',
     ],
   },
   {
