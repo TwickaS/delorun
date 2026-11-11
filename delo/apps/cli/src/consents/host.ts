@@ -24,12 +24,12 @@ export function localConsents(ctx: Pick<Context, 'get'>): LocalConsents {
     pendingServers: () => ctx.get('mcpReviews')?.pending(),
     acceptedServers: async () => ctx.get('mcpReviews')?.accepted(),
     acceptServer: async (serverName, reviewId) => ctx.get('mcpReviews')?.acceptReview(serverName, reviewId, true),
-    declineServer: (serverName, reviewId) => {
+    declineServer: async (serverName, reviewId) => {
       const reviews = ctx.get('mcpReviews')
       if (reviews === undefined) return false
-      reviews.declineReview(serverName, reviewId)
+      await reviews.declineReview(serverName, reviewId)
       return true
     },
-    revokeServer: async (command, acceptedAt) => ctx.get('mcpReviews')?.revokeAcceptance(command, acceptedAt, true),
+    revokeServer: async acceptanceId => ctx.get('mcpReviews')?.revokeAcceptance(acceptanceId, true),
   }
 }

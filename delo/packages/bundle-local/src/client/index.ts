@@ -46,6 +46,7 @@ import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permiss
 // Type-only: the 'conversation.approval.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-approval/client'
 import { en as consentsEn, zh as consentsZh, type ConsentsLocaleKey } from './consents-locales.ts'
+import { ConsentToast, createConsentToastSource } from './ConsentToast.tsx'
 import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAction.tsx'
 import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent } from './FullAccessConsent.tsx'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
@@ -60,6 +61,7 @@ export type { FullAccessConsentProps, FullAccessConsentSource, FullAccessConsent
 export type { FullAccessActionInjected, FullAccessActionProps } from './FullAccessAction.tsx'
 export type { McpReviewSource, McpReviewState, McpServerReviewProps } from './McpServerReview.tsx'
 export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaitingNotice.tsx'
+export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
 export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
 export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
 export type { OptInMutation, OptInSettings } from './opt-in.ts'
@@ -153,6 +155,9 @@ export const MCP_REVIEW_ID = 'delo-mcp-review'
 
 /** The `shell.overlay` id of the notice that an MCP server waits. */
 export const MCP_WAITING_NOTICE_ID = 'delo-mcp-waiting'
+
+/** The `shell.overlay` id of the toast that shows a Permissions answer's outcome. */
+export const CONSENT_TOAST_ID = 'delo-consents-toast'
 
 /** The `conversation.approval.action` id of the full-access action. */
 export const FULL_ACCESS_ACTION_ID = 'delo-full-access'
@@ -276,7 +281,14 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: (sessionId): FullAccessActionInjected => ({ sessionId, fetch, ask: consent.ask }),
   }, FullAccessAction))
-  const permissionsFace = (): PermissionsSectionInjected => ({ fetch, ask: consent.ask, review: review.ask })
+  const toast = createConsentToastSource()
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: CONSENT_TOAST_ID,
+    locale: CONSENTS_NS,
+    inject: () => ({ hooks: toast.hooks, dismiss: toast.dismiss }),
+  }, ConsentToast))
+  const permissionsFace = (): PermissionsSectionInjected => ({ fetch, ask: consent.ask, review: review.ask, notify: toast.show })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: PERMISSIONS_SECTION_ID,

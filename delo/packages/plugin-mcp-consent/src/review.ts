@@ -1,8 +1,9 @@
 /**
  * The pending reviews of the add-time consent: each stdio server start the consent refused, kept so the studio and
  * `delorun mcp` can show it and the person can accept or decline it at the home's own computer. A review's id is a
- * digest of everything the review was shown, the environment's values only through their digest, so an answer that
- * carries the id of an earlier review of a server — one shown before its start changed — is refused as stale.
+ * digest of the whole start, the environment's values only through their digest, so an answer that carries the id of
+ * an earlier review of a server — one shown before its start changed — is refused as stale. A review shows an
+ * environment variable's value only where {@link showsEnvValue} allows it.
  *
  * Free of Cordis at run time, so the review id is testable without a mounted plugin.
  *
@@ -11,7 +12,8 @@
 import { createHash } from 'node:crypto'
 import { sortedEnvEntries, type McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import { envDigest } from './store.ts'
-import type { AcceptedServer, McpConsentRefusalCode, PendingServer, ServerChange } from './wire.ts'
+import { showsEnvValue } from './wire.ts'
+import type { AcceptedServer, EnvVariable, McpConsentRefusalCode, PendingServer, ServerChange, ServerState } from './wire.ts'
 
 /** The length of a review id: hexadecimal digits of a SHA-256. */
 export const MCP_REVIEW_ID_LENGTH = 32
@@ -49,14 +51,34 @@ export function acceptHint(serverName: string): string {
 }
 
 /**
+ * A configured environment as a surface shows it.
+ * @param env - the configured environment entries.
+ * @returns each variable sorted by name, with its value only where {@link showsEnvValue} allows it.
+ */
+export function shownEnv(env: Readonly<Record<string, string>>): readonly EnvVariable[] {
+  return sortedEnvEntries(env).map(([name, value]) => (showsEnvValue(name) ? { name, value } : { name }))
+}
+
+/** What the consent found when it refused a start. */
+export interface RefusedStart {
+  /** Why the consent refused it, naming no environment value. */
+  readonly reason: string
+  /** What the review asks about. */
+  readonly change: ServerChange
+  /** The variables added, removed or given another value, sorted; empty unless the change is `environment`. */
+  readonly changedVariables: readonly string[]
+  /** Whether the review waits for an answer or the person set the start aside. */
+  readonly state: ServerState
+}
+
+/**
  * The pending review of a refused start.
  * @param start - the refused start.
- * @param reason - why the consent refused it.
- * @param change - what the review asks about.
+ * @param refused - what the consent found.
  * @param reviewedAt - when, in milliseconds since the epoch.
- * @returns the review, whose shown fields name the environment's variables but none of their values.
+ * @returns the review, whose shown fields name the environment's variables and only the values a surface may show.
  */
-export function pendingReviewOf(start: McpServerCommand, reason: string, change: ServerChange, reviewedAt: number): PendingReview {
+export function pendingReviewOf(start: McpServerCommand, refused: RefusedStart, reviewedAt: number): PendingReview {
   return {
     start,
     shown: {
@@ -65,9 +87,11 @@ export function pendingReviewOf(start: McpServerCommand, reason: string, change:
       command: start.command,
       args: [...start.args],
       cwd: start.cwd,
-      envNames: sortedEnvEntries(start.env).map(([name]) => name),
-      reason,
-      change,
+      env: shownEnv(start.env),
+      reason: refused.reason,
+      change: refused.change,
+      changedVariables: [...refused.changedVariables],
+      state: refused.state,
       reviewedAt,
     },
   }
@@ -96,7 +120,7 @@ export class McpReviewError extends Error {
  */
 export interface McpReviews {
   /**
-   * The pending reviews, sorted by server name.
+   * The pending reviews in every state, sorted by server name.
    * @returns what a surface shows of each.
    */
   pending(): readonly PendingServer[]
@@ -110,26 +134,26 @@ export interface McpReviews {
    */
   acceptReview(serverName: string, reviewId: string, confirmed: boolean): Promise<{ readonly started: number }>
   /**
-   * Set one pending review aside at the home's own computer.
+   * Set one pending review aside at the home's own computer: it stays listed as `declined` and its server stopped.
    * @param serverName - the server.
    * @param reviewId - the review shown.
+   * @returns when the review is set aside.
    * @throws {McpReviewError} for a stale answer.
    */
-  declineReview(serverName: string, reviewId: string): void
+  declineReview(serverName: string, reviewId: string): Promise<void>
   /**
-   * The accepted starts, with the configured servers that use each.
-   * @returns them sorted by command; none while the store cannot be read.
+   * The accepted starts, one per server name.
+   * @returns them sorted by server name; none while the store cannot be read.
    */
   accepted(): Promise<readonly AcceptedServer[]>
   /**
-   * Withdraw one acceptance at the home's own computer and stop the running rows of its command.
-   * @param command - the accepted command.
-   * @param acceptedAt - the acceptance time the list showed.
+   * Withdraw one acceptance at the home's own computer and stop the running rows of its server.
+   * @param acceptanceId - the acceptance id the list showed.
    * @param confirmed - the person's answer.
    * @returns how many running rows were stopped.
    * @throws {McpReviewError} for an unconfirmed or stale answer, or a store that cannot be written.
    */
-  revokeAcceptance(command: string, acceptedAt: number, confirmed: boolean): Promise<{ readonly stopped: number }>
+  revokeAcceptance(acceptanceId: string, confirmed: boolean): Promise<{ readonly stopped: number }>
 }
 
 declare module '@deepseek-ai/cordis' {

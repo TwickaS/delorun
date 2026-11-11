@@ -2,9 +2,9 @@
  * An accepted server starts without a restart of the studio: under a real Loader, a stdio mcp-client row that the
  * add-time consent refused stays stopped with the typed refusal, and once the person accepts the review the studio
  * showed, the row starts again with its own configuration and registers its tools. Revoking the acceptance stops the
- * row again and removes its tools. The MCP SDK is replaced by a stub, so no process starts.
+ * row again and removes its tools, and its review is listed as revoked. The MCP SDK is replaced by a stub, so no process starts.
  */
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -38,8 +38,11 @@ let root: string
 let ctx: Context
 
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), 'delo-mcp-restart-'))
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'delo-mcp-restart-')))
   mkdirSync(join(root, 'home'), { recursive: true })
+  // The executable the server's absolute command names, which the mcp-client resolves before the review.
+  mkdirSync(join(root, 'bin'))
+  writeFileSync(join(root, 'bin', 'server'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
   vi.stubEnv('DELO_HOME', join(root, 'home'))
   ctx = new Context()
   await ctx.plugin(SystemPrompt)
@@ -61,7 +64,7 @@ describe('an accepted server', () => {
     await ctx.loader.create({ name: 'cordis:consent', config: { enabled: true } })
     const serverId = await ctx.loader.create({
       name: 'cordis:mcp',
-      config: { transport: 'stdio', serverName: 'files', command: 'npx', args: ['-y', 'server-filesystem'], env: {}, cwd: '' },
+      config: { transport: 'stdio', serverName: 'files', command: join(root, 'bin', 'server'), args: ['--stdio'], env: {}, cwd: root },
     })
     await ctx.loader.await()
     await expect(ctx.loader.resolve(serverId).fiber?.await()).rejects.toBeInstanceOf(McpConsentRefusedError)
@@ -75,10 +78,10 @@ describe('an accepted server', () => {
     expect(ctx.tools.get('mcp__files__remote')).toBeDefined()
     expect(reviews?.pending()).toEqual([])
     const [accepted] = await reviews?.accepted() ?? []
-    expect(accepted?.servers).toEqual(['files'])
-    await expect(reviews?.revokeAcceptance('npx', accepted?.acceptedAt ?? 0, true)).resolves.toEqual({ stopped: 1 })
+    expect([accepted?.serverName, accepted?.configured]).toEqual(['files', true])
+    await expect(reviews?.revokeAcceptance(accepted?.acceptanceId ?? '', true)).resolves.toEqual({ stopped: 1 })
     await expect(ctx.loader.resolve(serverId).fiber?.await()).rejects.toBeInstanceOf(McpConsentRefusedError)
     expect(ctx.tools.get('mcp__files__remote')).toBeUndefined()
-    expect(reviews?.pending().map(review => review.change)).toEqual(['new'])
+    expect(reviews?.pending().map(review => [review.change, review.state])).toEqual([['new', 'revoked']])
   })
 })

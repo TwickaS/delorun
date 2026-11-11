@@ -7,8 +7,8 @@
  * - **The caller rule.** `mcp.accept`, `mcp.decline` and `mcp.revoke` are accepted only with the person's token; the
  *   Host's token, which acts for studio sessions on every listener, reach sessions included, is refused with
  *   `LOOPBACK_REQUIRED` before anything is read. `permission.reload` and `mcp.list` change no consent and accept both.
- * - **The shown state.** An answer names the review `mcp.list` showed, and a revoke the acceptance time it showed; a
- *   server whose start was reviewed again since, or a command accepted again or revoked since, is refused with
+ * - **The shown state.** An answer names the review `mcp.list` showed, and a revoke the acceptance id it showed; a
+ *   server whose start was reviewed again since, or an acceptance replaced or revoked since, is refused with
  *   `STALE_REVIEW` and nothing is recorded.
  *
  * @module @delo/home-process/consents
@@ -18,38 +18,58 @@ import type { ChannelCaller } from './devices-approve.ts'
 import { HomeProcessError } from './errors.ts'
 
 /**
- * What a pending review asks about: a server never accepted (`new`), a start whose arguments, working directory or
- * environment differ from the accepted one, or an acceptance store that cannot be read (`unreadable`).
+ * What a pending review asks about: a server never accepted (`new`), a start whose command, arguments, working
+ * directory or environment differ from the server's acceptance, an acceptance store that cannot be read
+ * (`unreadable`), or a start accepted before Delo kept one acceptance per server, which is reviewed once (`upgraded`).
  */
-export type McpServerChange = 'new' | 'arguments' | 'directory' | 'environment' | 'unreadable'
+export type McpServerChange = 'new' | 'command' | 'arguments' | 'directory' | 'environment' | 'unreadable' | 'upgraded'
 
-/** One pending stdio MCP server review, as `delorun mcp` shows it; no field holds an environment value. */
+/** Where a pending review stands: waiting for an answer, or set aside by a decline or a revoke until its start changes. */
+export type McpServerState = 'waiting' | 'declined' | 'revoked'
+
+/**
+ * One configured environment variable as `delorun mcp` shows it: the value only of a variable that changes what runs
+ * (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, `PYTHONPATH`, `DYLD_*`).
+ */
+export interface McpEnvVariable {
+  readonly name: string
+  readonly value?: string
+}
+
+/** One pending stdio MCP server review, as `delorun mcp` shows it. */
 export interface PendingMcpServer {
   readonly serverName: string
   readonly reviewId: string
   readonly command: string
   readonly args: readonly string[]
   readonly cwd: string
-  readonly envNames: readonly string[]
+  /** The configured environment variables, sorted by name. */
+  readonly env: readonly McpEnvVariable[]
   readonly reason: string
   /** What changed since the person's acceptance. */
   readonly change: McpServerChange
+  /** The variables added, removed or changed, sorted; empty unless the change is `environment`. */
+  readonly changedVariables: readonly string[]
+  readonly state: McpServerState
   readonly reviewedAt: number
 }
 
-/** One accepted stdio MCP server start, as `delorun mcp` shows it; no field holds an environment value. */
+/** One accepted stdio MCP server start, one per configured server name, as `delorun mcp` shows it. */
 export interface AcceptedMcpServer {
-  /** The accepted executable; a revoke names it. */
+  /** The id a revoke names. */
+  readonly acceptanceId: string
+  /** The server name the start was accepted for. */
+  readonly serverName: string
   readonly command: string
   readonly args: readonly string[]
   /** The accepted working directory; the empty string is the Host's working directory. */
   readonly cwd: string
-  /** The names of the accepted environment variables, sorted. */
-  readonly envNames: readonly string[]
-  /** When the person accepted it, in milliseconds since the epoch; a revoke names it. */
+  /** The accepted environment variables, sorted by name. */
+  readonly env: readonly McpEnvVariable[]
+  /** When the person accepted it, in milliseconds since the epoch. */
   readonly acceptedAt: number
-  /** The configured servers that start this command, sorted. */
-  readonly servers: readonly string[]
+  /** Whether a configured server row has the server name. */
+  readonly configured: boolean
 }
 
 /**
@@ -83,21 +103,20 @@ export interface LocalConsents {
    */
   acceptServer(serverName: string, reviewId: string): Promise<{ readonly started: number } | undefined>
   /**
-   * Set one pending review aside.
+   * Set one pending review aside as declined.
    * @param serverName - the server.
    * @param reviewId - the review shown.
    * @returns false without the consent.
    * @throws an error with a `code` property, `STALE_REVIEW`, for a refused answer.
    */
-  declineServer(serverName: string, reviewId: string): boolean
+  declineServer(serverName: string, reviewId: string): Promise<boolean>
   /**
-   * Withdraw one acceptance and stop the running servers that start its command.
-   * @param command - the accepted command.
-   * @param acceptedAt - the acceptance time shown.
+   * Withdraw one server's acceptance and stop that server's running rows.
+   * @param acceptanceId - the acceptance id shown.
    * @returns how many running rows stopped, or undefined without the consent.
    * @throws an error with a `code` property, `STALE_REVIEW` or `STORE_REFUSED`, for a refused answer.
    */
-  revokeServer(command: string, acceptedAt: number): Promise<{ readonly stopped: number } | undefined>
+  revokeServer(acceptanceId: string): Promise<{ readonly stopped: number } | undefined>
 }
 
 /**
@@ -178,13 +197,13 @@ export async function acceptServer(request: McpAcceptRequest, caller: ChannelCal
  * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `CONSENT_UNAVAILABLE` without the consent;
  *   `STALE_REVIEW` for a review that changed.
  */
-export function declineServer(request: McpDeclineRequest, caller: ChannelCaller, consents: LocalConsents | undefined): Readonly<Record<string, unknown>> {
+export async function declineServer(request: McpDeclineRequest, caller: ChannelCaller, consents: LocalConsents | undefined): Promise<Readonly<Record<string, unknown>>> {
   if (caller !== 'person') {
     throw new HomeProcessError('LOOPBACK_REQUIRED', 'declining an MCP server needs you at your computer: run delorun mcp decline there')
   }
   let declined: boolean | undefined
   try {
-    declined = consents?.declineServer(request.args.serverName, request.args.reviewId)
+    declined = await consents?.declineServer(request.args.serverName, request.args.reviewId)
   } catch (error) {
     throw consentRefusal(error)
   }
@@ -199,7 +218,7 @@ export function declineServer(request: McpDeclineRequest, caller: ChannelCaller,
  * @param consents - the Host's consents, or undefined without a booted Host.
  * @returns how many running server rows stopped.
  * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `CONSENT_UNAVAILABLE` without the consent;
- *   `STALE_REVIEW` for an acceptance that changed; `CONSENT_FAILED` naming the Host's code for any other refusal.
+ *   `STALE_REVIEW` for an acceptance that was replaced or revoked; `CONSENT_FAILED` naming the Host's code for any other refusal.
  */
 export async function revokeServer(request: McpRevokeRequest, caller: ChannelCaller, consents: LocalConsents | undefined): Promise<Readonly<Record<string, unknown>>> {
   if (caller !== 'person') {
@@ -207,7 +226,7 @@ export async function revokeServer(request: McpRevokeRequest, caller: ChannelCal
   }
   let revoked: { readonly stopped: number } | undefined
   try {
-    revoked = await consents?.revokeServer(request.args.command, request.args.acceptedAt)
+    revoked = await consents?.revokeServer(request.args.acceptanceId)
   } catch (error) {
     throw consentRefusal(error)
   }

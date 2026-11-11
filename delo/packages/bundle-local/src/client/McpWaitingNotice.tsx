@@ -1,9 +1,11 @@
 /**
  * The notice that a stdio MCP server is waiting for the person's OK, so a server the add-time consent stopped is never
  * a silent dead end. At the home's own computer it names the waiting servers and offers "Review and allow this server",
- * which opens the review of the first one; on a remote studio, which reads only the servers' names, it says the answer
+ * which opens the review of the first one; once that review closes, the notice offers the next waiting server, so each
+ * is reviewed in turn. On a remote studio, which reads only the servers' names, it says the answer
  * is given at the computer. The notice reads the waiting servers when it mounts and each time the window regains
- * focus, and shows again only for a server whose review changed since the person dismissed it.
+ * focus, and shows again only for a server whose review changed since the person dismissed it. A server the person
+ * declined or revoked is not waiting, so it raises no notice until its start changes.
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -39,7 +41,7 @@ type Waiting =
  */
 export async function readWaiting(fetch: HostFetch): Promise<Waiting> {
   try {
-    return { kind: 'computer', servers: (await readServers(fetch))?.servers ?? [] }
+    return { kind: 'computer', servers: (await readServers(fetch))?.servers.filter(server => server.state === 'waiting') ?? [] }
   } catch (error) {
     if (!isRefused(error, LOOPBACK_REQUIRED)) return { kind: 'computer', servers: [] }
   }
@@ -69,6 +71,7 @@ function dismissKey(server: PendingServer | WaitingServer): string {
 export function McpWaitingNotice({ fetch, review, t }: McpWaitingNoticeProps): ReactNode {
   const [waiting, setWaiting] = useState<Waiting>({ kind: 'computer', servers: [] })
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set())
+  const [reviewing, setReviewing] = useState(false)
   const refresh = useCallback(async (): Promise<void> => { setWaiting(await readWaiting(fetch)) }, [fetch])
   useEffect(() => {
     void refresh()
@@ -77,7 +80,7 @@ export function McpWaitingNotice({ fetch, review, t }: McpWaitingNoticeProps): R
     return () => { globalThis.removeEventListener('focus', onFocus) }
   }, [refresh])
   const shown = waiting.servers.filter(server => !dismissed.has(dismissKey(server)))
-  if (shown.length === 0) return null
+  if (shown.length === 0 || reviewing) return null
   const names = shown.map(server => server.serverName).join(', ')
   const dismiss = (): void => { setDismissed(new Set([...dismissed, ...shown.map(dismissKey)])) }
   if (waiting.kind === 'remote') {
@@ -86,8 +89,14 @@ export function McpWaitingNotice({ fetch, review, t }: McpWaitingNoticeProps): R
   }
   const first = waiting.servers.find(server => !dismissed.has(dismissKey(server)))
   const open = (): void => {
-    dismiss()
-    if (first !== undefined) void review(first).then(() => refresh())
+    if (first === undefined) return
+    setReviewing(true)
+    // Only the reviewed server is set aside: the notice then offers the next one that waits.
+    void review(first).finally(() => {
+      setDismissed(current => new Set([...current, dismissKey(first)]))
+      setReviewing(false)
+      void refresh()
+    })
   }
   return <Toast key={names} text={t('mcp.notice.computer', { servers: names })} icon={<IconWarningOutlineRegular />} holdMs={NOTICE_HOLD_MS}
     actions={[{ label: t('mcp.notice.review'), prefix: ' ', onClick: open }, { label: t('mcp.notice.dismiss'), prefix: ' ', onClick: dismiss }]} onDone={dismiss} />

@@ -3,7 +3,7 @@
  * authenticated the line by its `token`; this module checks the rest. An unknown `op`, an unknown field at any depth,
  * a `v` other than 1 or a value outside its type or bound is refused with `SCHEMA_VIOLATION`, so a request names no
  * path, archive or URL the home process opens or fetches, and no command it runs: `mcp.revoke` names an accepted MCP
- * server command only to withdraw its acceptance.
+ * server start only by its acceptance id, to withdraw it.
  *
  * @module @delo/home-process/schema
  */
@@ -21,8 +21,8 @@ const base = { v: z.literal(UPDATE_PROTOCOL_VERSION), token: z.string() }
 const approvalRequestId = z.string().regex(/^[A-Za-z0-9_-]{22}$/)
 /** An answer to one pending MCP server review: the server's configured name and the review id `mcp.list` showed. */
 const mcpReview = z.strictObject({ serverName: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/), reviewId: z.string().regex(/^[0-9a-f]{32}$/) })
-/** A withdrawal of one accepted MCP server start: its command and the acceptance time `mcp.list` showed. */
-const mcpRevoke = z.strictObject({ command: z.string().min(1).max(4096), acceptedAt: z.number().int().nonnegative() })
+/** A withdrawal of one accepted MCP server start: the acceptance id `mcp.list` showed. */
+const mcpRevoke = z.strictObject({ acceptanceId: z.string().regex(/^[0-9a-f]{32}$/) })
 const drain = { wait: z.enum(['drain', 'abort-if-busy', 'cancel']), drainTimeoutS: z.number().int().min(DRAIN_TIMEOUT_MIN_S).max(DRAIN_TIMEOUT_MAX_S).optional() }
 
 const request = z.discriminatedUnion('op', [

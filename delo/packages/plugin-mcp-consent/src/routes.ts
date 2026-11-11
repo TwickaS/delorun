@@ -4,7 +4,8 @@
  * acceptance, decline or revoke. Every route but `waiting` answers only a request that arrived on the loopback
  * listener: a reach device, or a request the home cannot place, is answered `403 LOOPBACK_REQUIRED` before its body is
  * read, so a server command is accepted or revoked only at the home's own computer. `waiting` admits a reach device's
- * Peer and answers only server names and change kinds, never a start's command, arguments, directory or environment.
+ * Peer and answers only the names and change kinds of the reviews in state `waiting`, never a start's command,
+ * arguments, directory or environment, and never a review the person declined or revoked.
  *
  * @module @delo/plugin-mcp-consent/routes
  */
@@ -14,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import { REACH_DEVICE, requireComputer, routedPathname } from '@delo/home-auth'
 import { z } from 'zod'
 import { MCP_REVIEW_ID_PATTERN, McpReviewError, type McpReviews } from './review.ts'
+import { ACCEPTANCE_ID_PATTERN } from './store.ts'
 import { MAX_MCP_CONSENT_REQUEST_BYTES, MCP_CONSENT_ROUTES, SERVER_NAME_PATTERN, type McpConsentRefusalCode } from './wire.ts'
 
 /** The HTTP status each refusal is answered with. */
@@ -30,7 +32,7 @@ const ACTION = 'Answering or revoking an MCP server\'s start'
 const Answer = { serverName: z.string().regex(SERVER_NAME_PATTERN), reviewId: z.string().regex(MCP_REVIEW_ID_PATTERN) }
 const AcceptBody = z.strictObject({ ...Answer, confirmed: z.boolean() })
 const DeclineBody = z.strictObject(Answer)
-const RevokeBody = z.strictObject({ command: z.string().min(1).max(4096), acceptedAt: z.number().int().nonnegative(), confirmed: z.boolean() })
+const RevokeBody = z.strictObject({ acceptanceId: z.string().regex(ACCEPTANCE_ID_PATTERN), confirmed: z.boolean() })
 
 /**
  * One JSON answer, never cached.
@@ -100,7 +102,7 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     methods: ['GET'],
     requestBody: 'buffered',
     admitPeer: (_request, peer) => peer.principal.kind === REACH_DEVICE,
-    fetch: () => answered(() => ({ servers: reviews.pending().map(({ serverName, change }) => ({ serverName, change })) })),
+    fetch: () => answered(() => ({ servers: reviews.pending().filter(({ state }) => state === 'waiting').map(({ serverName, change }) => ({ serverName, change })) })),
   })
   ctx.connection.fetch.register({
     path: MCP_CONSENT_ROUTES.accept,
@@ -119,8 +121,8 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     fetch: async (request) => {
       const body = await bodyOf(request, DeclineBody)
       if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the server name and the review id' })
-      return answered(() => {
-        reviews.declineReview(body.serverName, body.reviewId)
+      return answered(async () => {
+        await reviews.declineReview(body.serverName, body.reviewId)
         return { declined: true }
       })
     },
@@ -131,8 +133,8 @@ export function registerMcpConsentRoutes(ctx: Context, reviews: McpReviews): voi
     requestBody: 'buffered',
     fetch: async (request) => {
       const body = await bodyOf(request, RevokeBody)
-      if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the command, the acceptance time and confirmed' })
-      return answered(() => reviews.revokeAcceptance(body.command, body.acceptedAt, body.confirmed))
+      if (body === undefined) return answer(400, { error: 'INVALID_REQUEST', message: 'the request must be JSON with the acceptance id and confirmed' })
+      return answered(() => reviews.revokeAcceptance(body.acceptanceId, body.confirmed))
     },
   })
 }

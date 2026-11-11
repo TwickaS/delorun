@@ -36,8 +36,9 @@ export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
  *
  * - `INVALID_REQUEST`: the body is not the route's JSON message (400).
  * - `UNCONFIRMED`: an acceptance without `confirmed: true`, which the person's answer sets (400).
- * - `STALE_REVIEW`: the server has no pending review with that id: its start was reviewed again since, accepted or set
- *   aside, so the answer was given to a screen that no longer shows it (409).
+ * - `STALE_REVIEW`: the server has no pending review with that id: its start was reviewed again since or accepted; or
+ *   no acceptance has the revoked acceptance id: it was revoked or replaced since. The answer was given to a screen that
+ *   no longer shows it (409).
  * - `STORE_REFUSED`: the acceptance store cannot be read or written, so nothing is accepted (500).
  */
 export const MCP_CONSENT_REFUSAL_CODES = ['INVALID_REQUEST', 'UNCONFIRMED', 'STALE_REVIEW', 'STORE_REFUSED'] as const
@@ -46,14 +47,49 @@ export const MCP_CONSENT_REFUSAL_CODES = ['INVALID_REQUEST', 'UNCONFIRMED', 'STA
 export type McpConsentRefusalCode = typeof MCP_CONSENT_REFUSAL_CODES[number]
 
 /**
- * What a pending review asks about: a server the person never accepted (`new`), a start whose arguments, working
- * directory or environment differ from the one the person accepted, or a store that cannot be read, which counts no
- * acceptance (`unreadable`).
+ * What a pending review asks about: a server the person never accepted (`new`), a start whose command, arguments,
+ * working directory or environment differ from the one the person accepted for the server (`command`, `arguments`,
+ * `directory`, `environment`, the first that differs in this order), a store that cannot be read, which counts no
+ * acceptance (`unreadable`), or a server whose exact start the person accepted before acceptances were kept per server
+ * name, which the person reviews once (`upgraded`).
  */
-export const SERVER_CHANGES = ['new', 'arguments', 'directory', 'environment', 'unreadable'] as const
+export const SERVER_CHANGES = ['new', 'command', 'arguments', 'directory', 'environment', 'unreadable', 'upgraded'] as const
 
 /** One code of {@link SERVER_CHANGES}. */
 export type ServerChange = typeof SERVER_CHANGES[number]
+
+/**
+ * Where a pending review stands: it waits for the person's answer (`waiting`), the person declined it (`declined`), or
+ * the person revoked the server's acceptance (`revoked`). A declined or revoked review stays listed, its server stays
+ * stopped, and it holds until the server's start changes, which makes the next review `waiting`, or the person accepts
+ * it. Only a `waiting` review is shown to a reach device.
+ */
+export const SERVER_STATES = ['waiting', 'declined', 'revoked'] as const
+
+/** One code of {@link SERVER_STATES}. */
+export type ServerState = typeof SERVER_STATES[number]
+
+/** The environment variables whose value a surface shows, besides the `DYLD_` family: each changes what runs. */
+const RUN_AFFECTING_ENV: ReadonlySet<string> = new Set(['NODE_OPTIONS', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH', 'PYTHONPATH'])
+
+/**
+ * Whether a surface shows an environment variable's value: only for a variable that changes which program or library
+ * runs (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, `PYTHONPATH` and every name starting with `DYLD_`).
+ * Every other value may be a secret and is never shown; the acceptance store keeps only digests of every value.
+ * @param name - the variable's name, compared exactly.
+ * @returns true when the value is shown.
+ */
+export function showsEnvValue(name: string): boolean {
+  return RUN_AFFECTING_ENV.has(name) || name.startsWith('DYLD_')
+}
+
+/** One configured environment variable as a surface shows it. */
+export interface EnvVariable {
+  /** The variable's name. */
+  readonly name: string
+  /** The variable's value, present only when {@link showsEnvValue} holds for the name. */
+  readonly value?: string
+}
 
 /** One stdio server whose start the consent refused, as a surface shows it before the person answers. */
 export interface PendingServer {
@@ -67,37 +103,51 @@ export interface PendingServer {
   readonly args: readonly string[]
   /** The configured working directory; the empty string is the Host's working directory. */
   readonly cwd: string
-  /** The names of the configured environment variables, sorted; their values are never shown. */
-  readonly envNames: readonly string[]
+  /** The configured environment variables, sorted by name; a value only where {@link showsEnvValue} allows it. */
+  readonly env: readonly EnvVariable[]
   /** Why the consent refused the start: no acceptance, or what changed since the last one. */
   readonly reason: string
   /** What the review asks about, for a surface's own words. */
   readonly change: ServerChange
+  /**
+   * The names of the variables added, removed or given another value since the server's acceptance, sorted; empty
+   * unless {@link change} is `environment`.
+   */
+  readonly changedVariables: readonly string[]
+  /** Whether the review waits for an answer or the person set the server aside. */
+  readonly state: ServerState
   /** When the start was reviewed, in milliseconds since the epoch. */
   readonly reviewedAt: number
 }
 
-/** One accepted server start, as the acceptance store holds it, with the server rows that use it. */
+/** One accepted server start, as the acceptance store holds it for one configured server name. */
 export interface AcceptedServer {
-  /** The accepted executable, the store's key. */
+  /** The id a revoke names: a digest of the server name and the whole accepted start. */
+  readonly acceptanceId: string
+  /** The server name the start was accepted for; only that server's start is allowed by it. */
+  readonly serverName: string
+  /** The accepted executable. */
   readonly command: string
   /** The accepted arguments, in order. */
   readonly args: readonly string[]
   /** The accepted working directory; the empty string is the Host's working directory. */
   readonly cwd: string
-  /** The names of the accepted environment variables, sorted; their values are never shown or stored. */
-  readonly envNames: readonly string[]
-  /** When the person accepted it, in milliseconds since the epoch; a revoke names it. */
+  /**
+   * The accepted environment variables, sorted by name; a value only where {@link showsEnvValue} allows it and the
+   * server's configured row still sets that value, since the store keeps digests only.
+   */
+  readonly env: readonly EnvVariable[]
+  /** When the person accepted it, in milliseconds since the epoch. */
   readonly acceptedAt: number
-  /** The names of the configured servers that start this command, sorted; empty when no row of this studio does. */
-  readonly servers: readonly string[]
+  /** Whether a configured server row of this studio has the server name. */
+  readonly configured: boolean
 }
 
 /** What `GET` {@link MCP_CONSENT_ROUTES}`.pending` answers. */
 export interface PendingServersAnswer {
   /** The pending reviews, sorted by server name. */
   readonly servers: readonly PendingServer[]
-  /** The accepted starts, sorted by command; empty while the store cannot be read. */
+  /** The accepted starts, sorted by server name; empty while the store cannot be read. */
   readonly accepted: readonly AcceptedServer[]
 }
 
@@ -109,7 +159,7 @@ export interface WaitingServer {
 
 /** What `GET` {@link MCP_CONSENT_ROUTES}`.waiting` answers. */
 export interface WaitingServersAnswer {
-  /** The pending reviews' servers, sorted by server name. */
+  /** The servers of the pending reviews in state `waiting`, sorted by server name. */
   readonly servers: readonly WaitingServer[]
 }
 
@@ -142,16 +192,14 @@ export interface DeclineServerAnswer {
 
 /** What `POST` {@link MCP_CONSENT_ROUTES}`.revoke` takes. */
 export interface RevokeServerRequest {
-  /** The accepted command, as the list showed it. */
-  readonly command: string
-  /** The acceptance time the list showed; another time is a stale review. */
-  readonly acceptedAt: number
+  /** The acceptance id the list showed; an id no acceptance has is a stale review. */
+  readonly acceptanceId: string
   /** The person's answer: true only after the person chose to revoke. */
   readonly confirmed: boolean
 }
 
 /** What `POST` {@link MCP_CONSENT_ROUTES}`.revoke` answers. */
 export interface RevokeServerAnswer {
-  /** How many running server rows of the command were stopped; each waits for a new acceptance. */
+  /** How many running rows of the server were stopped; each waits for a new acceptance. */
   readonly stopped: number
 }

@@ -16,10 +16,11 @@ import {
 import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type InProcessHome, type TempHome } from './support.ts'
 
 const SERVER: PendingMcpServer = {
-  serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: [], cwd: '', envNames: [], reason: 'not accepted', change: 'new', reviewedAt: 0,
+  serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: [], cwd: '', env: [{ name: 'PATH', value: '/opt/bin' }, { name: 'TOKEN' }],
+  reason: 'not accepted', change: 'environment', changedVariables: ['TOKEN'], state: 'waiting', reviewedAt: 0,
 }
 
-const ACCEPTED: AcceptedMcpServer = { command: 'uvx', args: [], cwd: '', envNames: [], acceptedAt: 1, servers: ['git'] }
+const ACCEPTED: AcceptedMcpServer = { acceptanceId: 'c'.repeat(32), serverName: 'git', command: 'uvx', args: [], cwd: '', env: [], acceptedAt: 1, configured: true }
 
 /** A fake of the Host's consents that records every call and refuses a review id other than the one it holds. */
 class FakeConsents implements LocalConsents {
@@ -40,19 +41,19 @@ class FakeConsents implements LocalConsents {
     return Promise.resolve({ started: 1 })
   }
 
-  declineServer(serverName: string, reviewId: string): boolean {
+  async declineServer(serverName: string, reviewId: string): Promise<boolean> {
     this.calls.push(`decline ${serverName}`)
     if (reviewId !== SERVER.reviewId) throw Object.assign(new Error('reviewed again'), { code: 'STALE_REVIEW' })
-    return true
+    return Promise.resolve(true)
   }
 
   async acceptedServers(): Promise<readonly AcceptedMcpServer[]> {
     return Promise.resolve([ACCEPTED])
   }
 
-  async revokeServer(command: string, acceptedAt: number): Promise<{ readonly stopped: number }> {
-    this.calls.push(`revoke ${command}`)
-    if (acceptedAt !== ACCEPTED.acceptedAt) throw Object.assign(new Error('accepted again'), { code: 'STALE_REVIEW' })
+  async revokeServer(acceptanceId: string): Promise<{ readonly stopped: number }> {
+    this.calls.push(`revoke ${acceptanceId.slice(0, 4)}`)
+    if (acceptanceId !== ACCEPTED.acceptanceId) throw Object.assign(new Error('accepted again'), { code: 'STALE_REVIEW' })
     return Promise.resolve({ stopped: 1 })
   }
 }
@@ -62,13 +63,13 @@ const ABSENT: LocalConsents = {
   reloadPermissions: async () => Promise.resolve(undefined),
   pendingServers: () => undefined,
   acceptServer: async () => Promise.resolve(undefined),
-  declineServer: () => false,
+  declineServer: async () => Promise.resolve(false),
   acceptedServers: async () => Promise.resolve(undefined),
   revokeServer: async () => Promise.resolve(undefined),
 }
 
-function revocation(acceptedAt = ACCEPTED.acceptedAt): McpRevokeRequest {
-  return { v: 1, token: newStartToken(), op: 'mcp.revoke', args: { command: ACCEPTED.command, acceptedAt } }
+function revocation(acceptanceId = ACCEPTED.acceptanceId): McpRevokeRequest {
+  return { v: 1, token: newStartToken(), op: 'mcp.revoke', args: { acceptanceId } }
 }
 
 function answer(op: 'mcp.accept', reviewId?: string): McpAcceptRequest
@@ -86,7 +87,7 @@ describe('the consent operations', () => {
     const consents = new FakeConsents()
     // Pins the caller rule of each answer: without it the Host's token, which acts for reach sessions, would accept.
     await expect(acceptServer(answer('mcp.accept'), 'host', consents)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
-    expect(() => declineServer(answer('mcp.decline'), 'host', consents)).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    await expect(declineServer(answer('mcp.decline'), 'host', consents)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     await expect(revokeServer(revocation(), 'host', consents)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
     expect(consents.calls).toEqual([])
   })
@@ -94,10 +95,10 @@ describe('the consent operations', () => {
   it('accept and decline for the person, and name a stale review', async () => {
     const consents = new FakeConsents()
     await expect(acceptServer(answer('mcp.accept'), 'person', consents)).resolves.toEqual({ started: 1 })
-    expect(declineServer(answer('mcp.decline'), 'person', consents)).toEqual({ declined: true })
+    await expect(declineServer(answer('mcp.decline'), 'person', consents)).resolves.toEqual({ declined: true })
     // Pins the mapping of the Host's stale review: without it the answer would read as an unknown failure.
     await expect(acceptServer(answer('mcp.accept', 'b'.repeat(32)), 'person', consents)).rejects.toMatchObject({ code: 'STALE_REVIEW' })
-    expect(() => declineServer(answer('mcp.decline', 'b'.repeat(32)), 'person', consents)).toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    await expect(declineServer(answer('mcp.decline', 'b'.repeat(32)), 'person', consents)).rejects.toMatchObject({ code: 'STALE_REVIEW' })
     await expect(acceptServer(answer('mcp.accept'), 'person', { ...ABSENT, acceptServer: async () => Promise.reject(new Error('disk full')) }))
       .rejects.toMatchObject({ code: 'CONSENT_FAILED', detail: 'INTERNAL_ERROR: disk full' })
   })
@@ -106,7 +107,7 @@ describe('the consent operations', () => {
     const consents = new FakeConsents()
     await expect(revokeServer(revocation(), 'person', consents)).resolves.toEqual({ stopped: 1 })
     // Pins the mapping of the Host's stale acceptance: without it the answer would read as an unknown failure.
-    await expect(revokeServer(revocation(2), 'person', consents)).rejects.toMatchObject({ code: 'STALE_REVIEW' })
+    await expect(revokeServer(revocation('d'.repeat(32)), 'person', consents)).rejects.toMatchObject({ code: 'STALE_REVIEW' })
     const refused = Object.assign(new Error('disk full'), { code: 'STORE_REFUSED' })
     await expect(revokeServer(revocation(), 'person', { ...ABSENT, revokeServer: async () => Promise.reject(refused) }))
       .rejects.toMatchObject({ code: 'CONSENT_FAILED', detail: 'STORE_REFUSED: disk full' })
@@ -120,7 +121,7 @@ describe('the consent operations', () => {
     await expect(listServers(ABSENT)).rejects.toMatchObject({ code: 'CONSENT_UNAVAILABLE' })
     await expect(reloadPermissions(undefined)).rejects.toMatchObject({ code: 'CONSENT_UNAVAILABLE' })
     await expect(acceptServer(answer('mcp.accept'), 'person', ABSENT)).rejects.toMatchObject({ code: 'CONSENT_UNAVAILABLE' })
-    expect(() => declineServer(answer('mcp.decline'), 'person', ABSENT)).toThrow(expect.objectContaining({ code: 'CONSENT_UNAVAILABLE' }))
+    await expect(declineServer(answer('mcp.decline'), 'person', ABSENT)).rejects.toMatchObject({ code: 'CONSENT_UNAVAILABLE' })
   })
 })
 
@@ -146,7 +147,7 @@ describe('the consent operations on a running home process', () => {
     Object.defineProperty(running.hosts.latest, 'consents', { value: consents })
     const access = running.hosts.latest.access
     const args = { serverName: 'files', reviewId: SERVER.reviewId }
-    const revoked = { command: ACCEPTED.command, acceptedAt: ACCEPTED.acceptedAt }
+    const revoked = { acceptanceId: ACCEPTED.acceptanceId }
     expect(final(await access.send({ op: 'mcp.list' }))).toMatchObject({ ok: true, servers: [SERVER], accepted: [ACCEPTED] })
     expect(final(await access.send({ op: 'mcp.accept', args }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
     expect(final(await access.send({ op: 'mcp.decline', args }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
@@ -159,10 +160,12 @@ describe('the consent operations on a running home process', () => {
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'mcp.decline', args: { serverName: '../etc', reviewId: SERVER.reviewId } })))
       .toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'mcp.revoke', args: revoked }))).toMatchObject({ ok: true, stopped: 1 })
-    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'mcp.revoke', args: { ...revoked, acceptedAt: 2 } })))
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'mcp.revoke', args: { acceptanceId: 'd'.repeat(32) } })))
       .toMatchObject({ ok: false, error: 'STALE_REVIEW' })
-    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'mcp.revoke', args: { ...revoked, command: '' } })))
-      .toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
-    expect(consents.calls).toEqual(['reload', 'accept files', 'accept files', 'revoke uvx', 'revoke uvx'])
+    // The schema admits only an acceptance id: a command, or an id of another form, is refused before the Host is asked.
+    for (const args of [{ acceptanceId: 'uvx' }, { command: 'uvx', acceptedAt: 1 }]) {
+      expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'mcp.revoke', args } as never))).toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
+    }
+    expect(consents.calls).toEqual(['reload', 'accept files', 'accept files', 'revoke cccc', 'revoke dddd'])
   })
 })

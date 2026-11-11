@@ -265,25 +265,24 @@ export interface McpDeclineRequest extends RequestBase {
 }
 
 /**
- * The `mcp.revoke` request: the person withdrew, at the home's own computer, the acceptance that `mcp.list` showed for
- * this command at this time; the Host drops it and stops the running servers that start the command. Accepted only with
- * the token from the token file, and refused with `LOOPBACK_REQUIRED` for the Host's channel token.
+ * The `mcp.revoke` request: the person withdrew, at the home's own computer, the acceptance of one server that
+ * `mcp.list` showed with this acceptance id; the Host drops it, records the start as revoked and stops that server's
+ * running rows, leaving every other server's acceptance. Accepted only with the token from the token file, and refused
+ * with `LOOPBACK_REQUIRED` for the Host's channel token.
  */
 export interface McpRevokeRequest extends RequestBase {
   /** The operation. */
   readonly op: 'mcp.revoke'
   /** Arguments. */
   readonly args: {
-    /** The accepted command as `mcp.list` showed it: 1 to 4,096 characters. */
-    readonly command: string
-    /** The acceptance time `mcp.list` showed, in milliseconds since the epoch. */
-    readonly acceptedAt: number
+    /** The acceptance id `mcp.list` showed: 32 lowercase hexadecimal digits. */
+    readonly acceptanceId: string
   }
 }
 
 /**
  * Every request the update channel accepts. No request carries a path, an archive or a URL the home process opens or
- * fetches, or a command it runs; `mcp.revoke` names an accepted command only to withdraw its acceptance.
+ * fetches, or a command it runs; `mcp.revoke` names an accepted start only by its acceptance id.
  */
 export type UpdateChannelRequest =
   | StatusRequest

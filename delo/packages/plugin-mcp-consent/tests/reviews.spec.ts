@@ -1,12 +1,13 @@
 /**
  * Specs of the pending reviews of `@delo/plugin-mcp-consent`: each refused stdio server start is kept for the studio's
- * Permissions section and `delorun mcp`, without an environment value; an acceptance records exactly the start shown
- * and starts the refused row again; a decline records nothing. The denial cases prove that an unconfirmed answer, a
- * stale review and a request from a reach device record nothing. A review names what changed since the acceptance, the
- * accepted starts are listed, and a revoke withdraws one and stops the rows that start it; a stale or unconfirmed
- * revoke changes nothing.
+ * Permissions section and `delorun mcp`, with a value only of a run-affecting environment variable; an acceptance
+ * records exactly the start shown for its server name and starts the refused row again; a decline sets the start aside
+ * as `declined` until it changes. The denial cases prove that an unconfirmed answer, a stale review and a request from a
+ * reach device record nothing. A review names what changed since the acceptance and which variables, the accepted
+ * starts are listed one per server name, and a revoke withdraws one server's acceptance and stops that server's rows
+ * only; a stale or unconfirmed revoke changes nothing.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, DeloMcpConsent, MCP_CONSENT_ROUTES, mcpReviewId } from '../src/index.ts'
 import { registerMcpConsentRoutes } from '../src/routes.ts'
 import { acceptanceStorePath } from '../src/store.ts'
+import { showsEnvValue } from '../src/wire.ts'
 
 /** The secret value of the suite's configured environment, which no review or answer may hold. */
 const SECRET = 'secret-token-value'
@@ -27,6 +29,8 @@ const START: McpServerCommand = {
   args: ['-y', '@modelcontextprotocol/server-filesystem', '/srv/data'],
   env: { API_TOKEN: SECRET },
   cwd: '/srv/mcp',
+  resolvedCommand: '/usr/local/bin/npx',
+  resolvedCwd: '/srv/mcp',
 }
 
 let root: string
@@ -62,8 +66,9 @@ describe('a refused start', () => {
     await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
     const [pending] = consent.pending()
     expect(pending).toEqual({
-      serverName: 'files', reviewId: mcpReviewId(START), command: 'npx', args: START.args, cwd: '/srv/mcp', envNames: ['API_TOKEN'],
-      reason: 'no command is accepted yet (the acceptance store does not exist)', change: 'new', reviewedAt: expect.any(Number),
+      serverName: 'files', reviewId: mcpReviewId(START), command: 'npx', args: START.args, cwd: '/srv/mcp', env: [{ name: 'API_TOKEN' }],
+      reason: 'no server is accepted yet (the acceptance store does not exist)', change: 'new', changedVariables: [], state: 'waiting',
+      reviewedAt: expect.any(Number),
     })
     expect(JSON.stringify(consent.pending())).not.toContain(SECRET)
   })
@@ -71,15 +76,31 @@ describe('a refused start', () => {
   it('names the part of an accepted start that changed', async () => {
     await consent.review(START)
     await consent.acceptReview('files', mcpReviewId(START), true)
-    for (const [changed, change] of [
-      [{ ...START, args: [...START.args, '/home'] }, 'arguments'],
-      [{ ...START, cwd: '/srv/other' }, 'directory'],
-      [{ ...START, env: { API_TOKEN: 'another-value' } }, 'environment'],
-      [{ ...START, serverName: 'other', command: 'uvx' }, 'new'],
+    for (const [changed, change, changedVariables] of [
+      [{ ...START, command: 'uvx' }, 'command', []],
+      [{ ...START, args: [...START.args, '/home'] }, 'arguments', []],
+      [{ ...START, cwd: '/srv/other' }, 'directory', []],
+      [{ ...START, env: { API_TOKEN: 'another-value' } }, 'environment', ['API_TOKEN']],
+      [{ ...START, env: { PATH: '/opt/bin', NODE_ENV: 'test' } }, 'environment', ['API_TOKEN', 'NODE_ENV', 'PATH']],
+      [{ ...START, serverName: 'other' }, 'new', []],
     ] as const) {
       await consent.review(changed)
-      expect(consent.pending().find(review => review.serverName === changed.serverName)?.change).toBe(change)
+      const review = consent.pending().find(entry => entry.serverName === changed.serverName)
+      expect([review?.change, review?.changedVariables, review?.state]).toEqual([change, changedVariables, 'waiting'])
     }
+  })
+
+  it('shows the value of a variable that changes what runs, and never another value', async () => {
+    const env = { PATH: '/opt/bin', NODE_OPTIONS: '--require ./hook.js', DYLD_INSERT_LIBRARIES: '/tmp/x.dylib', PYTHONPATH: '/py', LD_PRELOAD: '/l.so', LD_LIBRARY_PATH: '/lib', API_TOKEN: SECRET, PATHS: 'not-shown' }
+    await consent.review({ ...START, env })
+    expect(consent.pending()[0]?.env).toEqual([
+      { name: 'API_TOKEN' }, { name: 'DYLD_INSERT_LIBRARIES', value: '/tmp/x.dylib' }, { name: 'LD_LIBRARY_PATH', value: '/lib' },
+      { name: 'LD_PRELOAD', value: '/l.so' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }, { name: 'PATH', value: '/opt/bin' },
+      { name: 'PATHS' }, { name: 'PYTHONPATH', value: '/py' },
+    ])
+    expect(JSON.stringify(consent.pending())).not.toContain(SECRET)
+    expect(JSON.stringify(consent.pending())).not.toContain('not-shown')
+    expect([showsEnvValue('path'), showsEnvValue('DYLD_'), showsEnvValue('XDYLD_X')]).toEqual([false, true, false])
   })
 
   it('ends its refusal with where the person accepts it', async () => {
@@ -129,16 +150,49 @@ describe('an answer to a pending review', () => {
 
   it('records nothing for a server with no pending review', async () => {
     await expect(consent.acceptReview('files', mcpReviewId(START), true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
-    expect(() => { consent.declineReview('files', mcpReviewId(START)) }).toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    await expect(consent.declineReview('files', mcpReviewId(START))).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
     expect(storeText()).toBeUndefined()
   })
 
-  it('declines a review: the server stays stopped and nothing is recorded', async () => {
+  it('declines a review: it stays listed as declined, the server stopped, and no acceptance is recorded', async () => {
     await consent.review(START)
-    consent.declineReview('files', mcpReviewId(START))
-    expect(consent.pending()).toEqual([])
-    expect(storeText()).toBeUndefined()
-    await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
+    await consent.declineReview('files', mcpReviewId(START))
+    expect(consent.pending()).toEqual([expect.objectContaining({ serverName: 'files', state: 'declined', change: 'new' })])
+    expect(storeText()).not.toContain(SECRET)
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: false, reason: expect.stringContaining('the person declined this start') })
+    expect(consent.pending()[0]?.state).toBe('declined')
+  })
+
+  it('keeps a declined start declined across a new service instance, until the start changes', async () => {
+    await consent.review(START)
+    await consent.declineReview('files', mcpReviewId(START))
+    const restarted = new DeloMcpConsent(new Context())
+    await restarted.review(START)
+    expect(restarted.pending()[0]?.state).toBe('declined')
+    const changed = { ...START, args: [...START.args, '/home'] }
+    await restarted.review(changed)
+    expect(restarted.pending()[0]).toMatchObject({ state: 'waiting', change: 'new' })
+    // The changed start dropped the set-aside one, so the declined start, configured again, waits too.
+    await restarted.review(START)
+    expect(restarted.pending()[0]?.state).toBe('waiting')
+  })
+
+  it('declines in this process only while the store cannot be read, leaving the store unchanged', async () => {
+    const path = acceptanceStorePath(join(root, 'home'))
+    mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(path, '{ not json', { mode: 0o600 })
+    await consent.review(START)
+    await consent.declineReview('files', mcpReviewId(START))
+    expect(consent.pending()[0]?.state).toBe('declined')
+    expect(storeText()).toBe('{ not json')
+  })
+
+  it('accepts a declined review like a waiting one', async () => {
+    await consent.review(START)
+    await consent.declineReview('files', mcpReviewId(START))
+    await expect(consent.acceptReview('files', mcpReviewId(START), true)).resolves.toEqual({ started: 0 })
+    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    expect(storeText()).not.toContain('declined')
   })
 
   it('starts again each Loader row this consent refused for the server, and no other row', async () => {
@@ -220,40 +274,90 @@ describe('an accepted start', () => {
     return updates
   }
 
-  it('is listed with the servers that start it, without an environment value', async () => {
+  /**
+   * Accept one start through its review.
+   * @param start - the start.
+   * @returns the start.
+   */
+  async function accepted(start: McpServerCommand): Promise<McpServerCommand> {
+    await consent.review(start)
+    await consent.acceptReview(start.serverName, mcpReviewId(start), true)
+    return start
+  }
+
+  it('is listed per server name, with a value only of a run-affecting variable its configured row still sets', async () => {
     loaderWith('files')
-    await consent.review(START)
-    await consent.acceptReview('files', mcpReviewId(START), true)
+    await accepted({ ...START, env: { ...START.env, PATH: '/opt/bin' } })
     await expect(consent.accepted()).resolves.toEqual([{
-      command: 'npx', args: START.args, cwd: '/srv/mcp', envNames: ['API_TOKEN'], acceptedAt: expect.any(Number), servers: ['files'],
+      acceptanceId: expect.stringMatching(/^[0-9a-f]{32}$/), serverName: 'files', command: 'npx', args: START.args, cwd: '/srv/mcp',
+      env: [{ name: 'API_TOKEN' }, { name: 'PATH' }], acceptedAt: expect.any(Number), configured: true,
     }])
     expect(JSON.stringify(await consent.accepted())).not.toContain(SECRET)
   })
 
-  it('is revoked: the store drops it, each row that starts it stops, and its next review asks again', async () => {
-    const updates = loaderWith('files', 'files-copy')
-    await consent.review(START)
-    await consent.acceptReview('files', mcpReviewId(START), true)
-    const [accepted] = await consent.accepted()
-    await expect(consent.revokeAcceptance('npx', accepted?.acceptedAt ?? 0, true)).resolves.toEqual({ stopped: 2 })
-    expect(updates.get('files')).toHaveBeenCalledWith({ serverName: 'files', command: 'npx' }, true)
-    await expect(consent.accepted()).resolves.toEqual([])
-    await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
+  it('shows a run-affecting value from the configured row whose value the acceptance holds', async () => {
+    const env = { ...START.env, PATH: '/opt/bin' }
+    ctx.provide('loader', { entries: () => [{ id: 'mcp-files', fiber: { config: { serverName: 'files', command: 'npx', env }, await: () => Promise.resolve(), update: vi.fn() } }] } as never)
+    await accepted({ ...START, env })
+    const [listed] = await consent.accepted()
+    expect(listed?.env).toEqual([{ name: 'API_TOKEN' }, { name: 'PATH', value: '/opt/bin' }])
+    expect(JSON.stringify(listed)).not.toContain(SECRET)
+  })
+
+  it('keeps two servers of the same command apart: neither overwrites the other, and each is allowed only its own start', async () => {
+    const files = await accepted(START)
+    const memory = await accepted({ ...START, serverName: 'memory', args: ['-y', '@modelcontextprotocol/server-memory'] })
+    const listed = await consent.accepted()
+    expect(listed.map(entry => [entry.serverName, entry.args, entry.configured])).toEqual([['files', files.args, false], ['memory', memory.args, false]])
+    expect(new Set(listed.map(entry => entry.acceptanceId)).size).toBe(2)
+    await expect(consent.review(files)).resolves.toEqual({ allow: true })
+    await expect(consent.review(memory)).resolves.toEqual({ allow: true })
+    await expect(consent.review({ ...memory, serverName: 'files' })).resolves.toMatchObject({ allow: false })
+  })
+
+  it('is revoked for one server: the store drops it, only that server\'s rows stop, and its next review is revoked', async () => {
+    const updates = loaderWith('files', 'memory')
+    await accepted(START)
+    const memory = await accepted({ ...START, serverName: 'memory', args: ['-y', '@modelcontextprotocol/server-memory'] })
+    updates.get('files')?.mockClear()
+    updates.get('memory')?.mockClear()
+    const files = (await consent.accepted()).find(entry => entry.serverName === 'files')
+    await expect(consent.revokeAcceptance(files?.acceptanceId ?? '', true)).resolves.toEqual({ stopped: 1 })
+    expect(updates.get('files')).toHaveBeenCalledWith({ serverName: 'files', command: START.command }, true)
+    expect(updates.get('memory')).not.toHaveBeenCalled()
+    expect((await consent.accepted()).map(entry => entry.serverName)).toEqual(['memory'])
+    await expect(consent.review(memory)).resolves.toEqual({ allow: true })
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: false, reason: expect.stringContaining('the person revoked this server\'s acceptance') })
+    expect(consent.pending()).toEqual([expect.objectContaining({ serverName: 'files', state: 'revoked', change: 'new' })])
+  })
+
+  it('stays revoked across a new service instance until the start changes or the person accepts it', async () => {
+    await accepted(START)
+    const [listed] = await consent.accepted()
+    await consent.revokeAcceptance(listed?.acceptanceId ?? '', true)
+    const restarted = new DeloMcpConsent(new Context())
+    await restarted.review(START)
+    expect(restarted.pending()[0]?.state).toBe('revoked')
+    await expect(restarted.acceptReview('files', mcpReviewId(START), true)).resolves.toEqual({ started: 0 })
+    await expect(restarted.review(START)).resolves.toEqual({ allow: true })
+    await restarted.revokeAcceptance((await restarted.accepted())[0]?.acceptanceId ?? '', true)
+    await restarted.review({ ...START, cwd: '/srv/other' })
+    expect(restarted.pending()[0]).toMatchObject({ state: 'waiting', change: 'new' })
   })
 
   it('stays accepted after an unconfirmed or stale revoke', async () => {
     const updates = loaderWith('files')
-    await consent.review(START)
-    await consent.acceptReview('files', mcpReviewId(START), true)
+    await accepted(START)
     // The acceptance itself started the refused row again.
     updates.get('files')?.mockClear()
-    const [accepted] = await consent.accepted()
-    const acceptedAt = accepted?.acceptedAt ?? 0
-    await expect(consent.revokeAcceptance('npx', acceptedAt, false)).rejects.toThrow(expect.objectContaining({ code: 'UNCONFIRMED' }))
-    await expect(consent.revokeAcceptance('npx', acceptedAt + 1, true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
-    await expect(consent.revokeAcceptance('uvx', acceptedAt, true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
-    expect(updates.get('files')).not.toHaveBeenCalled()
-    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    const [listed] = await consent.accepted()
+    const acceptanceId = listed?.acceptanceId ?? ''
+    await expect(consent.revokeAcceptance(acceptanceId, false)).rejects.toThrow(expect.objectContaining({ code: 'UNCONFIRMED' }))
+    await expect(consent.revokeAcceptance('0'.repeat(32), true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    // Accepting a changed start of the server replaces the acceptance, so the id shown before it is stale.
+    await accepted({ ...START, cwd: '/srv/other' })
+    await expect(consent.revokeAcceptance(acceptanceId, true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    await expect(consent.review({ ...START, cwd: '/srv/other' })).resolves.toEqual({ allow: true })
   })
 })
 
@@ -278,6 +382,8 @@ describe('the routes', () => {
     expect(remote.admits(MCP_CONSENT_ROUTES.waiting, { kind: 'sdk' })).toBe(false)
     expect(remote.admits(MCP_CONSENT_ROUTES.pending, { kind: 'reach-device', deviceId: 'phone' })).toBe(false)
     await consent.review(START)
+    await consent.review({ ...START, serverName: 'declined' })
+    await consent.declineReview('declined', mcpReviewId({ ...START, serverName: 'declined' }))
     const answered = await (await remote.get(MCP_CONSENT_ROUTES.waiting)).text()
     expect(JSON.parse(answered)).toEqual({ servers: [{ serverName: 'files', change: 'new' }] })
     expect(answered).not.toContain('npx')
@@ -288,16 +394,18 @@ describe('the routes', () => {
     const routes = routesOver('loopback')
     await consent.review(START)
     await consent.acceptReview('files', mcpReviewId(START), true)
-    const listed = await (await routes.get(MCP_CONSENT_ROUTES.pending)).json() as { accepted: { acceptedAt: number }[] }
-    const acceptedAt = listed.accepted[0]?.acceptedAt ?? 0
-    const unconfirmed = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt, confirmed: false })
+    const listed = await (await routes.get(MCP_CONSENT_ROUTES.pending)).json() as { accepted: { acceptanceId: string }[] }
+    const acceptanceId = listed.accepted[0]?.acceptanceId ?? ''
+    const unconfirmed = await routes.post(MCP_CONSENT_ROUTES.revoke, { acceptanceId, confirmed: false })
     expect([unconfirmed.status, await unconfirmed.json()]).toEqual([400, expect.objectContaining({ error: 'UNCONFIRMED' })])
-    const stale = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt: acceptedAt + 1, confirmed: true })
+    const stale = await routes.post(MCP_CONSENT_ROUTES.revoke, { acceptanceId: 'f'.repeat(32), confirmed: true })
     expect([stale.status, await stale.json()]).toEqual([409, expect.objectContaining({ error: 'STALE_REVIEW' })])
-    const malformed = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt: 'then', confirmed: true })
-    expect([malformed.status, await malformed.json()]).toEqual([400, expect.objectContaining({ error: 'INVALID_REQUEST' })])
+    for (const body of [{ acceptanceId: 'files', confirmed: true }, { command: 'npx', acceptedAt: 1, confirmed: true }, { acceptanceId, confirmed: true, extra: 1 }]) {
+      const malformed = await routes.post(MCP_CONSENT_ROUTES.revoke, body)
+      expect([malformed.status, await malformed.json()]).toEqual([400, expect.objectContaining({ error: 'INVALID_REQUEST' })])
+    }
     await expect(consent.review(START)).resolves.toEqual({ allow: true })
-    const revoked = await routes.post(MCP_CONSENT_ROUTES.revoke, { command: 'npx', acceptedAt, confirmed: true })
+    const revoked = await routes.post(MCP_CONSENT_ROUTES.revoke, { acceptanceId, confirmed: true })
     expect([revoked.status, await revoked.json()]).toEqual([200, { stopped: 0 }])
     await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
   })

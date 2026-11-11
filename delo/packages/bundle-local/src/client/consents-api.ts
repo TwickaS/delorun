@@ -7,7 +7,7 @@
  * @module @delo/bundle-local/client/consents-api
  */
 import {
-  MCP_CONSENT_ROUTES, SERVER_CHANGES, type AcceptedServer, type AcceptServerAnswer, type PendingServer, type PendingServersAnswer,
+  MCP_CONSENT_ROUTES, SERVER_CHANGES, SERVER_STATES, type AcceptedServer, type EnvVariable, type AcceptServerAnswer, type PendingServer, type PendingServersAnswer,
   type RevokeServerAnswer, type ServerChange, type WaitingServer, type WaitingServersAnswer,
 } from '@delo/plugin-mcp-consent/wire'
 import {
@@ -15,7 +15,7 @@ import {
 } from '@delo/plugin-permission-defaults/wire'
 import { call, fields, hostFailureOf, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
 
-export type { AcceptedServer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
+export type { AcceptedServer, EnvVariable, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
 
 /** The preset whose switch needs the workspace's consent. */
 export const FULL_ACCESS_PRESET = 'danger-full-access'
@@ -34,13 +34,16 @@ const isWorkspaces: Check = fields({ workspaces: listOf(isWorkspaceAccess), stor
 const isReview: Check = fields({ access: isWorkspaceAccess })
 const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime })
 const isServerChange: Check = value => SERVER_CHANGES.some(change => change === value)
+const isServerState: Check = value => SERVER_STATES.some(state => state === value)
+const isEnv: Check = listOf(fields({ name: isString, value: optional(isString) }))
 const isPendingServers: Check = fields({
   servers: listOf(fields({
     serverName: isString, reviewId: isString, command: isString, args: listOf(isString), cwd: isString,
-    envNames: listOf(isString), reason: isString, change: isServerChange, reviewedAt: isTime,
+    env: isEnv, reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
   })),
   accepted: listOf(fields({
-    command: isString, args: listOf(isString), cwd: isString, envNames: listOf(isString), acceptedAt: isTime, servers: listOf(isString),
+    acceptanceId: isString, serverName: isString, command: isString, args: listOf(isString), cwd: isString, env: isEnv,
+    acceptedAt: isTime, configured: value => typeof value === 'boolean',
   })),
 })
 const isWaitingServers: Check = fields({ servers: listOf(fields({ serverName: isString, change: isServerChange })) })
@@ -133,7 +136,7 @@ export async function readWaitingServers(fetch: HostFetch): Promise<readonly Wai
  *   unreachable Host or an unreadable answer.
  */
 export function revokeServer(fetch: HostFetch, accepted: AcceptedServer): Promise<RevokeServerAnswer> {
-  return call<RevokeServerAnswer>(fetch, MCP_CONSENT_ROUTES.revoke, isRevoked, { command: accepted.command, acceptedAt: accepted.acceptedAt, confirmed: true })
+  return call<RevokeServerAnswer>(fetch, MCP_CONSENT_ROUTES.revoke, isRevoked, { acceptanceId: accepted.acceptanceId, confirmed: true })
 }
 
 /**

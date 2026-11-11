@@ -49,6 +49,12 @@
   line-height: 18px;
 }
 
+.disclosure[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .disclosure > summary {
   width: fit-content;
   color: var(--dsw-alias-label-secondary);
@@ -116,7 +122,7 @@
 
 .start {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: fit-content(12em) minmax(0, 1fr);
   gap: 4px 12px;
   margin: 8px 0 0;
   font-size: 12px;
@@ -170,4 +176,8 @@
   .start {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.start .command {
+  white-space: pre-wrap;
 }

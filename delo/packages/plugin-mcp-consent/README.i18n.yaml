@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/packages/plugin-mcp-consent/README.md
 /:
-  en: dd98b1437b92e285
-  zh: b95765e52d6df4cb
+  en: 71e4c7a9c43cae07
+  zh: ba3ba5468698f449
 /delo-plugin-mcp-consent:
   en: 856300bc97a3b549
   zh: 7361ab941aaf7923
@@ -27,11 +27,11 @@
   en: 2814df35c18a6db2
   zh: c2cbe466872646d0
 /delo-plugin-mcp-consent/pending-reviews:
-  en: 755568186501caac
-  zh: 3a9168f256f4af95
+  en: 14751346a441b75f
+  zh: 4a8f9d7bacff2455
 /delo-plugin-mcp-consent/the-mcp-add-consent-switch:
   en: c714ef3ea575a700
   zh: e90dac9057e7fe71
 /delo-plugin-mcp-consent/development:
-  en: aca250b34ac10020
-  zh: e7579e7c0805117d
+  en: e3147f2ec28670d1
+  zh: 4e9fdd941ffb7d88

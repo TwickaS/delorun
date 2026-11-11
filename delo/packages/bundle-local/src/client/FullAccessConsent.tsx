@@ -190,9 +190,11 @@ export function FullAccessConsent({ useConsent, confirm, cancel, t }: FullAccess
   const consent = useConsent(current => current)
   if (consent === null) return null
   const access = consent.access
-  return <Modal open onClose={cancel} title={t('consent.title')} closeLabel={t('consent.close')}
+  // While the grant is recorded the consent stays open, so its outcome is the one the person sees.
+  const close = (): void => { if (!consent.busy) cancel() }
+  return <Modal open onClose={close} title={t('consent.title')} closeLabel={t('consent.close')}
     footer={<>
-      <Button variant="outline" data-modal-autofocus onClick={cancel}>{t('consent.cancel')}</Button>
+      <Button variant="outline" data-modal-autofocus disabled={consent.busy} onClick={close}>{t('consent.cancel')}</Button>
       {access === undefined ? null
         : <Button variant="primary" disabled={consent.busy} onClick={confirm}>{t('consent.confirm')}</Button>}
     </>}>

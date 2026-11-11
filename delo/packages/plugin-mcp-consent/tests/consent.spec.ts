@@ -3,8 +3,9 @@
  * and the `mcpAddConsent` provider's reviews — an accepted start allowed
  * without asking, a changed command, argument list, working directory,
  * environment, resolved executable path, command shell or resolved working
- * directory asked again, a missing, malformed or superseded store asked again, and every
- * registration behind the switch.
+ * directory asked again, a missing, malformed or superseded store asked
+ * again, a version 4 store's command-keyed acceptances never honoured, and
+ * every registration behind the switch.
  */
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -20,9 +21,12 @@ import {
   AcceptanceStoreError,
   acceptanceOfStart,
   acceptanceStorePath,
+  EMPTY_ACCEPTANCE_STORE,
   envDigest,
+  envDigests,
   parseAcceptanceStore,
   serializeAcceptanceStore,
+  startDigest,
   SupersededStoreError,
 } from '../src/store.ts'
 
@@ -50,18 +54,46 @@ const SHIM: McpServerCommand = {
   resolvedShell: '/Windows/System32/cmd.exe',
 }
 
+/** The words of a refusal of a store of a superseded version. */
+function supersededReason(version: number): string {
+  return `the acceptance store is of version ${String(version)}, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the server is accepted again${HINT}`
+}
+
 /**
  * The text of a valid store holding the acceptance of one start.
  * @param start - the accepted start.
  * @returns the store's text.
  */
-function acceptedStore(start: Omit<McpServerCommand, 'serverName'>): string {
-  return serializeAcceptanceStore(new Map([[start.command, acceptanceOfStart(start, 1_700_000_000_000)]]))
+function acceptedStore(start: McpServerCommand): string {
+  return serializeAcceptanceStore({ ...EMPTY_ACCEPTANCE_STORE, acceptances: new Map([[start.serverName, acceptanceOfStart(start, 1_700_000_000_000)]]) })
 }
 
-/** One acceptance in the store's format, for the format specs. */
+/**
+ * One acceptance in the store's format, for the format specs.
+ * @param args - the accepted arguments.
+ * @param acceptedAt - the acceptance time.
+ * @returns the acceptance.
+ */
 function acceptance(args: readonly string[], acceptedAt: number) {
-  return { args, cwd: '', resolvedCommand: '/usr/bin/tool', resolvedCwd: '/home/person', envNames: [], envDigest: envDigest({}), acceptedAt }
+  return { command: 'npx', args, cwd: '', resolvedCommand: '/usr/bin/tool', resolvedCwd: '/home/person', env: {}, acceptedAt }
+}
+
+/**
+ * One version 4 acceptance, keyed by its command.
+ * @param start - the accepted start.
+ * @returns the record.
+ */
+function commandKeyed(start: Omit<McpServerCommand, 'serverName'>) {
+  return {
+    args: start.args,
+    cwd: start.cwd,
+    resolvedCommand: start.resolvedCommand,
+    resolvedCwd: start.resolvedCwd,
+    ...start.resolvedShell === undefined ? {} : { resolvedShell: start.resolvedShell },
+    envNames: Object.keys(start.env).sort(),
+    envDigest: envDigest(start.env),
+    acceptedAt: 1,
+  }
 }
 
 describe('the acceptance store path', () => {
@@ -71,55 +103,64 @@ describe('the acceptance store path', () => {
 })
 
 describe('the acceptance store format', () => {
-  it('round-trips the acceptances, sorted by command, with a trailing newline', () => {
-    const entries = new Map([
-      ['zed', acceptance(['-y', 'z'], 2)],
-      ['alpha', acceptance(['-a'], 1)],
-    ])
-    const text = serializeAcceptanceStore(entries)
+  it('round-trips the acceptances by server name, the set-aside starts and the command-keyed records, sorted, with a trailing newline', () => {
+    const store = {
+      acceptances: new Map([['zed', acceptance(['-y', 'z'], 2)], ['alpha', acceptance(['-a'], 1)]]),
+      setAside: new Map([['beta', { state: 'declined' as const, start: startDigest(COMMAND) }]]),
+      commandKeyed: new Map([['uvx', commandKeyed(COMMAND)]]),
+    }
+    const text = serializeAcceptanceStore(store)
     expect(text).toBe(`${JSON.stringify({
-      v: 4,
-      acceptances: {
-        alpha: acceptance(['-a'], 1),
-        zed: acceptance(['-y', 'z'], 2),
-      },
+      v: 5,
+      acceptances: { alpha: acceptance(['-a'], 1), zed: acceptance(['-y', 'z'], 2) },
+      setAside: { beta: { state: 'declined', start: startDigest(COMMAND) } },
+      commandKeyed: { uvx: commandKeyed(COMMAND) },
     }, null, 2)}\n`)
-    const parsed = parseAcceptanceStore(text)
-    expect(parsed.get('alpha')).toEqual(acceptance(['-a'], 1))
-    expect(parsed.get('zed')).toEqual(acceptance(['-y', 'z'], 2))
+    expect(parseAcceptanceStore(text)).toEqual(store)
   })
 
-  it('keeps the environment\'s names and digest, never its values', () => {
+  it('keeps a digest of each environment variable, never a value', () => {
     const text = acceptedStore(COMMAND)
     expect(text).not.toContain(SECRET)
-    expect(parseAcceptanceStore(text).get('npx')).toEqual({
+    expect(parseAcceptanceStore(text).acceptances.get('srv')).toEqual({
+      command: 'npx',
       args: COMMAND.args,
       cwd: '/srv/mcp',
       resolvedCommand: '/usr/local/bin/npx',
       resolvedCwd: '/srv/mcp',
-      envNames: ['API_TOKEN', 'NODE_ENV'],
-      envDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      env: { API_TOKEN: expect.stringMatching(/^sha256:[0-9a-f]{64}$/), NODE_ENV: expect.stringMatching(/^sha256:[0-9a-f]{64}$/) },
       acceptedAt: 1_700_000_000_000,
     })
   })
 
   it('keeps the command shell of a batch file, and writes none for an executable that runs directly', () => {
-    expect(parseAcceptanceStore(acceptedStore(SHIM)).get('npx')).toMatchObject({ resolvedShell: '/Windows/System32/cmd.exe' })
+    expect(parseAcceptanceStore(acceptedStore(SHIM)).acceptances.get('srv')).toMatchObject({ resolvedShell: '/Windows/System32/cmd.exe' })
     expect(acceptedStore(COMMAND)).not.toContain('resolvedShell')
-    expect(parseAcceptanceStore(acceptedStore(COMMAND)).get('npx')).not.toHaveProperty('resolvedShell')
+    expect(parseAcceptanceStore(acceptedStore(COMMAND)).acceptances.get('srv')).not.toHaveProperty('resolvedShell')
   })
 
-  it('digests an environment the same whatever order its keys were written in', () => {
+  it('digests an environment the same whatever order its keys were written in, one digest per variable', () => {
     expect(envDigest({ B: '2', A: '1' })).toBe(envDigest({ A: '1', B: '2' }))
     expect(envDigest({ A: '1', B: '2' })).not.toBe(envDigest({ A: '1', B: '3' }))
-    expect(envDigest({ A: '1' })).not.toBe(envDigest({ A: '1', B: '' }))
+    expect(envDigests({ B: '2', A: '1' })).toEqual(envDigests({ A: '1', B: '2' }))
+    expect(envDigests({ A: '1', B: '2' })['A']).toBe(envDigests({ A: '1', B: '3' })['A'])
+    expect(envDigests({ A: '1', B: '2' })['B']).not.toBe(envDigests({ A: '1', B: '3' })['B'])
+  })
+
+  it('reads a version 4 store as no acceptance, keeping its command-keyed records with their resolved paths', () => {
+    const text = JSON.stringify({ v: 4, acceptances: { npx: commandKeyed(COMMAND), cmd: commandKeyed(SHIM) } })
+    const store = parseAcceptanceStore(text)
+    expect(store.acceptances.size).toBe(0)
+    expect(store.commandKeyed.get('npx')).toEqual(commandKeyed(COMMAND))
+    expect(store.commandKeyed.get('cmd')).toEqual(commandKeyed(SHIM))
+    expect(parseAcceptanceStore(serializeAcceptanceStore(store))).toEqual(store)
   })
 
   it('reads a version 1, 2 or 3 store as superseded, whatever it holds', () => {
     for (const [version, text] of [
       [1, JSON.stringify({ v: 1, acceptances: { npx: { args: ['-y'], acceptedAt: 1 } } })],
       [2, JSON.stringify({ v: 2, acceptances: { npx: { args: ['-y'], cwd: '', envNames: [], envDigest: envDigest({}), acceptedAt: 1 } } })],
-      [3, JSON.stringify({ v: 3, acceptances: { npx: acceptance(['-y'], 1) } })],
+      [3, JSON.stringify({ v: 3, acceptances: { srv: { command: 'npx', args: ['-y'], cwd: '', env: {}, acceptedAt: 1 } }, setAside: {}, commandKeyed: {} })],
     ] as const) {
       expect(() => parseAcceptanceStore(text)).toThrow(SupersededStoreError)
       expect(() => parseAcceptanceStore(text)).toThrow(`the store's version is ${String(version)}, written before an acceptance covered the resolved executable path, command shell and working directory`)
@@ -128,23 +169,31 @@ describe('the acceptance store format', () => {
 
   it('refuses a document that is not this version\'s format', () => {
     const valid = acceptance(['-y'], 1)
+    const store = (acceptances: object, more: object = {}) => JSON.stringify({ v: 5, acceptances, setAside: {}, commandKeyed: {}, ...more })
     for (const [text, problem] of [
       ['{', 'no JSON document'],
       ['[]', 'not a JSON object'],
-      [JSON.stringify({ v: 5, acceptances: {} }), 'the store\'s version is 5, not 4'],
-      [JSON.stringify({ v: 4, acceptances: {}, extra: true }), 'the store sets extra'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, extra: true } } }), 'the acceptance of the command "npx" sets extra'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, acceptedAt: 'now' } } }), 'the acceptance of the command "npx" does not hold a number acceptance time'],
+      [JSON.stringify({ v: 6, acceptances: {} }), 'the store\'s version is 6, not 5'],
+      [store({}, { extra: true }), 'the store sets extra'],
+      [JSON.stringify({ v: 5, acceptances: {}, commandKeyed: {} }), 'the store does not hold a setAside object'],
+      [JSON.stringify({ v: 4, acceptances: {}, setAside: {} }), 'the store sets setAside'],
+      [store({ srv: { ...valid, extra: true } }), 'the acceptance of the server "srv" sets extra'],
+      [store({ srv: { ...valid, acceptedAt: 'now' } }), 'the acceptance of the server "srv" does not hold a number acceptance time'],
+      [store({ srv: { ...valid, command: '' } }), 'the acceptance of the server "srv" does not hold a command'],
+      [store({ srv: { ...valid, cwd: 1 } }), 'the acceptance of the server "srv" does not hold a working directory string'],
+      [store({ srv: { ...valid, resolvedCommand: 'npx' } }), 'the acceptance of the server "srv" does not hold an absolute resolved executable path'],
+      [store({ srv: { ...valid, resolvedCwd: undefined } }), 'the acceptance of the server "srv" does not hold an absolute resolved working directory'],
+      [store({ srv: { ...valid, resolvedShell: 'cmd.exe' } }), 'the acceptance of the server "srv" does not hold an absolute resolved command shell'],
+      [store({ srv: { ...valid, resolvedShell: null } }), 'the acceptance of the server "srv" does not hold an absolute resolved command shell'],
+      [store({ srv: { ...valid, env: { PATH: '/bin' } } }), 'the acceptance of the server "srv" does not hold a sha256 digest for each environment variable'],
+      [store({ '../srv': valid }), 'which is not a server name'],
+      [store({}, { setAside: { srv: { state: 'waiting', start: startDigest(COMMAND) } } }), 'does not hold the state declined or revoked'],
+      [store({}, { setAside: { srv: { state: 'declined', start: 'x' } } }), 'does not hold a sha256 start digest'],
       [JSON.stringify({ v: 4, acceptances: { npx: { args: ['-y'], acceptedAt: 1 } } }), 'the acceptance of the command "npx" does not hold a working directory string'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCommand: 'npx' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved executable path'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCommand: undefined } } }), 'the acceptance of the command "npx" does not hold an absolute resolved executable path'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCwd: '.' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved working directory'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedCwd: 7 } } }), 'the acceptance of the command "npx" does not hold an absolute resolved working directory'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedShell: 'cmd.exe' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved command shell'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, resolvedShell: null } } }), 'the acceptance of the command "npx" does not hold an absolute resolved command shell'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, envNames: 'PATH' } } }), 'the acceptance of the command "npx" does not hold a list of environment variable names'],
-      [JSON.stringify({ v: 4, acceptances: { npx: { ...valid, envDigest: 'PATH=/bin' } } }), 'the acceptance of the command "npx" does not hold a sha256 environment digest'],
-      [JSON.stringify({ v: 4, acceptances: { '': valid } }), 'an empty command'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...commandKeyed(COMMAND), resolvedCommand: 'npx' } } }), 'the acceptance of the command "npx" does not hold an absolute resolved executable path'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...commandKeyed(COMMAND), envDigest: 'PATH=/bin' } } }), 'the acceptance of the command "npx" does not hold a sha256 environment digest'],
+      [JSON.stringify({ v: 4, acceptances: { npx: { ...commandKeyed(COMMAND), envNames: 'PATH' } } }), 'does not hold a list of environment variable names'],
+      [JSON.stringify({ v: 4, acceptances: { '': commandKeyed(COMMAND) } }), 'an empty command'],
     ] as const) {
       expect(() => parseAcceptanceStore(text)).toThrow(AcceptanceStoreError)
       expect(() => parseAcceptanceStore(text)).toThrow(problem)
@@ -193,7 +242,7 @@ describe('the mcpAddConsent provider', () => {
     return path
   }
 
-  it('allows an accepted command without asking', async () => {
+  it('allows an accepted start without asking', async () => {
     writeStore(acceptedStore(COMMAND))
     await expect(consent.review(COMMAND)).resolves.toEqual({ allow: true })
   })
@@ -203,74 +252,60 @@ describe('the mcpAddConsent provider', () => {
     await expect(consent.review({ ...COMMAND, env: { NODE_ENV: 'production', API_TOKEN: SECRET } })).resolves.toEqual({ allow: true })
   })
 
-  it('asks again when the arguments changed', async () => {
-    writeStore(acceptedStore({ ...COMMAND, args: ['-y', '@modelcontextprotocol/server-fs', '/elsewhere'] }))
-    await expect(consent.review(COMMAND)).resolves.toEqual({
+  it('does not allow the same start under another server name', async () => {
+    writeStore(acceptedStore(COMMAND))
+    await expect(consent.review({ ...COMMAND, serverName: 'other' })).resolves.toEqual({
       allow: false,
-      reason: `the person accepted a different argument list with this command${HINT}`,
+      reason: `the acceptance store holds no acceptance for this server${acceptHint('other')}`,
     })
   })
 
-  it('asks again when an accepted command\'s environment changed, without naming a value', async () => {
+  it('asks again when the command or the arguments changed', async () => {
+    writeStore(acceptedStore({ ...COMMAND, args: ['-y', '@modelcontextprotocol/server-fs', '/elsewhere'] }))
+    await expect(consent.review(COMMAND)).resolves.toEqual({
+      allow: false,
+      reason: `the person accepted a different argument list for this server${HINT}`,
+    })
+    await expect(consent.review({ ...COMMAND, command: 'uvx' })).resolves.toEqual({
+      allow: false,
+      reason: `the person accepted a different command for this server${HINT}`,
+    })
+  })
+
+  it('asks again when an accepted server\'s environment changed, naming the variables but no value', async () => {
     writeStore(acceptedStore(COMMAND))
-    for (const env of [
-      { ...COMMAND.env, NODE_OPTIONS: '--require /tmp/hook.js' },
-      { ...COMMAND.env, API_TOKEN: 'another-token' },
-      { NODE_ENV: 'production' },
-      {},
-    ]) {
+    for (const [env, names] of [
+      [{ ...COMMAND.env, NODE_OPTIONS: '--require /tmp/hook.js' }, 'NODE_OPTIONS'],
+      [{ ...COMMAND.env, API_TOKEN: 'another-token' }, 'API_TOKEN'],
+      [{ NODE_ENV: 'production' }, 'API_TOKEN'],
+      [{}, 'API_TOKEN, NODE_ENV'],
+    ] as const) {
       const decision = await consent.review({ ...COMMAND, env })
-      expect(decision).toEqual({ allow: false, reason: `the person accepted this command with different environment variables or values${HINT}` })
+      expect(decision).toEqual({ allow: false, reason: `the person accepted this server with different environment variables or values (${names})${HINT}` })
       expect(JSON.stringify(decision)).not.toContain(SECRET)
+      expect(JSON.stringify(decision)).not.toContain('hook.js')
     }
   })
 
-  it('asks again when an accepted command\'s working directory changed', async () => {
+  it('asks again when an accepted server\'s working directory changed', async () => {
     writeStore(acceptedStore(COMMAND))
     for (const cwd of ['/srv/other', '']) {
       await expect(consent.review({ ...COMMAND, cwd })).resolves.toEqual({
         allow: false,
-        reason: `the person accepted this command with a different working directory${HINT}`,
+        reason: `the person accepted this server with a different working directory${HINT}`,
       })
     }
   })
 
-  it('asks again when an accepted command resolves to another executable or working directory, naming both paths', async () => {
+  it('asks again when an accepted server resolves to another executable or working directory, naming both paths', async () => {
     writeStore(acceptedStore(COMMAND))
     await expect(consent.review({ ...COMMAND, resolvedCommand: '/srv/mcp/node_modules/.bin/npx' })).resolves.toEqual({
       allow: false,
-      reason: 'the command resolves to the executable "/srv/mcp/node_modules/.bin/npx", and the person accepted "/usr/local/bin/npx"',
+      reason: `the command resolves to the executable "/srv/mcp/node_modules/.bin/npx", and the person accepted "/usr/local/bin/npx"${HINT}`,
     })
     await expect(consent.review({ ...COMMAND, resolvedCwd: '/srv/other' })).resolves.toEqual({
       allow: false,
-      reason: 'the working directory resolves to "/srv/other", and the person accepted this command run in "/srv/mcp"',
-    })
-  })
-
-  it('does not honour a version 1 store, even for the exact command and arguments it accepted', async () => {
-    writeStore(JSON.stringify({ v: 1, acceptances: { [COMMAND.command]: { args: COMMAND.args, acceptedAt: 1 } } }))
-    for (const start of [COMMAND, { ...COMMAND, env: {}, cwd: '' }]) {
-      await expect(consent.review(start)).resolves.toEqual({
-        allow: false,
-        reason: `the acceptance store is of version 1, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again${HINT}`,
-      })
-    }
-  })
-
-  it('does not honour a version 2 store, even for the exact start it accepted', async () => {
-    const { resolvedCommand: _command, resolvedCwd: _cwd, ...versionTwo } = acceptanceOfStart(COMMAND, 1)
-    writeStore(JSON.stringify({ v: 2, acceptances: { [COMMAND.command]: versionTwo } }))
-    await expect(consent.review(COMMAND)).resolves.toEqual({
-      allow: false,
-      reason: 'the acceptance store is of version 2, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
-    })
-  })
-
-  it('does not honour a version 3 store, even for the exact start it accepted', async () => {
-    writeStore(JSON.stringify({ v: 3, acceptances: { [COMMAND.command]: acceptanceOfStart(COMMAND, 1) } }))
-    await expect(consent.review(COMMAND)).resolves.toEqual({
-      allow: false,
-      reason: 'the acceptance store is of version 3, recorded before an acceptance covered the executable path, command shell and working directory the command resolves to, so nothing counts as accepted until the command is accepted again',
+      reason: `the working directory resolves to "/srv/other", and the person accepted this server run in "/srv/mcp"${HINT}`,
     })
   })
 
@@ -279,39 +314,82 @@ describe('the mcpAddConsent provider', () => {
     await expect(consent.review(SHIM)).resolves.toEqual({ allow: true })
     await expect(consent.review({ ...SHIM, resolvedShell: '/Users/person/cmd.exe' })).resolves.toEqual({
       allow: false,
-      reason: 'the command runs through the command shell "/Users/person/cmd.exe", and the person accepted it run through the command shell "/Windows/System32/cmd.exe"',
+      reason: `the command runs through the command shell "/Users/person/cmd.exe", and the person accepted it run through the command shell "/Windows/System32/cmd.exe"${HINT}`,
     })
     const { resolvedShell: _shell, ...direct } = SHIM
     await expect(consent.review(direct)).resolves.toEqual({
       allow: false,
-      reason: 'the command runs through no command shell, and the person accepted it run through the command shell "/Windows/System32/cmd.exe"',
+      reason: `the command runs through no command shell, and the person accepted it run through the command shell "/Windows/System32/cmd.exe"${HINT}`,
     })
+  })
+
+  it('does not honour a version 1 store, even for the exact command and arguments it accepted', async () => {
+    writeStore(JSON.stringify({ v: 1, acceptances: { [COMMAND.command]: { args: COMMAND.args, acceptedAt: 1 } } }))
+    for (const start of [COMMAND, { ...COMMAND, env: {}, cwd: '' }]) {
+      await expect(consent.review(start)).resolves.toEqual({ allow: false, reason: supersededReason(1) })
+    }
+  })
+
+  it('does not honour a version 2 or 3 store, even for the exact start it accepted', async () => {
+    const { resolvedCommand: _command, resolvedCwd: _cwd, ...unresolved } = acceptanceOfStart(COMMAND, 1)
+    writeStore(JSON.stringify({ v: 2, acceptances: { [COMMAND.command]: commandKeyed(COMMAND) } }))
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: supersededReason(2) })
+    writeStore(JSON.stringify({ v: 3, acceptances: { srv: unresolved }, setAside: {}, commandKeyed: {} }))
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: supersededReason(3) })
+    writeStore(JSON.stringify({ v: 3, acceptances: { [COMMAND.command]: commandKeyed(COMMAND) } }))
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: supersededReason(3) })
   })
 
   it('accepting into a version 1 store starts a store of this version that holds only the new acceptance', async () => {
     const path = writeStore(JSON.stringify({ v: 1, acceptances: { other: { args: [], acceptedAt: 1 }, [COMMAND.command]: { args: COMMAND.args, acceptedAt: 1 } } }))
     await consent.accept(COMMAND)
-    const entries = parseAcceptanceStore(readFileSync(path, 'utf8'))
-    expect([...entries.keys()]).toEqual([COMMAND.command])
+    const written = parseAcceptanceStore(readFileSync(path, 'utf8'))
+    expect([...written.acceptances.keys()]).toEqual(['srv'])
+    expect(written.commandKeyed.size).toBe(0)
     await expect(consent.review(COMMAND)).resolves.toEqual({ allow: true })
-    await expect(consent.review({ ...COMMAND, command: 'other', args: [], env: {}, cwd: '' })).resolves.toEqual({
-      allow: false,
-      reason: `the acceptance store holds no acceptance for this command${HINT}`,
-    })
   })
 
-  it('asks again for a command the store holds no acceptance for', async () => {
-    writeStore(acceptedStore({ ...COMMAND, command: 'other-command', args: [], env: {}, cwd: '' }))
+  it('reviews a start a version 4 store covers exactly once as upgraded, and never allows it on that record', async () => {
+    writeStore(JSON.stringify({ v: 4, acceptances: { npx: commandKeyed(COMMAND) } }))
     await expect(consent.review(COMMAND)).resolves.toEqual({
       allow: false,
-      reason: `the acceptance store holds no acceptance for this command${HINT}`,
+      reason: `the person accepted this exact start before Delo kept one acceptance per server, so this server is reviewed once${HINT}`,
+    })
+    expect(consent.pending()[0]?.change).toBe('upgraded')
+    // Another server of the same start is not allowed by the record either, and a start it does not cover is new.
+    await consent.review({ ...COMMAND, serverName: 'copy' })
+    await consent.review({ ...COMMAND, serverName: 'changed', args: [] })
+    await consent.review({ ...COMMAND, serverName: 'moved', resolvedCommand: '/srv/mcp/node_modules/.bin/npx' })
+    await consent.review({ ...SHIM, serverName: 'shell' })
+    expect(consent.pending().map(review => [review.serverName, review.change])).toEqual([
+      ['changed', 'new'], ['copy', 'upgraded'], ['moved', 'new'], ['shell', 'new'], ['srv', 'upgraded'],
+    ])
+  })
+
+  it('keeps a version 4 store\'s records when accepting into it, dropping only the record the accepted start covers', async () => {
+    const other = { command: 'uvx', args: ['mcp-git'], env: {}, cwd: '', resolvedCommand: '/usr/bin/uvx', resolvedCwd: '/' }
+    const path = writeStore(JSON.stringify({ v: 4, acceptances: { npx: commandKeyed(COMMAND), uvx: commandKeyed(other) } }))
+    await consent.accept(COMMAND)
+    const written = parseAcceptanceStore(readFileSync(path, 'utf8'))
+    expect([...written.acceptances.keys()]).toEqual(['srv'])
+    expect([...written.commandKeyed.keys()]).toEqual(['uvx'])
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: true })
+    await consent.review({ ...other, serverName: 'git' })
+    expect(consent.pending().find(review => review.serverName === 'git')?.change).toBe('upgraded')
+  })
+
+  it('asks again for a server the store holds no acceptance for', async () => {
+    writeStore(acceptedStore({ serverName: 'another', command: 'other-command', args: [], env: {}, cwd: '', resolvedCommand: '/usr/bin/other-command', resolvedCwd: '/' }))
+    await expect(consent.review(COMMAND)).resolves.toEqual({
+      allow: false,
+      reason: `the acceptance store holds no acceptance for this server${HINT}`,
     })
   })
 
   it('asks while no store exists', async () => {
     await expect(consent.review(COMMAND)).resolves.toEqual({
       allow: false,
-      reason: `no command is accepted yet (the acceptance store does not exist)${HINT}`,
+      reason: `no server is accepted yet (the acceptance store does not exist)${HINT}`,
     })
   })
 
@@ -319,8 +397,9 @@ describe('the mcpAddConsent provider', () => {
     for (const text of [
       '{ not json',
       '[]',
-      JSON.stringify({ v: 5, acceptances: { [COMMAND.command]: acceptanceOfStart(COMMAND, 1) } }),
-      JSON.stringify({ v: 4, acceptances: { [COMMAND.command]: { ...acceptanceOfStart(COMMAND, 1), note: 'x' } } }),
+      JSON.stringify({ v: 5, acceptances: { srv: acceptanceOfStart(COMMAND, 1) } }),
+      JSON.stringify({ v: 5, acceptances: { srv: { ...acceptanceOfStart(COMMAND, 1), note: 'x' } }, setAside: {}, commandKeyed: {} }),
+      JSON.stringify({ v: 5, acceptances: { srv: { ...acceptanceOfStart(COMMAND, 1), resolvedCommand: 'npx' } }, setAside: {}, commandKeyed: {} }),
     ]) {
       writeStore(text)
       await expect(consent.review(COMMAND)).resolves.toSatisfy((decision: { allow: boolean, reason: string }) =>
@@ -349,25 +428,25 @@ describe('the mcpAddConsent provider', () => {
   })
 
   it('records an acceptance that a later review allows without asking', async () => {
-    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: `no command is accepted yet (the acceptance store does not exist)${HINT}` })
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: `no server is accepted yet (the acceptance store does not exist)${HINT}` })
     await consent.accept(COMMAND)
     const path = store()
     expect(statSync(path).mode & 0o777).toBe(0o600)
     expect(statSync(join(path, '..'), ).mode & 0o777).toBe(0o700)
-    // The recorded acceptance holds the accepted argument list and the acceptance time it was recorded with, per the
-    // store's documented shape; the time itself is the recording's, so the parse is what the shape check reads.
-    expect(parseAcceptanceStore(readFileSync(path, 'utf8')).get(COMMAND.command)).toEqual({ ...acceptanceOfStart(COMMAND, 0), acceptedAt: expect.any(Number) })
+    // The time itself is the recording's, so the parse is what the check reads.
+    expect(parseAcceptanceStore(readFileSync(path, 'utf8')).acceptances.get('srv')).toEqual({ ...acceptanceOfStart(COMMAND, 0), acceptedAt: expect.any(Number) })
     expect(readFileSync(path, 'utf8')).not.toContain(SECRET)
     await expect(consent.review(COMMAND)).resolves.toEqual({ allow: true })
   })
 
-  it('grants a changed command by accepting it again with its new arguments', async () => {
+  it('grants a changed start by accepting it again, which replaces the server\'s acceptance', async () => {
     await consent.accept(COMMAND)
     const changed = { ...COMMAND, args: ['-y', '@modelcontextprotocol/server-fs', '/elsewhere'] }
-    await expect(consent.review(changed)).resolves.toEqual({ allow: false, reason: `the person accepted a different argument list with this command${HINT}` })
+    await expect(consent.review(changed)).resolves.toEqual({ allow: false, reason: `the person accepted a different argument list for this server${HINT}` })
     await consent.accept(changed)
     await expect(consent.review(changed)).resolves.toEqual({ allow: true })
-    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: `the person accepted a different argument list with this command${HINT}` })
+    await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: `the person accepted a different argument list for this server${HINT}` })
+    expect([...parseAcceptanceStore(readFileSync(store(), 'utf8')).acceptances.keys()]).toEqual(['srv'])
   })
 
   it('refuses to accept into a store that is not this version\'s format, and leaves it unchanged', async () => {
@@ -452,7 +531,7 @@ describe('a server start the mcp-client resolves before the review', () => {
   it('records the executable and working directory the start resolved to', async () => {
     const start = await acceptFirstStart()
     expect(start).toMatchObject({ command: 'tool', cwd: '', resolvedCommand: join(a, 'bin', 'tool'), resolvedCwd: a })
-    expect(parseAcceptanceStore(readFileSync(acceptanceStorePath(join(root, 'home')), 'utf8')).get('tool'))
+    expect(parseAcceptanceStore(readFileSync(acceptanceStorePath(join(root, 'home')), 'utf8')).acceptances.get('srv'))
       .toMatchObject({ cwd: '', resolvedCommand: join(a, 'bin', 'tool'), resolvedCwd: a })
   })
 
@@ -465,7 +544,7 @@ describe('a server start the mcp-client resolves before the review', () => {
     expect(failure).toBeInstanceOf(McpConsentRefusedError)
     expect(failure).toMatchObject({
       resolvedCommand: join(b, 'bin', 'tool'),
-      reason: `the command resolves to the executable ${JSON.stringify(join(b, 'bin', 'tool'))}, and the person accepted ${JSON.stringify(join(a, 'bin', 'tool'))}`,
+      reason: `the command resolves to the executable ${JSON.stringify(join(b, 'bin', 'tool'))}, and the person accepted ${JSON.stringify(join(a, 'bin', 'tool'))}${HINT}`,
     })
     expect((failure as Error).message).toContain(`which runs the executable ${JSON.stringify(join(b, 'bin', 'tool'))}`)
   })
@@ -479,7 +558,7 @@ describe('a server start the mcp-client resolves before the review', () => {
     expect(failure).toBeInstanceOf(McpConsentRefusedError)
     expect(failure).toMatchObject({
       resolvedCwd: b,
-      reason: `the working directory resolves to ${JSON.stringify(b)}, and the person accepted this command run in ${JSON.stringify(a)}`,
+      reason: `the working directory resolves to ${JSON.stringify(b)}, and the person accepted this server run in ${JSON.stringify(a)}${HINT}`,
     })
   })
 })

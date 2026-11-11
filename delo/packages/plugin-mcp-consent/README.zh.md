@@ -1,5 +1,5 @@
 ---
-description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（mcpAddConsent），home 受保护状态下的接受存储，让已接受的 stdio 服务器命令启动，并把其他每个命令留到本人接受为止。"
+description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（mcpAddConsent），home 受保护状态下的接受存储，让已接受的 stdio 服务器启动得以运行，并把其他每次启动留到本人接受为止。"
 ---
 
 # @delo/plugin-mcp-consent
@@ -24,7 +24,7 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 ## 服务
 
-`DeloMcpConsent` 扩展 `@deepseek-ai/dsh-mcp-client` seam 的抽象 `McpAddConsent` 服务；在启动每个已配置的 stdio 服务器之前，mcp-client 会咨询它的 `review`。审查从不久等本人：允许一个命令即启动服务器；拒绝一个命令则让 mcp-client 的激活失败，失败带类型的拒绝会写明该命令及其参数，并附带 Service Provider 自己的原因，于是服务器保持停止。在该命令被接受之前，每次启动该服务器时拒绝都会重复出现；拒绝之后给出的一次接受，会让下一次启动该服务器。
+`DeloMcpConsent` 扩展 `@deepseek-ai/dsh-mcp-client` seam 的抽象 `McpAddConsent` 服务；在启动每个已配置的 stdio 服务器之前，mcp-client 会咨询它的 `review`。审查从不久等本人：允许一次启动即启动服务器；拒绝一次启动则让 mcp-client 的激活失败，失败带类型的拒绝会写明该命令及其参数，并附带 Service Provider 自己的原因，于是服务器保持停止。在该启动被接受之前，每次启动该服务器时拒绝都会重复出现；拒绝之后给出的一次接受，会让下一次启动该服务器。
 
 审查看到服务器的完整启动：命令、其参数、其工作目录及其已配置的环境条目，以及 mcp-client 将它们解析得到的绝对可执行文件路径和规范工作目录，在 Windows 上还有运行 `.cmd` 或 `.bat` 文件的 `COMSPEC` 的规范路径。mcp-client 将空的或相对的工作目录相对于 Host 的工作目录解析，并在服务器将以之启动的 `PATH` 中查找裸命令，然后以这些解析得到的路径 spawn 服务器，因此即使 Host 在另一个目录中启动或其 `PATH` 发生变化，已接受的启动运行的仍是本人接受过的可执行文件。它无法解析的命令会在任何审查之前以 `McpServerStartUnresolvedError` 让服务器保持停止。拒绝写明解析得到的可执行文件、工作目录和已配置环境变量的名称，但不写其中任何值，因为值可能是凭据。
 
@@ -65,11 +65,11 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 每次被拒绝的审查都在本进程中保留，作为该服务器的待处理审查：每个服务器名称一条，即最新的一条，因此审查之后发生变更的启动会替换那条审查。该服务也以 `mcpReviews` 提供（[`src/review.ts`](src/review.ts)）：
 
-- `pending()` 以界面显示的形式列出每条待处理审查：服务器名称、命令、其参数、其工作目录、已配置环境变量的名称（不含其值）、拒绝的原因、该审查所询问的内容（`change`，取自 [`SERVER_CHANGES`](src/wire.ts)：`new` 表示没有接受的命令、不存在的存储或已被取代的存储；`arguments`、`directory` 或 `environment` 表示启动中第一个与该命令的接受不同的部分；`unreadable` 表示被拒绝的存储或无法解析的 home）、审查时间及其审查 id——启动的每个字段的摘要，环境通过其摘要计入（[`mcpReviewId`](src/review.ts)）。
-- `acceptReview(serverName, reviewId, confirmed)` 通过 `accept` 原样记录该审查所显示的启动，移除该审查，并以各自的配置再次启动本同意为该服务器拒绝过的每个 Loader 配置项，因此服务器无需重启 studio 即可运行；没有 Loader 时，下一次启动会运行它。`declineReview(serverName, reviewId)` 移除该审查且不记录任何内容；服务器保持停止，直到它的配置项再次启动并再次被审查。
-- `accepted()` 按存储所持有的形式列出每次已接受的启动：命令、其参数、其工作目录、其环境变量的名称、接受时间，以及启动该命令的 Loader 已配置服务器；存储不存在或无法读取时，它不列出任何内容。`revokeAcceptance(command, acceptedAt, confirmed)` 从存储中移除该命令的接受，随后以各自的配置再次应用启动该命令的每个 Loader 配置项，于是其审查拒绝该启动，服务器停止，直到本人再次接受它；它答复停止了多少个配置项。
-- 遇到 `UNCONFIRMED`（没有 `confirmed: true` 的答复）、`STALE_REVIEW`（该服务器没有带此 id 的待处理审查，因为它在显示之后被再次审查、接受或拒绝；或存储不持有该命令在所显示时间的接受）以及（对接受或撤销而言）`STORE_REFUSED` 时，这些答复都以 `McpReviewError` 拒绝且不记录任何内容。每次答复记录一行日志。
-- 在 Connection 为 studio 提供服务的地方，`/api` 下的五条精确路由承载它们（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/deloMcpConsent.pending`（待处理的审查与已接受的启动）、`GET /api/deloMcpConsent.waiting`、`POST /api/deloMcpConsent.accept`、`POST /api/deloMcpConsent.decline` 与 `POST /api/deloMcpConsent.revoke`。除 `waiting` 外，每条路由只回答经回环监听器到达且 `Host` 为回环地址的请求；远程访问设备在请求体被读取之前就以 `403 LOOPBACK_REQUIRED` 被拒绝，因此服务器只能在 home 的电脑上被接受或撤销。`waiting` 还接纳远程访问已准入设备的 Peer（`admitPeer`），只答复每个等待中服务器的名称与 `change`，从不答复其命令、参数、目录或环境，因此手机可以说明有服务器在等待、需在电脑上批准。studio 的“权限”部分、MCP 服务器审查与等待中服务器的提示位于 [`@delo/bundle-local`](../bundle-local/README.zh.md#the-consent-surfaces)；`delorun mcp` 通过 home 进程的 `mcp.list`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke`（[C19](../../docs/contracts/c19-home-process.zh.md)）到达同样的调用，只有本人自己的命令可以得到它们的答复。
+- `pending()` 以界面显示的形式（[`PendingServer`](src/wire.ts)）列出每条待处理审查：服务器名称、命令、其参数、其工作目录、已配置的环境变量、拒绝的原因、该审查所询问的内容、变化的变量、其状态、审查时间及其审查 id——启动的每个字段的摘要，环境通过其摘要计入（[`mcpReviewId`](src/review.ts)）。只有当 [`showsEnvValue`](src/wire.ts) 对变量名成立时才显示其值：`NODE_OPTIONS`、`LD_PRELOAD`、`LD_LIBRARY_PATH`、`PATH`、`PYTHONPATH` 以及每个 `DYLD_` 变量，它们会改变运行的内容；其他值从不显示。`change` 取自 [`SERVER_CHANGES`](src/wire.ts)：`new` 表示没有接受的服务器、不存在的存储或已被取代的存储；`command`、`arguments`、`directory` 或 `environment` 表示启动中第一个与该服务器的接受不同的部分，`changedVariables` 写明每个增加、删除或变更的变量；`unreadable` 表示被拒绝的存储或无法解析的 home；`upgraded` 表示某条版本 2 记录原样覆盖的启动。`state` 取自 [`SERVER_STATES`](src/wire.ts)：`waiting`、`declined` 或 `revoked`。
+- `acceptReview(serverName, reviewId, confirmed)` 通过 `accept` 原样记录该审查所显示的启动（无论处于何种状态），移除该审查，并以各自的配置再次启动本同意为该服务器拒绝过的每个 Loader 配置项，因此服务器无需重启 studio 即可运行；没有 Loader 时，下一次启动会运行它。`declineReview(serverName, reviewId)` 让该审查以 `declined` 状态继续列出，把该启动记录为已拒绝，且不记录任何接受；服务器保持停止，直到其启动变化或本人接受它。存储无法读取或写入时，拒绝只在本进程中生效，并有一条警告说明这一点。
+- `accepted()` 列出每次接受（[`AcceptedServer`](src/wire.ts)）：其 id、服务器名称、命令、其参数、其工作目录、其环境变量、接受时间，以及是否有已配置的 Loader 配置项使用该服务器名称；只有当 `showsEnvValue` 成立、且该服务器的已配置配置项设置的值正是接受所持摘要对应的值时，才出现变量的值。存储不存在或无法读取时，它不列出任何内容。`revokeAcceptance(acceptanceId, confirmed)` 移除该次接受，把其启动记录为已撤销，随后以各自的配置再次应用该服务器名称的每个 Loader 配置项，于是其审查以 `revoked` 拒绝该启动，服务器停止，直到其启动变化或本人再次接受它；它答复停止了多少个配置项，并保留其他每次接受。
+- 遇到 `UNCONFIRMED`（没有 `confirmed: true` 的接受或撤销）、`STALE_REVIEW`（该服务器没有带此 id 的待处理审查，因为它在显示之后被再次审查或被接受；或没有接受带有被撤销的 id，因为它已被替换或撤销）以及（对接受或撤销而言）`STORE_REFUSED` 时，这些答复都以 `McpReviewError` 拒绝且不记录任何内容。每次答复记录一行日志。
+- 在 Connection 为 studio 提供服务的地方，`/api` 下的五条精确路由承载它们（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/deloMcpConsent.pending`（待处理的审查与已接受的启动）、`GET /api/deloMcpConsent.waiting`、`POST /api/deloMcpConsent.accept`、`POST /api/deloMcpConsent.decline` 与 `POST /api/deloMcpConsent.revoke`。除 `waiting` 外，每条路由只回答经回环监听器到达且 `Host` 为回环地址的请求；远程访问设备在请求体被读取之前就以 `403 LOOPBACK_REQUIRED` 被拒绝，因此服务器只能在 home 的电脑上被接受或撤销。`waiting` 还接纳远程访问已准入设备的 Peer（`admitPeer`），只答复每条状态为 `waiting` 的审查的名称与 `change`，从不答复已拒绝或已撤销的审查，也从不答复命令、参数、目录或环境，因此手机可以说明有服务器在等待、需在电脑上批准。studio 的“权限”部分、MCP 服务器审查与等待中服务器的提示位于 [`@delo/bundle-local`](../bundle-local/README.zh.md#the-consent-surfaces)；`delorun mcp` 通过 home 进程的 `mcp.list`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke`（[C19](../../docs/contracts/c19-home-process.zh.md)）到达同样的调用，只有本人自己的命令可以得到它们的答复。
 
 <a id="the-mcp_add_consent-switch"></a>
 
@@ -81,4 +81,4 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 ## 开发
 
-`tests/consent.spec.ts` 覆盖存储与审查；`tests/reviews.spec.ts` 覆盖带有变化的待处理审查与拒绝结尾的提示、再次启动的配置项、已接受的启动及其撤销，以及路由，并包括拒绝情形：远程访问设备只能读取等待中服务器的名称与变化，其他每条路由都拒绝它；未确认或过期的答复与撤销都不记录任何内容。规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent` 运行，包的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json` 运行。
+`tests/consent.spec.ts` 覆盖存储、其版本 1 与版本 2 前身以及审查；`tests/reviews.spec.ts` 覆盖带有变化的待处理审查、哪些变量与哪些值被显示、跨新服务实例保持的已拒绝与已撤销状态、再次启动的配置项、按服务器名称分开保存的已接受启动及其撤销，以及路由，并包括拒绝情形：远程访问设备只能读取等待中服务器的名称与变化，其他每条路由都拒绝它；未确认或过期的答复与撤销都不记录任何内容。`tests/restart.spec.ts` 在真实 Loader 下运行接受与撤销。规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent` 运行，包的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json` 运行。

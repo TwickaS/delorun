@@ -1,7 +1,8 @@
 /**
  * The approval card's action for a request that asks for full access, so the request is never a dead end. At the
- * home's own computer it offers "Allow full access for this workspace": a workspace without a grant shows the consent
- * first, then the grant is recorded, the chat switches to full access so it stops asking, and the card is answered as
+ * home's own computer it offers "Allow full access for this workspace": the click reads the workspace's full access
+ * again, so it answers what the home holds then; a workspace without a grant shows the consent first, then the grant is
+ * recorded, the chat switches to full access so it stops asking, and the card is answered as
  * allowed. A workspace that already holds a grant is not asked again. On a remote studio, whose review the home
  * refuses, the action says to approve at the computer instead of offering a button. A chat without a workspace folder,
  * a profile without per-workspace full access, and the consent's own card (`permission`) show nothing.
@@ -73,11 +74,13 @@ export function FullAccessAction({ grants, toolName, allow, sessionId, fetch, as
   if (!asks) return null
   if (offer.kind === 'remote') return <p className={css.line} role="status" data-full-access-action="remote">{t('action.atComputer')}</p>
   if (offer.kind === 'none' || toolName === CONSENT_TOOL) return null
-  const { access } = offer
   const run = async (): Promise<void> => {
     setBusy(true)
     setFailure(undefined)
     try {
+      // The review shown at mount may be out of date: another surface may have granted or withdrawn since.
+      const access = await reviewChat(fetch, sessionId)
+      if (access === undefined) return
       const granted = access.grantedAt === null
         ? await ask(access, sessionId)
         : (await setFullAccess(fetch, access, true, sessionId), true)

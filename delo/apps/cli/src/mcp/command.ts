@@ -1,23 +1,26 @@
 /**
- * `delorun mcp list | accept <server> | decline <server> | revoke <command>`: the stdio MCP servers whose start the
+ * `delorun mcp list | accept <server> | decline <server> | revoke <server>`: the stdio MCP servers whose start the
  * running studio's add-time consent (`@delo/plugin-mcp-consent`) holds stopped, answered at the home's own computer, and
- * the server commands it allows.
+ * the servers it allows, one acceptance per server name.
  *
- * - `list` shows each pending server: what changed since the person allowed it, its command, arguments, working
- *   directory, the names of its configured environment variables without their values, and why it waits; then each
- *   allowed command with its arguments, working directory, environment variable names, the configured servers that use
- *   it and when it was allowed.
+ * - `list` shows each pending server: what changed since the person allowed it (for an environment change, which
+ *   variables), whether the person declined it or revoked it, its command, arguments, working directory and configured
+ *   environment variables, and why it waits; then each allowed server with its command, arguments, working directory,
+ *   environment variables, whether a configured server has its name, and when it was allowed. A variable's value is
+ *   printed only for a variable that changes what runs (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`,
+ *   `PYTHONPATH`, `DYLD_*`).
  * - `accept` shows the server's start and records it only after the person confirms at a terminal; without a terminal,
- *   or without a yes, nothing is recorded. The running studio then starts the server again.
- * - `decline` sets the review aside; the server stays stopped until its row starts again.
- * - `revoke` shows an allowed command and the servers that use it, and withdraws it only after the person confirms at a
- *   terminal; the running studio then stops those servers, and each waits for an answer before it starts again.
+ *   or without a yes, nothing is recorded. The running studio then starts the server again. A declined or revoked
+ *   server is accepted the same way.
+ * - `decline` sets the review aside; the server stays stopped, listed as declined, until its start changes.
+ * - `revoke` shows an allowed server and withdraws its acceptance only after the person confirms at a terminal; the
+ *   running studio then stops that server, which stays stopped, listed as revoked, until its start changes or the person
+ *   accepts it again. Every other server's acceptance is unchanged.
  *
  * The reviews live in the running studio, which reviews each server as it starts it, so every action needs Delo to run;
  * the command reaches it over the update channel (`mcp.list`, `mcp.accept`, `mcp.decline` and `mcp.revoke`, contract
  * C19), whose answers only the person's own command may give. An answer names the review it was shown, and a revoke
- * the acceptance time it was shown; a server whose start, or a command whose acceptance, changed meanwhile is refused as
- * a stale review.
+ * the acceptance id it was shown; a server whose start or acceptance changed meanwhile is refused as a stale review.
  *
  * @module @delo/cli/mcp/command
  */
@@ -58,40 +61,61 @@ export interface McpDependencies {
 }
 
 /** The usage line. */
-const USAGE = 'Usage: delorun mcp list | accept <server> | decline <server> | revoke <command> [--profile <name>]'
+const USAGE = 'Usage: delorun mcp list | accept <server> | decline <server> | revoke <server> [--profile <name>]'
 
 /** What a pending review asks about, in the words `list` and `accept` print. */
 const CHANGE_WORDS = {
   new: 'new server',
+  command: 'its command changed',
   arguments: 'its arguments changed',
   directory: 'its working directory changed',
   environment: 'its environment variables changed',
   unreadable: 'the acceptance list could not be read',
+  upgraded: 'Delorun now remembers each server separately; review it once',
 } as const
 
 /** One code of {@link CHANGE_WORDS}, as `mcp.list` answers it. */
 type ServerChange = keyof typeof CHANGE_WORDS
 
-/** The start fields a pending server and an allowed command share. */
+/** Where a pending review stands, in the words `list` prints after what changed; a waiting review adds none. */
+const STATE_WORDS = {
+  waiting: '',
+  declined: 'you declined it; it stays stopped until its start changes or you accept it',
+  revoked: 'you revoked it; it stays stopped until its start changes or you accept it again',
+} as const
+
+/** One code of {@link STATE_WORDS}, as `mcp.list` answers it. */
+type ServerState = keyof typeof STATE_WORDS
+
+/** One configured environment variable, with its value only where the studio shows it. */
+interface EnvVariable {
+  readonly name: string
+  readonly value?: string
+}
+
+/** The start fields a pending server and an allowed server share. */
 interface ServerStart {
+  readonly serverName: string
   readonly command: string
   readonly args: readonly string[]
   readonly cwd: string
-  readonly envNames: readonly string[]
+  readonly env: readonly EnvVariable[]
 }
 
 /** One pending server as `mcp.list` answers it. */
 interface PendingServer extends ServerStart {
-  readonly serverName: string
   readonly reviewId: string
   readonly reason: string
   readonly change: ServerChange
+  readonly changedVariables: readonly string[]
+  readonly state: ServerState
 }
 
-/** One allowed command as `mcp.list` answers it. */
+/** One allowed server as `mcp.list` answers it. */
 interface AcceptedServer extends ServerStart {
+  readonly acceptanceId: string
   readonly acceptedAt: number
-  readonly servers: readonly string[]
+  readonly configured: boolean
 }
 
 /** What `mcp.list` answers. */
@@ -129,7 +153,7 @@ export function createMcpCommand(dependencies: McpDependencies): CliCommand {
         if (action === 'decline') return decline(where, target)
         if (action === 'revoke') return revoke(where, target)
       }
-      throw new CliError(EXIT.usage, `delorun mcp: ${action === undefined ? 'choose an action' : `${JSON.stringify(action)} is not list, accept <server>, decline <server> or revoke <command>`}\n${USAGE}`)
+      throw new CliError(EXIT.usage, `delorun mcp: ${action === undefined ? 'choose an action' : `${JSON.stringify(action)} is not list, accept <server>, decline <server> or revoke <server>`}\n${USAGE}`)
     },
   }
 }
@@ -143,7 +167,7 @@ export const mcpCommand: CliCommand = createMcpCommand({
 })
 
 /**
- * The pending servers and allowed commands the running studio holds.
+ * The pending servers and allowed servers the running studio holds.
  * @param where - the invocation.
  * @returns them.
  * @throws {CliError} {@link EXIT.notRunning} when Delo does not run, and {@link EXIT.failed} for a refusal or an
@@ -190,14 +214,26 @@ function isStrings(list: unknown): list is readonly string[] {
 }
 
 /**
+ * Read one environment variable of an `mcp.list` entry.
+ * @param entry - the variable's entry.
+ * @returns the variable, or undefined when its name is missing or a field is of another type.
+ */
+function variableOf(entry: object): EnvVariable | undefined {
+  const [name, value] = ['name', 'value'].map((key): unknown => Reflect.get(entry, key))
+  if (typeof name !== 'string' || (value !== undefined && typeof value !== 'string')) return undefined
+  return value === undefined ? { name } : { name, value }
+}
+
+/**
  * Read the start fields of an `mcp.list` entry.
  * @param entry - the entry.
  * @returns the fields, or undefined when one is missing or of another type.
  */
 function startOf(entry: object): ServerStart | undefined {
-  const [command, args, cwd, envNames] = ['command', 'args', 'cwd', 'envNames'].map((key): unknown => Reflect.get(entry, key))
-  if (typeof command !== 'string' || typeof cwd !== 'string' || !isStrings(args) || !isStrings(envNames)) return undefined
-  return { command, args, cwd, envNames }
+  const [serverName, command, args, cwd] = ['serverName', 'command', 'args', 'cwd'].map((key): unknown => Reflect.get(entry, key))
+  const env = entriesOf(Reflect.get(entry, 'env'), variableOf)
+  if (typeof serverName !== 'string' || typeof command !== 'string' || typeof cwd !== 'string' || !isStrings(args) || env === undefined) return undefined
+  return { serverName, command, args, cwd, env }
 }
 
 /**
@@ -207,70 +243,77 @@ function startOf(entry: object): ServerStart | undefined {
  */
 function pendingOf(entry: object): PendingServer | undefined {
   const start = startOf(entry)
-  const [serverName, reviewId, reason, change] = ['serverName', 'reviewId', 'reason', 'change'].map((key): unknown => Reflect.get(entry, key))
-  if (start === undefined || typeof serverName !== 'string' || typeof reviewId !== 'string' || typeof reason !== 'string') return undefined
-  if (!isChange(change)) return undefined
-  return { ...start, serverName, reviewId, reason, change }
+  const [reviewId, reason, change, changedVariables, state] = ['reviewId', 'reason', 'change', 'changedVariables', 'state'].map((key): unknown => Reflect.get(entry, key))
+  if (start === undefined || typeof reviewId !== 'string' || typeof reason !== 'string' || !isStrings(changedVariables)) return undefined
+  if (!isKey(CHANGE_WORDS, change) || !isKey(STATE_WORDS, state)) return undefined
+  return { ...start, reviewId, reason, change, changedVariables, state }
 }
 
 /**
- * Whether a field names a change {@link CHANGE_WORDS} has words for.
+ * Whether a field names a key of a table of words.
+ * @param words - the table.
  * @param value - the field.
  * @returns true for one of its keys.
  */
-function isChange(value: unknown): value is ServerChange {
-  return typeof value === 'string' && Object.hasOwn(CHANGE_WORDS, value)
+function isKey<T extends object>(words: T, value: unknown): value is keyof T {
+  return typeof value === 'string' && Object.hasOwn(words, value)
 }
 
 /**
- * Read one allowed command of an `mcp.list` answer.
+ * Read one allowed server of an `mcp.list` answer.
  * @param entry - the entry.
- * @returns the command, or undefined when the entry is not one.
+ * @returns the server, or undefined when the entry is not one.
  */
 function acceptedOf(entry: object): AcceptedServer | undefined {
   const start = startOf(entry)
-  const [acceptedAt, servers] = ['acceptedAt', 'servers'].map((key): unknown => Reflect.get(entry, key))
-  if (start === undefined || typeof acceptedAt !== 'number' || !Number.isSafeInteger(acceptedAt) || !isStrings(servers)) return undefined
-  return { ...start, acceptedAt, servers }
+  const [acceptanceId, acceptedAt, configured] = ['acceptanceId', 'acceptedAt', 'configured'].map((key): unknown => Reflect.get(entry, key))
+  if (start === undefined || typeof acceptanceId !== 'string' || typeof configured !== 'boolean') return undefined
+  if (typeof acceptedAt !== 'number' || !Number.isSafeInteger(acceptedAt)) return undefined
+  return { ...start, acceptanceId, acceptedAt, configured }
 }
 
 /**
- * A start's arguments, working directory and environment variable names, as indented lines.
+ * A start's command, arguments, working directory and environment variables, as indented lines. A variable's value is
+ * printed only when the studio sent it, which it does only for a variable that changes what runs.
  * @param start - the start.
  * @returns the lines.
  */
 function startFieldLines(start: ServerStart): string[] {
+  const env = start.env.map(variable => (variable.value === undefined ? printable(variable.name) : `${printable(variable.name)}=${quoted(variable.value)}`))
+  const hidden = start.env.some(variable => variable.value === undefined)
   return [
+    `    command: ${printable(start.command)}`,
     `    arguments: ${start.args.length === 0 ? 'none' : printable(start.args.map(argument => JSON.stringify(argument)).join(' '))}`,
     `    working directory: ${start.cwd === '' ? 'the studio\'s own' : printable(start.cwd)}`,
-    `    environment variables (values not shown): ${start.envNames.length === 0 ? 'none' : printable(start.envNames.join(', '))}`,
+    `    environment variables${hidden ? ' (values not shown)' : ''}: ${env.length === 0 ? 'none' : env.join(', ')}`,
   ]
 }
 
 /**
  * One pending server's start, as lines.
  * @param server - the server.
- * @returns what changed, what it would run, and why it waits.
+ * @returns what changed and whether the person set it aside, what it would run, and why it waits.
  */
 function startLines(server: PendingServer): string {
+  const state = STATE_WORDS[server.state]
   return [
-    `${printable(server.serverName)}: ${CHANGE_WORDS[server.change]}`,
-    `    command: ${printable(server.command)}`,
+    `${printable(server.serverName)}: ${CHANGE_WORDS[server.change]}${state === '' ? '' : `; ${state}`}`,
+    ...(server.changedVariables.length === 0 ? [] : [`    changed variables: ${printable(server.changedVariables.join(', '))}`]),
     ...startFieldLines(server),
     `    waits because: ${printable(server.reason)}`,
   ].join('\n')
 }
 
 /**
- * One allowed command, as lines.
- * @param accepted - the allowed command.
- * @returns what it runs, the servers that use it, and when it was allowed.
+ * One allowed server, as lines.
+ * @param accepted - the allowed server.
+ * @returns what it runs, whether a configured server has its name, and when it was allowed.
  */
 function acceptedLines(accepted: AcceptedServer): string {
   return [
-    printable(accepted.command),
+    printable(accepted.serverName),
     ...startFieldLines(accepted),
-    `    used by: ${accepted.servers.length === 0 ? 'no configured server' : printable(accepted.servers.join(', '))}`,
+    ...(accepted.configured ? [] : ['    no configured server has this name now']),
     `    allowed: ${new Date(accepted.acceptedAt).toISOString()}`,
   ].join('\n')
 }
@@ -286,8 +329,8 @@ async function list(where: Where): Promise<ExitCode> {
     ? 'No MCP server is waiting for your answer.\n'
     : `${servers.map(startLines).join('\n')}\nAccept one with delorun mcp accept <server>, or keep it stopped with delorun mcp decline <server>.\n`
   const allowed = accepted.length === 0
-    ? 'No MCP server command is allowed.\n'
-    : `Allowed MCP server commands:\n${accepted.map(acceptedLines).join('\n')}\nStop one and have it ask again with delorun mcp revoke <command>.\n`
+    ? 'No MCP server is allowed.\n'
+    : `Allowed MCP servers:\n${accepted.map(acceptedLines).join('\n')}\nStop one and keep it stopped with delorun mcp revoke <server>.\n`
   where.context.stdout(`${waiting}\n${allowed}`)
   return EXIT.ok
 }
@@ -340,32 +383,31 @@ async function decline(where: Where, name: string): Promise<ExitCode> {
   const server = named((await listed(where)).servers, name)
   const answer = final(await dependencies.send(home, profile, { op: 'mcp.decline', args: { serverName: server.serverName, reviewId: server.reviewId } }))
   if (answer.ok !== true) return failed(context, answerRefusal(answer, 'the server\'s start changed after it was shown, so nothing was recorded'))
-  context.stdout(`${printable(server.serverName)} stays stopped. It is reviewed again the next time Delo starts it.\n`)
+  context.stdout(`${printable(server.serverName)} stays stopped until its start changes or you accept it.\n`)
   return EXIT.ok
 }
 
 /**
- * `delorun mcp revoke <command>`.
+ * `delorun mcp revoke <server>`.
  * @param where - the invocation.
- * @param command - the allowed command, as `list` printed it.
+ * @param name - the allowed server, as `list` printed it.
  * @returns the exit code.
  */
-async function revoke(where: Where, command: string): Promise<ExitCode> {
+async function revoke(where: Where, name: string): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  const accepted = (await listed(where)).accepted.find(entry => entry.command === command)
-  if (accepted === undefined) throw new CliError(EXIT.failed, `delorun mcp: no allowed MCP server command is ${quoted(command)}; see delorun mcp list`)
+  const accepted = (await listed(where)).accepted.find(entry => entry.serverName === name)
+  if (accepted === undefined) throw new CliError(EXIT.failed, `delorun mcp: no allowed MCP server is named ${quoted(name)}; see delorun mcp list`)
   if (!dependencies.terminal) {
-    return failed(context, 'revoking a command asks you to confirm at a terminal, so nothing was revoked. Run the command in a terminal on this computer')
+    return failed(context, 'revoking a server asks you to confirm at a terminal, so nothing was revoked. Run the command in a terminal on this computer')
   }
-  const stops = accepted.servers.length === 0 ? 'No configured server uses it now.' : `The servers that use it stop: ${printable(accepted.servers.join(', '))}.`
-  context.stdout(`${acceptedLines(accepted)}\n${stops} Each asks for your answer again before it next starts.\n`)
-  if (await dependencies.confirm(`Revoke ${printable(accepted.command)} and stop the servers that use it?`) !== true) {
-    return failed(context, `nothing was revoked; ${printable(accepted.command)} stays allowed`)
+  const server = printable(accepted.serverName)
+  context.stdout(`${acceptedLines(accepted)}\n${server} stops and stays stopped until its start changes or you accept it again. Other servers stay allowed.\n`)
+  if (await dependencies.confirm(`Revoke ${server} and stop it?`) !== true) {
+    return failed(context, `nothing was revoked; ${server} stays allowed`)
   }
-  const answer = final(await dependencies.send(home, profile, { op: 'mcp.revoke', args: { command: accepted.command, acceptedAt: accepted.acceptedAt } }))
-  if (answer.ok !== true) return failed(context, answerRefusal(answer, 'the allowed command changed after it was shown, so nothing was revoked'))
-  const stopped = Number(answer.stopped)
-  context.stdout(`Revoked ${printable(accepted.command)}; ${stopped === 0 ? 'no running server used it' : `${String(stopped)} running server${stopped === 1 ? '' : 's'} stopped`}.\n`)
+  const answer = final(await dependencies.send(home, profile, { op: 'mcp.revoke', args: { acceptanceId: accepted.acceptanceId } }))
+  if (answer.ok !== true) return failed(context, answerRefusal(answer, 'the allowed server changed after it was shown, so nothing was revoked'))
+  context.stdout(`Revoked ${server}; ${Number(answer.stopped) === 0 ? 'it was not running' : 'it stopped'}.\n`)
   return EXIT.ok
 }
 
