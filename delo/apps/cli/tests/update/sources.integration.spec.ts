@@ -5,6 +5,7 @@
  * status records, the data facts, and the target's bundle tables read by the target's own Node.
  */
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -329,7 +330,7 @@ describe('storeReportSources', () => {
       await writeRecord()
       try {
         expect(await sources().harness('1.1.0')).toEqual([
-          { file: CLI_MANIFEST, merge: 'release-unchanged' },
+          { file: CLI_MANIFEST, merge: 'release-unchanged', result: { sha256: createHash('sha256').update('{"name":"@delo/cli","type":"module","edited":true}\n').digest('hex'), executable: false } },
           { file: GONE, merge: 'release-removed' },
           { file: CLOSURE_MANIFEST, merge: 'edits-overlap' },
         ])

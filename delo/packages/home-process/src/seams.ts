@@ -242,19 +242,24 @@ export interface HarnessCarry {
   /**
    * Refuse an update while changes to the running runtime's harness wait for review, before anything is fetched.
    * @param from - the running version.
-   * @throws {HomeProcessError} `HARNESS_CHANGES_PENDING` naming the files.
+   * @throws {HomeProcessError} `HARNESS_CHANGES_PENDING` naming the files; `HARNESS_COPY_UNREADABLE` when the running
+   *   runtime's copy cannot be scanned.
    */
   check(from: RuntimeVersion): Promise<void>
   /**
    * Write the target runtime's harness record and kept files, then run the switch while nothing can change the
-   * harness's records. When anything fails before the switch runs, what was written for the target is removed and the
-   * error is thrown; an error of the switch is thrown with the target's files in place.
+   * harness's records. It merges again first and compares the result with the harness items of the report the person
+   * confirmed, which the home process kept from `update.prepare`. When anything fails before the switch runs, what was
+   * written for the target is removed and the error is thrown; an error of the switch is thrown with the target's files
+   * in place.
    * @param from - the running version.
    * @param to - the target version.
+   * @param report - C3's report the person confirmed, as `update.prepare` built it.
    * @param switchRuntime - the update's runtime switch.
-   * @throws {HomeProcessError} `HARNESS_CHANGES_PENDING` when changes wait for review again.
+   * @throws {HomeProcessError} `HARNESS_CHANGES_PENDING` when changes wait for review again; `HARNESS_REPORT_STALE` when
+   *   the merge now differs from the report; `HARNESS_COPY_UNREADABLE` when the running runtime's copy cannot be scanned.
    */
-  carry(from: RuntimeVersion, to: RuntimeVersion, switchRuntime: () => Promise<void>): Promise<void>
+  carry(from: RuntimeVersion, to: RuntimeVersion, report: unknown, switchRuntime: () => Promise<void>): Promise<void>
 }
 
 /** The running chats of one Host: sessions with an active turn or a running background job. */

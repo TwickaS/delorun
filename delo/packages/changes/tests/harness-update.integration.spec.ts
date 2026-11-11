@@ -6,7 +6,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { carryHarness, type HarnessCarried } from '../src/harness-merge.ts'
+import { carryHarness, type HarnessCarried, type HarnessCarryPlan } from '../src/harness-merge.ts'
 import { applyHarnessChange, createHarnessCopy, harnessChanges, type HarnessContext, type SignedRuntime } from '../src/harness.ts'
 import { composition } from '../src/harness-tree.ts'
 import { leaveOutNewestChange } from '../src/left-out.ts'
@@ -63,11 +63,12 @@ async function approve(ctx: HarnessContext, path: string, text: string | undefin
  * @param ctx - the running runtime.
  * @param signed - the target's installation.
  * @param switchRuntime - the switch; it only counts by default.
+ * @param confirm - the comparison with what the person confirmed; it accepts every plan by default.
  * @returns what was carried and how many times the switch ran.
  */
-async function carry(ctx: HarnessContext, signed: SignedRuntime, switchRuntime?: () => Promise<void>): Promise<{ carried: HarnessCarried, switches: number }> {
+async function carry(ctx: HarnessContext, signed: SignedRuntime, switchRuntime?: () => Promise<void>, confirm: (plan: HarnessCarryPlan) => void = () => {}): Promise<{ carried: HarnessCarried, switches: number }> {
   let switches = 0
-  const carried = await carryHarness({ from: ctx, to: TARGET, signed: async () => Promise.resolve(signed) }, async () => {
+  const carried = await carryHarness({ from: ctx, to: TARGET, signed: async () => Promise.resolve(signed), confirm }, async () => {
     switches += 1
     await switchRuntime?.()
   }, () => AT)
@@ -209,11 +210,38 @@ describe('what an update leaves', () => {
     writeFileSync(inCopy(ctx, MANIFEST), '{"name":"waiting"}\n')
     let switched = false
 
-    const error = await rejection(carryHarness({ from: ctx, to: TARGET, signed: async () => Promise.resolve(installTarget(home)) }, async () => { switched = true }), 'HARNESS_CHANGES_PENDING')
+    const error = await rejection(carryHarness({ from: ctx, to: TARGET, signed: async () => Promise.resolve(installTarget(home)), confirm: () => {} }, async () => { switched = true }), 'HARNESS_CHANGES_PENDING')
 
     expect(error.detail).toContain(MANIFEST)
     expect(switched).toBe(false)
     expect(existsSync(harnessRuntimeDirectory(home, TARGET))).toBe(false)
+  })
+
+  it('has the caller compare the plan made under the lock, and writes nothing and does not switch when it refuses', async () => {
+    const { ctx, home } = harnessFixture()
+    await approve(ctx, START_FILE, 'export const start = 2\n')
+    const log = await readHarnessLog(home)
+    const plans: HarnessCarryPlan[] = []
+    let switched = false
+
+    await expect(carry(ctx, installTarget(home, { [MANIFEST]: '{"name":"closure","version":2}\n' }), async () => { switched = true }, (plan) => {
+      plans.push(plan)
+      throw new Error('the plan differs')
+    })).rejects.toThrow('the plan differs')
+
+    expect(plans.map(plan => plan.entries.map(entry => [entry.file, entry.merge.outcome]))).toEqual([[[START_FILE, 'carried']]])
+    expect(switched).toBe(false)
+    expect(existsSync(harnessRuntimeDirectory(home, TARGET))).toBe(false)
+    expect(await readHarnessLog(home)).toEqual(log)
+  })
+
+  it('has the caller compare an empty plan when the running runtime runs no approved file', async () => {
+    const { ctx, home } = harnessFixture()
+    const plans: HarnessCarryPlan[] = []
+
+    await carry(ctx, installTarget(home), undefined, (plan) => { plans.push(plan) })
+
+    expect(plans).toEqual([{ from: RUNTIME, entries: [] }])
   })
 
   it('replaces what an earlier install left for the target, never merging into it', async () => {
@@ -238,7 +266,7 @@ describe('what an update leaves', () => {
     writeFileSync(altered, 'altered\n')
     let switched = false
 
-    await rejection(carryHarness({ from: ctx, to: TARGET, signed: async () => Promise.resolve(signed) }, async () => { switched = true }), 'RUNTIME_CHANGED')
+    await rejection(carryHarness({ from: ctx, to: TARGET, signed: async () => Promise.resolve(signed), confirm: () => {} }, async () => { switched = true }), 'RUNTIME_CHANGED')
 
     expect(switched).toBe(false)
     expect(existsSync(harnessRuntimeDirectory(home, TARGET))).toBe(false)
@@ -273,6 +301,6 @@ describe('what an update leaves', () => {
 
   it('refuses to carry a runtime\'s changes to itself', async () => {
     const { ctx } = harnessFixture()
-    await rejection(carryHarness({ from: ctx, to: RUNTIME, signed: ctx.signed }, async () => Promise.resolve()), 'INVALID_REQUEST')
+    await rejection(carryHarness({ from: ctx, to: RUNTIME, signed: ctx.signed, confirm: () => {} }, async () => Promise.resolve()), 'INVALID_REQUEST')
   })
 })

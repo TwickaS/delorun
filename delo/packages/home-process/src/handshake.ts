@@ -484,7 +484,7 @@ export class UpdateHandshake {
       let criterion: string | undefined
       let switchStarted = false
       try {
-        await this.support.harness.carry(from, to, async () => {
+        await this.support.harness.carry(from, to, prepared.report, async () => {
           switchStarted = true
           await store.switchTo(from, to)
         })

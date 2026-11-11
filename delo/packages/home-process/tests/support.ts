@@ -270,6 +270,8 @@ export class FixtureHarness implements HarnessCarry {
   pending = false
   /** Whether the carry fails before it runs the switch. */
   failCarry = false
+  /** The report each carry was given. */
+  readonly reports: unknown[] = []
 
   async check(from: RuntimeVersion): Promise<void> {
     this.calls.push(`check:${from}`)
@@ -277,8 +279,9 @@ export class FixtureHarness implements HarnessCarry {
     return Promise.resolve()
   }
 
-  async carry(from: RuntimeVersion, to: RuntimeVersion, switchRuntime: () => Promise<void>): Promise<void> {
+  async carry(from: RuntimeVersion, to: RuntimeVersion, report: unknown, switchRuntime: () => Promise<void>): Promise<void> {
     this.calls.push(`carry:${from}>${to}`)
+    this.reports.push(report)
     if (this.pending) throw new HomeProcessError('HARNESS_CHANGES_PENDING', 'app/a.js waits for review')
     if (this.failCarry) throw new Error('the carry failed')
     await switchRuntime()

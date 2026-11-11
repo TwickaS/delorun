@@ -68,7 +68,18 @@ const DISABLED_PLUGIN: ReportItem = { kind: 'plugin', subject: { name: 'plugin-a
 const UNVERIFIED_PLUGIN: ReportItem = { kind: 'plugin', subject: { name: 'plugin-b', version: semantic('2.0.0') }, reason: 'manifest-unreadable', effect: 'kept', verification: 'unverified', detail: {}, actions: [] }
 
 /** An approved harness file whose change carries. */
-const CARRIED_FILE: ReportItem = { kind: 'harness', subject: { file: 'app/a.js' }, reason: 'harness-change-carried', effect: 'kept', verification: 'verified', detail: { merge: 'merged' }, actions: [] }
+const CARRIED_FILE: ReportItem = { kind: 'harness', subject: { file: 'app/a.js' }, reason: 'harness-change-carried', effect: 'kept', verification: 'verified', detail: { merge: 'release-unchanged' }, actions: [] }
+
+/** An approved harness file whose change merges with the new release's into content neither had. */
+const MERGED_FILE: ReportItem = {
+  kind: 'harness',
+  subject: { file: 'app/c.js' },
+  reason: 'harness-change-merged',
+  effect: 'changed',
+  verification: 'verified',
+  detail: { merge: 'merged', result: { sha256: brandString<Sha256Hex>('d'.repeat(64)), executable: false }, diff: { text: '--- a/app/c.js\n+++ b/app/c.js\n@@ -1,1 +1,1 @@\n-one\n+ONE\n' } },
+  actions: ['skip-update'],
+}
 
 /** An approved harness file that conflicts with the new release's. */
 const CONFLICTED_FILE: ReportItem = { kind: 'harness', subject: { file: 'app/b.js' }, reason: 'harness-change-conflicts', effect: 'disabled', verification: 'verified', detail: { merge: 'edits-overlap' }, actions: ['skip-update'] }
@@ -123,6 +134,31 @@ describe('reportLines', () => {
       'Your changes to Delo\'s own files (2):',
       '  - Your change to app/a.js carries over to Delo 1.1.0.',
       '  - Your change to app/b.js conflicts with Delo 1.1.0\'s file; the new release\'s file runs, and yours is kept beside it as app/b.js.mine.',
+    ])
+  })
+
+  it('c03-harness-change-merged: prints a merged file as merged, with its diff from the new release\'s file', () => {
+    const lines = reportLines(report({ items: [CARRIED_FILE, MERGED_FILE] }))
+
+    expect(lines.slice(5)).toEqual([
+      '  - Your change to app/a.js carries over to Delo 1.1.0.',
+      '  - Your change to app/c.js and Delo 1.1.0\'s change to it merge into a file neither has; read the merge before you confirm.',
+      '    --- a/app/c.js',
+      '    +++ b/app/c.js',
+      '    @@ -1,1 +1,1 @@',
+      '    -one',
+      '    +ONE',
+    ])
+  })
+
+  it('says why a merged file\'s diff is not shown, and prints nothing for a merged item without one', () => {
+    const notShown = (reason: 'binary' | 'too-large' | 'cut-short'): ReportItem => ({ ...MERGED_FILE, detail: { merge: 'merged', diff: { text: '', notShown: reason } } })
+    const lines = reportLines(report({ items: [notShown('binary'), notShown('too-large'), notShown('cut-short'), { ...MERGED_FILE, detail: { merge: 'merged' } }] }))
+
+    expect(lines.slice(4).filter(line => line.startsWith('    '))).toEqual([
+      '    The diff is not shown: one side is not text. Decline the update to keep your change as it runs now.',
+      '    The diff is not shown: one side is larger than 1 MiB. Decline the update to keep your change as it runs now.',
+      '    The diff is not shown: the report\'s diffs passed 256 KiB before it. Decline the update to keep your change as it runs now.',
     ])
   })
 
@@ -310,6 +346,19 @@ describe('runUpdate', () => {
 
     await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed })
     expect(sent('update.apply')).toHaveLength(0)
+  })
+
+  it('c03-harness-change-merged: refuses --yes when a changed harness file merges with the new release\'s, and applies after the person confirms', async () => {
+    await homeAnswering({ prepare: prepared(report({ items: [CARRIED_FILE, MERGED_FILE] })), apply: [{ ok: true, outcome: 'committed' }] })
+
+    const failure = await update(['--yes']).catch((error: unknown) => error)
+
+    expect(failure).toMatchObject({ exit: EXIT.failed })
+    expect((failure as CliError).message).toContain('merges your change to a file of Delo itself')
+    expect(sent('update.apply')).toHaveLength(0)
+    expect(output.stdout).toContain('    +ONE\n')
+    expect(await update([], { confirm: async () => Promise.resolve(true) })).toBe(EXIT.ok)
+    expect(sent('update.apply')).toHaveLength(1)
   })
 
   it('refuses --yes when the report holds an item Delo cannot predict', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mergeHarnessFile, type HarnessFileSide } from '../src/harness-merge.ts'
+import { mergedDiffs, mergeHarnessFile, type HarnessCarryEntry, type HarnessCarryPlan, type HarnessFileSide } from '../src/harness-merge.ts'
+import type { ApprovedHarnessFile, ContentVersion } from '../src/types.ts'
 
 /**
  * A text side.
@@ -114,5 +115,64 @@ describe('mergeHarnessFile', () => {
     const crlf = (text: string): HarnessFileSide => side(text.replaceAll('\n', '\r\n'))
 
     expect(mergeHarnessFile({ base: BASE, mine: side(lines({ 0: 'ONE' })), theirs: crlf(lines({ 11: 'TWELVE' })) })).toEqual({ outcome: 'conflict', conflict: 'edits-overlap' })
+  })
+})
+
+/**
+ * A plan of files, each merged from the target's side to a result, or planned with another outcome.
+ * @param entries - each file's target side and merge.
+ * @returns the plan.
+ */
+function planOf(entries: readonly Pick<HarnessCarryEntry, 'file' | 'theirs' | 'merge'>[]): HarnessCarryPlan {
+  const approved: ApprovedHarnessFile = { version: 'v'.repeat(64) as ContentVersion, change: 'c0123456789' as ApprovedHarnessFile['change'], approvedAt: '2026-11-11T12:00:00.000Z' }
+  return { from: '1.0.0', entries: entries.map(entry => ({ ...entry, approved, base: undefined, mine: undefined })) }
+}
+
+describe('mergedDiffs', () => {
+  it('shows each merged file against the target\'s file, and no other outcome', () => {
+    const theirs = side(lines({ 11: 'TWELVE' }))
+    const plan = planOf([
+      { file: 'app/a.js', theirs, merge: { outcome: 'carried', carry: 'merged', result: side(lines({ 0: 'ONE', 11: 'TWELVE' })) } },
+      { file: 'app/b.js', theirs, merge: { outcome: 'carried', carry: 'release-unchanged', result: side('b\n') } },
+      { file: 'app/c.js', theirs, merge: { outcome: 'conflict', conflict: 'edits-overlap' } },
+      { file: 'app/d.js', theirs, merge: { outcome: 'same' } },
+    ])
+
+    const diffs = mergedDiffs(plan)
+
+    expect([...diffs.keys()]).toEqual(['app/a.js'])
+    expect(diffs.get('app/a.js')?.text).toContain('--- a/app/a.js\n+++ b/app/a.js\n@@ -1,5 +1,5 @@\n-one\n+ONE\n two\n')
+    expect(diffs.get('app/a.js')?.notShown).toBeUndefined()
+  })
+
+  it('names a change of the execute bit with mode lines, and a removal against nothing', () => {
+    const plan = planOf([
+      { file: 'app/x.sh', theirs: side('x\n'), merge: { outcome: 'carried', carry: 'merged', result: side('x\n', true) } },
+      { file: 'app/gone.js', theirs: undefined, merge: { outcome: 'carried', carry: 'merged', result: undefined } },
+    ])
+
+    const diffs = mergedDiffs(plan)
+
+    expect(diffs.get('app/x.sh')?.text).toMatch(/^old mode 100644\nnew mode 100755\n--- a\/app\/x\.sh/u)
+    expect(diffs.get('app/gone.js')).toEqual({ text: '--- a/app/gone.js\n+++ b/app/gone.js\n' })
+  })
+
+  it('shows no lines of a binary or too large side, and none of any diff after the total is passed', () => {
+    const merged = (text: string): HarnessCarryEntry['merge'] => ({ outcome: 'carried', carry: 'merged', result: side(text) })
+    const plan = planOf([
+      { file: 'app/a.bin', theirs: { bytes: Buffer.from([0, 1, 2]), executable: false }, merge: merged('text\n') },
+      { file: 'app/b.js', theirs: side('b'.repeat(40)), merge: merged('b\n') },
+      { file: 'app/c.js', theirs: side('c\n'), merge: merged('C\n') },
+      { file: 'app/d.js', theirs: side('d\n'), merge: merged('D\n') },
+      { file: 'app/e.js', theirs: side('e\n'), merge: merged('E\n') },
+    ])
+
+    const diffs = mergedDiffs(plan, { file: 32, total: 60 })
+
+    expect(diffs.get('app/a.bin')).toEqual({ text: '', notShown: 'binary' })
+    expect(diffs.get('app/b.js')).toEqual({ text: '', notShown: 'too-large' })
+    expect(diffs.get('app/c.js')?.text).toContain('+C')
+    expect(diffs.get('app/d.js')).toEqual({ text: '', notShown: 'cut-short' })
+    expect(diffs.get('app/e.js')).toEqual({ text: '', notShown: 'cut-short' })
   })
 })

@@ -4,14 +4,15 @@
  * change carries when the target left the file as it was or when the person's edit applies to the target's file as it
  * is; anything else is a conflict, and a conflict never keeps either side silently: the target's file runs and the
  * person's is kept beside it. {@link planHarnessCarry} reads one runtime's record and plans every file, writing nothing,
- * and the plan holds all three sides. {@link carryHarness} is the update's one call: after the person confirmed and
- * before the runtime switches, it plans again under the harness lock and writes the target runtime's record, its log
+ * and the plan holds all three sides; {@link mergedDiffs} shows each merged file against the target's. {@link carryHarness}
+ * is the update's one call: after the person confirmed and before the runtime switches, it plans again under the harness
+ * lock, has the caller compare that plan with what the person confirmed, and writes the target runtime's record, its log
  * entries and the person's kept files, then runs the switch while the lock is held.
  *
  * @module @delo/changes/harness-merge
  */
-import { applyPatch, structuredPatch } from 'diff'
-import { DIFF_FILE_LIMIT, isBinary } from './diff.ts'
+import { applyPatch, createTwoFilesPatch, FILE_HEADERS_ONLY, structuredPatch } from 'diff'
+import { DIFF_FILE_LIMIT, DIFF_TOTAL_LIMIT, isBinary, type DiffBounds } from './diff.ts'
 import { ChangesError } from './errors.ts'
 import { composedFiles, harnessChangeSummary, harnessChanges, keepBeside, pathExists, readSignedFile, removeTree, writeHarnessCopy, type HarnessContext, type SignedRuntime } from './harness.ts'
 import { changeId } from './ids.ts'
@@ -239,6 +240,59 @@ export function signedHarnessReader(signed: SignedRuntime): ReadSignedHarnessFil
   }
 }
 
+/**
+ * Why a merged file's diff does not show its lines: `binary` when a side is not UTF-8 text or holds a NUL byte,
+ * `too-large` when a side passes the file limit, `cut-short` when the plan's diffs passed the total limit before it.
+ */
+export type MergedDiffNotShown = 'binary' | 'too-large' | 'cut-short'
+
+/** A merged file's unified diff from the target's signed file to what the target runs. */
+export interface MergedDiff {
+  /** The diff, with `old mode` and `new mode` lines when the execute bit differs; empty when `notShown` is set. */
+  readonly text: string
+  /** Why the diff does not show the lines, when it does not. */
+  readonly notShown?: MergedDiffNotShown
+}
+
+/** The file mode a diff's mode lines name. */
+const fileMode = (executable: boolean): string => (executable ? '100755' : '100644')
+
+/**
+ * The diff of each file of a plan that carries by merging (`carried` with carry `merged`), so the person sees what runs
+ * that neither side had: from the target's signed file, or nothing, to the merged content, or nothing. It is bounded as
+ * Changes' diffs are: a side above the file limit or binary shows no lines, and once the diffs pass the total limit
+ * every later one shows none.
+ * @param plan - the plan.
+ * @param bounds - the file and total limits; {@link DIFF_FILE_LIMIT} and {@link DIFF_TOTAL_LIMIT} by default.
+ * @returns one diff per merged file, by path.
+ */
+export function mergedDiffs(plan: HarnessCarryPlan, bounds: DiffBounds = {}): ReadonlyMap<string, MergedDiff> {
+  const fileLimit = bounds.file ?? DIFF_FILE_LIMIT
+  const totalLimit = bounds.total ?? DIFF_TOTAL_LIMIT
+  const diffs = new Map<string, MergedDiff>()
+  let used = 0
+  for (const { file, theirs, merge } of plan.entries) {
+    if (merge.outcome !== 'carried' || merge.carry !== 'merged') continue
+    const sides = [theirs, merge.result].flatMap(side => side === undefined ? [] : [side.bytes])
+    if (sides.some(bytes => bytes.length > fileLimit)) {
+      diffs.set(file, { text: '', notShown: 'too-large' })
+      continue
+    }
+    if (sides.some(isBinary)) {
+      diffs.set(file, { text: '', notShown: 'binary' })
+      continue
+    }
+    const before = theirs?.executable ?? false
+    const after = merge.result?.executable ?? false
+    const modes = before === after ? '' : `old mode ${fileMode(before)}\nnew mode ${fileMode(after)}\n`
+    const lines = createTwoFilesPatch(`a/${file}`, `b/${file}`, theirs?.bytes.toString('utf8') ?? '', merge.result?.bytes.toString('utf8') ?? '', undefined, undefined, { headerOptions: FILE_HEADERS_ONLY })
+    const text = modes + lines
+    used += Buffer.byteLength(text)
+    diffs.set(file, used > totalLimit ? { text: '', notShown: 'cut-short' } : { text })
+  }
+  return diffs
+}
+
 /** What an update carries from the running runtime to the one it installs. */
 export interface HarnessCarryRequest {
   /** The running runtime: the home, its version and its verified signed installation. */
@@ -250,6 +304,12 @@ export interface HarnessCarryRequest {
    * @returns the installation and its verified file list.
    */
   readonly signed: () => Promise<SignedRuntime>
+  /**
+   * Compare the plan made under the harness lock with what the person confirmed, before anything is written.
+   * @param plan - the plan; it has no entry when the running runtime runs no approved harness file.
+   * @throws whatever refuses the carry when the plan differs; nothing is written then and the switch does not run.
+   */
+  readonly confirm: (plan: HarnessCarryPlan) => void
 }
 
 /** What {@link carryHarness} wrote for the target runtime. */
@@ -311,7 +371,8 @@ async function carryWrites(home: string, to: string, plan: HarnessCarryPlan, at:
 /**
  * Carry the running runtime's approved harness files to the runtime an update installs, then switch, under
  * {@link withHarnessLock} throughout. It refuses while changes wait for review in the running runtime's copy. It plans
- * again against the target's verified files, replaces whatever an earlier install left under
+ * again against the target's verified files and has {@link HarnessCarryRequest.confirm} compare the plan with what the
+ * person confirmed, replaces whatever an earlier install left under
  * `changes/harness/<to>/` (never merging into it), and writes the target's record and one applied `harness-edit` log
  * entry per carried file, `decidedFrom: "update"`. When the running runtime has a writable copy, or a file conflicts,
  * it writes the target's writable copy and keeps the person's content of each conflicted file beside it as
@@ -323,7 +384,9 @@ async function carryWrites(home: string, to: string, plan: HarnessCarryPlan, at:
  * @param now - the clock for the records' times.
  * @returns what was written for the target.
  * @throws {ChangesError} `HARNESS_CHANGES_PENDING` naming the files that wait for review; `INVALID_REQUEST` when the
- *   target is the running runtime; `RECORD_UNREADABLE`, `STORE_CORRUPT` or `RUNTIME_CHANGED` as reading the sides does.
+ *   target is the running runtime; `RECORD_UNREADABLE`, `STORE_CORRUPT` or `RUNTIME_CHANGED` as reading the sides does;
+ *   `CONTENT_TOO_LARGE`, `CHANGED_WHILE_READING` or the filesystem's error as scanning the running runtime's copy does.
+ *   Whatever `confirm` throws reaches the caller.
  */
 export async function carryHarness(request: HarnessCarryRequest, switchRuntime: () => Promise<void>, now: () => Date = () => new Date()): Promise<HarnessCarried> {
   const { from, to } = request
@@ -361,15 +424,19 @@ async function writeCarry(request: HarnessCarryRequest, at: string): Promise<Har
   const log = await readHarnessLog(home)
   const record = runningHarnessRecord(log, await readHarnessRecord(home, from.runtime))
   const hasCopy = await pathExists(harnessCopyDirectory(home, from.runtime))
-  if (Object.keys(record.files).length === 0 && !hasCopy) return { carried: [], keptBeside: [], removedReturned: [], copy: false }
-  const signed = await request.signed()
-  const writes = await carryWrites(home, to, await planHarnessCarry(home, record, signedHarnessReader(signed)), at)
+  let signed: SignedRuntime | undefined
+  const target = async (): Promise<SignedRuntime> => (signed ??= await request.signed())
+  let reader: ReadSignedHarnessFile | undefined
+  const plan = await planHarnessCarry(home, record, async path => (reader ??= signedHarnessReader(await target()))(path))
+  request.confirm(plan)
+  if (plan.entries.length === 0 && !hasCopy) return { carried: [], keptBeside: [], removedReturned: [], copy: false }
+  const writes = await carryWrites(home, to, plan, at)
   const carried = Object.keys(writes.record.files)
   if (carried.length > 0) await writeHarnessRecord(home, writes.record)
   const copy = hasCopy || writes.kept.length > 0
   const keptBeside: string[] = []
   if (copy) {
-    await writeHarnessCopy(home, to, signed, writes.record)
+    await writeHarnessCopy(home, to, await target(), writes.record)
     for (const { file, bytes } of writes.kept) keptBeside.push(await keepBeside(home, to, file, bytes))
   }
   // The log is written last, so a failure before it leaves no entry naming a target directory that is removed.

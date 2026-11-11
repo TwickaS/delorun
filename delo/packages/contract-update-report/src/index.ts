@@ -127,7 +127,8 @@ export interface HarnessSubject {
  * carry the change; the others are conflicts, where the target's file runs and the person's is kept beside it.
  *
  * - `release-unchanged`: the target's file equals the running release's, so the approved content carries as it is.
- * - `merged`: both releases' files differ and the person's edit applies to the target's file without overlapping it.
+ * - `merged`: both releases' files differ and the person's edit applies to the target's file without overlapping it,
+ *   so the target runs a file neither side had, which the person confirms (`harness-change-merged`).
  * - `in-release`: the target's file equals the approved content.
  * - `edits-overlap`: the person's edit does not apply to the target's file as it is.
  * - `binary`: both sides changed a file that is not UTF-8 text.
@@ -146,6 +147,28 @@ export type HarnessMerge =
   | 'release-removed'
   | 'release-changed-removed'
   | 'both-added'
+
+/** What the target runs of a carried harness file: its bytes' SHA-256 and its execute bit. */
+export interface HarnessResult {
+  /** The SHA-256 of the file's bytes. */
+  readonly sha256: Sha256Hex
+  /** Whether the owner execute bit is set. */
+  readonly executable: boolean
+}
+
+/**
+ * Why a merged harness file's diff does not show its lines: `binary` when a side is not UTF-8 text or holds a NUL byte,
+ * `too-large` when a side is larger than 1 MiB, `cut-short` when the report's diffs passed 256 KiB before it.
+ */
+export type HarnessDiffNotShown = 'binary' | 'too-large' | 'cut-short'
+
+/** A merged harness file's unified diff from the target's signed file to what the target runs. */
+export interface HarnessDiff {
+  /** The diff text, with `old mode` and `new mode` lines when the execute bit differs; empty when `notShown` is set. */
+  readonly text: string
+  /** Why the diff does not show the lines, when it does not. */
+  readonly notShown?: HarnessDiffNotShown
+}
 
 /** The `schema` value of a release's `data-formats.json`. */
 export const DATA_FORMATS_SCHEMA = 'delo.data-formats/1'
@@ -194,6 +217,7 @@ export type ReportReason =
   | 'data-format-changed'
   | 'data-format-unknown'
   | 'harness-change-carried'
+  | 'harness-change-merged'
   | 'harness-change-conflicts'
 
 /** What happens to an item's subject on the target. */
@@ -225,6 +249,13 @@ export interface ItemDetail {
   readonly copy?: DataCopySize
   /** How the approved content meets the target's file, for `harness` reasons. */
   readonly merge?: HarnessMerge
+  /**
+   * What the target runs, for `harness-change-carried` and `harness-change-merged` when the target runs a file; an
+   * update applies only while its merge still gives this result.
+   */
+  readonly result?: HarnessResult
+  /** The diff from the target's file to what runs, for `harness-change-merged`. */
+  readonly diff?: HarnessDiff
 }
 
 /** Fields every item has. */

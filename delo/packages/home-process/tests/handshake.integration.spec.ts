@@ -131,15 +131,18 @@ describe('the harness carry', () => {
     expect(handshake.update).toBeUndefined()
   })
 
-  it('switches inside the carry, after the session-data copy is written', async () => {
+  it('switches inside the carry, after the session-data copy is written, and hands the carry the report it kept', async () => {
     const harness = new FixtureHarness()
     const { handshake, store, copies } = await handshakeWith(harness)
-    const { reportId } = await handshake.prepare(V2, () => {}) as { readonly reportId: string }
+    const { reportId, report } = await handshake.prepare(V2, () => {}) as { readonly reportId: string, readonly report: unknown }
 
     // The fixture subject starts no successor, so the update rolls back after the switch; the carry ran it first.
     await expect(handshake.apply(reportId, 'drain', 60, true, () => {})).rejects.toThrow('the switch ran')
     expect(harness.calls).toEqual([`check:${V1}`, `carry:${V1}>${V2}`, 'switched'])
     expect(store.switches[0]).toBe(`${V1}>${V2}`)
     expect(copies.calls.indexOf(`save:${V1}>${V2}`)).toBeGreaterThanOrEqual(0)
+    expect(report).toBeDefined()
+    expect(harness.reports).toEqual([report])
+    expect(harness.reports[0]).toBe(report)
   })
 })

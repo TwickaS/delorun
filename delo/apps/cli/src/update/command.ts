@@ -9,16 +9,19 @@
  * - `--check` runs the update check ([notice](./notice.ts)) on demand, whatever the profile's switch says: it fetches
  *   and verifies only the channel's signed metadata, needs no home process, prints the notice's line, and installs and
  *   changes nothing.
- * - `--yes` confirms a report with no `disabled` or `removed` item and no unverified item, so never one with a
- *   conflicted harness file, and takes the copy when the data differs.
+ * - `--yes` confirms a report with no `disabled` or `removed` item, no merged harness file and no unverified item, so
+ *   never one with a conflicted or merged harness file, and takes the copy when the data differs.
  * - `--data-copy` takes a copy when the data does not differ; `--no-data-copy` declines it when it does.
+ *
+ * A harness file whose change merges with the target's into content neither side had is printed with its diff from
+ * the target's file, as the report bounds it.
  *
  * @module @delo/cli/update/command
  */
 import { fileURLToPath } from 'node:url'
 import { confirm, isCancel, select } from '@clack/prompts'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
-import type { UpdateReport } from '@delo/contract-update-report'
+import type { HarnessDiffNotShown, ReportItem, UpdateReport } from '@delo/contract-update-report'
 import { queryHomeStatus, sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
 import { historyGitProblem } from '@delo/profile-safety'
 import { confirmsWithoutAsking, dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE } from '@delo/update'
@@ -127,6 +130,25 @@ function mebibytes(bytes: number): string {
   return `${(bytes / 1_048_576).toFixed(1)} MiB`
 }
 
+/** Why a merged file's diff is not printed, after `The diff is not shown: `. */
+const DIFF_NOT_SHOWN: Readonly<Record<HarnessDiffNotShown, string>> = {
+  'binary': 'one side is not text.',
+  'too-large': 'one side is larger than 1 MiB.',
+  'cut-short': 'the report\'s diffs passed 256 KiB before it.',
+}
+
+/**
+ * The lines of a merged harness file's diff, indented under its item.
+ * @param item - the `harness-change-merged` item.
+ * @returns the diff's lines, or why it is not shown.
+ */
+function mergedDiffLines(item: ReportItem): readonly string[] {
+  const diff = item.detail.diff
+  if (diff === undefined) return []
+  if (diff.notShown !== undefined) return [`    The diff is not shown: ${DIFF_NOT_SHOWN[diff.notShown]} Decline the update to keep your change as it runs now.`]
+  return diff.text.replace(/\n$/u, '').split('\n').map(line => `    ${line}`)
+}
+
 /**
  * The report as the person reads it.
  * @param report - C3's report.
@@ -146,7 +168,10 @@ export function reportLines(report: UpdateReport): readonly string[] {
   }
   const harness = report.items.filter(item => item.kind === 'harness')
   if (harness.length > 0) lines.push(`Your changes to Delo's own files (${String(harness.length)}):`)
-  for (const item of harness) lines.push(`  - ${reasonMessage(item, versions)}`)
+  for (const item of harness) {
+    lines.push(`  - ${reasonMessage(item, versions)}`)
+    if (item.reason === 'harness-change-merged') lines.push(...mergedDiffLines(item))
+  }
   for (const source of report.notChecked) lines.push(`Not checked: ${uncheckedMessage(source)}`)
   for (const item of report.items) {
     if (item.kind !== 'data') continue
@@ -225,7 +250,7 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
   if (values['data-copy'] === true && values['no-data-copy'] === true) throw new CliError(EXIT.usage, 'delorun update: choose --data-copy or --no-data-copy, not both')
   const data = report.items.find(item => item.kind === 'data')
   if (values.yes === true && !confirmsWithoutAsking(report)) {
-    throw new CliError(EXIT.failed, 'delorun update: the report disables or removes something, or holds an item Delo cannot predict, so --yes does not confirm it; run delorun update without --yes to decide')
+    throw new CliError(EXIT.failed, 'delorun update: the report disables or removes something, merges your change to a file of Delo itself, or holds an item Delo cannot predict, so --yes does not confirm it; run delorun update without --yes to decide')
   }
   const apply = values.yes === true || await prompts.confirm(`Apply the update to Delo ${report.to.delo}?`)
   if (!apply) return { apply, dataCopy: false }
