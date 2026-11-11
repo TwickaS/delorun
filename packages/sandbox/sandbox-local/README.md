@@ -117,6 +117,21 @@ The filter changes more than vsock, on any virtual machine with vsock and not on
 
 Landlock applies no seccomp filter: under WSL it refuses every wrap because of `/run/WSL`, and on other virtual machines vsock and io_uring stay open to its commands. A configured `runnerCommand` gets neither the filter nor the refusal.
 
+<a id="network"></a>
+### Network
+
+A policy's `network` restricts what a command reaches; without one the command shares the host's network, as every profile above does. Only bwrap expresses a network rule ([`RUNNER_NETWORK`](src/network.ts)). Landlock, Seatbelt and the Windows ACL runner refuse a policy with a network with `SANDBOX_UNSUPPORTED_POLICY`, which names the runner and what to do, instead of running the command with the host's network: the Landlock launcher applies no network rule, Seatbelt's network rules are not built here, and the Windows runner has none.
+
+| `network` | bwrap |
+|---|---|
+| none | The host's network, unchanged |
+| `off` | A network namespace of the command's own (`--unshare-net`) with a loopback interface and nothing else: no address on the host or beyond it, the host's loopback services and abstract Unix sockets included |
+| `proxy` | The same namespace, the proxy's Unix socket bound at its own path, and a bridge that serves it on `127.0.0.1:3128` inside the namespace; `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, their lower-case forms and `NODE_USE_ENV_PROXY=1` name the bridge, and `NO_PROXY` names the loopback addresses |
+
+Under `proxy` the wrap starts `/bin/sh`, which runs the bridge with the Host's own Node executable and then replaces itself with the command, so the command keeps its exit status, standard input and descriptors. The bridge detaches before the command starts, copies each connection to its port to a new connection to the socket, and ends with the namespace when the command exits. A bridge that fails before it listens writes a line starting `sandbox-proxy-bridge: ` and the command does not run; the wrap's `runnerFailureRules` include that signature. The socket must exist at the wrap, or bwrap fails before the command runs. A socket under the protected home is bound inside the home's empty tmpfs before it turns read-only, so a command sees only its own proxy's socket there; a socket anywhere else that a command can see stays reachable to commands whose network is `off`.
+
+What a command under `proxy` reaches is what the proxy allows. A program that ignores the proxy variables, connects by address or uses UDP reaches nothing, and the command cannot resolve names itself unless `/etc/hosts` answers.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -157,6 +172,7 @@ Each runner's kernel speaks its own denial dialect, carried on every wrap as `de
 | [`src/profiles.ts`](src/profiles.ts) | Per-platform profile builders: bwrap mounts, Landlock grants, Seatbelt SBPL, and each runner's protected-home rules |
 | [`src/mounts.ts`](src/mounts.ts) | Mount aliases from `/proc/self/mountinfo` and macOS firmlink spellings of the protected paths |
 | [`src/seccomp.ts`](src/seccomp.ts) | The vsock filter's BPF program, the shell loader that hands it to bwrap, and the vsock check |
+| [`src/network.ts`](src/network.ts) | The runners that express a network rule, bwrap's network arguments and proxy environment, the bridge, and the refusal text |
 
 </details>
 
@@ -198,7 +214,9 @@ These limits define when the provider is a poor fit or needs special operational
 - **The protected home under Landlock** — Landlock grants reads by directory tree, so each wrap lists the directories on the way from `/` to the home and grants their other entries: those directories cannot be listed, an entry created in them after the wrap is unreadable, and an entry removed between the wrap and the launch makes the launcher refuse the run. A consumer that sees that runner failure retries the wrap once before reporting it. Landlock has no right for connecting to a pathname socket, so denied sockets and sockets under the home stay reachable there.
 - **Socket and alias coverage** — bwrap shadows a denied socket only when it exists at the wrap, and Seatbelt denies only the listed socket paths. Aliases on btrfs, bcachefs and overlayfs may go unfound (reported as `unknown`), and a filesystem that mirrors the home under another device, such as a FUSE mirror, is not detected. Aliases are found at each wrap, so a mount added while a command runs is not covered, and no runner covers a hard link made outside the sandbox to a file under the home, nor a bind mount of a home file that was deleted or replaced since, which still reaches its old contents.
 - **Sockets recreated after a wrap** — bwrap binds `/dev/null` over the socket file that exists at the wrap; a socket removed and created again at that path, such as after a Docker engine restart, is reachable from commands wrapped before. A consumer that keeps confined commands running for long, such as a terminal or a background job, must rewrap or stop them when a denied socket is recreated.
-- **Abstract Unix sockets** — no runner denies a connect to an abstract-namespace socket: the address lies in memory a seccomp filter cannot read, and hiding them would need a network namespace, which also removes network access. A program that listens on one is reachable from confined commands, with an escape directory or without.
+- **Abstract Unix sockets** — no runner denies a connect to an abstract-namespace socket: the address lies in memory a seccomp filter cannot read, and hiding them needs a network namespace, which also removes network access. A program that listens on one is reachable from confined commands, with an escape directory or without, unless the policy's `network` gives bwrap's command a namespace of its own.
+- **Network rules on bwrap only** — Landlock, Seatbelt and the Windows ACL runner refuse a policy with a `network`. Landlock's TCP rules, from kernel ABI 4, would scope connects by port only, not by address, and leave UDP open; the launcher does not apply them.
+- **The bridge's port and executable** — under `proxy` the bridge binds `127.0.0.1:3128` in the command's namespace, so a command that binds that port itself fails with `EADDRINUSE`; the bridge runs the Host's Node executable, which must be readable inside the sandbox. A long-running command keeps the socket bound at its wrap: a proxy that stops or is replaced leaves it with no network until it is wrapped again.
 - **Runner selection is cached for the provider lifetime** — installing, removing, or repairing a runner requires reloading the plugin before selection changes.
 - **`runnerCommand` is an operator assertion** — a configured custom runner skips functional probes and is assumed to implement the bwrap-compatible profile honestly; if it is itself a Bash script, its interpreter startup runs before that script applies confinement.
 

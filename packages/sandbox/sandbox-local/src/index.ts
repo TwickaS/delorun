@@ -51,9 +51,11 @@ import { aliasCoverage, readMountTable } from './mounts.ts'
 import type { AliasCoverage } from './mounts.ts'
 import { RUNNER_PROTECTION, bwrapProfileArgs, landlockProfileArgs, resolveProtection, seatbeltProfileArgs } from './profiles.ts'
 import { vsockOffered, withSeccompFilter } from './seccomp.ts'
+import { BRIDGE_DIAGNOSTIC, RUNNER_NETWORK, bridgedArgv, networkRefusal } from './network.ts'
 import type { LocalSandboxRunner, Protection, ProtectionSettings } from './profiles.ts'
 
 export { RUNNER_PROTECTION } from './profiles.ts'
+export { BRIDGE_DIAGNOSTIC, PROXY_ENVIRONMENT, RUNNER_NETWORK, SANDBOX_PROXY_PORT } from './network.ts'
 export type { LocalSandboxRunner, RunnerProtection } from './profiles.ts'
 export { ALIAS_UNRELIABLE_FILESYSTEMS } from './mounts.ts'
 export type { AliasCoverage } from './mounts.ts'
@@ -521,12 +523,15 @@ export class LocalSandboxProvider extends SandboxProvider {
    * chain's runner speaking its own profile dialect.
    *
    * @param argv - the exact argv the caller is about to spawn.
-   * @param policy - the file-effect policy this execution runs under.
+   * @param policy - the file-effect policy this execution runs under, with its network; under a `proxy` network the
+   *   caller's argv runs behind the bridge to the proxy's socket ({@link bridgedArgv}).
    * @param signal - cancellation before policy resolution or grant creation.
    * @returns the wrapped argv plus the selected backend's enforcement completeness, denial
    *   signatures, and structured runner-failure rules; throws the fail-closed
-   *   `SANDBOX_UNAVAILABLE` error when the platform has no usable runner, and
-   *   `HOME_IN_WRITABLE_ROOT` when a writable root overlaps the protected home.
+   *   `SANDBOX_UNAVAILABLE` error when the platform has no usable runner,
+   *   `HOME_IN_WRITABLE_ROOT` when a writable root overlaps the protected home, and
+   *   `SANDBOX_UNSUPPORTED_POLICY` when the policy restricts the network on a runner that cannot
+   *   ({@link RUNNER_NETWORK}).
    */
   async confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv> {
     signal?.throwIfAborted()
@@ -536,12 +541,15 @@ export class LocalSandboxProvider extends SandboxProvider {
       const roots = workspaceWritableRoots(policy)
       for (const path of [protection.home, ...protection.homeAliases]) assertRootsOutsideHome(roots, path)
     }
+    // Under `proxy` the command starts behind the bridge, whose own failure is a runner failure: the command never ran.
+    const command = policy.network?.mode === 'proxy' ? bridgedArgv(policy.network.socket, argv) : [...argv]
+    const bridgeRules: readonly RunnerFailureRule[] = policy.network?.mode === 'proxy' ? [{ fatalSignatures: [BRIDGE_DIAGNOSTIC] }] : []
     if (this.runnerCommand !== undefined) {
       return Promise.resolve<ConfinedArgv>({
-        argv: [...this.runnerCommand, ...bwrapProfileArgs(policy, protection), '--', ...argv],
+        argv: [...this.runnerCommand, ...bwrapProfileArgs(policy, protection), '--', ...command],
         enforcement: 'full',
         denialSignatures: DENIAL_SIGNATURES.runnerCommand,
-        runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }],
+        runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }, ...bridgeRules],
       })
     }
     const selected = this.selectRunner(policy.mode)
@@ -549,15 +557,18 @@ export class LocalSandboxProvider extends SandboxProvider {
     if (escape !== undefined && !RUNNER_PROTECTION[selected.runner].socketConnect) {
       throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them`)
     }
+    if (policy.network !== undefined && !RUNNER_NETWORK[selected.runner]) {
+      throw new SandboxUnsupportedPolicyError(networkRefusal(selected.runner, policy.network))
+    }
     const profileArgv = this.runnerArgv(selected.runner, policy, protection)
     // No mount rule hides virtual-machine sockets, the transport between a VM such as WSL and its host.
     const filtered = selected.runner === 'bwrap' && (escape !== undefined || (this.internals.vsockOffered ?? vsockOffered)())
     const runnerArgv = filtered ? withSeccompFilter(profileArgv) : profileArgv
     return Promise.resolve<ConfinedArgv>({
-      argv: [...runnerArgv, '--', ...argv],
+      argv: [...runnerArgv, '--', ...command],
       enforcement: selected.enforcement,
       denialSignatures: DENIAL_SIGNATURES[selected.runner],
-      runnerFailureRules: RUNNER_FAILURE_RULES[selected.runner],
+      runnerFailureRules: [...RUNNER_FAILURE_RULES[selected.runner], ...bridgeRules],
     })
   }
 

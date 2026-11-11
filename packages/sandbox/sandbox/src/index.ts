@@ -45,6 +45,32 @@ export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 export type ConfinedSandboxMode = Exclude<SandboxMode, 'danger-full-access'>
 
 /**
+ * The network a confined execution may reach, when a policy restricts it. A policy without one leaves the network as
+ * the runner shares it with the host.
+ * - `off`: no network. The command sees a loopback interface of its own and nothing beyond it.
+ * - `proxy`: no network except one HTTP proxy, which listens on the Unix socket {@link SandboxProxyNetwork.socket}
+ *   outside the sandbox. The runner serves that socket to the command on a loopback port and names the port in the
+ *   command's proxy environment variables; a program that ignores them reaches nothing.
+ *
+ * A runner that cannot express the requested network refuses the wrap with `SANDBOX_UNSUPPORTED_POLICY` rather than
+ * running the command with the host's network.
+ */
+export type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork
+
+/** The `proxy` form of {@link SandboxNetwork}. */
+export interface SandboxProxyNetwork {
+  /** Reach only the HTTP proxy on {@link socket}. */
+  readonly mode: 'proxy'
+  /**
+   * Absolute path of the proxy's Unix socket, which must exist when the command is wrapped. The runner makes this one
+   * socket reachable at the same path inside the sandbox, so it should lie where the runner hides every other path,
+   * such as under a protected home; a socket a confined command can otherwise see stays reachable to commands whose
+   * network is `off`.
+   */
+  readonly socket: string
+}
+
+/**
  * The complete file-effect policy resolved for one capability call. The root
  * is carried even under modes that do not consume it so callers can resolve
  * policy once before choosing the enforcement path.
@@ -61,6 +87,11 @@ export interface SandboxExecutionPolicy {
    * These grant nothing under `read-only` or `danger-full-access`.
    */
   additionalWritableRoots?: readonly string[]
+  /**
+   * The network this execution may reach. Absent means the host's network, as the runner shares it. Ignored under
+   * `danger-full-access`, which bypasses confinement.
+   */
+  network?: SandboxNetwork
   /**
    * Opaque identity of the calling session (the branded `dsh-session`
    * SessionId). Backends key per-session state off it (e.g. windows-acl gives

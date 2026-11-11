@@ -117,6 +117,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   sandbox: 'sandbox.md',
   sandboxPolicy: 'sandbox.md',
   sandboxModeGuard: 'sandbox.md',
+  sandboxNetwork: 'sandbox.md',
   ssh: 'ssh.md',
   sessionPersistence: 'persistence.md',
   sessionQuery: 'session-query.md',

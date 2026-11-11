@@ -14,6 +14,7 @@ import { grantArgs as landlockGrantArgs } from '@deepseek-ai/node-addon-system/l
 import { SandboxUnsupportedPolicyError, canonicalPath, pathWithin, workspaceWritableRoots, writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { DATA_VOLUME, aliasCoverage, firmlinkAliases, mountAliases, readMountTable } from './mounts.ts'
+import { bwrapNetworkArgs } from './network.ts'
 import type { AliasCoverage, MountEntry } from './mounts.ts'
 
 /** A runner of the local provider's platform chains. */
@@ -235,13 +236,14 @@ export function resolveProtection(
  * `/tmp`, remounted read-only last, into which a workspace root under `/tmp` is bound read-only, as a
  * `workspace-write` command gets an empty writable one, and every other mount of the host's `/tmp` gets an empty
  * read-only tmpfs. A path inside a hidden directory needs no mount of its own, and bwrap could not create its mount
- * point in the read-only tmpfs, so it is left out.
- * @param policy - file-effect policy to express as bwrap mounts.
+ * point in the read-only tmpfs, so it is left out. A policy that restricts the network adds a network namespace of
+ * the command's own, and under `proxy` the proxy environment and a bind of the proxy's socket at its own path.
+ * @param policy - file-effect policy, with its network, to express as bwrap arguments.
  * @param protection - the protected home and denied sockets.
  * @returns profile arguments before the trailing separator and command argv.
  */
 export function bwrapProfileArgs(policy: SandboxPolicy, protection: Protection = NO_PROTECTION): string[] {
-  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent']
+  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent', ...bwrapNetworkArgs(policy.network)]
   const privateReadOnlyTmp = protection.privateTmp && policy.mode === 'read-only'
   if (policy.mode === 'workspace-write') {
     args.push('--tmpfs', '/tmp')
@@ -255,13 +257,20 @@ export function bwrapProfileArgs(policy: SandboxPolicy, protection: Protection =
   const exposed = (path: string): boolean => !hidden.some(directory => pathWithin(path, directory))
   for (const socket of protection.shadowedSockets.filter(exposed)) args.push('--ro-bind', '/dev/null', socket)
   for (const directory of hidden) args.push('--tmpfs', directory, '--remount-ro', directory)
+  // The proxy's socket is bound where the command reaches it: inside the home's tmpfs before it turns read-only, so
+  // only this one socket under the home is reachable, or over its own path elsewhere, after every hiding mount and
+  // before `/tmp` turns read-only, so its mount point can still be made there.
+  const socket = policy.network?.mode === 'proxy' ? policy.network.socket : undefined
+  const socketInHome = socket !== undefined && protection.home !== undefined && pathWithin(socket, protection.home)
   if (protection.home !== undefined) {
     args.push('--tmpfs', protection.home)
     for (const entry of protection.readable) args.push('--ro-bind', entry.source, entry.path)
+    if (socketInHome) args.push('--bind', socket, socket)
     args.push('--remount-ro', protection.home)
     for (const alias of protection.homeAliases.filter(exposed)) args.push('--tmpfs', alias, '--remount-ro', alias)
   }
   for (const alias of protection.tmpAliases.filter(exposed)) args.push('--tmpfs', alias, '--remount-ro', alias)
+  if (socket !== undefined && !socketInHome) args.push('--bind', socket, socket)
   if (privateReadOnlyTmp) args.push('--remount-ro', '/tmp')
   return args
 }

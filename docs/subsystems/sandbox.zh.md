@@ -61,6 +61,11 @@ interface SandboxExecutionPolicy {
    */
   additionalWritableRoots?: readonly string[]
   /**
+   * The network this execution may reach. Absent means the host's network, as the runner shares it. Ignored under
+   * `danger-full-access`, which bypasses confinement.
+   */
+  network?: SandboxNetwork
+  /**
    * Opaque identity of the calling session (the branded `dsh-session`
    * SessionId). Backends key per-session state off it (e.g. windows-acl gives
    * each live session/workspace pair a random private temp directory and SID,
@@ -71,7 +76,7 @@ interface SandboxExecutionPolicy {
 }
 ```
 
-`ctx.sandboxPolicy.resolve()` 接收活跃会话；对于已批准的重试，还接收显式模式。该服务拥有优先级与 root 回退规则，使 bash 和 fs 不必重复实现。
+`ctx.sandboxPolicy.resolve()` 接收活跃会话；对于已批准的重试，还接收显式模式。该服务拥有优先级与 root 回退规则，使 bash 和 fs 不必重复实现。决定网络的插件将解析器挂载为可选的 `ctx.sandboxNetwork`；该服务以会话和已解析的 root 向它询问每次调用的网络，未挂载时任何策略都不携带网络。
 
 ```ts type-equiv
 /** Inputs that select the sandbox policy for one capability call. */
@@ -97,6 +102,42 @@ interface SandboxPolicyRequest {
 interface SandboxPolicy extends SandboxExecutionPolicy {
   /** The file-effect mode this execution runs under. */
   mode: ConfinedSandboxMode
+}
+```
+
+<a id="network"></a>
+
+## 网络
+
+策略可以限制受限命令能到达的网络。没有 `network` 时，每个 runner 都与主机共享网络，即原版行为。`off` 让命令完全没有网络，`proxy` 只给它一个在沙箱外 Unix socket 上监听的 HTTP 代理。本地提供方仅在 bwrap 下表达这两种形式，在 Landlock、Seatbelt 和 Windows ACL runner 上以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝；其 [README](../../packages/sandbox/sandbox-local/README.zh.md#network) 说明实现方式。
+
+```ts type-equiv
+/**
+ * The network a confined execution may reach, when a policy restricts it. A policy without one leaves the network as
+ * the runner shares it with the host.
+ * - `off`: no network. The command sees a loopback interface of its own and nothing beyond it.
+ * - `proxy`: no network except one HTTP proxy, which listens on the Unix socket {@link SandboxProxyNetwork.socket}
+ *   outside the sandbox. The runner serves that socket to the command on a loopback port and names the port in the
+ *   command's proxy environment variables; a program that ignores them reaches nothing.
+ *
+ * A runner that cannot express the requested network refuses the wrap with `SANDBOX_UNSUPPORTED_POLICY` rather than
+ * running the command with the host's network.
+ */
+type SandboxNetwork = { readonly mode: 'off' } | SandboxProxyNetwork
+```
+
+```ts type-equiv
+/** The `proxy` form of {@link SandboxNetwork}. */
+interface SandboxProxyNetwork {
+  /** Reach only the HTTP proxy on {@link socket}. */
+  readonly mode: 'proxy'
+  /**
+   * Absolute path of the proxy's Unix socket, which must exist when the command is wrapped. The runner makes this one
+   * socket reachable at the same path inside the sandbox, so it should lie where the runner hides every other path,
+   * such as under a protected home; a socket a confined command can otherwise see stays reachable to commands whose
+   * network is `off`.
+   */
+  readonly socket: string
 }
 ```
 
@@ -212,6 +253,14 @@ The optional mode-switch guard a consent layer mounts on the context: it runs be
 
 Source: [`packages/sandbox/sandbox-policy/src/session-mode.ts`](../../packages/sandbox/sandbox-policy/src/session-mode.ts)
 
+<a id="ctxsandboxnetwork--sandboxnetworkresolver"></a>
+
+### `ctx.sandboxNetwork` — `SandboxNetworkResolver`
+
+Decides the network of one call's policy. It answers synchronously, because policy resolution is synchronous, and must not throw: a resolver that cannot decide answers the most restrictive network it supports.
+
+Source: [`packages/sandbox/sandbox-policy/src/network.ts`](../../packages/sandbox/sandbox-policy/src/network.ts)
+
 <a id="ctxsandboxpolicy--sandboxpolicyservice"></a>
 
 ### `ctx.sandboxPolicy` — `SandboxPolicyService`
@@ -233,8 +282,10 @@ environmentDenialSignatures(confined: Pick<ConfinedArgv, 'environmentDenialSigna
  * deployment default. A session cwd is its workspace-write boundary; the
  * configured root is the fallback for agentless calls and sessions without a
  * cwd.
+ * A mounted `ctx.sandboxNetwork` resolver decides the call's network; without
+ * one the policy carries none, and runners share the host's network.
  * @param request - optional session and approved mode override.
- * @returns the fully resolved per-call mode and absolute workspace root.
+ * @returns the fully resolved per-call mode, absolute workspace root and, when a resolver decides one, network.
  */
 resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy
 

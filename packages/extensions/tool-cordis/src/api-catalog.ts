@@ -2627,6 +2627,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [],
   },
   {
+    key: 'sandboxNetwork',
+    summary: 'Decides the network of one call\'s policy.',
+    description: 'Decides the network of one call\'s policy. It answers synchronously, because policy resolution is synchronous, and must not throw: a resolver that cannot decide answers the most restrictive network it supports.',
+    methods: [],
+  },
+  {
     key: 'sandboxPolicy',
     summary: 'The sandbox-policy service (`ctx.sandboxPolicy`).',
     description: 'The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, and current request-time policy section. Tool layers call resolve for each execution so a session\'s mode log and immutable cwd travel together to every enforcing capability.',
@@ -2659,9 +2665,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd. A mounted `ctx.sandboxNetwork` resolver decides the call\'s network; without one the policy carries none, and runners share the host\'s network.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
-        returns: 'the fully resolved per-call mode and absolute workspace root.',
+        returns: 'the fully resolved per-call mode, absolute workspace root and, when a resolver decides one, network.',
       },
       {
         signature: 'overrideOf(session: Session): SandboxMode | undefined',
@@ -8263,11 +8269,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SandboxExecutionPolicy',
-    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    sessionId?: SessionId;\n}',
+    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    additionalWritableRoots?: readonly string[];\n    network?: SandboxNetwork;\n    sessionId?: SessionId;\n}',
   },
   {
     name: 'SandboxMode',
     declaration: 'export type SandboxMode = \'read-only\' | \'workspace-write\' | \'danger-full-access\';',
+  },
+  {
+    name: 'SandboxNetwork',
+    declaration: 'export type SandboxNetwork = {\n    readonly mode: \'off\';\n} | SandboxProxyNetwork;',
   },
   {
     name: 'SandboxPolicy',
@@ -8276,6 +8286,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SandboxPolicyRequest',
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
+  },
+  {
+    name: 'SandboxProxyNetwork',
+    declaration: 'export interface SandboxProxyNetwork {\n    readonly mode: \'proxy\';\n    readonly socket: string;\n}',
   },
   {
     name: 'SaveFileAttachment',
