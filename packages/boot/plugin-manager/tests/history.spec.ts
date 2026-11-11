@@ -195,10 +195,12 @@ it('shows its admission every file a version would hold, those a wider caller ad
   expect(execFileSync('git', ['--git-dir', join(dir, HISTORY_DIR), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain('refused')
 })
 
-it('saves the text its admission read, not an edit made after the read, and refuses when the admission throws', async () => {
+it('saves the text its admission read, not an edit made after the read or a change to its copy, and refuses when the admission throws', async () => {
   writeFileSync(join(dir, 'package.json'), '{"v":1}\n')
-  const profile = new ProfileHistory(dir, FILES, 'git', 30_000, () => {
+  const profile = new ProfileHistory(dir, FILES, 'git', 30_000, (files) => {
     writeFileSync(join(dir, 'package.json'), '{"v":"edited during the save"}\n')
+    // The admission gets its own copy, so changing it changes nothing that is staged.
+    ;(files as Map<string, string | undefined>).set('package.json', '{"v":"changed by the admission"}\n')
     return undefined
   })
   const saved = await profile.record('Read once', { kind: 'person' })

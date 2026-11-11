@@ -178,7 +178,7 @@ export class ProfileHistory {
     }
     let refusal: string | undefined
     try {
-      refusal = admit(files)
+      refusal = admit(new Map(files))
     } catch (error) {
       throw new VersionRefusedError(`the check of this version failed: ${(error as Error).message}`, { cause: error })
     }

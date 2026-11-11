@@ -20,8 +20,8 @@
  * @module @delo/cli/secret-fields
  */
 import { existsSync, readFileSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { open, rm } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import type {} from '@deepseek-ai/dsh-config-editor'
@@ -31,8 +31,9 @@ import {
   describeSecretField, expressionOf, HOME_PATCH_COPY_FILENAME, findSecretValues, secretFieldAdmission, secretFieldRemedy, secretFieldsSet,
   type ConfigSchemasOf, type SecretReference, type SecretValueFound,
 } from '@delo/profile-safety'
-import { isSeq, parseDocument, type Document } from 'yaml'
+import { isSeq, parse, parseDocument, type Document } from 'yaml'
 import { profileDirectory } from './profile.ts'
+import { CREDENTIALS_FILENAME } from './setup/writes.ts'
 
 /** The patch file of a profile and of the home. */
 const PATCH_FILENAME = 'cordis.patch.yml'
@@ -93,29 +94,66 @@ export function credentialNameFor(entryId: string, path: readonly string[]): str
   return /^[A-Z_]/u.test(name) ? name : `KEY_${name}`
 }
 
+/** The most names {@link storeValue} tries for one value before it leaves the value in place. */
+export const MAX_NAME_ATTEMPTS = 100
+
 /**
- * Move one value into the credentials store, or find that the store holds it already. A name that resolves to another
- * value, from the store or the environment, is never written over.
+ * The names the credentials file holds now and their values, read from the file itself rather than from a provider's
+ * cached view, so a name another process stored a moment ago counts.
+ * @param path - the credentials file.
+ * @returns each stored name with its value; empty when the file is absent.
+ * @throws {Error} when the file is not a credentials document.
+ */
+function storedNames(path: string): Map<string, unknown> {
+  if (!existsSync(path)) return new Map()
+  const document: unknown = parse(readFileSync(path, 'utf8'))
+  const refs = typeof document === 'object' && document !== null ? Reflect.get(document, 'refs') : undefined
+  return new Map(typeof refs === 'object' && refs !== null ? Object.entries(refs) : [])
+}
+
+/**
+ * Move one value into the credentials store, or find that the store holds it already. A name the credentials file or
+ * the environment gives another value is never written over. The caller holds the home-wide settle lock, so no other
+ * start picks the same name between the check and the write.
  * @param credentials - the Host's credential provider, upstream's credentials writer.
+ * @param file - the credentials file, read before each name is chosen.
  * @param entryId - the row's patch id or plugin name, which the new name derives from.
  * @param path - the field's path, which the new name derives from.
  * @param target - the value and the name its reference field gives now.
- * @returns the name the reference field names afterwards, and whether the store already held the value under the
+ * @returns the name the reference field names afterwards, and whether the file already held the value under the
  *   current name.
+ * @throws {Error} when no free name is found in {@link MAX_NAME_ATTEMPTS} tries, or the store refuses the write.
  */
-async function storeValue(credentials: CredentialProvider, entryId: string, path: readonly string[], target: MoveTarget): Promise<{ name: string; held: boolean }> {
-  if (target.current !== undefined) {
-    const stored = await credentials.resolve(credentialRef(target.current))
-    if (stored?.source === 'file' && stored.value === target.value) return { name: target.current, held: true }
-  }
+async function storeValue(credentials: CredentialProvider, file: string, entryId: string, path: readonly string[], target: MoveTarget): Promise<{ name: string; held: boolean }> {
+  const stored = storedNames(file)
+  if (target.current !== undefined && stored.get(target.current) === target.value) return { name: target.current, held: true }
   const base = credentialNameFor(entryId, path)
-  for (let attempt = 1; ; attempt++) {
+  for (let attempt = 1; attempt <= MAX_NAME_ATTEMPTS; attempt++) {
     const name = attempt === 1 ? base : `${base}_${String(attempt)}`
-    const existing = await credentials.resolve(credentialRef(name))
-    if (existing?.source === 'file' && existing.value === target.value) return { name, held: false }
-    if (existing !== undefined) continue
+    if (stored.has(name)) {
+      if (stored.get(name) === target.value) return { name, held: false }
+      continue
+    }
+    if (await credentials.resolve(credentialRef(name)) !== undefined) continue
     await credentials.set(credentialRef(name), target.value)
     return { name, held: false }
+  }
+  throw new Error(`no free credential name was found from ${base} to ${base}_${String(MAX_NAME_ATTEMPTS)}`)
+}
+
+/**
+ * Flush a file and the directory that holds it to disk, so a patch rewritten afterwards never outlives the value it
+ * points at. Directories cannot be opened for flushing on Windows, where only the file is flushed.
+ * @param path - the file.
+ */
+async function flushToDisk(path: string): Promise<void> {
+  for (const target of process.platform === 'win32' ? [path] : [path, dirname(path)]) {
+    const handle = await open(target, 'r')
+    try {
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
   }
 }
 
@@ -163,9 +201,10 @@ function moveTarget(found: SecretValueFound): MoveTarget | { readonly stays: str
  * @param path - the patch file.
  * @param schemas - the Host's Config schemas.
  * @param credentials - the Host's credential provider, if it loads one.
+ * @param credentialsFile - the credentials file it writes.
  * @returns what was moved and what stays.
  */
-async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: CredentialProvider | undefined): Promise<SecretSettlement> {
+async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: CredentialProvider | undefined, credentialsFile: string): Promise<SecretSettlement> {
   const text = readFileSync(path, 'utf8')
   const found = findSecretValues(path, text, schemas)
   const moved: string[] = []
@@ -187,7 +226,7 @@ async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: C
       continue
     }
     try {
-      const { name, held } = await storeValue(credentials, place.entryId, place.path, target)
+      const { name, held } = await storeValue(credentials, credentialsFile, place.entryId, place.path, target)
       document.deleteIn(documentPath(document, place.location, place.path))
       if (name !== target.current) document.setIn(documentPath(document, place.location, [...place.path.slice(0, -1), target.reference.field]), name)
       moved.push(held
@@ -197,7 +236,9 @@ async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: C
       stays(`storing it failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  if (moved.length > 0) await writeFileAtomic(path, String(document), { mode: 0o600 })
+  if (moved.length === 0) return { moved, notices }
+  if (existsSync(credentialsFile)) await flushToDisk(credentialsFile)
+  await writeFileAtomic(path, String(document), { mode: 0o600 })
   return { moved, notices }
 }
 
@@ -207,7 +248,8 @@ async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: C
  * `credential-ref` field beside it. A value the store already holds under the name that field gives, the schema's
  * default included, is only removed from the patch. Any other value is stored under a new name derived from its place,
  * never over a name that holds another value, and the reference field is set to it. A value that cannot be moved stays,
- * and a notice names it with the way to move it. Both files are rewritten under the profile's writer lock, and the
+ * and a notice names it with the way to move it. The credentials file and its directory are flushed to disk before a
+ * patch is rewritten. Both files are rewritten under the profile's writer lock and the home patch's, and the
  * profile's copy of the home patch, which an earlier snapshot may have written with a value in it, is replaced with a
  * copy of the home patch as it is now.
  * @param ctx - the booted profile's root context.
@@ -219,13 +261,16 @@ async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: C
 export async function settleSecretValues(ctx: Context, home: string, profile: string, schemas: ConfigSchemasOf): Promise<SecretSettlement> {
   const profileDir = profileDirectory(home, profile)
   const credentials = ctx.get('credentials')
-  return await withFileLock(join(profileDir, 'package.json'), async () => {
+  const homePatch = join(home, PATCH_FILENAME)
+  const credentialsFile = join(home, CREDENTIALS_FILENAME)
+  // The profile's writer lock, then the home patch's: every start that settles takes the second, so two profiles, or a
+  // start and `delorun headless`, never choose a credential name or rewrite the home patch at the same time.
+  return await withFileLock(join(profileDir, 'package.json'), () => withFileLock(homePatch, async () => {
     const moved: string[] = []
     const notices: string[] = []
-    const homePatch = join(home, PATCH_FILENAME)
     for (const path of [join(profileDir, PATCH_FILENAME), homePatch]) {
       if (!existsSync(path)) continue
-      const settled = await settleFile(path, schemas, credentials)
+      const settled = await settleFile(path, schemas, credentials, credentialsFile)
       moved.push(...settled.moved)
       notices.push(...settled.notices)
     }
@@ -242,7 +287,7 @@ export async function settleSecretValues(ctx: Context, home: string, profile: st
       }
     }
     return { moved, notices }
-  })
+  }))
 }
 
 /**

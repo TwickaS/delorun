@@ -20,7 +20,7 @@ import { HISTORY_DIR, PROFILE_FILES, ProfileHistory, VersionRefusedError } from 
 import Settings from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import { parse } from 'yaml'
-import { configSchemasOf, credentialNameFor, guardSecretFields, settleSecretValues, type SecretSettlement } from '../src/secret-fields.ts'
+import { configSchemasOf, credentialNameFor, guardSecretFields, MAX_NAME_ATTEMPTS, settleSecretValues, type SecretSettlement } from '../src/secret-fields.ts'
 
 /** The secret value the specs type; no file the history holds and no message may hold it. */
 const SECRET = 'sk-typed-into-settings'
@@ -199,6 +199,27 @@ describe('settling a start\'s patch files', () => {
     expect(readFileSync(profile.patchPath, 'utf8')).not.toContain(SECRET)
     expect(readFileSync(join(profile.dir, 'home-cordis.patch.yml'), 'utf8')).not.toContain(SECRET)
     expect(stored().refs).toEqual({ CORDIS_WEB_APIKEY: SECRET })
+  })
+
+  it('chooses a name from the credentials file as another process left it, never writing over that process\'s key', async () => {
+    writeFileSync(profile.patchPath, `- id: web-deepseek-api\n  config:\n    apiKey: ${SECRET}\n`)
+    // Written after this Host's store last read the file, as another start would write it.
+    writeFileSync(credentials, `version: 1\nrefs:\n  ${credentialNameFor('web-deepseek-api', ['apiKey'])}: sk-another-start\n`, { mode: 0o600 })
+    const settled = await settle()
+    expect(settled.moved).toEqual([`${profile.patchPath}: moved the value of the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead) into the credentials file as WEB_DEEPSEEK_API_APIKEY_2, and set apiKeyEnv to WEB_DEEPSEEK_API_APIKEY_2.`])
+    expect(stored().refs).toEqual({ WEB_DEEPSEEK_API_APIKEY: 'sk-another-start', WEB_DEEPSEEK_API_APIKEY_2: SECRET })
+  })
+
+  it(`leaves a value in place when the first ${String(MAX_NAME_ATTEMPTS)} names it could take all hold other keys`, async () => {
+    const base = credentialNameFor('web-deepseek-api', ['apiKey'])
+    const taken = Array.from({ length: MAX_NAME_ATTEMPTS }, (_, index) => `  ${index === 0 ? base : `${base}_${String(index + 1)}`}: sk-other-${String(index)}`)
+    writeFileSync(credentials, `version: 1\nrefs:\n${taken.join('\n')}\n`, { mode: 0o600 })
+    const text = `- id: web-deepseek-api\n  config:\n    apiKey: ${SECRET}\n`
+    writeFileSync(profile.patchPath, text)
+    const settled = await settle()
+    expect(settled.moved).toEqual([])
+    expect(settled.notices).toEqual([expect.stringContaining(`which Delo left in place because storing it failed: no free credential name was found from ${base} to ${base}_${String(MAX_NAME_ATTEMPTS)}.`)])
+    expect(readFileSync(profile.patchPath, 'utf8')).toBe(text)
   })
 
   it('leaves a value with no reference field, or an expression, in place and names it with the way to move it', async () => {
