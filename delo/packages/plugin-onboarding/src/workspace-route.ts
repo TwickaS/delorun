@@ -6,7 +6,7 @@
  * @module @delo/plugin-onboarding/workspace-route
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { HomeAuth, isLoopbackHost } from '@delo/home-auth'
+import { isLoopbackHost, type HomeAuthService } from '@delo/home-auth'
 import { resolveDeloHome, workspaceLocationHomes, workspaceLocationProblem, type WorkspaceLocationProblem } from '@delo/home'
 // Type-only: the ctx.workspaceRegistry merge.
 import type { WorkspaceRegistry } from '@deepseek-ai/dsh-workspace'
@@ -21,13 +21,15 @@ const LOOPBACK_ONLY_SENTENCE = 'Add a workspace on the home\'s own computer, at 
 /**
  * Refuse a request to add a workspace that did not arrive on the loopback listener under a loopback `Host`, before its
  * body is read: what a workspace holds is what the model may write, so only the person at the computer chooses it. A
- * reach listener's dispatcher stamps the request it forwards, which `HomeAuth.arrivalOf` reads as the device routes do.
+ * mounted `homeAuth` service says which listener admitted the request, as the device routes ask it; without the
+ * service, which fails closed the same way before it starts, nothing is known and the request is refused.
  * @param request - the request the Connection received.
  * @param response - the response, answered 403 with {@link LOOPBACK_ONLY_CODE} when the arrival is not loopback.
+ * @param homeAuth - the mounted `homeAuth` service, read when the request arrives; `undefined` while none is mounted.
  * @returns whether the request may go on to the route.
  */
-export function arrivedOnLoopback(request: IncomingMessage, response: ServerResponse): boolean {
-  if (HomeAuth.arrivalOf(request).listener === 'loopback' && isLoopbackHost(request.headers.host)) return true
+export function arrivedOnLoopback(request: IncomingMessage, response: ServerResponse, homeAuth: Pick<HomeAuthService, 'arrivalOf'> | undefined): boolean {
+  if (homeAuth?.arrivalOf(request).listener === 'loopback' && isLoopbackHost(request.headers.host)) return true
   response.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' })
   response.end(JSON.stringify({ error: LOOPBACK_ONLY_CODE, message: LOOPBACK_ONLY_SENTENCE }))
   return false

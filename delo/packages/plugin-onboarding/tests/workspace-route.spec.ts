@@ -5,9 +5,10 @@
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { IncomingMessage, ServerResponse } from 'node:http'
+import { Socket } from 'node:net'
 import { Context } from '@deepseek-ai/cordis'
-import { REQUEST_LISTENER } from '@delo/home-auth'
+import type { HomeAuthService } from '@delo/home-auth'
 import type { WorkspaceLocationProblem } from '@delo/home'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
 import {
@@ -41,7 +42,7 @@ function registryFake() {
 }
 
 /** The plugin over a stub Connection and, unless `null`, a registry, reached as the studio reaches the route. */
-async function mount(registry: ReturnType<typeof registryFake> | null = registryFake()) {
+async function mount(registry: ReturnType<typeof registryFake> | null = registryFake(), homeAuth: Pick<HomeAuthService, 'arrivalOf'> | null = null) {
   const ctx = new Context()
   const routes = new Map<string, { readonly methods: readonly string[]; readonly requestBody: string; readonly fetch: (request: Request) => Promise<Response> }>()
   ctx.provide('connection', {
@@ -53,6 +54,7 @@ async function mount(registry: ReturnType<typeof registryFake> | null = registry
     },
   } as never)
   if (registry !== null) ctx.provide('workspaceRegistry', registry as never)
+  if (homeAuth !== null) ctx.provide('homeAuth', homeAuth as never)
   const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
   const fiber = ctx.plugin({ name, inject: [...inject], apply })
   await fiber.await()
@@ -160,40 +162,60 @@ describe('the add-workspace route', () => {
 })
 
 describe('the add-workspace route on a remote session', () => {
-  /** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */
-  function arrival(url: string | undefined, host: string | undefined, listener?: string) {
-    const request = { url, headers: { host }, socket: {}, ...(listener === undefined ? {} : { [REQUEST_LISTENER]: listener }) } as unknown as IncomingMessage
-    const response = { writeHead: vi.fn(), end: vi.fn() }
-    return { request, response, served: response as unknown as ServerResponse }
+  /** A listener id, as the `homeAuth` service names the one that admitted a request. */
+type ListenerId = NonNullable<ReturnType<HomeAuthService['arrivalOf']>['listener']>
+
+/** The `homeAuth` service's answer for a request: the listener it says admitted it, as the mounted service reads its stamp. */
+  function homeAuthOn(listener: ListenerId | undefined): Pick<HomeAuthService, 'arrivalOf'> {
+    return { arrivalOf: request => ({ listener, host: request.headers.host, source: 'test' }) }
   }
 
-  it('refuses a request that a reach listener forwarded with 403 LOOPBACK_ONLY, and goes no further', async () => {
-    const { ctx } = await mount()
-    const { request, response, served } = arrival(ADD_WORKSPACE_PATH, '127.0.0.1:3080', 'tailnet')
+  /** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */
+  function arrival(url: string | undefined, host: string | undefined) {
+    const request = new IncomingMessage(new Socket())
+    if (url !== undefined) request.url = url
+    if (host !== undefined) request.headers.host = host
+    const response = new ServerResponse(request)
+    const writeHead = vi.spyOn(response, 'writeHead').mockReturnValue(response)
+    const end = vi.spyOn(response, 'end').mockReturnValue(response)
+    return { request, response, writeHead, end }
+  }
+
+  it('refuses a request that a reach listener admitted with 403 LOOPBACK_ONLY, and goes no further', async () => {
+    const { ctx } = await mount(registryFake(), homeAuthOn('reach-tailscale-private'))
+    const { request, response, writeHead, end } = arrival(ADD_WORKSPACE_PATH, '127.0.0.1:3080')
     const next = vi.fn(async () => {})
-    await ctx.waterfall('connection/request', request, served, next)
+    await ctx.waterfall('connection/request', request, response, next)
     expect(next).not.toHaveBeenCalled()
-    expect(response.writeHead).toHaveBeenCalledWith(403, expect.objectContaining({ 'content-type': 'application/json' }))
-    expect(JSON.parse(response.end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_ONLY' })
+    expect(writeHead).toHaveBeenCalledWith(403, expect.objectContaining({ 'content-type': 'application/json' }))
+    expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_ONLY' })
   })
 
-  it('refuses a request under a Host that is no loopback address, also when no listener stamped it', async () => {
-    const { ctx } = await mount()
-    for (const host of ['studio.example', undefined]) {
-      const { request, response, served } = arrival(`${ADD_WORKSPACE_PATH}?x=1`, host)
+  it('refuses a request under a Host that is no loopback address, and one the service cannot place', async () => {
+    for (const [homeAuth, host] of [[homeAuthOn('loopback'), 'studio.example'], [homeAuthOn('loopback'), undefined], [homeAuthOn(undefined), '127.0.0.1:3080']] as const) {
+      const { ctx } = await mount(registryFake(), homeAuth)
+      const { request, response, writeHead } = arrival(`${ADD_WORKSPACE_PATH}?x=1`, host)
       const next = vi.fn(async () => {})
-      await ctx.waterfall('connection/request', request, served, next)
-      expect([next.mock.calls.length, response.writeHead.mock.calls[0]?.[0]]).toEqual([0, 403])
+      await ctx.waterfall('connection/request', request, response, next)
+      expect([next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([0, 403])
     }
   })
 
-  it('lets the loopback listener through, and leaves every other path and a request without a path alone', async () => {
+  it('refuses every request while no homeAuth service is mounted', async () => {
     const { ctx } = await mount()
-    for (const [url, host, listener] of [[ADD_WORKSPACE_PATH, 'localhost:3080', undefined], ['/api/other', 'studio.example', 'tailnet'], [undefined, 'studio.example', 'tailnet']] as const) {
-      const { request, response, served } = arrival(url, host, listener)
+    const { request, response, writeHead } = arrival(ADD_WORKSPACE_PATH, 'localhost:3080')
+    const next = vi.fn(async () => {})
+    await ctx.waterfall('connection/request', request, response, next)
+    expect([next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([0, 403])
+  })
+
+  it('lets the loopback listener through, and leaves every other path and a request without a path alone', async () => {
+    for (const [url, host, listener] of [[ADD_WORKSPACE_PATH, 'localhost:3080', 'loopback'], ['/api/other', 'studio.example', 'reach-tailscale-private'], [undefined, 'studio.example', 'reach-tailscale-private']] as const) {
+      const { ctx } = await mount(registryFake(), homeAuthOn(listener))
+      const { request, response, writeHead } = arrival(url, host)
       const next = vi.fn(async () => {})
-      await ctx.waterfall('connection/request', request, served, next)
-      expect([next.mock.calls.length, response.writeHead.mock.calls.length]).toEqual([1, 0])
+      await ctx.waterfall('connection/request', request, response, next)
+      expect([next.mock.calls.length, writeHead.mock.calls.length]).toEqual([1, 0])
     }
   })
 })

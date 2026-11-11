@@ -13,6 +13,8 @@ import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.settings merge.
 import type {} from '@deepseek-ai/dsh-settings'
+// Type-only: the ctx.homeAuth merge.
+import type {} from '@delo/home-auth'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
 import { readSetupRecord } from './answers.ts'
@@ -43,7 +45,7 @@ export function apply(ctx: Context): void {
   ctx.inject(['workspaceRegistry'], (child) => {
     // Before the body is read: a reach or remote session never adds a workspace.
     child.on('connection/request', async (request, response, next) => {
-      if (request.url?.split('?', 1)[0] === ADD_WORKSPACE_PATH && !arrivedOnLoopback(request, response)) return
+      if (request.url?.split('?', 1)[0] === ADD_WORKSPACE_PATH && !arrivedOnLoopback(request, response, child.get('homeAuth'))) return
       await next()
     })
     child.connection.fetch.register({
