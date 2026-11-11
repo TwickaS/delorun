@@ -30,7 +30,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 | --- | --- |
 | `delorun [--profile <name>]` | 若 home 上还没有 CLI profile，则运行 setup；否则在此终端中启动 home 进程并打开 studio |
 | `delorun setup [--profile <name>] [--yes \| --config <file>]` | setup：在终端中提问，或用 `--yes` 应用全部默认值，或用 `--config` 应用答案文档；已完成的 setup 保持不变 |
-| `delorun start [--foreground] [--profile <name>]` | 以脱离终端的方式启动 home 进程，并最多等待 120 秒使其报告 `running`；`--foreground` 则在此终端中运行它。两者都不打开 studio |
+| `delorun start [--foreground] [--profile <name>] [--patch <file>]... [--inspect]` | 以脱离终端的方式启动 home 进程，并最多等待 120 秒使其报告 `running`；`--foreground` 则在此终端中运行它。两者都不打开 studio。`--patch` 像 `dsh --patch` 一样添加覆盖层，位于 profile 各层之上、沙箱覆盖层之下，同样受组合不变量约束，安全模式下拒绝；更新启动的后继进程不带这些覆盖层。`--inspect` 在 profile 启动前于 127.0.0.1:9229 打开 Node 的调试器，并警告本机任何能连到该端口的程序都能以 Delo 的身份运行代码 |
 | `delorun stop [--now] [--profile <name>]` | 在运行中的 chat 结束后停止 home 进程，最多等待 1,800 秒；`--now` 先取消它们 |
 | `delorun status [--profile <name>] [--json]` | 打印 home、profile、`delorun` 忽略的已继承 `DSH_HOME`，以及 home 进程的状态、进程 id、启动 id、运行时版本、运行中的 chat 与进行中的更新；`--json` 只打印其 `status` 应答 |
 | `delorun doctor [--port <n>]` | 检查 Delo home、Docker 引擎、DeepSeek API 密钥的格式以及 studio 的端口，每项检查输出一行；不联系任何模型，不启动容器，也不运行任何命令，只有只读的 `docker version` 探测例外 |

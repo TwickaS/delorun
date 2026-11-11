@@ -9,7 +9,8 @@
  *
  * 1. upstream's profile preparation, the refusal of a profile that skipped a Delo bundle, and for `delorun headless` the
  *    refusal of a `headless` profile that does not load `@delo/bundle-headless`;
- * 2. safe mode's filtered layers and overlay, when its marker is set;
+ * 2. safe mode's filtered layers and overlay, when its marker is set; otherwise the person's `--patch` overlays of
+ *    `delorun start`, in the order given, which safe mode refuses;
  * 3. the approved plugin content step ({@link ApprovedPluginContent}), whose overlays apply after safe mode's;
  * 4. C1's sandbox overlay, the last overlay, so it applies over every layer
  *    ([sandbox protection](./sandbox-protection.ts));
@@ -72,6 +73,11 @@ export interface ComposeRequest {
   readonly env: Readonly<Record<string, string | undefined>>
   /** The OS home directory, under which Docker Desktop for macOS keeps its sockets; the user's by default. */
   readonly osHome?: string
+  /**
+   * The person's overlays from `delorun start --patch`, absolute, in order. They apply over the profile's layers and
+   * under the approved plugin content and the sandbox overlay, so the composition's invariants hold over them.
+   */
+  readonly patchFiles?: readonly string[]
 }
 
 /** The composition so far, which the approved plugin content step reads. */
@@ -196,11 +202,13 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   const deloRows = deloRowIds(resolvedProfile.profile)
   // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
   const safe = safeModeStart({ home: request.home, profile: request.profile, resolvedProfile })
+  const overlays = request.patchFiles ?? []
   if (safe !== undefined) {
+    if (overlays.length > 0) throw new CliError(EXIT.failed, `delorun: the profile ${request.profile} is in safe mode, which leaves out everything but Delo's and upstream's own plugins, so it does not apply --patch ${overlays.join(', ')}; start without --patch, or leave safe mode with delorun recover exit-safe-mode`)
     request.output.stdout(safeModeNotice(safe))
     resolvedProfile = safe.resolvedProfile
   }
-  const before = safe?.patchFiles ?? []
+  const before = safe?.patchFiles ?? overlays
   const approved = await dependencies.approvedPluginContent({ request, resolvedProfile, patchFiles: before, safe })
   const protection = await sandboxProtection(request.home, request.profile, request.env, request.osHome ?? homedir())
   const others = [...before, ...approved]

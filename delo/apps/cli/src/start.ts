@@ -8,6 +8,11 @@
  *   while the terminal also shows its output.
  * - `delorun start` starts the same command detached from the terminal, with standard input closed and its output
  *   in its log, and waits at most 120 seconds for the update channel to report `running`.
+ * - `--patch <file>`, repeatable, adds the person's overlays to the composition, as `dsh --patch` does: they apply over
+ *   the profile's layers and under Delo's sandbox overlay, the composition's checks hold over them, safe mode refuses
+ *   them, and the successor process an update starts runs without them.
+ * - `--inspect` opens Node's inspector on 127.0.0.1:9229 in the home process before the profile boots, so a debugger
+ *   can attach; while it is open, any program on this computer that reaches that port can run code as Delo.
  *
  * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
  * Delo bundle is refused before it boots, and one in which a row of a Delo bundle did not activate is shut down and
@@ -20,8 +25,9 @@
  * @module @delo/cli/start
  */
 import { spawn } from 'node:child_process'
-import { rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, rmSync } from 'node:fs'
+import { open as openInspector, url as inspectorUrl } from 'node:inspector'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
@@ -287,6 +293,8 @@ export interface StartRequest {
    * release roots and the Docker context are read from it, never from this process's environment.
    */
   readonly env: Readonly<Record<string, string | undefined>>
+  /** The person's `--patch` overlays, absolute, in order ([compose](./compose.ts)); none by default. */
+  readonly patchFiles?: readonly string[]
 }
 
 /** The level of the home process's log. */
@@ -493,7 +501,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
-  const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env }, {
+  const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env, ...request.patchFiles === undefined ? {} : { patchFiles: request.patchFiles } }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,
   }).catch(async (error: unknown) => {
@@ -592,11 +600,12 @@ function withDevices(booted: BootedProfile): { readonly devices?: LocalDeviceApp
  * @param output - where the command writes.
  * @param open - whether this command opens the studio in the browser once the home process runs.
  * @param opener - how the studio is opened; this computer's by default.
+ * @param forwarded - the `--patch` and `--inspect` options the detached `delorun start --foreground` receives.
  * @returns {@link EXIT.ok} when the home process runs, {@link EXIT.failed} when it exited or did not report `running`
  *   within 120 seconds.
  * @throws {CliError} when the home has no CLI profile.
  */
-export async function startDetached(home: string, profile: string, output: CommandOutput, open = false, opener: StudioOpener = computerOpener(process.env)): Promise<CommandResult> {
+export async function startDetached(home: string, profile: string, output: CommandOutput, open = false, opener: StudioOpener = computerOpener(process.env), forwarded: readonly string[] = []): Promise<CommandResult> {
   if (!hasCliProfile(home, profile)) throw new CliError(EXIT.failed, `delorun: the CLI profile ${profile} is not set up in ${home}; run: delorun setup`)
   const running = await answeringStatus(home, profile)
   if (running !== undefined) {
@@ -606,7 +615,7 @@ export async function startDetached(home: string, profile: string, output: Comma
   }
   const entry = process.argv[1]
   if (entry === undefined) throw new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so the home process cannot be started')
-  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
+  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile, ...forwarded], { detached: true, stdio: 'ignore', env: process.env })
   let exitCode: number | null | undefined
   child.once('exit', (code) => { exitCode = code })
   child.unref()
@@ -663,14 +672,54 @@ export function startsDetached(foreground: boolean, profileDirectory: string): b
   return !foreground && readBackgroundAnswer(profileDirectory)
 }
 
-/** `delorun start [--foreground] [--profile <name>]`. */
+/** The port `--inspect` opens Node's inspector on: Node's own default, which debuggers look for. */
+export const INSPECTOR_PORT = 9229
+
+/**
+ * Open Node's inspector on the loopback address and say what that exposes.
+ * @param output - where the warning goes.
+ * @param open - opens the inspector; Node's `inspector.open` by default.
+ * @returns the inspector's WebSocket address.
+ * @throws {CliError} when the inspector cannot open, such as when the port is taken.
+ */
+export function openDebugger(output: CommandOutput, open: (port: number, host: string) => void = (port, host) => { openInspector(port, host) }): string {
+  try {
+    open(INSPECTOR_PORT, '127.0.0.1')
+  } catch (error) {
+    throw new CliError(EXIT.failed, `delorun start: the debugger could not listen on 127.0.0.1:${String(INSPECTOR_PORT)}: ${error instanceof Error ? error.message : String(error)}; stop the program using that port and try again`)
+  }
+  const address = inspectorUrl() ?? `ws://127.0.0.1:${String(INSPECTOR_PORT)}`
+  output.stderr(`delorun start: a debugger can attach at ${address} (chrome://inspect, or your editor's Node debugger on port ${String(INSPECTOR_PORT)}). While it listens, any program on this computer that reaches that port, the commands Delo runs for the agent included, can run code as Delo with your access; start without --inspect when you are done.\n`)
+  return address
+}
+
+/**
+ * The absolute paths of `--patch` files.
+ * @param files - the values given, relative to the working directory or absolute.
+ * @returns their absolute paths.
+ * @throws {CliError} for a file that does not exist.
+ */
+export function patchFilesOf(files: readonly string[]): string[] {
+  return files.map((file) => {
+    const path = resolve(file)
+    if (!existsSync(path)) throw new CliError(EXIT.usage, `delorun start: --patch ${file} does not exist`)
+    return path
+  })
+}
+
+/** `delorun start [--foreground] [--open] [--profile <name>] [--patch <file>]... [--inspect]`. */
 export const startCommand: CliCommand = {
   name: 'start',
-  summary: 'Start the home process in the background, or in this terminal with --foreground',
+  summary: 'Start the home process in the background, or in this terminal with --foreground; --patch adds overlays',
   async run(args, context) {
-    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' } })
+    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' }, patch: { type: 'string', multiple: true }, inspect: { type: 'boolean', default: false } })
     const { home, profile } = await prepareHome(context, values.profile)
-    if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context, values.open === true)
-    return startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env })
+    const patchFiles = patchFilesOf(values.patch ?? [])
+    if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) {
+      const forwarded = [...patchFiles.flatMap(file => ['--patch', file]), ...values.inspect === true ? ['--inspect'] : []]
+      return startDetached(home.path, profile, context, values.open === true, computerOpener(process.env), forwarded)
+    }
+    if (values.inspect === true) openDebugger(context)
+    return startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env, ...patchFiles.length === 0 ? {} : { patchFiles } })
   },
 }

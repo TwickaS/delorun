@@ -6,7 +6,7 @@
  * | --- | --- |
  * | `delorun [--profile <name>] [--foreground]` | runs setup on a home without the CLI profile; otherwise starts the home process in the background, or in this terminal when setup's answer or `--foreground` says so, and opens the studio |
  * | `delorun setup [<section>] [--profile <name>] [--list]` | setup, Quick or Full, or one section again ([setup](./setup/index.ts)) |
- * | `delorun start [--foreground] [--open] [--profile <name>]` | the home process in the background, or in this terminal ([start](./start.ts)) |
+ * | `delorun start [--foreground] [--open] [--profile <name>] [--patch <file>]... [--inspect]` | the home process in the background, or in this terminal, with the person's overlays and a debugger port when asked ([start](./start.ts)) |
  * | `delorun open [--print] [--profile <name>]` | the studio in the browser with a link that signs in once, or that link printed ([open](./open/command.ts)) |
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
