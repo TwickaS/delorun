@@ -120,11 +120,13 @@ export function syntheticPluginName(index: number): string {
 
 /**
  * Add installed plugin packages to the CLI profile: each package's manifest under `node_modules` and a dependency in
- * the profile's `package.json`.
+ * the profile's `package.json`. Each declares the DSH and Delo ranges given, as a maintained plugin does, so the report
+ * judges each one instead of naming it unpredictable.
  * @param deloHome - the Delo home.
  * @param count - how many.
+ * @param engines - the `engines` each declares, such as `{ dsh: '>=0.2.2-rc.1', delo: '>=0.1.0' }`.
  */
-export function addPlugins(deloHome: string, count: number): void {
+export function addPlugins(deloHome: string, count: number, engines: Readonly<Record<string, string>>): void {
   const profile = join(deloHome, 'profiles', PROFILE)
   const manifestPath = join(profile, 'package.json')
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies?: Record<string, string> }
@@ -133,8 +135,21 @@ export function addPlugins(deloHome: string, count: number): void {
     const name = syntheticPluginName(index)
     const directory = join(profile, 'node_modules', ...name.split('/'))
     mkdirSync(directory, { recursive: true })
-    writeFileSync(join(directory, 'package.json'), `${JSON.stringify({ name, version: '1.0.0', type: 'module', description: 'A synthetic plugin package of the benchmark; it holds no code.' }, undefined, 2)}\n`)
+    writeFileSync(join(directory, 'package.json'), `${JSON.stringify({ name, version: '1.0.0', type: 'module', description: 'A synthetic plugin package of the benchmark; it holds no code.', engines }, undefined, 2)}\n`)
     dependencies[name] = '1.0.0'
   }
   writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, dependencies }, undefined, 2)}\n`)
+}
+
+/**
+ * The upstream release the measured tree is based on, from the divergence ledger's `upstream.ref` (`dsh-v<version>`).
+ * @param repository - the repository root.
+ * @returns the version, such as `0.2.2-rc.1`.
+ * @throws {Error} when the ledger names no `dsh-v` tag.
+ */
+export function upstreamVersion(repository: string): string {
+  const ledger = JSON.parse(readFileSync(join(repository, 'delo', 'upstream-patches.json'), 'utf8')) as { readonly upstream?: { readonly ref?: string } }
+  const match = /^dsh-v(.+)$/u.exec(ledger.upstream?.ref ?? '')
+  if (match === null) throw new Error('delo/upstream-patches.json names no dsh-v<version> upstream ref')
+  return match[1]!
 }

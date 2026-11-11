@@ -6,7 +6,7 @@ import { resolveSurface } from '@delo/logs'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Finished, TimedLine } from '../src/harness/processes.ts'
 import { CLI_COMMANDS, CLI_ITEMS, commandItems } from '../src/suites/cli/index.ts'
-import { chatIds, corpusModules } from '../src/fixtures/data.ts'
+import { addPlugins, chatIds, corpusModules, upstreamVersion } from '../src/fixtures/data.ts'
 import { DATA_ITEMS, gatherIntoWorkspace, shellWord } from '../src/suites/data/index.ts'
 import { INSTALL_ITEMS, installItems } from '../src/suites/install/index.ts'
 import { oldestVersion } from '../src/suites/recovery/index.ts'
@@ -63,6 +63,22 @@ describe('the recovery suite', () => {
 })
 
 describe('the data suite', () => {
+  it('installs synthetic plugins that declare their ranges, and reads the upstream version from the ledger', () => {
+    const home = scratch()
+    mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
+    writeFileSync(join(home, 'profiles', 'default', 'package.json'), JSON.stringify({ name: 'profile', dependencies: { kept: '1.0.0' } }))
+    addPlugins(home, 2, { dsh: '>=1.0.0' })
+    const profile = JSON.parse(readFileSync(join(home, 'profiles', 'default', 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+    expect(profile.dependencies).toEqual({ 'kept': '1.0.0', '@delo-benchmark/plugin-00': '1.0.0', '@delo-benchmark/plugin-01': '1.0.0' })
+    const plugin = JSON.parse(readFileSync(join(home, 'profiles', 'default', 'node_modules', '@delo-benchmark', 'plugin-01', 'package.json'), 'utf8')) as { engines: unknown }
+    expect(plugin.engines).toEqual({ dsh: '>=1.0.0' })
+    expect(upstreamVersion(join(import.meta.dirname, '..', '..', '..', '..'))).toMatch(/^\d+\.\d+\.\d+/u)
+    const fake = scratch()
+    mkdirSync(join(fake, 'delo'))
+    writeFileSync(join(fake, 'delo', 'upstream-patches.json'), JSON.stringify({ upstream: { ref: 'main' } }))
+    expect(() => upstreamVersion(fake)).toThrow('names no dsh-v')
+  })
+
   it('names the synthetic chats as upstream\'s corpus does', async () => {
     expect(await chatIds(2)).toEqual(['bench-00000', 'bench-00001'])
     expect(typeof (await corpusModules()).SyntheticCorpusWriter).toBe('function')

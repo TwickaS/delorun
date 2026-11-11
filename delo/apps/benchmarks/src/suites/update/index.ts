@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readLines, resolveSurface } from '@delo/logs'
-import { addPlugins } from '../../fixtures/data.ts'
+import { addPlugins, upstreamVersion } from '../../fixtures/data.ts'
 import { copyHome, deloRequest, killLeftovers, PROFILE, startDriver, stopHome, type InstalledHome } from '../../fixtures/home.ts'
 import { INSTALLED_VERSION, installedChannel, templateHome } from '../../fixtures/releases.ts'
 import { expectSuccess, firstMatch, run, type Finished, type TimedLine } from '../../harness/processes.ts'
@@ -302,7 +302,7 @@ export const updateSuite: Suite = {
     if (!context.machine.clone) skipped.push({ item: 'file-system clone', reason: `the roots' file system (${context.machine.fileSystem}) does not clone files, so every copy is a full copy; rerun with --root-base on a file system that clones (Btrfs, XFS with reflink, APFS) to measure clones` })
     const chats = (scenario: UpdateScenario): number => scenario.chats === 'small' ? context.options.chatsSmall : context.options.chatsLarge
     const template = (scenario: UpdateScenario): Promise<BenchRoot> => templateHome(context, `chats-${String(chats(scenario))}-plugins-${scenario.plugins}`, chats(scenario), (root) => {
-      if (scenario.plugins === 'many') addPlugins(root.deloHome, context.options.plugins)
+      if (scenario.plugins === 'many') addPlugins(root.deloHome, context.options.plugins, { dsh: `>=${upstreamVersion(context.repository)}`, delo: `>=${VERSIONS.from}` })
     })
     const results: ScenarioResult[] = []
     for (const scenario of UPDATE_SCENARIOS.filter(candidate => selected.includes(candidate.id))) {
