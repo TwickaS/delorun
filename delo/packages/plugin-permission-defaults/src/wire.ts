@@ -83,12 +83,20 @@ export interface SetFullAccessRequest {
   readonly on: boolean
   /** The person's answer: true only after the person confirmed in the consent. */
   readonly confirmed: boolean
+  /**
+   * The open chat the consent was asked from, which turning on also switches to full access; it must be in the
+   * workspace. Absent, no open chat changes when full access is turned on.
+   */
+  readonly chat?: string | undefined
 }
 
 /** What `POST` {@link PERMISSION_ROUTES}`.setFullAccess` answers. */
 export interface SetFullAccessAnswer {
   /** The workspace's full access after the change. */
   readonly access: WorkspaceAccess
-  /** How many open chats in the workspace were set back to the safer preset; 0 when full access was turned on. */
+  /**
+   * How many open chats in the workspace changed: set back to the safer preset when full access was turned off, or the
+   * request's `chat` switched to full access when it was turned on.
+   */
   readonly chats: number
 }

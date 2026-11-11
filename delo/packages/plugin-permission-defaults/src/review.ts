@@ -1,6 +1,6 @@
 /**
  * What a surface shows before the person turns a workspace's full access on or off, and the review id that ties the
- * person's answer to what was shown. The studio's Workspace access section and `delorun workspace full-access` both
+ * person's answer to what was shown. The studio's Permissions section and `delorun workspace full-access` both
  * read a workspace's {@link WorkspaceAccess}, show it, and send the change with its {@link fullAccessReviewId}; the
  * service refuses a change whose review id no longer matches the workspace's state, so an answer given to a screen
  * that another surface changed meanwhile records nothing.

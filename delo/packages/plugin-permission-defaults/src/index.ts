@@ -136,7 +136,10 @@ export class FullAccessConsentRefusedError extends Error {
 export interface FullAccessChange {
   /** The workspace's full access after the change. */
   readonly access: WorkspaceAccess
-  /** How many open chats in the workspace were set back to the safer preset; 0 when full access was turned on. */
+  /**
+   * How many open chats in the workspace changed: set back to the safer preset when full access was turned off, or the
+   * request's chat switched to full access when it was turned on.
+   */
   readonly chats: number
 }
 
@@ -151,7 +154,8 @@ export interface FullAccessChange {
 export function fullAccessRefusal(workspace: string, problem?: string): string {
   const where = workspace === NO_WORKSPACE ? 'a chat with no workspace folder' : `the workspace ${JSON.stringify(workspace)}`
   const unreadable = problem === undefined ? '' : ` The permission store could not be read, so no consent counts (${problem}).`
-  return `full access for ${where} needs one consent for that workspace first: the person turns it on at the home's own computer, in the studio's Settings, Workspace access, or with \`delorun workspace full-access <folder> on\`; until then keep the safer preset "${SAFER_PRESET}".${unreadable}`
+  const command = workspace === NO_WORKSPACE ? 'delorun workspace full-access <folder> on' : `delorun workspace full-access ${JSON.stringify(workspace)} on`
+  return `full access for ${where} needs one consent for that workspace first: the person allows it at the home's own computer, with the approval card's "Allow full access for this workspace", in the studio's Settings, Permissions, or with \`${command}\`; until then keep the safer preset "${SAFER_PRESET}".${unreadable}`
 }
 
 /**
@@ -268,13 +272,15 @@ export class PermissionDefaults extends Service {
    * computer; the route that calls this refuses every other arrival first. On records the grant, so the guard lets a
    * chat in the workspace switch to full access and new chats there start with it; off withdraws the grant, records
    * the safer preset and sets every open chat of the workspace that runs with full access back to the safer preset,
-   * which appends that chat's `sandbox/mode` and `permission/preset` events. The change is written to the store before
-   * it is remembered, and one line without the folder's path goes to the Host's log.
+   * which appends that chat's `sandbox/mode` and `permission/preset` events. Turning on with the request's `chat` also
+   * switches that chat to full access, so the chat the person answered in stops asking. The change is written to the
+   * store before it is remembered, and one line without the folder's path goes to the Host's log.
    * @param request - the workspace the consent named, the review id it was shown with, on or off, and the answer.
    * @returns the workspace's full access after the change, and how many open chats were set back.
    * @throws {FullAccessChangeError} `UNCONFIRMED` without the person's answer, `UNKNOWN_WORKSPACE` for a folder no
-   *   surface shows, `STALE_REVIEW` when the workspace's full access changed after the consent was shown, and
-   *   `STORE_REFUSED` when the store cannot be read or written; each records nothing.
+   *   surface shows, `UNKNOWN_CHAT` for a `chat` that is not open in the workspace, `STALE_REVIEW` when the
+   *   workspace's full access changed after the consent was shown, and `STORE_REFUSED` when the store cannot be read or
+   *   written; each records nothing.
    */
   async setFullAccess(request: SetFullAccessRequest): Promise<FullAccessChange> {
     if (!request.confirmed) throw new FullAccessChangeError('UNCONFIRMED', 'the person has not confirmed the change, so nothing is recorded')
@@ -282,13 +288,17 @@ export class PermissionDefaults extends Service {
     if (workspace === NO_WORKSPACE || !this.workspaces().workspaces.some(access => access.workspace === workspace)) {
       throw new FullAccessChangeError('UNKNOWN_WORKSPACE', 'the studio does not know this workspace')
     }
+    const chat = request.chat === undefined ? undefined : this.ctx.get('agents')?.get(SessionId(request.chat))?.session
+    if (request.chat !== undefined && (chat === undefined || workspaceKey(chat.header.cwd ?? '') !== workspace)) {
+      throw new FullAccessChangeError('UNKNOWN_CHAT', 'no open chat in this workspace has this id')
+    }
     return this.serial(async () => {
       const entries = await this.readForChange()
       if (workspaceAccessOf(entries, workspace).reviewId !== request.reviewId) {
         throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
       }
       await this.write(entries, workspace, request.on ? FULL_ACCESS_PRESET : SAFER_PRESET)
-      const chats = request.on ? 0 : this.withdrawOpenChats(workspace)
+      const chats = request.on ? this.switchChat(chat) : this.withdrawOpenChats(workspace)
       const grants = [...this.entries.values()].filter(entry => entry.fullAccessGrantedAt !== null).length
       this.ctx.logger.info(`permission-defaults: full access turned ${request.on ? 'on' : 'off'} for one workspace at the home's computer; ${String(grants)} workspace(s) hold a grant`)
       return { access: workspaceAccessOf(this.entries, workspace, this.titleOf(workspace)), chats }
@@ -451,6 +461,22 @@ export class PermissionDefaults extends Service {
   }
 
   /**
+   * Switch the chat a granting consent was asked from to full access.
+   * @param session - the chat, or undefined when the consent named none.
+   * @returns 1 when the chat was switched; 0 without a chat or when it could not be switched, which the Host's log names.
+   */
+  private switchChat(session: Session | undefined): number {
+    if (session === undefined) return 0
+    try {
+      this.ctx.permissionPresets.set(session, FULL_ACCESS_PRESET)
+      return 1
+    } catch (error) {
+      this.ctx.logger.warn(`permission-defaults: the chat ${String(session.id)} keeps its preset after its workspace's grant, because it could not be switched to full access: ${reasonOf(error)}`)
+      return 0
+    }
+  }
+
+  /**
    * The title of the registered workspace at a key.
    * @param workspace - the workspace key.
    * @returns the title, or undefined when no registered workspace is at the key.
@@ -564,7 +590,7 @@ declare module '@deepseek-ai/cordis' {
  * refuses a full-access mode change for a workspace nobody consented to, which
  * seeds each new chat with its workspace's preset, and which records the one
  * consent, and, where a Connection serves the studio, the routes of the
- * studio's consent and its Workspace access section ([`./routes.ts`](./routes.ts)).
+ * studio's consent and its Permissions section ([`./routes.ts`](./routes.ts)).
  * Off, mount nothing, so upstream's own seeding and mode switches
  * stand, which is what the parity composition asserts.
  * @param ctx - the plugin context.

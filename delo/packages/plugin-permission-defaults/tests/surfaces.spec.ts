@@ -1,6 +1,6 @@
 /**
  * Specs of the full-access surfaces of `@delo/plugin-permission-defaults`: the service calls the studio's consent, its
- * Workspace access section and `delorun workspace full-access` make — the list of workspaces, the review of one chat's
+ * Permissions section and `delorun workspace full-access` make — the list of workspaces, the review of one chat's
  * workspace, turning full access on and off with the person's answer, and reading the store again after the CLI wrote
  * it — and the routes over them, whose denial cases prove that a remote device, an unconfirmed answer and a stale
  * review record nothing.
@@ -126,6 +126,29 @@ describe('turning a workspace\'s full access on and off', () => {
     expect(await storedGrants(home)).toEqual({ [shown.workspace]: change.access.grantedAt })
     ctx.permissionPresets.set(agent.session, FULL_ACCESS_PRESET)
     expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(FULL_ACCESS_PRESET)
+  })
+
+  it('switches the chat the consent was asked from to full access, and only that chat', async () => {
+    const { ctx, harness, defaults, workspace } = await mounted()
+    const asking = await harness.create(SessionId('chat-asking'), {}, { cwd: workspace })
+    const sibling = await harness.create(SessionId('chat-sibling'), {}, { cwd: workspace })
+    const shown = defaults.reviewChat('chat-asking')
+    const change = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: 'chat-asking' })
+    expect(change.chats).toBe(1)
+    expect(ctx.sandboxPolicy.resolve({ session: asking.session }).mode).toBe(FULL_ACCESS_PRESET)
+    expect(ctx.sandboxPolicy.resolve({ session: sibling.session }).mode).toBe(SAFER_PRESET)
+  })
+
+  it('refuses a chat that is not open in the workspace, and records nothing', async () => {
+    const { harness, defaults, home, workspace } = await mounted()
+    await harness.create(SessionId('chat-here'), {}, { cwd: workspace })
+    await harness.create(SessionId('chat-nowhere'))
+    const shown = defaults.reviewChat('chat-here')
+    for (const chat of ['chat-nowhere', 'chat-unknown']) {
+      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat }))
+        .rejects.toThrow(expect.objectContaining({ code: 'UNKNOWN_CHAT' }))
+    }
+    expect(await storedGrants(home)).toEqual({})
   })
 
   it('refuses an unconfirmed change and records nothing', async () => {

@@ -1,5 +1,5 @@
 /**
- * The studio's routes to the per-workspace full access ({@link PERMISSION_ROUTES}): the list the Workspace access
+ * The studio's routes to the per-workspace full access ({@link PERMISSION_ROUTES}): the list the Permissions
  * section shows, the review of one chat's workspace the consent shows when the person picks full access, and the
  * change the person's answer makes. Every route answers only a request that arrived on the loopback listener: a reach
  * device, or a request the home cannot place, is answered `403 LOOPBACK_REQUIRED` before its body is read, so full
@@ -35,6 +35,7 @@ const SetFullAccessBody = z.strictObject({
   reviewId: z.string().regex(REVIEW_ID_PATTERN),
   on: z.boolean(),
   confirmed: z.boolean(),
+  chat: z.string().min(1).max(256).optional(),
 })
 
 /**
