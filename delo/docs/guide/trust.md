@@ -88,6 +88,7 @@ Each file these checks download is checked against its signature, so a server th
 
 - **`delorun verify`** checks that the installed release is signed, that it is in the public release log, and that its files are the signed ones. Its other planned checks, of isolation, exposure, sign-in, plugins and data sharing, are not available yet: the report lists each as `not run` and ends with `this is not a full verification of this Delo`. The checks run as you, so a program running as you could tamper with them.
 - **`delorun logs`** shows each log, where it is and what it holds ([Where Delorun keeps its logs](logs.md)).
+- **The launcher.** npm serves the `delorun` launcher before any Delo check runs, so check it out of band. `delorun verify` prints a `Launcher` line with the integrity that the installed release's signed manifest gives the launcher you ran; compare it with the output of `npm view delorun@<version> dist.integrity`. Delo Run publishes the SHA-256 of each release root file and its key ids in the README, on this page, in each release's notes and in `delo/release/production-keys.json`; compare them with the root files under the launcher package's `roots/` directory. No release root is published yet. Setup installs the `delorun` command at the version you ran, never the newest version npm serves.
 
 ## Reporting a problem
 

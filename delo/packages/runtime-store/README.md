@@ -99,6 +99,7 @@ A layout or protocol the launcher does not support fails with `RUNTIME_INCOMPATI
 | `POINTER_CHANGED` | A switch's `from` is not the version `current` names |
 | `NOT_INSTALLED` | A pointer write names a version that is not installed |
 | `ROOT_NOT_ANCHORED` | A `TrustedRootSource` could not anchor `trust/root.json` on the launcher's shipped roots: the process was not started by the launcher, its roots do not read, or none leads to the stored root |
+| `TARGET_LOWER` | An update's prepare named a target, or the channel resolved a release, lower than the version `current` names; nothing was installed, and `delorun recover rollback` is the only way back |
 
 ## Crash safety
 

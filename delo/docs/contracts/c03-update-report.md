@@ -14,7 +14,7 @@ Before an update applies, Delo shows what the target release would change or bre
 
 The CLI home's update and rollback are built and reached by `delorun update` and `delorun recover`; the studio's and the desktop app's are not, and undo and restore run without their checks and approval prompt.
 
-- **Built and reached:** `delorun update` builds the report against the newest release on the channel, applies nothing until the person confirms (`--yes` confirms only a report with no `disabled`, `removed` or unverified item), writes the snapshot, waits for running chats while the CLI profile's update gate refuses new turns, takes the session-data copy, runs H1 to H5 within 120 seconds and rolls back automatically when one fails. `delorun recover` rolls back through the one table, restores a profile history version, enters and leaves safe mode and discards set-aside data. The [update check](#update-check) runs in the Host of a CLI home that runs from the store, writes its record and serves the notice to the terminal, the studio's sidebar and `delorun doctor`.
+- **Built and reached:** `delorun update` builds the report against the newest release on the channel, applies nothing until the person confirms (`--yes` confirms only a report with no `disabled`, `removed` or unverified item and a `log` of `passed`), writes the snapshot, waits for running chats while the CLI profile's update gate refuses new turns, takes the session-data copy, runs H1 to H5 within 120 seconds and rolls back automatically when one fails. `delorun recover` rolls back through the one table, restores a profile history version, enters and leaves safe mode and discards set-aside data. The [update check](#update-check) runs in the Host of a CLI home that runs from the store, writes its record and serves the notice to the terminal, the studio's sidebar and `delorun doctor`.
 - **Not built:** the studio's update screen, "Update now" and rollback; the desktop updater's use of this report and procedure; the status records, which the report reads and no installation writes, so the other installation always shows `unknown`; the approval prompt and the install-time plugin checks of undo and restore (R5), so `delorun recover restore` applies a version at once and lists what changed afterwards; the revocation list (no release publishes one, so every report lists `revocations` as not checked); H1's release-log condition, because H1 checks the runtime files only; reverting a restore that fails partway, which leaves the profile partly restored; the startup report with Update, Keep disabled and Roll back, because upstream's start disables an incompatible row and prints one line to standard error; the desktop's fatal recovery writing a history version and offering the profile from before the update; a history version before profile normalisation.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
@@ -86,14 +86,14 @@ A report is built for one installation and one target release, after the target'
 | `schema` | `delo.update-report/2` | The report format. |
 | `installation` | `cli-home` or `desktop-host` | The installation being updated. |
 | `from`, `to` | `{ "delo", "dsh", "channel" }` | The running and target versions ([C17](c17-plugin-versions.md#the-two-versions)). |
-| `release` | `{ "manifest": sha256, "signature", "freshness", "log" }` | The target's manifest digest and each check's result. `delorun update` sets all three to `passed`: the store verifies the signature when it builds the report, and the install verified freshness and the release log before the files landed. A release-log check that could not complete at install, and so recorded `unchecked`, is still reported `passed` here. |
+| `release` | `{ "manifest": sha256, "signature", "freshness", "log" }` | The target's manifest digest and each check's result. `signature` and `freshness` are `passed` or `failed`: the store verifies the signature when it builds the report, and the install verified freshness before the files landed. `log` is the state the install recorded in `trust/release-log.json` ([C18](c18-release-log.md)): `passed` for `verified`, `unchecked` when the online check did not complete or no state is recorded, `failed` for a verifiable failure. A report is made for `passed` and `unchecked`, and the report says when the log was not reached. |
 | `generated` | timestamp | When the report was built. |
 | `installations` | list of `{ "id", "delo", "dsh", "state", "target"? }` | Both installations' versions and update states. |
 | `items` | list of item | Everything that changes, sorted by kind, then subject. |
 | `notChecked` | list of `revocations` | The sources the report did not read; the report says so instead of counting them as checked. `revocations` means the target publishes no revocation list, and the report states: `Not checked: revocations. This release publishes no revocation list; the health check after the switch holds what one would show.` |
 | `counts` | `{ "disabled", "removed", "changed", "unverified", "data" }` | The number of items with each effect, of unverified items and of `data` items. |
 
-The report is stored in the snapshot's history version, so the history shows what the update was predicted to change.
+The report is stored in the snapshot's history version, so the history shows what the update was predicted to change. No release reads a stored report back, so `log`'s `unchecked` value belongs to format 2 without a new version: a report an earlier release wrote never carries it.
 
 ## Items
 
@@ -149,7 +149,7 @@ A session-data copy holds the home's `sessions/` and `storages/` as real copies 
 
 ## Applying an update
 
-1. The person confirms the report; `delorun update` prints it and asks, and `delorun update --yes` confirms a report that has no `disabled` or `removed` item and no unverified item. With a `data` item the person also chooses about the copy: `--yes` takes it, and declining needs `--no-data-copy` or the prompt's second choice.
+1. The person confirms the report; `delorun update` prints it and asks, and `delorun update --yes` confirms a report that has no `disabled` or `removed` item, no unverified item and a `log` of `passed`. With a `data` item the person also chooses about the copy: `--yes` takes it, and declining needs `--no-data-copy` or the prompt's second choice.
 2. A snapshot is written: a profile history version named "Before update to Delo <to.delo>", holding the profile patch, the home patch, the bundle list, both exemption files, the profile's `pnpm-workspace.yaml` and the report. The update record `run/<profile>/update.json` ([C1](c01-home-layout.md)) names the two versions, whether the data differs, whether a copy is taken and the snapshot's history version (`snapshot`).
 3. Running chats finish, or the person stops them; the CLI switch goes through the home process's update handshake, which never switches under a running chat ([C19](c19-home-process.md)), and the desktop app does this in its pre-restart step. With the Host stopped and the home lock held, the session-data copy is written when the person chose it.
 4. The update record's `targetStarted` is written and synced, then the target starts and the health check runs.
@@ -227,7 +227,7 @@ The report's `schema` names its major version; reason codes form a closed list i
 ### Requirements
 
 - R1. No update disables, removes or changes a plugin, bundle or row the report did not name; the health check enforces it and rolls back otherwise.
-- R2. Nothing applies before the person confirms the report, and a report exists only for a target that passed signature, freshness and log checks.
+- R2. Nothing applies before the person confirms the report, and a report exists only for a target that passed signature and freshness checks and whose log check did not fail; a log check that did not complete is shown as `unchecked`, and `--yes` does not confirm it.
 - R3. Unverified items are shown as such and never counted as safe.
 - R4. A failed health check rolls back automatically; the person can roll back at any later time; a rollback changes the profile and the runtime store, and chat data only by restoring a copy the person took, with the newer data set aside.
 - R5. Undo and restore run the install-time plugin checks over what they bring back and list the plugins, builds and exemptions that change before applying.
@@ -243,6 +243,7 @@ The report's `schema` names its major version; reason codes form a closed list i
 | `c03-unnamed-disable-rolls-back` | WP3.4, WP3.5 | A target that disables a plugin the report did not name fails H3 and rolls back to the previous release and snapshot. |
 | `c03-health-timeout-rolls-back` | WP3.4 | A target whose Host is not ready 120 seconds after start rolls back. |
 | `c03-unverified-metadata-shown` | WP3.4 | A plugin whose `package.json` does not parse appears as `manifest-unreadable` and `unverified`, and `--yes` does not confirm the report. |
+| `c03-yes-refuses-unchecked-log` | release-chain | A report whose `log` is `unchecked`, as the install recorded it, shows that state and the line that the log was not reached; `--yes` refuses it and nothing applies. |
 | `c03-delo-requirement-excludes-target` | WP3.4 | A plugin whose `engines.delo` excludes the target appears as `delo-requirement-unmet` with both target versions. |
 | `c03-no-report-for-unverified-target` | WP3.4 | A target whose manifest signature fails produces no report and the update stops. |
 | `c03-no-silent-disable-at-start` | WP3.5 | An incompatible plugin at startup is reported with Update, Keep disabled and Roll back. |

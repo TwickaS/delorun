@@ -12,23 +12,29 @@
   en: 6c32fb6ec882e46b
   zh: a39a9dbd9472053f
 /delo-npm-launcher/contents:
-  en: 7a4fa00ed23a0f67
-  zh: f9e4af8ff7081718
+  en: b4f24c303f84e570
+  zh: 2a84b113b5a56c32
 /delo-npm-launcher/commands:
-  en: f7a274507893d7df
-  zh: 84ad6fb68e953c87
+  en: 3aaf24fd1976dd73
+  zh: 0730583a3b0c1b7b
 /delo-npm-launcher/the-launch-flow:
-  en: f5fe41a531d779e3
-  zh: a025cede5b4c938f
+  en: ba53517e11bd1c73
+  zh: ac10382557fd4f31
+/delo-npm-launcher/what-it-prints:
+  en: c5df280f0515b897
+  zh: 29eab6b24cde0926
 /delo-npm-launcher/the-roots-it-ships:
-  en: 8a5fe019071f78d8
-  zh: c72b8af8164a3513
+  en: 3b2980cfdfcb46b1
+  zh: 42de4eed507110c1
 /delo-npm-launcher/refusals:
-  en: 00fae9d90acf9563
-  zh: c9e368c295949fa7
+  en: b235c1182699d5a4
+  zh: a106b9e2a439ff73
+/delo-npm-launcher/building-the-package:
+  en: 05050a43daa066b4
+  zh: b0d1e2e616abc9d4
 /delo-npm-launcher/exit-codes:
   en: 73531e09b7f69509
   zh: 94a0125df8e61a81
 /delo-npm-launcher/development:
-  en: 538840e3b16fdcdc
-  zh: 34d77e3d53c3bc76
+  en: 58db83b08898915d
+  zh: e451713d3a6d5df9

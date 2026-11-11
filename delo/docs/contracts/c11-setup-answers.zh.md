@@ -58,7 +58,7 @@ setup 回答是 `delorun setup` 所问的问题、保存每个回答的 schema�
 
 第一个问题之后的每个问题都可以回到前一个：选择题或是否题提供“← 返回”，文本或密钥问题把空输入当作“返回”。审阅屏幕在写入任何内容之前列出所有回答。
 
-在终端中运行时，最后会提议安装 `delorun` 命令（它运行 `npm install -g delorun`，本人拒绝或安装失败时打印这一行），然后按 `background` 回答在后台或终端中启动 Delorun，并打开 studio。它打印关闭终端后 Delorun 是否继续运行、studio 的地址，以及 `delorun status`、`delorun logs --follow` 与 `delorun stop`。在没有显示器的电脑上或在 SSH 会话中，它打印地址与 SSH 端口转发命令行，而不是打开浏览器。`--yes` 与 `--config` 不启动任何内容，只打印要运行的命令。
+终端运行结束时，先提议安装 `delorun` 命令（它以启动器在 `DELO_LAUNCHER_VERSION` 中指明的版本运行 `npm install -g delorun@<version>`，本人拒绝或安装失败时打印这一行；不是由启动器启动的运行不提议安装），然后按 `background` 回答在后台或在终端中启动 Delorun，并打开 studio。它会打印终端关闭后 Delorun 是否继续运行、studio 的地址，以及 `delorun status`、`delorun logs --follow` 与 `delorun stop`。在没有显示器的计算机上或在 SSH 会话中，它打印地址与 SSH 端口转发命令，而不打开浏览器。`--yes` 与 `--config` 不启动任何内容，只打印要运行的命令。
 
 <a id="questions"></a>
 ### 问题

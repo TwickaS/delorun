@@ -96,6 +96,7 @@ Delo 的约定要求 Setup 的 `--yes` 与 `--config` 形式从不开启远程�
 
 - Delo 的约定要求 `delorun verify` 检查 home 的发布版本、文件、隔离、暴露、登录、插件与数据共享，并报告你的系统无法强制执行的项目。每份报告都会说明，以你身份运行的程序可以更改这些检查。
 - Delo 的约定要求 `delorun logs` 显示每个运行日志、其位置与记录。Delo 自身的记录不含密钥、聊天文本、提示、模型输出、工具参数或文件内容。命令的捕获输出仍可能包含聊天与文件文本，直到保留期限将其删除。Delo 运行期间，日志在写入 14 天后被删除。
+- npm 在任何 Delo 检查运行之前就提供 `delorun` 启动器，因此请通过带外方式核查它。`delorun verify` 会打印一行 `Launcher`，给出已安装发布版本的签名清单为你所运行的启动器记录的完整性值；请将其与 `npm view delorun@<version> dist.integrity` 的输出比较。Delo Run 在 README、本页、每个发布版本的说明以及 `delo/release/production-keys.json` 中公布每个发布根文件的 SHA-256 及其密钥 id；请将它们与启动器包 `roots/` 目录下的根文件比较。目前尚未公布任何发布根。Setup 按你所运行的版本安装 `delorun` 命令，从不安装 npm 提供的最新版本。
 - [威胁模型](../security/threat-model.zh.md)列出每个边界、其防护，以及 Delo 不防范的内容。
 
 <a id="reporting-a-problem"></a>

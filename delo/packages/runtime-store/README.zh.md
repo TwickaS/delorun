@@ -52,7 +52,7 @@ const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: anchoredRoot
 
 ## 回滚
 
-仓库自身不提供回滚：每条回退路径都读取更新记录，并通过 `@delo/update` 唯一的回滚函数应用[约定 C3](../../docs/contracts/c03-update-report.md#rollback) 的回滚表，该函数按调用方的路径通过 `switchTo` 或 `restore` 切换指针。指针写入（包括回滚的写入）不改变 `runtimes/` 之外的任何文件。`NO_PREVIOUS` 代码保留在启动器的拒绝表中，没有任何仓库操作会产生它。
+仓库自身不提供回滚：每条回退路径都读取更新记录，并通过 `@delo/update` 唯一的回滚函数应用[约定 C3](../../docs/contracts/c03-update-report.zh.md#rollback) 的回滚表，该函数按调用方的路径通过 `switchTo` 或 `restore` 切换指针。指针写入（包括回滚的写入）不改变 `runtimes/` 之外的任何文件。`NO_PREVIOUS` 代码保留在启动器的拒绝表中，没有任何仓库操作会产生它。
 
 <a id="installing"></a>
 
@@ -115,6 +115,7 @@ const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: anchoredRoot
 | `POINTER_CHANGED` | 切换的 `from` 不是 `current` 所记录的版本 |
 | `NOT_INSTALLED` | 指针写入所指向的版本未安装 |
 | `ROOT_NOT_ANCHORED` | `TrustedRootSource` 无法把 `trust/root.json` 锚定在启动器携带的根上：进程不是由启动器启动、其根无法读取，或没有任何根能走到已存储的根 |
+| `TARGET_LOWER` | 更新的准备阶段指定的目标，或通道解析出的版本，低于 `current` 所记录的版本；没有安装任何内容，`delorun recover rollback` 是唯一的回退途径 |
 
 <a id="crash-safety"></a>
 

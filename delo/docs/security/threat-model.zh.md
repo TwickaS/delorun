@@ -201,11 +201,11 @@ Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md
 [C2](../contracts/c02-release-manifest.zh.md) 与 [C18](../contracts/c18-release-log.zh.md) 定义发布完整性。
 
 - 离线的 targets 密钥为每个发布清单签名，离线的 root 密钥为每个角色的密钥及每次轮换签名。在线的 timestamp 密钥只为新鲜度签名，其文件在签发 3 天后过期；客户端拒绝过期或更旧的 timestamp。
-- 安装或更新需要发布日志中经过验证的包含证明，并由 root 所列的见证者共同签名。每次启动时，经过验证的发布日志失败会停止启动；离线或未知的结果从不阻止启动。
-- targets 密钥持有者只在自己控制的、CI 之外的机器上，使用公开的配方从带标签源码重建发布之后才签名；没有匹配的重建记录时，签名命令会拒绝。
+- 安装或更新需要发布日志中经过验证的包含证明，并由 root 所列的见证者共同签名。每次启动时，经过验证的发布日志失败，或缺失已存储的完整性包，都会阻止启动；离线或未知的在线检查从不阻止启动。安装时在线检查未完成的发布，会在更新报告中显示为 `unchecked`，`delorun update --yes` 不会确认它。
+- targets 密钥持有者只通过 `sign-release.ts` 为公开发布签名；在以下情况下它会拒绝：没有在 CI 之外、使用公开配方从带标签源码重建的匹配重建记录，标签没有 `delo/release/allowed-signers` 中某个密钥的签名，或提交不在发布分支上。`local-release.ts` 为它自己的通道签名一个未经重建的发布：其清单把构建者写为 `local release (no independent rebuild)`，它拒绝 `delo/release/production-keys.json` 中列出的 root 或密钥，从生产发布位置获取的启动器会拒绝它的清单。
 - 签名命令根据 GitHub Advisory Database 检查锁文件，遇到没有有效接受的公告时拒绝。
 - 在签名、摘要与日志检查通过之前，任何文件都不会进入 `~/.delo/runtimes/`。每次启动时，npm 启动器都会根据已签名的文件列表检查每个已安装的运行时文件：它对每个文件计算哈希，或将文件的身份与上次计算哈希后记录的身份比较，并默认至少每 7 天对每个文件计算一次哈希。不改变文件变更时间的存储损坏，由该完整检查或 `delorun verify` 发现，而不是由下一次启动发现。
-- npm 启动器是安装前的信任锚：`npx delorun` 会在任何 Delo 检查之前运行 npm 提供的启动器。
+- npm 启动器是安装前的信任锚：`npx delorun` 会在任何 Delo 检查之前运行 npm 提供的启动器。每次启动都以启动器附带的最新 root 为锚，从不以更旧的已存储 root 为锚，因此被附带 root 撤销的 targets 密钥不再能通过验证。设置会安装固定为当前运行的启动器版本的 `delorun` 命令，[信任页面](../guide/trust.zh.md#checking-it-yourself)说明了如何通过带外方式核查该版本。
 
 发布工作流尚不存在：每 24 小时重新签名 timestamp、带构建证明且不使用令牌地发布到 npm，以及安装脚本，见[发布工作流设计](../design/release-workflow.md)。桌面应用的更新器是上游的，不检查任何 Delo 签名或日志条目（[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)）。
 

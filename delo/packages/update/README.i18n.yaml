@@ -12,32 +12,41 @@
   en: 13c60589935cfd37
   zh: f0e6647f83a1351e
 /delo-update/contents:
-  en: 8c836df8408d5551
-  zh: 93ad225d64b33e9a
+  en: f1aa6fc9f8118e0a
+  zh: 12db23e29b0af2e9
 /delo-update/what-the-report-decides:
-  en: 9744042858259254
-  zh: 8f4913c68f5e0dff
+  en: adbbfd4fa32398a9
+  zh: ce9fc31a4fc237df
 /delo-update/the-two-version-axes:
-  en: d010be9aa9fa6844
-  zh: 4e5a9da76d926d18
+  en: 5605646de81f700c
+  zh: d6db7b927992b6da
 /delo-update/bundles-and-rows:
-  en: af170cb618ede452
-  zh: 5e41466d73817d08
+  en: 75acd36b9b836eae
+  zh: 964da73abe2ce9c1
 /delo-update/both-installations:
   en: a76d8f4446a41056
-  zh: bbe497dc5726aada
+  zh: 2c43135591525dde
+/delo-update/data-formats:
+  en: 80463691fc32f97d
+  zh: 8542545bac2de7af
+/delo-update/the-session-data-copy:
+  en: 6d74bcefe56fcd20
+  zh: f97d5d6dc963a88f
+/delo-update/the-one-rollback-function:
+  en: e4a0648ecd4a6488
+  zh: db02954b403f2937
 /delo-update/confirming-without-asking:
-  en: 92d8c245ccf6dc77
-  zh: 0550cbdfa61b1b66
+  en: b00903dbdd0ee941
+  zh: 6ec767a332612324
 /delo-update/the-sentences:
-  en: c5430ba515393c7d
-  zh: 50c22348fbc38bed
+  en: 0131a1a741662383
+  zh: 1c694c207972fc81
 /delo-update/seams-for-other-packages:
-  en: 3c9d75a7684a33ea
-  zh: c51e87dd2bf83d5e
+  en: 461b257eb86d8a37
+  zh: 7de5ca2fd49176e6
 /delo-update/not-yet-implemented:
-  en: 0f75a4c1c01e9180
-  zh: f7e3bb8fc68d19cc
+  en: 3ee60a1acbcce772
+  zh: c5a8c1623a1a19b9
 /delo-update/tests:
-  en: c69f9a831aa9afdf
-  zh: a21f2a6b9a37000f
+  en: eed3b2a52a7bceee
+  zh: 54cb8e77f25f850d

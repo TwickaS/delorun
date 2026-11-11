@@ -59,7 +59,7 @@ The first screen asks for **Quick** (preselected) or **Full**. Each topic is a r
 
 Every question after the first can return to the one before it: a select or yes-or-no question offers "← Back", and a text or key question takes an empty entry as "go back". A review screen lists the answers before anything is written.
 
-A terminal run ends by offering to install the `delorun` command (it runs `npm install -g delorun`, and prints that line when the person declines or the install fails), then starts Delorun in the background or in the terminal, as the `background` answer says, and opens the studio. It prints whether Delorun keeps running after the terminal closes, the studio's address, and `delorun status`, `delorun logs --follow` and `delorun stop`. On a computer with no display, or in an SSH session, it prints the address and the SSH port-forward line instead of opening a browser. `--yes` and `--config` start nothing and print the command to run.
+A terminal run ends by offering to install the `delorun` command (it runs `npm install -g delorun@<version>` at the version the launcher named in `DELO_LAUNCHER_VERSION`, and prints that line when the person declines or the install fails; a run the launcher did not start offers no install), then starts Delorun in the background or in the terminal, as the `background` answer says, and opens the studio. It prints whether Delorun keeps running after the terminal closes, the studio's address, and `delorun status`, `delorun logs --follow` and `delorun stop`. On a computer with no display, or in an SSH session, it prints the address and the SSH port-forward line instead of opening a browser. `--yes` and `--config` start nothing and print the command to run.
 
 <a id="questions"></a>
 ### Questions

@@ -34,7 +34,7 @@ description: "Delo 的安装路径：启动器通过 HTTPS 获取的发布文件
 
 1. 从启动器内置的根开始的根链，每个根都由前一个版本校验，最新的根还要满足自身的阈值与有效期。
 2. 时间戳的签名、生存期、有效期，以及它相对于本 home 已存储版本的版本号，从而拒绝重放。
-3. 频道清单：新时间戳指定的摘要与 targets 阈值的签名，以及当有人指定版本时该人的版本号。
+3. 频道清单：新时间戳指定的摘要与 targets 阈值的签名，以及当有人指定版本时该人的版本号。从约定 C2 的生产发布获取内容的通道，会以 `LOCAL_RELEASE_BUILDER` 拒绝构建者为 `local release (no independent rebuild)` 的清单，这种清单只有 `local-release.ts` 会写出。
 4. 平台的清单文件，需满足清单中的长度与 SHA-256，以及该文件自身的签名。
 5. 归档本身，在从磁盘读取时满足清单中的长度与 SHA-256。
 
@@ -44,7 +44,7 @@ description: "Delo 的安装路径：启动器通过 HTTPS 获取的发布文件
 
 ## 发布日志
 
-`resolve` 通过 `@delo/release-verify` 的 `checkAndStore` 以 `enforce` 模式运行约定 C18 的检查，启动器的启动与 `delorun verify` 运行的也是这同一个实现：先离线检查 bundle，再对照日志的最新检查点做在线检查，起点是 bundle 携带的检查点或本 home 存储的更新的检查点，并把校验通过的检查点存储到 `trust/checkpoint.json`。哪些应答使发布处于 `unchecked`、哪些使它失败，由该包的 README 说明。检查结果为 `failed` 时以 `RELEASE_LOG_FAILED` 拒绝安装；`unchecked` 的发布凭其签名安装，通道报告带原因的 `log-checked`，以便启动器发出警告（约定 C18 的“各客户端的行为”）。检查自身代码出错时同样以 `RELEASE_LOG_FAILED` 拒绝；`trust/` 下的记录若是链接、属于其他用户、权限宽于 0600 或无法写入，则以 `TRUST_STATE_INVALID` 拒绝。`recordInstalled` 通过 `recordResult` 把结果（`verified`，或带原因的 `unchecked`）写入 `trust/release-log.json`，并保留其他发布的条目；`failed` 的检查不记录任何内容。`log` 选项是检查所读取的传输，或为被信任的根生成传输的函数；启动器传入 `@delo/release-verify` 的 `tilesTransport`，端点为根的 `log.origin` 所指定的端点，在为本地日志构建的版本中则为本地日志的端点。
+未发布 bundle 的发布为 `RELEASE_LOG_FAILED`，不会安装任何内容。`resolve` 通过 `@delo/release-verify` 的 `checkAndStore` 以 `enforce` 模式运行约定 C18 的检查，启动器的启动与 `delorun verify` 运行的也是这同一个实现：先离线检查 bundle，再对照日志的最新检查点做在线检查，起点是 bundle 携带的检查点或本 home 存储的更新的检查点，并把校验通过的检查点存储到 `trust/checkpoint.json`。哪些应答使发布处于 `unchecked`、哪些使它失败，由该包的 README 说明。检查结果为 `failed` 时以 `RELEASE_LOG_FAILED` 拒绝安装；`unchecked` 的发布凭其签名安装，通道报告带原因的 `log-checked`，以便启动器发出警告（约定 C18 的“各客户端的行为”）。检查自身代码出错时同样以 `RELEASE_LOG_FAILED` 拒绝；`trust/` 下的记录若是链接、属于其他用户、权限宽于 0600 或无法写入，则以 `TRUST_STATE_INVALID` 拒绝。`recordInstalled` 通过 `recordResult` 把结果（`verified`，或带原因的 `unchecked`）写入 `trust/release-log.json`，并保留其他发布的条目；`failed` 的检查不记录任何内容。`log` 选项是检查所读取的传输，或为被信任的根生成传输的函数；启动器传入 `@delo/release-verify` 的 `tilesTransport`，端点为根的 `log.origin` 所指定的端点，在为本地日志构建的版本中则为本地日志的端点。
 
 <a id="extraction"></a>
 
@@ -58,7 +58,7 @@ description: "Delo 的安装路径：启动器通过 HTTPS 获取的发布文件
 
 `trust/` 下的三个文件是安装过程保留的回滚保护，每个都通过临时文件以权限 0600 写入：最近校验通过的根、最近校验通过的时间戳，以及最近校验通过的日志检查点。在这三者之外，`trust/roots/<n>.root.json` 为安装所走过的每个根版本各保存一个文件，最旧的在前。一旦启动器携带的根能走到已存储的根，之后的安装就从已存储的根向前走根链；它拒绝所指根低于已存储根的时间戳，在请求任何根之前拒绝所指根比已存储根多出 `MAX_ROOT_ROTATIONS`（32）个以上的时间戳，并在每个根文件到达时校验它。它拒绝低于已存储版本的时间戳；无法读取的根或时间戳文件，以及这些文件中属于其他用户或权限宽于 0600 的任何一个，都会让安装以 `TRUST_STATE_INVALID` 失败，而不会被替换。检查点与检查状态是 `@delo/release-verify` 的记录：已存储的检查点让日志受其树约束，无法读取的检查点会被替换，并在检查结果中附带说明，而不会拒绝安装。
 
-已存储的根同时是启动的锚点，因此由 `readStoredRootBytes` 把它读回，并由 `verifyStoredRoot` 按启动器随包携带的根核对它：在启动器携带的某个版本上，存储的根必须正是该根（键与角色一致），比携带的最旧根更旧的存储根会被拒绝。比携带的所有根都新的存储根，只有在安装所走过的链能从携带的某个根走到它、且每个版本都由前一个根的键和自身的键共同签名时才被信任；没有携带的根作为起点的根会被拒绝，因此还原或同步留在 `trust/` 下的文件无法成为锚点。除此之外，已存储的根的任何内容都不被直接相信。`readShippedRoots(directory)` 按从旧到新读取启动器的 `roots/<n>.root.json` 文件，目录中没有任何根、跳过某个版本或无法连成链时会被拒绝；`readAnchoredRoot(home, shipped)` 读取 `trust/root.json` 与走过的链并应用 `verifyStoredRoot`，启动器所启动的运行时正是这样为每次更新、回滚与健康检查确定锚点。
+已存储的根同时是启动的锚点，因此由 `readStoredRootBytes` 把它读回，并由 `verifyStoredRoot` 按启动器随包携带的根核对它：在启动器携带的某个版本上，存储的根必须正是该根（键与角色一致），比携带的最旧根更旧的存储根会被拒绝。比携带的最新根更旧的存储根不作为锚点：`verifyStoredRoot` 返回携带的最新根，因此被该根撤销的 targets 键会使启动检查失败。比携带的所有根都新的存储根，只有在安装所走过的链能从携带的某个根走到它、且每个版本都由前一个根的键和自身的键共同签名时才被信任；没有携带的根作为起点的根会被拒绝，因此还原或同步留在 `trust/` 下的文件无法成为锚点。除此之外，已存储的根的任何内容都不被直接相信。`readShippedRoots(directory)` 按从旧到新读取启动器的 `roots/<n>.root.json` 文件，目录中没有任何根、跳过某个版本或无法连成链时会被拒绝；`readAnchoredRoot(home, shipped)` 读取 `trust/root.json` 与走过的链并应用 `verifyStoredRoot`，启动器所启动的运行时正是这样为每次更新、回滚与健康检查确定锚点。
 
 <a id="failures"></a>
 

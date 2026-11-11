@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/delorun-update-lower-version/guide.md
+/:
+  en: fdd13dab41995819
+  zh: d66a2e336202aa4b
+/delorun-update-refuses-a-lower-release:
+  en: 7c1e48d2c310abe1
+  zh: ef79c88f9bb17421
+/delorun-update-refuses-a-lower-release/change:
+  en: 15697d706e51f526
+  zh: 6dade643e465d57f
+/delorun-update-refuses-a-lower-release/migration:
+  en: 3282078ff1b40bf8
+  zh: 5a2ce9d88da724ab
