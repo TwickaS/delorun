@@ -6,12 +6,15 @@
  * that cannot be reached leaves the check not run, with the warning that names the release, and exits 0. Every log
  * answer comes from the fixture's `fetch`.
  */
+import { generateKeyPairSync } from 'node:crypto'
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DELO_HOME_ENTRIES, TRUST_FILES } from '@delo/contract-home-layout'
 import { VERIFICATION_CHECK_IDS, VERIFICATION_DETAIL_MAX_LENGTH, VERIFICATION_NOTICE } from '@delo/contract-verification-checks'
 import { writeChannelRecord } from '@delo/install'
+import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
+import { toJsonValue } from '@delo/release-formats/sign/json'
 import { checkStatePath, checkpointPath, serializeStoredCheckpoint, storedCheckpoint } from '@delo/release-verify'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { main } from '../../src/main.ts'
@@ -101,7 +104,7 @@ describe('a release that verifies', { timeout: 30_000 }, () => {
     expect(lines[1]).toMatch(/^Trusted root: version 1, root keys [0-9a-f]{16}, anchored on the shipped roots of the launcher that started this Delo, in \S+ \(DELO_LAUNCHER_ROOTS\)\.$/u)
     expect(lines[1]).toContain(` in ${fixture.launcherRoots} (`)
     expect(lines[2]).toBe('Release channel: production; release log: production; as the launcher that installed this Delo recorded them.')
-    expect(lines[3]).toBe(`Launcher: the launcher that started this Delo did not name its version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${RELEASE} lists.`)
+    expect(lines[3]).toBe(`Launcher: the launcher that started this Delo reported no version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${RELEASE} lists.`)
     expect(lines.at(-2)).toBe('2 checks passed, 0 failed, 9 not run; this is not a full verification of this Delo.')
     expect(line(run, 'release-signature')).toMatch(/^passed\s+release-signature\s+trusted root 1 is anchored on the launcher's shipped roots; trusted root 1 is valid until 2027-10-01T00:00:00Z; the manifest's targets signature verifies; the stored timestamp is fresh; the release-log entry verifies and the log is consistent with the stored checkpoint$/u)
     expect(line(run, 'runtime-files')).toMatch(/^passed\s+runtime-files\s+all 5 files of runtime 0\.1\.0 match the signed file list$/u)
@@ -390,6 +393,18 @@ describe('the runtime store\'s logger', () => {
 })
 
 describe('the trusted root a run anchors on', { timeout: 30_000 }, () => {
+  it('names the root keys of the root it anchored on: the newest shipped root, not an older stored one', async () => {
+    const fixture = await home()
+    const newRootKey = generateKeyPairSync('ed25519').privateKey
+    const entry = publicKeyEntry(newRootKey)
+    // Root 2 rotates the root key and keeps every other role, signed by both root keys.
+    const second = { ...fixture.root, version: 2, keys: { ...fixture.root.keys, [entry.keyid]: entry.entry }, roles: { ...fixture.root.roles, root: { keyids: [entry.keyid], threshold: 1 } } }
+    const secondBytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(second), signatures: [] }, [fixture.keys.root, newRootKey]), undefined, 2)}\n`)
+    writeFileSync(join(fixture.launcherRoots, '2.root.json'), secondBytes)
+    const run = await verify(fixture)
+    expect(run.stdout).toContain(`Trusted root: version 2, root keys ${String(entry.keyid).slice(0, 16)}, anchored on the shipped roots`)
+  })
+
   it('holds a root to its own signatures only without the launcher\'s roots, and does not call that a pass', async () => {
     const fixture = await home()
     const run = await verify(fixture, [], {}, {})

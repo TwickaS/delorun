@@ -209,7 +209,6 @@ async function anchoredRoot(options: ReleaseCheckOptions): Promise<RootStep> {
   }
   let root = own
   let anchor: RootAnchor
-  const keyids = own.metadata.roles.root.keyids.map(String)
   const rootsDirectory = options.launcherRoots
   let shipped: readonly Uint8Array[] | undefined
   let reason = 'the launcher that started this runtime named no shipped roots'
@@ -220,14 +219,15 @@ async function anchoredRoot(options: ReleaseCheckOptions): Promise<RootStep> {
       reason = `the launcher's roots at ${rootsDirectory} do not read: ${reasonOf(error)}`
     }
   }
-  if (shipped === undefined || rootsDirectory === undefined) anchor = { version: own.metadata.version, keyids, anchored: 'stored', reason }
+  if (shipped === undefined || rootsDirectory === undefined) anchor = { version: own.metadata.version, keyids: own.metadata.roles.root.keyids.map(String), anchored: 'stored', reason }
   else {
     try {
       root = verifyStoredRoot({ stored, shipped, walked: await readStoredRootChain(options.home), source: path })
     } catch (error) {
       return { refused: { result: 'fail', detail: `the trusted root ${path} is not one the launcher's shipped roots lead to: ${reasonOf(error)}` } }
     }
-    anchor = { version: root.metadata.version, keyids, anchored: 'shipped', rootsDirectory }
+    // The anchor may be the newest shipped root rather than the stored one, so its keys are the ones named.
+    anchor = { version: root.metadata.version, keyids: root.metadata.roles.root.keyids.map(String), anchored: 'shipped', rootsDirectory }
   }
   const expires = Date.parse(root.metadata.expires) / 1000
   const expiry: Part = options.now > expires + CLOCK_TOLERANCE_SECONDS
@@ -277,7 +277,8 @@ const LAUNCHER_PACKAGE = 'delorun'
 /**
  * The launcher that started this run against the release's signed `npm` entries. npm serves the launcher before any
  * Delo check runs, so the run says which launcher version ran and the integrity the signed manifest gives that version,
- * for the person to compare with npm's own record out of band. Nothing here passes or fails a check: a launcher of an
+ * for the person to compare with npm's own record out of band. The version is the one the launcher reported in
+ * `DELO_LAUNCHER_VERSION`, which the launcher sets from its own `package.json` and never passes on from its parent. Nothing here passes or fails a check: a launcher of an
  * earlier release starts a runtime an update installed, and a local release lists no npm package.
  * @param version - the launcher's version, from `DELO_LAUNCHER_VERSION`, or `undefined` when the launcher set none.
  * @param manifest - the verified manifest of the installed release.
@@ -285,12 +286,12 @@ const LAUNCHER_PACKAGE = 'delorun'
  *   version, or why the launcher could not be compared with the release.
  */
 export function launcherComparison(version: string | undefined, manifest: ReleaseManifest): string {
-  if (version === undefined) return `the launcher that started this Delo did not name its version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${manifest.version} lists`
+  if (version === undefined) return `the launcher that started this Delo reported no version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${manifest.version} lists`
   const listed = manifest.npm.filter(entry => entry.name === LAUNCHER_PACKAGE)
   const same = listed.find(entry => String(entry.version) === version)
-  if (same !== undefined) return `${LAUNCHER_PACKAGE}@${version}, which release ${manifest.version}'s signed manifest lists with integrity ${String(same.integrity)}; compare it with npm view ${LAUNCHER_PACKAGE}@${version} dist.integrity`
-  if (listed.length === 0) return `${LAUNCHER_PACKAGE}@${version}; release ${manifest.version}'s signed manifest lists no ${LAUNCHER_PACKAGE} npm package to compare it with`
-  return `${LAUNCHER_PACKAGE}@${version}; release ${manifest.version}'s signed manifest lists ${listed.map(entry => `${LAUNCHER_PACKAGE}@${String(entry.version)}`).join(', ')}, so compare the launcher with the manifest of release ${version}`
+  if (same !== undefined) return `${LAUNCHER_PACKAGE}@${version} as the launcher reported it, which release ${manifest.version}'s signed manifest lists with integrity ${String(same.integrity)}; compare it with npm view ${LAUNCHER_PACKAGE}@${version} dist.integrity`
+  if (listed.length === 0) return `${LAUNCHER_PACKAGE}@${version} as the launcher reported it; release ${manifest.version}'s signed manifest lists no ${LAUNCHER_PACKAGE} npm package to compare it with`
+  return `${LAUNCHER_PACKAGE}@${version} as the launcher reported it; release ${manifest.version}'s signed manifest lists ${listed.map(entry => `${LAUNCHER_PACKAGE}@${String(entry.version)}`).join(', ')}, so compare the launcher with the manifest of release ${version}`
 }
 
 /**
