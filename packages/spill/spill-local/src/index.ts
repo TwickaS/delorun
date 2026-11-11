@@ -14,12 +14,12 @@ import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import z from '@deepseek-ai/schemastery'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import type {} from '@deepseek-ai/dsh-sandbox'
+import { canonicalPath } from '@deepseek-ai/dsh-sandbox'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
 import { gatherSweepRoots, sweepSpillRoots } from './cleanup.ts'
 import type { SweepRoot, WarnFn } from './cleanup.ts'
-import { privateRoot, privateRootFallbackCause, saveTextFile } from './store.ts'
+import { privateRoot, privateRootFallbackCause, saveTextFile, sessionDir } from './store.ts'
 
 export { discoverDefaultRoots, sweepSpillRoots } from './cleanup.ts'
 export type { SweepOptions, SweepRoot, WarnFn } from './cleanup.ts'
@@ -182,6 +182,15 @@ export class LocalSpillStore extends SpillStore {
    * @returns the saved file's locator, size and retrieval hint.
    * @throws {SpillRootUnprotectedError} for the temp fallback under a protected home.
    */
+  /**
+   * The session's directory under the root, canonical through the root's links, as the read tools compare paths.
+   * @param sessionId - the owning session's header id.
+   * @returns `<canonical root>/session-<hash>`.
+   */
+  override sessionDirectory(sessionId: string): string {
+    return sessionDir(canonicalPath(this.root), sessionId)
+  }
+
   async saveText(input: SaveTextSpill): Promise<SpillRef> {
     const protectedHome = this.homeFailure === undefined ? undefined : this.ctx.get('sandbox')?.protectedHome
     if (protectedHome !== undefined) throw new SpillRootUnprotectedError(this.root, protectedHome, this.homeFailure)

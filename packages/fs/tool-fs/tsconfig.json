@@ -30,6 +30,9 @@
       "path": "../fs"
     },
     {
+      "path": "../../spill/spill"
+    },
+    {
       "path": "../fs-observation-policy"
     },
     {

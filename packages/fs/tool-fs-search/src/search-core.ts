@@ -27,6 +27,7 @@ import { ItemRetainer, TextRetainer } from '@deepseek-ai/dsh-output-retention'
 import type { RetainedItems } from '@deepseek-ai/dsh-output-retention'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessOutputRead, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
+import { spillReadGrants } from '@deepseek-ai/dsh-spill'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { canonicalPath, classifyRunnerFailure, pathWithin, protectedReadGuard, toolReadableOnly } from '@deepseek-ai/dsh-sandbox'
 import type { ConfinedArgv, RunnerFailureRule, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
@@ -276,7 +277,7 @@ function searchTarget(ctx: Context, exec: ToolExecution, toolName: string, workd
   const mode = reads === undefined
     ? 'danger-full-access'
     : ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
-  const refused = protectedReadGuard(reads, mode)
+  const refused = protectedReadGuard(reads, mode, spillReadGrants(ctx, exec.agent?.session.header))
   if (sandbox === undefined || reads === undefined || mode === 'danger-full-access') {
     return { cwd: workdir, path: searchPath, confine: undefined, refused, keep: () => true, display: path => path, verify: () => {} }
   }
@@ -290,8 +291,8 @@ function searchTarget(ctx: Context, exec: ToolExecution, toolName: string, workd
   return {
     cwd,
     path: searchPath === undefined ? undefined : canonicalRoot,
-    // A root under a tool-readable entry, such as the spill directory, is hidden from a confined run; it runs
-    // unconfined, which is safe because confined commands cannot write under the protected home to plant a link there.
+    // A root the call is granted under a tool-readable entry, such as its session's spill directory, is hidden from a
+    // confined run; it runs unconfined, which is safe because confined commands cannot write under the protected home.
     confine: toolReadableOnly(reads, canonicalRoot)
       ? undefined
       : (argv, signal) => sandbox.confine(argv, searchPolicy(ctx, exec, workdir), signal),

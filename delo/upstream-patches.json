@@ -1121,8 +1121,8 @@
     {
       "path": "packages/fs/tool-fs-search/src/search-core.ts",
       "class": "security",
-      "reason": "Protected home, read fence: when the sandbox provider reports `protectedReads` and the call does not run under `danger-full-access`, `runRipgrep` resolves the search root to its canonical path before ripgrep starts (for a root that does not exist yet, its deepest existing ancestor's canonical path with the missing rest appended) and refuses a protected root with the new `SEARCH_SANDBOX_DENIED`, passes ripgrep the canonical path (or runs it in the canonical directory when no path was given), wraps it through `ctx.sandbox.confine` under a `read-only` policy so the kernel's home rule holds at every depth, classifies a sandbox runner failure as `SEARCH_FAILED` before exit 1 can read as no matches, accepts an exit 2 whose diagnostics are only access denials under protected paths, drops each output path outside the canonical root or under a protected root, and refuses the search when the root resolves differently afterwards. A root under a tool-readable entry runs unconfined. `runRipgrep` takes a `RipgrepSearch` (root plus argv builder) and returns `keep` and `display` with the run. Without protected reads the spawn is upstream's.",
-      "sha256": "fe977e7bfbe962d8bbaa175c8c005e2c76d0e76985f6a5f79eb148c43e8bd976"
+      "reason": "Protected home, read fence: when the sandbox provider reports `protectedReads` and the call does not run under `danger-full-access`, `runRipgrep` resolves the search root to its canonical path before ripgrep starts (for a root that does not exist yet, its deepest existing ancestor's canonical path with the missing rest appended) and refuses a protected root with the new `SEARCH_SANDBOX_DENIED`, passes ripgrep the canonical path (or runs it in the canonical directory when no path was given), wraps it through `ctx.sandbox.confine` under a `read-only` policy so the kernel's home rule holds at every depth, classifies a sandbox runner failure as `SEARCH_FAILED` before exit 1 can read as no matches, accepts an exit 2 whose diagnostics are only access denials under protected paths, drops each output path outside the canonical root or under a protected root, and refuses the search when the root resolves differently afterwards. A root under a tool-readable entry, which the check admits only inside the calling session's spill directories from `spillReadGrants`, runs unconfined. `runRipgrep` takes a `RipgrepSearch` (root plus argv builder) and returns `keep` and `display` with the run. Without protected reads the spawn is upstream's.",
+      "sha256": "1819c407b5897e04dc82788a1eeace8fb8f5429673fc6261f00daf04a9090cde"
     },
     {
       "path": "packages/fs/tool-fs/src/consent.ts",
@@ -1145,8 +1145,8 @@
     {
       "path": "packages/fs/tool-fs/src/read-target.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes. `protectedReadCheck` returns the same check as a predicate read once per call, for a tool that checks many targets, such as a directory listing.",
-      "sha256": "c64ba2bd7ba02953c051705ef167e54ed1e6baf32587c38677f6407bf6151cb4"
+      "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes. `protectedReadCheck` returns the same check as a predicate read once per call, for a tool that checks many targets, such as a directory listing. The check grants the calling session's spill directories from `spillReadGrants`.",
+      "sha256": "8d4b660febe1ad92330b4e205299396e44130021df000fc49a31cabb699a3a21"
     },
     {
       "path": "packages/fs/tool-fs/src/sandbox.ts",
@@ -1254,7 +1254,7 @@
       "path": "packages/sandbox/sandbox-local/src/index.ts",
       "class": "security",
       "reason": "Protected home and denied sockets (C1's confinement rules): the validated Config fields `protectedHome` (canonicalised at load, refused when missing, not a directory or `/`), `protectedHomeReadable` (relative entries inside the home, refused without `protectedHome`) and `deniedSockets` (absolute paths); each wrap resolves the protection, refuses a `workspace-write` root that overlaps the home with `HOME_IN_WRITABLE_ROOT` and passes the protection to the selected runner's profile, the `runnerCommand` override included. Re-exports `RUNNER_PROTECTION` and its types. All fields default to none, so the parity composition is unchanged. Lead verdict: approved, after two independent reviews and their fixes (2026-11-10): stricter only. Overrides `protectedHome` with the canonical configured home. Review of #66: refuses at load a denied socket inside a readable entry, and refuses a writable root that overlaps any alias of the home. Adds `aliasCoverage()` on the provider and the exported `pathAliasCoverage(path)` and `ALIAS_UNRELIABLE_FILESYSTEMS`, so setup and verification report alias-dependent rules as unknown rather than enforced. Overrides `protectedReads` with the home, its aliases and the readable entries under each. Adds and validates the `deniedSocketDirectories` Config field (absolute, not the filesystem root). Adds the validated `escapeSocketDirectories` Config field (absolute, not the filesystem root): each entry is denied like a `deniedSocketDirectories` entry, and while one exists a wrap on a runner whose `RUNNER_PROTECTION` cannot deny socket connects (Landlock, windows-acl) refuses with `SANDBOX_UNSUPPORTED_POLICY`; Delo's start names WSL's interop directory `/run/WSL` there, so no confined command starts a Windows program through the interop sockets. The bwrap invocation is started through `withSeccompFilter` (seccomp.ts) while an escape directory exists or `vsockOffered()` finds `AF_VSOCK` in `/proc/net/protocols` (or cannot read it), with the `vsockOffered` test hook, so confined commands create no vsock socket and no io_uring instance; Landlock applies no filter, and abstract Unix sockets stay open to confined commands. Lead verdict: approved, after an independent review and its fixes (2026-11-10). Adds `protectedHomeToolReadable` (relative entries inside the home, refused without `protectedHome`), reported as `protectedReads.toolReadable` under each root and passed to no runner's profile.",
-      "sha256": "f284bbf2d1aa3d885f131282ad29f4bcc82fe0c49fc94bdd754ca6f5518bd567"
+      "sha256": "b31b438188f2abbf7c4a3a10492bdd523ef8e893aed139670bc28283deeed5a2"
     },
     {
       "path": "packages/sandbox/sandbox-local/src/mounts.ts",
@@ -1296,13 +1296,13 @@
       "path": "packages/sandbox/sandbox/src/index.ts",
       "class": "delo-feature",
       "feature": "container-denial-marker",
-      "reason": "Container denial marker: exports `denialMarkers`, `environmentDenialMarker` and `denialOf`, and adds the optional `ConfinedArgv.environmentDenialSignatures` seam. No upstream export is removed or renamed. Protected home: also exports `assertRootsOutsideHome`, `pathWithin` and `SandboxProtectedRootError` from `roots.ts`. Adds the `SandboxProvider.protectedHome` getter (undefined by default) that in-process enforcers read. Adds the `protectedReads` getter and `ProtectedReads` type, and exports `protectedReadGuard`. Adds the optional `ProtectedReads.toolReadable` entries, which in-process read tools may read and confined executions may not, and exports `toolReadableOnly`."
+      "reason": "Container denial marker: exports `denialMarkers`, `environmentDenialMarker` and `denialOf`, and adds the optional `ConfinedArgv.environmentDenialSignatures` seam. No upstream export is removed or renamed. Protected home: also exports `assertRootsOutsideHome`, `pathWithin` and `SandboxProtectedRootError` from `roots.ts`. Adds the `SandboxProvider.protectedHome` getter (undefined by default) that in-process enforcers read. Adds the `protectedReads` getter and `ProtectedReads` type, and exports `protectedReadGuard`. Adds the optional `ProtectedReads.toolReadable` entries, inside which in-process read tools may read only their own grants and confined executions nothing, and exports `toolReadableOnly`."
     },
     {
       "path": "packages/sandbox/sandbox/src/roots.ts",
       "class": "security",
-      "reason": "Protected home and denied sockets (C1's confinement rules): adds `pathWithin` (segment-wise containment of canonical paths) and `assertRootsOutsideHome`, which throws `SandboxProtectedRootError` with code `HOME_IN_WRITABLE_ROOT` for a writable root that equals, lies inside or contains the protected home. Upstream's root derivations are unchanged. Lead verdict pending review: stricter only, called only when a home is configured. Adds `protectedReadGuard`, the check model-facing read tools apply to each canonical path. `protectedReadGuard` also exempts `ProtectedReads.toolReadable`, and `toolReadableOnly` reports whether a path lies under one of those entries.",
-      "sha256": "b4c3e269950dbb841454746bf8aa3674b5f0ccb76510dd0f5b005d3b6ac6fda0"
+      "reason": "Protected home and denied sockets (C1's confinement rules): adds `pathWithin` (segment-wise containment of canonical paths) and `assertRootsOutsideHome`, which throws `SandboxProtectedRootError` with code `HOME_IN_WRITABLE_ROOT` for a writable root that equals, lies inside or contains the protected home. Upstream's root derivations are unchanged. Lead verdict pending review: stricter only, called only when a home is configured. Adds `protectedReadGuard`, the check model-facing read tools apply to each canonical path. `protectedReadGuard` takes the caller's `grants` and exempts a path inside `ProtectedReads.toolReadable` only within one of them, and `toolReadableOnly` reports whether a path lies under one of those entries.",
+      "sha256": "d4bd7e8ea2735c19e3010b29a68dd9aec0b44609f77d904cecb80d2980f003b7"
     },
     {
       "path": "packages/schedule/schedule/src/index.ts",
@@ -1463,8 +1463,8 @@
     {
       "path": "packages/spill/spill-local/src/index.ts",
       "class": "security",
-      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses. `saveText` refuses the temp fallback root with `SpillRootUnprotectedError` (`SPILL_ROOT_UNPROTECTED`) while the mounted sandbox provider reports a `protectedHome`, and re-exports `privateRootFallbackCause`. Lead verdict (2026-11-11): kept; the spill notice names a path the read tools may read.",
-      "sha256": "9b099ccb22879d69e38e2817d31fc5a398cd3aae61278a48ce84b3887f85feef"
+      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses. `saveText` refuses the temp fallback root with `SpillRootUnprotectedError` (`SPILL_ROOT_UNPROTECTED`) while the mounted sandbox provider reports a `protectedHome`, and re-exports `privateRootFallbackCause`. `sessionDirectory` reports `<canonical root>/session-<hash>`.",
+      "sha256": "1fa20aec7a6b4de79a9db2665fd54c01212ff9a5bfd80b290abad76e64005e7c"
     },
     {
       "path": "packages/spill/spill-local/src/store.ts",
@@ -1475,8 +1475,8 @@
     {
       "path": "packages/spill/spill-local/tests/spill-local.spec.ts",
       "class": "security",
-      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill. Also proves an existing spill directory is tightened to owner-only, a link at the spill path is not written through, and the temp fallback is refused while the sandbox protects the home. Lead verdict (2026-11-11): kept; covers the 0700 tightening, refusing to write through a link, and refusing the temp root under a protected home.",
-      "sha256": "bb6240afffa2803753b68b99db12c04dd4d9b9528ecf31a22ec6aaab7fef7752"
+      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill. Also proves an existing spill directory is tightened to owner-only, a link at the spill path is not written through, and the temp fallback is refused while the sandbox protects the home. Also checks `sessionDirectory`.",
+      "sha256": "68110e1b6a1ab3e0bd946b872e7d333c5c8f9cd917da2e922d58ebf8c53b9497"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-root-confinement.spec.ts",
@@ -1981,6 +1981,12 @@
       "class": "security",
       "reason": "Protected home, read fence: a read or listing opens the target key and confirms the descriptor is the file or directory the key names before reading through it, so a read tool's protected-read check on the key covers the content when a component of the key is swapped for a link between the check and the open. On Linux the descriptor's `/proc/self/fd` path must equal the key and a listing reads its entries through that descriptor; elsewhere the descriptor's device and inode must equal the key's after the open and the key must still be its own realpath. A mismatch fails with `FS_IO_ERROR`. Reads open with `O_NONBLOCK` outside Windows so a FIFO swapped in after the regular-file check cannot block the open. Content, errors and limits are otherwise upstream's. Lead verdict (2026-11-11): kept; each read and each listing of the requested directory opens the target and confirms the descriptor is that target (its /proc/self/fd path on Linux, device and inode elsewhere), so a link swapped in after the check fails the read with FS_IO_ERROR.",
       "sha256": "c9ecfb2f19a574d05d80a0917300c6a72ecbb3d9a7ab9290113dc87c09131d42"
+    },
+    {
+      "path": "packages/spill/spill/src/index.ts",
+      "class": "security",
+      "reason": "Protected home, spill reads: adds `SpillStore.sessionDirectory(sessionId)`, undefined by default, the local directory holding one session's artifacts, and `spillReadGrants(ctx, header)`, the directories of the calling session and of the session it was forked from that the read tools may read inside the sandbox provider's tool-readable entries. Without a store that reports a directory nothing is granted; `saveText` is unchanged.",
+      "sha256": "fa77f0efad04c66730c96d83f75ea2e6431409d3ebdda83f82c1305262843dac"
     },
     {
       "path": "scripts/verify-doc-refs.ts",

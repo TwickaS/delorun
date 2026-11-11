@@ -715,13 +715,28 @@ describe('the sandbox provider\'s protected home', () => {
     expect(text(result)).not.toContain('secret-key')
   })
 
-  it('reads a tool-readable entry under the home, such as spilled output, and refuses the rest of the home', async () => {
-    await mkdir(join(home, 'spill', 'session-1'), { recursive: true })
-    await writeFile(join(home, 'spill', 'session-1', 'grep.txt'), 'spilled output\n')
+  it('reads its own session\'s spilled output under the home, and refuses another session\'s and the rest of the home', async () => {
+    for (const id of ['a', 'b']) {
+      await mkdir(join(home, 'spill', `session-${id}`), { recursive: true })
+      await writeFile(join(home, 'spill', `session-${id}`, 'grep.txt'), `spilled output ${id}\n`)
+    }
     const canonical = await realpath(dir)
     ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delo', 'spill')] }
-    expect(text(await call('read', { file_path: '.delo/spill/session-1/grep.txt' }))).toContain('spilled output')
-    expect(await call('read', { file_path: '.delo/secrets/key' })).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+    ctx.provide('spillStore', { sessionDirectory: (id: string) => join(canonical, '.delo', 'spill', `session-${id}`) } as never)
+    const read = (filePath: string, header: object = { id: 'a', cwd: dir }) => executeToolFixture(ctx, {
+      signal: testToolSignal,
+      callId: ToolCallId(`spill-${++callCounter}`),
+      name: 'read',
+      arguments: { file_path: filePath },
+      agent: { session: { header } } as never,
+    })
+    expect(text(await read('.delo/spill/session-a/grep.txt'))).toContain('spilled output a')
+    expect(await read('.delo/spill/session-b/grep.txt')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+    expect(await read('.delo/secrets/key')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
+    // A session forked from `b` reads the spill files its log inherited from `b`.
+    expect(text(await read('.delo/spill/session-b/grep.txt', { id: 'c', parentSession: 'b', cwd: dir }))).toContain('spilled output b')
+    // A call without a session is granted no spill directory.
+    expect(await call('read', { file_path: '.delo/spill/session-a/grep.txt' })).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
   })
 
   it('reads under the home in a session under danger-full-access', async () => {

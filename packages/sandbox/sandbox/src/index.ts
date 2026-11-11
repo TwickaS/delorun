@@ -239,8 +239,9 @@ export interface ProtectedReads {
   /** The readable entries under each root, which confined executions and in-process read tools may read. */
   readonly readable: readonly string[]
   /**
-   * The entries under each root that in-process read tools may read and confined executions may not, such as the
-   * directory holding spilled tool output that the tools tell a model to read. A provider never grants them to a
+   * The entries under each root inside which an in-process read tool may be granted reads that confined executions
+   * never get, such as the directory holding spilled tool output. A tool reads only within its own grants there, such
+   * as the calling session's own spill directory (`protectedReadGuard`'s `grants`). A provider never grants them to a
    * confined execution. Absent means none.
    */
   readonly toolReadable?: readonly string[]

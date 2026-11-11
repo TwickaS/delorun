@@ -137,21 +137,29 @@ export function assertRootsOutsideHome(roots: readonly string[], home: string): 
 
 /**
  * The check a model-facing read tool applies to each canonical path it would read, list or search: refused when it
- * lies under a protected root and under none of the readable or tool-readable entries. `danger-full-access` reads
- * everything, as confined commands in that mode do.
+ * lies under a protected root, under none of the readable entries, and not under a tool-readable entry within one of
+ * the caller's `grants`. `danger-full-access` reads everything, as confined commands in that mode do.
  * @param reads - the provider's {@link ProtectedReads}, read once for the call; `undefined` protects nothing.
  * @param mode - the calling session's resolved sandbox mode.
+ * @param grants - canonical directories the calling tool may read inside the tool-readable entries, such as the
+ *   calling session's own spill directory; a tool-readable path outside every grant stays refused.
  * @returns a predicate that is true for a path the tool must refuse.
  */
-export function protectedReadGuard(reads: ProtectedReads | undefined, mode: SandboxMode): (path: string) => boolean {
+export function protectedReadGuard(
+  reads: ProtectedReads | undefined,
+  mode: SandboxMode,
+  grants: readonly string[] = [],
+): (path: string) => boolean {
   if (reads === undefined || mode === 'danger-full-access') return () => false
-  const exempt = [...reads.readable, ...reads.toolReadable ?? []]
-  return path => reads.roots.some(root => pathWithin(path, root)) && !exempt.some(entry => pathWithin(path, entry))
+  const granted = grants.filter(grant => toolReadableOnly(reads, grant))
+  return path => reads.roots.some(root => pathWithin(path, root))
+    && !reads.readable.some(entry => pathWithin(path, entry))
+    && !granted.some(grant => pathWithin(path, grant))
 }
 
 /**
- * Whether a canonical path lies under one of the provider's tool-readable entries, which in-process tools may read and
- * confined executions may not ({@link ProtectedReads.toolReadable}).
+ * Whether a canonical path lies under one of the provider's tool-readable entries, which in-process tools may be
+ * granted and confined executions may not read ({@link ProtectedReads.toolReadable}).
  * @param reads - the provider's {@link ProtectedReads}.
  * @param path - a canonical path.
  * @returns true when the path is that entry or beneath it.

@@ -182,6 +182,7 @@ describe('LocalSpillStore service', () => {
     expect(readFileSync(ref.locator, 'utf8')).toBe('the full body')
     expect(ref.bytes).toBe(Buffer.byteLength('the full body', 'utf8'))
     expect(ref.retrievalHint).toBe('Use read with offset/limit, or grep this path to search within it.')
+    expect((ctx.spillStore as LocalSpillStore).sessionDirectory('sess-1')).toBe(sessionDir(await realpath(root), 'sess-1'))
   })
 
   it('resolves a relative configured root to absolute', async () => {

@@ -47,7 +47,7 @@ kind: "package-reference"
 | `probeTimeoutMs` | `5,000` | 每次竞争 runner 候选功能探测的超时时间 |
 | `protectedHome` | 无 | 受限命令不能写入或读取的现有目录（例如 harness 主目录）的绝对路径；与它重叠的 `workspace-write` 根目录会以 `HOME_IN_WRITABLE_ROOT` 被拒绝 |
 | `protectedHomeReadable` | `[]` | `protectedHome` 下、相对于它的路径，受限命令仍可读取和执行；需要 `protectedHome` |
-| `protectedHomeToolReadable` | `[]` | `protectedHome` 下、相对于它的路径，进程内读取工具可以读取，受限命令仍不可读取，例如 spill 目录；在 `protectedReads` 中报告，任何 runner 都不授予；需要 `protectedHome` |
+| `protectedHomeToolReadable` | `[]` | `protectedHome` 下、相对于它的路径，进程内读取工具只能读取其中授予它的部分（例如调用会话自己的 spill 目录），受限命令仍不可读取；在 `protectedReads` 中报告，任何 runner 都不授予；需要 `protectedHome` |
 | `deniedSockets` | `[]` | 受限命令不能连接的 Unix 套接字绝对路径，在能表达该规则的 runner 上生效 |
 | `deniedSocketDirectories` | `[]` | 只存放受限命令不能连接的套接字的目录的绝对路径，例如 Docker Desktop 的控制套接字目录；bwrap 隐藏整个目录，Seatbelt 拒绝包装时其中存在的每个套接字 |
 

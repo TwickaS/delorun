@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import { protectedReadGuard } from '@deepseek-ai/dsh-sandbox'
+import { spillReadGrants } from '@deepseek-ai/dsh-spill'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { FsInfo, FsTarget } from '@deepseek-ai/dsh-fs'
@@ -14,7 +15,8 @@ import { sessionResolveOptions } from './session-cwd.ts'
 
 /**
  * The sandbox provider's protected-read check for one tool call, read once: true for a target under the protected home
- * or another path that reaches it, outside its readable and tool-readable entries, unless the call runs under
+ * or another path that reaches it, outside its readable entries and outside the spill directories of the calling
+ * session and the session it was forked from within its tool-readable entries, unless the call runs under
  * `danger-full-access`. A provider that protects nothing makes it always false.
  * @param ctx - the plugin context.
  * @param exec - the tool execution, whose session decides the sandbox mode when `mode` is omitted.
@@ -25,7 +27,7 @@ export function protectedReadCheck(ctx: Context, exec: ToolExecution, mode?: San
   const reads = ctx.get('sandbox')?.protectedReads
   if (reads === undefined) return () => false
   const callMode = mode ?? ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
-  const refused = protectedReadGuard(reads, callMode)
+  const refused = protectedReadGuard(reads, callMode, spillReadGrants(ctx, exec.agent?.session.header))
   return target => refused(target.targetKey)
 }
 

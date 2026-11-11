@@ -72,9 +72,10 @@
 # which hold no secret. The provider's protected home is also what every tool
 # row refuses to read or search, the rows inside each agent preset included:
 # `read`, `read_image`, `apply_patch`, `glob` and `grep` take it from this row
-# and from no setting of their own. They may read the tool-readable `spill/`,
-# which confined commands cannot. `delorun start` keeps adding that profile's
-# channel sockets as `deniedSockets` in `run/<profile>/sandbox.patch.yml`.
+# and from no setting of their own. They may read their own session's directory
+# under the tool-readable `spill/`, which confined commands cannot. `delorun
+# start` keeps adding that profile's channel sockets as `deniedSockets` in
+# `run/<profile>/sandbox.patch.yml`.
 - id: sandbox
   config:
     protectedHome: !!js dshHomePath()
@@ -82,7 +83,7 @@
       - runtimes
       - skills
       - dsh-runtimes
-    # Spilled tool output, which the spill notice tells the model to read.
+    # Spilled tool output; each session's tools read only its own directory.
     protectedHomeToolReadable:
       - spill
 

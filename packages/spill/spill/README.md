@@ -59,7 +59,7 @@ The returned `SpillRef` carries three fields: `locator`, an opaque model-facing 
 
 ### Ownership and boundaries
 
-Storage is grouped by the owning session: forked sessions inherit existing locators from the seeded log without copying or re-owning them, and new spills after a fork use the child session id. A session-reference artifact belongs to the target session receiving the context, not the referenced source session. `suggestedName` is only a hint — backends sanitize it to one safe segment and never trust it as a path. Consumers own preview and spill decisions; the backend owns storage and artifact expiry.
+Storage is grouped by the owning session: forked sessions inherit existing locators from the seeded log without copying or re-owning them, and new spills after a fork use the child session id. A session-reference artifact belongs to the target session receiving the context, not the referenced source session. `suggestedName` is only a hint — backends sanitize it to one safe segment and never trust it as a path. Consumers own preview and spill decisions; the backend owns storage and artifact expiry. A backend that keeps each session's artifacts in one local directory reports it through `sessionDirectory(sessionId)`; `spillReadGrants(ctx, header)` returns the directories of the calling session and of the session it was forked from, which the read tools may read where a sandbox provider protects the home, and no other session's.
 
 ### Failures and recovery
 

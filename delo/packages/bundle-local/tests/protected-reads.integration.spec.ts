@@ -8,7 +8,7 @@
  * the home as upstream's tools do.
  */
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -230,14 +230,25 @@ describe.each(rows)('the search tools of $path', ({ config }) => {
     expect(grepped.text).not.toContain('needle secret')
   })
 
-  it('read spilled output under the home, which the spill notice tells the model to grep', async () => {
+  it('search their own session\'s spilled output under the home, and refuse another session\'s', async () => {
     await mount(config, composedSandboxConfig())
-    mkdirSync(join(home.dir, 'spill', 'session-1'), { recursive: true })
-    writeFileSync(join(home.dir, 'spill', 'session-1', 'grep.txt'), 'needle spilled\n')
-    const grepped = await call('grep', { pattern: 'needle', path: join(home.dir, 'spill') })
+    if (ctx === undefined) throw new Error('no composition is mounted')
+    const spill = join(realpathSync(home.dir), 'spill')
+    for (const id of ['session-protected-reads', 'session-other']) {
+      mkdirSync(join(spill, id), { recursive: true })
+      writeFileSync(join(spill, id, 'grep.txt'), `needle spilled for ${id}\n`)
+    }
+    // A spill store keeping each session's artifacts in its own directory, as the local store does.
+    ctx.provide('spillStore', { sessionDirectory: (id: string) => join(spill, id) } as never)
+    const grepped = await call('grep', { pattern: 'needle', path: join(spill, 'session-protected-reads') })
     expect(grepped.isError).not.toBe(true)
-    expect(grepped.text).toContain('needle spilled')
-    expect((await call('glob', { pattern: '**/*.txt', path: join(home.dir, 'spill') })).text).toContain('grep.txt')
+    expect(grepped.text).toContain('needle spilled for session-protected-reads')
+    expect((await call('glob', { pattern: '**/*.txt', path: join(spill, 'session-protected-reads') })).text).toContain('grep.txt')
+    for (const path of [join(spill, 'session-other'), spill]) {
+      const refused = await call('grep', { pattern: 'needle', path })
+      expect(refused).toMatchObject({ isError: true, code: 'SEARCH_SANDBOX_DENIED' })
+      expect(refused.text).not.toContain('session-other')
+    }
   })
 
   it.skipIf(!CONFINED)('search the workspace as before', async () => {

@@ -441,13 +441,23 @@ describe('search tools and the sandbox provider\'s protected home', () => {
     }
   })
 
-  it('searches a tool-readable entry under the home unconfined, which a confined run could not see', async () => {
-    await mkdir(join(dir, '.delo', 'spill'))
-    await writeFile(join(dir, '.delo', 'spill', 'grep.txt'), 'needle spilled\n')
+  it('searches its own session\'s spill directory unconfined, and refuses another session\'s', async () => {
+    const own = join(dir, '.delo', 'spill', 'session-session-int')
+    const other = join(dir, '.delo', 'spill', 'session-other')
+    await mkdir(own, { recursive: true })
+    await mkdir(other, { recursive: true })
+    await writeFile(join(own, 'grep.txt'), 'needle spilled\n')
+    await writeFile(join(other, 'grep.txt'), 'needle other chat\n')
     const canonical = await realpath(dir)
     ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delo', 'spill')] }
-    expect(text(await call('grep', { pattern: 'needle', path: '.delo/spill' }, agent()))).toContain('needle spilled')
+    ctx.provide('spillStore', { sessionDirectory: (id: string) => join(canonical, '.delo', 'spill', `session-${id}`) } as never)
+    expect(text(await call('grep', { pattern: 'needle', path: '.delo/spill/session-session-int' }, agent()))).toContain('needle spilled')
     expect(ProtectingProvider.wraps).toEqual([])
+    for (const path of ['.delo/spill/session-other', '.delo/spill']) {
+      const result = await call('grep', { pattern: 'needle', path }, agent())
+      expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+      expect(text(result)).not.toContain('other chat')
+    }
     const refused = await call('grep', { pattern: 'needle', path: '.delo/secrets' }, agent())
     expect(refused).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
   })

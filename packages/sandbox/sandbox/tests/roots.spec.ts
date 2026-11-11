@@ -140,13 +140,16 @@ describe('protectedReadGuard', () => {
     expect(protectedReadGuard(reads, 'read-only')('/u/.delo/secrets/key')).toBe(true)
   })
 
-  it('lets read tools read a tool-readable entry, and refuses the rest of the home beside it', () => {
+  it('lets a read tool read its grants inside a tool-readable entry, and refuses the rest of the entry and the home', () => {
     const withSpill = { ...reads, toolReadable: ['/u/.delo/spill', '/mnt/distro/u/.delo/spill'] }
-    const refused = protectedReadGuard(withSpill, 'workspace-write')
+    const refused = protectedReadGuard(withSpill, 'workspace-write', ['/u/.delo/spill/session-1', '/u/.delo/secrets'])
     expect(refused('/u/.delo/spill/session-1/grep.txt')).toBe(false)
-    expect(refused('/mnt/distro/u/.delo/spill/session-1/grep.txt')).toBe(false)
+    expect(refused('/u/.delo/spill/session-2/grep.txt')).toBe(true)
+    expect(refused('/u/.delo/spill')).toBe(true)
     expect(refused('/u/.delo/spill-other/key')).toBe(true)
+    // A grant outside every tool-readable entry grants nothing.
     expect(refused('/u/.delo/secrets/key')).toBe(true)
+    expect(protectedReadGuard(withSpill, 'workspace-write')('/u/.delo/spill/session-1/grep.txt')).toBe(true)
     expect(toolReadableOnly(withSpill, '/u/.delo/spill/session-1')).toBe(true)
     expect(toolReadableOnly(withSpill, '/u/.delo/runtimes')).toBe(false)
     expect(toolReadableOnly(reads, '/u/.delo/spill')).toBe(false)

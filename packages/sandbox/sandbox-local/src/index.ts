@@ -105,8 +105,8 @@ export interface Config {
    */
   protectedHomeReadable?: string[]
   /**
-   * Paths under {@link protectedHome}, relative to it, that in-process read tools may read while confined commands
-   * still may not, such as the spill directory whose files a spill notice tells the model to read. Reported as
+   * Paths under {@link protectedHome}, relative to it, inside which in-process read tools may read their own grants,
+   * such as the calling session's spill directory, while confined commands still may not read anything. Reported as
    * `protectedReads.toolReadable` and never granted by any runner's profile. Rejected without `protectedHome`.
    */
   protectedHomeToolReadable?: string[]

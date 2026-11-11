@@ -5,7 +5,8 @@
  * subclass {@link SpillStore} and register as the `spillStore` service;
  * `@deepseek-ai/dsh-spill-local` (host filesystem) is the first.
  *
- * The Service Definition is deliberately minimal: `saveText` and nothing else. It owns NO
+ * The Service Definition is deliberately minimal: `saveText`, plus the optional `sessionDirectory` that tells read
+ * tools which local directory one session's artifacts live in. It owns NO
  * retention policy (that is `@deepseek-ai/dsh-output-retention`), NO tool-result
  * replacement (that is `@deepseek-ai/dsh-spill-policy`), and NO retrieval or
  * search API. The backend supplies the locator and retrieval hint appropriate
@@ -53,6 +54,33 @@ export abstract class SpillStore extends Service {
    * @returns the saved artifact's {@link SpillRef}; rejects on a storage failure.
    */
   abstract saveText(input: SaveTextSpill): Promise<SpillRef>
+
+  /**
+   * The local directory that holds every artifact this store saves for one session, which that session's read tools
+   * may read where a sandbox provider otherwise protects it. A store without such a directory, the default, returns
+   * `undefined`, and no read is granted.
+   * @param sessionId - the owning session's header id.
+   * @returns the canonical directory, or `undefined`.
+   */
+  sessionDirectory(sessionId: string): string | undefined {
+    void sessionId
+    return undefined
+  }
+}
+
+/**
+ * The directories a read tool running for one session may read inside a sandbox provider's tool-readable entries: the
+ * mounted spill store's directories for that session and for the session it was forked or delegated from, whose
+ * locators a forked session's log carries. Earlier ancestors are not included. An agentless call gets none.
+ * @param ctx - context whose optional `spillStore` service is read.
+ * @param header - the calling session's header, or `undefined` for an agentless call.
+ * @returns the grants for `protectedReadGuard` from `@deepseek-ai/dsh-sandbox`.
+ */
+export function spillReadGrants(ctx: Context, header: { readonly id: string; readonly parentSession?: string } | undefined): string[] {
+  const store = ctx.get('spillStore')
+  if (header === undefined || store === undefined) return []
+  const owners = header.parentSession === undefined ? [header.id] : [header.id, header.parentSession]
+  return owners.flatMap(owner => store.sessionDirectory(owner) ?? [])
 }
 
 export default SpillStore
