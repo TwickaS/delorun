@@ -10,7 +10,8 @@
  * invariant Changes keeps ([compose](../compose.ts)). After the profile booted, or failed to, the start records which
  * plugins under Changes loaded (`run/<profile>/changes-boot.json`), which `delorun doctor` reads; after it booted, the
  * home process follows work sessions ([work watch](./work-watch.ts)) until its Host stops, ending one at its end time,
- * and stopping ends the open one. A session ended here ends without the person, so it approves nothing: the version it
+ * and stopping ends the open one; while protection is off it also reloads each linked plugin live when its folder
+ * changes ([unreviewed watch](./unreviewed-watch.ts)). A session ended here ends without the person, so it approves nothing: the version it
  * started from stays approved and what the folder holds waits for review.
  *
  * @module @delo/cli/changes/start
@@ -26,6 +27,7 @@ import { CliError, EXIT } from '../exit.ts'
 import type { PreStartContext, StoredRuntime } from '../pre-start.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { printable, printableText } from '../terminal-text.ts'
+import { watchUnreviewed } from './unreviewed-watch.ts'
 import { watchWork } from './work-watch.ts'
 
 /** The profile a start is about to boot. */
@@ -179,12 +181,13 @@ export async function recordChangesBoot(request: ChangesBootRequest, rows: reado
 }
 
 /**
- * Follow work sessions in the booted Host until Delo stops ([work watch](./work-watch.ts)).
+ * Follow work sessions in the booted Host until Delo stops ([work watch](./work-watch.ts)), and while protection is off,
+ * reload each linked plugin live when its folder changes ([unreviewed watch](./unreviewed-watch.ts)).
  * @param request - the home, the profile and the logger.
  * @param booted - the booted profile's reload.
- * @returns what the Host's `close` and `suspend` call before they stop the profile: it stops following work sessions
- *   and ends the open one without the person, which approves nothing. A failure to end it is logged; the next start
- *   ends it.
+ * @returns what the Host's `close` and `suspend` call before they stop the profile: it stops both watchers and ends the
+ *   open work session without the person, which approves nothing. A failure to end it is logged; the next start ends
+ *   it.
  */
 export function afterChangesBoot(request: ChangesBootRequest, booted: { readonly reload: ReloadHost }): () => Promise<void> {
   const { home, profile, logger } = request
@@ -192,7 +195,9 @@ export function afterChangesBoot(request: ChangesBootRequest, booted: { readonly
   const ctx = { home, profile, profileDir }
   const reload: ReloadHost = () => booted.reload()
   const watcher = watchWork({ ...ctx, reload, logger, expire: () => finishWorkWithoutPerson(ctx, 'expired', reload) })
+  const live = watchUnreviewed({ ...ctx, reload, logger })
   return async () => {
+    await live.close()
     await watcher.close()
     try {
       const ended = await finishWorkWithoutPerson(ctx, 'stopped')

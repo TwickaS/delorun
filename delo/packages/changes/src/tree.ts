@@ -29,7 +29,7 @@
  * below the folder, becomes a relative `link` entry to that path, so a copy resolves it inside itself; a link to a
  * directory that contains an included one is skipped. A walk never enters the Delo home or a system directory.
  *
- * With `dependencies: 'link'`, the scan of a plugin too large to copy with its dependencies under Warn and Off, a link
+ * With `dependencies: 'link'`, the scan of a plugin too large to copy with its dependencies under protection off, a link
  * whose real path lies below a `node_modules` directory is instead a `link` entry marked `outside` with that absolute
  * real path (its absolute path when it does not resolve), and below every `node_modules` directory other than the
  * folder's own top-level one a link the scan would dereference is such an entry too. An active directory's scan

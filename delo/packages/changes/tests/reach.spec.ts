@@ -27,6 +27,16 @@ const START_ONLY = 'leaveOutNewestChange'
 /** The one module outside `delo/packages/changes/src/` that may name it: the start's retry. */
 const START_IMPORTER = join('delo', 'apps', 'cli', 'src', 'changes', 'retry.ts')
 
+/**
+ * The functions that load content without a proof of presence while protection is off, each with the one module
+ * outside `delo/packages/changes/src/` that may name it: the running Host's watch of linked plugins' folders, and the
+ * start's application of the edits in the harness's writable copy.
+ */
+const UNREVIEWED_LOADERS: Readonly<Record<string, string>> = {
+  loadUnreviewed: join('delo', 'apps', 'cli', 'src', 'changes', 'unreviewed-watch.ts'),
+  applyUnreviewedHarnessChanges: join('delo', 'apps', 'cli', 'src', 'changes', 'harness-start.ts'),
+}
+
 /** The function that ends a work session without a proof of presence, because Delo stops. */
 const STOP_ONLY = 'finishWorkWithoutPerson'
 
@@ -132,9 +142,11 @@ describe('no model tool or route reaches a changes action', () => {
     const routes = readFileSync(join(ROOT, ROUTES), 'utf8')
     expect(IMPORTS_CHANGES.test(routes)).toBe(true)
     expect(guardedNames(routes)).toContain('attestStudio')
-    // The routes never reach the protection setting, the terminal proof, the agent's plugin operation or an action on
-    // Delo itself, which only a terminal that knows the runtime's signed file list decides.
-    for (const name of ['changeProtection', 'setProtection', 'attestTerminal', 'applyInstallChange', ...HARNESS_ACTIONS]) expect(guardedNames(routes), name).not.toContain(name)
+    // The routes never reach the protection setting, the terminal proof or an action on Delo itself, which only a
+    // terminal that knows the runtime's signed file list decides. They apply an agent's plugin request with the studio's
+    // proof, as the terminal applies it with its own.
+    for (const name of ['changeProtection', 'setProtection', 'attestTerminal', ...HARNESS_ACTIONS]) expect(guardedNames(routes), name).not.toContain(name)
+    expect(guardedNames(routes)).toContain('applyInstallChange')
     expect(guardedNames(routes)).not.toContain('*')
   })
 
@@ -147,6 +159,21 @@ describe('no model tool or route reaches a changes action', () => {
       }
     }
     expect(naming).toEqual([START_IMPORTER])
+  })
+
+  it('only the Host\'s folder watch and the start load content without review, and no route, tool or plugin names them', () => {
+    const naming: Record<string, string[]> = Object.fromEntries(Object.keys(UNREVIEWED_LOADERS).map(name => [name, []]))
+    for (const directory of [...sourceDirectories('delo/packages'), ...sourceDirectories('delo/apps')]) {
+      for (const file of sources(directory)) {
+        const path = relative(ROOT, file)
+        if (path.startsWith(OWNERS[1]!)) continue
+        const text = readFileSync(file, 'utf8')
+        for (const name of Object.keys(UNREVIEWED_LOADERS)) {
+          if (new RegExp(`\\b${name}\\b`).test(text)) naming[name]!.push(path)
+        }
+      }
+    }
+    expect(naming).toEqual(Object.fromEntries(Object.entries(UNREVIEWED_LOADERS).map(([name, importer]) => [name, [importer]])))
   })
 
   it('recognizes an import of a guarded function, a namespace import and a relative import into the sources', () => {

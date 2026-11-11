@@ -1,13 +1,13 @@
 /**
  * What `delorun verify` says about Changes (contract C21): after the release's check lines, the changes the person
- * approved, then each pending change, each plugin running content they did not approve and each invariant that does not
- * hold. The summary line never reads as a plain pass while anything is not approved, and the run exits 1 while
- * unapproved content runs or an invariant does not hold.
+ * approved, the changes that loaded without review while protection was off, then each pending change and each
+ * invariant that does not hold. The summary line never reads as a plain pass while anything is not approved or loaded
+ * without review, and the run exits 1 only while an invariant does not hold.
  */
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { attestTerminal, enforceApprovedContent, readApproved, setProtection, writeApproved } from '@delo/changes'
+import { applyChange, attestTerminal, enforceApprovedContent, listChanges, readApproved, readChangeLog, setProtection, writeApproved } from '@delo/changes'
 import { EXIT } from '../../src/exit.ts'
 import { NOT_FROM_STORE } from '../../src/verify/changes.ts'
 import { createVerifyCommand, runsFromStore, type VerifyEnvironment } from '../../src/verify/index.ts'
@@ -24,6 +24,9 @@ afterEach(() => {
 
 /** The summary line of a run in which every release check passed and everything present is approved. */
 const PLAIN_SUMMARY = '2 checks passed, 0 failed, 9 not run; this is not a full verification of this Delo.'
+const TERMINAL = attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } })
+const PROTECTION_ON = 'Protection is on: changes load only after you apply them.'
+const PROTECTION_OFF = 'Protection is off: changes load without your review and are recorded; turn it on with: delorun changes protection on.'
 
 /** What one run printed and returned. */
 interface Run {
@@ -39,11 +42,13 @@ interface ChangesHome {
 }
 
 /**
- * @returns a fixture home whose profile links `plug` from a folder, after its first start under Changes.
+ * @returns a fixture home with protection on whose profile links `plug` from a folder, after its first start under
+ *   Changes.
  */
 async function changesHome(): Promise<ChangesHome> {
   const fixture = await installedHome()
   homes.push(fixture.home)
+  await setProtection(fixture.home, 'on', TERMINAL)
   const source = join(dirname(fixture.home), 'plug')
   mkdirSync(source)
   writeFileSync(join(source, 'package.json'), '{"name":"plug","version":"1.0.0"}\n')
@@ -107,7 +112,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     const home = await changesHome()
     const run = await verify(home.fixture)
     expect(run.exit).toBe(EXIT.ok)
-    expect(changesBlock(run)).toEqual(['Changes:', 'Protection is block: changes you have not approved do not run.', '1 change you approved:', `  plug from ${home.source} (approved at upgrade)`, PLAIN_SUMMARY])
+    expect(changesBlock(run)).toEqual(['Changes:', PROTECTION_ON, '1 change you approved:', `  plug from ${home.source} (approved at upgrade)`, PLAIN_SUMMARY])
     expect(changesBlock(run).join('\n')).not.toMatch(/integrity|trust|drift/iu)
     // An approval the person gave after the upgrade carries no mark.
     const approved = await readApproved(home.profileDir)
@@ -116,23 +121,42 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     expect(changesBlock(await verify(home.fixture))[3]).toBe(`  plug from ${home.source}`)
   })
 
-  it('verify never prints a plain pass with unapproved content', async () => {
-    // A pending change under warn runs content the person did not approve.
-    const warned = await changesHome()
-    await setProtection(warned.fixture.home, 'warn', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
-    writeFileSync(join(warned.source, 'index.js'), 'export default 2\n')
-    await startProfile(warned)
-    const running = await verify(warned.fixture)
-    const block = changesBlock(running)
-    expect(block.at(-1)).not.toBe(PLAIN_SUMMARY)
-    expect(block.at(-1)).toBe('2 checks passed, 0 failed, 9 not run; 1 change you have not approved is present; protection is lowered to warn, so changes you have not approved run; this is not a full verification of this Delo.')
-    expect(block[1]).toBe('Protection is warn: changes you have not approved run, and every start says so.')
-    expect(block).toContain('  plug runs content you have not approved')
-    expect(block).toContainEqual(expect.stringMatching(/^ {2}plug has changes in .* waiting for your review: delorun changes show c[0-9a-f]{10}$/u))
-    expect(running.exit).toBe(EXIT.failed)
-    expect(block.join('\n')).not.toMatch(/integrity|trust|drift/iu)
+  it('verify never prints a plain pass with content that loaded without review, and exits 0', async () => {
+    const home = await changesHome()
+    // A second plugin the person applied after review.
+    const other = join(dirname(home.fixture.home), 'other')
+    mkdirSync(other)
+    writeFileSync(join(other, 'package.json'), '{"name":"other","version":"1.0.0"}\n')
+    linkPlugin(home, 'other', other)
+    await startProfile(home)
+    const ctx = { home: home.fixture.home, profile: 'default', profileDir: home.profileDir }
+    const [install] = (await listChanges(ctx)).pending
+    await applyChange(ctx, install!.id, TERMINAL, { reload: () => Promise.resolve(undefined) })
+    await setProtection(home.fixture.home, 'off', TERMINAL)
+    writeFileSync(join(home.source, 'index.js'), 'export default 2\n')
+    await startProfile(home)
+    const { id } = (await readChangeLog(home.fixture.home, 'default')).entries.at(-1)!
+    const off = await verify(home.fixture)
+    expect(changesBlock(off)).toEqual([
+      'Changes:',
+      PROTECTION_OFF,
+      '1 change you approved:',
+      `  other from ${other}`,
+      '1 change loaded without review (protection is off):',
+      `  plug from ${home.source} (${id})`,
+      '2 checks passed, 0 failed, 9 not run; 1 change loaded without review (protection is off); this is not a full verification of this Delo.',
+    ])
+    expect(off.exit).toBe(EXIT.ok)
+    expect(changesBlock(off).join('\n')).not.toMatch(/integrity|trust|drift/iu)
+    // Turning protection on keeps the content approved, and verify still names how it loaded.
+    await setProtection(home.fixture.home, 'on', TERMINAL)
+    const on = changesBlock(await verify(home.fixture))
+    expect(on.slice(1, 6)).toEqual([PROTECTION_ON, '1 change you approved:', `  other from ${other}`, '1 change loaded without review (while protection was off):', `  plug from ${home.source} (${id})`])
+    expect(on.at(-1)).toBe('2 checks passed, 0 failed, 9 not run; 1 change loaded without review (while protection was off); this is not a full verification of this Delo.')
+  })
 
-    // An invariant that does not hold: the profile links the plugin from its folder again.
+  it('verify never prints a plain pass with an invariant that does not hold, and exits 1', async () => {
+    // The profile links the plugin from its folder again.
     const broken = await changesHome()
     linkPlugin(broken, 'plug', broken.source)
     const unsound = await verify(broken.fixture)
@@ -141,7 +165,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     expect(unsound.exit).toBe(EXIT.failed)
   })
 
-  it('names pending changes that do not run under block, without failing the run', async () => {
+  it('names pending changes that do not run under protection on, without failing the run', async () => {
     const home = await changesHome()
     const other = join(dirname(home.fixture.home), 'other')
     mkdirSync(other)
@@ -154,7 +178,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     expect(run.exit).toBe(EXIT.ok)
     expect(changesBlock(run)).toEqual([
       'Changes:',
-      'Protection is block: changes you have not approved do not run.',
+      PROTECTION_ON,
       '1 change you approved:',
       `  plug from ${home.source} (approved at upgrade)`,
       'Not approved:',
@@ -164,25 +188,24 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     ])
   })
 
-  it('says when the person approved no change', async () => {
+  it('says when the person approved no change, with protection off in a home without a protection record', async () => {
     const fixture = await installedHome()
     homes.push(fixture.home)
     const profileDir = join(fixture.home, 'profiles', 'default')
     mkdirSync(profileDir, { recursive: true })
     writeFileSync(join(profileDir, 'package.json'), '{"name":"dsh-profile-default","private":true}\n')
     const run = await verify(fixture)
-    expect(changesBlock(run)).toEqual(['Changes:', 'Protection is block: changes you have not approved do not run.', '0 changes you approved.', PLAIN_SUMMARY])
+    expect(changesBlock(run)).toEqual(['Changes:', PROTECTION_OFF, '0 changes you approved.', PLAIN_SUMMARY])
   })
 
-  it('verify never prints a plain pass with protection lowered', async () => {
+  it('protection off is no fault while nothing loaded without review, and a protection record that cannot be read is', async () => {
     const home = await changesHome()
-    await setProtection(home.fixture.home, 'off', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+    await setProtection(home.fixture.home, 'off', TERMINAL)
     const run = await verify(home.fixture)
-    const block = changesBlock(run)
-    expect(block[1]).toBe('Protection is off: changes you have not approved run without notice.')
-    expect(block.at(-1)).not.toBe(PLAIN_SUMMARY)
-    expect(block.at(-1)).toBe('2 checks passed, 0 failed, 9 not run; protection is lowered to off, so changes you have not approved run; this is not a full verification of this Delo.')
-    // A protection record that cannot be read is named as an invariant, never as a level.
+    expect(changesBlock(run)[1]).toBe(PROTECTION_OFF)
+    expect(changesBlock(run).at(-1)).toBe(PLAIN_SUMMARY)
+    expect(run.exit).toBe(EXIT.ok)
+    // A protection record that cannot be read is named as an invariant, never as a setting.
     writeFileSync(join(home.fixture.home, 'changes', 'protection.json'), '{}\n', { mode: 0o600 })
     const unreadable = changesBlock(await verify(home.fixture))
     expect(unreadable.some(line => line.startsWith('Protection is'))).toBe(false)

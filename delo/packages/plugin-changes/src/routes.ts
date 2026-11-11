@@ -2,6 +2,8 @@
  * The studio's Changes routes (contract C21, "Routes and the recovery screen"): what failed at the last start, the
  * recent changes and one change, read by any session the studio admits, and the actions a person takes at their
  * computer: apply, discard and undo a change, turn a plugin off or on, open and end a work session, and safe mode.
+ * Applying an agent's plugin request runs the plugin operation the Host names (`@delo/changes`' shared operation) with
+ * `applyInstallChange`, after a second confirmation that names its spec: what it installs is not shown before it runs.
  *
  * Every request is first admitted by Connection (`ctx.connection.admit`): the Host/Origin fence, then the studio's
  * signed cookie or the authenticator provider, so a caller without the studio's credential is answered 401 or 403 and
@@ -32,6 +34,7 @@ import { realpathSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
   applyChange,
+  applyInstallChange,
   attestStudio,
   CONTENT_VERSION_PATTERN,
   discardChange,
@@ -66,7 +69,9 @@ import {
   type ChangesContext,
   type ContentVersion,
   type HarnessReview,
+  type InstallResult,
   type ListedChange,
+  type PluginOperation,
   type ReloadHost,
   type RiskSummary,
   type ShownChange,
@@ -93,6 +98,7 @@ import {
   type DoneView,
   type EntryView,
   type HarnessEntryView,
+  type InstallView,
   type PendingListView,
   type PendingView,
   type RiskView,
@@ -150,6 +156,12 @@ export interface RouteDependencies {
   readonly profile: () => ChangesContext | undefined
   /** Reloads the running Host in its own process: upstream's hot reload. */
   readonly reload: ReloadHost
+  /**
+   * The plugin operation applying an agent's plugin request runs in the Host.
+   * @param ctx - the profile the request is applied to.
+   * @returns the operation.
+   */
+  readonly pluginOperation: (ctx: ChangesContext) => PluginOperation
   /** The bundles the installation itself ships, which safe mode keeps loading; empty when the composition names none. */
   readonly installationBundles: readonly string[]
   /** The Host's log, which names a failure the person sees only as `INTERNAL`, and words withheld from an answer. */
@@ -359,6 +371,26 @@ function requireRiskConfirmation(risk: RiskSummary, confirmed: boolean): void {
 }
 
 /**
+ * The second confirmation every agent's plugin request needs before the studio applies it: Delo shows no content of
+ * what it installs, which pnpm resolves from the spec when it runs, and an install, update or removal changes the
+ * profile's dependencies.
+ * @param entry - the request.
+ * @param confirmed - whether the person confirmed it.
+ * @throws {RouteRefusal} `409 CONFIRM_RISK` naming the spec, until confirmed.
+ */
+function requireRequestConfirmation(entry: ChangeEntry, confirmed: boolean): void {
+  if (confirmed) return
+  const spec = entry.subject.spec!
+  const removes = entry.kind === 'plugin-remove'
+  throw new RouteRefusal(409, CONFIRM_RISK, removes
+    ? `This removes ${spec}, which the agent asked for. Confirm again to apply it.`
+    : `This installs ${spec}, which the agent asked for, as pnpm resolves it; Delo does not show its content before it runs. A plugin's code can do anything Delo can. Confirm again to apply it.`, {
+    kinds: removes ? ['dependency-or-build'] : ['dependency-or-build', 'not-shown'],
+    notShown: removes ? [] : [spec],
+  })
+}
+
+/**
  * @param risk - a risk summary.
  * @returns what the person reads of it.
  */
@@ -527,7 +559,8 @@ async function part<T>(problems: string[], home: HomeWords, what: string, read: 
 /**
  * `GET state`: what failed at the last start, the changes left out at it, the plugins under Changes and the agent's
  * plugin requests waiting for review, the recent changes newest first with whether each can be undone, the recent
- * changes to Delo itself, the protection setting, safe mode, the work session, and whether the request is at the
+ * changes to Delo itself, the protection setting (the client says from it whether changes load without review), safe
+ * mode, the work session, and whether the request is at the
  * computer, so the screen says so before an action is refused. It reads the records only: nothing is written and no
  * plugin's folder is read.
  * @param ctx - the profile.
@@ -687,6 +720,14 @@ function actionView(result: ActionResult): ActionView {
 }
 
 /**
+ * @param result - what applying an agent's plugin request did.
+ * @returns what the person reads.
+ */
+function installView(result: InstallResult): InstallView {
+  return { entry: entryView(result.entry), reload: result.reload, ...result.folderChange === undefined ? {} : { folderChange: result.folderChange } }
+}
+
+/**
  * @param started - what opening a work session did.
  * @returns what the person reads.
  */
@@ -712,10 +753,10 @@ function doneView(done: WorkDone): DoneView {
  * @param presence - the studio proof.
  * @param dependencies - the Host's reload and the installation's bundles.
  * @returns what the person reads.
- * @throws {RouteRefusal} for a body the action does not take, a change to Delo itself, an agent's plugin request, an
- *   unconfirmed risk, or safe mode without the installation's bundles; {@link ChangesError} for a refusal of Changes.
+ * @throws {RouteRefusal} for a body the action does not take, a change to Delo itself, an unconfirmed risk or agent's
+ *   plugin request, or safe mode without the installation's bundles; {@link ChangesError} for a refusal of Changes.
  */
-async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<ActionView | DiscardView | StartedView | DoneView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
+async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<ActionView | InstallView | DiscardView | StartedView | DoneView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
   const options = { reload: dependencies.reload }
   switch (action) {
     case 'apply': {
@@ -725,7 +766,8 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       await refuseHarnessChange(ctx.home, id, action)
       const shown = await showChange(ctx, id)
       if (shown.kind === 'logged' && isPluginRequest(shown.entry)) {
-        throw new RouteRefusal(409, 'APPLY_AT_TERMINAL', `Change ${id} installs, updates or removes a plugin the agent asked for, which runs the plugin operation in a terminal: delorun changes apply ${id}`)
+        requireRequestConfirmation(shown.entry, confirmed)
+        return installView(await applyInstallChange(ctx, id, presence, { reload: dependencies.reload, run: dependencies.pluginOperation(ctx) }))
       }
       if (shown.kind === 'pending') requireRiskConfirmation(shown.change.risk, confirmed)
       return actionView(await applyChange(ctx, id, presence, options))

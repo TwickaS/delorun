@@ -1,6 +1,7 @@
 /**
  * What `delorun verify` and `delorun doctor` report about Changes for one profile: the protection setting, the approved
- * plugins, the pending changes, the plugins running content the person did not approve, the work session, the
+ * plugins, the pending changes, the plugins whose approved content loaded without review while protection was off, the
+ * work session, the
  * invariants that do not hold ([invariants](./invariants.ts)), the record of the last start
  * ([boot record](./boot-record.ts)) and of the last failed reload in a work session ([work record](./work-record.ts)).
  *
@@ -18,7 +19,7 @@ import { namesDirectory } from './enforce.ts'
 import { isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { checkChangesInvariants, type InvariantRequest } from './invariants.ts'
-import { leftOutNow, type LeftOutFact } from './left-out.ts'
+import { leftOutNow, newestDecided, type LeftOutFact } from './left-out.ts'
 import { versionsDirectory } from './paths.ts'
 import { approvedOf, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, unshownAtUpgrade } from './records.ts'
 import { compareCodeUnits, scanFolder, versionOf } from './tree.ts'
@@ -67,6 +68,13 @@ export interface AppliedStatus {
   readonly at: string
 }
 
+/** An approved plugin whose approved content loaded without review. */
+export interface UnreviewedStatus {
+  readonly plugin: string
+  /** The change that loaded it. */
+  readonly id: ChangeId
+}
+
 /** One plugin under Changes, for `doctor`'s line per plugin. */
 export interface PluginStatus {
   readonly plugin: string
@@ -90,8 +98,11 @@ export interface ChangesStatus {
   readonly appliedCount: number
   /** The plugins whose folder differs from their approved content, by name. */
   readonly pending: readonly PendingStatus[]
-  /** The plugins whose active content is of kind `unapproved` (under `warn` or `off`), by name. */
-  readonly unapproved: readonly { readonly plugin: string }[]
+  /**
+   * The approved plugins whose approved content loaded without review: the applied change that brought it was decided
+   * `unreviewed`, while protection was off. By name.
+   */
+  readonly unreviewed: readonly UnreviewedStatus[]
   /** The open work session. */
   readonly workSession?: { readonly plugin: string, readonly source: string, readonly startedAt: string }
   /** One line per invariant that does not hold, and per record or folder that cannot be read. */
@@ -225,7 +236,12 @@ export async function changesStatus(request: ChangesStatusRequest): Promise<Chan
       .sort((a, b) => compareCodeUnits(a.plugin, b.plugin)),
     appliedCount: log.entries.filter(entry => entry.state === 'applied').length,
     pending,
-    unapproved: plugins.filter(entry => entry.active?.kind === 'unapproved').map(({ plugin }) => ({ plugin })),
+    unreviewed: Object.entries(approved.plugins)
+      .flatMap(([plugin, approval]): UnreviewedStatus[] => {
+        const brought = newestDecided(log.entries, entry => entry.state === 'applied' && entry.subject.plugin === plugin && entry.to === approval.version)
+        return brought?.decidedFrom === 'unreviewed' ? [{ plugin, id: brought.id }] : []
+      })
+      .sort((a, b) => compareCodeUnits(a.plugin, b.plugin)),
     ...workSession === undefined ? {} : { workSession: { plugin: workSession.plugin, source: workSession.source, startedAt: workSession.startedAt } },
     invariants,
     unshownAtUpgrade: log.entries.flatMap(entry => unshownAtUpgrade(entry) && entry.subject.plugin !== undefined && entry.subject.source !== undefined ? [{ plugin: entry.subject.plugin, source: entry.subject.source }] : []),
@@ -269,11 +285,11 @@ export async function leftOutFacts(home: string, profile: string): Promise<LeftO
 }
 
 /**
- * How many changes the person has not approved are present: each pending change, and each plugin running unapproved
- * content that no pending change already names.
+ * How many changes the person has not approved are present: each folder that differs from its plugin's approved
+ * content. Content that loaded without review is approved and counted apart ({@link ChangesStatus.unreviewed}).
  * @param status - the report.
  * @returns the count.
  */
-export function notApprovedCount(status: Pick<ChangesStatus, 'pending' | 'unapproved'>): number {
-  return status.pending.length + status.unapproved.filter(({ plugin }) => !status.pending.some(change => change.plugin === plugin)).length
+export function notApprovedCount(status: Pick<ChangesStatus, 'pending'>): number {
+  return status.pending.length
 }

@@ -4,7 +4,8 @@
 export const en = {
   'nav': 'Changes',
   'title': 'Changes',
-  'intro': 'Nothing changes what Delo runs until you apply it here or with delorun changes.',
+  'intro': 'Every change to what Delo runs is listed here, and you can undo it.',
+  'live': 'Protection is off, so changes load without your review and a linked plugin reloads live each time you save it.',
   'loading': 'Loading your changes',
   'load.failed': 'Your changes could not be loaded.',
   'load.retry': 'Try again',
@@ -39,7 +40,7 @@ export const en = {
   'pending.check': 'Read the folders again',
 
   'requests.heading': 'Asked for in a chat',
-  'requests.terminal': 'Applying it installs, updates or removes a plugin, which runs in a terminal:',
+  'requests.terminal': 'Applying it installs, updates or removes a plugin. Apply it here, or in a terminal:',
   'requests.command': 'Command',
 
   'recent.heading': 'Recent changes',
@@ -65,9 +66,8 @@ export const en = {
   'self.notice': 'This summary is a help to read the change, not a protection: a change to Delo itself can do anything Delo can.',
 
   'protection.heading': 'Protection',
-  'protection.block': 'Block: a plugin you changed and did not review runs the copy you approved.',
-  'protection.warn': 'Warn: a plugin you changed and did not review runs, and every start names it.',
-  'protection.off': 'Off: a plugin you changed and did not review runs, and nothing says so.',
+  'protection.on': 'On: a change waits for your review before it loads, and the agent\'s plugin installs and removals wait for you.',
+  'protection.off': 'Off: changes load without your review, and linked plugins reload live when you save them. Each change is still listed here and can be undone.',
   'protection.change': 'Only a terminal on your computer changes this setting:',
   'protection.command': 'Command',
 
@@ -126,6 +126,7 @@ export const en = {
   'second.title': 'Apply a change the checks flagged?',
   'second.body': 'The checks found that this change:',
   'second.notShown': 'Not shown in the diff:',
+  'second.request': 'The agent asked for this: {summary}. Delo cannot show what it installs before it runs. This change:',
   'second.apply': 'Apply anyway',
   'second.approve': 'Approve anyway',
 
@@ -140,12 +141,15 @@ export const en = {
   'confirm.work.body': 'Edits in its folder load live, without review, until you click Done, for at most two hours. Done shows what changed and asks you to approve it.',
   'confirm.discardRequest.title': 'Discard this request?',
   'confirm.discardRequest.body': '{summary}. Nothing is installed, updated or removed.',
+  'confirm.applyRequest.title': 'Apply this request?',
+  'confirm.applyRequest.body': '{summary}. Delo installs, updates or removes the plugin now, as delorun changes apply does, and reloads.',
 
   'toast.applied': 'Applied',
   'toast.discarded': 'Discarded',
   'toast.undone': 'Undone',
   'toast.notRunning': 'Done. Delo is not running, so the next start loads it.',
   'toast.wentBack': 'It did not load, so Delo went back to what ran before: {failure}',
+  'toast.installNotLoaded': 'Applied, but the running Delo did not load it; the next start loads it: {failure}',
   'toast.workStarted': 'Edits load live now',
   'toast.workEnded': 'The work session ended',
   'toast.changedSinceReview': 'The folder changed since you looked; review it again.',
@@ -168,7 +172,8 @@ export type ChangesToastKey = Extract<ChangesLocaleKey, `toast.${string}`>
 export const zh: typeof en = {
   'nav': '变更',
   'title': '变更',
-  'intro': '在这里或用 delorun changes 应用之前，任何变更都不会改变 Delo 运行的内容。',
+  'intro': '对 Delo 运行内容的每项变更都列在这里，你可以撤销它。',
+  'live': '保护已关闭，因此变更无需你审阅即会加载，链接的插件在你每次保存时实时重新加载。',
   'loading': '正在加载变更',
   'load.failed': '无法加载变更。',
   'load.retry': '重试',
@@ -203,7 +208,7 @@ export const zh: typeof en = {
   'pending.check': '重新读取文件夹',
 
   'requests.heading': '对话中提出的请求',
-  'requests.terminal': '应用它会安装、更新或移除插件，需要在终端中运行：',
+  'requests.terminal': '应用它会安装、更新或移除插件。可以在这里应用，也可以在终端中应用：',
   'requests.command': '命令',
 
   'recent.heading': '最近的变更',
@@ -229,9 +234,8 @@ export const zh: typeof en = {
   'self.notice': '此摘要只是帮你阅读变更，并不是保护：对 Delo 本身的变更可以做 Delo 能做的任何事。',
 
   'protection.heading': '保护',
-  'protection.block': '阻止：你修改但未审阅的插件运行你批准的副本。',
-  'protection.warn': '警告：你修改但未审阅的插件照常运行，每次启动都会提示。',
-  'protection.off': '关闭：你修改但未审阅的插件照常运行，不做任何提示。',
+  'protection.on': '开启：变更在加载前等待你审阅，智能体对插件的安装和移除也会等待你。',
+  'protection.off': '关闭：变更无需你审阅即会加载，链接的插件在你保存时实时重新加载。每项变更仍会列在这里，并且可以撤销。',
   'protection.change': '只有你电脑上的终端可以更改此设置：',
   'protection.command': '命令',
 
@@ -290,6 +294,7 @@ export const zh: typeof en = {
   'second.title': '要应用检查项标记的变更吗？',
   'second.body': '检查发现此变更：',
   'second.notShown': '差异中未显示：',
+  'second.request': '这是智能体请求的：{summary}。Delo 无法在运行前显示它要安装的内容。此变更：',
   'second.apply': '仍然应用',
   'second.approve': '仍然批准',
 
@@ -304,12 +309,15 @@ export const zh: typeof en = {
   'confirm.work.body': '其文件夹中的修改会实时加载，无需审阅，直到你点击“完成”，最长两小时。“完成”会显示改动内容并请你批准。',
   'confirm.discardRequest.title': '丢弃此请求？',
   'confirm.discardRequest.body': '{summary}。不会安装、更新或移除任何内容。',
+  'confirm.applyRequest.title': '应用此请求？',
+  'confirm.applyRequest.body': '{summary}。Delo 会像 delorun changes apply 一样立即安装、更新或移除该插件，然后重新加载。',
 
   'toast.applied': '已应用',
   'toast.discarded': '已丢弃',
   'toast.undone': '已撤销',
   'toast.notRunning': '已完成。Delo 未在运行，下次启动时加载',
   'toast.wentBack': '未能加载，Delo 已恢复到之前运行的内容：{failure}',
+  'toast.installNotLoaded': '已应用，但正在运行的 Delo 未能加载它；下次启动时会加载：{failure}',
   'toast.workStarted': '修改现在会实时加载',
   'toast.workEnded': '处理已结束',
   'toast.changedSinceReview': '你查看之后文件夹有变化，请重新审阅',

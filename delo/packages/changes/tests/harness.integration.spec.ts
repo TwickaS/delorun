@@ -1,13 +1,15 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { applyHarnessChange, composedDigest, composedFiles, createHarnessCopy, discardAllHarnessChanges, discardHarnessChange, findHarnessChange, harnessChanges, listHarness, loggedHarnessChange, readSignedFile, removeTree, showHarnessChange, undoHarnessChange, type HarnessContext } from '../src/harness.ts'
+import { applyHarnessChange, applyUnreviewedHarnessChanges, composedDigest, composedFiles, createHarnessCopy, discardAllHarnessChanges, discardHarnessChange, findHarnessChange, harnessChanges, listHarness, loggedHarnessChange, readSignedFile, removeTree, showHarnessChange, undoHarnessChange, type HarnessContext } from '../src/harness.ts'
+import { harnessStatus } from '../src/harness-tree.ts'
 import { leaveOutNewestChange, leftOutFact, newestLeavableChange } from '../src/left-out.ts'
 import { harnessCopyDirectory, harnessRecordPath } from '../src/paths.ts'
 import { readHarnessLog, readHarnessRecord, withEntry, writeChangeLog, writeHarnessLog, writeHarnessRecord, type AtComputer } from '../src/records.ts'
 import { storeEmptyVersion } from '../src/store.ts'
 import type { ChangeEntry, ChangeId, ContentVersion } from '../src/types.ts'
 import { harnessFixture, RUNTIME, SIGNED_FILES, snapshotOf, START_FILE, terminal } from './harness-fixture.ts'
+import { protect } from './profile-fixture.ts'
 import { alterReads, makeFifo, modeOf, rejection, temporaryDirectory, understateSize } from './support.ts'
 
 /**
@@ -625,5 +627,57 @@ describe('discarding every harness change from a copy that cannot be read', () =
     writeFileSync(harnessRecordPath(ctx.home, RUNTIME), 'not json\n', { mode: 0o600 })
     await rejection(discardAllHarnessChanges(ctx, terminal()), 'RECORD_UNREADABLE')
     expect(existsSync(harnessCopyDirectory(ctx.home, RUNTIME))).toBe(true)
+  })
+})
+
+describe('harness edits with protection off', () => {
+  it('a start applies every edit of the copy without review, logs each as unreviewed, and undo takes it back', async () => {
+    const { ctx, home, signed } = harnessFixture()
+    const before = snapshotOf(signed.directory)
+    const id = await editStart(ctx)
+    const { applied } = await applyUnreviewedHarnessChanges(ctx)
+    expect(applied).toEqual([expect.objectContaining({ id, kind: 'harness-edit', state: 'applied', decidedFrom: 'unreviewed', summary: `Loaded without review: Delo ${RUNTIME} itself: ${START_FILE}` })])
+    expect(Object.keys((await readHarnessRecord(home, RUNTIME)).files)).toEqual([START_FILE])
+    expect((await harnessStatus(home, RUNTIME, signed)).approved).toEqual([{ file: START_FILE, change: id, unreviewed: true }])
+    expect((await readHarnessLog(home)).entries).toEqual(applied)
+    expect((await harnessChanges(ctx)).changes).toEqual([])
+    expect(snapshotOf(signed.directory)).toEqual(before)
+    expect(await applyUnreviewedHarnessChanges(ctx)).toEqual({ applied: [] })
+    await undoHarnessChange(ctx, id, terminal())
+    expect((await readHarnessRecord(home, RUNTIME)).files).toEqual({})
+  })
+
+  it('applies nothing with protection on, or without a copy', async () => {
+    const { ctx, home } = harnessFixture()
+    expect(await applyUnreviewedHarnessChanges(ctx)).toEqual({ applied: [] })
+    protect(home)
+    await editStart(ctx)
+    expect(await applyUnreviewedHarnessChanges(ctx)).toEqual({ applied: [] })
+    expect((await readHarnessRecord(home, RUNTIME)).files).toEqual({})
+    expect((await harnessChanges(ctx)).changes).toHaveLength(1)
+  })
+
+  it('applies nothing from a copy that cannot be read, and says why', async () => {
+    const { ctx, home } = harnessFixture()
+    await editStart(ctx)
+    const app = join(harnessCopyDirectory(home, RUNTIME), 'app')
+    chmodSync(app, 0o000)
+    const result = await applyUnreviewedHarnessChanges(ctx)
+    chmodSync(app, 0o700)
+    expect(result).toEqual({ applied: [], unread: expect.stringContaining('EACCES') })
+    expect((await readHarnessRecord(home, RUNTIME)).files).toEqual({})
+  })
+
+  it('applies nothing from a file that grows while it is read, and stops on a signed installation that cannot be read', async () => {
+    const { ctx, home } = harnessFixture()
+    await editStart(ctx)
+    const restore = await understateSize(inCopy(ctx, START_FILE), 1)
+    try {
+      expect(await applyUnreviewedHarnessChanges(ctx)).toEqual({ applied: [], unread: expect.stringContaining('grew while it was read') })
+    } finally {
+      restore()
+    }
+    await expect(applyUnreviewedHarnessChanges({ ...ctx, signed: () => Promise.reject(new Error('unreadable installation')) })).rejects.toThrow('unreadable installation')
+    expect((await readHarnessRecord(home, RUNTIME)).files).toEqual({})
   })
 })

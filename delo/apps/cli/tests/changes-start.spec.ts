@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { activeDirectory, readChangeLog } from '@delo/changes'
+import { activeDirectory, attestTerminal, ChangesError, readChangeLog, setProtection } from '@delo/changes'
 import { RuntimeStoreError } from '@delo/runtime-store'
 import { changesApprovedContent, isCarriedPackage, startChanges } from '../src/changes/start.ts'
 import { carriedPackageDirectory } from '../src/delo-bundles.ts'
@@ -231,11 +231,39 @@ describe('startChanges', () => {
     hooks.markError = new Error('the log is busy\u001b[2J')
     await startChanges({ home, profile: 'default', terminal: true }, context.stdout)
     expect(context.printed.at(-1)).toBe('Delo could not record that you saw this, so the next start says it again: Error: the log is busy\\u001b[2J\n')
+    hooks.markError = new ChangesError('RECORD_UNREADABLE', 'log.json', 'log.json is not a record Delo wrote')
+    await startChanges({ home, profile: 'default', terminal: true }, context.stdout)
+    expect(context.printed.at(-1)).toBe('Delo could not record that you saw this, so the next start says it again: log.json is not a record Delo wrote\n')
     hooks.markError = undefined
+  })
+
+  it('a start without a terminal setting records the notice as shown only when standard output and standard error both are terminals', async () => {
+    await prepareHome(context, undefined)
+    profileLinkingPlug('default')
+    const before = { stdout: Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'), stderr: Object.getOwnPropertyDescriptor(process.stderr, 'isTTY') }
+    const terminals = (stdout: boolean, stderr: boolean): void => {
+      Object.defineProperty(process.stdout, 'isTTY', { value: stdout, configurable: true, writable: true })
+      Object.defineProperty(process.stderr, 'isTTY', { value: stderr, configurable: true, writable: true })
+    }
+    try {
+      terminals(true, false)
+      await startChanges({ home, profile: 'default' }, context.stdout)
+      expect((await readChangeLog(home, 'default')).entries[0]!.shownAt).toBeUndefined()
+      terminals(true, true)
+      await startChanges({ home, profile: 'default' }, context.stdout)
+      expect((await readChangeLog(home, 'default')).entries[0]!.shownAt).toEqual(expect.any(String))
+    } finally {
+      for (const [name, descriptor] of Object.entries(before)) {
+        const stream = name === 'stdout' ? process.stdout : process.stderr
+        if (descriptor === undefined) Reflect.deleteProperty(stream, 'isTTY')
+        else Object.defineProperty(stream, 'isTTY', descriptor)
+      }
+    }
   })
 
   it('a profile created after the first start under Changes does not approve its links at upgrade', async () => {
     await prepareHome(context, undefined)
+    await setProtection(home, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
     mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
     writeFileSync(join(home, 'profiles', 'default', 'package.json'), '{"name":"dsh-profile-default","dependencies":{}}\n')
     await startChanges({ home, profile: 'default', terminal: true }, context.stdout)

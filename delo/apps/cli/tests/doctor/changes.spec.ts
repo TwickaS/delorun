@@ -1,7 +1,7 @@
 /**
  * The `changes` lines of `delorun doctor` (contract C21): the protection setting, the work session, one line per plugin
  * under Changes, the cause of a failed start or load named with the change to undo, each pending change and each
- * invariant that does not hold.
+ * invariant that does not hold. The home has protection on unless a case turns it off.
  */
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -40,10 +40,11 @@ let base: string
 let home: string
 let profileDir: string
 
-beforeEach(() => {
+beforeEach(async () => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-doctor-changes-')))
   home = join(base, '.delo')
   mkdirSync(home, { mode: 0o700 })
+  await setProtection(home, 'on', attestTerminal(TERMINAL))
   profileDir = join(home, 'profiles', PROFILE)
   mkdirSync(join(profileDir, 'node_modules'), { recursive: true })
   writeFileSync(join(profileDir, 'package.json'), '{"name":"dsh-profile-default","private":true,"dependencies":{}}\n')
@@ -112,7 +113,7 @@ describe('the changes lines of delorun doctor', () => {
     await start()
     await booted([{ id: 'plain', name: 'plain', disabled: false, state: 'active' }, { id: 'guarded', name: 'guarded', disabled: false, state: 'active' }])
     expect(await lines()).toEqual([
-      { name: 'changes', status: 'pass', message: 'protection is set to block: changes you have not approved do not run.' },
+      { name: 'changes', status: 'pass', message: 'protection is on: changes load only after you apply them.' },
       { name: 'changes', status: 'pass', message: `guarded from ${guarded}: it loaded at the last start; it runs the content you approved; it requires dsh ^0.2.2 and delo >=0.1.0; it changes a consent, a guard or the sandbox policy (index.js:3).` },
       { name: 'changes', status: 'pass', message: `plain from ${plain}: it loaded at the last start; it runs the content you approved; it declares no dsh or delo version requirement; ${NONE_REGISTERED}.` },
     ])
@@ -149,35 +150,36 @@ describe('the changes lines of delorun doctor', () => {
     writeFileSync(join(profileDir, 'package.json'), '{"name":"dsh-profile-default","private":true,"dependencies":{}}\n')
     await booted([], 'the Host did not answer')
     expect(await lines()).toEqual([
-      { name: 'changes', status: 'pass', message: 'protection is set to block: changes you have not approved do not run.' },
+      { name: 'changes', status: 'pass', message: 'protection is on: changes load only after you apply them.' },
       { name: 'changes', status: 'warn', message: 'The last start failed: the Host did not answer.' },
     ])
   })
 
-  it('warns about unapproved content under warn, pending changes, and a plugin waiting for review', async () => {
+  it('names content that loaded without review in either setting, pending changes, and a plugin waiting for review', async () => {
     const source = linkPlugin('plug')
     await start()
-    await setProtection(home, 'warn', attestTerminal(TERMINAL))
+    await setProtection(home, 'off', attestTerminal(TERMINAL))
     writeFileSync(join(source, 'index.js'), 'export default 2\n')
     await start()
+    const loaded = (await readChangeLog(home, PROFILE)).entries.at(-1)!
+    expect(loaded).toMatchObject({ decidedFrom: 'unreviewed', state: 'applied' })
+    await booted([{ id: 'plug', name: 'plug', disabled: false, state: 'active' }])
+    const unreviewedLine = { name: 'changes', status: 'pass', message: `plug from ${source}: it loaded at the last start; it runs content that loaded without review (${loaded.id}); it declares no dsh or delo version requirement; ${NONE_REGISTERED}.` }
+    const off = await lines()
+    expect(off[0]).toEqual({ name: 'changes', status: 'pass', message: 'protection is off: changes load without your review and are recorded; turn it on with: delorun changes protection on.' })
+    expect(off).toContainEqual(unreviewedLine)
+
+    await setProtection(home, 'on', attestTerminal(TERMINAL))
     const waiting = linkPlugin('waiting')
-    await setProtection(home, 'block', attestTerminal(TERMINAL))
     await start()
     writeFileSync(join(source, 'index.js'), 'export default 3\n')
     await booted([{ id: 'plug', name: 'plug', disabled: false, state: 'active' }])
     const results = await lines()
-    expect(results[0]).toEqual({ name: 'changes', status: 'pass', message: 'protection is set to block: changes you have not approved do not run.' })
+    expect(results[0]).toEqual({ name: 'changes', status: 'pass', message: 'protection is on: changes load only after you apply them.' })
+    expect(results).toContainEqual(unreviewedLine)
     expect(results).toContainEqual({ name: 'changes', status: 'warn', message: `plug has changes in ${source} waiting for your review: run delorun changes list` })
     expect(results).toContainEqual({ name: 'changes', status: 'pass', message: `waiting from ${waiting}: it did not load at the last start (the profile has no row for it); nothing of it runs until you review it.` })
     expect(results).toContainEqual(expect.objectContaining({ status: 'warn', message: expect.stringMatching(new RegExp(`^waiting from ${waiting} waits for your review: delorun changes show c[0-9a-f]{10}$`, 'u')) }))
-
-    await setProtection(home, 'warn', attestTerminal(TERMINAL))
-    await start()
-    const warned = await lines()
-    expect(warned[0]).toEqual({ name: 'changes', status: 'warn', message: 'protection is set to warn: changes you have not approved run, and every start says so. Set it back with: delorun changes protection block' })
-    expect(warned).toContainEqual(expect.objectContaining({ status: 'warn', message: expect.stringMatching(/^plug from .*: it loaded at the last start; it runs content you have not approved; /u) }))
-    await setProtection(home, 'off', attestTerminal(TERMINAL))
-    expect((await lines())[0]).toEqual({ name: 'changes', status: 'warn', message: 'protection is set to off: changes you have not approved run without notice. Set it back with: delorun changes protection block' })
   })
 
   it('doctor names the plugin and the change a failed start left out, and what its plugin runs instead', async () => {
@@ -205,12 +207,12 @@ describe('the changes lines of delorun doctor', () => {
     expect(await lines()).toContainEqual({ name: 'changes', status: 'pass', message: `late from ${late}: it was not under Changes at the last start; nothing of it runs, because a failed start left out the change that added it or turned it on.` })
   })
 
-  it('doctor never passes lowered protection', async () => {
+  it('the protection line passes in either setting', async () => {
     linkPlugin('plug')
     await start()
-    for (const level of ['warn', 'off'] as const) {
+    for (const level of ['on', 'off'] as const) {
       await setProtection(home, level, attestTerminal(TERMINAL))
-      expect((await lines()).filter(result => result.message.startsWith('protection')).map(result => result.status)).toEqual(['warn'])
+      expect((await lines()).filter(result => result.message.startsWith('protection')).map(result => result.status), level).toEqual(['pass'])
     }
   })
 
@@ -311,7 +313,7 @@ describe('delorun doctor with the changes lines', () => {
     linkPlugin('plug')
     await start()
     const sound = await doctor({ DELO_HOME: home })
-    expect(sound.stdout).toContain('pass changes: protection is set to block')
+    expect(sound.stdout).toContain('pass changes: protection is on')
     writeFileSync(join(home, 'changes', 'protection.json'), '{}\n', { mode: 0o600 })
     const broken = await doctor({ DELO_HOME: home })
     expect(broken.exit).toBe(EXIT.failed)

@@ -6,7 +6,7 @@ import { EMPTY_CONTENT_VERSION, enforceApprovedContent, isInRuntimeStore, prepar
 import { checkLoadedContent } from '../src/invariants.ts'
 import { activeDirectory } from '../src/paths.ts'
 import { pluginChange } from '../src/pending.ts'
-import { openWorkSession, readActiveRecord, readApproved, readChangeLog, setProtection, writeChangeLog } from '../src/records.ts'
+import { openWorkSession, readActiveRecord, readApproved, readChangeLog, writeApproved, writeChangeLog } from '../src/records.ts'
 import { holdsVersion, storeFolder } from '../src/store.ts'
 import { approvedVersion, fixture, folder, history, linkAs, migrated, namingActive, NOW, PROFILE, recorded, start, terminal } from './profile-fixture.ts'
 import { temporaryDirectory, writeFiles } from './support.ts'
@@ -30,10 +30,10 @@ describe('the first start under Changes', () => {
 
     const stored = (await storeFolder(fx.home, plug)).version
     expect(first).toEqual({
-      protection: 'block',
+      protection: 'on',
       approvedAtUpgrade: [{ plugin: 'plug', source: plug }, { plugin: '@x/scoped', source: scoped }],
       pending: [],
-      unapproved: [],
+      unreviewed: [],
       historyVersion: expect.stringMatching(/^[0-9a-f]{40}$/),
     })
     expect(recorded(fx, 'plug')).toEqual(namingActive(fx, 'plug'))
@@ -52,14 +52,14 @@ describe('the first start under Changes', () => {
     ].join('\n'))
 
     const second = await start(fx)
-    expect(second).toEqual({ protection: 'block', approvedAtUpgrade: [], pending: [], unapproved: [] })
+    expect(second).toEqual({ protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [] })
     expect(startNotice(second)).toBe('')
     expect(await history(fx)).toHaveLength(1)
   })
 
   it('sets migratedAt in a profile with no linked plugin and records no history version', async () => {
     const fx = fixture()
-    expect(await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, lockWaitMs: 1000 })).toEqual({ protection: 'block', approvedAtUpgrade: [], pending: [], unapproved: [] })
+    expect(await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, lockWaitMs: 1000 })).toEqual({ protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [] })
     expect(Date.parse((await readChangeLog(fx.home, PROFILE)).migratedAt!)).not.toBeNaN()
     expect(await history(fx)).toEqual([])
   })
@@ -121,7 +121,7 @@ describe('the first start under Changes', () => {
     manifest.dependencies['from-file'] = `file:${folder(fx, 'packed')}`
     writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
     const before = readFileSync(manifestPath, 'utf8')
-    expect(await start(fx)).toEqual({ protection: 'block', approvedAtUpgrade: [], pending: [], unapproved: [] })
+    expect(await start(fx)).toEqual({ protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [] })
     expect(readFileSync(manifestPath, 'utf8')).toBe(before)
     expect(await history(fx)).toEqual([])
   })
@@ -188,7 +188,7 @@ describe('the first start under Changes', () => {
   })
 })
 
-describe('a start under block', () => {
+describe('a start with protection on', () => {
   it('a plugin outside a work session never loads from its folder', async () => {
     const { fx, source, approved } = await migrated()
     writeFileSync(join(source, 'index.js'), 'export default "edited"\n')
@@ -201,7 +201,7 @@ describe('a start under block', () => {
     expect(Object.values(recorded(fx, 'plug')).some(value => value.includes(source))).toBe(false)
   })
 
-  it('a changed plugin does not load under Block', async () => {
+  it('a changed plugin does not load with protection on', async () => {
     const { fx, source, approved } = await migrated()
     writeFileSync(join(source, 'index.js'), 'export default "edited"\n')
     const changes = await start(fx)
@@ -212,7 +212,7 @@ describe('a start under block', () => {
     expect(startNotice(changes)).toBe(`plug has changes waiting for your review and loads without them: delorun changes show ${pending!.id}\n`)
   })
 
-  it('a new linked plugin without approved content loads nothing under Block', async () => {
+  it('a new linked plugin without approved content loads nothing with protection on', async () => {
     const { fx } = await migrated()
     const added = folder(fx, 'added')
     linkAs(fx, 'added', added)
@@ -274,20 +274,20 @@ describe('a start under block', () => {
     const fx = fixture()
     linkAs(fx, 'orphan', activeDirectory(fx.home, PROFILE, 'orphan'))
     await writeChangeLog(fx.home, PROFILE, { schema: 'delo.changes-log/1', migratedAt: NOW.toISOString(), entries: [] })
-    expect(await start(fx)).toEqual({ protection: 'block', approvedAtUpgrade: [], pending: [], unapproved: [] })
+    expect(await start(fx)).toEqual({ protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [] })
     expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'orphan'), EMPTY_CONTENT_VERSION)).toBe(true)
   })
 })
 
 describe('a work session', () => {
-  it('loads the folder\'s content live under block and says so', async () => {
+  it('loads the folder\'s content live with protection on and says so', async () => {
     const { fx, source, approved } = await migrated()
     await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     writeFileSync(join(source, 'index.js'), 'export default "editing"\n')
     const changes = await start(fx)
     const active = activeDirectory(fx.home, PROFILE, 'plug')
     expect(readFileSync(join(active, 'index.js'), 'utf8')).toBe('export default "editing"\n')
-    expect(changes).toEqual({ protection: 'block', approvedAtUpgrade: [], pending: [], unapproved: [], workSession: { plugin: 'plug' } })
+    expect(changes).toEqual({ protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [], workSession: { plugin: 'plug' } })
     expect((await readActiveRecord(fx.home, PROFILE)).plugins.plug).toEqual({ version: (await storeFolder(fx.home, source)).version, kind: 'work-session' })
     expect(startNotice(changes)).toBe('Working on plug: edits in its folder load live until delorun changes done plug.\n')
   })
@@ -299,41 +299,85 @@ describe('a work session', () => {
   })
 })
 
-describe('a start under warn or off', () => {
-  it('runs the folder\'s content under warn and reports it as not reviewed', async () => {
-    const { fx, source } = await migrated()
-    await setProtection(fx.home, 'warn', terminal())
-    expect((await start(fx)).unapproved).toEqual([])
+describe('a start with protection off', () => {
+  it('loads a changed folder and a new link without review, approves them and logs each as unreviewed', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
+    expect(await start(fx)).toEqual({ protection: 'off', approvedAtUpgrade: [], pending: [], unreviewed: [] })
     writeFileSync(join(source, 'index.js'), 'export default "edited"\n')
-    linkAs(fx, 'added', folder(fx, 'added'))
+    const added = folder(fx, 'added')
+    linkAs(fx, 'added', added)
     const changes = await start(fx)
     expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default "edited"\n')
     expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'added'), 'index.js'), 'utf8')).toBe('export default "one"\n')
-    expect(changes).toMatchObject({ protection: 'warn', pending: [], unapproved: [{ plugin: 'plug' }, { plugin: 'added' }] })
-    expect((await readActiveRecord(fx.home, PROFILE)).plugins.plug!.kind).toBe('unapproved')
+    expect(recorded(fx, 'added')).toEqual(namingActive(fx, 'added'))
+    const edited = await approvedVersion(fx, 'plug')
+    const log = await readChangeLog(fx.home, PROFILE)
+    const edit = log.entries.find(entry => entry.subject.plugin === 'plug' && entry.kind === 'plugin-edit')!
+    const install = log.entries.find(entry => entry.subject.plugin === 'added')!
+    expect(edit).toMatchObject({ state: 'applied', decidedFrom: 'unreviewed', from: approved, to: edited, summary: `Loaded without review: plug: changes in ${source}`, historyVersion: changes.historyVersion })
+    expect(install).toMatchObject({ kind: 'plugin-install', state: 'applied', decidedFrom: 'unreviewed', to: await approvedVersion(fx, 'added'), summary: `Loaded without review: added from ${added}`, historyVersion: changes.historyVersion })
+    expect(changes).toMatchObject({ protection: 'off', pending: [], unreviewed: [{ id: install.id, plugin: 'added', kind: 'plugin-install' }, { id: edit.id, plugin: 'plug', kind: 'plugin-edit' }] })
+    expect((await readActiveRecord(fx.home, PROFILE)).plugins.plug).toEqual({ version: edited, kind: 'approved' })
+    expect(await history(fx)).toContain('Changes: loaded without review added, plug')
     expect(startNotice(changes)).toBe([
-      'Warning: plug runs changes you have not reviewed (protection is set to warn).',
-      'Warning: added runs changes you have not reviewed (protection is set to warn).',
+      `added loaded without review, because protection is off: delorun changes show ${install.id}`,
+      `plug loaded changes without review, because protection is off: delorun changes show ${edit.id}`,
       '',
     ].join('\n'))
+    expect(await checkLoadedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })).toEqual([])
+    expect(await start(fx)).toEqual({ protection: 'off', approvedAtUpgrade: [], pending: [], unreviewed: [] })
   })
 
-  it('keeps the approved content under warn when the folder is gone', async () => {
-    const { fx, source, approved } = await migrated()
-    await setProtection(fx.home, 'warn', terminal())
+  it('a link back to an approved plugin\'s folder, which holds new content, loads it without review as an edit', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "edited"\n')
+    linkAs(fx, 'plug', source)
+    const changes = await start(fx)
+    expect(changes.unreviewed).toEqual([expect.objectContaining({ plugin: 'plug', kind: 'plugin-edit' })])
+    expect(recorded(fx, 'plug')).toEqual(namingActive(fx, 'plug'))
+    expect((await readChangeLog(fx.home, PROFILE)).entries.find(entry => entry.decidedFrom === 'unreviewed')).toMatchObject({ from: approved, to: await approvedVersion(fx, 'plug') })
+  })
+
+  it('keeps the approved content when the folder is gone', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
     rmSync(source, { recursive: true })
-    expect((await start(fx)).unapproved).toEqual([])
+    expect((await start(fx)).unreviewed).toEqual([])
     expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
-  it('runs the folder\'s content under off without a notice', async () => {
-    const { fx, source } = await migrated()
-    await setProtection(fx.home, 'off', terminal())
-    writeFileSync(join(source, 'index.js'), 'export default "edited"\n')
-    const changes = await start(fx)
-    expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default "edited"\n')
-    expect(changes).toEqual({ protection: 'off', approvedAtUpgrade: [], pending: [], unapproved: [] })
-    expect(startNotice(changes)).toBe('')
+  it('does not load content the person declined, and loads the folder again once it holds something else', async () => {
+    const { fx, source, approved } = await migrated({ protection: 'off' })
+    writeFileSync(join(source, 'index.js'), 'export default "declined"\n')
+    await start(fx)
+    const declined = await approvedVersion(fx, 'plug')
+    const log = await readChangeLog(fx.home, PROFILE)
+    const loaded = log.entries.find(entry => entry.decidedFrom === 'unreviewed')!
+    // The person undid it: the approved content is the one before, as `delorun changes undo` leaves it.
+    await writeChangeLog(fx.home, PROFILE, { ...log, entries: log.entries.map(entry => entry.id === loaded.id ? { ...entry, state: 'undone', decidedFrom: 'terminal', decidedAt: '2026-11-10T11:00:00.000Z' } : entry) })
+    const record = await readApproved(fx.profileDir)
+    await writeApproved(fx.profileDir, { ...record, plugins: { ...record.plugins, plug: { ...record.plugins.plug!, version: approved } } })
+
+    const kept = await start(fx)
+    expect(kept.unreviewed).toEqual([])
+    expect(kept.pending).toEqual([{ id: loaded.id, plugin: 'plug', kind: 'plugin-edit' }])
+    expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
+    expect(await approvedVersion(fx, 'plug')).toBe(approved)
+    expect(declined).not.toBe(approved)
+
+    writeFileSync(join(source, 'index.js'), 'export default "again"\n')
+    expect((await start(fx)).unreviewed).toEqual([expect.objectContaining({ plugin: 'plug', kind: 'plugin-edit' })])
+    expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default "again"\n')
+  })
+
+  it('a link moved before a reload loads without review and is logged, approving nothing at upgrade', async () => {
+    const { fx } = await migrated({ protection: 'off' })
+    const added = folder(fx, 'added')
+    linkAs(fx, 'added', added)
+    const changes = await prepareReload({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW })
+    expect(changes.unreviewed).toEqual([expect.objectContaining({ plugin: 'added', kind: 'plugin-install' })])
+    expect(recorded(fx, 'added')).toEqual(namingActive(fx, 'added'))
+    expect(readFileSync(join(activeDirectory(fx.home, PROFILE, 'added'), 'index.js'), 'utf8')).toBe('export default "one"\n')
+    expect((await readApproved(fx.profileDir)).plugins.added).toMatchObject({ source: added, approvedAt: NOW.toISOString() })
   })
 })
 

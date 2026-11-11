@@ -10,7 +10,8 @@
  * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
  * ([install actions](./install-actions.ts), also the entry `@delo/changes/install`), reloading the running Host
  * ([reload](./reload.ts)), and the person's changes to the harness itself with the composed tree a start runs
- * ([harness](./harness.ts), [harness tree](./harness-tree.ts)). Ending a work session because Delo
+ * ([harness](./harness.ts), [harness tree](./harness-tree.ts)), and what loads without review while protection is off
+ * ([unreviewed](./unreviewed.ts)). Ending a work session because Delo
  * stops is the separate entry `@delo/changes/stop` ([stop](./stop.ts)).
  *
  * @module @delo/changes
@@ -58,3 +59,4 @@ export * from './install-actions.ts'
 export * from './reload.ts'
 export * from './harness.ts'
 export * from './harness-tree.ts'
+export * from './unreviewed.ts'

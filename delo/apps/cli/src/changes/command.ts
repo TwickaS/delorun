@@ -10,7 +10,7 @@
  * | `discard <id>` | the change never runs; the folder is not touched |
  * | `undo <id>` | an applied change is taken back |
  * | `off <plugin>`, `on <plugin>` | one plugin stops running, or runs again |
- * | `protection [block \| warn \| off]` | prints the setting, or changes it |
+ * | `protection [on \| off]` | prints the setting, or changes it after saying what the new setting means and asking |
  * | `work <plugin> [--for <minutes>]`, `done <plugin>` | edits in the plugin's folder load live for at most `--for` minutes; `done` shows the folder's version and approves exactly it ([work command](./work-command.ts)) |
  * | `edit-harness [--discard]` | makes the person's writable copy of the installed release, whose saved files are changes to Delo itself; `--discard` takes every such change back ([harness command](./harness-command.ts)) |
  *
@@ -82,7 +82,7 @@ import { harnessContextOf, outputLogger } from './harness-start.ts'
 import { isWorkSubcommand, runWorkCommand } from './work-command.ts'
 
 /** The usage line. */
-const USAGE = 'usage: delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [block|warn|off] | work <plugin> [--for <minutes>] | done <plugin> | edit-harness [--discard]] [--profile <name>] [--json]'
+const USAGE = 'usage: delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [on|off] | work <plugin> [--for <minutes>] | done <plugin> | edit-harness [--discard]] [--profile <name>] [--json]'
 
 /** The refusal when the command does not run at a terminal. */
 export const NOT_AT_TERMINAL = 'This needs you at your computer: run it in a terminal.'
@@ -199,7 +199,7 @@ function actionOf(name: keyof typeof SUBCOMMANDS, argument: string | undefined, 
     case 'protection': {
       if (argument === undefined) return { kind: 'protection' }
       const level = PROTECTION_LEVELS.find(candidate => candidate === argument)
-      if (level === undefined) throw usageError(`${JSON.stringify(argument)} is not a protection level; use block, warn or off`)
+      if (level === undefined) throw usageError(`${JSON.stringify(argument)} is not a protection setting; use on or off`)
       return { kind: 'protection', level }
     }
   }
@@ -300,11 +300,10 @@ function print(write: (text: string) => void, lines: readonly string[]): void {
   write(`${lines.flatMap(line => printableLines(line)).join('\n')}\n`)
 }
 
-/** What each protection level means, in the person's words. */
+/** What each protection setting means, in the person's words. */
 const PROTECTION_MEANING: Readonly<Record<ProtectionLevel, string>> = {
-  block: 'changed plugins run only after you apply their changes',
-  warn: 'changed plugins run without your review, and every start names them',
-  off: 'changed plugins run without your review, and nothing says so',
+  on: "a changed plugin, an edit of Delo itself and the agent's plugin installs and removals load only after you apply them, and the agent asks before it first changes an approved plugin in a chat",
+  off: "changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delo runs, edits of Delo itself apply at the next start, and the agent installs and removes plugins with the full-access approval alone; see and undo each with delorun changes list",
 }
 
 /**
@@ -587,7 +586,7 @@ function declined(context: CommandContext): CommandResult {
 }
 
 /**
- * `protection`: print the setting, or change it after stating what a weaker one means and asking.
+ * `protection`: print the setting, or change it after stating what the new setting means and asking.
  * @param ctx - the profile.
  * @param level - the new level, or undefined to print the setting.
  * @param presence - the terminal proof when a level is given.
@@ -598,15 +597,15 @@ function declined(context: CommandContext): CommandResult {
 async function protection(ctx: ChangesContext, level: ProtectionLevel | undefined, presence: AtComputer | undefined, dependencies: ChangesCommandDependencies, context: CommandContext): Promise<CommandResult> {
   if (level === undefined) {
     const current = await readProtection(ctx.home)
-    context.stdout(`Protection: ${current}: ${PROTECTION_MEANING[current]}.\nChange it in a terminal: delorun changes protection block|warn|off\n`)
+    context.stdout(`Protection: ${current}: ${PROTECTION_MEANING[current]}.\nChange it in a terminal: delorun changes protection on|off\n`)
     return EXIT.ok
   }
-  if (level !== 'block') {
-    context.stdout(`Changed plugins will run without your review. With ${level}, ${PROTECTION_MEANING[level]}.\n`)
-    if (!await confirmed(dependencies, `Set protection to ${level}?`)) return declined(context)
-  }
+  context.stdout(level === 'off'
+    ? `Changes will load without your review. With protection off, ${PROTECTION_MEANING.off}.\n`
+    : `Changes will wait for your review. With protection on, ${PROTECTION_MEANING.on}.\n`)
+  if (!await confirmed(dependencies, `Turn protection ${level}?`)) return declined(context)
   const changed = await changeProtection(ctx, level, presence!)
-  context.stdout(`Protection is ${changed.level} (it was ${changed.before}); the next start uses it.\n`)
+  context.stdout(`Protection is ${changed.level} (it was ${changed.before}). Delo uses it from its next decision, without a restart.\n`)
   return EXIT.ok
 }
 

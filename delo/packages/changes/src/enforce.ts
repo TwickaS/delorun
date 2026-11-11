@@ -6,10 +6,13 @@
  * 1. during a work session for the plugin that has not passed its end time, the folder's current content (a start ends a
  *    session past its end time without the person first, approving nothing, as the Host's watcher does);
  * 2. otherwise, while a change a failed start left out stays out, the content from before that change, or nothing for an
- *    install or a plugin turned on, in every protection setting ([left out](./left-out.ts));
- * 3. otherwise, under protection `block`, the approved version, or nothing at all for a plugin with no approved version
+ *    install or a plugin turned on ([left out](./left-out.ts)); under protection `off` only while the folder still holds
+ *    what the change brought;
+ * 3. otherwise, under protection `on`, the approved version, or nothing at all for a plugin with no approved version
  *    (upstream then skips its bundle as unresolvable, so nothing from the folder loads);
- * 4. under `warn` or `off`, the folder's current content.
+ * 4. under `off`, the folder's current content, which becomes the approved version and is logged as an applied change
+ *    decided `unreviewed` ([unreviewed](./unreviewed.ts)), unless the person declined exactly that content, which keeps
+ *    the approved version.
  *
  * A link into the runtime store `runtimes/`, as Delo's own bundles carried by an installed release are linked, is left
  * alone: the store's start check covers it, and an update replaces it. A link to the directory the running installation
@@ -42,6 +45,7 @@ import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApprove
 import { holdsVersion, materialize, storeEmptyVersion, storeFolder } from './store.ts'
 import { versionOf } from './tree.ts'
 import { ACTIVE_RECORD_SCHEMA, type ActiveContent, type ApprovedRecord, type ChangeEntry, type ChangeId, type ChangeLog, type ContentVersion, type ProtectionLevel } from './types.ts'
+import { approvedWith, declinedByPerson, unreviewedEntry, unreviewedWords, type UnreviewedLoad } from './unreviewed.ts'
 import { endWorkWithoutPerson, workFinishedLine, workSessionExpired, type WorkFinished } from './work.ts'
 
 /** How long a start waits for the profile write lock: upstream plugin management's default, which a `pnpm` run can hold. */
@@ -89,10 +93,10 @@ export interface StartChanges {
   readonly protection: ProtectionLevel
   /** Plugins approved at the upgrade that no terminal has shown yet; `markShownAtUpgrade` records it once one did. */
   readonly approvedAtUpgrade: readonly ApprovedAtUpgrade[]
-  /** Under `block`, the changes this start leaves out. */
+  /** The changes this start leaves out: under `on`, each folder that differs from its approved content; under `off`, content the person declined. */
   readonly pending: readonly PendingAtStart[]
-  /** Under `warn`, the plugins whose running content is not the approved one. */
-  readonly unapproved: readonly { readonly plugin: string }[]
+  /** Under `off`, the folder content this start approved without review. */
+  readonly unreviewed: readonly UnreviewedLoad[]
   /** The plugin whose folder loads live, when a work session is open for a plugin of the profile. */
   readonly workSession?: { readonly plugin: string }
   /** The work session this start ended without the person because its end time had passed. */
@@ -107,7 +111,7 @@ export interface StartChanges {
    */
   readonly failed?: readonly PluginFailure[]
   /**
-   * Under `warn`, plugins too large to copy with their installed packages, which load those packages from where they
+   * Under `off`, plugins too large to copy with their installed packages, which load those packages from where they
    * are installed; `underHome` when one of them is below the person's home folder, where a confined command can write.
    */
   readonly linkedDependencies?: readonly { readonly plugin: string, readonly underHome: boolean }[]
@@ -206,7 +210,7 @@ export async function prepareReload(request: EnforceRequest): Promise<StartChang
     }
   }
   await refuseUnkept(request)
-  return { protection: await readProtection(request.home), approvedAtUpgrade: [], pending: [], unapproved: [] }
+  return { protection: await readProtection(request.home), approvedAtUpgrade: [], pending: [], unreviewed: [] }
 }
 
 /**
@@ -245,13 +249,13 @@ function failureDetail(error: unknown): string {
 }
 
 /** A folder stored at this pass, or why it could not be. */
-type FolderContent =
+export type FolderContent =
   | { readonly kind: 'stored', readonly version: ContentVersion, readonly linkedDependencies?: { readonly underHome: boolean } }
   | { readonly kind: 'unreadable', readonly detail: string }
 
 /**
- * Store a plugin folder's content, as the protection level allows it: under `warn` and `off` a folder too large to
- * copy with its installed packages is stored with those packages kept as links to where they are installed.
+ * Store a plugin folder's content, as the protection level allows it: under `off` a folder too large to copy with its
+ * installed packages is stored with those packages kept as links to where they are installed.
  * @param home - the Delo home.
  * @param source - the folder.
  * @param scanCache - the scan cache file.
@@ -259,11 +263,11 @@ type FolderContent =
  * @returns the stored version, or why the folder could not be read: it changed while it was read, it passes a content
  *   limit, or the filesystem or the store refused it. Such a folder never stops a start or a reload.
  */
-async function storeContent(home: string, source: string, scanCache: string, protection: ProtectionLevel): Promise<FolderContent> {
+export async function storeFolderContent(home: string, source: string, scanCache: string, protection: ProtectionLevel): Promise<FolderContent> {
   try {
     return { kind: 'stored', version: (await storeFolder(home, source, { scanCache })).version }
   } catch (error) {
-    if (protection === 'block' || !isChangesError(error) || error.code !== 'CONTENT_TOO_LARGE') return { kind: 'unreadable', detail: failureDetail(error) }
+    if (protection === 'on' || !isChangesError(error) || error.code !== 'CONTENT_TOO_LARGE') return { kind: 'unreadable', detail: failureDetail(error) }
   }
   try {
     const { manifest, version } = await storeFolder(home, source, { scanCache, dependencies: 'link' })
@@ -302,26 +306,30 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
   const moved: { readonly plugin: string, readonly source: string }[] = []
   const upgraded: string[] = []
   const awaiting: string[] = []
+  const unreviewed: UnreviewedLoad[] = []
   const failed: PluginFailure[] = []
   const stored = new Map<string, FolderContent>()
+  let approvalsChanged = false
   for (const link of await readLinks(profileDir)) {
     const active = activeDirectory(home, profile, link.name)
     if (resolve(link.target) === resolve(active)) {
-      if (pass === 'start') managed.push({ plugin: link.name, source: approvedOf(approved, link.name)?.source ?? pendingInstallSource(log, link.name) })
+      if (pass === 'start') managed.push({ plugin: link.name, source: approvedOf(approved, link.name)?.source ?? installSource(log, link.name, protection) })
       continue
     }
     if (isHarnessLink(request, link.name, link.target)) continue
     // A missing folder, or a file where the folder was, is still brought under Changes: left alone, its link would load
     // whatever is created there before the next start.
     const content: FolderContent = await namesDirectory(link.target)
-      ? await storeContent(home, link.target, scanCache, protection)
+      ? await storeFolderContent(home, link.target, scanCache, protection)
       : { kind: 'unreadable', detail: `${link.target} is not a folder` }
     stored.set(link.name, content)
     const subject = { plugin: link.name, source: link.target }
     // A folder that cannot be read waits for review with no content, so the next start reads it again.
     const version = content.kind === 'stored' ? content.version : EMPTY_CONTENT_VERSION
+    const approval = approvedOf(approved, link.name)
     if (migrating && content.kind === 'stored') {
       approved = withApproval(approved, link.name, { source: link.target, version, approvedAt: at, approvedAtUpgrade: true })
+      approvalsChanged = true
       log = withNewEntry(log, {
         id: changeId('plugin-install', subject, undefined, version),
         kind: 'plugin-install',
@@ -334,7 +342,14 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
         decidedFrom: 'upgrade',
       })
       upgraded.push(link.name)
-    } else if (approvedOf(approved, link.name)?.source !== link.target) {
+    } else if (protection === 'off' && content.kind === 'stored' && approval?.version !== version && !declinedByPerson(log, link.name, version)) {
+      // Under `off` a new link loads its folder's content, logged as a change nobody reviewed.
+      const entry = unreviewedEntry(log, { ...subject, ...approval === undefined ? {} : { from: approval.version }, to: version }, at)
+      approved = approvedWith(approved, link.name, link.target, version, at)
+      approvalsChanged = true
+      log = withEntry(log, entry)
+      unreviewed.push({ id: entry.id, plugin: link.name, kind: entry.kind })
+    } else if (approval?.source !== link.target) {
       // A link back to the approved plugin's own folder, as an undo past the upgrade brings back, is moved silently.
       if (content.kind === 'unreadable') await storeEmptyVersion(home)
       log = withNewEntry(log, {
@@ -352,43 +367,54 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     managed.push({ plugin: link.name, source: link.target })
   }
 
-  // The log names every new source before the profile's specs stop naming it; `migratedAt` is set only at the end,
-  // so a start interrupted in between migrates the remaining links at the next start.
-  if (log !== firstLog) await writeChangeLog(home, profile, log)
-  if (upgraded.length > 0) await writeApproved(profileDir, approved)
-  for (const { plugin } of moved) await pointLinkAt(profileDir, plugin, activeDirectory(home, profile, plugin))
-
+  // Under `off`, the folder content of each plugin already under Changes becomes its approved content before anything
+  // is written, so the records name it before the active directories hold it.
+  const decided = new Map<string, ActiveContent | undefined>()
   const pending: PendingAtStart[] = []
-  const unapproved: { readonly plugin: string }[] = []
   const linkedDependencies: { readonly plugin: string, readonly underHome: boolean }[] = []
   const leftOut: LeftOutFact[] = []
-  const activeBefore = await readActiveRecord(home, profile)
-  // A reload decides only the plugins it moved; every other active directory keeps what the record says it holds.
-  const activePlugins: Record<string, ActiveContent> = pass === 'start' ? {} : { ...activeBefore.plugins }
   for (const { plugin, source } of managed) {
     const approvedVersion = approvedOf(approved, plugin)?.version
     // A folder that is gone leaves the approved content, and nothing to review.
-    const content = source === undefined || !await namesDirectory(source) ? undefined : stored.get(plugin) ?? await storeContent(home, source, scanCache, protection)
+    const content = source === undefined || !await namesDirectory(source) ? undefined : stored.get(plugin) ?? await storeFolderContent(home, source, scanCache, protection)
     if (content?.kind === 'unreadable') failed.push({ plugin, detail: content.detail })
     const folder = content?.kind === 'stored' ? { source: source!, version: content.version } : undefined
-    let active: ActiveContent | undefined
     const left = leftOutOf(log, approved, plugin)
     if (workSession?.plugin === plugin && folder !== undefined) {
-      active = { version: folder.version, kind: 'work-session' }
-    } else if (left !== undefined) {
-      active = leftOutContent(left)
+      decided.set(plugin, { version: folder.version, kind: 'work-session' })
+    } else if (left !== undefined && (protection === 'on' || folder === undefined || left.kind === 'plugin-on' || left.to === folder.version)) {
+      decided.set(plugin, leftOutContent(left))
       leftOut.push(leftOutFact(left))
-    } else if (protection === 'block' || folder === undefined) {
-      active = approvedVersion === undefined ? undefined : { version: approvedVersion, kind: 'approved' }
-      if (protection === 'block' && folder !== undefined && folder.version !== approvedVersion) {
+    } else if (protection === 'on' || folder === undefined || folder.version === approvedVersion || declinedByPerson(log, plugin, folder.version)) {
+      decided.set(plugin, approvedVersion === undefined ? undefined : { version: approvedVersion, kind: 'approved' })
+      if (folder !== undefined && folder.version !== approvedVersion) {
         const kind = approvedVersion === undefined ? 'plugin-install' : 'plugin-edit'
         pending.push({ id: changeId(kind, { plugin, source: folder.source }, approvedVersion, folder.version), plugin, kind })
       }
     } else {
-      active = { version: folder.version, kind: folder.version === approvedVersion ? 'approved' : 'unapproved' }
-      if (active.kind === 'unapproved' && protection === 'warn') unapproved.push({ plugin })
-      if (content?.kind === 'stored' && content.linkedDependencies !== undefined && protection === 'warn') linkedDependencies.push({ plugin, underHome: content.linkedDependencies.underHome })
+      const entry = unreviewedEntry(log, { plugin, source: folder.source, ...approvedVersion === undefined ? {} : { from: approvedVersion }, to: folder.version }, at)
+      approved = approvedWith(approved, plugin, folder.source, folder.version, at)
+      approvalsChanged = true
+      log = withEntry(log, entry)
+      unreviewed.push({ id: entry.id, plugin, kind: entry.kind })
+      decided.set(plugin, { version: folder.version, kind: 'approved' })
     }
+    if (protection === 'off' && content?.kind === 'stored' && content.linkedDependencies !== undefined && decided.get(plugin)?.version === content.version) {
+      linkedDependencies.push({ plugin, underHome: content.linkedDependencies.underHome })
+    }
+  }
+
+  // The log names every new source before the profile's specs stop naming it; `migratedAt` is set only at the end,
+  // so a start interrupted in between migrates the remaining links at the next start.
+  if (log !== firstLog) await writeChangeLog(home, profile, log)
+  if (approvalsChanged) await writeApproved(profileDir, approved)
+  for (const { plugin } of moved) await pointLinkAt(profileDir, plugin, activeDirectory(home, profile, plugin))
+
+  const activeBefore = await readActiveRecord(home, profile)
+  // A reload decides only the plugins it moved; every other active directory keeps what the record says it holds.
+  const activePlugins: Record<string, ActiveContent> = pass === 'start' ? {} : { ...activeBefore.plugins }
+  for (const { plugin } of managed) {
+    let active = decided.get(plugin)
     try {
       await holdContent(home, activeDirectory(home, profile, plugin), active?.version)
     } catch (error) {
@@ -410,14 +436,15 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
   if (pass === 'start') {
     // An approval at upgrade without a history version, which an earlier start could not record, is recorded now.
     const unrecorded = log.entries.flatMap(entry => entry.decidedFrom === 'upgrade' && entry.historyVersion === undefined && entry.subject.plugin !== undefined ? [entry.subject.plugin] : [])
-    const summary = historySummary(unrecorded, awaiting, moved.map(({ plugin }) => plugin))
+    const summary = historySummary(unrecorded, awaiting, unreviewed.map(({ plugin }) => plugin), moved.map(({ plugin }) => plugin))
     historyVersion = summary === undefined ? undefined : await openHistory({ profileDir }).record(summary, { kind: 'person' })
   }
 
+  const loadedNow = new Set(unreviewed.map(({ id }) => id))
   const shown: ApprovedAtUpgrade[] = []
   const entries = log.entries.map((entry): ChangeEntry => {
     let next = entry
-    if (historyVersion !== undefined && entry.decidedFrom === 'upgrade' && entry.historyVersion === undefined) {
+    if (historyVersion !== undefined && entry.historyVersion === undefined && (entry.decidedFrom === 'upgrade' || (entry.state === 'applied' && loadedNow.has(entry.id)))) {
       next = { ...next, historyVersion }
     }
     if (pass === 'start' && entry.decidedFrom === 'upgrade' && entry.state === 'applied' && entry.shownAt === undefined && entry.subject.plugin !== undefined && entry.subject.source !== undefined) {
@@ -433,7 +460,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     protection,
     approvedAtUpgrade: shown,
     pending,
-    unapproved,
+    unreviewed,
     ...session === undefined ? {} : { workSession: session },
     ...workEnded === undefined ? {} : { workEnded },
     ...historyVersion === undefined ? {} : { historyVersion },
@@ -463,11 +490,9 @@ export function startNotice(changes: StartChanges): string {
       ? `${plugin} is not loaded until you review it: delorun changes show ${id}`
       : `${plugin} has changes waiting for your review and loads without them: delorun changes show ${id}`)
   }
-  for (const { plugin } of changes.unapproved) {
-    lines.push(`Warning: ${plugin} runs changes you have not reviewed (protection is set to warn).`)
-  }
+  for (const load of changes.unreviewed) lines.push(unreviewedWords(load))
   for (const { plugin, underHome } of changes.linkedDependencies ?? []) {
-    lines.push(`Warning: ${plugin} is too large to copy with its installed packages, so it loads them from where they are installed${underHome ? ', inside your home folder, where commands the agent runs can change them' : ''}.`)
+    lines.push(`${plugin} is too large to copy with its installed packages, so it loads them from where they are installed${underHome ? ', inside your home folder, where commands the agent runs can change them' : ''}.`)
   }
   for (const { plugin, detail } of changes.failed ?? []) {
     lines.push(`${plugin} runs the content you approved, or nothing if you approved none, because Delo could not read its folder: ${detail}`)
@@ -476,13 +501,16 @@ export function startNotice(changes: StartChanges): string {
 }
 
 /**
- * The folder of a plugin whose only record is a pending install.
+ * The folder of a plugin without approved content, from its install entries: under `on` the newest pending install's,
+ * whose folder waits for review; under `off` the newest install's in any state, so a folder whose install was undone
+ * or discarded loads again once it holds anything else.
  * @param log - the change log.
  * @param plugin - the package name.
- * @returns the folder the newest pending install of the plugin names, or undefined.
+ * @param protection - the protection level.
+ * @returns the folder, or undefined.
  */
-function pendingInstallSource(log: ChangeLog, plugin: string): string | undefined {
-  return log.entries.findLast(entry => entry.kind === 'plugin-install' && entry.state === 'pending' && entry.subject.plugin === plugin)?.subject.source
+function installSource(log: ChangeLog, plugin: string, protection: ProtectionLevel): string | undefined {
+  return log.entries.findLast(entry => entry.kind === 'plugin-install' && (protection === 'off' || entry.state === 'pending') && entry.subject.plugin === plugin && entry.subject.source !== undefined)?.subject.source
 }
 
 /**
@@ -572,15 +600,17 @@ export async function namesDirectory(path: string): Promise<boolean> {
  * The subject of the profile history version a start records.
  * @param upgraded - the plugins approved at the upgrade whose approval no history version holds yet.
  * @param awaiting - the plugins added since, which wait for review.
+ * @param unreviewed - the plugins whose folder content this start approved without review.
  * @param moved - every plugin whose spec this start moved to its active directory.
  * @returns the summary, or undefined when the start changed none of the profile's files.
  */
-function historySummary(upgraded: readonly string[], awaiting: readonly string[], moved: readonly string[]): string | undefined {
-  if (moved.length === 0 && upgraded.length === 0) return undefined
+function historySummary(upgraded: readonly string[], awaiting: readonly string[], unreviewed: readonly string[], moved: readonly string[]): string | undefined {
+  if (moved.length === 0 && upgraded.length === 0 && unreviewed.length === 0) return undefined
   const parts: string[] = []
   if (upgraded.length > 0) parts.push(`approved at upgrade ${upgraded.join(', ')}`)
   if (awaiting.length > 0) parts.push(`${awaiting.join(', ')} ${awaiting.length === 1 ? 'waits' : 'wait'} for your review`)
-  const relinked = moved.filter(plugin => !upgraded.includes(plugin) && !awaiting.includes(plugin))
+  if (unreviewed.length > 0) parts.push(`loaded without review ${unreviewed.join(', ')}`)
+  const relinked = moved.filter(plugin => !upgraded.includes(plugin) && !awaiting.includes(plugin) && !unreviewed.includes(plugin))
   if (relinked.length > 0) parts.push(`${relinked.join(', ')} linked to Delo's copy again`)
   return `Changes: ${parts.join('; ')}`
 }

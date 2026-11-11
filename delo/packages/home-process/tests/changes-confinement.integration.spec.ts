@@ -6,16 +6,16 @@
  * off` that pseudo-terminal and answers its question.
  *
  * Through upstream's sandbox provider, configured as the home process configures the CLI profile's (the home protected
- * with C1's read exemptions), each dialect this host runs is tested: the confined command fails and leaves
- * `changes/protection.json` absent, and a confined direct write to `changes/` fails, the harness's writable copy and
- * records under `changes/harness/` included, while the same command without
+ * with C1's read exemptions), each dialect this host runs is tested with protection on: the confined command fails and
+ * leaves `changes/protection.json` at `on`, and a confined direct write to `changes/` fails, the harness's writable copy
+ * and records under `changes/harness/` included, while the same command without
  * confinement, the person's own full access, lowers the setting. A workspace that contains the home shows the rule
  * alone: with the home protected the provider refuses to confine a command there, and without it the same command in
  * the same pseudo-terminal lowers the setting. Homes live under `/var/tmp`, because upstream's profiles replace `/tmp`
  * with a private one that would hide a home there whether or not the dialect expresses C1's rule.
  */
 import { execFile, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -38,6 +38,24 @@ const NOT_AT_TERMINAL = 'This needs you at your computer: run it in a terminal.'
  */
 function protectionPath(home: string): string {
   return join(home, 'changes', 'protection.json')
+}
+
+/**
+ * Turn protection on, writing the record `delorun changes protection on` writes: 0600 under a 0700 `changes/`.
+ * @param home - the Delo home.
+ */
+function protectOn(home: string): void {
+  mkdirSync(join(home, 'changes'), { recursive: true, mode: 0o700 })
+  chmodSync(join(home, 'changes'), 0o700)
+  writeFileSync(protectionPath(home), `${JSON.stringify({ schema: 'delo.changes-protection/1', level: 'on', setAt: new Date().toISOString() })}\n`, { mode: 0o600 })
+}
+
+/**
+ * @param home - the Delo home.
+ * @returns the level its protection record holds.
+ */
+function levelOf(home: string): unknown {
+  return (JSON.parse(readFileSync(protectionPath(home), 'utf8')) as { level?: unknown }).level
 }
 const TSX_LOADER = import.meta.resolve('tsx/esm')
 const PROFILE = 'default'
@@ -156,17 +174,19 @@ async function attemptWrite(prefix: readonly string[], path: string): Promise<st
  */
 async function confinedCannotLower(dialect: 'bwrap' | 'landlock'): Promise<void> {
   const paths = await setUp()
+  protectOn(paths.home)
   const prefix = await confinedPrefix(await provider(dialect, paths.home), paths.workspace)
   const confined = await lowerProtection(prefix, paths)
   expect(confined.status, confined.output).not.toBe(0)
   // The terminal check passed inside the pseudo-terminal: the home-write rule is what refused it.
   expect(confined.output).not.toContain(NOT_AT_TERMINAL)
-  expect(existsSync(protectionPath(paths.home))).toBe(false)
-  expect(existsSync(join(paths.home, 'changes')) ? readdirSync(join(paths.home, 'changes')) : []).toEqual([])
-  for (const target of [protectionPath(paths.home), join(paths.home, 'changes', 'store', 'objects', 'a'.repeat(64))]) {
-    expect(await attemptWrite(prefix, target), target).not.toBe('ok')
-    expect(existsSync(target)).toBe(false)
-  }
+  expect(levelOf(paths.home)).toBe('on')
+  expect(readdirSync(join(paths.home, 'changes'))).toEqual(['protection.json'])
+  expect(await attemptWrite(prefix, protectionPath(paths.home))).not.toBe('ok')
+  expect(levelOf(paths.home)).toBe('on')
+  const object = join(paths.home, 'changes', 'store', 'objects', 'a'.repeat(64))
+  expect(await attemptWrite(prefix, object)).not.toBe('ok')
+  expect(existsSync(object)).toBe(false)
   // The person's writable copy of the harness and the harness's records are under `changes/` too, so a confined command
   // writes none of them, not even into a copy that exists.
   const copy = join(paths.home, 'changes', 'harness', '1.2.3', 'copy', 'app')
@@ -178,16 +198,16 @@ async function confinedCannotLower(dialect: 'bwrap' | 'landlock'): Promise<void>
   // The same command with the person's own full access lowers it: full access is the person's own authority.
   const unconfined = await lowerProtection([], paths)
   expect(unconfined.status, unconfined.output).toBe(0)
-  expect(unconfined.output).toContain('Protection is off (it was block)')
-  expect(existsSync(protectionPath(paths.home))).toBe(true)
-  rmSync(protectionPath(paths.home))
+  expect(unconfined.output).toContain('Protection is off (it was on)')
+  expect(levelOf(paths.home)).toBe('off')
+  protectOn(paths.home)
 
   // A workspace containing the home: the home rule refuses to confine there; without it the command lowers the setting.
   const around = { ...paths, workspace: base! }
   await expect(confinedPrefix(await provider(dialect, paths.home), around.workspace)).rejects.toMatchObject({ code: 'HOME_IN_WRITABLE_ROOT' })
   const unprotected = await lowerProtection(await confinedPrefix(await provider(dialect, undefined), around.workspace), around)
-  expect(unprotected.output).toContain('Protection is off (it was block)')
-  expect(existsSync(protectionPath(paths.home))).toBe(true)
+  expect(unprotected.output).toContain('Protection is off (it was on)')
+  expect(levelOf(paths.home)).toBe('off')
 }
 
 describe.skipIf(!scriptUsable || !bwrapUsable)(`F16 under upstream's sandbox provider (bwrap)${SCRIPT_NOTE}${bwrapUsable ? '' : NOT_RUN('bwrap is not usable here')}`, { timeout: 180_000 }, () => {

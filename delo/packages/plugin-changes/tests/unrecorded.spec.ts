@@ -10,6 +10,9 @@ vi.mock('@delo/changes/install', () => ({
   recordPluginRequest: () => Promise.reject('the log is busy.'),
 }))
 
+// Protection on, so the request is recorded rather than passed to upstream.
+vi.mock('@delo/changes', async original => ({ ...await original<typeof import('@delo/changes')>(), readProtection: () => Promise.resolve('on') }))
+
 it('denies with a thrown value that is not an Error as the reason', async () => {
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())

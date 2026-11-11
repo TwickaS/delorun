@@ -8,9 +8,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./install": "./src/install-actions.ts",
-    "./stop": "./src/stop.ts"
+    "./stop": "./src/stop.ts",
+    "./plugin-operation": "./src/plugin-operation.ts"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-plugin-manager": "workspace:*",

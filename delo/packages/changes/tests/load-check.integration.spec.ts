@@ -70,7 +70,7 @@ function workspacePlugin(fx: Fixture): { plug: string, installed: string } {
 }
 
 describe('a start whose folder cannot be read', () => {
-  it('a scan failure under Block keeps the approved content running', async () => {
+  it('a scan failure with protection on keeps the approved content running', async () => {
     const { fx, source, approved } = await migrated()
     writeFiles(source, { 'locked/a.js': 'a' })
     lockOut(join(source, 'locked'))
@@ -80,7 +80,7 @@ describe('a start whose folder cannot be read', () => {
     expect(startNotice(changes)).toContain('plug runs the content you approved, or nothing if you approved none, because Delo could not read its folder: ')
   })
 
-  it('refuses a plugin over the content limits under Block with the reason, and keeps its approved content', async () => {
+  it('refuses a plugin over the content limits with protection on with the reason, and keeps its approved content', async () => {
     const { fx, source, approved } = await migrated()
     oversized(join(source, 'big.bin'))
     const changes = await start(fx)
@@ -89,18 +89,18 @@ describe('a start whose folder cannot be read', () => {
     expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
-  it('under Warn, keeps the approved content of a folder that cannot be read, even without its installed packages', async () => {
+  it('with protection off, keeps the approved content of a folder that cannot be read, even without its installed packages', async () => {
     const { fx, source, approved } = await migrated()
-    await setProtection(fx.home, 'warn', terminal())
+    await setProtection(fx.home, 'off', terminal())
     oversized(join(source, 'big.bin'))
     const changes = await start(fx)
     expect(changes.failed).toEqual([{ plugin: 'plug', detail: expect.stringContaining('MiB') }])
     expect(await holdsVersion(activeDirectory(fx.home, PROFILE, 'plug'), approved)).toBe(true)
   })
 
-  it('under Warn, keeps the approved content of a folder that changed while it was read', async () => {
+  it('with protection off, keeps the approved content of a folder that changed while it was read', async () => {
     const { fx, source, approved } = await migrated()
-    await setProtection(fx.home, 'warn', terminal())
+    await setProtection(fx.home, 'off', terminal())
     lockOut(source)
     const changes = await start(fx)
     chmodSync(source, 0o700)
@@ -166,15 +166,15 @@ describe('installed packages a plugin links', () => {
     expect(loaded.value).toBe('plug+dep+inner')
   })
 
-  it('under Warn, loads a plugin too large to copy with its installed packages from where they are installed, and says where', async () => {
+  it('with protection off, loads a plugin too large to copy with its installed packages from where they are installed, and says where', async () => {
     const fx = fixture()
     const { plug, installed } = workspacePlugin(fx)
     oversized(join(installed, 'big.bin'))
-    await setProtection(fx.home, 'warn', terminal())
+    await setProtection(fx.home, 'off', terminal())
     linkAs(fx, 'plug', plug)
     const outsideHome = await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW })
     expect(outsideHome.linkedDependencies).toEqual([{ plugin: 'plug', underHome: false }])
-    expect(startNotice(outsideHome)).toContain('Warning: plug is too large to copy with its installed packages, so it loads them from where they are installed.\n')
+    expect(startNotice(outsideHome)).toContain('plug is too large to copy with its installed packages, so it loads them from where they are installed.\n')
     vi.stubEnv('HOME', fx.root)
     writeFileSync(join(plug, 'index.js'), 'export const value = "edited"\n')
     const underHome = await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW })
@@ -254,15 +254,15 @@ describe('the check before a reload', () => {
 
   it('takes the free profile write lock to move a folder link, and keeps every other active directory as recorded', async () => {
     const { fx, approved } = await migrated()
-    await setProtection(fx.home, 'warn', terminal())
+    await setProtection(fx.home, 'off', terminal())
     const added = folder(fx, 'added', 'export default "not reviewed"\n')
     linkAs(fx, 'added', added)
     const changes = await prepareReload(reload(fx))
-    expect(changes.unapproved).toEqual([{ plugin: 'added' }])
+    expect(changes.unreviewed).toEqual([expect.objectContaining({ plugin: 'added', kind: 'plugin-install' })])
     expect(existsSync(join(fx.profileDir, 'package.json.lock'))).toBe(false)
     const active = (await readActiveRecord(fx.home, PROFILE)).plugins
     expect(active.plug).toEqual({ version: approved, kind: 'approved' })
-    expect(active.added?.kind).toBe('unapproved')
+    expect(active.added?.kind).toBe('approved')
   })
 
   it('writes nothing and refuses a folder link while another process holds the profile write lock', async () => {
@@ -279,7 +279,7 @@ describe('the check before a reload', () => {
   it('only verifies, and passes, a profile another process already brought under Changes', async () => {
     const { fx } = await migrated()
     holdLock(fx, 1)
-    expect(await prepareReload(reload(fx))).toEqual({ protection: 'block', approvedAtUpgrade: [], pending: [], unapproved: [] })
+    expect(await prepareReload(reload(fx))).toEqual({ protection: 'on', approvedAtUpgrade: [], pending: [], unreviewed: [] })
   })
 
   it('fails when the lock file cannot be read', async () => {

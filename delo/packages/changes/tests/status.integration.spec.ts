@@ -38,11 +38,11 @@ describe('changesStatus', () => {
     const report = await status(fx)
     const upgrade = (await readChangeLog(fx.home, PROFILE)).entries[0]!
     expect(report).toEqual({
-      protection: 'block',
+      protection: 'on',
       approved: [{ plugin: 'plug', source, approvedAt: NOW.toISOString(), approvedAtUpgrade: true }],
       appliedCount: 1,
       pending: [],
-      unapproved: [],
+      unreviewed: [],
       invariants: [],
       unshownAtUpgrade: [],
       plugins: [{ plugin: 'plug', source, approved, active: { version: approved, kind: 'approved' }, lastApplied: { id: upgrade.id, summary: upgrade.summary, at: NOW.toISOString() } }],
@@ -85,24 +85,23 @@ describe('changesStatus', () => {
     ])
     expect(report.pending.map(change => change.id)).toEqual(atStart.pending.map(change => change.id))
     expect(report.plugins.find(plugin => plugin.plugin === 'waiting')).toEqual({ plugin: 'waiting', source: waiting })
-    expect(report.unapproved).toEqual([])
+    expect(report.unreviewed).toEqual([])
   })
 
-  it('reports the plugins that run content the person did not approve under warn, counted once with their pending change', async () => {
+  it('reports the plugins whose approved content loaded without review, and counts none of them as not approved', async () => {
     const { fx, source } = await migrated()
-    await setProtection(fx.home, 'warn', terminal())
+    await setProtection(fx.home, 'off', terminal())
     writeFileSync(join(source, 'index.js'), 'export default "two"\n')
     await start(fx)
     const report = await status(fx)
-    expect(report.protection).toBe('warn')
-    expect(report.unapproved).toEqual([{ plugin: 'plug' }])
-    expect(report.pending).toHaveLength(1)
-    expect(notApprovedCount(report)).toBe(1)
-    // Folder put back to what was approved while the unapproved content still runs: the running content alone counts.
-    writeFileSync(join(source, 'index.js'), 'export default "one"\n')
-    const reverted = await status(fx)
-    expect(reverted.pending).toEqual([])
-    expect(notApprovedCount(reverted)).toBe(1)
+    expect(report.protection).toBe('off')
+    const loaded = (await readChangeLog(fx.home, PROFILE)).entries.find(entry => entry.decidedFrom === 'unreviewed')!
+    expect(report.unreviewed).toEqual([{ plugin: 'plug', id: loaded.id }])
+    linkAs(fx, 'added', folder(fx, 'added'))
+    await start(fx)
+    expect((await status(fx)).unreviewed.map(({ plugin }) => plugin)).toEqual(['added', 'plug'])
+    expect(report.pending).toEqual([])
+    expect(notApprovedCount(report)).toBe(0)
   })
 
   it('reports the open work session', async () => {

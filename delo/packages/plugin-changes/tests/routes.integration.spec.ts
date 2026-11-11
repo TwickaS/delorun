@@ -1,8 +1,8 @@
 /**
  * The studio's Changes routes acting on a real profile with its history, at the computer: applying asks the second
  * confirmation the checks call for, undo, discard, turning a plugin off and on, a work session opened and ended, safe
- * mode, and the agent's plugin requests left to the terminal. The profile history runs `git`, so these cases start
- * processes.
+ * mode, and the agent's plugin requests applied through the Host's plugin operation after a second confirmation. The
+ * profile history runs `git`, so these cases start processes.
  *
  * Each test's comment names the check whose removal makes it fail, so the suite is also the mutation record.
  */
@@ -10,12 +10,12 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
-import { readApproved, readChangeLog, writeChangeLog, type ChangesContext } from '@delo/changes'
+import { attestTerminal, readApproved, readChangeLog, setProtection, writeChangeLog, type ChangesContext } from '@delo/changes'
 import { recordPluginRequest } from '@delo/changes/install'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
 import { ACTION_PATHS, SHOW_PATH, STATE_PATH, type ChangesRoute } from '../src/routes.ts'
-import { approvedPlugin, get, json, post, serveRoutes } from './routes-fixture.ts'
+import { approvedPlugin, CREDENTIAL, get, json, post, send, serveRoutes } from './routes-fixture.ts'
 
 /** The `show?pending` route, which reads the folders and lists the changes waiting for review. */
 const PENDING_PATH = `${SHOW_PATH}?pending`
@@ -82,17 +82,11 @@ describe('acting on a change at the computer', () => {
     expect(json(await get(server.port, PENDING_PATH)).pending).toEqual([])
   })
 
-  it('turns a plugin off and on again, and leaves the agent\'s plugin request to the terminal', async () => {
+  it('turns a plugin off and on again', async () => {
     const { ctx } = await approvedPlugin()
     const server = await serveRoutes(ctx)
     expect(json(await post(server.port, ACTION_PATHS.off, { plugin: 'plug' }))).toMatchObject({ entry: { kind: 'plugin-off', state: 'applied' }, reload: { kind: 'reloaded' } })
     expect(json(await post(server.port, ACTION_PATHS.on, { plugin: 'plug' }))).toMatchObject({ entry: { kind: 'plugin-on', state: 'applied' } })
-    const request = await recordPluginRequest(ctx, { action: 'install', spec: 'left-pad@1.3.0' })
-    expect(json(await get(server.port, STATE_PATH)).requests).toMatchObject([{ id: request.id, spec: 'left-pad@1.3.0' }])
-    // Pins the refusal of an agent's request: the studio has no plugin operation, which the terminal runs.
-    const reply = await post(server.port, ACTION_PATHS.apply, { id: request.id })
-    expect(reply.status).toBe(409)
-    expect(json(reply)).toMatchObject({ code: 'APPLY_AT_TERMINAL', message: expect.stringContaining(`delorun changes apply ${request.id}`) as string })
   })
 
   it('opens a work session and ends it with exactly the version it showed', async () => {
@@ -123,6 +117,65 @@ describe('acting on a change at the computer', () => {
     const { version } = json(await get(server.port, `${SHOW_PATH}?work=plug`)) as { version: string }
     expect(json(await post(server.port, ACTION_PATHS.done, { plugin: 'plug', version }))).toEqual({ kind: 'went-back', plugin: 'plug', failure: 'plug failed to start' })
     expect(await approved(ctx)).toBe(before)
+  })
+})
+
+describe('the agent\'s plugin requests in the studio', () => {
+  it('the studio applies a queued install with protection on through the plugin operation, after a second confirmation', async () => {
+    const { ctx } = await approvedPlugin()
+    await setProtection(ctx.home, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+    const server = await serveRoutes(ctx)
+    const request = await recordPluginRequest(ctx, { action: 'install', spec: 'left-pad@1.3.0' })
+    expect(json(await get(server.port, STATE_PATH)).requests).toMatchObject([{ id: request.id, spec: 'left-pad@1.3.0' }])
+    // A remote session and another site are refused before the body is read, and run nothing.
+    const remote = await send(server.port, ACTION_PATHS.apply, { method: 'POST', headers: [CREDENTIAL, 'x-test-remote: 1'], body: { id: request.id, confirmedRisk: true }, withholdBody: true })
+    expect(json(remote)).toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    const crossSite = await send(server.port, ACTION_PATHS.apply, { method: 'POST', headers: [CREDENTIAL, 'Origin: http://evil.example'], body: { id: request.id, confirmedRisk: true }, withholdBody: true })
+    expect(json(crossSite)).toMatchObject({ code: 'CROSS_SITE' })
+    // Pins the second confirmation of a request: without it the first Apply installs what the agent named, unseen.
+    const first = await post(server.port, ACTION_PATHS.apply, { id: request.id })
+    expect(first.status).toBe(409)
+    expect(json(first)).toEqual({
+      code: 'CONFIRM_RISK',
+      message: 'This installs left-pad@1.3.0, which the agent asked for, as pnpm resolves it; Delo does not show its content before it runs. A plugin\'s code can do anything Delo can. Confirm again to apply it.',
+      kinds: ['dependency-or-build', 'not-shown'],
+      notShown: ['left-pad@1.3.0'],
+    })
+    expect(server.operations).toEqual([])
+    expect(server.reloads()).toBe(0)
+    const second = await post(server.port, ACTION_PATHS.apply, { id: request.id, confirmedRisk: true })
+    expect(second.status).toBe(200)
+    expect(json(second)).toMatchObject({ entry: { id: request.id, kind: 'plugin-install', state: 'applied', decidedFrom: 'studio', spec: 'left-pad@1.3.0' }, reload: { kind: 'reloaded' } })
+    expect(server.operations).toEqual([['add', 'left-pad@1.3.0']])
+    expect(server.reloads()).toBe(1)
+    expect(json(await get(server.port, STATE_PATH)).requests).toEqual([])
+  })
+
+  it('a removal asks the second confirmation too, a failed operation leaves the request waiting, and Discard declines one', async () => {
+    const { ctx } = await approvedPlugin()
+    const server = await serveRoutes(ctx, { operationResult: { exitCode: 1, failure: 'plug is needed' } })
+    const removal = await recordPluginRequest(ctx, { action: 'remove', spec: 'plug' })
+    expect(json(await post(server.port, ACTION_PATHS.apply, { id: removal.id }))).toEqual({ code: 'CONFIRM_RISK', message: 'This removes plug, which the agent asked for. Confirm again to apply it.', kinds: ['dependency-or-build'], notShown: [] })
+    const failed = await post(server.port, ACTION_PATHS.apply, { id: removal.id, confirmedRisk: true })
+    expect(failed.status).toBe(409)
+    expect(json(failed)).toMatchObject({ code: 'OPERATION_FAILED', message: `Change ${removal.id} was not applied: plug is needed` })
+    expect(server.operations).toEqual([['remove', 'plug']])
+    expect(json(await get(server.port, STATE_PATH)).requests).toMatchObject([{ id: removal.id, state: 'pending', lastFailure: { failure: 'plug is needed' } }])
+    expect(json(await post(server.port, ACTION_PATHS.discard, { id: removal.id }))).toMatchObject({ entry: { id: removal.id, state: 'discarded' } })
+    expect(json(await get(server.port, STATE_PATH)).requests).toEqual([])
+    expect(server.reloads()).toBe(0)
+  })
+
+  it('names the change that holds a folder\'s content after applying a request for a folder', async () => {
+    const { ctx, source } = await approvedPlugin()
+    const server = await serveRoutes(ctx, { reloadOutcome: { ok: false, error: 'boom' } })
+    const folder = join(source, '..', 'other')
+    mkdirSync(folder)
+    writeFileSync(join(folder, 'package.json'), '{"name":"other","version":"1.0.0"}\n')
+    const request = await recordPluginRequest(ctx, { action: 'install', spec: `link:${folder}` })
+    const applied = json(await post(server.port, ACTION_PATHS.apply, { id: request.id, confirmedRisk: true }))
+    expect(applied).toMatchObject({ entry: { id: request.id, state: 'applied' }, reload: { kind: 'failed', failure: 'boom' }, folderChange: expect.stringMatching(/^c[0-9a-f]{10}$/) as string })
+    expect(server.operations).toEqual([['add', expect.stringContaining('link:') as string]])
   })
 })
 
@@ -202,5 +255,14 @@ describe('the plugin\'s routes in the Host', () => {
     expect(status).toBe(200)
     expect(JSON.parse(text)).toMatchObject({ entry: { kind: 'plugin-off', decidedFrom: 'studio' }, reload: { kind: 'reloaded' } })
     expect(reconciled).toBe(1)
+    // An agent's request runs the Host's plugin operation, which checks the package a folder holds before pnpm runs.
+    const folder = join(ctx.profileDir, '..', '..', '..', 'not-a-bundle')
+    mkdirSync(folder)
+    writeFileSync(join(folder, 'package.json'), '{"name":"not-a-bundle","version":"1.0.0"}\n')
+    const held = await recordPluginRequest(ctx, { action: 'install', spec: `link:${folder}` })
+    const apply = Object.assign(Readable.from([Buffer.from(JSON.stringify({ id: held.id, confirmedRisk: true }))]), { method: 'POST', url: ACTION_PATHS.apply, headers: { host: '127.0.0.1:3080' }, socket: { localAddress: '127.0.0.1', localPort: 3080 } })
+    await handlers.get(ACTION_PATHS.apply)!(apply as never, { writeHead: (code: number) => { status = code }, end: (body: string) => { text = body } } as never)
+    expect(status).toBe(409)
+    expect(JSON.parse(text)).toMatchObject({ code: 'OPERATION_FAILED', message: expect.stringContaining('is no DSH plugin bundle') as string })
   })
 })

@@ -64,7 +64,7 @@ export interface LeavableRecords {
  * @param include - which entries count.
  * @returns the counted entry decided last, the later one in the log on a tie; undefined when none counts.
  */
-function newestDecided(entries: readonly ChangeEntry[], include: (entry: ChangeEntry) => boolean): ChangeEntry | undefined {
+export function newestDecided(entries: readonly ChangeEntry[], include: (entry: ChangeEntry) => boolean): ChangeEntry | undefined {
   let newest: ChangeEntry | undefined
   let newestAt = Number.NEGATIVE_INFINITY
   for (const entry of entries) {

@@ -1,8 +1,7 @@
 /**
- * The plugin operation `delorun changes apply` runs for an agent's plugin request: upstream's `runProfilePnpm` for the
- * profile, run as the plugin manager's `installBundle` runs it, with the checks `installBundle` runs, its output on the
- * command's streams; and upstream's own loader. The denial cases apply a held request through `applyInstallChange` with
- * upstream's real operation and pnpm.
+ * The plugin operation `delorun changes apply` runs for an agent's plugin request: `@delo/changes`' shared operation
+ * from the command's directory, its output on the command's streams, with this installation's anchor. The denial cases
+ * apply a held request through `applyInstallChange` with upstream's real operation and pnpm.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -75,7 +74,7 @@ function stubbed(ctx: ChangesContext, result: { readonly exitCode?: number, read
 const QUIET = { stdout: () => {}, stderr: () => {} }
 
 describe('upstreamPluginOperation', () => {
-  it('runs upstream\'s operation as the plugin manager runs it and prints its output on the command\'s streams', async () => {
+  it('runs @delo/changes\' shared operation from the command\'s directory and prints its output on the command\'s streams', async () => {
     const { ctx } = profile()
     const printed: string[] = []
     const errors: string[] = []
@@ -89,53 +88,15 @@ describe('upstreamPluginOperation', () => {
     )
     expect(printed).toEqual(['added 1\n'])
     expect(errors).toEqual(['warning\n'])
-  })
-
-  it('refuses an install that is no plugin bundle, changes several dependencies or cannot be checked', async () => {
-    const { ctx } = profile({ kept: '1.0.0' })
-    const plain = stubbed(ctx, { dependencies: { kept: '1.0.0', plain: '1.0.0' } }, { bundleManifest: () => undefined })
+    // The shared operation's checks run here too.
+    const plain = stubbed(ctx, { dependencies: { x: '1.0.0', plain: '1.0.0' } }, { bundleManifest: () => undefined })
     expect(await upstreamPluginOperation(ctx, QUIET, plain.load)(['add', 'plain'])).toMatchObject({ exitCode: 1, failure: 'plain is no DSH plugin bundle: its package.json declares no dsh.bundle.patch, so nothing was installed' })
-    const several = stubbed(ctx, { dependencies: { one: '1.0.0', two: '1.0.0' } })
-    expect(await upstreamPluginOperation(ctx, QUIET, several.load)(['add', 'one'])).toMatchObject({ exitCode: 1, failure: 'the operation changed one, two, not one plugin, so nothing was installed' })
-    const unresolved = stubbed(ctx, { dependencies: { other: '1.0.0' } }, { bundleManifest: () => { throw new Error('not installed') } })
-    expect(await upstreamPluginOperation(ctx, QUIET, unresolved.load)(['add', 'other'])).toMatchObject({ exitCode: 1, failure: 'other cannot be checked: Error: not installed' })
   })
 
-  it('reports upstream\'s refusal of an incompatible version, and leaves a failure, a removal and an unchanged install to the caller', async () => {
-    const { ctx } = profile({ kept: '1.0.0' })
-    const incompatible = stubbed(ctx, { exitCode: 1, incompatible: [{ name: 'old', version: '1.0.0' }] })
-    expect(await upstreamPluginOperation(ctx, QUIET, incompatible.load)(['add', 'old@1.0.0'])).toEqual({ exitCode: 1, logPath: '/l', output: 'out', failure: 'this Delo cannot run old@1.0.0: its requirements are not met, so nothing was installed' })
-    const failing = stubbed(ctx, { exitCode: 2 })
-    expect(await upstreamPluginOperation(ctx, QUIET, failing.load)(['add', 'x'])).toEqual({ exitCode: 2, logPath: '/l', output: 'out' })
-    const remove = stubbed(ctx, { dependencies: {} }, { bundleManifest: () => undefined })
-    expect(await upstreamPluginOperation(ctx, QUIET, remove.load)(['remove', 'kept'])).toEqual({ exitCode: 0, logPath: '/l', output: 'out' })
-    writeFileSync(join(ctx.profileDir, 'package.json'), '{"dependencies":"not an object"}')
-    const unchanged = stubbed(ctx, {}, { bundleManifest: () => undefined })
-    expect(await upstreamPluginOperation(ctx, QUIET, unchanged.load)(['add', 'kept'])).toEqual({ exitCode: 0, logPath: '/l', output: 'out' })
-  })
-
-  it('checks the package in the folder a spec names, before pnpm runs', async () => {
-    const { root, ctx } = profile()
-    const bundle = { name: 'plug', version: '1.0.0', dsh: { bundle: { patch: 'cordis.patch.yml' } } }
-    const plain = packageAt(join(root, 'plain'), { name: 'plug', version: '1.0.0' })
-    const good = packageAt(join(root, 'good'), bundle)
-    const broken = join(root, 'broken')
-    mkdirSync(broken)
-    writeFileSync(join(broken, 'package.json'), '[]')
-    const checked = stubbed(ctx, { dependencies: { plug: 'link:/active' } }, { bundleManifest: () => undefined, incompatibility: manifest => 'version' in manifest && manifest.version === '2.0.0' ? 'Requires another Delo.' : undefined })
-    const run = upstreamPluginOperation(ctx, QUIET, checked.load)
-    expect(await run(['add', 'plug@link:/active'], plain)).toEqual({ exitCode: 1, failure: `the package in ${plain} is no DSH plugin bundle: its package.json declares no dsh.bundle.patch` })
-    expect(await run(['add', 'plug@link:/active'], broken)).toEqual({ exitCode: 1, failure: `the package in ${broken} cannot be checked: Error: ${join(broken, 'package.json')} holds no JSON object` })
-    const newer = packageAt(join(root, 'newer'), { ...bundle, version: '2.0.0' })
-    expect(await run(['add', 'plug@link:/active'], newer)).toEqual({ exitCode: 1, failure: 'Requires another Delo. Nothing was installed.' })
-    expect(checked.runProfilePnpm).not.toHaveBeenCalled()
-    // The link names the active directory, whose content is not applied yet, so the installed package is not checked.
-    expect(await run(['add', 'plug@link:/active'], good)).toEqual({ exitCode: 0, logPath: '/l', output: 'out' })
-  })
-
-  it('loads upstream\'s operation, checks and anchor by default', async () => {
+  it('loads upstream\'s operation, checks and this installation\'s anchor by default', async () => {
     const upstream = await loadUpstream()
-    expect(typeof upstream.installAnchor).toBe('string')
+    const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
+    expect(upstream.installAnchor).toBe(INSTALL_ANCHOR)
     expect(typeof upstream.runProfilePnpm).toBe('function')
     expect(upstream.incompatibility({ name: 'p', version: '1.0.0' }, '/nonexistent')).toBeUndefined()
     // The default loader is the one the operation uses when none is given.

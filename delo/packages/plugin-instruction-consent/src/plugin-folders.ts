@@ -1,10 +1,13 @@
 /**
  * The approved-plugin write consent of `@delo/plugin-instruction-consent` (C16 switch `approved_plugin_write_consent`):
- * before the agent's first write in a chat to the `source` folder of a plugin the person approved under Changes, the
- * person is asked, and the ask names the plugin and says the agent is changing what the harness runs. The approvals are
- * read from the profile the Host runs at every write, so a plugin approved while the Host runs is covered at once and a
- * profile without the record has none. A write into the profile's active directories under the Delo home, which only
- * Changes writes, is refused without asking.
+ * with protection on, before the agent's first write in a chat to the `source` folder of a plugin the person approved
+ * under Changes, the person is asked, and the ask names the plugin and says the agent is changing what the harness
+ * runs. With protection off, the default, such a write does not ask: the plugin's folder loads without review anyway.
+ * The protection setting and the approvals are read from the home and the profile the Host runs at every write, so
+ * `delorun changes protection on|off` and a plugin approved while the Host runs take effect at once, and a profile
+ * without the record has none. A protection record or an approval record that cannot be read refuses the write. A write
+ * into the profile's active directories under the Delo home, which only Changes writes, is refused without asking in
+ * either setting.
  *
  * A target is compared on the path the file backend writes, `target.targetKey`: the local backends key a target by its
  * real path, its own when it exists, otherwise its deepest existing ancestor's with the rest appended, so a symbolic
@@ -16,8 +19,8 @@
  *
  * The ask is kept per chat and plugin for the Host process's lifetime: after the person allows it, later writes to
  * that plugin's folder in the same chat pass; another chat, or the same chat after the Host restarts, asks again. A
- * refusal leaves the file unchanged and asks again at the next write. The writes still appear in Changes as pending
- * changes, which only the person applies.
+ * refusal leaves the file unchanged and asks again at the next write. With protection on the writes still appear in
+ * Changes as pending changes, which only the person applies.
  *
  * @module @delo/plugin-instruction-consent/plugin-folders
  */
@@ -30,7 +33,7 @@ import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { WriteConsentRefusedError, type WriteConsentArgs, type WriteConsentDiff } from '@deepseek-ai/dsh-tool-fs/src/consent.ts'
-import { CHANGES_ENTRIES, profileChangesDirectory, readApproved } from '@delo/changes'
+import { CHANGES_ENTRIES, profileChangesDirectory, readApproved, readProtection, type ProtectionLevel } from '@delo/changes'
 import { diffText } from './classify.ts'
 
 /** One approved plugin and the folder whose files are its content. */
@@ -212,8 +215,8 @@ export function pluginWriteAsk(plugin: string, diff: WriteConsentDiff | undefine
 }
 
 /**
- * Ask before the first write in a chat to an approved plugin's folder, and refuse any write into the profile's active
- * directories. The listeners are prepended to the three intent waterfalls every filesystem writer emits once per
+ * With protection on, ask before the first write in a chat to an approved plugin's folder; in either protection
+ * setting, refuse any write into the profile's active directories. The listeners are prepended to the three intent waterfalls every filesystem writer emits once per
  * target, so each target of a patch is reviewed and a policy that decides without calling `next()` cannot skip them.
  * @param ctx - the plugin context, whose `profileContext` and `approval` services are read at each write.
  */
@@ -226,7 +229,7 @@ export function askBeforePluginWrites(ctx: Context): void {
    * @param target - the resolved target.
    * @param actor - the tool execution that emitted the intent.
    * @throws WriteConsentRefusedError when the target is inside the profile's active directories, the ask is refused,
-   *   cancelled or cannot be put, or the profile's record of approved plugins cannot be read.
+   *   cancelled or cannot be put, or the protection setting or the profile's record of approved plugins cannot be read.
    */
   const review = async (target: FsTarget, actor: object | undefined): Promise<void> => {
     const profile = ctx.get('profileContext')
@@ -235,6 +238,14 @@ export function askBeforePluginWrites(ctx: Context): void {
     if (await lands(target, activeRoot(profile))) {
       throw new WriteConsentRefusedError(`the ${exec.name} to "${target.displayPath}" was not run: it is inside the directory Changes loads the harness's plugins from, which only Changes writes, so the write would never become the person's plugin; change the plugin's own folder instead, and the person reviews that change in Changes`)
     }
+    let level: ProtectionLevel
+    try {
+      level = await readProtection(profile.home)
+    } catch (error) {
+      // readProtection rejects with a ChangesError, whose message names the file and what is wrong with it.
+      throw new WriteConsentRefusedError(`the ${exec.name} to "${target.displayPath}" was not run: the protection setting, which decides whether a write to an approved plugin's folder asks first, cannot be read (${(error as Error).message})`, { cause: error })
+    }
+    if (level === 'off') return
     let plugins: PluginFolders[]
     try {
       plugins = await approvedPluginFolders(profile)

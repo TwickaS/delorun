@@ -761,9 +761,9 @@ async function switchBundle(ctx: ChangesContext, state: State, plugin: string, e
 }
 
 /**
- * Change the protection setting. Only a terminal proof changes it. A weaker level than
- * before is logged in the profile's change log as an applied `guard-weakening` change. The setting is read at the next
- * start.
+ * Change the protection setting. Only a terminal proof changes it. Turning it off is logged in the profile's change log
+ * as an applied `guard-weakening` change. A start, the running Host's watcher of the plugins' folders and the Host's
+ * plugins read the setting at each decision, so it takes effect without a restart.
  * @param ctx - the profile whose log records a weakening.
  * @param level - the new level.
  * @param presence - proof from `attestTerminal`.
@@ -779,7 +779,7 @@ export async function changeProtection(ctx: ChangesContext, level: ProtectionLev
     kind: 'guard-weakening',
     state: 'applied',
     subject: { setting: 'protection' },
-    summary: `Protection lowered from ${before} to ${level}`,
+    summary: 'Protection turned off: changes load without review',
     createdAt: record.setAt,
     decidedAt: record.setAt,
     decidedFrom: 'terminal',

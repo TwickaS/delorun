@@ -19,7 +19,7 @@
 import { spawn, type StdioOptions } from 'node:child_process'
 import { existsSync, fstatSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
-import { checkComposedTree, composition, isChangesError, prepareComposedTree, retainHarness, type HarnessContext, type SignedRuntime } from '@delo/changes'
+import { applyUnreviewedHarnessChanges, checkComposedTree, composition, isChangesError, prepareComposedTree, retainHarness, type HarnessContext, type SignedRuntime } from '@delo/changes'
 import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { HANDOVER_FD } from '@delo/contract-home-process'
 import { runDirectory } from '@delo/home'
@@ -30,6 +30,7 @@ import type { CommandOutput, CommandResult } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
 import { otherDataUsers } from '../home-exclusion.ts'
 import { closureRootOf } from '../package-manager.ts'
+import { printable } from '../terminal-text.ts'
 import { runtimePlatformOf } from '../update/channel.ts'
 import type { RunningRuntime } from '../update/runtime.ts'
 import { signedRuntimeOf } from '../update/signed-runtime.ts'
@@ -288,6 +289,18 @@ export function handOffMarker(home: string, profile: string, parent: number): st
   return join(runDirectory(home, profile), `hand-off-${String(parent)}`)
 }
 
+/**
+ * Print what a start applied without review from the harness's writable copy, and why it applied nothing when the copy
+ * could not be read.
+ * @param result - what `applyUnreviewedHarnessChanges` did.
+ * @param runtime - the running runtime version.
+ * @param output - the start's output.
+ */
+function unreviewedNotice(result: Awaited<ReturnType<typeof applyUnreviewedHarnessChanges>>, runtime: RuntimeVersion, output: CommandOutput): void {
+  for (const entry of result.applied) output.stdout(`${printable(`Delo itself (${String(entry.subject.file)}) changed without review, because protection is off: delorun changes show ${entry.id}`)}\n`)
+  if (result.unread !== undefined) output.stderr(`${printable(`Delo could not read your copy of Delo ${runtime}, so it runs what it ran: ${result.unread}`)}\n`)
+}
+
 /** What a hand-off did. */
 export type HandOff =
   /** The composed tree's start ran, or ended by a signal or for an update's successor; `ran` is this start's result. */
@@ -301,7 +314,9 @@ export type HandOff =
 /**
  * Hand a foreground start off to the composed tree of its runtime, when the signed installation runs, the profile is not
  * in safe mode and its runtime has approved harness files. Nothing else runs first: no lock, no token and no log. A
- * start always removes the {@link handOffMarker} its parent process wrote, the composed tree's start included.
+ * start always removes the {@link handOffMarker} its parent process wrote, the composed tree's start included. While
+ * protection is off, the signed installation's start first applies every edit of the runtime's writable copy without
+ * review, so the tree it composes runs them.
  * @param request - the home, the profile, the environment and the output.
  * @param dependencies - this process's runtime, entry and arguments, the store's check and the child.
  * @returns undefined when this process runs the start itself; `not-started` when the child exited with a failure before
@@ -316,9 +331,13 @@ export async function handOffToComposedTree(request: HandOffRequest, dependencie
   rmSync(handOffMarker(home, profile, process.ppid), { force: true })
   let tree
   try {
+    let signed: Promise<SignedRuntime> | undefined
+    const signedOnce = (): Promise<SignedRuntime> => (signed ??= dependencies.signed(home, runtime.version, request.env))
+    if (runtime.store && runtime.composed === undefined && readSafeMode(home, profile) === undefined) {
+      unreviewedNotice(await applyUnreviewedHarnessChanges({ home, runtime: runtime.version, signed: signedOnce }), runtime.version, request.output)
+    }
     if (!await handsOff(home, profile, runtime)) return undefined
-    const signed = await dependencies.signed(home, runtime.version, request.env)
-    tree = await prepareComposedTree(home, runtime.version, signed)
+    tree = await prepareComposedTree(home, runtime.version, await signedOnce())
   } catch (error) {
     if (error instanceof RuntimeStoreError) throw new CliError(EXIT.failed, `delorun: Delo ${runtime.version} was not started, because its files differ from the signed release: ${error.detail}. See what differs with: delorun verify`)
     if (isChangesError(error)) throw new CliError(EXIT.failed, `delorun: Delo ${runtime.version} was not started with your changes to it: ${error.detail}`)

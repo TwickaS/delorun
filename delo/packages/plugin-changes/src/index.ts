@@ -1,18 +1,30 @@
 /**
- * @delo/plugin-changes: the agent's plugin changes wait for the person, and no recomposition of the profile loads
- * content the person did not approve. With the C16 switch `plugin_changes_pending` on, a `plugin_manager` call whose
- * action is `install_bundle` or `remove_bundle` does not run: a `tools/pre-execute` listener records it in the
- * profile's change log as a pending change and denies the call with a result the model reads, which names the change
- * and says nothing was installed. A call whose action changes which plugins run, their settings or the profile's
+ * @delo/plugin-changes: with protection on, the agent's plugin changes wait for the person, and no recomposition of
+ * the profile loads content the person did not approve. With the C16 switch `plugin_changes_pending` on, a
+ * `tools/pre-execute` listener reads the protection setting (`readProtection` of the profile the Host runs) at each
+ * `plugin_manager` call whose action changes which plugins run, so `delorun changes protection on|off` takes effect at
+ * the next call without a restart.
+ *
+ * With protection on, a call whose action is `install_bundle` or `remove_bundle` does not run: the listener records it
+ * in the profile's change log as a pending change and denies the call with a result the model reads, which names the
+ * change and says nothing was installed. A call whose action changes which plugins run, their settings or the profile's
  * history in another way (`set_bundle`, `set_plugin`, `configure`, `set_version_exemption`, `undo`, `restore`) does not
  * run either and records nothing: the model reads that the person makes that change at their computer. The tool never
  * reaches its own full-access approval for these actions, and the person applies or discards a recorded change at
- * their computer with `delorun changes`. The tool offers no update action: the agent asks for an update by installing
- * a version of a plugin the profile has, which records a `plugin-update`.
+ * their computer with `delorun changes` or in the studio. The tool offers no update action: the agent asks for an update
+ * by installing a version of a plugin the profile has, which records a `plugin-update`.
+ *
+ * With protection off, the default, every such call passes to upstream exactly as with the switch off: the listener
+ * calls `next()`, and upstream's full-access approval alone decides. An install from a folder (`link:<folder>`) that
+ * ran comes under Changes at the recomposition it causes: the check below links the plugin to its active directory and
+ * logs the folder's content as an applied change decided `unreviewed`. A registry install or a removal is not under
+ * Changes; the profile history upstream records for it is its record, and this plugin logs nothing for it.
+ *
+ * A protection record that cannot be read holds every such call: it is denied, naming that the setting cannot be read.
  *
  * A tool guard backs the listener: a `pre-execute` listener that allowed such a call without calling `next()` would
  * skip the listener, and the guard, which runs after every listener and cannot be overruled, denies every such call the
- * listener did not handle.
+ * listener did not handle. A call the listener passed through with protection off counts as handled.
  *
  * Whatever the switch says, the plugin provides upstream hot reload's `profileReconcileCheck`, which runs before every
  * recomposition of the profile, whether the person's studio, `delorun plugin`, `delorun changes`, a work session or the
@@ -21,13 +33,15 @@
  * keeps. A link is the harness's own when it is into the runtime store, or names the directory the running Host already
  * loads that package from: a start brought every other link under Changes.
  *
- * Off, the parity value and the default, the plugin registers no listener or guard, and the tool runs and asks as
- * upstream's does.
+ * With the switch off, the parity value and the default, the plugin registers no listener or guard, and the tool runs
+ * and asks as upstream's does.
  *
  * Whatever the switch says, once the web server and Connection are present the plugin registers the studio's Changes
  * routes ([routes](./routes.ts)) under `/delo/changes/`, which the recovery screen and the studio read and act through;
- * an action needs the person at their computer, and safe mode keeps the bundles `installationBundles` names. The routes
- * tell a remote session by Connection's `isReachPeer`; a Connection without it registers no route.
+ * an action needs the person at their computer, and safe mode keeps the bundles `installationBundles` names. Applying an
+ * agent's plugin request in the studio runs `@delo/changes`' shared plugin operation from the Host's directory with the
+ * profile launcher's pnpm, its output in the Host's log. The routes tell a remote session by Connection's
+ * `isReachPeer`; a Connection without it registers no route.
  * @module @delo/plugin-changes
  */
 import { realpathSync } from 'node:fs'
@@ -38,8 +52,9 @@ import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import { PACKAGE_NAME_PATTERN, prepareReload, reloadProfile, startNotice, type ChangeEntry } from '@delo/changes'
+import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type PluginOperation, type ProtectionLevel } from '@delo/changes'
 import { recordPluginRequest, type PluginRequest } from '@delo/changes/install'
+import { loadUpstreamChecks, upstreamPluginOperation } from '@delo/changes/plugin-operation'
 import { CHANGES_ROUTE_PREFIX, changesRoutes, type RouteConnection } from './routes.ts'
 
 /**
@@ -54,9 +69,10 @@ export const name = 'plugin-changes'
 /** The plugin's configuration. */
 export interface Config {
   /**
-   * C16 switch `plugin_changes_pending`: whether an agent's `plugin_manager` install, update or removal records a
-   * pending change instead of running. Off, the parity value and the default, the plugin registers nothing and the
-   * tool runs and asks as upstream's does. Delo's composition turns it on.
+   * C16 switch `plugin_changes_pending`: whether, with protection on, an agent's `plugin_manager` install, update or
+   * removal records a pending change instead of running. With protection off the tool runs and asks as upstream's does
+   * whatever the switch says. Off, the parity value and the default, the plugin registers nothing and the tool runs and
+   * asks as upstream's does. Delo's composition turns it on.
    */
   readonly enabled: boolean
   /**
@@ -168,10 +184,27 @@ function unrecorded(detail: string): PreToolDecision {
 }
 
 /**
+ * The result the model reads when the protection setting cannot be read, so whether the call waits for the person is
+ * unknown: it is held.
+ * @param action - the action.
+ * @param detail - why the setting cannot be read.
+ * @returns the denial.
+ */
+function protectionUnreadable(action: string, detail: string): PreToolDecision {
+  return {
+    kind: 'deny',
+    reason: `${action} changes what the person's harness runs, and the protection setting that decides whether it waits for the person cannot be read: ${detail} Nothing was changed; tell the person, who checks it with delorun changes protection.`,
+    info: { name: 'PluginChangeUnrecorded', code: PLUGIN_CHANGE_UNRECORDED },
+  }
+}
+
+/**
  * Provide the check before every recomposition of the profile, and, with the switch on, hold back the agent's plugin
- * changes: every `plugin_manager` install, update or removal is recorded as a pending change in the profile the Host
- * runs and denied with the change's id, one that cannot be recorded is denied too, and every other action that changes
- * what the profile runs is denied as one the person makes at their computer. Off, only the check is provided.
+ * changes while protection is on: every `plugin_manager` install, update or removal is recorded as a pending change in
+ * the profile the Host runs and denied with the change's id, one that cannot be recorded is denied too, and every other
+ * action that changes what the profile runs is denied as one the person makes at their computer. With protection off
+ * such a call goes on to upstream; with a protection record that cannot be read it is denied. With the switch off, only
+ * the check is provided.
  * @param ctx - the plugin context.
  * @param config - the switch, defaulted by the schema above.
  */
@@ -186,6 +219,7 @@ export function apply(ctx: Context, config: Config): void {
         return profile === undefined ? undefined : { home: profile.home, profile: profile.name, profileDir: profile.dir }
       },
       reload: () => reloadProfile(scope.get('hmr')),
+      pluginOperation: changes => hostPluginOperation(scope, changes),
       installationBundles: config.installationBundles,
       logger: scope.logger,
       loopbackPort: () => scope.webServer.port,
@@ -203,26 +237,61 @@ export function apply(ctx: Context, config: Config): void {
   if (!config.enabled) return
   const recorded = new WeakSet<object>()
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
-    if (atComputerAction(exec)) {
-      recorded.add(exec)
-      return atComputer((exec.arguments as { action: string }).action)
-    }
     const held = heldRequest(exec)
-    if (held === undefined) return next()
+    const other = atComputerAction(exec)
+    if (held === undefined && !other) return next()
     recorded.add(exec)
-    if (typeof held.target !== 'string' || held.target.trim() === '') return unrecorded('the call names no target.')
+    const action = (exec.arguments as { action: string }).action
     const profile = ctx.get('profileContext')
-    if (profile === undefined) return unrecorded('this harness runs no profile whose changes Delo keeps.')
+    if (profile === undefined) return held === undefined ? atComputer(action) : unrecorded('this harness runs no profile whose changes Delo keeps.')
+    let level: ProtectionLevel
+    try {
+      level = await readProtection(profile.home)
+    } catch (error) {
+      return protectionUnreadable(action, messageOf(error))
+    }
+    if (level === 'off') return next()
+    if (held === undefined) return atComputer(action)
+    if (typeof held.target !== 'string' || held.target.trim() === '') return unrecorded('the call names no target.')
     try {
       const entry = await recordPluginRequest({ home: profile.home, profile: profile.name, profileDir: profile.dir }, { action: held.action, spec: held.target })
       return pendingDecision(entry)
     } catch (error) {
-      return unrecorded(`${error instanceof Error ? error.message : String(error)}`)
+      return unrecorded(messageOf(error))
     }
   }, { prepend: true })
   ctx.tools.guard(exec => (heldRequest(exec) !== undefined || atComputerAction(exec)) && !recorded.has(exec)
     ? 'Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.'
     : undefined)
+}
+
+/**
+ * @param error - a thrown value.
+ * @returns its words.
+ */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * The plugin operation the studio's Apply of an agent's plugin request runs in the Host: `@delo/changes`' shared
+ * operation from the Host's directory with the installation anchor and pnpm the profile launcher names, its output in
+ * the Host's log.
+ * @param ctx - the plugin context, whose `profileContext` names the anchor, the directory and pnpm.
+ * @param changes - the profile the request is applied to.
+ * @returns the operation.
+ * @throws {Error} when the Host runs no profile launched by dsh, which the routes never ask for.
+ */
+export function hostPluginOperation(ctx: Context, changes: ChangesContext): PluginOperation {
+  const launched = ctx.get('profileContext')
+  if (launched === undefined) throw new Error('plugin-changes: this Host runs no profile launched by dsh, so it has no plugin operation.')
+  const { installAnchor, cwd, packageManager } = launched
+  return upstreamPluginOperation(changes, {
+    cwd,
+    ...packageManager === undefined ? {} : { packageManager },
+    output: (text, stream) => { ctx.logger[stream === 'stderr' ? 'warn' : 'info'](text.trimEnd()) },
+    upstream: async () => ({ installAnchor, ...await loadUpstreamChecks() }),
+  })
 }
 
 /**

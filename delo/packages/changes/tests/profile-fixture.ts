@@ -9,9 +9,9 @@ import { dirname, join, relative } from 'node:path'
 import { parse, parseDocument } from 'yaml'
 import { openHistory } from '@delo/profile-safety'
 import { enforceApprovedContent, type StartChanges } from '../src/enforce.ts'
-import { activeDirectory } from '../src/paths.ts'
+import { activeDirectory, changesDirectory, protectionPath } from '../src/paths.ts'
 import { attestTerminal, markShownAtUpgrade, readApproved, type AtComputer } from '../src/records.ts'
-import type { ContentVersion } from '../src/types.ts'
+import { PROTECTION_RECORD_SCHEMA, type ContentVersion, type ProtectionLevel } from '../src/types.ts'
 import { temporaryDirectory, writeFiles } from './support.ts'
 
 /** The clock every fixture start reads. */
@@ -35,18 +35,31 @@ export interface Fixture {
 
 /**
  * A Delo home with the profile `default`, whose manifest and lockfile list no dependency yet.
+ * @param options - the protection setting the home starts with: `on` by default, so a spec proves the review path; a
+ *   spec of what loads without review passes `off`, the setting of a home without a record.
+ * @param options.protection - the setting.
  * @returns the fixture.
  */
-export function fixture(): Fixture {
+export function fixture(options: { readonly protection?: ProtectionLevel } = {}): Fixture {
   const root = temporaryDirectory()
   const home = join(root, '.delo')
   mkdirSync(home, { mode: 0o700 })
+  if ((options.protection ?? 'on') === 'on') protect(home)
   const profileDir = join(home, 'profiles', PROFILE)
   writeFiles(profileDir, {
     'package.json': `${JSON.stringify({ name: 'dsh-profile-default', private: true, dependencies: { 'left-pad': '^1.3.0' }, dsh: { profile: { bundles: [] } } }, undefined, 2)}\n`,
     'pnpm-lock.yaml': "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      left-pad:\n        specifier: ^1.3.0\n        version: 1.3.0\n",
   })
   return { root, home, profileDir }
+}
+
+/**
+ * Turn protection on in a home, as `delorun changes protection on` writes it.
+ * @param home - the Delo home.
+ */
+export function protect(home: string): void {
+  mkdirSync(changesDirectory(home), { recursive: true, mode: 0o700 })
+  writeFileSync(protectionPath(home), `${JSON.stringify({ schema: PROTECTION_RECORD_SCHEMA, level: 'on', setAt: NOW.toISOString() })}\n`, { mode: 0o600 })
 }
 
 /**
@@ -144,10 +157,11 @@ export async function approvedVersion(fx: Fixture, name: string): Promise<Conten
 
 /**
  * Migrate a fixture with one plugin linked from a folder, `plug`.
+ * @param options - the protection setting, as {@link fixture} takes it.
  * @returns the fixture, the folder and the approved version.
  */
-export async function migrated(): Promise<{ fx: Fixture, source: string, approved: ContentVersion }> {
-  const fx = fixture()
+export async function migrated(options: Parameters<typeof fixture>[0] = {}): Promise<{ fx: Fixture, source: string, approved: ContentVersion }> {
+  const fx = fixture(options)
   const source = folder(fx, 'plug')
   linkAs(fx, 'plug', source)
   await start(fx)

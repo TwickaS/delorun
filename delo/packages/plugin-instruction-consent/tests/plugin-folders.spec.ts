@@ -1,8 +1,10 @@
 /**
  * Specs of the approved-plugin write consent (C16 switch `approved_plugin_write_consent`) through upstream's real write
- * tool on the local filesystem: the agent's first write in a chat to an approved plugin's folders asks, naming the
- * plugin and carrying the diff, however the path is spelt; later writes in that chat pass and another chat asks again;
- * a write into the profile's active directories is refused; a refusal leaves the file unwritten; and with the switch at
+ * tool on the local filesystem: with protection on, the agent's first write in a chat to an approved plugin's folders
+ * asks, naming the plugin and carrying the diff, however the path is spelt; later writes in that chat pass and another
+ * chat asks again; a refusal leaves the file unwritten. With protection off, the default, such a write does not ask; the
+ * setting is read at each write, so changing it takes effect without a restart, and a record that cannot be read
+ * refuses the write. In either setting a write into the profile's active directories is refused, and with the switch at
  * parity the write runs as upstream runs it.
  */
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -23,7 +25,7 @@ import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ToolRuntime, { type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import type { ApprovalRequestEvent } from '@deepseek-ai/dsh-user-approval/types'
-import { activeDirectory, APPROVED_RECORD_SCHEMA, writeApproved } from '@delo/changes'
+import { activeDirectory, APPROVED_RECORD_SCHEMA, attestTerminal, protectionPath, setProtection, writeApproved, type ProtectionLevel } from '@delo/changes'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { apply } from '../src/index.ts'
 import { approvedPluginFolders, callDiff, lands, pluginOfTarget, pluginWriteAsk } from '../src/plugin-folders.ts'
@@ -59,8 +61,21 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-/** A Delo home whose profile approved the plugin `plug` from a folder, a workspace beside it, and a link into the folder. */
-async function layout() {
+/**
+ * Set the protection setting, as `delorun changes protection` at a terminal does.
+ * @param home - the Delo home.
+ * @param level - the level.
+ */
+async function protect(home: string, level: ProtectionLevel): Promise<void> {
+  await setProtection(home, level, attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+}
+
+/**
+ * A Delo home whose profile approved the plugin `plug` from a folder, a workspace beside it, and a link into the folder.
+ * @param protection - the protection setting the home records; `none`, the home has no record and is at the default.
+ * @returns the layout.
+ */
+async function layout(protection: ProtectionLevel | 'none' = 'on') {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'delo-plugin-writes-')))
   roots.push(root)
   const home = join(root, '.delo')
@@ -74,6 +89,7 @@ async function layout() {
   writeFileSync(join(profileDir, 'package.json'), '{"name":"dsh-profile-default","private":true}\n')
   await writeApproved(profileDir, { schema: APPROVED_RECORD_SCHEMA, plugins: { plug: { source, version: 'a'.repeat(64) as never, approvedAt: '2026-11-10T10:00:00.000Z' } } })
   symlinkSync(source, join(workspace, 'link'))
+  if (protection !== 'none') await protect(home, protection)
   return { root, home, profileDir, source, workspace, profile: { home, name: PROFILE, dir: profileDir } }
 }
 
@@ -94,10 +110,11 @@ function chat(name: string): Agent {
  * Upstream's write tool on the local filesystem, the approval service, and the plugin with the given switch.
  * @param switchOn - `approvedPluginWrites`.
  * @param answer - what the person answers to each ask.
+ * @param protection - the protection setting the home records; `none`, the home has no record and is at the default.
  * @returns the layout, the asks the person saw, and a write.
  */
-async function harness(switchOn: boolean, answer: ApprovalOutcome = 'allowed-once') {
-  const fixture = await layout()
+async function harness(switchOn: boolean, answer: ApprovalOutcome = 'allowed-once', protection: ProtectionLevel | 'none' = 'on') {
+  const fixture = await layout(protection)
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
   provideWorkingDirectoryFixture(ctx, fixture.workspace)
@@ -228,6 +245,42 @@ describe('the approved-plugin write consent', () => {
     const result = await write(chat('unreadable'), join(workspace, 'notes.md'))
     expect(text(result)).toContain('the profile\'s record of approved plugins cannot be read')
     expect(existsSync(join(workspace, 'notes.md'))).toBe(false)
+    expect(asks).toEqual([])
+  })
+
+  it('with protection off, the agent\'s write to an approved plugin\'s folder does not ask, and the active directories stay refused', async () => {
+    const { home, source, asks, write } = await harness(true, 'rejected', 'none')
+    const result = await write(chat('unprotected'), join(source, 'free.js'))
+    expect(result.isError, text(result)).toBe(false)
+    expect(readFileSync(join(source, 'free.js'), 'utf8')).toBe('export default 2\n')
+    const active = join(activeDirectory(home, PROFILE, 'plug'), 'index.js')
+    expect(text(await write(chat('unprotected'), active))).toContain('it is inside the directory Changes loads the harness\'s plugins from, which only Changes writes')
+    expect(existsSync(active)).toBe(false)
+    expect(asks).toEqual([])
+  })
+
+  it('reads the setting at each write, so changing it takes effect in the running Host without a restart', async () => {
+    const { home, source, asks, write } = await harness(true, 'rejected', 'off')
+    expect((await write(chat('first'), join(source, 'first.js'))).isError).toBe(false)
+    expect(asks).toEqual([])
+    await protect(home, 'on')
+    const held = await write(chat('second'), join(source, 'second.js'))
+    expect(text(held)).toContain(`the user refused the write to "${join(source, 'second.js')}"`)
+    expect(existsSync(join(source, 'second.js'))).toBe(false)
+    expect(asks).toHaveLength(1)
+    await protect(home, 'off')
+    expect((await write(chat('third'), join(source, 'third.js'))).isError).toBe(false)
+    expect(asks).toHaveLength(1)
+  })
+
+  it('refuses a write when the protection setting cannot be read', async () => {
+    const { home, source, asks, write } = await harness(true, 'allowed-once', 'off')
+    writeFileSync(protectionPath(home), 'not json', { mode: 0o600 })
+    const result = await write(chat('unreadable-protection'), join(source, 'held.js'))
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain(`the write to "${join(source, 'held.js')}" was not run: the protection setting, which decides whether a write to an approved plugin's folder asks first, cannot be read (`)
+    expect(result.error?.info).toEqual({ name: 'WriteConsentRefusedError', code: 'FS_CONSENT_DENIED' })
+    expect(existsSync(join(source, 'held.js'))).toBe(false)
     expect(asks).toEqual([])
   })
 

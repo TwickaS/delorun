@@ -1,12 +1,14 @@
 /**
  * `delorun plugin`: after upstream's plugin operation, a plugin it linked from a folder is linked to its active
- * directory at once, which holds nothing until the person applies the folder's content, and the command says so.
+ * directory at once. With protection on, the directory holds nothing until the person applies the folder's content;
+ * with protection off, the default, it holds the folder's content, logged as loaded without review. The command says
+ * which.
  */
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { activeDirectory, readChangeLog } from '@delo/changes'
+import { activeDirectory, attestTerminal, readChangeLog, setProtection } from '@delo/changes'
 import type { CommandContext } from '../src/command.ts'
 import { startChanges } from '../src/changes/start.ts'
 import { EXIT } from '../src/exit.ts'
@@ -40,7 +42,7 @@ let home: string
 let profileDir: string
 let context: CommandContext & { errors: string[] }
 
-beforeEach(() => {
+beforeEach(async () => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-plugin-')))
   home = join(base, '.delo')
   vi.stubEnv('HOME', base)
@@ -54,6 +56,7 @@ beforeEach(() => {
   mkdirSync(home, { mode: 0o700 })
   mkdirSync(join(profileDir, 'node_modules'), { recursive: true })
   writeFileSync(join(profileDir, 'package.json'), `${JSON.stringify({ name: 'dsh-profile-default', private: true, dependencies: {} }, undefined, 2)}\n`)
+  await setProtection(home, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
   upstream.calls = []
   upstream.run = () => {}
   upstream.end = 'exit-0'
@@ -107,6 +110,19 @@ describe('delorun plugin', () => {
     expect(realpathSync(join(profileDir, 'node_modules', 'plug'))).toBe(active)
     expect((await readChangeLog(home, PROFILE)).entries.at(-1)).toMatchObject({ kind: 'plugin-install', state: 'pending', subject: { plugin: 'plug', source: folder } })
     expect(context.errors.join('')).toMatch(/^plug is not loaded until you review it: delorun changes show c[0-9a-f]{10}\n$/)
+  })
+
+  it('with protection off, delorun plugin add link:<folder> loads the folder at once, logged as loaded without review', async () => {
+    rmSync(join(home, 'changes', 'protection.json'))
+    await firstStart()
+    const folder = addingLink('plug')
+    expect(await pluginCommand.run(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.ok)
+    const active = activeDirectory(home, PROFILE, 'plug')
+    expect(spec('plug')).toBe(`link:${active}`)
+    expect(readFileSync(join(active, 'index.js'), 'utf8')).toBe('export default "not reviewed"\n')
+    const entry = (await readChangeLog(home, PROFILE)).entries.at(-1)!
+    expect(entry).toMatchObject({ kind: 'plugin-install', state: 'applied', decidedFrom: 'unreviewed', subject: { plugin: 'plug', source: folder } })
+    expect(context.errors.join('')).toBe(`plug loaded without review, because protection is off: delorun changes show ${entry.id}\n`)
   })
 
   it('moves the link after a failed upstream operation too, and exits 1', async () => {

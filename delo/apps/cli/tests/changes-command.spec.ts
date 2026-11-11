@@ -1,19 +1,22 @@
 /**
  * `delorun changes` (contract C21, "Commands"): listing and showing what waits for review, the confirmations before
- * apply, discard, undo, off, on and a weaker protection setting, the refusal of every change without a terminal, the
- * running Host's reload through the update channel, and the home lock while Delo does not run.
+ * apply, discard, undo, off, on and a new protection setting, the refusal of every change without a terminal, the
+ * running Host's reload through the update channel, and the home lock while Delo does not run. The home has protection
+ * on, so changes wait for review; `with protection off` covers a home without a protection record, where a start loads
+ * a changed folder without review.
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { attestTerminal, enforceApprovedContent, listChanges, readApproved, readChangeLog, readWorkSession, recordPluginRequest, readProtection, setProtection, writeChangeLog, type ChangeId, type ChangesContext, type ContentVersion, type ReloadHost, type ReloadOutcome } from '@delo/changes'
+import { activeDirectory, attestTerminal, enforceApprovedContent, listChanges, readApproved, readChangeLog, readWorkSession, recordPluginRequest, readProtection, setProtection, writeChangeLog, type ChangeId, type ChangesContext, type ContentVersion, type ReloadHost, type ReloadOutcome } from '@delo/changes'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { ensureHomeTree, newStartId, readHomeLock, runDirectory } from '@delo/home'
 import { CountingChatGate, HomeProcess, sendHomeRequest, updateChannelProbe, type RunningHost } from '@delo/home-process'
 import { Redactor, type DeloLogger } from '@delo/logs'
 import { NOT_AT_TERMINAL, pageLinesOf, reloadThroughChannel, runChanges, withProfileHost, type ChangesCommandDependencies } from '../src/changes/command.ts'
+import { startChanges } from '../src/changes/start.ts'
 import type { CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
@@ -25,6 +28,11 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 })
 const PROFILE = 'default'
 const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
 const OK: ReloadOutcome = { ok: true }
+const TERMINAL = { stdin: { isTTY: true }, stdout: { isTTY: true } }
+/** What `delorun changes protection` says protection on means. */
+const ON_MEANING = "a changed plugin, an edit of Delo itself and the agent's plugin installs and removals load only after you apply them, and the agent asks before it first changes an approved plugin in a chat"
+/** What `delorun changes protection` says protection off means. */
+const OFF_MEANING = 'changes load without your review and are still recorded: a changed plugin loads at the next start and when you save while Delo runs, edits of Delo itself apply at the next start, and the agent installs and removes plugins with the full-access approval alone; see and undo each with delorun changes list'
 
 let base: string
 let home: string
@@ -51,6 +59,7 @@ beforeEach(async () => {
   profileDir = join(home, 'profiles', PROFILE)
   mkdirSync(home, { mode: 0o700 })
   await ensureHomeTree(home, PROFILE)
+  await setProtection(home, 'on', attestTerminal(TERMINAL))
   mkdirSync(join(profileDir, 'node_modules'), { recursive: true })
   writeFileSync(join(profileDir, 'package.json'), `${JSON.stringify({ name: `dsh-profile-${PROFILE}`, private: true, dependencies: { plug: `link:${source}`, 'left-pad': '^1.3.0' }, dsh: { profile: { bundles: ['plug'] } } }, undefined, 2)}\n`)
   symlinkSync(relative(join(profileDir, 'node_modules'), source), join(profileDir, 'node_modules', 'plug'))
@@ -155,7 +164,7 @@ describe('delorun changes list and show', () => {
     expect(await runChanges([], context, driven([]))).toBe(EXIT.ok)
     expect(out()).toContain('Nothing waits for your review.')
     expect(out()).toContain('Recent changes, newest first:')
-    expect(out()).toContain('Protection: block: changed plugins run only after you apply their changes.')
+    expect(out()).toContain('\nProtection: on: a changed plugin, an edit of Delo itself')
     edit('export default 2\n')
     context.printed.length = 0
     expect(await runChanges(['list'], context, driven([]))).toBe(EXIT.ok)
@@ -164,7 +173,7 @@ describe('delorun changes list and show', () => {
     expect(out()).not.toContain('Working on')
     context.printed.length = 0
     expect(await runChanges(['list', '--json'], context, driven([]))).toBe(EXIT.ok)
-    expect(JSON.parse(out())).toMatchObject({ protection: 'block', pending: [{ id }] })
+    expect(JSON.parse(out())).toMatchObject({ protection: 'on', pending: [{ id }] })
   })
 
   it('names a new plugin, two changed files, a failed apply, a gone folder and a work session in the list', async () => {
@@ -262,7 +271,7 @@ describe('delorun changes list and show', () => {
 
   it('is a row of the command table', async () => {
     expect(await main(['changes', 'protection'], context)).toBe(EXIT.ok)
-    expect(out()).toContain('Protection: block')
+    expect(out()).toContain('Protection: on')
   })
 })
 
@@ -634,24 +643,131 @@ describe('delorun changes work and done', () => {
 })
 
 describe('delorun changes protection', () => {
-  it('prints the setting without a terminal', async () => {
+  it('prints the setting with on|off without a terminal, and off for a home without a protection record', async () => {
     expect(await runChanges(['protection'], context, driven([], [], false))).toBe(EXIT.ok)
-    expect(out()).toBe('Protection: block: changed plugins run only after you apply their changes.\nChange it in a terminal: delorun changes protection block|warn|off\n')
+    expect(out()).toBe(`Protection: on: ${ON_MEANING}.\nChange it in a terminal: delorun changes protection on|off\n`)
+    rmSync(join(home, 'changes', 'protection.json'))
+    context.printed.length = 0
+    expect(await runChanges(['protection'], context, driven([], [], false))).toBe(EXIT.ok)
+    expect(out()).toBe(`Protection: off: ${OFF_MEANING}.\nChange it in a terminal: delorun changes protection on|off\n`)
   })
 
-  it('states what a weaker level means and asks; declining keeps it, and raising it asks nothing', async () => {
+  it('protection off states what off means and asks; only y writes it, and the log records the weakening', async () => {
     const declined = driven(['n'])
-    await runChanges(['protection', 'warn'], context, declined)
-    expect(out()).toContain('Changed plugins will run without your review. With warn, changed plugins run without your review, and every start names them.')
-    expect(declined.questions).toEqual(['Set protection to warn? [y/N] '])
-    expect(await readProtection(home)).toBe('block')
-    expect(await runChanges(['protection', 'off'], context, driven(['y']))).toBe(EXIT.ok)
+    expect(await runChanges(['protection', 'off'], context, declined)).toBe(EXIT.ok)
+    expect(out()).toBe(`Changes will load without your review. With protection off, ${OFF_MEANING}.\nNothing was changed.\n`)
+    expect(declined.questions).toEqual(['Turn protection off? [y/N] '])
+    expect(await readProtection(home)).toBe('on')
+    context.printed.length = 0
+    const accepted = driven(['y'])
+    expect(await runChanges(['protection', 'off'], context, accepted)).toBe(EXIT.ok)
+    expect(accepted.questions).toEqual(['Turn protection off? [y/N] '])
     expect(await readProtection(home)).toBe('off')
-    expect(out()).toContain('Protection is off (it was block); the next start uses it.')
-    const raised = driven([])
-    expect(await runChanges(['protection', 'block'], context, raised)).toBe(EXIT.ok)
-    expect(raised.questions).toEqual([])
-    expect(await readProtection(home)).toBe('block')
+    expect(out()).toContain('Protection is off (it was on). Delo uses it from its next decision, without a restart.\n')
+    expect((await readChangeLog(home, PROFILE)).entries.at(-1)).toMatchObject({ kind: 'guard-weakening', state: 'applied', summary: 'Protection turned off: changes load without review', decidedFrom: 'terminal' })
+  })
+
+  it('protection on states what on means and asks; only y writes it, and the log records no weakening', async () => {
+    rmSync(join(home, 'changes', 'protection.json'))
+    const entries = (await readChangeLog(home, PROFILE)).entries.length
+    const declined = driven(['no'])
+    expect(await runChanges(['protection', 'on'], context, declined)).toBe(EXIT.ok)
+    expect(out()).toBe(`Changes will wait for your review. With protection on, ${ON_MEANING}.\nNothing was changed.\n`)
+    expect(declined.questions).toEqual(['Turn protection on? [y/N] '])
+    expect(existsSync(join(home, 'changes', 'protection.json'))).toBe(false)
+    context.printed.length = 0
+    expect(await runChanges(['protection', 'on'], context, driven(['y']))).toBe(EXIT.ok)
+    expect(await readProtection(home)).toBe('on')
+    expect(out()).toContain('Protection is on (it was off). Delo uses it from its next decision, without a restart.\n')
+    expect((await readChangeLog(home, PROFILE)).entries).toHaveLength(entries)
+  })
+
+  it('refuses the old settings warn and block, and anything else, as a usage error that asks nothing', async () => {
+    for (const level of ['warn', 'block', 'ON']) {
+      const terminal = driven(['y'])
+      await expect(runChanges(['protection', level], context, terminal), level).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining(`${JSON.stringify(level)} is not a protection setting; use on or off`) })
+      expect(terminal.questions).toEqual([])
+    }
+    expect(await readProtection(home)).toBe('on')
+  })
+})
+
+describe('with protection off, the default', () => {
+  beforeEach(async () => {
+    // A home without a protection record has protection off.
+    rmSync(join(home, 'changes', 'protection.json'))
+    // A start at a terminal has shown the plugins approved at upgrade, so a start names only what it loaded.
+    await startChanges({ home, profile: PROFILE, terminal: true }, () => {})
+  })
+
+  /**
+   * Run Changes' part of `delorun start` for the profile, as the home process's pre-start step does.
+   * @returns what the start printed.
+   */
+  async function started(): Promise<string> {
+    const printed: string[] = []
+    await startChanges({ home, profile: PROFILE, terminal: false }, text => void printed.push(text))
+    return printed.join('')
+  }
+
+  it('a changed plugin folder loads at the next start without review, logged as an applied change list, show and undo reach', async () => {
+    const from = (await readApproved(profileDir)).plugins.plug!.version
+    edit('export default 2\n')
+    const printed = await started()
+    const entry = (await readChangeLog(home, PROFILE)).entries.at(-1)!
+    expect(entry).toMatchObject({ kind: 'plugin-edit', state: 'applied', decidedFrom: 'unreviewed', from, subject: { plugin: 'plug', source }, summary: `Loaded without review: plug: changes in ${source}` })
+    expect(entry.historyVersion).toEqual(expect.any(String))
+    expect(printed).toBe(`plug loaded changes without review, because protection is off: delorun changes show ${entry.id}\n`)
+    expect((await readApproved(profileDir)).plugins.plug!.version).toBe(entry.to)
+    expect(readFileSync(join(activeDirectory(home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default 2\n')
+    expect((await listChanges(ctx())).pending).toEqual([])
+
+    expect(await runChanges(['list'], context, driven([]))).toBe(EXIT.ok)
+    expect(out()).toContain('Nothing waits for your review.')
+    expect(out()).toContain(`  ${entry.id}  applied    ${entry.decidedAt!}  Loaded without review: plug: changes in ${source}\n`)
+    expect(out()).toContain('\nProtection: off: changes load without your review and are still recorded')
+    context.printed.length = 0
+    expect(await runChanges(['show', entry.id], context, driven([]))).toBe(EXIT.ok)
+    expect(out()).toBe(`Change ${entry.id}: Loaded without review: plug: changes in ${source}\nState: applied since ${entry.decidedAt!}\n`)
+
+    context.printed.length = 0
+    const undo = driven(['y'], [undefined])
+    expect(await runChanges(['undo', entry.id], context, undo)).toBe(EXIT.ok)
+    expect(undo.questions).toEqual([`Undo ${entry.id}: Loaded without review: plug: changes in ${source}? [y/N] `])
+    expect(out()).toContain(`Undid ${entry.id}. Delo is not running; the next start runs it.`)
+    expect((await readApproved(profileDir)).plugins.plug!.version).toBe(from)
+    expect(readFileSync(join(activeDirectory(home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default 1\n')
+  })
+
+  it('content the person undid does not load again until the folder holds something else', async () => {
+    const from = (await readApproved(profileDir)).plugins.plug!.version
+    edit('export default 2\n')
+    await started()
+    const entry = (await readChangeLog(home, PROFILE)).entries.at(-1)!
+    await runChanges(['undo', entry.id], context, driven(['y'], [undefined]))
+    const again = await started()
+    expect(again).toMatch(/^plug has changes waiting for your review and loads without them: delorun changes show c[0-9a-f]{10}\n$/u)
+    expect((await readApproved(profileDir)).plugins.plug!.version).toBe(from)
+    expect(readFileSync(join(activeDirectory(home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default 1\n')
+    edit('export default 3\n')
+    expect(await started()).toMatch(/^plug loaded changes without review, because protection is off: delorun changes show c[0-9a-f]{10}\n$/u)
+    expect(readFileSync(join(activeDirectory(home, PROFILE, 'plug'), 'index.js'), 'utf8')).toBe('export default 3\n')
+  })
+
+  it('a plugin linked since the last start loads at the next start without review', async () => {
+    const other = join(base, 'other')
+    mkdirSync(other)
+    writeFileSync(join(other, 'package.json'), '{"name":"other"}\n')
+    const manifestPath = join(profileDir, 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies: Record<string, string> }
+    manifest.dependencies.other = `link:${other}`
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+    symlinkSync(relative(join(profileDir, 'node_modules'), other), join(profileDir, 'node_modules', 'other'))
+    const printed = await started()
+    const entry = (await readChangeLog(home, PROFILE)).entries.find(candidate => candidate.subject.plugin === 'other')!
+    expect(entry).toMatchObject({ kind: 'plugin-install', state: 'applied', decidedFrom: 'unreviewed', summary: `Loaded without review: other from ${other}` })
+    expect(printed).toBe(`other loaded without review, because protection is off: delorun changes show ${entry.id}\n`)
+    expect(readFileSync(join(activeDirectory(home, PROFILE, 'other'), 'package.json'), 'utf8')).toBe('{"name":"other"}\n')
   })
 })
 
@@ -661,14 +777,14 @@ describe('every state-changing changes action refuses without a terminal', () =>
     const id = await pendingId()
     const upgrade = (await readChangeLog(home, PROFILE)).entries[0]!
     const before = written()
-    for (const args of [['apply', id], ['discard', id], ['undo', upgrade.id], ['off', 'plug'], ['on', 'left-pad'], ['protection', 'off'], ['work', 'plug'], ['done', 'plug']]) {
+    for (const args of [['apply', id], ['discard', id], ['undo', upgrade.id], ['off', 'plug'], ['on', 'left-pad'], ['protection', 'off'], ['protection', 'on'], ['work', 'plug'], ['done', 'plug']]) {
       const terminal = driven(['y', 'y'], [OK], false)
       await expect(runChanges(args, context, terminal)).rejects.toThrow(`delorun changes: ${NOT_AT_TERMINAL}`)
       expect(terminal.questions).toEqual([])
       expect(terminal.hosted()).toBe(0)
     }
     expect(written()).toBe(before)
-    expect(await readProtection(home)).toBe('block')
+    expect(await readProtection(home)).toBe('on')
   })
 })
 
@@ -814,18 +930,20 @@ describe('plugin names', () => {
 })
 
 describe('delorun status and Changes', () => {
-  it('delorun status names the plugins approved at upgrade until a terminal showed them, the changes waiting and lowered protection', async () => {
+  it('delorun status names the plugins approved at upgrade until a terminal showed them and the changes waiting, never the protection setting', async () => {
     const upgrade = `changes: Delo runs the approved copy of plug, linked from ${source}, as it was when Changes began. Edits in that folder wait for your review.\n`
     expect(await statusCommand.run([], context)).toBe(EXIT.notRunning)
     expect(out()).toContain(upgrade)
     edit('export default 2\n')
-    await setProtection(home, 'warn', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
     await runChanges(['list'], context, driven([]))
     context.printed.length = 0
     await statusCommand.run([], context)
     expect(out()).not.toContain(upgrade)
     expect(out()).toMatch(/changes: plug has changes in .* waiting for your review: delorun changes show c[0-9a-f]{10}\n/u)
-    expect(out()).toContain('changes: Protection is warn: changes you have not approved run, and every start says so.\n')
+    await setProtection(home, 'off', attestTerminal(TERMINAL))
+    context.printed.length = 0
+    await statusCommand.run([], context)
+    expect(out()).not.toContain('Protection')
     context.printed.length = 0
     expect(await statusCommand.run(['--json'], context)).toBe(EXIT.notRunning)
     expect(out()).not.toContain('changes:')

@@ -7,8 +7,9 @@
  * invariant that does not hold; and for the runtime this `delorun` runs from the store, the person's changes to the
  * harness itself: its approved files, its writable copy, the changes waiting there and the composed tree a start runs.
  *
- * A plugin that did not load, runs content the person did not approve or waits for review is `warn`, and so are a change
- * left out at start and protection lowered to `warn` or `off`; an invariant that does not hold is `fail`. Nothing is
+ * A plugin that did not load or waits for review is `warn`, and so is a change left out at start; an invariant that does
+ * not hold is `fail`. The protection setting is a `pass` line in either setting: off is the default, and a plugin whose
+ * content loaded without review says so on its line. Nothing is
  * written: the consent check reads the active content from the store. Every message is escaped for the terminal, and a failure message a plugin or
  * a record carries is cut at a line's length ([terminal text](../terminal-text.ts)).
  *
@@ -55,7 +56,6 @@ const ENGINES = ['dsh', 'delo'] as const
 const CONTENT_WORDS: Readonly<Record<ActiveContent['kind'], string>> = {
   'approved': 'it runs the content you approved',
   'work-session': 'it runs its folder in your work session',
-  'unapproved': 'it runs content you have not approved',
   'left-out': 'it runs the content from before a change a failed start left out',
 }
 
@@ -148,11 +148,14 @@ function loadState(status: ChangesStatus, plugin: PluginStatus): { readonly fail
 }
 
 /**
+ * @param status - the report.
  * @param plugin - one plugin under Changes.
  * @returns the clause on what its active directory holds.
  */
-function contentWords(plugin: PluginStatus): string {
+function contentWords(status: ChangesStatus, plugin: PluginStatus): string {
   if (plugin.active?.kind === 'left-out' && plugin.active.version === undefined) return 'nothing of it runs, because a failed start left out the change that added it or turned it on'
+  const unreviewed = status.unreviewed.find(candidate => candidate.plugin === plugin.plugin)
+  if (plugin.active?.kind === 'approved' && unreviewed !== undefined) return `it runs content that loaded without review (${unreviewed.id})`
   if (plugin.active !== undefined) return CONTENT_WORDS[plugin.active.kind]
   return plugin.approved === undefined ? 'nothing of it runs until you review it' : 'no content of it is recorded as running'
 }
@@ -167,7 +170,7 @@ function contentWords(plugin: PluginStatus): string {
  */
 async function pluginLine(home: string, profile: string, status: ChangesStatus, plugin: PluginStatus): Promise<CheckResult> {
   const load = loadState(status, plugin)
-  const parts = [load.words, contentWords(plugin)]
+  const parts = [load.words, contentWords(status, plugin)]
   const version = plugin.active?.version
   if (version !== undefined) {
     parts.push(await requirements(activeDirectory(home, profile, plugin.plugin)))
@@ -175,7 +178,7 @@ async function pluginLine(home: string, profile: string, status: ChangesStatus, 
   }
   // A plugin waiting for review as an install loads nothing by design; its pending line says so.
   const expectedOut = plugin.approved === undefined && plugin.active === undefined
-  const warn = (load.failed && !expectedOut) || plugin.active?.kind === 'unapproved'
+  const warn = load.failed && !expectedOut
   return line(warn ? 'warn' : 'pass', `${plugin.plugin} from ${plugin.source}: ${parts.join('; ')}.`)
 }
 
@@ -222,7 +225,7 @@ export async function changesLines(home: string, profile: string, status: Change
   // A protection record that cannot be read is named by its invariant line.
   const results: CheckResult[] = status.protection === undefined
     ? []
-    : [line(status.protection === 'block' ? 'pass' : 'warn', `protection is set to ${status.protection}: ${PROTECTION_WORDS[status.protection]}.${status.protection === 'block' ? '' : ' Set it back with: delorun changes protection block'}`)]
+    : [line('pass', `protection is ${status.protection}: ${PROTECTION_WORDS[status.protection]}.`)]
   if (status.workSession !== undefined) {
     const { plugin, startedAt } = status.workSession
     results.push(line('pass', `you are working on ${plugin} since ${startedAt}: edits in its folder load live until delorun changes done ${plugin}.`))
@@ -259,7 +262,10 @@ export async function changesLines(home: string, profile: string, status: Change
 export function harnessLines(harness: HarnessStatus): CheckResult[] {
   const { runtime, tree } = harness
   const results: CheckResult[] = []
-  if (harness.approved.length > 0) results.push(line('pass', `you approved changes to ${String(harness.approved.length)} ${harness.approved.length === 1 ? 'file' : 'files'} of Delo ${runtime} itself: ${harness.approved.map(({ file }) => file).join(', ')}.`))
+  const reviewed = harness.approved.filter(({ unreviewed }) => !unreviewed)
+  const unreviewed = harness.approved.filter(file => file.unreviewed)
+  if (reviewed.length > 0) results.push(line('pass', `you approved changes to ${String(reviewed.length)} ${reviewed.length === 1 ? 'file' : 'files'} of Delo ${runtime} itself: ${reviewed.map(({ file }) => file).join(', ')}.`))
+  if (unreviewed.length > 0) results.push(line('pass', `changes to ${String(unreviewed.length)} ${unreviewed.length === 1 ? 'file' : 'files'} of Delo ${runtime} itself loaded without review while protection was off: ${unreviewed.map(({ file, change }) => `${file} (${change})`).join(', ')}.`))
   if (harness.copy !== undefined) results.push(line('pass', `your copy of Delo ${runtime} is in ${harness.copy}; delorun changes edit-harness --discard takes every change to Delo itself back.`))
   for (const change of harness.pending) results.push(line('warn', `Delo ${runtime} itself: ${change.file} waits for your review: delorun changes show ${change.id}`))
   for (const { id, plugin, at, failure } of harness.leftOut.map(leftOutFact)) {

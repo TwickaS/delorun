@@ -17,7 +17,7 @@ type FakeState = Omit<ChangesStateView, 'folders'> & { readonly pending: readonl
 
 /** A state with nothing in it, at the computer. */
 function emptyState(fields: Partial<FakeState> = {}): FakeState {
-  return { atComputer: true, profile: 'default', protection: 'block', leftOut: [], pending: [], requests: [], recent: [], harness: [], problems: [], ...fields }
+  return { atComputer: true, profile: 'default', protection: 'on', leftOut: [], pending: [], requests: [], recent: [], harness: [], problems: [], ...fields }
 }
 
 /**
@@ -104,6 +104,12 @@ function harness(initial: FakeState = emptyState()) {
       return shown === undefined ? Response.json({ kind: 'logged', entry: logged({ id: String(url.searchParams.get('id')) }) }) : Response.json({ kind: 'pending', change: shown })
     },
     [ACTION_PATHS.apply]: ({ body }) => {
+      const request = state.requests.find(item => item.id === body.id)
+      if (request !== undefined) {
+        if (body.confirmedRisk !== true) return Response.json({ code: 'CONFIRM_RISK', message: 'Confirm again.', kinds: ['dependency-or-build', 'not-shown'], notShown: ['left-pad@1.3.0'] }, { status: 409 })
+        state = { ...state, requests: state.requests.filter(item => item.id !== body.id) }
+        return Response.json({ entry: decided(body, { kind: request.kind }), reload: { kind: 'reloaded' } })
+      }
       const shown = changes.get(String(body.id))
       if (shown?.risk.needsSecondConfirmation === true && body.confirmedRisk !== true) {
         return Response.json({ code: 'CONFIRM_RISK', message: 'Confirm again.', kinds: shown.risk.kinds, notShown: ['native.node: not text, and Node can load it'] }, { status: 409 })
@@ -328,8 +334,9 @@ describe('the Changes section', () => {
     expect(recentRows[1]?.textContent).toContain(en['state.discarded'])
     expect(within(recentRows[1] as HTMLElement).queryByRole('button')).toBeNull()
     const protection = screen.getByRole('region', { name: en['protection.heading'] })
-    expect(within(protection).getByText(en['protection.block'])).toBeTruthy()
-    expect(within(protection).getByText('delorun changes protection block|warn|off')).toBeTruthy()
+    expect(within(protection).getByText(en['protection.on'])).toBeTruthy()
+    expect(within(protection).getByText('delorun changes protection on|off')).toBeTruthy()
+    expect(document.querySelector('[data-delo-changes-live]')).toBeNull()
     expect(within(protection).queryByRole('button')).toBeNull()
     expect(within(protection).queryByRole('switch')).toBeNull()
     expect(within(protection).queryByRole('radio')).toBeNull()
@@ -351,9 +358,14 @@ describe('the Changes section', () => {
     expect(screen.queryByRole('region', { name: en['requests.heading'] })).toBeNull()
   })
 
-  it.each(['warn', 'off'] as const)('states the %s protection setting', async (protection) => {
-    await openSection(emptyState({ protection }))
-    expect(screen.getByText(en[`protection.${protection}`])).toBeTruthy()
+  it('with protection off, says that changes load and linked plugins reload live on save without review, read only', async () => {
+    await openSection(emptyState({ protection: 'off' }))
+    expect(document.querySelector('[data-delo-changes-live]')?.textContent).toBe(en.live)
+    const protection = screen.getByRole('region', { name: en['protection.heading'] })
+    expect(within(protection).getByText(en['protection.off'])).toBeTruthy()
+    expect(within(protection).getByText('delorun changes protection on|off')).toBeTruthy()
+    expect(within(protection).queryByRole('button')).toBeNull()
+    expect(within(protection).queryByRole('switch')).toBeNull()
   })
 
   it('reads the plugins\' folders only through show?pending: when it opens, after an action and when asked, never on the state\'s poll', async () => {
@@ -543,11 +555,44 @@ describe('the Changes section', () => {
     expect(within(screen.getByRole('dialog')).getByText(en['confirm.applyAgain.body'].replace('{summary}', 'Edit broken'))).toBeTruthy()
   })
 
-  it('discards an agent\'s plugin request after a confirmation and leaves applying it to a terminal', async () => {
+  it('applies an agent\'s plugin request after a confirmation and the second confirmation that names what it installs', async () => {
+    const request = logged({ id: 'c0000000005', kind: 'plugin-install', state: 'pending', summary: 'Install left-pad@1.3.0', undoable: false })
+    const { fake } = await openSection(emptyState({ requests: [request] }))
+    const requests = screen.getByRole('region', { name: en['requests.heading'] })
+    expect(within(requests).getByText(en['requests.terminal'])).toBeTruthy()
+    fireEvent.click(within(requests).getByRole('button', { name: en['review.apply'] }))
+    let dialog = screen.getByRole('dialog', { name: en['confirm.applyRequest.title'] })
+    expect(within(dialog).getByText(en['confirm.applyRequest.body'].replace('{summary}', 'Install left-pad@1.3.0'))).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['review.apply'] }))
+    await waitFor(() => { expect(fake.callsTo(ACTION_PATHS.apply)).toEqual([{ id: 'c0000000005' }]) })
+    dialog = await screen.findByRole('dialog', { name: en['confirm.applyRequest.title'] })
+    expect(within(dialog).getByText(en['second.request'].replace('{summary}', 'Install left-pad@1.3.0'))).toBeTruthy()
+    expect(within(dialog).queryByText(en['second.body'])).toBeNull()
+    expect(within(dialog).getByText(en['risk.dependency-or-build'])).toBeTruthy()
+    expect(within(dialog).getByText(en['risk.not-shown'])).toBeTruthy()
+    expect(within(dialog).getByText('left-pad@1.3.0')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['second.apply'] }))
+    await waitFor(() => { expect(fake.callsTo(ACTION_PATHS.apply)).toEqual([{ id: 'c0000000005' }, { id: 'c0000000005', confirmedRisk: true }]) })
+    await waitFor(() => { expect(toasts()).toContain(en['toast.applied']) })
+    await waitFor(() => { expect(screen.queryByRole('region', { name: en['requests.heading'] })).toBeNull() })
+  })
+
+  it.each([
+    [{ kind: 'not-running' }, en['toast.notRunning']],
+    [{ kind: 'failed', failure: 'Error: no' }, en['toast.installNotLoaded'].replace('{failure}', 'Error: no')],
+  ] as const)('reports how the running Delo took an applied request: %o', async (reload, words) => {
+    const request = logged({ id: 'c0000000005', kind: 'plugin-remove', state: 'pending', summary: 'Remove old', undoable: false })
+    const { fake } = await openSection(emptyState({ requests: [request] }))
+    fake.replace(ACTION_PATHS.apply, ({ body }) => Response.json({ entry: logged({ id: String(body.id), kind: 'plugin-remove' }), reload }))
+    fireEvent.click(screen.getByRole('button', { name: en['review.apply'] }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['review.apply'] }))
+    await waitFor(() => { expect(toasts()).toContain(words) })
+  })
+
+  it('discards an agent\'s plugin request after a confirmation', async () => {
     const request = logged({ id: 'c0000000005', kind: 'plugin-install', state: 'pending', summary: 'Install left-pad', undoable: false })
     const { fake } = await openSection(emptyState({ requests: [request] }))
     const requests = screen.getByRole('region', { name: en['requests.heading'] })
-    expect(within(requests).queryByRole('button', { name: en['review.apply'] })).toBeNull()
     fireEvent.click(within(requests).getByRole('button', { name: en['review.discard'] }))
     const dialog = screen.getByRole('dialog', { name: en['confirm.discardRequest.title'] })
     expect(within(dialog).getByText(en['confirm.discardRequest.body'].replace('{summary}', 'Install left-pad'))).toBeTruthy()
@@ -718,15 +763,18 @@ describe('the Changes section', () => {
     const leftOut = logged({ id: 'c0000000009', state: 'left-out-at-start', plugin: 'broken-plugin', undoable: false })
     const session = { plugin: 'hello-plugin', source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString() }
     const { fake } = await openSection(emptyState({
-      atComputer: false, workSession: session, leftOut: [leftOut], pending: [PENDING],
+      atComputer: false, protection: 'off', workSession: session, leftOut: [leftOut], pending: [PENDING],
       requests: [logged({ id: 'c0000000005', kind: 'plugin-install', state: 'pending', undoable: false })], recent: [logged({ id: 'c0000000006' })],
     }))
     expect(document.querySelector('[data-delo-changes-remote]')?.textContent).toBe(`${en['remote.title']}${en['remote.body']}`)
     // Everything is shown; every action is disabled, reading a change is not.
     expect(screen.getByText('hello-plugin')).toBeTruthy()
-    for (const name of [en['work.done'], en['leftOut.applyAgain'], en['confirm.undo'], en['review.discard']]) {
+    for (const name of [en['work.done'], en['leftOut.applyAgain'], en['confirm.undo'], en['review.discard'], en['review.apply']]) {
       for (const button of screen.getAllByRole('button', { name })) expect(button.hasAttribute('disabled')).toBe(true)
     }
+    // The protection setting and what it means read the same, with no control.
+    expect(document.querySelector('[data-delo-changes-live]')?.textContent).toBe(en.live)
+    expect(within(screen.getByRole('region', { name: en['protection.heading'] })).queryByRole('button')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: en['pending.review'] }))
     const dialog = await screen.findByRole('dialog')
     await within(dialog).findByRole('region', { name: en['review.files'] })

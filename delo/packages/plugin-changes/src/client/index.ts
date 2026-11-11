@@ -1,6 +1,7 @@
 /**
  * The studio half of `@delo/plugin-changes`: the Changes section in Settings, which reviews, applies, discards and
- * undoes changes and opens and ends a work session through the Host's Changes routes; the work-session badge at the
+ * undoes changes, applies the agent's plugin requests, states the protection setting, and opens and ends a work session
+ * through the Host's Changes routes; the work-session badge at the
  * sidebar's foot; and the outcome toast. A page that is not at the computer reads everything and acts on nothing.
  * @module @delo/plugin-changes/client
  */
@@ -84,6 +85,7 @@ export function apply(ctx: Context): void {
     listPending: () => changes.listPending(),
     reviewWork: plugin => changes.reviewWork(plugin),
     apply: (id, confirmedRisk) => changes.apply(id, confirmedRisk),
+    applyRequest: (id, confirmedRisk) => changes.applyRequest(id, confirmedRisk),
     discard: id => changes.discard(id),
     undo: id => changes.undo(id),
     beginWork: plugin => changes.beginWork(plugin),

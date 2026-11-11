@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { activeDirectory, applyChange, attestTerminal, enforceApprovedContent, listChanges, readChangeLog, type ChangeEntry } from '@delo/changes'
+import { activeDirectory, applyChange, attestTerminal, enforceApprovedContent, listChanges, readChangeLog, setProtection, type ChangeEntry } from '@delo/changes'
 import { isCarriedPackage } from '../src/changes/start.ts'
 import { CHANGES_RETRY_ENV, relaunchForeground, SECOND_FAILURE_LINE } from '../src/changes/retry.ts'
 import type { CommandContext } from '../src/command.ts'
@@ -58,8 +58,8 @@ function profileDir(): string {
 }
 
 /**
- * Link plugins from folders into the set-up CLI profile, as `delorun plugin add link:` leaves them, and bring them
- * under Changes as the first start does, approving each as it is.
+ * Link plugins from folders into the set-up CLI profile, as `delorun plugin add link:` leaves them, turn protection on,
+ * and bring them under Changes as the first start does, approving each as it is.
  * @param names - the plugins' package names, each also its folder's name and row id.
  * @returns each plugin's folder, by name.
  */
@@ -79,6 +79,8 @@ async function linkedPlugins(...names: string[]): Promise<Record<string, string>
     folders[name] = folder
   }
   writeFileSync(path, JSON.stringify(manifest))
+  // With protection on, each edit waits for review until the spec applies it.
+  await setProtection(deloHome, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
   await enforceApprovedContent({ home: deloHome, profile: PROFILE, profileDir: profileDir(), harnessLink: isCarriedPackage })
   return folders
 }

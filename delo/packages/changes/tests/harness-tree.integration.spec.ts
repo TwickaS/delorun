@@ -201,7 +201,7 @@ describe('the harness report', () => {
     writeFileSync(join(harnessCopyDirectory(home, RUNTIME), 'app', 'added.js'), 'export {}\n')
     const before = snapshotOf(join(home, 'changes'))
     const status = await harnessStatus(home, RUNTIME, signed)
-    expect(status.approved).toEqual([{ file: START_FILE, change: expect.stringMatching(/^c[0-9a-f]{10}$/u) }])
+    expect(status.approved).toEqual([{ file: START_FILE, change: expect.stringMatching(/^c[0-9a-f]{10}$/u), unreviewed: false }])
     expect(status.copy).toBe(join(harnessCopyDirectory(home, RUNTIME), 'app'))
     expect(status.pending.map(change => change.file)).toEqual(['app/added.js'])
     expect(status.tree.kind).toBe('not-built')

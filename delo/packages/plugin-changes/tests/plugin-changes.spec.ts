@@ -1,9 +1,11 @@
 /**
  * Specs of `@delo/plugin-changes` against upstream's real `plugin_manager` tool and tool pipeline: with the C16 switch
- * `plugin_changes_pending` on, the model's install, update and removal record a pending change and change nothing the
- * profile runs, without reaching the tool's full-access approval; a listener that allows such a call without the
- * plugin's listener is overruled by its guard; and with the switch at parity the tool asks its approval as upstream's
- * does.
+ * `plugin_changes_pending` on and protection on, the model's install, update and removal record a pending change and
+ * change nothing the profile runs, without reaching the tool's full-access approval; with protection off, the default,
+ * every such call reaches upstream's approval and manager as with the switch off; a protection record that cannot be
+ * read holds the call; the setting is read at each call, so changing it takes effect without a restart; a listener that
+ * allows such a call without the plugin's listener is overruled by its guard; and with the switch at parity the tool
+ * asks its approval as upstream's does.
  */
 import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -22,7 +24,7 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import ToolRuntime, { type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
-import { readChangeLog } from '@delo/changes'
+import { attestTerminal, protectionPath, readChangeLog, setProtection, type ProtectionLevel } from '@delo/changes'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
 
@@ -67,6 +69,15 @@ function snapshot(directory: string): Record<string, string> {
   return files
 }
 
+/**
+ * Set the protection setting, as `delorun changes protection` at a terminal does.
+ * @param deloHome - the Delo home.
+ * @param level - the level.
+ */
+async function protect(deloHome: string, level: ProtectionLevel): Promise<void> {
+  await setProtection(deloHome, level, attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+}
+
 /** An agent whose session has an open turn, so an approval can be asked. */
 function activeAgent(): Agent {
   const id = SessionId('plugin-changes')
@@ -82,10 +93,12 @@ function activeAgent(): Agent {
  * @param enabled - the switch.
  * @param withProfile - whether the Host runs a profile launched by dsh.
  * @param profileHistory - the tool's switch that offers `configure`, `undo` and `restore`.
+ * @param protection - the protection setting the home records; `none`, the home has no record and is at the default.
  * @returns the context, the manager, the approval spy, the profile and a call.
  */
-async function harness(enabled: boolean, withProfile = true, profileHistory = false) {
+async function harness(enabled: boolean, withProfile = true, profileHistory = false, protection: ProtectionLevel | 'none' = 'on') {
   const profile = home()
+  if (protection !== 'none') await protect(profile.home, protection)
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
   const applied = async (): Promise<ChangeResult> => ({ changed: true, application: 'applied', stage: 'install', target: 'plug' })
@@ -181,10 +194,13 @@ describe('the model\'s plugin_manager changes wait for the person', () => {
   })
 
   it('denies when the harness runs no profile whose changes Delo keeps', async () => {
-    const { manager, call } = await harness(true, false)
+    const { manager, call } = await harness(true, false, true)
     const result = await call({ action: 'install_bundle', target: 'new-plugin' })
     expect(text(result)).toContain('could not be recorded: this harness runs no profile whose changes Delo keeps.')
     expect(manager.installBundle).not.toHaveBeenCalled()
+    const restore = await call({ action: 'restore', target: 'version-1' })
+    expect(restore.error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
+    expect(manager.restore).not.toHaveBeenCalled()
   })
 
   it('reports a record it cannot read as the reason', async () => {
@@ -256,6 +272,68 @@ describe('the model\'s plugin_manager changes wait for the person', () => {
     expect(plugin.heldRequest({ name: 'plugin_manager', arguments: undefined })).toBeUndefined()
     expect(plugin.heldRequest({ name: 'plugin_manager', arguments: { action: 7 } })).toBeUndefined()
     expect(plugin.heldRequest({ name: 'plugin_manager', arguments: { action: 'toString' } })).toBeUndefined()
+  })
+})
+
+describe('with protection off', () => {
+  it('the model\'s plugin_manager install runs through upstream\'s approval with protection off, the default', async () => {
+    const { manager, approval, profile, call } = await harness(true, true, false, 'none')
+    const result = await call({ action: 'install_bundle', target: 'new-plugin@2.0.0' })
+    // The listener passed the call on and the guard let it run: upstream's approval and manager decided it.
+    expect(result.isError).toBe(false)
+    expect(approval).toHaveBeenCalledTimes(1)
+    expect(manager.installBundle).toHaveBeenCalledWith('new-plugin@2.0.0', {})
+    expect((await call({ action: 'remove_bundle', target: 'installed-plugin' })).isError).toBe(false)
+    expect(manager.removeBundle).toHaveBeenCalledWith('installed-plugin')
+    expect(approval).toHaveBeenCalledTimes(2)
+    // A registry install or a removal is not under Changes: nothing is logged for it.
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+  })
+
+  it('every other action that changes what runs goes to upstream too', async () => {
+    const { manager, approval, call } = await harness(true, true, true, 'off')
+    expect((await call({ action: 'set_bundle', target: 'installed-plugin', enabled: false })).isError).toBe(false)
+    expect(manager.setBundleEnabled).toHaveBeenCalledTimes(1)
+    expect(approval).toHaveBeenCalledTimes(1)
+  })
+
+  it('a listener that allows the call without the plugin\'s listener is still overruled by its guard', async () => {
+    const { ctx, manager, approval, call } = await harness(true, true, false, 'off')
+    ctx.on('tools/pre-execute', () => Promise.resolve({ kind: 'allow' as const }), { prepend: true })
+    const result = await call({ action: 'install_bundle', target: 'new-plugin' })
+    expect(text(result)).toBe('Error: Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.')
+    expect(approval).not.toHaveBeenCalled()
+    expect(manager.installBundle).not.toHaveBeenCalled()
+  })
+
+  it('a protection record that cannot be read holds the call', async () => {
+    const { manager, approval, profile, call } = await harness(true, true, true, 'off')
+    writeFileSync(protectionPath(profile.home), 'not json', { mode: 0o600 })
+    for (const args of [{ action: 'install_bundle', target: 'new-plugin' }, { action: 'set_bundle', target: 'installed-plugin', enabled: false }]) {
+      const result = await call(args)
+      expect(result.isError).toBe(true)
+      expect(result.error?.info).toEqual({ name: 'PluginChangeUnrecorded', code: plugin.PLUGIN_CHANGE_UNRECORDED })
+      expect(text(result)).toMatch(new RegExp(`^Error: ${args.action} changes what the person's harness runs, and the protection setting that decides whether it waits for the person cannot be read: .+ Nothing was changed; tell the person, who checks it with delorun changes protection\\.$`, 's'))
+    }
+    expect(approval).not.toHaveBeenCalled()
+    expect(manager.installBundle).not.toHaveBeenCalled()
+    expect(manager.setBundleEnabled).not.toHaveBeenCalled()
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+  })
+
+  it('reads the setting at each call, so changing it takes effect in the running Host without a restart', async () => {
+    const { manager, approval, profile, call } = await harness(true, true, false, 'off')
+    expect((await call({ action: 'install_bundle', target: 'first-plugin' })).isError).toBe(false)
+    expect(manager.installBundle).toHaveBeenCalledTimes(1)
+    await protect(profile.home, 'on')
+    const held = await call({ action: 'install_bundle', target: 'second-plugin' })
+    expect(held.error?.info).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
+    expect(manager.installBundle).toHaveBeenCalledTimes(1)
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ kind: 'plugin-install', state: 'pending', subject: { plugin: 'second-plugin', spec: 'second-plugin' } })])
+    await protect(profile.home, 'off')
+    expect((await call({ action: 'install_bundle', target: 'third-plugin' })).isError).toBe(false)
+    expect(manager.installBundle).toHaveBeenLastCalledWith('third-plugin', {})
+    expect(approval).toHaveBeenCalledTimes(2)
   })
 })
 

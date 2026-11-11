@@ -20,7 +20,7 @@ import { codedReason, profileOption, refusalDescriber, type RefusalDescriber } f
  * - `NOT_LINKED`: the plugin is not one the profile links from a folder, or the name is not a package name.
  * - `WORK_SESSION_OPEN`: a work session is already open.
  * - `NO_WORK_SESSION`: no work session is open for the plugin.
- * - `RUNTIME_CHANGED`: the runtime in use differs from its signed file list under Block.
+ * - `RUNTIME_CHANGED`: the runtime in use differs from its signed file list.
  * - `INVALID_REQUEST`: an agent's plugin request names no spec pnpm accepts, or no plugin of the profile to remove; or a
  *   harness path names no runtime version or no file under the runtime's `app/` directory.
  * - `OPERATION_FAILED`: upstream's plugin operation for an applied plugin request failed; nothing was applied.

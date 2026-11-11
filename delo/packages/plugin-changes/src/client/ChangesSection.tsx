@@ -1,12 +1,15 @@
 /**
  * The Changes section in Settings: the work session, the changes a start left out, the changes and the agent's
- * requests waiting for review, the recent changes, the changes to Delo itself and the protection setting. The state,
- * which the page reads every 15 seconds, names the plugins under Changes; the section reads their folders for the
- * changes waiting for review when it opens, after each action and when the person asks. Review opens a change with its
- * diff and risk summary; Apply, Discard, Undo, Apply again, Start working and Done act through the harness's Changes
- * routes, and a change the checks flagged asks a second confirmation that names what they found. A change to Delo
- * itself is reviewed read only, with the terminal commands that decide it and no action. A page that is not at the
- * computer shows everything with every action disabled.
+ * requests waiting for review, the recent changes, the changes to Delo itself and the protection setting, read only
+ * with the terminal command that changes it; with protection off, a note says that changes load without review and
+ * linked plugins reload live on save. The state, which the page reads every 15 seconds, names the plugins under
+ * Changes; the section reads their folders for the changes waiting for review when it opens, after each action and
+ * when the person asks. Review opens a change with its diff and risk summary; Apply, Discard, Undo, Apply again, Start
+ * working and Done act through the harness's Changes routes, and a change the checks flagged asks a second
+ * confirmation that names what they found. An agent's plugin request is applied after a confirmation and the second
+ * confirmation the route asks for every request, which names its spec. A change to Delo itself is reviewed read only,
+ * with the terminal commands that decide it and no action. A page that is not at the computer shows everything with
+ * every action disabled.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button, CommandText, Modal, relativeTime, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -55,6 +58,13 @@ export interface ChangesSectionInjected {
    */
   readonly apply: (id: string, confirmedRisk: boolean) => Promise<ActionOutcome>
   /**
+   * Apply an agent's plugin request.
+   * @param id - the request.
+   * @param confirmedRisk - whether the person confirmed a second time.
+   * @returns the outcome.
+   */
+  readonly applyRequest: (id: string, confirmedRisk: boolean) => Promise<ActionOutcome>
+  /**
    * Discard a change.
    * @param id - the change.
    * @returns the outcome.
@@ -89,13 +99,17 @@ export type ChangesSectionProps = PropsRuntime<'settings.section'> & PropsLocale
 type T = TranslateNS<'deloChanges'>
 
 /** What a second confirmation would send once the person confirms. */
-type Flagged = { readonly kind: 'apply', readonly id: string } | { readonly kind: 'done', readonly plugin: string, readonly version: string }
+type Flagged =
+  | { readonly kind: 'apply', readonly id: string }
+  | { readonly kind: 'applyRequest', readonly id: string, readonly summary: string }
+  | { readonly kind: 'done', readonly plugin: string, readonly version: string }
 
 /** A smaller confirmation before an action that needs no review. */
 type Ask =
   | { readonly kind: 'undo', readonly entry: EntryView }
   | { readonly kind: 'applyAgain', readonly entry: EntryView }
   | { readonly kind: 'discardRequest', readonly entry: EntryView }
+  | { readonly kind: 'applyRequest', readonly entry: EntryView }
   | { readonly kind: 'work', readonly plugin: string }
 
 /** The dialog on display. */
@@ -158,6 +172,7 @@ export function ChangesSection(props: ChangesSectionProps) {
       <h2 className={css.heading}>{t('title')}</h2>
     </div>
     <p className={css.meta}>{t('intro')}</p>
+    {state?.protection === 'off' ? <p className={css.meta} role="note" data-delo-changes-live>{t('live')}</p> : null}
     {load.status === 'loading'
       ? <div className={css.rows} role="status">
         <span className={css.visuallyHidden}>{t('loading')}</span>
@@ -207,6 +222,7 @@ export function ChangesSection(props: ChangesSectionProps) {
           </div>
           <div className={css.actions}>
             <Button variant="outline" size="sm" disabled={disabled} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'discardRequest', entry } }) }}>{t('review.discard')}</Button>
+            <Button variant="outline" size="sm" disabled={disabled} onClick={() => { setDialog({ kind: 'ask', ask: { kind: 'applyRequest', entry } }) }}>{t('review.apply')}</Button>
           </div>
         </li>)}
       </Group>}
@@ -233,7 +249,13 @@ export function ChangesSection(props: ChangesSectionProps) {
         onClose={() => { setDialog(undefined) }}
         onConfirm={() => {
           const { flagged } = dialog
-          run(() => flagged.kind === 'apply' ? props.apply(flagged.id, true) : props.done(flagged.plugin, flagged.version, true))
+          run(() => {
+            switch (flagged.kind) {
+              case 'apply': return props.apply(flagged.id, true)
+              case 'applyRequest': return props.applyRequest(flagged.id, true)
+              case 'done': return props.done(flagged.plugin, flagged.version, true)
+            }
+          })
         }} />
       : null}
     {dialog?.kind === 'ask'
@@ -245,6 +267,7 @@ export function ChangesSection(props: ChangesSectionProps) {
             case 'undo': return run(() => props.undo(ask.entry.id))
             case 'applyAgain': return run(() => props.apply(ask.entry.id, false))
             case 'discardRequest': return run(() => props.discard(ask.entry.id))
+            case 'applyRequest': return run(() => props.applyRequest(ask.entry.id, false), { kind: 'applyRequest', id: ask.entry.id, summary: ask.entry.summary })
             case 'work': return run(() => props.beginWork(ask.plugin))
           }
         }} />
@@ -448,7 +471,7 @@ function selfCommands(entry: HarnessEntryView): readonly string[] {
 }
 
 /**
- * The protection setting, with the terminal command that changes it and no control.
+ * The protection setting, read only, with the terminal command that changes it and no control.
  * @param props - the state and the dictionary.
  * @returns the group, or nothing when the setting cannot be read.
  */
@@ -459,7 +482,7 @@ function Protection({ state, t }: { readonly state: ChangesStateView, readonly t
       <div className={css.main}>
         <p className={css.text}>{t(`protection.${state.protection}`)}</p>
         <p className={css.meta}>{t('protection.change')}</p>
-        <CommandText className={css.command} label={t('protection.command')} text="delorun changes protection block|warn|off" />
+        <CommandText className={css.command} label={t('protection.command')} text="delorun changes protection on|off" />
       </div>
     </li>
   </Group>
@@ -611,12 +634,14 @@ function SecondConfirmation({ dialog, t, busy, canAct, onClose, onConfirm }: {
   readonly onClose: () => void
   readonly onConfirm: () => void
 }) {
-  return <Modal open onClose={onClose} title={t('second.title')} closeLabel={t('confirm.close')}
+  return <Modal open onClose={onClose} title={t(dialog.flagged.kind === 'applyRequest' ? 'confirm.applyRequest.title' : 'second.title')} closeLabel={t('confirm.close')}
     footer={<>
       <Button variant="outline" data-modal-autofocus onClick={onClose}>{t('confirm.cancel')}</Button>
-      <Button variant="primary" disabled={busy || !canAct} onClick={onConfirm}>{t(dialog.flagged.kind === 'apply' ? 'second.apply' : 'second.approve')}</Button>
+      <Button variant="primary" disabled={busy || !canAct} onClick={onConfirm}>{t(dialog.flagged.kind === 'done' ? 'second.approve' : 'second.apply')}</Button>
     </>}>
-    <p className={css.confirmText}>{t('second.body')}</p>
+    {dialog.flagged.kind === 'applyRequest'
+      ? <p className={css.confirmText}>{t('second.request', { summary: dialog.flagged.summary })}</p>
+      : <p className={css.confirmText}>{t('second.body')}</p>}
     <ul className={css.riskList}>{dialog.kinds.map(kind => <li key={kind} data-risk-kind={kind}><span className={css.riskKind}>{t(`risk.${kind}`)}</span></li>)}</ul>
     {dialog.notShown.length === 0 ? null : <>
       <p className={css.confirmText}>{t('second.notShown')}</p>
@@ -627,7 +652,7 @@ function SecondConfirmation({ dialog, t, busy, canAct, onClose, onConfirm }: {
 }
 
 /**
- * The confirmation before Undo, Apply again, discarding an agent's request and Start working.
+ * The confirmation before Undo, Apply again, applying or discarding an agent's request and Start working.
  * @param props - what is asked, the action and whether it is available.
  * @returns the dialog.
  */
@@ -659,6 +684,7 @@ function askCopy(ask: Ask, t: T): { readonly title: string, readonly body: strin
     case 'undo': return { title: t('confirm.undo.title'), body: t('confirm.undo.body', { summary: ask.entry.summary }), confirm: t('confirm.undo') }
     case 'applyAgain': return { title: t('confirm.applyAgain.title'), body: t('confirm.applyAgain.body', { summary: ask.entry.summary }), confirm: t('leftOut.applyAgain') }
     case 'discardRequest': return { title: t('confirm.discardRequest.title'), body: t('confirm.discardRequest.body', { summary: ask.entry.summary }), confirm: t('review.discard') }
+    case 'applyRequest': return { title: t('confirm.applyRequest.title'), body: t('confirm.applyRequest.body', { summary: ask.entry.summary }), confirm: t('review.apply') }
     case 'work': return { title: t('confirm.work.title', { plugin: ask.plugin }), body: t('confirm.work.body'), confirm: t('work.start') }
   }
 }

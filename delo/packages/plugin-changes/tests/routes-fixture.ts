@@ -15,7 +15,7 @@ import type { AddressInfo } from 'node:net'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, storeEmptyVersion, storeFileVersion, versionsDirectory, writeHarnessLog, type ChangeEntry, type ChangesContext, type ChangeState, type ReloadOutcome } from '@delo/changes'
+import { changeId, CHANGE_LOG_SCHEMA, enforceApprovedContent, storeEmptyVersion, storeFileVersion, versionsDirectory, writeHarnessLog, type ChangeEntry, type ChangesContext, type ChangeState, type PluginOperationResult, type ReloadOutcome } from '@delo/changes'
 import { REQUEST_LISTENER } from '@delo/home'
 import { onTestFinished } from 'vitest'
 import { changesRoutes, type RouteDependencies } from '../src/routes.ts'
@@ -129,18 +129,22 @@ export interface RouteServer {
   readonly reloads: () => number
   /** What the routes reported to the Host's log. */
   readonly warnings: string[]
+  /** The arguments of each plugin operation the routes ran, which succeeds unless `operationResult` says otherwise. */
+  readonly operations: (readonly string[])[]
 }
 
 /**
  * Serve the Changes routes on a loopback port; stopped after the test.
  * @param ctx - the profile the Host runs, or undefined for a Host that runs none.
- * @param options - what the dependencies answer, replacing the defaults.
+ * @param options - what the dependencies answer, replacing the defaults; `operationResult` is what the stand-in plugin
+ *   operation answers.
  * @returns the server.
  */
-export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome } = {}): Promise<RouteServer> {
+export async function serveRoutes(ctx: ChangesContext | undefined, options: Partial<RouteDependencies> & { readonly reloadOutcome?: ReloadOutcome, readonly operationResult?: PluginOperationResult } = {}): Promise<RouteServer> {
   let profileReads = 0
   let reloads = 0
   const warnings: string[] = []
+  const operations: (readonly string[])[] = []
   let port: number | undefined
   const routes = changesRoutes({
     connection: {
@@ -158,6 +162,10 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     reload: () => {
       reloads += 1
       return Promise.resolve(options.reloadOutcome ?? { ok: true })
+    },
+    pluginOperation: () => (args) => {
+      operations.push(args)
+      return Promise.resolve(options.operationResult ?? { exitCode: 0 })
     },
     installationBundles: [],
     logger: { warn: (message: string) => { warnings.push(message) } },
@@ -179,7 +187,7 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
   await once(server, 'listening')
   port = (server.address() as AddressInfo).port
   onTestFinished(() => new Promise<void>((resolve) => { server.close(() => { resolve() }) }))
-  return { port, profileReads: () => profileReads, reloads: () => reloads, warnings }
+  return { port, profileReads: () => profileReads, reloads: () => reloads, warnings, operations }
 }
 
 /**

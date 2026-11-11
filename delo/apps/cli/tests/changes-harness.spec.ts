@@ -2,14 +2,15 @@
  * Changes to the harness itself through `delorun` (contract C21, "Harness edits"): which installation's entry a start
  * runs, the start's hand-off to the composed tree, the runtime a composed tree's file runs, `delorun changes
  * edit-harness` and the harness decisions at a terminal, the retry that leaves a harness change out, and what `verify`
- * and `doctor` say about the composed tree.
+ * and `doctor` say about the composed tree. The home has protection on, so a harness edit waits for review; `with
+ * protection off` covers a home without a protection record, whose start applies the edits without review.
  */
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyHarnessChange, attestTerminal, ChangesError, createHarnessCopy, harnessChanges, harnessCopyDirectory, harnessLogPath, harnessStatus, prepareComposedTree, readHarnessLog, readHarnessRecord, TREE_RETENTION_GRACE_MS, type ChangeId, type ContentVersion, type HarnessContext, type HarnessStatus, type SignedFile, type SignedRuntime } from '@delo/changes'
+import { applyHarnessChange, attestTerminal, ChangesError, createHarnessCopy, harnessChanges, harnessCopyDirectory, harnessLogPath, harnessStatus, prepareComposedTree, readHarnessLog, readHarnessRecord, setProtection, TREE_RETENTION_GRACE_MS, type ChangeId, type ContentVersion, type HarnessContext, type HarnessStatus, type SignedFile, type SignedRuntime } from '@delo/changes'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { ensureHomeTree } from '@delo/home'
@@ -54,6 +55,7 @@ beforeEach(async () => {
   vi.stubEnv('DELO_PROFILE', undefined)
   mkdirSync(home, { mode: 0o700 })
   await ensureHomeTree(home, PROFILE)
+  await setProtection(home, 'on', terminal())
   mkdirSync(join(home, 'profiles', PROFILE), { recursive: true })
   writeFileSync(join(home, 'profiles', PROFILE, 'package.json'), '{"name":"dsh-profile-default","private":true}\n')
   const directory = join(home, 'runtimes', RUNTIME)
@@ -178,12 +180,15 @@ describe('which entry a start runs', () => {
 })
 
 describe('the start\'s hand-off to the composed tree', () => {
-  it('a pending harness change never runs: the start runs the signed entry', async () => {
-    await editStart()
+  it('a pending harness change never runs: the start runs the signed entry, and the change keeps waiting', async () => {
+    const id = await editStart()
     const dependencies = handOff()
     expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toBeUndefined()
     expect(dependencies.started).toEqual([])
     expect(existsSync(join(home, 'changes', 'harness', RUNTIME, 'run'))).toBe(false)
+    expect((await harnessChanges(harness())).changes.map(change => change.id)).toEqual([id])
+    expect((await readHarnessLog(home)).entries).toEqual([])
+    expect(context.printed).toEqual([])
   })
 
   it('an applied change runs: the start hands off to the composed tree\'s entry with the same arguments', async () => {
@@ -265,6 +270,90 @@ describe('the start\'s hand-off to the composed tree', () => {
     const unreached = (): never => { throw new Error('not reached') }
     const dependencies = { handOff: () => Promise.resolve({ kind: 'ran' as const, ran: EXIT.changeLeftOut }), prepareProfile: unreached, runProfile: unreached, onExit: unreached, handover: unreached } as Partial<StartDependencies>
     expect(await startForeground({ home, profile: PROFILE, open: false, output: context, env: context.env }, dependencies as StartDependencies)).toBe(EXIT.changeLeftOut)
+  })
+})
+
+describe('with protection off, the default', () => {
+  beforeEach(() => {
+    // A home without a protection record has protection off.
+    rmSync(join(home, 'changes', 'protection.json'))
+  })
+
+  it('the start applies an edit of the writable copy without review, logs it, says so and runs the composed tree', async () => {
+    await editStart()
+    const dependencies = handOff({ handover: () => true })
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toEqual({ kind: 'ran', ran: undefined })
+    const [entry] = (await readHarnessLog(home)).entries
+    expect(entry).toMatchObject({ kind: 'harness-edit', state: 'applied', decidedFrom: 'unreviewed', subject: { file: START_FILE, runtime: RUNTIME } })
+    expect(entry!.summary).toMatch(/^Loaded without review: /u)
+    expect((await readHarnessRecord(home, RUNTIME)).files[START_FILE]?.change).toBe(entry!.id)
+    expect(context.printed.join('')).toBe(`Delo itself (${START_FILE}) changed without review, because protection is off: delorun changes show ${entry!.id}\n`)
+    const tree = join(home, 'changes', 'harness', RUNTIME, 'run', readdirSync(join(home, 'changes', 'harness', RUNTIME, 'run'))[0]!)
+    expect(dependencies.started.map(child => child.args[0])).toEqual([join(tree, ...ENTRY.split('/'))])
+    expect(readFileSync(join(tree, START_FILE), 'utf8')).toBe('export const start = 2\n')
+    expect(readFileSync(join(signed.directory, START_FILE), 'utf8')).toBe(FILES[START_FILE])
+    expect((await harnessChanges(harness())).changes).toEqual([])
+    // The next start finds nothing new to apply and says nothing.
+    context.printed.length = 0
+    await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff())
+    expect(context.printed).toEqual([])
+    expect((await readHarnessLog(home)).entries).toHaveLength(1)
+  })
+
+  it('a copy that cannot be read applies nothing, says why, and the start runs what it ran', async () => {
+    await editStart()
+    chmodSync(join(harnessCopyDirectory(home, RUNTIME), 'app', 'node_modules'), 0o000)
+    const dependencies = handOff()
+    try {
+      expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, dependencies)).toBeUndefined()
+    } finally {
+      chmodSync(join(harnessCopyDirectory(home, RUNTIME), 'app', 'node_modules'), 0o700)
+    }
+    expect(dependencies.started).toEqual([])
+    expect(context.errors.join('')).toMatch(new RegExp(`^Delo could not read your copy of Delo ${RUNTIME.replaceAll('.', '\\.')}, so it runs what it ran: .*EACCES.*\\n$`, 'u'))
+    expect(context.printed).toEqual([])
+    expect((await readHarnessLog(home)).entries).toEqual([])
+    expect((await readHarnessRecord(home, RUNTIME)).files).toEqual({})
+  })
+
+  it('applies nothing in safe mode, in a process already in a composed tree, or outside the store', async () => {
+    const id = await editStart()
+    await enterSafeMode({ homeDir: home, profile: PROFILE, reason: 'spec', skipped: [] })
+    expect(await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff())).toBeUndefined()
+    await handOffToComposedTree({ home, profile: 'other', env: context.env, output: context }, handOff({ runtime: runtimeOfFile(home, join(home, 'changes', 'harness', RUNTIME, 'run', 'd'.repeat(64), ...ENTRY.split('/'))) }))
+    await handOffToComposedTree({ home, profile: 'other', env: context.env, output: context }, handOff({ runtime: runtimeOfFile(home, join(base, 'checkout', 'bin.js')) }))
+    expect((await readHarnessLog(home)).entries).toEqual([])
+    expect((await harnessChanges(harness())).changes.map(change => change.id)).toEqual([id])
+    expect(context.printed).toEqual([])
+  })
+
+  it('verify and doctor name a harness file that loaded without review, and say when protection was off', async () => {
+    await editStart()
+    await handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, handOff())
+    const [entry] = (await readHarnessLog(home)).entries
+    const unreviewedFile = `  Delo ${RUNTIME} itself: ${START_FILE} (${entry!.id})`
+    const off = await readVerifyChanges(home, PROFILE, true, { runtime: RUNTIME, signed })
+    expect(changesLines(off)).toContain(`1 change loaded without review (protection is off):\n${unreviewedFile}`)
+    expect(changesLines(off)).toContain('0 changes you approved.')
+    expect(changesSuffix(off)).toBe('; 1 change loaded without review (protection is off)')
+    expect(changesExit(off)).toBe(EXIT.ok)
+    expect(changesLines({ ...off, status: null })).toContain(`1 change loaded without review (while protection was off):\n${unreviewedFile}`)
+    expect(harnessLines(off.harness!)).toContainEqual({ name: 'changes', status: 'pass', message: `changes to 1 file of Delo ${RUNTIME} itself loaded without review while protection was off: ${START_FILE} (${entry!.id}).` })
+    expect(harnessLines(off.harness!).some(line => line.message.startsWith('you approved'))).toBe(false)
+    const two = [{ file: 'app/a.js', change: 'c0000000001' as ChangeId, unreviewed: true }, { file: 'app/b.js', change: 'c0000000002' as ChangeId, unreviewed: true }]
+    expect(harnessLines({ ...off.harness!, approved: two }).map(line => line.message)).toContain(`changes to 2 files of Delo ${RUNTIME} itself loaded without review while protection was off: app/a.js (c0000000001), app/b.js (c0000000002).`)
+    expect(changesLines({ ...off, harness: { ...off.harness!, approved: two } })).toContain('2 changes loaded without review (protection is off):')
+    await setProtection(home, 'on', terminal())
+    const on = await readVerifyChanges(home, PROFILE, true, { runtime: RUNTIME, signed })
+    expect(changesLines(on)).toContain(`1 change loaded without review (while protection was off):\n${unreviewedFile}`)
+    expect(changesSuffix(on)).toBe('; 1 change loaded without review (while protection was off)')
+  })
+
+  it('a signed installation that fails its check stops the start before anything is applied', async () => {
+    await editStart()
+    const store = handOff({ signed: () => Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', signed.directory, 'runtime 1.2.3 differs from its signed file list')) })
+    await expect(handOffToComposedTree({ home, profile: PROFILE, env: context.env, output: context }, store)).rejects.toThrow(/because its files differ from the signed release/u)
+    expect((await readHarnessLog(home)).entries).toEqual([])
   })
 })
 
@@ -631,7 +720,7 @@ describe('every path of the harness commands', () => {
   it('doctor names each change waiting, each change left out and how many files were approved', async () => {
     const status: HarnessStatus = {
       runtime: RUNTIME,
-      approved: [{ file: 'app/a.js', change: 'c0000000001' as ChangeId }, { file: 'app/b.js', change: 'c0000000002' as ChangeId }],
+      approved: [{ file: 'app/a.js', change: 'c0000000001' as ChangeId, unreviewed: false }, { file: 'app/b.js', change: 'c0000000002' as ChangeId, unreviewed: false }],
       pending: [{ id: 'c0000000003' as ChangeId, kind: 'harness-edit', runtime: RUNTIME, file: 'app/c.js', status: 'added', from: 'a'.repeat(64) as ContentVersion, to: 'b'.repeat(64) as ContentVersion }],
       leftOut: [{ id: 'c0000000004' as ChangeId, kind: 'harness-edit', state: 'left-out-at-start', subject: { file: 'app/a.js', runtime: RUNTIME }, summary: 'x', createdAt: '2026-11-11T10:00:00.000Z', decidedAt: '2026-11-11T10:00:00.000Z', leftOut: { at: '2026-11-11T10:00:00.000Z', failure: 'boom' } }],
       tree: { kind: 'signed' },

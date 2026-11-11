@@ -70,11 +70,27 @@ export interface WorkWatch {
 }
 
 /**
+ * Whether a watch event names a path inside a `.git` directory, which is not part of a plugin's content.
  * @param name - a path relative to the watched folder, as a watch event names it.
- * @returns whether it is inside a `.git` directory, which is not part of a plugin's content.
+ * @returns whether it is inside a `.git` directory.
  */
-function inGit(name: string | null): boolean {
+export function inGit(name: string | null): boolean {
   return name !== null && name.split(sep).includes(EXCLUDED_DIRECTORY)
+}
+
+/**
+ * Watch a path without keeping the process alive; a watcher that fails later is logged and stays closed.
+ * @param logger - receives the failure.
+ * @param path - the folder or directory.
+ * @param recursive - whether to watch below it.
+ * @param listener - receives each event.
+ * @returns the watcher.
+ * @throws the filesystem error when the path cannot be watched.
+ */
+export function openWatch(logger: DeloLogger, path: string, recursive: boolean, listener: WatchListener<string>): FSWatcher {
+  const watcher = watch(path, { recursive, persistent: false }, listener)
+  watcher.on('error', (error) => { logger.warn(`Delo stopped watching ${path}: ${error.message}`) })
+  return watcher
 }
 
 /**
@@ -92,11 +108,7 @@ export function watchWork(options: WorkWatchOptions): WorkWatch {
   let settling = Promise.resolve()
   let folder: { readonly source: string, readonly watcher: FSWatcher } | undefined
 
-  const open = (path: string, recursive: boolean, listener: WatchListener<string>): FSWatcher => {
-    const watcher = watch(path, { recursive, persistent: false }, listener)
-    watcher.on('error', (error) => { logger.warn(`Delo stopped watching ${path} for your work session: ${error.message}`) })
-    return watcher
-  }
+  const open = (path: string, recursive: boolean, listener: WatchListener<string>): FSWatcher => openWatch(logger, path, recursive, listener)
   const schedule = (): void => {
     clearTimeout(timer)
     timer = setTimeout(() => { settling = settling.then(settle) }, debounceMs)

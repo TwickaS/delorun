@@ -15,6 +15,8 @@ import {
   type ChangesStateView,
   type DiscardView,
   type DoneView,
+  type InstallReloadView,
+  type InstallView,
   type PendingListView,
   type PendingView,
   type RefusalView,
@@ -101,6 +103,19 @@ function reloadNotice(reload: ReloadView, done: ChangesToastKey): ChangesNotice 
     case 'reloaded': return { ok: true, key: done }
     case 'not-running': return { ok: true, key: 'toast.notRunning' }
     case 'went-back': return { ok: false, key: 'toast.wentBack', values: { failure: reload.failure } }
+  }
+}
+
+/**
+ * The notice for how the running Host took an applied agent's plugin request.
+ * @param reload - the Host's answer.
+ * @returns the notice.
+ */
+function installNotice(reload: InstallReloadView): ChangesNotice {
+  switch (reload.kind) {
+    case 'reloaded': return { ok: true, key: 'toast.applied' }
+    case 'not-running': return { ok: true, key: 'toast.notRunning' }
+    case 'failed': return { ok: false, key: 'toast.installNotLoaded', values: { failure: reload.failure } }
   }
 }
 
@@ -199,6 +214,16 @@ export class ChangesController {
   async apply(id: string, confirmedRisk: boolean): Promise<ActionOutcome> {
     return await this.act(() => request<ActionView>(ACTION_PATHS.apply, confirmedRisk ? { id, confirmedRisk } : { id }),
       result => reloadNotice(result.reload, 'toast.applied'))
+  }
+
+  /**
+   * Apply an agent's plugin request: the Host runs the plugin operation and reloads.
+   * @param id - the request.
+   * @param confirmedRisk - whether the person confirmed a second time, which every request needs.
+   * @returns the outcome; `confirm` when the route asks the second confirmation.
+   */
+  async applyRequest(id: string, confirmedRisk: boolean): Promise<ActionOutcome> {
+    return await this.act(() => request<InstallView>(ACTION_PATHS.apply, confirmedRisk ? { id, confirmedRisk } : { id }), result => installNotice(result.reload))
   }
 
   /**

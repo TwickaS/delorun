@@ -93,7 +93,7 @@ describe('listing and showing changes', () => {
   it('lists a folder edit as waiting for review, the decided changes newest first, the protection setting and the work session', async () => {
     const { fx, source, approved } = await migrated()
     const ctx = contextOf(fx)
-    expect(await listChanges(ctx)).toMatchObject({ protection: 'block', pending: [], missing: [], entries: [{ kind: 'plugin-install', state: 'applied', decidedFrom: 'upgrade' }] })
+    expect(await listChanges(ctx)).toMatchObject({ protection: 'on', pending: [], missing: [], entries: [{ kind: 'plugin-install', state: 'applied', decidedFrom: 'upgrade' }] })
     edit(source, 'export default "two"\n')
     const change = await onlyPending(ctx)
     expect(change).toMatchObject({ kind: 'plugin-edit', plugin: 'plug', source, from: approved, files: [{ path: 'index.js', status: 'modified' }] })
@@ -362,7 +362,7 @@ describe('undoing a change', () => {
     await applyChange(ctx, (await onlyPending(ctx)).id, terminal(), reloads(OK))
     await rejection(undoChange(ctx, upgrade.id, terminal(), reloads(OK)), 'NOT_ALLOWED')
     await rejection(undoChange(ctx, 'c0000000000' as ChangeId, terminal(), reloads(OK)), 'UNKNOWN_CHANGE')
-    const weakening = await changeProtection(ctx, 'warn', terminal())
+    const weakening = await changeProtection(ctx, 'off', terminal())
     await rejection(undoChange(ctx, weakening.entry!.id, terminal(), reloads(OK)), 'NOT_ALLOWED')
     await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     await rejection(undoChange(ctx, upgrade.id, terminal(), reloads(OK)), 'NOT_ALLOWED')
@@ -468,14 +468,14 @@ describe('turning one plugin off and on', () => {
 })
 
 describe('the protection setting', () => {
-  it('logs a weaker level as a change and a stronger one as none', async () => {
+  it('logs turning it off as a change and turning it on as none', async () => {
     const { fx } = await migrated()
     const ctx = contextOf(fx)
     const lowered = await changeProtection(ctx, 'off', terminal())
-    expect(lowered).toMatchObject({ before: 'block', level: 'off', entry: { kind: 'guard-weakening', state: 'applied', subject: { setting: 'protection' }, summary: 'Protection lowered from block to off', decidedFrom: 'terminal' } })
+    expect(lowered).toMatchObject({ before: 'on', level: 'off', entry: { kind: 'guard-weakening', state: 'applied', subject: { setting: 'protection' }, summary: 'Protection turned off: changes load without review', decidedFrom: 'terminal' } })
     expect(await readProtection(fx.home)).toBe('off')
     expect((await listChanges(ctx)).entries[0]).toEqual(lowered.entry)
-    expect(await changeProtection(ctx, 'block', terminal())).toEqual({ before: 'off', level: 'block' })
+    expect(await changeProtection(ctx, 'on', terminal())).toEqual({ before: 'off', level: 'on' })
   })
 })
 
@@ -497,7 +497,7 @@ describe('the changes actions refuse a proof the attest functions did not issue'
     await rejection(turnOn(ctx, 'left-pad', forged, host), 'NOT_AT_COMPUTER')
     await rejection(changeProtection(ctx, 'off', forged), 'NOT_AT_COMPUTER')
     expect(written(fx)).toBe(before)
-    expect(await readProtection(fx.home)).toBe('block')
+    expect(await readProtection(fx.home)).toBe('on')
     expect(host.calls()).toBe(0)
   })
 })

@@ -7,7 +7,7 @@
  * Mode `probe` (the default): the booted Host's guards are asked in this process, and the line holds each outcome: a
  * fetch to a loopback address through the web seam's real HTTP provider, a `write` of an `AGENTS.md` that a scripted
  * model requests from the real file tool, a switch to full access for a workspace without a grant (the guard and the
- * preset service), and the turn gate.
+ * preset service), an agent's plugin install under protection on, which the home has, and the turn gate.
  *
  * Mode `permission-mode`: the profile's `headless-runner` row stays enabled and the task's arguments carry
  * `--permission-mode danger-full-access` for a workspace without a grant. Delo's pre-boot refusal is bypassed by
@@ -28,7 +28,7 @@ import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@delo/bundle-local/update-gate'
-import { readChangeLog } from '@delo/changes'
+import { attestTerminal, readChangeLog, setProtection } from '@delo/changes'
 import { HEADLESS_PROFILE } from '@delo/contract-home-layout'
 import { prepareHome } from '../../src/command.ts'
 import { CliError } from '../../src/exit.ts'
@@ -40,6 +40,8 @@ const mode = (process.argv[2] ?? 'probe') as Mode
 const output = { env: { ...process.env }, stdout: (text: string) => void process.stderr.write(text), stderr: (text: string) => void process.stderr.write(text) }
 const workspace = join(process.cwd(), 'workspace')
 const { home } = await prepareHome(output, undefined)
+// With protection on, an agent's plugin install waits for the person.
+await setProtection(home.path, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
 mkdirSync(workspace, { recursive: true })
 
 /** The test overlay of each mode, which applies before the sandbox overlay. */

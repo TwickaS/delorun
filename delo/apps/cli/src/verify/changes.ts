@@ -1,13 +1,14 @@
 /**
  * What `delorun verify` prints about Changes (contract C21, "What verify and doctor report"): after the release's check
- * lines, the changes the person approved by plugin and folder, then everything present that they did not approve: each
- * pending change, each plugin running content they did not approve, and each invariant of Changes that does not hold.
- * A run from the runtime store also names the person's changes to the harness itself: each approved file among the
- * changes they approved, each change waiting in their copy among what they did not approve, and the composed tree a
- * start runs, whose failed check never reads as a pass ([harness tree](../../../../packages/changes/src/harness-tree.ts)).
- * A run from outside the runtime store says that there is no signed release to compare its files with. The block names
- * the protection setting; the summary line never reads as a plain pass while anything is not approved or protection is
- * lowered to `warn` or `off`, and the run exits 1 while unapproved content runs or an invariant does not hold. Every
+ * lines, the changes the person approved by plugin and folder, then the changes that loaded without review while
+ * protection was off, then everything present that they did not approve: each pending change and each invariant of
+ * Changes that does not hold. A run from the runtime store also names the person's changes to the harness itself: each
+ * approved file among the changes they approved, or among those that loaded without review, each change waiting in
+ * their copy among what they did not approve, and the composed tree a start runs, whose failed check never reads as a
+ * pass ([harness tree](../../../../packages/changes/src/harness-tree.ts)). A run from outside the runtime store says
+ * that there is no signed release to compare its files with. The block names the protection setting, which is not a
+ * fault in either setting; the summary line never reads as a plain pass while anything is not approved or loaded
+ * without review, and the run exits 1 while an invariant does not hold or the composed tree fails its check. Every
  * line goes through [terminal text](../terminal-text.ts), since plugin names, folders and invariant lines come from
  * files a person or a plugin wrote.
  *
@@ -33,9 +34,8 @@ export interface VerifyChanges {
 
 /** What each protection setting means, as the lines of `verify` and `doctor` say it. */
 export const PROTECTION_WORDS: Readonly<Record<ProtectionLevel, string>> = {
-  block: 'changes you have not approved do not run',
-  warn: 'changes you have not approved run, and every start says so',
-  off: 'changes you have not approved run without notice',
+  on: 'changes load only after you apply them',
+  off: 'changes load without your review and are recorded; turn it on with: delorun changes protection on',
 }
 
 /**
@@ -75,15 +75,16 @@ export async function readVerifyChanges(home: string, profile: string, fromStore
  * @param harness - its report.
  * @returns the approved files, the information lines, and the parts not approved or not as Changes keeps them.
  */
-function harnessParts(harness: HarnessStatus | undefined): { readonly approved: string[], readonly notes: string[], readonly others: string[] } {
-  if (harness === undefined) return { approved: [], notes: [], others: [] }
+function harnessParts(harness: HarnessStatus | undefined): { readonly approved: string[], readonly unreviewed: string[], readonly notes: string[], readonly others: string[] } {
+  if (harness === undefined) return { approved: [], unreviewed: [], notes: [], others: [] }
   const { runtime, tree } = harness
   const notes: string[] = []
   if (tree.kind === 'not-built') notes.push(`Your approved changes to Delo ${runtime} itself run from its next start.`)
   if (tree.kind === 'not-checked') notes.push(`The harness with your changes in ${tree.directory} was not checked, because the signed release did not verify.`)
   for (const entry of harness.leftOut) notes.push(`${leftOutFact(entry).plugin} runs without change ${entry.id}, which a failed start left out.`)
   return {
-    approved: harness.approved.map(({ file }) => `  Delo ${runtime} itself: ${file}`),
+    approved: harness.approved.filter(({ unreviewed }) => !unreviewed).map(({ file }) => `  Delo ${runtime} itself: ${file}`),
+    unreviewed: harness.approved.filter(({ unreviewed }) => unreviewed).map(({ file, change }) => `  Delo ${runtime} itself: ${file} (${change})`),
     notes,
     others: [
       ...harness.pending.map(change => `Delo ${runtime} itself: ${change.file} waits for your review: delorun changes show ${change.id}`),
@@ -143,19 +144,30 @@ export function changesLines(changes: VerifyChanges): string {
   if (status === null) {
     lines.push(`The profile ${changes.profile} is not set up, so no changes are recorded.`)
     if (harness.approved.length > 0) lines.push(`${counted(harness.approved.length, 'change', 'changes')} you approved:`, ...harness.approved)
+    if (harness.unreviewed.length > 0) lines.push(`${unreviewedWords(harness.unreviewed.length, undefined)}:`, ...harness.unreviewed)
     lines.push(...harness.notes)
     if (harness.others.length > 0) lines.push('Not approved:', ...harness.others.map(line => `  ${line}`))
     return printed(lines)
   }
   if (status.protection !== undefined) lines.push(`Protection is ${status.protection}: ${PROTECTION_WORDS[status.protection]}.`)
-  const approved = status.approved.length + harness.approved.length
+  const reviewed = status.approved.filter(approval => !status.unreviewed.some(({ plugin }) => plugin === approval.plugin))
+  const approved = reviewed.length + harness.approved.length
   lines.push(`${counted(approved, 'change', 'changes')} you approved${approved === 0 ? '.' : ':'}`)
-  for (const approval of status.approved) lines.push(`  ${approval.plugin} from ${approval.source}${approval.approvedAtUpgrade ? ' (approved at upgrade)' : ''}`)
-  lines.push(...harness.approved, ...harness.notes)
+  for (const approval of reviewed) lines.push(`  ${approval.plugin} from ${approval.source}${approval.approvedAtUpgrade ? ' (approved at upgrade)' : ''}`)
+  lines.push(...harness.approved)
+  const unreviewed = status.unreviewed.length + harness.unreviewed.length
+  if (unreviewed > 0) {
+    lines.push(`${unreviewedWords(unreviewed, status.protection)}:`)
+    for (const approval of status.approved) {
+      const loaded = status.unreviewed.find(({ plugin }) => plugin === approval.plugin)
+      if (loaded !== undefined) lines.push(`  ${approval.plugin} from ${approval.source} (${loaded.id})`)
+    }
+    lines.push(...harness.unreviewed)
+  }
+  lines.push(...harness.notes)
   const others = [
     ...harness.others,
     ...status.pending.map(pendingLine),
-    ...status.unapproved.map(({ plugin }) => `${plugin} runs content you have not approved`),
     ...status.invariants.map(line => `Not as Changes keeps it: ${line}`),
   ]
   if (others.length > 0) lines.push('Not approved:', ...others.map(line => `  ${line}`))
@@ -163,9 +175,18 @@ export function changesLines(changes: VerifyChanges): string {
 }
 
 /**
- * The words the summary line gains while anything is not approved or protection is lowered.
+ * @param count - how many changes loaded without review.
+ * @param protection - the protection setting now; undefined when it was not read, as for a profile that is not set up.
+ * @returns the words that count them and say why they loaded: `protection is off` only when the setting read is off.
+ */
+function unreviewedWords(count: number, protection: ProtectionLevel | undefined): string {
+  return `${counted(count, 'change', 'changes')} loaded without review (${protection === 'off' ? 'protection is off' : 'while protection was off'})`
+}
+
+/**
+ * The words the summary line gains while anything is not approved, loaded without review, or not as Changes keeps it.
  * @param changes - what the run found.
- * @returns `; …` clauses; empty when everything present is approved and protection is `block`.
+ * @returns `; …` clauses; empty when everything present is approved after review.
  */
 export function changesSuffix(changes: VerifyChanges | undefined): string {
   const status = changes?.status
@@ -173,27 +194,28 @@ export function changesSuffix(changes: VerifyChanges | undefined): string {
   const parts: string[] = []
   const present = (status === null ? 0 : notApprovedCount(status)) + (changes.harness?.pending.length ?? 0)
   if (present > 0) parts.push(`${counted(present, 'change you have not approved is', 'changes you have not approved are')} present`)
+  const unreviewed = (status?.unreviewed.length ?? 0) + (changes.harness?.approved.filter(file => file.unreviewed).length ?? 0)
+  if (unreviewed > 0) parts.push(unreviewedWords(unreviewed, status?.protection))
   const broken = (status?.invariants.length ?? 0) + (treeFailed(changes.harness) ? 1 : 0)
   if (broken > 0) parts.push(`${counted(broken, 'part of your changes is', 'parts of your changes are')} not as Changes keeps them`)
-  if (status?.protection === 'warn' || status?.protection === 'off') parts.push(`protection is lowered to ${status.protection}, so changes you have not approved run`)
   return parts.map(part => `; ${part}`).join('')
 }
 
 /**
- * The exit code Changes asks for: 1 while content the person did not approve runs, an invariant does not hold, or the
- * composed tree of the person's harness changes fails its check.
+ * The exit code Changes asks for: 1 while an invariant does not hold or the composed tree of the person's harness
+ * changes fails its check. Pending changes and changes that loaded without review are reported, not faults.
  * @param changes - what the run found.
  * @returns the exit code.
  */
 export function changesExit(changes: VerifyChanges): ExitCode {
   const status = changes.status
-  return treeFailed(changes.harness) || (status !== null && (status.unapproved.length > 0 || status.invariants.length > 0)) ? EXIT.failed : EXIT.ok
+  return treeFailed(changes.harness) || (status !== null && status.invariants.length > 0) ? EXIT.failed : EXIT.ok
 }
 
 /**
- * What `delorun status` says about Changes: each plugin approved at upgrade that no terminal has shown yet, each change
- * waiting for review, and protection when it is lowered. `delorun start` runs the home process with its output in the
- * log only, so this is where a person reads what that start said. Nothing is written.
+ * What `delorun status` says about Changes: each plugin approved at upgrade that no terminal has shown yet, and each
+ * change waiting for review. `delorun start` runs the home process with its output in the log only, so this is where a
+ * person reads what that start said. Nothing is written.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile.
  * @returns the lines, each ending in a newline; empty when there is nothing to say or the profile is not set up.
@@ -204,7 +226,6 @@ export async function changesNotice(home: string, profile: string): Promise<stri
   const lines = [
     ...status.unshownAtUpgrade.map(upgradeLine),
     ...status.pending.map(pendingLine),
-    ...status.protection === 'warn' || status.protection === 'off' ? [`Protection is ${status.protection}: ${PROTECTION_WORDS[status.protection]}.`] : [],
   ]
   return printed(lines.map(line => `changes: ${line}`))
 }

@@ -3,7 +3,9 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { checkChangesInvariants } from '../src/invariants.ts'
 import { activeDirectory, objectsDirectory, profileChangesDirectory, protectionPath, versionsDirectory } from '../src/paths.ts'
-import { openWorkSession, setProtection } from '../src/records.ts'
+import { openWorkSession, writeActiveRecord } from '../src/records.ts'
+import { materialize, storeFolder } from '../src/store.ts'
+import { ACTIVE_RECORD_SCHEMA } from '../src/types.ts'
 import { fixture, folder, linkAs, migrated, PROFILE, start, terminal, type Fixture } from './profile-fixture.ts'
 
 // Each case writes real git histories and scans folders; under a loaded host that takes longer than vitest's default.
@@ -112,14 +114,14 @@ describe('checkChangesInvariants', () => {
     expect(await check(fx)).toEqual([expect.stringMatching(/^The active directory of plug cannot be read: .*EACCES/)])
   })
 
-  it('reports unapproved content under block outside a work session, and accepts it during one', async () => {
+  it('reports content that is not the approved version with protection on outside a work session, and accepts it during one', async () => {
     const { fx, source, approved } = await migrated()
-    await setProtection(fx.home, 'warn', terminal())
     writeFileSync(join(source, 'index.js'), 'export default "edited"\n')
-    await start(fx)
-    await setProtection(fx.home, 'block', terminal())
+    const edited = (await storeFolder(fx.home, source)).version
+    await materialize(fx.home, edited, activeDirectory(fx.home, PROFILE, 'plug'))
+    await writeActiveRecord(fx.home, PROFILE, { schema: ACTIVE_RECORD_SCHEMA, plugins: { plug: { version: edited, kind: 'approved' } } })
     const [line] = await check(fx)
-    expect(line).toMatch(/^plug loads version [0-9a-f]{64} under block outside a work session, which is not its approved version\.$/)
+    expect(line).toMatch(/^plug loads version [0-9a-f]{64} with protection on outside a work session, which is not its approved version\.$/)
     await openWorkSession(fx.home, PROFILE, { plugin: 'plug', source, from: approved, minutes: 60 }, terminal())
     expect(await check(fx)).toEqual([])
   })

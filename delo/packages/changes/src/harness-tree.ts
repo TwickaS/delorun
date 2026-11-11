@@ -426,8 +426,11 @@ export type ComposedTreeState =
 export interface HarnessStatus {
   /** The runtime version. */
   readonly runtime: string
-  /** The files whose approved content differs from the signed release's, with the change that approved each, by path. */
-  readonly approved: readonly { readonly file: string, readonly change: ChangeId }[]
+  /**
+   * The files whose approved content differs from the signed release's, with the change that approved each, by path;
+   * `unreviewed` when a start applied that change without review while protection was off.
+   */
+  readonly approved: readonly { readonly file: string, readonly change: ChangeId, readonly unreviewed: boolean }[]
   /** The writable copy's `app/` directory, when it exists. */
   readonly copy?: string
   /** The changes waiting for review in the copy; empty when the signed release was not read. */
@@ -452,7 +455,7 @@ export interface HarnessStatus {
 export async function harnessStatus(home: string, runtime: string, signed: SignedRuntime | undefined): Promise<HarnessStatus> {
   const record = await readHarnessRecord(home, runtime)
   const log = await readHarnessLog(home)
-  const approved = Object.entries(record.files).sort(([a], [b]) => compareCodeUnits(a, b)).map(([file, entry]) => ({ file, change: entry.change }))
+  const approved = Object.entries(record.files).sort(([a], [b]) => compareCodeUnits(a, b)).map(([file, entry]) => ({ file, change: entry.change, unreviewed: log.entries.some(logged => logged.id === entry.change && logged.decidedFrom === 'unreviewed') }))
   const copy = harnessCopyDirectory(home, runtime)
   const hasCopy = await pathExists(copy)
   const pending = signed === undefined || !hasCopy ? [] : (await harnessChanges({ home, runtime, signed: () => Promise.resolve(signed) }, { cache: false })).changes

@@ -66,21 +66,36 @@ export type DecidedFrom =
   | 'start'
   /** An update the person confirmed carried an approved harness file to the runtime it installed. */
   | 'update'
+  /**
+   * Protection was off, so Delo loaded the content without anyone reviewing it: a start loaded a plugin folder's content
+   * or applied an edit of the harness's writable copy, or a running Host reloaded a plugin from its folder.
+   */
+  | 'unreviewed'
 
-/** The protection setting: what happens to content the person did not approve. */
+/** Every {@link DecidedFrom}. */
+export const DECIDED_FROM: readonly DecidedFrom[] = ['terminal', 'studio', 'upgrade', 'start', 'update', 'unreviewed']
+
+/** The protection setting: whether a change loads only after the person reviewed it. */
 export type ProtectionLevel =
-  /** The start is refused for a changed harness file, and a changed plugin loads its approved content. The default. */
-  | 'block'
-  /** Unapproved content runs, and every start and the studio say so. */
-  | 'warn'
-  /** Unapproved content runs without notice. */
+  /**
+   * A changed plugin loads its approved content until the person applies the change, a harness edit runs only once
+   * applied, the agent's plugin installs and removals wait for the person, and the agent's first write to an approved
+   * plugin's folder in a chat asks.
+   */
+  | 'on'
+  /**
+   * The default. Changes load without review and are still recorded: each start approves what a linked plugin's folder
+   * holds and the edits in the harness's writable copy, a running Host reloads a linked plugin when its folder changes,
+   * and the agent's plugin operations run as upstream runs them. Each is a logged change decided `unreviewed`, so it
+   * is listed and undone like any other.
+   */
   | 'off'
 
 /** Every {@link ProtectionLevel}, strongest first. */
-export const PROTECTION_LEVELS: readonly ProtectionLevel[] = ['block', 'warn', 'off']
+export const PROTECTION_LEVELS: readonly ProtectionLevel[] = ['on', 'off']
 
 /** The level a home without a protection record has. */
-export const DEFAULT_PROTECTION: ProtectionLevel = 'block'
+export const DEFAULT_PROTECTION: ProtectionLevel = 'off'
 
 /** One entry of a content version: a regular file or a symbolic link, by its path relative to the plugin folder. */
 export type VersionEntry =
@@ -291,16 +306,16 @@ export const WORK_SESSION_SCHEMA = 'delo.changes-work-session/1'
 
 /**
  * What the profile's active directory for one plugin holds, in `changes/<profile>/active.json`: `approved` outside a
- * work session under Block; `work-session` during one; `unapproved` under Warn or Off; `left-out` while a change a
- * failed start left out stays out ([left out](./left-out.ts)), holding the content from before that change, or nothing
- * when the change installed the plugin or turned it on.
+ * work session, in either protection setting; `work-session` during one; `left-out` while a change a failed start left
+ * out stays out ([left out](./left-out.ts)), holding the content from before that change, or nothing when the change
+ * installed the plugin or turned it on.
  */
 export type ActiveContent =
-  | { readonly version: ContentVersion, readonly kind: 'approved' | 'work-session' | 'unapproved' }
+  | { readonly version: ContentVersion, readonly kind: 'approved' | 'work-session' }
   | { readonly version?: ContentVersion, readonly kind: 'left-out' }
 
 /** Every kind of {@link ActiveContent}. */
-export const ACTIVE_KINDS: readonly ActiveContent['kind'][] = ['approved', 'work-session', 'unapproved', 'left-out']
+export const ACTIVE_KINDS: readonly ActiveContent['kind'][] = ['approved', 'work-session', 'left-out']
 
 /** The file `changes/<profile>/active.json`, by package name. */
 export interface ActiveRecord {

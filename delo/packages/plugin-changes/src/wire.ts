@@ -35,7 +35,7 @@ export type ChangesAction = keyof typeof ACTION_PATHS
 /** The refusal code of an action that is not at the computer. */
 export const LOOPBACK_REQUIRED = 'LOOPBACK_REQUIRED'
 
-/** The refusal code of a flagged change until the person confirms it a second time. */
+/** The refusal code of a flagged change and of an agent's plugin request, until the person confirms it a second time. */
 export const CONFIRM_RISK = 'CONFIRM_RISK'
 
 /** The refusal code of `done` when the folder holds another version than the one the person was shown. */
@@ -51,10 +51,13 @@ export type ChangeKindView = 'plugin-edit' | 'plugin-install' | 'plugin-update' 
 export type ChangeStateView = 'pending' | 'applied' | 'discarded' | 'left-out-at-start' | 'undone'
 
 /** Where the last decision about a change was made. */
-export type DecidedFromView = 'terminal' | 'studio' | 'upgrade' | 'start' | 'update'
+export type DecidedFromView = 'terminal' | 'studio' | 'upgrade' | 'start' | 'update' | 'unreviewed'
 
-/** The protection setting. */
-export type ProtectionView = 'block' | 'warn' | 'off'
+/**
+ * The protection setting: `on`, changes wait for the person's review; `off`, the default, changes load without review
+ * and linked plugins reload live when their folder changes, each still logged as a change decided `unreviewed`.
+ */
+export type ProtectionView = 'on' | 'off'
 
 /** What a risk finding says a change can do. */
 export type RiskKindView = 'consent-guard-sandbox' | 'model-tool' | 'commands' | 'network' | 'home-read' | 'dependency-or-build' | 'not-shown'
@@ -266,10 +269,25 @@ export type ReloadView =
   | { readonly kind: 'reloaded' }
   | { readonly kind: 'went-back', readonly failure: string, readonly historyVersion?: string, readonly again?: { readonly ok: true } | { readonly ok: false, readonly error: string } }
 
-/** `apply`, `undo`, `off` and `on`. */
+/** `apply` of a change that is no agent's plugin request, `undo`, `off` and `on`. */
 export interface ActionView {
   readonly entry: EntryView
   readonly reload: ReloadView
+}
+
+/** How the running Host took an applied agent's plugin request. */
+export type InstallReloadView =
+  | { readonly kind: 'not-running' }
+  | { readonly kind: 'reloaded' }
+  /** The running Host failed to load it; the profile keeps the change, which the next start loads. */
+  | { readonly kind: 'failed', readonly failure: string }
+
+/** `apply` of an agent's plugin request. */
+export interface InstallView {
+  readonly entry: EntryView
+  readonly reload: InstallReloadView
+  /** For a spec that names a folder: the change that holds the folder's content. */
+  readonly folderChange?: string
 }
 
 /** `discard`. */
@@ -288,7 +306,10 @@ export type DoneView =
   | { readonly kind: 'went-back', readonly plugin: string, readonly failure: string }
   | { readonly kind: 'ended', readonly plugin: string, readonly entry?: EntryView }
 
-/** A refusal: its code, its sentence, and for `CONFIRM_RISK` the kinds and each file the diff does not show. */
+/**
+ * A refusal: its code, its sentence, and for `CONFIRM_RISK` the kinds and each file the diff does not show, or the spec
+ * of an agent's plugin request whose content is not shown.
+ */
 export interface RefusalView {
   readonly code: string
   readonly message: string

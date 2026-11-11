@@ -278,7 +278,7 @@ describe('collectStore', () => {
     const setup = setUp()
     const active = await stored(setup.home, 'active')
     await stored(setup.home, 'unreferenced')
-    await writeActiveRecord(setup.home, 'gone', { schema: ACTIVE_RECORD_SCHEMA, plugins: { p: { version: active, kind: 'unapproved' } } })
+    await writeActiveRecord(setup.home, 'gone', { schema: ACTIVE_RECORD_SCHEMA, plugins: { p: { version: active, kind: 'work-session' } } })
     age(setup.home)
     expect(await collectStore(setup.request)).toEqual({ complete: true, removedVersions: 1, removedObjects: 1 })
     expect(remaining(setup.home)).toEqual({ versions: versionFiles(active), objects: objectFiles('active') })

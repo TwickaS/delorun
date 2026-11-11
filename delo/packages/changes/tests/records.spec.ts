@@ -120,20 +120,21 @@ describe('attestStudio', () => {
   })
 
   it('refuses a studio proof for the protection setting', async () => {
+    await setProtection(home, 'on', terminal())
     expect(await refusal(setProtection(home, 'off', attestStudio(atComputer)))).toBe('NOT_AT_COMPUTER')
-    expect(await readProtection(home)).toBe('block')
+    expect(await readProtection(home)).toBe('on')
   })
 })
 
 describe('protection', () => {
-  it('is block when the home has no record', async () => {
-    expect(await readProtection(home)).toBe('block')
+  it('is off when the home has no record', async () => {
+    expect(await readProtection(home)).toBe('off')
   })
 
   it('is set from a terminal and read back, at 0600 under a 0700 changes directory', async () => {
-    const record = await setProtection(home, 'warn', terminal())
-    expect(record.level).toBe('warn')
-    expect(await readProtection(home)).toBe('warn')
+    const record = await setProtection(home, 'on', terminal())
+    expect(record.level).toBe('on')
+    expect(await readProtection(home)).toBe('on')
     if (POSIX) {
       expect((await stat(protectionPath(home))).mode & 0o777).toBe(0o600)
       expect((await stat(changesDirectory(home))).mode & 0o777).toBe(0o700)
@@ -141,11 +142,12 @@ describe('protection', () => {
   })
 
   it('refuses an object that only looks like a terminal proof', async () => {
+    await setProtection(home, 'on', terminal())
     const forged = { kind: 'terminal' } as AtComputer
     expect(await refusal(setProtection(home, 'off', forged))).toBe('NOT_AT_COMPUTER')
     const copied = { ...terminal() }
     expect(await refusal(setProtection(home, 'off', copied))).toBe('NOT_AT_COMPUTER')
-    expect(await readProtection(home)).toBe('block')
+    expect(await readProtection(home)).toBe('on')
   })
 
   it.runIf(POSIX)('refuses a record other users can read', async () => {

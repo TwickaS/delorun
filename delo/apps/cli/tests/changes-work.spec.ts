@@ -3,13 +3,13 @@
  * the open session's folder into the plugin's active directory and reloads the Host, goes back when the reload fails,
  * follows sessions opened and ended by `delorun changes work` and `done`, and ends a session at its end time; Delo
  * stopping ends the session, and a start after a home process that did not stop ends it first, each without the person,
- * so nothing new is approved.
+ * so nothing new is approved. The home has protection on, so what a folder holds outside a session waits for review.
  */
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, type FSWatcher, type WatchListener } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, type FSWatcher, type WatchListener } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { activeDirectory, attestTerminal, enforceApprovedContent, finishWork, readApproved, readChangeLog, readWorkFailure, readWorkSession, reviewWork, startWork, type ChangesContext, type ReloadHost, type ReloadOutcome, type WorkFinished } from '@delo/changes'
+import { activeDirectory, attestTerminal, enforceApprovedContent, finishWork, readApproved, readChangeLog, readWorkFailure, readWorkSession, reviewWork, setProtection, startWork, type ChangesContext, type ReloadHost, type ReloadOutcome, type WorkFinished } from '@delo/changes'
 import { finishWorkWithoutPerson } from '@delo/changes/stop'
 import type { DeloLogger } from '@delo/logs'
 import { afterChangesBoot, startChanges } from '../src/changes/start.ts'
@@ -47,6 +47,7 @@ beforeEach(async () => {
   base = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-changes-work-')))
   home = join(base, '.delo')
   mkdirSync(home, { mode: 0o700 })
+  await setProtection(home, 'on', terminal())
   source = join(base, 'plug')
   mkdirSync(source)
   writeFileSync(join(source, 'package.json'), '{"name":"plug","version":"1.0.0"}\n')
@@ -206,7 +207,7 @@ describe('the watcher', () => {
     }, { timeout: 60_000, interval: 50 })
     const sessions = watched.calls.find(call => call.path.endsWith(join('profiles', PROFILE)))!
     sessions.watcher.emit('error', new Error('the watch broke'))
-    expect(messages('warn')).toContain(`Delo stopped watching ${sessions.path} for your work session: the watch broke`)
+    expect(messages('warn')).toContain(`Delo stopped watching ${sessions.path}: the watch broke`)
     sessions.listener('change', null)
     writeFileSync(join(sessions.path, 'work-session.json'), '{}\n', { mode: 0o600 })
     await vi.waitFor(() => { expect(messages('warn')).toEqual(expect.arrayContaining([expect.stringMatching(/^Delo could not load your work session's folder: .*work-session\.json is not a record Delo wrote/)])) }, { timeout: 60_000, interval: 50 })
@@ -314,5 +315,18 @@ describe('ending a work session without the person approves nothing new', () => 
     writeFileSync(join(home, 'changes', 'profiles', PROFILE, 'work-session.json'), '{}\n', { mode: 0o600 })
     await afterChangesBoot({ home, profile: PROFILE, logger }, { reload: host().reload })()
     expect(messages('warn')).toEqual(expect.arrayContaining([expect.stringMatching(/^Delo could not end your work session as it stopped; the next start ends it: .*not a record Delo wrote/)]))
+  })
+
+  it('logs a session it cannot end for a failure that is not one of Changes', async () => {
+    await startWork(ctx(), 'plug', terminal(), host())
+    // Removing the session record from a directory Delo cannot write fails with the filesystem's error.
+    const records = join(home, 'changes', 'profiles', PROFILE)
+    chmodSync(records, 0o500)
+    try {
+      await afterChangesBoot({ home, profile: PROFILE, logger }, { reload: host().reload })()
+    } finally {
+      chmodSync(records, 0o700)
+    }
+    expect(messages('warn')).toEqual(expect.arrayContaining([expect.stringMatching(/^Delo could not end your work session as it stopped; the next start ends it: Error: EACCES/)]))
   })
 })

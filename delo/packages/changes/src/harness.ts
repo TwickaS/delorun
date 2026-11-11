@@ -9,6 +9,7 @@
  * Pending harness changes are computed from the copy on every read and logged only when decided, as a plugin folder's
  * are. Every decision takes an {@link AtComputer} proof, refuses one the attest functions did not issue before it reads
  * or writes anything, runs under {@link withHarnessLock} and is logged in the harness's change log with `decidedFrom`.
+ * While protection is off, a start applies every pending change without review ({@link applyUnreviewedHarnessChanges}).
  *
  * @module @delo/changes/harness
  */
@@ -21,7 +22,7 @@ import { boundedDiff, compareVersions, reviewInputOf } from './diff.ts'
 import { ChangesError, isChangesError } from './errors.ts'
 import { changeId } from './ids.ts'
 import { harnessCopyDirectory, harnessRuntimeDirectory, harnessScanCachePath, versionsDirectory } from './paths.ts'
-import { findEntry, isHarnessPath, readHarnessLog, readHarnessRecord, requirePresence, withEntry, withHarnessLock, writeHarnessLog, writeHarnessRecord, type AtComputer } from './records.ts'
+import { findEntry, isHarnessPath, readHarnessLog, readHarnessRecord, readProtection, requirePresence, withEntry, withHarnessLock, writeHarnessLog, writeHarnessRecord, type AtComputer } from './records.ts'
 import { reviewChange } from './review.ts'
 import { readObject, readVersion, storeEmptyVersion, storeFileVersion } from './store.ts'
 import { byteLimitWords, compareCodeUnits, CONTENT_LIMITS, openRegularFile, readChunks, scanFolder, versionOf, type FileEntry, type ScanLimits, type ScannedFolder } from './tree.ts'
@@ -775,6 +776,54 @@ export async function applyHarnessChange(ctx: HarnessContext, id: ChangeId, pres
     const done: ChangeEntry = { ...pendingEntry(change, findEntry(log, id)?.createdAt ?? at), state: 'applied', decidedAt: at, decidedFrom: presence.kind }
     await writeHarnessLog(ctx.home, withEntry(log, done))
     return done
+  })
+}
+
+/** What a start applied without review from the harness's writable copy while protection is off. */
+export interface UnreviewedHarness {
+  /** The changes applied, each logged as decided `unreviewed`. */
+  readonly applied: readonly ChangeEntry[]
+  /** Why the copy could not be read, when it could not: nothing was applied, and the runtime runs what it ran. */
+  readonly unread?: string
+}
+
+/**
+ * Apply every change waiting in the running runtime's writable copy without review, as a start does while protection
+ * is off: each file's copy content becomes its approved content in the runtime's record, stored in the store, and the
+ * change is logged applied and decided `unreviewed`, so `list`, `show` and `undo` reach it as any other. The protection
+ * setting is read again under the harness lock, and nothing is applied when it is on. Needs no proof of presence: the
+ * signed code's start calls it before it composes the tree ([harness tree](./harness-tree.ts)). The signed installation
+ * is never written.
+ * @param ctx - the runtime.
+ * @returns what was applied, or why the copy could not be read.
+ * @throws {ChangesError} `RECORD_UNREADABLE` when the protection setting or a harness record is not one Delo wrote;
+ *   `RUNTIME_CHANGED` when a signed file differs from the list.
+ */
+export async function applyUnreviewedHarnessChanges(ctx: HarnessContext): Promise<UnreviewedHarness> {
+  return withHarnessLock(ctx.home, async () => {
+    if (await readProtection(ctx.home) === 'on' || !await pathExists(harnessCopyDirectory(ctx.home, ctx.runtime))) return { applied: [] }
+    let pending: readonly Located[]
+    try {
+      pending = (await locatePending(ctx)).located
+    } catch (error) {
+      if (!isChangesError(error) || (error.code !== 'HARNESS_COPY_UNREADABLE' && error.code !== 'CHANGED_WHILE_READING')) throw error
+      return { applied: [], unread: unreadReason(error) }
+    }
+    const at = timeOf(ctx)
+    let log = await readHarnessLog(ctx.home)
+    let record = await readHarnessRecord(ctx.home, ctx.runtime)
+    const applied: ChangeEntry[] = []
+    for (const change of pending) {
+      await storeSides(ctx, change)
+      record = await approving(ctx, record, change.file, change.to, change.id, at)
+      const done: ChangeEntry = { ...pendingEntry(change, findEntry(log, change.id)?.createdAt ?? at), summary: `Loaded without review: ${harnessChangeSummary(change)}`, state: 'applied', decidedAt: at, decidedFrom: 'unreviewed' }
+      log = withEntry(log, done)
+      applied.push(done)
+    }
+    if (applied.length === 0) return { applied }
+    await writeHarnessRecord(ctx.home, record)
+    await writeHarnessLog(ctx.home, log)
+    return { applied }
   })
 }
 

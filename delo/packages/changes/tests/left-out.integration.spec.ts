@@ -311,10 +311,10 @@ describe('the records of content left out', () => {
     writeFileSync(join(profileChangesDirectory(fx.home, PROFILE), 'active.json'), `${JSON.stringify({ schema: ACTIVE_RECORD_SCHEMA, plugins: { plug: { kind: 'approved' } } })}\n`, { mode: 0o600 })
     expect((await rejection(readActiveRecord(fx.home, PROFILE), 'RECORD_UNREADABLE')).detail).toContain('version is missing')
     writeFileSync(join(profileChangesDirectory(fx.home, PROFILE), 'active.json'), `${JSON.stringify({ schema: ACTIVE_RECORD_SCHEMA, plugins: { plug: { version: before, kind: 'skipped' } } })}\n`, { mode: 0o600 })
-    expect((await rejection(readActiveRecord(fx.home, PROFILE), 'RECORD_UNREADABLE')).detail).toContain('approved, work-session, unapproved, left-out')
+    expect((await rejection(readActiveRecord(fx.home, PROFILE), 'RECORD_UNREADABLE')).detail).toContain('approved, work-session, left-out')
   })
 
-  it('refuses left-out content under block that no change left out of the plugin holds, and accepts holding nothing', async () => {
+  it('refuses left-out content with protection on that no change left out of the plugin holds, and accepts holding nothing', async () => {
     const { fx, before, change } = await appliedEdit()
     const request = { home: fx.home, profile: PROFILE, profileDir: fx.profileDir }
     // The active directory holds the content from before the change, recorded as left out, with no change left out.

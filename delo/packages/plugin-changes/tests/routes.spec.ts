@@ -93,11 +93,11 @@ describe('who reaches the Changes routes', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     // No route names the protection setting, and the studio's proof is refused by the setting's writer.
-    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), installationBundles: [], logger: { warn: () => {} }, loopbackPort: () => undefined }).map(route => route.path)
+    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), pluginOperation: () => () => Promise.resolve({ exitCode: 0 }), installationBundles: [], logger: { warn: () => {} }, loopbackPort: () => undefined }).map(route => route.path)
     expect(paths.filter(path => path.includes('protection'))).toEqual([])
     expect((await post(server.port, '/delo/changes/protection', { level: 'off' })).status).toBe(404)
-    await expect(setProtection(ctx.home, 'off', attestStudio({ loopback: true, credential: true, remoteSession: false }))).rejects.toMatchObject({ code: 'NOT_AT_COMPUTER' })
-    expect(await readProtection(ctx.home)).toBe('block')
+    await expect(setProtection(ctx.home, 'on', attestStudio({ loopback: true, credential: true, remoteSession: false }))).rejects.toMatchObject({ code: 'NOT_AT_COMPUTER' })
+    expect(await readProtection(ctx.home)).toBe('off')
   })
 
   it('decides the arrival from the listener, the Host and the admission', () => {
@@ -188,7 +188,7 @@ describe('what a route refuses', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     const state = json(await get(server.port, STATE_PATH))
-    expect(state).toEqual({ atComputer: true, profile: 'default', protection: 'block', leftOut: [], folders: [], requests: [], recent: [], harness: [], problems: [] })
+    expect(state).toEqual({ atComputer: true, profile: 'default', protection: 'off', leftOut: [], folders: [], requests: [], recent: [], harness: [], problems: [] })
     const broken = await serveRoutes({ ...ctx, home: `${ctx.home}/missing`, profileDir: `${ctx.profileDir}/missing` })
     const problems = json(await get(broken.port, STATE_PATH)).problems as string[]
     expect(problems.map(problem => problem.split(':')[0])).toEqual(['The changes waiting for review cannot be read'])
@@ -203,7 +203,7 @@ describe('the recovery state from the records', () => {
     await writeChangeLog(ctx.home, ctx.profile, {
       schema: 'delo.changes-log/1',
       entries: [
-        { id: 'c0000000001' as never, kind: 'guard-weakening', state: 'applied', subject: { setting: 'protection' }, summary: 'Protection lowered from block to warn', createdAt: at, decidedAt: at, decidedFrom: 'terminal' },
+        { id: 'c0000000001' as never, kind: 'guard-weakening', state: 'applied', subject: { setting: 'protection' }, summary: 'Protection turned off', createdAt: at, decidedAt: at, decidedFrom: 'terminal' },
         { id: 'c0000000002' as never, kind: 'plugin-off', state: 'applied', subject: { plugin: 'plug' }, summary: 'Turned off plug', createdAt: at, decidedAt: at, decidedFrom: 'studio' },
         { id: 'c0000000003' as never, kind: 'plugin-edit', state: 'pending', subject: { plugin: 'plug', source: '/elsewhere' }, summary: 'Edits plug', createdAt: at },
       ],
@@ -215,7 +215,7 @@ describe('the recovery state from the records', () => {
     // Two changes decided at the same time list the later-logged one first; a pending one is not a recent change.
     expect(state.recent).toEqual([
       { id: 'c0000000002', kind: 'plugin-off', state: 'applied', summary: 'Turned off plug', plugin: 'plug', createdAt: at, decidedAt: at, decidedFrom: 'studio', undoable: true },
-      { id: 'c0000000001', kind: 'guard-weakening', state: 'applied', summary: 'Protection lowered from block to warn', createdAt: at, decidedAt: at, decidedFrom: 'terminal', undoable: false },
+      { id: 'c0000000001', kind: 'guard-weakening', state: 'applied', summary: 'Protection turned off', createdAt: at, decidedAt: at, decidedFrom: 'terminal', undoable: false },
     ])
     expect(state.lastStart).toEqual({ at, plugins: [{ plugin: 'plug', loaded: true }] })
     writeFileSync(protectionPath(ctx.home), 'not json', { mode: 0o600 })

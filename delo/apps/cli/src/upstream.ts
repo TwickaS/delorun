@@ -15,8 +15,10 @@
  *
  * After upstream's plugin operation, whether it succeeded or not, `delorun plugin` makes the plugins that the profile
  * it selects ([profile](./profile.ts)) links from folders, missing ones included, load from their active directories at once, as the running Host checks before every
- * reload (`prepareReload` of `@delo/changes`): `delorun plugin add link:<folder>` leaves the plugin linked to its empty
- * active directory and its folder's content waiting for review, and says so on standard error. A profile whose first
+ * reload (`prepareReload` of `@delo/changes`): with protection off, `delorun plugin --profile <name> add link:<folder>`
+ * links the plugin to its active directory holding the folder's content, approved and logged as loaded without review;
+ * with protection on, to its empty active directory with the folder's content waiting for review. Either is said on
+ * standard error. A profile whose first
  * start under Changes has not run is left to that start. The command exits 0 when upstream's operation succeeded and
  * the profile is what Changes keeps, and 1 otherwise.
  *

@@ -5,7 +5,7 @@
  *
  * ```text
  * changes/                          0700
- *   protection.json                 the protection setting; absent means block
+ *   protection.json                 the protection setting; absent means off
  *   migration.json                  the profiles that existed at the first start under Changes
  *   store/objects/<sha256>          approved file contents, by digest, never rewritten
  *   store/versions/<sha256>.json    one content version's file list, by its digest

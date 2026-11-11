@@ -1,15 +1,16 @@
 /**
  * Denial specs of `@delo/plugin-changes`' check before every recomposition, through upstream's real profile boot,
  * Loader, runtime resolution, plugin manager and hot reload: no recomposition evaluates an active directory that
- * differs from its approved version, a restore or another process's `link:<folder>` install evaluates nothing from the
- * folder, and a start under Block evaluates nothing of a plugin with no approved content.
+ * differs from its approved version, and with protection on a restore or another process's `link:<folder>` install
+ * evaluates nothing from the folder, and a start evaluates nothing of a plugin with no approved content. With protection
+ * off, such an install loads the folder's content, logged as an applied change decided `unreviewed`.
  */
 import { readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import Hmr from '@deepseek-ai/dsh-hmr'
 import PluginManager, { type ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager'
-import { applyChange, attestTerminal, readChangeLog } from '@delo/changes'
+import { applyChange, attestTerminal, readChangeLog, setProtection } from '@delo/changes'
 import { expect, it, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
 import { active, bootProfile, bundleFolder, evaluated, linkFolder, mountChanges, mountTools, PROFILE, profileHome, start, writeModule, type ProfileHome } from './reload-fixture.ts'
@@ -69,6 +70,14 @@ async function live(fx: ProfileHome) {
 }
 
 /**
+ * Turn protection on, as `delorun changes protection on` at a terminal does.
+ * @param fx - the home.
+ */
+async function protect(fx: ProfileHome): Promise<void> {
+  await setProtection(fx.home, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
+}
+
+/**
  * @param fx - the home.
  * @returns the profile's manifest text.
  */
@@ -110,6 +119,7 @@ it('a reload refuses an active directory that differs from its approved version'
 
 it('a restore that names a folder link loads nothing from the folder', async () => {
   const fx = profileHome()
+  await protect(fx)
   // The first start under Changes, with nothing linked yet.
   await start(fx)
   const name = 'delo-reload-restored'
@@ -136,6 +146,7 @@ it('a restore that names a folder link loads nothing from the folder', async () 
 
 it('delorun plugin add link:<folder> while Delo runs loads nothing from the folder', async () => {
   const fx = profileHome()
+  await protect(fx)
   await start(fx)
   const name = 'delo-reload-added'
   const folder = bundleFolder(fx, name, 'folder')
@@ -162,8 +173,26 @@ it('delorun plugin add link:<folder> while Delo runs loads nothing from the fold
   expect(evaluated(fx)).toEqual([])
 })
 
-it('upstream evaluates nothing of a plugin with no approved content under Block', async () => {
+it('with protection off, a link:<folder> install while Delo runs loads the folder, logged as unreviewed', async () => {
   const fx = profileHome()
+  await start(fx)
+  const name = 'delo-reload-unreviewed'
+  const folder = bundleFolder(fx, name, 'folder')
+  const { touchManifest } = await live(fx)
+
+  // What upstream's plugin manager writes for an install from a folder the agent asked for and upstream approved.
+  linkFolder(fx, name, folder)
+  await touchManifest()
+  expect(specOf(fx, name)).toBe(`link:${active(fx, name)}`)
+  expect(realpathSync(join(fx.dir, 'node_modules', name))).toBe(active(fx, name))
+  expect(evaluated(fx)).toEqual(['folder'])
+  const installs = (await readChangeLog(fx.home, PROFILE)).entries.filter(entry => entry.subject.plugin === name)
+  expect(installs).toEqual([expect.objectContaining({ kind: 'plugin-install', state: 'applied', decidedFrom: 'unreviewed', subject: { plugin: name, source: folder } })])
+})
+
+it('upstream evaluates nothing of a plugin with no approved content with protection on', async () => {
+  const fx = profileHome()
+  await protect(fx)
   await start(fx)
   const name = 'delo-start-pending'
   const folder = bundleFolder(fx, name, 'reviewed')

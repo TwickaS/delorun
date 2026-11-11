@@ -8,7 +8,7 @@ import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE, STUDIO_BUNDLE } from '@delo/bundle-local/profile'
 import { READ_EXEMPTIONS, RESERVED_PROFILE_NAMES, type RuntimeVersion } from '@delo/contract-home-layout'
-import { attestTerminal, readApproved, readChangeLog, readWorkSession, startWork } from '@delo/changes'
+import { attestTerminal, readApproved, readChangeLog, readWorkSession, setProtection, startWork } from '@delo/changes'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { HostNotStoppedError, sendHomeRequest, type LocalDeviceApproval } from '@delo/home-process'
 import { resolveSurface } from '@delo/logs'
@@ -421,6 +421,8 @@ describe('starting the home process', { timeout: 60_000 }, () => {
 
   it('Delo stopping ends the work session: the Host closes it and approves nothing', { timeout: 300_000 }, async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
+    // With protection on, what the folder holds after the session waits for review.
+    await setProtection(deloHome, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
     const profileDir = join(deloHome, 'profiles', 'default')
     const folder = join(osHome, 'plug')
     mkdirSync(folder)
