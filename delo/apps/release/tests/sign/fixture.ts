@@ -8,7 +8,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { devNull } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -223,9 +223,14 @@ export interface ReleaseFixture {
   readonly keyPath: string
   readonly keys: Keys
   readonly commit: string
-  /** The SSH key that signed the release tag, which {@link ReleaseFixture.allowedSigners} lists. */
+  /** The SSH key that signed the release tag, which the release branch's allowed-signers file lists. */
   readonly signer: TagSigner
-  /** The fixture's allowed-signers file. */
+  /**
+   * Commit a release file on the release branch, as a maintainer's merge would: `delo/release/allowed-signers` or
+   * `delo/release/production-keys.json`; `undefined` removes it. The checkout stays at the release commit.
+   */
+  readonly commitReleaseFile: (name: 'allowed-signers' | 'production-keys.json', text: string | undefined) => void
+  /** The text of the release branch's allowed-signers file as the fixture commits it. */
   readonly allowedSigners: string
   /** Run git in the fixture repository, with no global or system configuration. */
   readonly git: (args: readonly string[]) => string
@@ -235,10 +240,10 @@ export interface ReleaseFixture {
   readonly record: () => RunResult
   /**
    * Sign with the signing library against an advisory feed stand-in that answers with `advisories`, optionally from
-   * another rebuild output, record or attestation, with `firstOfLine` when given, and with another allowed-signers
-   * file or release branch than the fixture's.
+   * another rebuild output, record or attestation, with `firstOfLine` when given, and with another release branch than
+   * the fixture's.
    */
-  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object, readonly firstOfLine?: boolean, readonly allowedSigners?: string, readonly releaseBranch?: string }) => Promise<RunResult>
+  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object, readonly firstOfLine?: boolean, readonly releaseBranch?: string }) => Promise<RunResult>
 }
 
 /**
@@ -266,8 +271,8 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
     git(['tag', `v${earlier.version}`])
   }
   const signer = tagSigner(directory, 'release-signer')
-  const allowedSigners = join(directory, 'allowed-signers')
-  writeFileSync(allowedSigners, `# The fixture's release signer.\n${signer.allowed}`)
+  const allowedSigners = `# The fixture's release signer.\n${signer.allowed}`
+  const keys = throwawayKeys()
   writeReleaseFacts(repo, FIXTURE_DSH)
   writeChangelog(repo, options.changelog ?? [...assembled, version])
   mkdirSync(join(repo, 'delo/apps/release'), { recursive: true })
@@ -282,6 +287,8 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
   }
   mkdirSync(join(repo, 'delo', 'release'), { recursive: true })
   writeFileSync(join(repo, 'delo', 'release', 'advisory-acceptances.yaml'), 'acceptances: []\n')
+  writeFileSync(join(repo, 'delo', 'release', 'allowed-signers'), allowedSigners)
+  writeFileSync(join(repo, 'delo', 'release', 'production-keys.json'), `${JSON.stringify({ schema: 'delo.production-keys/1', roots: [], keyids: [publicKeyEntry(keys.targets).keyid] }, undefined, 2)}\n`)
   mkdirSync(join(repo, '.github'))
   writeFileSync(join(repo, '.github', 'CODEOWNERS'), '* @example-maintainer\n')
   git(['add', '-A'])
@@ -341,7 +348,6 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
   writeFileSync(attestationKeyPath, attestationKey, { mode: 0o600 })
   const attestationPath = join(directory, 'rebuild.attestation.json')
   writeFileSync(attestationPath, attestationText(attestationKey, { version, commit, outputs: await outputRefs(rebuild) }))
-  const keys = throwawayKeys()
   const keyPath = join(directory, 'targets.pem')
   writeFileSync(keyPath, keys.targets.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 })
   const run = (entry: string, args: readonly string[], extraEnv: NodeJS.ProcessEnv = {}): RunResult => runEntry(entry, args, { CI: '', GITHUB_ACTIONS: '', ...extraEnv }, repo)
@@ -359,6 +365,16 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
     commit,
     signer,
     allowedSigners,
+    commitReleaseFile: (name, text) => {
+      git(['checkout', '-q', RELEASE_BRANCH])
+      const path = join(repo, 'delo', 'release', name)
+      if (text === undefined) rmSync(path)
+      else writeFileSync(path, text)
+      git(['add', '-A'])
+      git(['commit', '-q', '-m', `change ${name}`])
+      // The release branch moves on; the checkout stays at the release commit, which the rebuild records.
+      git(['checkout', '-q', '--detach', commit])
+    },
     git,
     run,
     record: () => run('record-rebuild.ts', ['--version', version, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delo/actions/runs/1']),
@@ -377,7 +393,6 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
           now: new Date('2026-11-06T12:00:00Z'),
           feed: feed.url,
           firstOfLine: args.firstOfLine ?? false,
-          allowedSigners: args.allowedSigners ?? allowedSigners,
           releaseBranch: args.releaseBranch ?? RELEASE_BRANCH,
         })
         return { status: 0, stdout: signed.manifestName, stderr: '' }

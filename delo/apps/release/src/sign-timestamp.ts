@@ -3,7 +3,8 @@
  * protected environment: every 24 hours, and when a release is published.
  *
  * `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --state <state.json> --root <root file>... [--first]
- * --stable <manifest file> --beta <manifest file> [--replaced <manifest file>]... --out <timestamp.json>`
+ * --stable <manifest file> --beta <manifest file> [--replaced <manifest file>]... --out <timestamp.json>
+ * [--release-branch <revision>]`
  *
  * `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --init-state --root <root file> --state <state.json>`
  *
@@ -15,7 +16,9 @@
  * previous timestamp, only while the state records none. `--replaced` passes the manifest a channel names when a
  * re-signed manifest of the same release replaces it after a targets-key rotation. The private key is read from the
  * environment variable `DELO_TIMESTAMP_KEY` as PKCS #8 PEM, the workflow environment's secret; it is never a file or
- * an argument. The command writes the new state and then the timestamp, each through a temporary file renamed into
+ * an argument. It must be a production key: the command refuses a key that `delo/release/production-keys.json`, as
+ * `--release-branch` (`origin/v5` by default) of the repository it runs in commits it, does not list, so an empty
+ * registry stops every signing. The command writes the new state and then the timestamp, each through a temporary file renamed into
  * place, so no timestamp exists that the state does not record.
  *
  * @module @delo/release/sign-timestamp
@@ -25,8 +28,10 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { signEnvelope } from '@delo/release-formats/sign/envelope'
+import { repositoryRoot } from '@delo/tools/src/git.ts'
+import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { toJsonValue } from '@delo/release-formats/sign/json'
+import { productionKeyProblem, DEFAULT_RELEASE_BRANCH } from './sign/source.ts'
 import { initialState, nextTimestamp, readTimestampState, stateAfter, type ManifestFile } from './sign/timestamp.ts'
 import { trustRootChain, verifyTimestamp } from '@delo/release-formats/sign/verify'
 
@@ -39,7 +44,7 @@ function replaceFile(path: string, bytes: Uint8Array | string): void {
   renameSync(`${path}.signing`, path)
 }
 
-function main(argv: readonly string[]): number {
+async function main(argv: readonly string[]): Promise<number> {
   const { values } = parseArgs({
     args: [...argv],
     strict: true,
@@ -52,6 +57,7 @@ function main(argv: readonly string[]): number {
       'beta': { type: 'string' },
       'replaced': { type: 'string', multiple: true },
       'out': { type: 'string' },
+      'release-branch': { type: 'string', default: DEFAULT_RELEASE_BRANCH },
     },
   })
   try {
@@ -71,6 +77,8 @@ function main(argv: readonly string[]): number {
     if (pem === undefined || pem === '') throw new Error('DELO_TIMESTAMP_KEY holds no key')
     const key = createPrivateKey(pem)
     if (key.asymmetricKeyType !== 'ed25519') throw new Error('DELO_TIMESTAMP_KEY is not an Ed25519 key')
+    const unlisted = await productionKeyProblem(repositoryRoot(process.cwd()), values['release-branch'], publicKeyEntry(key).keyid, 'timestamp')
+    if (unlisted !== undefined) throw new Error(unlisted)
     const content = nextTimestamp({
       state: readTimestampState(readFileSync(statePath)),
       roots,
@@ -93,5 +101,5 @@ function main(argv: readonly string[]): number {
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = main(process.argv.slice(2))
+  process.exitCode = await main(process.argv.slice(2))
 }

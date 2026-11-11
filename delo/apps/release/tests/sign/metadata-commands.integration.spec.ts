@@ -3,13 +3,15 @@
  * only when both root thresholds sign it, and a timestamp names a channel's manifest only when the targets key signed
  * it and the previous timestamp verifies, with its key taken from the environment.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { devNull } from 'node:os'
 import { join } from 'node:path'
 import { generateKeyPairSync, type KeyObject } from 'node:crypto'
 import type { UtcTimestamp } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { describe, expect, it } from 'vitest'
-import { signEnvelope } from '@delo/release-formats/sign/envelope'
+import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { toJsonValue } from '@delo/release-formats/sign/json'
 import { readEnvelope } from '@delo/release-formats/sign/schemas'
 import { trustRootChain } from '@delo/release-formats/sign/verify'
@@ -65,7 +67,46 @@ describe('sign-root', CHILD_PROCESS_TIMEOUT, () => {
   })
 })
 
+/**
+ * A git repository whose `main` commits a production-keys registry, as the release branch does.
+ * @param directory - where the repository is made.
+ * @param keyids - the key ids the registry lists.
+ * @returns the repository's path.
+ */
+function registryRepository(directory: string, keyids: readonly string[]): string {
+  const repo = join(directory, 'repo')
+  mkdirSync(join(repo, 'delo', 'release'), { recursive: true })
+  const git = (args: readonly string[]): void => {
+    execFileSync('git', args, { cwd: repo, timeout: 30_000, env: { ...process.env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@example.org', GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@example.org' } })
+  }
+  git(['init', '-q', '-b', 'main'])
+  writeFileSync(join(repo, 'delo', 'release', 'production-keys.json'), `${JSON.stringify({ schema: 'delo.production-keys/1', roots: [], keyids })}\n`)
+  git(['add', '-A'])
+  git(['commit', '-q', '-m', 'registry'])
+  return repo
+}
+
 describe('sign-timestamp', CHILD_PROCESS_TIMEOUT, () => {
+  it('sign-timestamp-refuses-unlisted-production-key: refuses a timestamp key the release branch\'s registry does not list, and every key while it is empty', (test) => {
+    const directory = scratch(test)
+    const keys = throwawayKeys()
+    const rootPath = join(directory, 'root.json')
+    writeFileSync(rootPath, rootFile(keys, window()).bytes)
+    const statePath = join(directory, 'state.json')
+    expect(runEntry('sign-timestamp.ts', ['--init-state', '--root', rootPath, '--state', statePath]).status).toBe(0)
+    const manifest = join(directory, 'delorun-0.1.0.manifest.json')
+    writeFileSync(manifest, `${JSON.stringify(signEnvelope({ signed: toJsonValue(manifestContent('0.1.0', Buffer.from('archive'))), signatures: [] }, [keys.targets]), undefined, 2)}\n`)
+    const env = { DELO_TIMESTAMP_KEY: keys.timestamp.export({ format: 'pem', type: 'pkcs8' }).toString() }
+    const args = ['--state', statePath, '--root', rootPath, '--first', '--stable', manifest, '--beta', manifest, '--out', join(directory, 't1.json'), '--release-branch', 'main']
+    const empty = runEntry('sign-timestamp.ts', args, env, registryRepository(join(directory, 'empty'), []))
+    expect(empty.stderr).toContain('lists no production key')
+    expect(empty.status).toBe(1)
+    const other = runEntry('sign-timestamp.ts', args, env, registryRepository(join(directory, 'other'), ['0'.repeat(64)]))
+    expect(other.stderr).toContain(`the timestamp key ${publicKeyEntry(keys.timestamp).keyid} is not a production key`)
+    expect(existsSync(join(directory, 't1.json'))).toBe(false)
+    expect(runEntry('sign-timestamp.ts', args, env, registryRepository(join(directory, 'listed'), [publicKeyEntry(keys.timestamp).keyid])).status).toBe(0)
+  })
+
   it('starts from a state written once, continues only from the timestamp it holds, takes no --previous, and refuses a manifest another key signed', (test) => {
     const directory = scratch(test)
     const keys = throwawayKeys()
@@ -83,7 +124,8 @@ describe('sign-timestamp', CHILD_PROCESS_TIMEOUT, () => {
     }
     const older = manifest('0.1.0', keys.targets)
     const env = { DELO_TIMESTAMP_KEY: keys.timestamp.export({ format: 'pem', type: 'pkcs8' }).toString() }
-    const sign = (out: string, start: readonly string[], path = older): ReturnType<typeof runEntry> => runEntry('sign-timestamp.ts', ['--state', statePath, '--root', rootPath, ...start, '--stable', path, '--beta', path, '--out', join(directory, out)], env)
+    const repo = registryRepository(directory, [publicKeyEntry(keys.timestamp).keyid])
+    const sign = (out: string, start: readonly string[], path = older): ReturnType<typeof runEntry> => runEntry('sign-timestamp.ts', ['--state', statePath, '--root', rootPath, ...start, '--stable', path, '--beta', path, '--out', join(directory, out), '--release-branch', 'main'], env, repo)
     expect(sign('none.json', []).stderr).toContain('the state records no timestamp yet; sign the first timestamp with --first')
     const first = sign('t1.json', ['--first'])
     expect(first.stderr).toBe('')

@@ -291,7 +291,7 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
 
   it('refuses from the command line without a rebuild record, naming the required source', async (test) => {
     const fixture = await releaseFixture(test)
-    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--allowed-signers', fixture.allowedSigners, '--release-branch', RELEASE_BRANCH]
+    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--release-branch', RELEASE_BRANCH]
     const result = fixture.run('sign-release.ts', args)
     refusal(result.stderr)
     expect(result.status).toBe(1)
@@ -300,15 +300,15 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     expect(stated.status).toBe(1)
   })
 
-  it('reads the repository\'s allowed-signers file and the release branch origin/v5 by default from the command line', async (test) => {
+  it('reads the release branch origin/v5 by default from the command line, and takes no --allowed-signers', async (test) => {
     const fixture = await releaseFixture(test)
     const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath]
-    const unlisted = fixture.run('sign-release.ts', args)
-    expect(unlisted.stderr).toContain(`signing refuses: the allowed-signers file ${join(fixture.repo, 'delo', 'release', 'allowed-signers')} does not read`)
-    expect(unlisted.status).toBe(1)
-    const branch = fixture.run('sign-release.ts', [...args, '--allowed-signers', fixture.allowedSigners])
+    const branch = fixture.run('sign-release.ts', args)
     expect(branch.stderr).toContain('signing refuses: the release branch origin/v5 names no commit')
     expect(branch.status).toBe(1)
+    const override = fixture.run('sign-release.ts', [...args, '--allowed-signers', join(fixture.repo, 'signers')])
+    expect(override.stderr).toContain('--allowed-signers')
+    expect(override.status).not.toBe(0)
     expect(existsSync(join(fixture.release, MANIFEST))).toBe(false)
   })
 

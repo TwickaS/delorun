@@ -11,11 +11,12 @@ import { spawnSync } from 'node:child_process'
 import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { tarStream } from '@delo/release-formats/archive/tar'
+import { publicKeyEntry } from '@delo/release-formats/sign/envelope'
 import { INSTALL_SCRIPT_REFUSAL } from '../../src/sign/release.ts'
 import { npmIntegrity, npmTarballName, packedManifest } from '../../src/sign/npm-package.ts'
 import { ALLOWED_SIGNERS_PATH, signerLines } from '../../src/sign/source.ts'
 import { REPO, scratch } from '../support.ts'
-import { packedPackage, releaseFixture, tagSigner, VERSION, type ReleaseFixture } from './fixture.ts'
+import { packedPackage, releaseFixture, RELEASE_BRANCH, tagSigner, VERSION, type ReleaseFixture } from './fixture.ts'
 
 const MANIFEST = `delorun-${VERSION}.manifest.json`
 const TAG = `v${VERSION}`
@@ -77,17 +78,29 @@ describe('signing checks the release tag', FIXTURE_TIMEOUT, () => {
     const before = readdirSync(fixture.release).sort()
     const stranger = tagSigner(scratch(test), 'stranger')
     retag(fixture, ['-s', '-m', `release ${VERSION}`, TAG], stranger.key)
-    refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: the signature of tag ${TAG} does not verify with a key the allowed-signers file ${fixture.allowedSigners} lists`)
+    refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: the signature of tag ${TAG} does not verify with a key the allowed-signers file delo/release/allowed-signers on the release branch ${RELEASE_BRANCH} lists`)
   })
 
   it('sign-release-refuses-empty-allowed-signers: the committed allowed-signers file lists no key, so signing refuses every tag', async (test) => {
     const fixture = await releaseFixture(test)
     expect(fixture.record().status).toBe(0)
     const before = readdirSync(fixture.release).sort()
-    const committed = join(REPO, ALLOWED_SIGNERS_PATH)
-    expect(signerLines(readFileSync(committed, 'utf8'))).toBe(0)
-    refusedWithoutWriting(fixture, before, await fixture.sign({}, { allowedSigners: committed }), `signing refuses: the allowed-signers file ${committed} lists no signer key, so no release tag verifies`)
-    refusedWithoutWriting(fixture, before, await fixture.sign({}, { allowedSigners: join(fixture.repo, 'missing') }), 'does not read')
+    const committed = readFileSync(join(REPO, ALLOWED_SIGNERS_PATH), 'utf8')
+    expect(signerLines(committed)).toBe(0)
+    fixture.commitReleaseFile('allowed-signers', committed)
+    refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: the allowed-signers file delo/release/allowed-signers on the release branch ${RELEASE_BRANCH} lists no signer key, so no release tag verifies`)
+    fixture.commitReleaseFile('allowed-signers', undefined)
+    refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: the release branch ${RELEASE_BRANCH} holds no delo/release/allowed-signers`)
+  })
+
+  it('sign-release-reads-allowed-signers-from-the-release-branch: a signer added only in the working tree does not verify', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const before = readdirSync(fixture.release).sort()
+    const stranger = tagSigner(scratch(test), 'stranger')
+    retag(fixture, ['-s', '-m', `release ${VERSION}`, TAG], stranger.key)
+    writeFileSync(join(fixture.repo, ALLOWED_SIGNERS_PATH), `${fixture.allowedSigners}${stranger.allowed}`)
+    refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: the signature of tag ${TAG} does not verify`)
   })
 
   it('sign-release-refuses-retargeted-tag: refuses a signed tag object made for another tag name', async (test) => {
@@ -102,13 +115,26 @@ describe('signing checks the release tag', FIXTURE_TIMEOUT, () => {
   it('sign-release-accepts-listed-signer: signs when a key the allowed-signers file lists signed the tag', async (test) => {
     const fixture = await releaseFixture(test)
     const second = tagSigner(scratch(test), 'second-signer')
-    writeFileSync(fixture.allowedSigners, `${readFileSync(fixture.allowedSigners, 'utf8')}${second.allowed}`)
+    fixture.commitReleaseFile('allowed-signers', `${fixture.allowedSigners}${second.allowed}`)
     retag(fixture, ['-s', '-m', `release ${VERSION}`, TAG], second.key)
     expect(fixture.record().status).toBe(0)
     const result = await fixture.sign()
     expect(result.stderr).toBe('')
     expect(result.status).toBe(0)
     expect(existsSync(join(fixture.release, MANIFEST))).toBe(true)
+  })
+})
+
+describe('signing checks the targets key against the production-keys registry', FIXTURE_TIMEOUT, () => {
+  it('sign-release-refuses-unlisted-production-key: refuses a targets key the registry does not list, and every key while the registry is empty', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const before = readdirSync(fixture.release).sort()
+    const keyid = publicKeyEntry(fixture.keys.targets).keyid
+    fixture.commitReleaseFile('production-keys.json', readFileSync(join(REPO, 'delo', 'release', 'production-keys.json'), 'utf8'))
+    refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: delo/release/production-keys.json on the release branch ${RELEASE_BRANCH} lists no production key`)
+    fixture.commitReleaseFile('production-keys.json', `${JSON.stringify({ schema: 'delo.production-keys/1', roots: [], keyids: ['0'.repeat(64)] })}\n`)
+    refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: the targets key ${keyid} is not a production key`)
   })
 })
 

@@ -2,8 +2,9 @@
  * Signing a release with the targets key (contract C2): the checks that refuse to sign without the targets-key
  * holder's rebuild, then the signed runtime file lists, the published rebuild record and the signed manifest. Signing
  * runs on the holder's machine with the release workflow's files in a local directory and the holder's rebuild
- * record and rebuild output outside it; it checks that the release tag is signed by a key the allowed-signers file
- * lists and names a commit on the release branch (`sign/source.ts`), checks every file the manifest names, holds the
+ * record and rebuild output outside it; it checks that the targets key is a production key and the release tag is
+ * signed by a key the allowed-signers file lists, both as the release branch commits them, and that the tag names a
+ * commit on the release branch (`sign/source.ts`), checks every file the manifest names, holds the
  * manifest's runtime entries to exactly the release platforms `closure.json` lists at the release's commit, refuses
  * install scripts other than zero-length placeholders, which the rebuild comparison does not cover, checks each npm
  * package's integrity, name and version against its packed tarball (`sign/npm-package.ts`), compares every runtime
@@ -41,12 +42,12 @@ import { logEntryName } from '@delo/release-formats/log/bundle'
 import { entryRequest } from '@delo/release-formats/log/entry'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
-import { signEnvelope } from '@delo/release-formats/sign/envelope'
+import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@delo/release-formats/sign/json'
 import { ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
 import { patchRuleProblem } from './patch-rule.ts'
 import { npmPackageProblem } from './npm-package.ts'
-import { releaseBranchProblem, tagSignatureProblem } from './source.ts'
+import { productionKeyProblem, releaseBranchProblem, tagSignatureProblem } from './source.ts'
 
 /** Signing refused; the message names what is missing or wrong. */
 export class SigningRefusal extends Error {
@@ -89,9 +90,11 @@ export interface SigningRequest {
   readonly feed: string
   /** Whether the holder states that the release, a patch version, is the first of its major and minor; see `PatchRuleRequest.firstOfLine` in `patch-rule.ts`. */
   readonly firstOfLine: boolean
-  /** The allowed-signers file the release tag's SSH signature must verify with; the command passes the committed `delo/release/allowed-signers`. */
-  readonly allowedSigners: string
-  /** The branch the release commit must be on, as a revision of {@link SigningRequest.repository}, such as `origin/v5`. */
+  /**
+   * The branch the release commit must be on, as a revision of {@link SigningRequest.repository}, such as `origin/v5`;
+   * its commits of `delo/release/allowed-signers` and `delo/release/production-keys.json` list the tag signers and the
+   * production keys.
+   */
   readonly releaseBranch: string
 }
 
@@ -297,8 +300,6 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   for (const [where, script] of [['install.sh', draft.install.sh], ['install.ps1', draft.install.ps1]] as const) {
     if (script.length !== 0) throw new SigningRefusal(`signing refuses: the draft's ${where} is ${script.name} of ${String(script.length)} bytes, but ${INSTALL_SCRIPT_REFUSAL}, so a release lists each install script only as a zero-length placeholder`)
   }
-  const unsigned = await tagSignatureProblem(request.repository, draft.source.tag, request.allowedSigners)
-  if (unsigned !== undefined) throw new SigningRefusal(`signing refuses: ${unsigned}`)
   let tagged: string
   try {
     tagged = commitOf(request.repository, `refs/tags/${draft.source.tag}`)
@@ -307,6 +308,10 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   }
   const offBranch = await releaseBranchProblem(request.repository, tagged, request.releaseBranch)
   if (offBranch !== undefined) throw new SigningRefusal(`signing refuses: ${offBranch}`)
+  const unlisted = await productionKeyProblem(request.repository, request.releaseBranch, publicKeyEntry(request.key).keyid, 'targets')
+  if (unlisted !== undefined) throw new SigningRefusal(`signing refuses: ${unlisted}`)
+  const unsigned = await tagSignatureProblem(request.repository, draft.source.tag, request.releaseBranch)
+  if (unsigned !== undefined) throw new SigningRefusal(`signing refuses: ${unsigned}`)
   const { record, recordBytes, comparison } = await checkRebuild(request, draft, tagged)
   const patchProblem = patchRuleProblem({ repository: request.repository, version: draft.version, dsh: draft.dsh, commit: record.commit, firstOfLine: request.firstOfLine })
   if (patchProblem !== undefined) throw new SigningRefusal(`signing refuses: ${patchProblem}`)

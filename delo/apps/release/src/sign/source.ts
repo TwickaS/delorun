@@ -1,17 +1,26 @@
 /**
  * The source checks signing runs before anything else reads the release's commit: the release tag is an annotated tag
- * for its own name, signed with an SSH key the committed allowed-signers file (`delo/release/allowed-signers`, git's
- * `gpg.ssh.allowedSignersFile` format) lists, and the commit it names is on the release branch. Each check runs git
- * without a shell and with a timeout, and returns the problem it found as text, or `undefined`.
+ * for its own name, signed with an SSH key the allowed-signers file (`delo/release/allowed-signers`, git's
+ * `gpg.ssh.allowedSignersFile` format) lists, and the commit it names is on the release branch; and the signing key is
+ * one the production-keys registry (`delo/release/production-keys.json`) lists. Both files are read as the release
+ * branch commits them (`git show <branch>:<path>`), never from the working tree, so a file edited in the checkout
+ * cannot add a signer or a key. Each check runs git without a shell and with a timeout, and returns the problem it
+ * found as text, or `undefined`.
  *
  * @module @delo/release/sign/source
  */
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { KeyId } from '@delo/contract-release-manifest'
+import { readProductionKeys } from '../local/production-keys.ts'
 
-/** The allowed-signers file's path below the repository root. */
-export const ALLOWED_SIGNERS_PATH = join('delo', 'release', 'allowed-signers')
+/** The allowed-signers file's path in the repository, as git names it. */
+export const ALLOWED_SIGNERS_PATH = 'delo/release/allowed-signers'
+
+/** The production-keys registry's path in the repository, as git names it. */
+export const PRODUCTION_KEYS_REPOSITORY_PATH = 'delo/release/production-keys.json'
 
 /** The release branch a release commit must be on, unless the signer names another. */
 export const DEFAULT_RELEASE_BRANCH = 'origin/v5'
@@ -64,6 +73,48 @@ function gitError(result: GitResult): string {
 }
 
 /**
+ * A file as the release branch commits it.
+ * @param repository - the repository.
+ * @param branch - the release branch.
+ * @param path - the file's path in the repository, `/`-separated.
+ * @returns the file's text, or the problem that kept it from being read.
+ * @throws Error when git cannot be started.
+ */
+export async function committedFile(repository: string, branch: string, path: string): Promise<{ readonly text: string } | { readonly problem: string }> {
+  if (branch.startsWith('-')) return { problem: `the release branch ${JSON.stringify(branch)} is not a branch name` }
+  const tip = await git(repository, ['rev-parse', '--verify', '--quiet', `${branch}^{commit}`])
+  if (tip.status !== 0) return { problem: `the release branch ${branch} names no commit in ${repository}; fetch it before signing` }
+  const shown = await git(repository, ['show', `${tip.stdout.trim()}:${path}`])
+  if (shown.status !== 0) return { problem: `the release branch ${branch} holds no ${path}: ${gitError(shown)}` }
+  return { text: shown.stdout }
+}
+
+/**
+ * Check that a signing key is listed in the production-keys registry the release branch commits. An empty registry
+ * lists no key, so it refuses every key: production signing stops until the owner records the keys of the key
+ * ceremony.
+ * @param repository - the repository.
+ * @param branch - the release branch.
+ * @param keyid - the signing key's id.
+ * @param role - the key's role, which the problem names, such as `targets`.
+ * @returns the problem, or `undefined` when the registry lists the key.
+ * @throws Error when git cannot be started.
+ */
+export async function productionKeyProblem(repository: string, branch: string, keyid: KeyId, role: string): Promise<string | undefined> {
+  const file = await committedFile(repository, branch, PRODUCTION_KEYS_REPOSITORY_PATH)
+  if ('problem' in file) return file.problem
+  let listed: ReadonlySet<KeyId>
+  try {
+    listed = readProductionKeys(Buffer.from(file.text)).keyids
+  } catch (error) {
+    return `${PRODUCTION_KEYS_REPOSITORY_PATH} on the release branch ${branch} does not read: ${(error as Error).message}`
+  }
+  if (listed.size === 0) return `${PRODUCTION_KEYS_REPOSITORY_PATH} on the release branch ${branch} lists no production key, so no production signing runs until the owner records the keys of the key ceremony`
+  if (!listed.has(keyid)) return `the ${role} key ${keyid} is not a production key: ${PRODUCTION_KEYS_REPOSITORY_PATH} on the release branch ${branch} does not list it`
+  return undefined
+}
+
+/**
  * The number of signer lines in an allowed-signers file: lines that are neither blank nor `#` comments.
  * @param text - the file's text.
  * @returns the count.
@@ -74,23 +125,20 @@ export function signerLines(text: string): number {
 
 /**
  * Check that a release tag is an annotated tag for its own name, naming a commit, signed with an SSH key that the
- * allowed-signers file lists for the `git` namespace. Verification is git's `verify-tag` with `gpg.format=ssh`,
- * `gpg.ssh.program=ssh-keygen` and the given file, so neither an OpenPGP signature nor a configured signing program
- * takes part.
+ * allowed-signers file the release branch commits lists for the `git` namespace. Verification is git's `verify-tag`
+ * with `gpg.format=ssh`, `gpg.ssh.program=ssh-keygen` and a private copy of that file, so neither an OpenPGP signature,
+ * a configured signing program nor the working tree's copy of the file takes part.
  * @param repository - the repository holding the tag.
  * @param tag - the tag's name, such as `v0.1.0`.
- * @param allowedSigners - the allowed-signers file.
+ * @param branch - the release branch, whose commit of {@link ALLOWED_SIGNERS_PATH} lists the signers.
  * @returns the problem, or `undefined` when the signature verifies.
- * @throws Error when git cannot be started.
+ * @throws Error when git cannot be started, or the private copy cannot be written.
  */
-export async function tagSignatureProblem(repository: string, tag: string, allowedSigners: string): Promise<string | undefined> {
-  let signers: string
-  try {
-    signers = await readFile(allowedSigners, 'utf8')
-  } catch (error) {
-    return `the allowed-signers file ${allowedSigners} does not read: ${(error as Error).message}`
-  }
-  if (signerLines(signers) === 0) return `the allowed-signers file ${allowedSigners} lists no signer key, so no release tag verifies; the owner adds each release signer's SSH signing key to it`
+export async function tagSignatureProblem(repository: string, tag: string, branch: string): Promise<string | undefined> {
+  const file = await committedFile(repository, branch, ALLOWED_SIGNERS_PATH)
+  if ('problem' in file) return file.problem
+  const named = `${ALLOWED_SIGNERS_PATH} on the release branch ${branch}`
+  if (signerLines(file.text) === 0) return `the allowed-signers file ${named} lists no signer key, so no release tag verifies; the owner adds each release signer's SSH signing key to it`
   const ref = `refs/tags/${tag}`
   const kind = await git(repository, ['cat-file', '-t', ref])
   if (kind.status !== 0) return `the tag ${tag} does not exist in ${repository}: ${gitError(kind)}`
@@ -102,9 +150,16 @@ export async function tagSignatureProblem(repository: string, tag: string, allow
   if (fields.get('type') !== 'commit') return `the tag ${tag} names a ${fields.get('type') ?? 'missing'} object, not a commit`
   if (fields.get('tag') !== tag) return `the tag object at ${ref} was made for the tag ${JSON.stringify(fields.get('tag') ?? '')}, not ${tag}`
   if (!body.includes(SSH_SIGNATURE)) return `the tag ${tag} carries no SSH signature; a release tag is signed with an SSH key the allowed-signers file lists`
-  const verified = await git(repository, ['-c', 'gpg.format=ssh', '-c', 'gpg.ssh.program=ssh-keygen', '-c', `gpg.ssh.allowedSignersFile=${allowedSigners}`, 'verify-tag', ref])
-  if (verified.status !== 0) return `the signature of tag ${tag} does not verify with a key the allowed-signers file ${allowedSigners} lists: ${gitError(verified)}`
-  return undefined
+  const directory = await mkdtemp(join(tmpdir(), 'delo-allowed-signers-'))
+  try {
+    const allowedSigners = join(directory, 'allowed-signers')
+    await writeFile(allowedSigners, file.text, { mode: 0o600 })
+    const verified = await git(repository, ['-c', 'gpg.format=ssh', '-c', 'gpg.ssh.program=ssh-keygen', '-c', `gpg.ssh.allowedSignersFile=${allowedSigners}`, 'verify-tag', ref])
+    if (verified.status !== 0) return `the signature of tag ${tag} does not verify with a key the allowed-signers file ${named} lists: ${gitError(verified)}`
+    return undefined
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 }
 
 /**

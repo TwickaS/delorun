@@ -2,8 +2,7 @@
  * The signing command of contract C2, run by the targets-key holder on their own machine, outside CI:
  *
  * `node_modules/.bin/tsx delo/apps/release/src/sign-release.ts --release <dir> --rebuild <dir> --record <file>
- * --attestation <file> --attestation-key <file> --key <targets.pem> [--first-of-line] [--allowed-signers <file>]
- * [--release-branch <revision>]`
+ * --attestation <file> --attestation-key <file> --key <targets.pem> [--first-of-line] [--release-branch <revision>]`
  *
  * `--release` holds the release workflow's files with its `manifest-draft.json`; `--rebuild` is the holder's own
  * rebuild output on this machine, `--record` the rebuild record `record-rebuild.ts` wrote and `--attestation` the
@@ -20,10 +19,11 @@
  * version at the tagged commit, and a patch release that the patch rule of `sign/patch-rule.ts` refuses. A
  * patch version (such as `0.1.3`) with no earlier release of its major and minor tagged and listed in the committed
  * changelog refuses unless `--first-of-line` states that it is the first release of that line.
- * Before reading the rebuild it refuses a release tag that is not an annotated tag for its own name, signed with an
- * SSH key that `--allowed-signers` lists (the repository's `delo/release/allowed-signers` by default, which lists no
- * key until the owner adds one, so every tag is refused until then), a tagged commit that is not on `--release-branch`
- * (`origin/v5` by default; fetch it first), and a draft whose `install.sh` or `install.ps1` is not a zero-length
+ * Before reading the rebuild it refuses a targets key that `delo/release/production-keys.json` does not list, and a
+ * release tag that is not an annotated tag for its own name, signed with an SSH key that `delo/release/allowed-signers`
+ * lists, each file read as `--release-branch` (`origin/v5` by default; fetch it first) commits it, never from the
+ * working tree: both files list nothing until the owner adds the keys, so signing refuses until then. It also refuses
+ * a tagged commit that is not on the release branch, and a draft whose `install.sh` or `install.ps1` is not a zero-length
  * placeholder, because the install scripts are not in the rebuild comparison yet. After checking the draft's files it
  * refuses an `npm[]` entry whose tarball, as `npm pack` names it (`delorun-<version>.tgz`), is not in `--release`, has
  * another npm integrity, or holds a `package/package.json` with another name or version.
@@ -34,7 +34,7 @@
  *
  * @module @delo/release/sign-release
  */
-import { join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { ADVISORY_FEED_URL } from '@delo/contract-release-manifest'
@@ -42,12 +42,12 @@ import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { readAttestationKey } from './rebuild/attestation.ts'
 import { readSigningKey } from '@delo/release-formats/sign/envelope'
 import { signRelease, SigningRefusal } from './sign/release.ts'
-import { ALLOWED_SIGNERS_PATH, DEFAULT_RELEASE_BRANCH } from './sign/source.ts'
+import { DEFAULT_RELEASE_BRANCH } from './sign/source.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
-  const { values } = parseArgs({ args: [...argv], strict: true, options: { 'release': { type: 'string' }, 'rebuild': { type: 'string' }, 'record': { type: 'string' }, 'attestation': { type: 'string' }, 'attestation-key': { type: 'string' }, 'key': { type: 'string' }, 'first-of-line': { type: 'boolean', default: false }, 'allowed-signers': { type: 'string' }, 'release-branch': { type: 'string', default: DEFAULT_RELEASE_BRANCH } } })
+  const { values } = parseArgs({ args: [...argv], strict: true, options: { 'release': { type: 'string' }, 'rebuild': { type: 'string' }, 'record': { type: 'string' }, 'attestation': { type: 'string' }, 'attestation-key': { type: 'string' }, 'key': { type: 'string' }, 'first-of-line': { type: 'boolean', default: false }, 'release-branch': { type: 'string', default: DEFAULT_RELEASE_BRANCH } } })
   if (values.release === undefined || values.rebuild === undefined || values.record === undefined || values.attestation === undefined || values['attestation-key'] === undefined || values.key === undefined) {
-    console.error('sign-release: pass --release <dir>, --rebuild <dir>, --record <file>, --attestation <file>, --attestation-key <file> and --key <targets.pem>, and optionally --first-of-line, --allowed-signers <file> and --release-branch <revision>')
+    console.error('sign-release: pass --release <dir>, --rebuild <dir>, --record <file>, --attestation <file>, --attestation-key <file> and --key <targets.pem>, and optionally --first-of-line and --release-branch <revision>')
     return 2
   }
   try {
@@ -64,7 +64,6 @@ async function main(argv: readonly string[]): Promise<number> {
       now: new Date(),
       feed: ADVISORY_FEED_URL,
       firstOfLine: values['first-of-line'],
-      allowedSigners: values['allowed-signers'] === undefined ? join(repository, ALLOWED_SIGNERS_PATH) : resolve(values['allowed-signers']),
       releaseBranch: values['release-branch'],
     })
     for (const item of signed.comparison.accepted) console.log(`sign-release: accepted ${item.file}: ${item.entry} (rebuild exception ${item.exception})`)
