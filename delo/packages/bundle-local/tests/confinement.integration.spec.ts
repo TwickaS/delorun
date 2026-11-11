@@ -53,10 +53,10 @@ afterAll(async () => {
  * evaluates them: `dshHomePath` is the scope the composition reads, and the harness home is the Delo home.
  * @returns the row's config.
  */
-function composedSandboxConfig(): { readonly protectedHome: string, readonly protectedHomeReadable: readonly string[] } {
+function composedSandboxConfig(): { readonly protectedHome: string, readonly protectedHomeReadable: readonly string[], readonly protectedHomeToolReadable: readonly string[] } {
   const row = home.rows(DELO_PROFILE).find(entry => entry.id === 'sandbox')
   if (row?.config === undefined) throw new Error('the composed Delo CLI profile has no configured sandbox row')
-  return interpolate({ dshHomePath }, row.config) as { readonly protectedHome: string, readonly protectedHomeReadable: readonly string[] }
+  return interpolate({ dshHomePath }, row.config) as { readonly protectedHome: string, readonly protectedHomeReadable: readonly string[], readonly protectedHomeToolReadable: readonly string[] }
 }
 
 /**
@@ -75,7 +75,7 @@ describe('the shipped composition\'s sandbox row', () => {
     vi.stubEnv('DSH_HOME', home.dir)
     try {
       const config = composedSandboxConfig()
-      expect(config).toEqual({ protectedHome: home.dir, protectedHomeReadable: [...READ_EXEMPTIONS] })
+      expect(config).toEqual({ protectedHome: home.dir, protectedHomeReadable: [...READ_EXEMPTIONS], protectedHomeToolReadable: ['spill'] })
     } finally {
       vi.unstubAllEnvs()
     }
@@ -101,7 +101,7 @@ describe('a confined command under the shipped composition\'s sandbox row', () =
     vi.stubEnv('DSH_HOME', home.dir)
     try {
       ctx = new Context()
-      await ctx.plugin(LocalSandboxProvider, composedSandboxConfig() as { protectedHome: string, protectedHomeReadable: string[] })
+      await ctx.plugin(LocalSandboxProvider, composedSandboxConfig() as { protectedHome: string, protectedHomeReadable: string[], protectedHomeToolReadable: string[] })
     } finally {
       vi.unstubAllEnvs()
     }
@@ -119,5 +119,11 @@ describe('a confined command under the shipped composition\'s sandbox row', () =
     // The read exemptions still reach a confined command, so a runtime or skill directory keeps working.
     const readable = await sandbox.confine([process.execPath, '-e', READ, exemption], policy)
     expect(await run(readable.argv)).toBe('ok')
+    // Spilled tool output is readable by the read tools only: a confined command cannot read it.
+    mkdirSync(join(home.dir, 'spill'), { recursive: true })
+    const spilled = join(home.dir, 'spill', 'canary')
+    writeFileSync(spilled, 'canary\n', { mode: 0o600 })
+    expect(sandbox.protectedReads?.toolReadable).toContain(join(home.dir, 'spill'))
+    expect(await run((await sandbox.confine([process.execPath, '-e', READ, spilled], policy)).argv)).not.toBe('ok')
   })
 })

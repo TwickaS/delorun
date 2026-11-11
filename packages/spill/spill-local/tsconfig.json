@@ -20,6 +20,12 @@
     },
     {
       "path": "../spill"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../sandbox/sandbox"
     }
   ]
 }

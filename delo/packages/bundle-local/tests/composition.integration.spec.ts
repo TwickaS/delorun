@@ -249,6 +249,7 @@ describe('a Delo CLI profile', () => {
     expect(sandbox?.config).toMatchObject({
       protectedHome: { __jsExpr: 'dshHomePath()' },
       protectedHomeReadable: [...READ_EXEMPTIONS],
+      protectedHomeToolReadable: ['spill'],
     })
   })
 

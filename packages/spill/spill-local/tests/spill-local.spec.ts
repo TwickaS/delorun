@@ -11,7 +11,7 @@
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, normalize, relative } from 'node:path'
@@ -25,6 +25,7 @@ import LocalSpillStore, {
   encodeSegment,
   isErrno,
   privateRoot,
+  privateRootFallbackCause,
   saveTextFile,
   sessionDir,
   sweepSpillRoots,
@@ -143,6 +144,23 @@ describe('privateRoot', () => {
     }
   })
 
+  it.skipIf(process.platform === 'win32')('tightens an existing spill directory that other users could read to owner-only', () => {
+    const home = join(root, 'loose-home')
+    mkdirSync(join(home, DEFAULT_ROOT_DIR_NAME), { recursive: true })
+    chmodSync(join(home, DEFAULT_ROOT_DIR_NAME), 0o755)
+    expect(privateRoot(home)).toBe(join(home, DEFAULT_ROOT_DIR_NAME))
+    expect(statSync(join(home, DEFAULT_ROOT_DIR_NAME)).mode & 0o777).toBe(0o700)
+  })
+
+  it.skipIf(process.platform === 'win32')('does not write spills through a link at the home\'s spill path', () => {
+    const home = join(root, 'linked-home')
+    mkdirSync(join(root, 'elsewhere'))
+    mkdirSync(home)
+    symlinkSync(join(root, 'elsewhere'), join(home, DEFAULT_ROOT_DIR_NAME), 'dir')
+    expect(dirname(privateRoot(home))).toBe(tmpdir())
+    expect(privateRootFallbackCause(home)).toBeInstanceOf(Error)
+  })
+
   it('keeps the temp root only for a home that cannot host its spill directory', () => {
     // A file where the home should be: `<home>/spill` cannot be created under it.
     const blocked = join(root, 'occupied')
@@ -187,6 +205,30 @@ describe('LocalSpillStore service', () => {
       expect(store.root).toBe(privateRoot(home))
     } finally {
       vi.unstubAllEnvs()
+    }
+  })
+
+  it('refuses to spill to the temp root while the sandbox provider protects the home that could not hold it', async () => {
+    // A file where the home's spill directory should be: the default root falls back to the OS temp dir.
+    const home = join(root, 'blocked-home')
+    mkdirSync(home)
+    writeFileSync(join(home, DEFAULT_ROOT_DIR_NAME), 'x')
+    vi.stubEnv('DSH_HOME', home)
+    const ctx = new Context()
+    try {
+      await ctx.plugin(LocalSpillStore, { cleanupPeriodDays: 0 })
+      const store = ctx.spillStore as LocalSpillStore
+      expect(dirname(store.root)).toBe(tmpdir())
+      const sandbox: { protectedHome: string | undefined } = { protectedHome: home }
+      ctx.provide('sandbox', sandbox as never)
+      await expect(store.saveText(request())).rejects.toMatchObject({ code: 'SPILL_ROOT_UNPROTECTED' })
+      expect(readdirSync(store.root)).toEqual([])
+      // Without a protected home the temp root keeps spilling working.
+      sandbox.protectedHome = undefined
+      expect(readFileSync((await store.saveText(request())).locator, 'utf8')).toBe('the full body')
+    } finally {
+      vi.unstubAllEnvs()
+      await ctx.fiber.dispose()
     }
   })
 

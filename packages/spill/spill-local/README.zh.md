@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 最小配置
 
-不带配置加载插件是安全的：文件会落在操作系统临时目录下延迟创建的私有（0700）每进程目录中。当文件必须位于已知位置时，设置 `root`。
+不带配置加载插件是安全的：文件会落在 Harness 主目录中延迟创建的私有（0700）`spill/` 目录里，其他用户可读的已有目录会被收紧为 0700。无法容纳该目录的主目录，或该路径上的链接，会回退到操作系统临时目录下的私有 `dsh-spill-*` 目录，而受限命令可以读取该目录；当挂载的 `ctx.sandbox` 提供方报告 `protectedHome` 时，`saveText` 会以 `SPILL_ROOT_UNPROTECTED` 拒绝这一回退，调用方把输出保留在行内。当文件必须位于已知位置时，设置 `root`。
 
 ```yaml
 - name: '@deepseek-ai/dsh-spill-local'
@@ -40,7 +40,7 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `root` | 私有 0700 临时目录 | spill 文件的根目录；设置后可将文件保存在已知位置 |
+| `root` | 主目录中私有 0700 的 `spill/` | spill 文件的根目录；设置后可将文件保存在已知位置 |
 | `cleanupPeriodDays` | `30` | 文件在一次性启动清理中可被删除前需经过的天数；`0` 禁用清理 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-spill-local)是每个受支持字段的穷尽式真源。

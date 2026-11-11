@@ -29,7 +29,7 @@ Mount this backend in a composition that spills text to the local filesystem. It
 
 ### Minimal configuration
 
-Loading the plugin with no config is safe: files land in a lazily-created private (0700) per-process directory under the OS temp directory. Set `root` when the files must live under a known location.
+Loading the plugin with no config is safe: files land in the lazily-created private (0700) `spill/` directory of the Harness home, and an existing one that other users could read is tightened to 0700. A home that cannot hold it, or a link at that path, falls back to a private `dsh-spill-*` directory under the OS temp directory, which confined commands can read; while the mounted `ctx.sandbox` provider reports a `protectedHome`, `saveText` refuses that fallback with `SPILL_ROOT_UNPROTECTED`, and the caller keeps the output inline. Set `root` when the files must live under a known location.
 
 ```yaml
 - name: '@deepseek-ai/dsh-spill-local'
@@ -40,7 +40,7 @@ Loading the plugin with no config is safe: files land in a lazily-created privat
 
 | Field | Default | Meaning |
 |---|---|---|
-| `root` | private 0700 temp dir | Root directory for spill files; set to keep them under a known location |
+| `root` | the home's private 0700 `spill/` | Root directory for spill files; set to keep them under a known location |
 | `cleanupPeriodDays` | `30` | File age in days before the one-shot startup cleanup may delete it; `0` disables cleanup |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-spill-local) is the exhaustive source for every accepted field.

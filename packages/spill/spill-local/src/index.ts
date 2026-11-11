@@ -13,16 +13,34 @@ import { Context } from '@deepseek-ai/cordis'
 import { resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import z from '@deepseek-ai/schemastery'
+import { HarnessError } from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-sandbox'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
 import { gatherSweepRoots, sweepSpillRoots } from './cleanup.ts'
 import type { SweepRoot, WarnFn } from './cleanup.ts'
-import { privateRoot, saveTextFile } from './store.ts'
+import { privateRoot, privateRootFallbackCause, saveTextFile } from './store.ts'
 
 export { discoverDefaultRoots, sweepSpillRoots } from './cleanup.ts'
 export type { SweepOptions, SweepRoot, WarnFn } from './cleanup.ts'
-export { DEFAULT_ROOT_DIR_NAME, DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, saveTextFile, sessionDir } from './store.ts'
+export { DEFAULT_ROOT_DIR_NAME, DEFAULT_ROOT_PREFIX, encodeSegment, isErrno, privateRoot, privateRootFallbackCause, saveTextFile, sessionDir } from './store.ts'
 export type { SavedText, SaveTextOptions } from './store.ts'
+
+/**
+ * The default spill root is a temp directory confined commands can read, while the sandbox provider protects the home
+ * that should have held it.
+ */
+export class SpillRootUnprotectedError extends HarnessError {
+  constructor(root: string, home: string, cause: unknown) {
+    super(
+      `spill-local: not saving tool output to ${root}: the protected home ${home} could not hold its spill directory `
+        + `(${String(cause)}), and confined commands can read the temporary directory; make ${home} writable or set the spill row's root`,
+      'SPILL_ROOT_UNPROTECTED',
+      { cause },
+    )
+    this.name = 'SpillRootUnprotectedError'
+  }
+}
 
 /** Milliseconds in one day — converts the `cleanupPeriodDays` config to the sweep cutoff. */
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -76,6 +94,9 @@ export class LocalSpillStore extends SpillStore {
   /** Resolved absolute spill root (config `root`, else the private default), fixed at construction. */
   readonly root: string
 
+  /** Why the default root fell back to a `dsh-spill-*` temp directory; `undefined` for a home or configured root. */
+  private readonly homeFailure: unknown
+
   /** Validated config (schemastery applied the `cleanupPeriodDays` default before construction). */
   readonly config: ResolvedConfig
 
@@ -91,6 +112,7 @@ export class LocalSpillStore extends SpillStore {
     // cast records that runtime fact for exactOptionalPropertyTypes.
     this.config = config as ResolvedConfig
     this.root = config.root !== undefined ? resolve(config.root) : privateRoot()
+    this.homeFailure = config.root !== undefined ? undefined : privateRootFallbackCause()
 
     // One best-effort startup sweep, owned by the fiber. The generator body runs
     // at activation but does NOT await the sweep — it launches it and yields an
@@ -152,7 +174,17 @@ export class LocalSpillStore extends SpillStore {
     return tmpdir()
   }
 
+  /**
+   * Save one spill file. A default root that fell back to the OS temp directory is refused while the mounted sandbox
+   * provider protects a home, because confined commands can read the temp directory: the call rejects with
+   * {@link SpillRootUnprotectedError}, and the caller keeps the output inline as for any failed save.
+   * @param input - the spill request.
+   * @returns the saved file's locator, size and retrieval hint.
+   * @throws {SpillRootUnprotectedError} for the temp fallback under a protected home.
+   */
   async saveText(input: SaveTextSpill): Promise<SpillRef> {
+    const protectedHome = this.homeFailure === undefined ? undefined : this.ctx.get('sandbox')?.protectedHome
+    if (protectedHome !== undefined) throw new SpillRootUnprotectedError(this.root, protectedHome, this.homeFailure)
     const saved = await saveTextFile({
       root: this.root,
       sessionId: input.owner.sessionId,

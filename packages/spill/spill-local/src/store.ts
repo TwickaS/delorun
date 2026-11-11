@@ -7,7 +7,7 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -33,29 +33,59 @@ export function isErrno(error: unknown, code: string): boolean {
   return error instanceof Error && (error as NodeJS.ErrnoException).code === code
 }
 
+/** The private root of one home, and why the home could not hold it when the root is the temp fallback. */
+interface PrivateRootRecord {
+  /** The absolute root path. */
+  readonly path: string
+  /** The failure that made `<home>/spill` unusable, when {@link path} is a `dsh-spill-*` temp directory. */
+  readonly homeFailure: unknown
+}
+
 /** The private root of each home this process has resolved, keyed by that home. */
-const privateRoots = new Map<string, string>()
+const privateRoots = new Map<string, PrivateRootRecord>()
+
+/**
+ * Create or adopt `<home>/spill` as a private directory: created at mode 0700, and an existing one tightened to 0700
+ * on POSIX, so a directory an older version or another tool left group- or world-readable stops exposing spilled
+ * output. A link or a non-directory at that path is refused, because files written through it would land elsewhere.
+ * @param preferred - `<home>/spill`.
+ * @throws when the home cannot hold the directory.
+ */
+function adoptHomeRoot(preferred: string): void {
+  mkdirSync(preferred, { recursive: true, mode: 0o700 })
+  const info = lstatSync(preferred)
+  if (!info.isDirectory()) throw new Error(`${preferred} is not a directory`)
+  if (process.platform !== 'win32' && (info.mode & 0o077) !== 0) chmodSync(preferred, 0o700)
+}
 
 /**
  * Create the private spill root of one home: `<home>/spill` at mode 0700, or —
  * when the home cannot host it — a private `dsh-spill-*` directory under the OS
- * temp dir.
+ * temp dir, recording why.
  *
  * @param home The Harness home that owns the root.
- * @returns The absolute root path.
+ * @returns The root and, for the temp fallback, the home's failure.
  */
-function createPrivateRoot(home: string): string {
+function createPrivateRoot(home: string): PrivateRootRecord {
   const preferred = join(home, DEFAULT_ROOT_DIR_NAME)
   try {
-    mkdirSync(preferred, { recursive: true, mode: 0o700 })
-    return preferred
-  } catch {
-    // A read-only home, or a home path a file occupies, cannot hold the spill
-    // directory; the temp root keeps spilling working. It sits outside the home
-    // that `home-read` covers, so a deployment that protects the home must
-    // protect these `dsh-spill-*` roots too.
-    return mkdtempSync(join(tmpdir(), DEFAULT_ROOT_PREFIX))
+    adoptHomeRoot(preferred)
+    return { path: preferred, homeFailure: undefined }
+  } catch (error: unknown) {
+    // A read-only home, a home path a file occupies, or a link at `<home>/spill` cannot hold the spill directory;
+    // the temp root keeps spilling working where no sandbox protects the home. Confined commands can read it, so the
+    // store refuses to spill there while a sandbox provider protects a home (`LocalSpillStore.saveText`).
+    return { path: mkdtempSync(join(tmpdir(), DEFAULT_ROOT_PREFIX)), homeFailure: error }
   }
+}
+
+/** The cached root record of one home, created on first use. */
+function privateRootRecord(home: string): PrivateRootRecord {
+  const cached = privateRoots.get(home)
+  if (cached !== undefined) return cached
+  const created = createPrivateRoot(home)
+  privateRoots.set(home, created)
+  return created
 }
 
 /**
@@ -69,11 +99,17 @@ function createPrivateRoot(home: string): string {
  * @returns The private root path, one per home for this process's lifetime.
  */
 export function privateRoot(home: string = resolveDshHome()): string {
-  const cached = privateRoots.get(home)
-  if (cached !== undefined) return cached
-  const created = createPrivateRoot(home)
-  privateRoots.set(home, created)
-  return created
+  return privateRootRecord(home).path
+}
+
+/**
+ * Why a home's private spill root is the `dsh-spill-*` temp fallback rather than `<home>/spill`.
+ *
+ * @param home The Harness home that owns the root; defaults to `$DSH_HOME`.
+ * @returns The failure that made `<home>/spill` unusable, or `undefined` when the root is inside the home.
+ */
+export function privateRootFallbackCause(home: string = resolveDshHome()): unknown {
+  return privateRootRecord(home).homeFailure
 }
 
 // Spill keeps its empty-name policy local so storage backends stay decoupled.

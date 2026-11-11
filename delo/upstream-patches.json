@@ -1457,26 +1457,26 @@
     {
       "path": "packages/spill/spill-local/package.json",
       "class": "security",
-      "reason": "Declares `@deepseek-ai/dsh-home-paths` (`privateRoot` resolves `$DSH_HOME`) and the test-only `@deepseek-ai/dsh-sandbox-local` the confinement spec wraps a command through.",
-      "sha256": "ec733faaaf3d473133d72c8dcfaa261cd69d037fb3c14dca983c1338bdd7623b"
+      "reason": "Declares `@deepseek-ai/dsh-home-paths` (`privateRoot` resolves `$DSH_HOME`) and the test-only `@deepseek-ai/dsh-sandbox-local` the confinement spec wraps a command through. Also declares `@deepseek-ai/dsh-llm` for `HarnessError` and `@deepseek-ai/dsh-sandbox` for the type of the optional `ctx.sandbox` lookup.",
+      "sha256": "7614dfc6a2a068d652527ca4b955ca8039d8b945e2fc7e84d4cfbabd53989dfe"
     },
     {
       "path": "packages/spill/spill-local/src/index.ts",
       "class": "security",
-      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses.",
-      "sha256": "ed0c50adea4ae4c4d501bbf00cfc5e83bed488515c9ca392fb515bfd15992bc6"
+      "reason": "The config and class docs state the home-scoped default root and the temp root the fallback alone uses. `saveText` refuses the temp fallback root with `SpillRootUnprotectedError` (`SPILL_ROOT_UNPROTECTED`) while the mounted sandbox provider reports a `protectedHome`, and re-exports `privateRootFallbackCause`.",
+      "sha256": "9b099ccb22879d69e38e2817d31fc5a398cd3aae61278a48ce84b3887f85feef"
     },
     {
       "path": "packages/spill/spill-local/src/store.ts",
       "class": "security",
-      "reason": "F2: the default spill root is the home's own `<home>/spill`, created 0700 from `$DSH_HOME`, instead of `mkdtemp` under the OS temp dir. The temp dir is granted to every confined command, so a spill written there was readable from inside any home's sandbox, and `discoverDefaultRoots` listed every home's roots. The temp root stays only for a home that cannot host the spill directory.",
-      "sha256": "d1504869f620059e20af8fa34ea56bfd6a388d5579f12f911a97659d95697c33"
+      "reason": "F2: the default spill root is the home's own `<home>/spill`, created 0700 from `$DSH_HOME`, instead of `mkdtemp` under the OS temp dir. The temp dir is granted to every confined command, so a spill written there was readable from inside any home's sandbox, and `discoverDefaultRoots` listed every home's roots. The temp root stays only for a home that cannot host the spill directory. An existing `<home>/spill` is tightened to 0700 on POSIX, a link or non-directory there falls back like an unwritable home, and `privateRootFallbackCause` reports why a home's root is the temp fallback.",
+      "sha256": "9fcf6df900cfa24da9100c614166f15aa17fba21e899fb79f0621c342a6befb4"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-local.spec.ts",
       "class": "security",
-      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill.",
-      "sha256": "d6c65d54303a6ae579cb74aa486686b52f8dc41bb9a26e2ee596a84eefe6539c"
+      "reason": "Proves the default root sits inside the resolved home and is owner-only, that the temp root remains only for a home that cannot host the spill directory, and that two homes do not enumerate each other's spill. Also proves an existing spill directory is tightened to owner-only, a link at the spill path is not written through, and the temp fallback is refused while the sandbox protects the home.",
+      "sha256": "bb6240afffa2803753b68b99db12c04dd4d9b9528ecf31a22ec6aaab7fef7752"
     },
     {
       "path": "packages/spill/spill-local/tests/spill-root-confinement.spec.ts",
@@ -1487,8 +1487,8 @@
     {
       "path": "packages/spill/spill-local/tsconfig.json",
       "class": "security",
-      "reason": "The `home-paths` project reference for the new import.",
-      "sha256": "4b05c063775a8d81f95dae01da25e7697914b1608ba65dd80e54f364e2255081"
+      "reason": "The `home-paths` project reference for the new import. Also the `llm` and `sandbox` project references.",
+      "sha256": "47c2d2c1a72995885aa935ce8f4458a1f2c73ce3c2d8c358fae07c111890b71c"
     },
     {
       "path": "packages/subprocess/subprocess/src/index.ts",
