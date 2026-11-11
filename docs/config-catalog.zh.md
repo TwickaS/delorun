@@ -1626,7 +1626,7 @@ export interface Config {
 
 - `inject`: `sandboxPolicy`
 - `refs`: [`LocalConfig`](#deepseek-aidsh-fs-local)
-- `source`: [`packages/fs/fs-sandbox/src/index.ts:47`](../packages/fs/fs-sandbox/src/index.ts)
+- `source`: [`packages/fs/fs-sandbox/src/index.ts:50`](../packages/fs/fs-sandbox/src/index.ts)
 
 ```ts config-catalog
 /**
@@ -2425,7 +2425,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:114`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:116`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2960,8 +2960,8 @@ export interface Config {
    */
   protectedHomeReadable?: string[]
   /**
-   * Paths under {@link protectedHome}, relative to it, that in-process read tools may read while confined commands
-   * still may not, such as the spill directory whose files a spill notice tells the model to read. Reported as
+   * Paths under {@link protectedHome}, relative to it, inside which in-process read tools may read their own grants,
+   * such as the calling session's spill directory, while confined commands still may not read anything. Reported as
    * `protectedReads.toolReadable` and never granted by any runner's profile. Rejected without `protectedHome`.
    */
   protectedHomeToolReadable?: string[]
@@ -4408,7 +4408,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-str-replace-editor`
 
 - `inject`: `tools` · `fs`
-- `source`: [`packages/fs/tool-str-replace-editor/src/index.ts:518`](../packages/fs/tool-str-replace-editor/src/index.ts)
+- `source`: [`packages/fs/tool-str-replace-editor/src/index.ts:521`](../packages/fs/tool-str-replace-editor/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for the string-replacement editor tool. */

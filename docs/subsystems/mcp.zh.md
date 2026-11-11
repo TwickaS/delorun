@@ -130,8 +130,9 @@ Abstract add-time consent service. Subclass, implement review, and load the subc
  * Review one configured server start before the mcp-client plugin starts
  * that server. The review runs at every boot of the server row, before any
  * child process starts, so the provider can let an accepted start through
- * at once and ask again when the command, arguments, working directory or
- * environment it is shown differ from the ones it accepted before.
+ * at once and ask again when the command, arguments, working directory,
+ * environment, resolved executable path, resolved command shell or resolved
+ * working directory it is shown differ from the ones it accepted before.
  *
  * The returned promise gates the server's start: the mcp-client plugin's
  * activation does not finish, and the server does not start, until it

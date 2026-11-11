@@ -118,6 +118,15 @@ Semantics every implementation must honor:
  * @returns the saved artifact's {@link SpillRef}; rejects on a storage failure.
  */
 abstract saveText(input: SaveTextSpill): Promise<SpillRef>
+
+/**
+ * The local directory that holds every artifact this store saves for one session, which that session's read tools
+ * may read where a sandbox provider otherwise protects it. A store without such a directory, the default, returns
+ * `undefined`, and no read is granted.
+ * @param sessionId - the owning session's header id.
+ * @returns the canonical directory, or `undefined`.
+ */
+sessionDirectory(sessionId: string): string | undefined
 ```
 
 Source: [`packages/spill/spill/src/index.ts`](../../packages/spill/spill/src/index.ts)

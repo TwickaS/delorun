@@ -2073,7 +2073,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: 'abstract review(command: McpServerCommand): Promise<McpConsentDecision>',
-        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, so the provider can let an accepted start through at once and ask again when the command, arguments, working directory or environment it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
+        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, so the provider can let an accepted start through at once and ask again when the command, arguments, working directory, environment, resolved executable path, resolved command shell or resolved working directory it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
         parameters: [{ name: 'command', description: 'the server start under review.' }],
         returns: '`allow: true` to start the server, or `allow: false` with the reason that leaves the server stopped.',
       },
@@ -3701,6 +3701,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Persist `input.content` to a session-scoped spill artifact.',
         parameters: [{ name: 'input', description: 'the owner, caller-supplied source fields, suggested name, and full text to save.' }],
         returns: 'the saved artifact\'s {@link SpillRef}; rejects on a storage failure.',
+      },
+      {
+        signature: 'sessionDirectory(sessionId: string): string | undefined',
+        description: 'The local directory that holds every artifact this store saves for one session, which that session\'s read tools may read where a sandbox provider otherwise protects it. A store without such a directory, the default, returns `undefined`, and no read is granted.',
+        parameters: [{ name: 'sessionId', description: 'the owning session\'s header id.' }],
+        returns: 'the canonical directory, or `undefined`.',
       },
     ],
   },
@@ -7313,7 +7319,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpServerCommand',
-    declaration: 'export interface McpServerCommand {\n    readonly serverName: string;\n    readonly command: string;\n    readonly args: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n    readonly cwd: string;\n}',
+    declaration: 'export interface McpServerCommand {\n    readonly serverName: string;\n    readonly command: string;\n    readonly args: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n    readonly cwd: string;\n    readonly resolvedCommand: string;\n    readonly resolvedCwd: string;\n    readonly resolvedShell?: string;\n}',
   },
   {
     name: 'Mergeability',
