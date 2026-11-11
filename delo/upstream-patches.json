@@ -1493,14 +1493,14 @@
     {
       "path": "packages/subprocess/subprocess/src/index.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a webhook URL, a PEM private key block, a credential-file path or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through.",
-      "sha256": "6c16afcc083f3087339f16fbacb4a81c3bff95fe1cdc8c1d9ffe029b5eef245c"
+      "reason": "Ambient credential scrub (H3): `scrubbedParentEnv()` also drops an explicit denylist of ambient authorities and credential carriers (`SSH_AUTH_SOCK`, `DOCKER_HOST`, `KUBECONFIG`, `KRB5CCNAME`, `*_CREDENTIALS`, `AWS_*`, `AZURE_*`, `SLACK_*`, `DISCORD_*`, `*_WEBHOOK*`, `*PASSPHRASE*`, `MYSQL_PWD`, `*_PASSWD`) and any name whose value has a credential shape: URL user information, a user name alone included, a webhook URL, a PEM private key block, a credential-file path or an agent socket. A `*PATH` search list loses only its elements that name a credential file or an agent socket. Ordinary values, `PATH`, locale and proxy variables still survive, and the explicit `env` merge stays the only pass-through.",
+      "sha256": "a9a69de9b1f6a46689e33814d40c46e52425d98d2c0bf3a1d6885b30cba9d423"
     },
     {
       "path": "packages/subprocess/subprocess/tests/env.spec.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive.",
-      "sha256": "367d25ac1af264de94d8a3b5044cf360192a202ec49044934d703fd4fe642b74"
+      "reason": "Ambient credential scrub (H3): one spec per denylisted name and per credential value shape, the case-insensitive match Windows environment names require, and the ordinary URL, directory and locale that must still survive. Also covers token-only URL user information, Sentry DSNs, a user name alone, scp-style remotes and query `@`, and per-element removal from search paths.",
+      "sha256": "313a27fe116a56bf98f3ebf7daeb90242742bad0b82825344b8831989753231a"
     },
     {
       "path": "packages/test-support/session-snapshot/src/index.ts",

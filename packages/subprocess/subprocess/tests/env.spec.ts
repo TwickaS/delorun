@@ -2,6 +2,7 @@
  * The shared child-environment scrub: every ambient name and value shape a child never inherits implicitly, and the
  * ordinary entries that still survive so a child CLI runs normally.
  */
+import { delimiter } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { scrubbedParentEnv } from '../src/index.ts'
 
@@ -44,6 +45,12 @@ describe('the denylisted ambient names', () => {
     ['DISCORD_GUILD_ID', 'opaque'],
     ['DEPLOY_WEBHOOK_URL', 'opaque'],
     ['SERVICE_PASSWD', 'opaque'],
+    ['KUBECONFIG', 'opaque'],
+    ['KRB5CCNAME', 'opaque'],
+    ['GPG_PASSPHRASE', 'opaque'],
+    ['PASSPHRASE_FILE', 'opaque'],
+    ['MYSQL_PWD', 'opaque'],
+    ['REGISTRY_CREDENTIALS', 'opaque'],
   ])('drops ambient %s', (name, value) => {
     expect(childEnvWith({ [name]: value })[name]).toBeUndefined()
   })
@@ -64,6 +71,29 @@ describe('the credential-shaped values', () => {
   it('drops a name whose value is a URL with user information', () => {
     const env = childEnvWith({ SCRUB_PROBE_ENDPOINT: 'https://robot:canary@registry.example.invalid/v1' })
     expect(env.SCRUB_PROBE_ENDPOINT).toBeUndefined()
+  })
+
+  it('drops a name whose value is a URL whose user information is a token alone', () => {
+    const env = childEnvWith({ SCRUB_PROBE_ENDPOINT: 'https://canarytoken@git.example.invalid/org/repo.git' })
+    expect(env.SCRUB_PROBE_ENDPOINT).toBeUndefined()
+  })
+
+  it('drops a name whose value is a Sentry DSN', () => {
+    expect(childEnvWith({ SENTRY_DSN: 'https://canarykey@o123.ingest.sentry.invalid/1' }).SENTRY_DSN).toBeUndefined()
+  })
+
+  it('drops a name whose value is a URL whose user information is a plain login, which a token cannot be told from', () => {
+    const env = childEnvWith({ SCRUB_PROBE_REMOTE: 'ssh://git@git.example.invalid/org/repo.git' })
+    expect(env.SCRUB_PROBE_REMOTE).toBeUndefined()
+  })
+
+  it('keeps a scp-style remote and a URL whose query holds an @', () => {
+    const env = childEnvWith({
+      SCRUB_PROBE_REMOTE: 'git@git.example.invalid:org/repo.git',
+      SCRUB_PROBE_ENDPOINT: 'https://example.invalid?contact=someone@example.invalid',
+    })
+    expect(env.SCRUB_PROBE_REMOTE).toBe('git@git.example.invalid:org/repo.git')
+    expect(env.SCRUB_PROBE_ENDPOINT).toBe('https://example.invalid?contact=someone@example.invalid')
   })
 
   it('drops a name whose value is a webhook URL on a hooks host', () => {
@@ -96,6 +126,11 @@ describe('the credential-shaped values', () => {
     expect(childEnvWith({ SCRUB_PROBE_SOCKET: value }).SCRUB_PROBE_SOCKET).toBeUndefined()
   })
 
+  it('keeps a list whose elements are separately harmless, though one names a tool and a later one a socket file', () => {
+    const value = ['/opt/gpg-tools/bin', '/srv/app.socket.d'].join(delimiter)
+    expect(childEnvWith({ SCRUB_PROBE_DIRECTORIES: value }).SCRUB_PROBE_DIRECTORIES).toBe(value)
+  })
+
   it('keeps an ordinary URL, a bare path and a locale', () => {
     const env = childEnvWith({
       SCRUB_PROBE_ENDPOINT: 'https://example.invalid/docs?page=2',
@@ -105,5 +140,26 @@ describe('the credential-shaped values', () => {
     expect(env.SCRUB_PROBE_ENDPOINT).toBe('https://example.invalid/docs?page=2')
     expect(env.SCRUB_PROBE_DIRECTORY).toBe('/opt/ci/workspace')
     expect(env.SCRUB_PROBE_LOCALE).toBe('en_US.UTF-8')
+  })
+})
+
+describe('the search-path lists', () => {
+  it('removes only the agent-socket element of a search path and keeps the others in order', () => {
+    const value = ['/usr/local/bin', '/run/user/1000/keyring/ssh', '/usr/bin'].join(delimiter)
+    expect(childEnvWith({ SCRUB_PROBE_PATH: value }).SCRUB_PROBE_PATH).toBe(['/usr/local/bin', '/usr/bin'].join(delimiter))
+  })
+
+  it('removes only the credential-file element of a search path', () => {
+    const value = ['/opt/keys/service-account.json', '/usr/bin'].join(delimiter)
+    expect(childEnvWith({ SCRUB_PROBE_PATH: value }).SCRUB_PROBE_PATH).toBe('/usr/bin')
+  })
+
+  it('drops a search path with no element left', () => {
+    expect(childEnvWith({ SCRUB_PROBE_PATH: '/tmp/ssh-canary/agent.4242' }).SCRUB_PROBE_PATH).toBeUndefined()
+  })
+
+  it('drops a list that is not a search path whole when one element names an agent socket', () => {
+    const value = ['/usr/bin', '/tmp/ssh-canary/agent.4242'].join(delimiter)
+    expect(childEnvWith({ SCRUB_PROBE_DIRECTORIES: value }).SCRUB_PROBE_DIRECTORIES).toBeUndefined()
   })
 })

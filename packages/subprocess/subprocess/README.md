@@ -77,7 +77,7 @@ A terminal request can opt into `shellActivity`. `inspectActivity()` combines su
 
 ### Environment every child starts from
 
-Children never inherit the harness's ambient secrets: credential-shaped names and ambient `DSH_*` facts are scrubbed, and the caller's explicit `env` merges after that scrub. A deliberately forwarded credential or a current `DSH_*` deployment fact still reaches the child; an explicit `undefined` tombstone removes an ordinary ambient entry.
+Children never inherit the harness's ambient secrets: credential-shaped names, denylisted credential carriers, values with a credential shape, and ambient `DSH_*` facts are scrubbed, and the caller's explicit `env` merges after that scrub. Any URL with user information counts, including a user name alone such as `ssh://git@host/repo`, because a token in that position cannot be told from a login. In a search-path list such as `PATH`, a credential-file or agent-socket element removes only that element. A deliberately forwarded credential or a current `DSH_*` deployment fact still reaches the child; an explicit `undefined` tombstone removes an ordinary ambient entry.
 
 ### What can go wrong
 

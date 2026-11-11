@@ -8,6 +8,7 @@
  * @module @deepseek-ai/dsh-subprocess
  */
 
+import { delimiter } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { proxyEnvironmentForChild } from '@deepseek-ai/dsh-http-proxy'
 import { DSH_ENV_PREFIX } from './types.ts'
@@ -49,24 +50,29 @@ export const SENSITIVE_ENV_PATTERN = /KEY|PASSWORD|SECRET|TOKEN/i
 /**
  * Ambient names that are never forwarded implicitly, whatever their value
  * looks like: the ones that hand a child ambient authority (an agent socket
- * that signs as the user, a container endpoint, a cloud credential handle),
- * the ones whose value is an endpoint that carries its own secret (a chat
- * workspace or any webhook), and an alternate passwd database. Each entry is
- * matched case-insensitively against the whole name, `*` matching any run of
- * characters. A name outside this list is still dropped when its value has a
- * credential shape; see `CREDENTIAL_VALUE_SHAPES` below. A deliberately
- * supplied entry survives either way, because explicit env layers merge after
- * the scrub.
+ * that signs as the user, a container endpoint, a cluster configuration, a
+ * Kerberos ticket cache, a cloud or tool credential file), the ones whose
+ * value is an endpoint that carries its own secret (a chat workspace or any
+ * webhook), passphrases and passwords under names the name heuristic misses,
+ * and an alternate passwd database. Each entry is matched case-insensitively
+ * against the whole name, `*` matching any run of characters. A name outside
+ * this list is still dropped when its value has a credential shape; see
+ * `CREDENTIAL_VALUE_SHAPES` below. A deliberately supplied entry survives
+ * either way, because explicit env layers merge after the scrub.
  */
 const DENIED_ENV_NAMES: readonly string[] = [
   'SSH_AUTH_SOCK',
   'DOCKER_HOST',
-  'GOOGLE_APPLICATION_CREDENTIALS',
+  'KUBECONFIG',
+  'KRB5CCNAME',
+  '*_CREDENTIALS',
   'AWS_*',
   'AZURE_*',
   'SLACK_*',
   'DISCORD_*',
   '*_WEBHOOK*',
+  '*PASSPHRASE*',
+  'MYSQL_PWD',
   '*_PASSWD',
 ]
 
@@ -102,32 +108,71 @@ const CREDENTIAL_FILE_NAMES = [
  * Value shapes that identify a credential carrier without any help from its
  * name, because a name-only rule cannot see
  * `CI_JOB_ENDPOINT=https://robot:<secret>@ci.invalid/`. An ambient entry whose
- * value has one of these shapes is dropped whatever it is called.
+ * whole value has one of these shapes is dropped whatever it is called.
+ *
+ * Any user information after `scheme://` counts, including a user name with no
+ * password: `https://<token>@host` and a Sentry DSN carry the secret as the
+ * user name, and a token cannot be told apart from a plain login such as the
+ * `git` of `ssh://git@host/repo`, so both are dropped. A scp-style
+ * `git@host:org/repo` has no scheme and is not a URL with user information.
  */
 const CREDENTIAL_VALUE_SHAPES: readonly RegExp[] = [
-  // `scheme://user:secret@host`: the user information is the credential.
-  /[a-z][a-z0-9+.-]*:\/\/[^\s/@]+:[^\s/@]*@/i,
+  // `scheme://user@host` or `scheme://user:secret@host`: the user information is the credential.
+  /[a-z][a-z0-9+.-]*:\/\/[^\s/?#@:]+(?::[^\s/?#@]*)?@/i,
   // A webhook endpoint — a `hooks.` host or a `/webhook(s)` path — whose path is the secret.
   /[a-z][a-z0-9+.-]*:\/\/(?:hooks\.[^\s"'<>]+|[^\s"'<>]*[/.]webhooks?[/.][^\s"'<>]*)/i,
   // A PEM private key block, however the value was spelled.
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/,
-  // The path of a file that holds credentials.
-  new RegExp(String.raw`(?:^|[\s"'=(])[^\s"'=]*?(?:${CREDENTIAL_FILE_NAMES})`, 'i'),
-  // An agent socket: the SSH agent's per-session socket, the GnuPG agent's, a keyring's, or a docker socket.
-  /(?:^|[\s"'=])[^\s"']*(?:[/\\]agent\.\d+|S\.gpg-agent[^\s"']*|[/\\]keyring[/\\][^\s"']*|(?:ssh|gpg)[^\s"']*\.sock)/i,
 ]
 
 /**
- * Whether one ambient entry may reach a child implicitly.
+ * Shapes of one path that names a credential carrier. They are matched against
+ * the whole value of an ordinary entry, which is then dropped, and against each
+ * element of a search-path list (see `SEARCH_PATH_LIST_NAME`), which loses only
+ * the matching elements.
+ */
+const CREDENTIAL_PATH_SHAPES: readonly RegExp[] = [
+  // The path of a file that holds credentials.
+  new RegExp(String.raw`(?:^|[\s"'=(])[^\s"'=]*?(?:${CREDENTIAL_FILE_NAMES})`, 'i'),
+  // An agent socket: the SSH agent's per-session socket, the GnuPG agent's, a keyring's, or a docker socket.
+  // The runs exclude `:` and `;`, so the shape never spans two elements of a list such as `PATH`.
+  /(?:^|[\s"'=:;])[^\s"':;]*(?:[/\\]agent\.\d+|S\.gpg-agent[^\s"':;]*|[/\\]keyring[/\\][^\s"':;]*|(?:ssh|gpg)[^\s"':;]*\.sock)/i,
+]
+
+/**
+ * Names whose value is a list of search paths joined by the platform path
+ * delimiter (`PATH`, `Path`, `LD_LIBRARY_PATH`, `PYTHONPATH`, ...). One
+ * credential-shaped element removes that element only, so the child keeps the
+ * rest of its search path.
+ */
+const SEARCH_PATH_LIST_NAME = globMatcher('*PATH')
+
+/**
+ * Whether one path, or one element of a search-path list, names a credential carrier.
+ * @param value - the path text.
+ * @returns `true` when the text matches a credential path shape.
+ */
+function isCredentialPath(value: string): boolean {
+  return CREDENTIAL_PATH_SHAPES.some(shape => shape.test(value))
+}
+
+/**
+ * The value one ambient entry may pass to a child implicitly.
  * @param name - the environment name.
  * @param value - the value the parent process holds for it.
- * @returns `false` for a credential-shaped or `DSH_*` name, a denylisted name, or a value with a credential shape.
+ * @returns `undefined` for a credential-shaped or `DSH_*` name, a denylisted name, a value with a credential shape, or a
+ * search-path list with no element left; otherwise the value, minus credential-path elements for a search-path list.
  */
-function isForwardableEnvEntry(name: string, value: string): boolean {
-  return !SENSITIVE_ENV_PATTERN.test(name)
-    && !name.toUpperCase().startsWith(DSH_ENV_PREFIX)
-    && !DENIED_ENV_MATCHERS.some(matcher => matcher.test(name))
-    && !CREDENTIAL_VALUE_SHAPES.some(shape => shape.test(value))
+function forwardableEnvValue(name: string, value: string): string | undefined {
+  if (
+    SENSITIVE_ENV_PATTERN.test(name)
+    || name.toUpperCase().startsWith(DSH_ENV_PREFIX)
+    || DENIED_ENV_MATCHERS.some(matcher => matcher.test(name))
+    || CREDENTIAL_VALUE_SHAPES.some(shape => shape.test(value))
+  ) return undefined
+  if (!SEARCH_PATH_LIST_NAME.test(name)) return isCredentialPath(value) ? undefined : value
+  const elements = value.split(delimiter).filter(element => !isCredentialPath(element))
+  return elements.length === 0 ? undefined : elements.join(delimiter)
 }
 
 /**
@@ -152,7 +197,8 @@ function isForwardableEnvEntry(name: string, value: string): boolean {
 export function scrubbedParentEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && isForwardableEnvEntry(key, value)) env[key] = value
+    const forwarded = value === undefined ? undefined : forwardableEnvValue(key, value)
+    if (forwarded !== undefined) env[key] = forwarded
   }
   // A child Node ignores the inherited proxy variables unless the flag this adds is set, so an MCP
   // stdio server or subagent CLI would connect directly while its parent proxies. The same overlay
