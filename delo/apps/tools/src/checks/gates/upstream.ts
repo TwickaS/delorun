@@ -8,8 +8,7 @@
  * A gate's tier follows its cost on the reference host: a gate that takes up to about ten seconds runs in every tier, one
  * that takes up to about a minute is left out of the lane tier, and one that takes longer, builds a site or reads
  * upstream's built output runs in the merge tier only. `budgets.json` records the memory of each gate that needs more
- * than the gates' default. A gate that fails on the integration branch also runs in the merge tier only, so it blocks the
- * trunk and not every lane's push, until its findings are fixed and it moves to the tier its cost allows.
+ * than the gates' default. A gate that fails on the integration branch keeps its tier and is listed in `debt.json`.
  *
  * @module @delo/tools/checks/gates/upstream
  */
@@ -43,13 +42,13 @@ const UPSTREAM: readonly UpstreamGate[] = [
   { id: 'config-catalog', title: 'Upstream\'s generated configuration catalog is current', run: { script: 'verify-config-catalog' } },
   { id: 'plugin-packages', title: 'The loadable-plugin package list in the composition skill is current', run: { script: 'verify-plugin-packages' } },
   { id: 'dependency-catalog', title: 'The README npx dependency catalog is current', run: { script: 'verify-dependency-catalog' } },
-  { id: 'persistence-catalog', title: 'Upstream\'s generated persistence catalog and schema are current', run: { script: 'verify-persistence-catalog' }, tier: 'merge' },
-  { id: 'persistence-changes', title: 'Persistence type changes are acknowledged in the schema history', run: { script: 'verify-persistence-changes' }, tier: 'merge' },
+  { id: 'persistence-catalog', title: 'Upstream\'s generated persistence catalog and schema are current', run: { script: 'verify-persistence-catalog' }, tier: 'agent' },
+  { id: 'persistence-changes', title: 'Persistence type changes are acknowledged in the schema history', run: { script: 'verify-persistence-changes' }, tier: 'agent' },
   { id: 'persistence-releases', title: 'The pinned prerelease persistence archive verifies', run: { script: 'verify-persistence-releases' } },
   { id: 'persistence-formats', title: 'The archived Session format references verify through the current writer', run: { script: 'verify-persistence-formats' } },
   { id: 'session-format-catalog', title: 'The Session format catalog is current', run: { script: 'verify-session-format-catalog' } },
   { id: 'public-repository-links', title: 'No tracked file references an unavailable legacy repository', run: { script: 'verify-public-repository-links' } },
-  { id: 'repository-references', title: 'No maintained reference to a repository commit or the disallowed organization URL', run: { script: 'verify-repository-references' }, tier: 'merge' },
+  { id: 'repository-references', title: 'No maintained reference to a repository commit or the disallowed organization URL', run: { script: 'verify-repository-references' }, tier: 'agent' },
   { id: 'concrete-terms', title: 'No tracked file carries the banned ambiguous origin label', run: { script: 'verify-concrete-terms' } },
   { id: 'doc-refs', title: 'Documentation paths named in TypeScript, Delo\'s included, exist', run: { script: 'verify-doc-refs' } },
   { id: 'subsystem-pages', title: 'Every package group README links a subsystem page or names its exemption', run: { script: 'verify-subsystem-pages' } },
@@ -96,14 +95,14 @@ const UPSTREAM: readonly UpstreamGate[] = [
   },
   { id: 'client-ui-i18n', title: 'Client UI copy goes through the locale dictionaries', run: { script: 'verify-client-ui-i18n' } },
   { id: 'client-route-resolution', title: 'App routes in browser code are document-relative', run: { script: 'verify-client-route-resolution' } },
-  { id: 'no-bare-dispatcher', title: 'Every HTTP dispatcher honours the configured proxy or names its exemption', run: { script: 'verify-no-bare-dispatcher' }, tier: 'merge' },
-  { id: 'plugin-record-callers', title: 'Release packages declare Session events instead of writing plugin records', run: { script: 'verify-plugin-record-callers' }, tier: 'merge' },
+  { id: 'no-bare-dispatcher', title: 'Every HTTP dispatcher honours the configured proxy or names its exemption', run: { script: 'verify-no-bare-dispatcher' } },
+  { id: 'plugin-record-callers', title: 'Release packages declare Session events instead of writing plugin records', run: { script: 'verify-plugin-record-callers' }, tier: 'agent' },
   { id: 'no-top-level-await', title: 'No module-scope await in package sources', run: { script: 'verify-no-top-level-await' } },
   { id: 'cordis-config', title: 'Cordis Loader entry metadata and package resolution in every shipped configuration', run: { script: 'verify-cordis-config' } },
   { id: 'runtime-closure', title: 'The deploy manifest supplies every plugin a shipped preset references and every required workspace peer', run: { script: 'verify-runtime-closure' } },
   { id: 'approval-policy', title: 'Upstream\'s weighted review-approval policy specs', run: { script: 'test:approval-policy' } },
-  { id: 'issue-management', title: 'Upstream\'s issue-management policy specs', run: { script: 'test:issue-management' }, tier: 'merge' },
-  { id: 'client-domain-graph', title: 'Client domain directories import `contract/` and never each other', run: { script: 'verify-client-domain-graph' }, tier: 'merge' },
+  { id: 'issue-management', title: 'Upstream\'s issue-management policy specs', run: { script: 'test:issue-management' } },
+  { id: 'client-domain-graph', title: 'Client domain directories import `contract/` and never each other', run: { script: 'verify-client-domain-graph' } },
   { id: 'module-graph', title: 'Upstream\'s generated module graph is current', run: { script: 'verify-module-graph' } },
   { id: 'duplication', title: 'No cross-file TypeScript clone in packages and scripts', run: { script: 'duplication' } },
   { id: 'lint', title: 'Upstream\'s oxlint rules over the repository', run: { script: 'lint:contracts-ready' }, tier: 'merge' },

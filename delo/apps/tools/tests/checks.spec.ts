@@ -317,7 +317,7 @@ describe('the gate tiers', () => {
   })
 
   it('runs each of upstream\'s gates once, through its package script or its spec files', () => {
-    const upstream = GATES.filter(entry => UPSTREAM_GATES.includes(entry))
+    const upstream = GATES.filter(entry => UPSTREAM_GATES.some(gate => gate.id === entry.id))
     expect(upstream).toHaveLength(UPSTREAM_GATES.length)
     expect(new Set(GATES.map(entry => entry.id)).size).toBe(GATES.length)
     for (const entry of UPSTREAM_GATES) expect(entry.command.slice(0, 3).join(' ')).toMatch(/^(pnpm run --silent|node_modules\/\.bin\/vitest run \S+)/)

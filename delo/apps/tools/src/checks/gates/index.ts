@@ -6,6 +6,7 @@
  * @module @delo/tools/checks/gates
  */
 import type { GateCheck } from '../types.ts'
+import { readDebt, withDebt } from './debt.ts'
 import { UPSTREAM_GATES } from './upstream.ts'
 
 const TSX = 'node_modules/.bin/tsx'
@@ -84,9 +85,10 @@ export const RANGE_BASE = 'origin/v5'
 /**
  * The repository gates the runner schedules, in catalogue order: Delo's own, then upstream's ({@link UPSTREAM_GATES}). A
  * gate's command runs from the repository root and passes on exit 0; at pre-commit the runner appends the staged paths to
- * the command of each staged gate.
+ * the command of each staged gate. A gate listed in `debt.json` runs through `debt.ts`, which reports its failure
+ * without failing the run and fails the run once it passes.
  */
-export const GATES: readonly GateCheck[] = [
+export const GATES: readonly GateCheck[] = withDebt([
   {
     id: 'gates:licence',
     title: 'Delo packages and the root LICENSE are MIT',
@@ -188,4 +190,4 @@ export const GATES: readonly GateCheck[] = [
     inputs: FUNDAMENTALS_INPUTS,
   },
   ...UPSTREAM_GATES,
-]
+], readDebt())
