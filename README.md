@@ -16,7 +16,7 @@ Delo is pre-release. It has no tagged release yet, and interfaces and defaults c
 - `update` to show the newest release's report and apply it after you confirm, and `recover` to see where the profile stands after an update and to roll back, restore a version or enter safe mode.
 - `verify` to check the installed release against its signed manifest and the release log.
 - `trash`, `export` and `import` to restore or purge deleted chats and workspaces, and to move a chat or a workspace between homes as a signed archive.
-- `plugin` and `headless`, which run DeepSeek Harness's own commands and profiles unchanged. Delo's protections, consents and privacy defaults belong to the CLI profile that `delorun` starts, so none of them applies to `delorun headless`, which also uploads session logs to DeepSeek as stock does.
+- `plugin` and `headless`. `delorun plugin` runs DeepSeek Harness's plugin installer inside your Delorun home, without Delorun's protections. `delorun headless` answers one task and exits, as `dsh headless` does, but with Delorun's sandbox protection, guards and consents, and with DeepSeek's session-log upload off; a consent that would ask you refuses instead, because nobody is there to answer.
 
 Review the [safety notice](SAFETY.md) before running the project. The [user guide](delo/docs/guide/README.md) explains how to install and use Delorun.
 
