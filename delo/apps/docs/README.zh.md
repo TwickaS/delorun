@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本包构建 Delo 的文档网站：以静态站点的形式提供中英文的用户指南和参考资料。站点直接读取 [`delo/docs/guide/`](../../docs/guide/README.zh.md) 和 [`delo/docs/reference/`](../../docs/reference/README.zh.md) 下的每一对页面，不复制任何页面。站点是一个独立的私有工作区，拥有自己的锁文件，因此不属于仓库的根工作区。
+本包构建 Delo 的文档网站：以静态站点的形式提供中英文的用户指南和参考资料，站点基于 TanStack Start 上的 Fumadocs 构建。站点直接读取 [`delo/docs/guide/`](../../docs/guide/README.zh.md) 和 [`delo/docs/reference/`](../../docs/reference/README.zh.md) 下的每一对页面，不复制任何页面。站点是一个独立的私有工作区，拥有自己的锁文件，因此不属于仓库的根工作区。
 
 ## 路由
 
@@ -11,9 +11,11 @@
 | `/` | 首页，链接到两个部分 |
 | `/guide`、`/guide/<页面>` | 英文的用户指南 |
 | `/reference`、`/reference/<页面>` | 英文的参考资料 |
-| `/zh/...` | 同样的路由，中文版，适用于每个有中文对应页的页面 |
+| `/zh/...` | 同样的路由，中文版；没有中文对应页的页面显示其英文文本 |
 | `/llms.mdx/<部分>/<页面>` 和 `/zh/llms.mdx/...` | 每个页面的 Markdown 版本。部分的索引页为 `/llms.mdx/<部分>/index`，目录的索引页为 `/llms.mdx/<部分>/<目录>/index` |
 | `/llms.txt`、`/zh/llms.txt` | 每种语言页面的索引，链接到它们的 Markdown 版本 |
+| `/search.json` | 两种语言所有页面的搜索索引，由搜索对话框下载 |
+| `/404` | 地址没有对应文件时，主机通过 `404.html` 提供的页面 |
 
 页面的英文路由与中文路由是同一个 slug 加上语言前缀。某一语言的页面链接到同一语言的对应页面：中文页面中指向 `trust.md` 的链接会变为它的中文路由。
 
@@ -32,23 +34,45 @@
 
 每个页面都标明它描述的 Delo 版本。版本从 [`delo/apps/release/package.json`](../release/package.json) 读取，这是站点唯一引用的来源。
 
+## 主题
+
+站点的外观位于 `src/theme/`：设计令牌在 [`tokens.css`](src/theme/tokens.css) 中，页眉在 [`header.ts`](src/theme/header.ts) 中，页面页脚在 [`footer.tsx`](src/theme/footer.tsx) 中。这些文件不读取任何页面、标签或站点设置；站点把自己的文本和链接传给它们，因此其他站点可以用自己的内容采用同一主题。
+
 ## 命令
 
 在仓库根目录运行，使用 `.nvmrc` 指定的 Node 主版本。
 
 ```sh
 (cd delo/apps && pnpm --dir docs install --frozen-lockfile)  # installs the site's dependencies from its own lockfile
-(cd delo/apps && pnpm --dir docs run build)                  # builds into out/ and runs the dead-link check
+(cd delo/apps && pnpm --dir docs run build)                  # builds into out/, typechecks the site and runs the dead-link check
 (cd delo/apps && pnpm --dir docs run dev)                    # serves the site for local work
+(cd delo/apps && pnpm --dir docs run preview)                # serves the built out/ on 127.0.0.1:4173 as a static host would
 ```
 
 本地检查 `pnpm check` 在变更涉及站点、其页面或发布版本时，将构建作为 `docs-site` 检查运行。在安装命令成功执行之前，该检查拒绝运行。
 
 ## 部署
 
-构建输出是静态目录 `out/`。本包不负责部署、不配置主机，也不设置域名。部署方案确定后，主机必须以 `text/markdown; charset=utf-8` 提供 Markdown 路由，这些路由没有文件扩展名。
+构建输出是静态目录 `out/`：上表中的每个路由都是预渲染的文件，构建之后站点不运行任何服务器代码。页面路由是位于其目录旁的 HTML 文件，例如 `guide/` 旁的 `guide.html`，因此主机用 `guide.html` 提供 `/guide`。站点地址 `https://docs.delorun.com`（每个页面将其作为规范 URL）以及导航栏链接的产品站点，都在 [`src/site/config.ts`](src/site/config.ts) 中设置。
 
-站点在构建期间不发出任何网络请求，也不加载远程字体或脚本。构建时关闭遥测（`NEXT_TELEMETRY_DISABLED=1`）。搜索功能尚未包含，搜索控件处于禁用状态。
+在浏览器中，指向其他页面的链接会用构建写入 `out/assets/` 的页面数据渲染该页面，搜索也在浏览器中查询 `/search.json`，因此两者都不请求服务器。站点在构建期间不发出任何网络请求，不加载远程字体或脚本，也不发送遥测。
+
+[`alchemy.run.ts`](alchemy.run.ts) 用 Alchemy 把 `out/` 部署为只含静态资源的 Cloudflare Worker：Alchemy 运行站点的构建并上传其输出，而站点的构建不依赖 Alchemy。`prod` 阶段把 `docs.delorun.com` 作为 Workers 自定义域名挂接到现有的 `delorun.com` 区域，由 Cloudflare 创建其 DNS 记录和证书；其他阶段只有各自的 `workers.dev` 地址。地址没有对应文件时，Cloudflare 以状态码 404 提供 `404.html`。[`public/_headers`](public/_headers) 由构建复制到 `out/`，它设置安全响应头、`/assets/` 中带哈希文件的长期缓存，以及 Markdown 路由的 `text/markdown; charset=utf-8` 类型。
+
+在 `delo/apps/docs` 中运行部署命令：
+
+```sh
+pnpm exec alchemy profile edit --add Cloudflare   # once per machine: sign in to the Cloudflare account
+pnpm exec alchemy state bootstrap                 # once per account: create the state store that Cloudflare.state() uses
+pnpm exec alchemy plan --stage prod               # shows what a deploy would change, changing nothing
+pnpm exec alchemy deploy --stage prod             # builds the site and publishes it at docs.delorun.com
+pnpm exec alchemy destroy --stage <stage>         # deletes a stage's Worker and its custom domain
+pnpm run typecheck:deploy                         # typechecks alchemy.run.ts
+```
+
+在工作站上，如果账户还没有状态存储，第一次 `plan` 或 `deploy` 也会创建它；设置 `CI=true` 时，缺少状态存储会使运行失败，因此需先在工作站上执行一次初始化。状态存储是一个带 Durable Object 的 Worker，其令牌和加密密钥保存在账户的 Secrets Store 中。
+
+部署作业使用 `CLOUDFLARE_ACCOUNT_ID` 和一个限定于 Delo 账户的 `CLOUDFLARE_API_TOKEN` 进行认证，该令牌需要以下权限：账户级的 `Workers Scripts Write`（Worker、其静态资源、其 `workers.dev` 地址和自定义域名）和 `Secrets Store Write`（读取状态存储的凭据，Alchemy 通过把它们绑定到一个短暂存在的预览 Worker 来读取），以及仅限 `delorun.com` 区域的 `Zone Read`（Alchemy 按名称查找该区域）和 `Workers Routes Read`（Alchemy 读取该区域的 Worker 路由）。`pnpm exec alchemy provider check-env` 会在部署开始前报告缺少的变量。该令牌只能放在一个在默认分支上运行、处于受保护环境且需要指定审核人的部署作业中，任何拉取请求工作流都无法读取其密钥；它从不提交到仓库，也从不提供给拉取请求的构建。
 
 ## 配对
 

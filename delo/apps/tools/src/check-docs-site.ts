@@ -1,7 +1,7 @@
 /**
  * The documentation website's check: it refuses to run without the site's installed dependencies, and otherwise runs
- * the site's build, which includes its dead-link check (`delo/apps/docs/scripts/check-links.mjs`). The site has its own
- * lockfile, so the install is the site's own command.
+ * the site's build, which prerenders every page, typechecks the site and runs its dead-link check
+ * (`delo/apps/docs/scripts/check-links.mjs`). The site has its own lockfile, so the install is the site's own command.
  *
  * @module @delo/tools/check-docs-site
  */
@@ -14,15 +14,12 @@ const SITE = 'delo/apps/docs'
 const INSTALL = '(cd delo/apps && pnpm --dir docs install --frozen-lockfile)'
 
 const root = repositoryRoot(process.cwd())
-if (!existsSync(join(root, SITE, 'node_modules', 'next', 'package.json'))) {
+// The site's build tool; its manifest is present once the site's own install has run.
+if (!existsSync(join(root, SITE, 'node_modules', 'vite', 'package.json'))) {
   console.error(`docs-site: ${SITE} has no installed dependencies; run ${INSTALL}`)
   process.exit(1)
 }
-const build = spawnSync('pnpm', ['--dir', SITE, 'run', 'build'], {
-  cwd: root,
-  stdio: 'inherit',
-  env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' },
-})
+const build = spawnSync('pnpm', ['--dir', SITE, 'run', 'build'], { cwd: root, stdio: 'inherit' })
 if (build.error !== undefined) {
   console.error(`docs-site: the build did not start: ${build.error.message}`)
   process.exit(1)

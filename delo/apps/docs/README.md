@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-This package builds Delo's documentation website: the user guide and the references in English and Chinese, as a static site. It reads each page pair under [`delo/docs/guide/`](../../docs/guide/README.md) and [`delo/docs/reference/`](../../docs/reference/README.md) in place and copies none of them. The site is a private workspace with its own lockfile, so it is outside the repository's root workspace.
+This package builds Delo's documentation website: the user guide and the references in English and Chinese, as a static site built with Fumadocs on TanStack Start. It reads each page pair under [`delo/docs/guide/`](../../docs/guide/README.md) and [`delo/docs/reference/`](../../docs/reference/README.md) in place and copies none of them. The site is a private workspace with its own lockfile, so it is outside the repository's root workspace.
 
 ## Routes
 
@@ -11,9 +11,11 @@ This package builds Delo's documentation website: the user guide and the referen
 | `/` | The home page, which links the two sections |
 | `/guide`, `/guide/<page>` | The user guide in English |
 | `/reference`, `/reference/<page>` | The references in English |
-| `/zh/...` | The same routes in Chinese, for each page that has a Chinese pair |
+| `/zh/...` | The same routes in Chinese; a page without a Chinese pair shows its English text |
 | `/llms.mdx/<section>/<page>` and `/zh/llms.mdx/...` | Each page as Markdown. A section's index is `/llms.mdx/<section>/index`, and a directory's index page is `/llms.mdx/<section>/<directory>/index` |
 | `/llms.txt`, `/zh/llms.txt` | An index of each locale's pages, linking their Markdown |
+| `/search.json` | The search index of every page in both locales, which the search dialog downloads |
+| `/404` | The page a host serves, from `404.html`, for an address no file has |
 
 A page's English and Chinese routes are the same slug under the locale prefix. A page in one locale links to its counterpart in the same locale: a Chinese page's link to `trust.md` becomes its Chinese route.
 
@@ -32,23 +34,45 @@ The dead-link check runs after the build. It checks every internal link and frag
 
 Each page states the Delo version it describes. The version is read from [`delo/apps/release/package.json`](../release/package.json), the only source the site names.
 
+## Theme
+
+The site's look lives in `src/theme/`: the design tokens in [`tokens.css`](src/theme/tokens.css), the header in [`header.ts`](src/theme/header.ts) and the page footer in [`footer.tsx`](src/theme/footer.tsx). These files read no page, label or site setting; the site passes its own text and links to them, so another site can take the same theme with its own content.
+
 ## Commands
 
 Run from the repository root, on the Node major that `.nvmrc` pins.
 
 ```sh
 (cd delo/apps && pnpm --dir docs install --frozen-lockfile)  # installs the site's dependencies from its own lockfile
-(cd delo/apps && pnpm --dir docs run build)                  # builds into out/ and runs the dead-link check
+(cd delo/apps && pnpm --dir docs run build)                  # builds into out/, typechecks the site and runs the dead-link check
 (cd delo/apps && pnpm --dir docs run dev)                    # serves the site for local work
+(cd delo/apps && pnpm --dir docs run preview)                # serves the built out/ on 127.0.0.1:4173 as a static host would
 ```
 
 The local check `pnpm check` runs the build as the `docs-site` check when a change touches the site, its pages or the release version. The check refuses to run until the install command has succeeded.
 
 ## Deployment
 
-The build's output is the static directory `out/`. This package does not deploy it, configure a host, or set a domain. When deployment is decided, the host must serve the Markdown routes, which have no file extension, as `text/markdown; charset=utf-8`.
+The build's output is the static directory `out/`: every route above is a prerendered file, and the site runs no server code after the build. A page route is an HTML file beside its directory, such as `guide.html` beside `guide/`, so the host serves `/guide` from `guide.html`. The site's address, `https://docs.delorun.com`, which each page names as its canonical URL, and the product site the navigation links are set in [`src/site/config.ts`](src/site/config.ts).
 
-The site makes no network request during the build and loads no remote font or script. Telemetry is off for the build (`NEXT_TELEMETRY_DISABLED=1`). Search is not included yet; the search control is disabled.
+In the browser, a link to another page renders that page from the page data the build wrote into `out/assets/`, and search queries `/search.json` in the browser, so neither asks a server. The site makes no network request during the build, loads no remote font or script and sends no telemetry.
+
+[`alchemy.run.ts`](alchemy.run.ts) deploys `out/` with Alchemy as an assets-only Cloudflare Worker: Alchemy runs the site's build and uploads its output, and the site builds without Alchemy. The `prod` stage attaches `docs.delorun.com` as a Workers custom domain in the existing `delorun.com` zone, and Cloudflare creates its DNS record and certificate; every other stage has only its `workers.dev` address. Cloudflare serves an address no file has from `404.html` with status 404. [`public/_headers`](public/_headers), which the build copies into `out/`, sets the security headers, long caching for the hashed files in `/assets/` and the Markdown routes' `text/markdown; charset=utf-8` type.
+
+Run the deployment commands from `delo/apps/docs`:
+
+```sh
+pnpm exec alchemy profile edit --add Cloudflare   # once per machine: sign in to the Cloudflare account
+pnpm exec alchemy state bootstrap                 # once per account: create the state store that Cloudflare.state() uses
+pnpm exec alchemy plan --stage prod               # shows what a deploy would change, changing nothing
+pnpm exec alchemy deploy --stage prod             # builds the site and publishes it at docs.delorun.com
+pnpm exec alchemy destroy --stage <stage>         # deletes a stage's Worker and its custom domain
+pnpm run typecheck:deploy                         # typechecks alchemy.run.ts
+```
+
+On a workstation the first `plan` or `deploy` also creates the state store when the account has none; with `CI=true` a missing store fails the run, so the bootstrap runs once from a workstation first. The state store is a Worker with a Durable Object, and its token and encryption key are kept in the account's Secrets Store.
+
+A deploy job authenticates with `CLOUDFLARE_ACCOUNT_ID` and a `CLOUDFLARE_API_TOKEN` scoped to the Delo account with these permissions: account `Workers Scripts Write` (the Worker, its assets, its `workers.dev` address and the custom domain) and `Secrets Store Write` (reading the state store's credentials, which Alchemy does by binding them to a short-lived preview Worker), and on the `delorun.com` zone only, `Zone Read` (Alchemy finds the zone by name) and `Workers Routes Read` (Alchemy reads the zone's Worker routes). `pnpm exec alchemy provider check-env` reports a missing variable before a deploy starts. The token belongs only in a deploy job that runs on the default branch in a protected environment with required reviewers, whose secrets no pull-request workflow can read; it is never committed and never given to a pull-request build.
 
 ## Pairing
 

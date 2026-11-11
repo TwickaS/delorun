@@ -3,23 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delo/apps/docs/README.md
 /delo-documentation-website:
-  en: bbc3b8645da423c2
-  zh: c8ea7ee0de56f334
+  en: dab3bd9ec4bce9b8
+  zh: e70cedef82e1d064
 /delo-documentation-website/routes:
-  en: 92356eff3181d3b5
-  zh: 675903f42c03a477
+  en: 151ba012efd466a5
+  zh: a98bead3765ec51d
 /delo-documentation-website/links:
   en: 8eba19e03a4bb0be
   zh: 1bcd6dda77bade27
 /delo-documentation-website/version:
   en: 88b1f1e099994a20
   zh: 51b2f72a90454a26
+/delo-documentation-website/theme:
+  en: 758a1ee3339ff155
+  zh: 4bfc67a0c7401c0c
 /delo-documentation-website/commands:
   en: 4390bd6a515bee22
   zh: 2ed2da4fa21dcbd9
 /delo-documentation-website/deployment:
-  en: be199828cd5ef531
-  zh: c4681d9ad16562ca
+  en: 4c12ff4957333646
+  zh: f4235b168c3c2cfc
 /delo-documentation-website/pairing:
   en: 0bf45a6fe3173811
   zh: 8d7b937421c01afc

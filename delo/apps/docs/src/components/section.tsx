@@ -1,73 +1,95 @@
-import type { Metadata } from 'next'
-import type { ReactNode } from 'react'
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
+/**
+ * A section page: its route loader, its document head and its rendering inside the section's sidebar layout. The
+ * loader reads the page sources, which the browser also holds, so a page renders on navigation without a server.
+ *
+ * @module @delo/docs/section
+ */
+import { notFound } from '@tanstack/react-router'
+import Link from 'fumadocs-core/link'
 import { DocsLayout } from 'fumadocs-ui/layouts/docs'
 import { DocsBody, DocsPage } from 'fumadocs-ui/layouts/docs/page'
+import defaultMdxComponents from 'fumadocs-ui/mdx'
+import { use } from 'react'
+import { baseOptions } from '@/components/layout.tsx'
+import { PageFooter } from '@/theme/footer.tsx'
+import { SITE_URL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
-import { deloVersion, type Locale } from '@/site/locale.ts'
-import { markdownSlugOf, pageMarkdown, titleOf } from '@/site/markdown.ts'
-import { routeOf, type Section } from '@/site/doc-links.ts'
+import { deloVersion, htmlLangOf, type Locale } from '@/site/locale.ts'
+import { routeOf, type Section } from '@/site/routes.ts'
 import { sources } from '@/site/source.ts'
 
-/**
- * A section's sidebar layout for one locale.
- * @param props.section - the section.
- * @param props.locale - the locale, which selects the page tree and the labels.
- * @param props.children - the page.
- * @returns the docs layout with the section's pages in the sidebar.
- */
-export function SectionLayout({ section, locale, children }: { section: Section, locale: Locale, children: ReactNode }) {
-  const copy = COPY[locale]
-  return (
-    <DocsLayout
-      tree={sources[section].getPageTree(locale)}
-      nav={{ title: copy.siteTitle }}
-    >
-      {children}
-    </DocsLayout>
-  )
+/** What a section route's loader returns: the page's address and the head's text. */
+export interface SectionPageData {
+  readonly section: Section
+  readonly locale: Locale
+  readonly slugs: string[]
+  readonly title: string
+  readonly description: string | undefined
 }
 
 /**
- * The metadata of a page: its title is its first heading, and its description is the page's frontmatter description.
+ * Load a section page: find it and load its compiled content, so it renders without suspending.
  * @param section - the section.
- * @param slug - the page's slugs within the section.
  * @param locale - the locale.
- * @returns the metadata, empty when no page has those slugs.
+ * @param splat - the route's path after the section, empty for the section index.
+ * @returns the page's data.
+ * @throws the router's not-found error when no page has that path in the locale.
  */
-export async function sectionMetadata(section: Section, slug: string[], locale: Locale): Promise<Metadata> {
-  const page = sources[section].getPage(slug, locale)
-  if (page === undefined) return {}
-  const title = titleOf((await pageMarkdown(section, markdownSlugOf(page), locale)) ?? '')
-  return { title: title === '' ? undefined : title, description: page.data.description }
+export async function loadSectionPage(section: Section, locale: Locale, splat: string | undefined): Promise<SectionPageData> {
+  const slugs = (splat ?? '').split('/').filter(part => part !== '')
+  const page = sources[section].getPage(slugs, locale)
+  if (page === undefined) throw notFound()
+  await page.data.preload()
+  return { section, locale, slugs, title: page.data.title ?? '', description: page.data.description }
 }
 
 /**
- * A page of a section, with its Markdown body and the version it describes.
- * @param props.section - the section.
- * @param props.locale - the locale.
- * @param props.slug - the page's slugs within the section; empty for the section index.
- * @returns the page.
- * @throws Error via `notFound` when no page has those slugs in the locale.
+ * The document head of a section page: its title is its first heading, its description is the frontmatter's, and its
+ * canonical URL is its route on the published site.
+ * @param data - the loader's data, absent when the page was not found.
+ * @returns the head's meta and link tags.
  */
-export async function SectionPage({ section, locale, slug }: { section: Section, locale: Locale, slug: string[] }) {
-  const page = sources[section].getPage(slug, locale)
-  if (page === undefined) notFound()
+export function sectionHead(data: SectionPageData | undefined) {
+  if (data === undefined) return {}
+  return {
+    meta: [
+      { title: data.title },
+      ...(data.description === undefined ? [] : [{ name: 'description', content: data.description }]),
+    ],
+    links: [{ rel: 'canonical', href: `${SITE_URL}${routeOf(data.section, data.slugs, data.locale === 'zh')}` }],
+  }
+}
+
+/**
+ * A page of a section in the section's sidebar layout, with the version it describes and a link to the same page in
+ * the other locale.
+ * @param props - the loader's data.
+ * @returns the page.
+ * @throws the router's not-found error when no page has those slugs in the locale.
+ */
+export function SectionPage({ section, locale, slugs }: SectionPageData) {
+  const source = sources[section]
+  const page = source.getPage(slugs, locale)
+  if (page === undefined) throw notFound()
+  const { toc } = use(page.data.load())
   const Body = page.data.body
   const copy = COPY[locale]
-  const other = locale === 'en' ? 'zh' : 'en'
+  const other: Locale = locale === 'en' ? 'zh' : 'en'
   return (
-    <DocsPage toc={page.data.toc}>
-      <DocsBody>
-        <Body />
-      </DocsBody>
-      <p className="mt-8 text-sm text-fd-muted-foreground">{copy.describes(deloVersion())}</p>
-      <p className="text-sm">
-        <Link href={routeOf(section, slug, other === 'zh')} hrefLang={other === 'zh' ? 'zh-Hans' : 'en'} aria-label={copy.switchLabel}>
-          {COPY[other].switchTo}
-        </Link>
-      </p>
-    </DocsPage>
+    <DocsLayout {...baseOptions(locale)} tree={source.getPageTree(locale)}>
+      <DocsPage toc={toc}>
+        <DocsBody>
+          <Body components={defaultMdxComponents} />
+        </DocsBody>
+        <PageFooter>
+          <p>{copy.describes(deloVersion())}</p>
+          <p>
+            <Link href={routeOf(section, slugs, other === 'zh')} hrefLang={htmlLangOf(other)} lang={htmlLangOf(other)} title={copy.switchLabel}>
+              {copy.switchTo}
+            </Link>
+          </p>
+        </PageFooter>
+      </DocsPage>
+    </DocsLayout>
   )
 }

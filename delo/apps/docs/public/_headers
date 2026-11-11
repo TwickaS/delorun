@@ -1,0 +1,19 @@
+# Cloudflare static-asset header rules, applied to every file the site serves.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: frame-ancestors 'none'
+
+# Bundled files carry a content hash in their names, so a name never changes content.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The indexes and the Markdown routes hold Chinese text; the Markdown routes have no file extension.
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+/zh/llms.txt
+  Content-Type: text/plain; charset=utf-8
+/llms.mdx/*
+  Content-Type: text/markdown; charset=utf-8
+/zh/llms.mdx/*
+  Content-Type: text/markdown; charset=utf-8

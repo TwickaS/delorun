@@ -1,6 +1,8 @@
 node_modules/
-.next/
 .source/
+.tanstack/
+.build/
 out/
-next-env.d.ts
+routeTree.gen.ts
 *.tsbuildinfo
+.alchemy/

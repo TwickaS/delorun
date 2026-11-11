@@ -9,26 +9,16 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { posix, relative, resolve, sep } from 'node:path'
 import GithubSlugger from 'github-slugger'
+import { plainText } from './headings.ts'
+import { isSection, routeOf, slugsOf } from './routes.ts'
 
 /** The upstream repository's default-branch URL prefix, for upstream files that Delo's pages link. */
 export const UPSTREAM_BLOB_URL = 'https://github.com/deepseek-ai/deepseek-harness/blob/master/'
-
-/** The published section names, which are also the first route segment. */
-export type Section = 'guide' | 'reference'
 
 /** How a link resolves. */
 export type ResolvedLink =
   | { readonly kind: 'href', readonly href: string }
   | { readonly kind: 'unpublished', readonly path: string }
-
-/**
- * Whether a string names a published section.
- * @param value - the candidate name.
- * @returns true for `guide` and `reference`.
- */
-export function isSection(value: string): value is Section {
-  return value === 'guide' || value === 'reference'
-}
 
 /** The directory each published section reads from, relative to the repository root. */
 const PAGE_ROOT = 'delo/docs'
@@ -42,28 +32,6 @@ export function repositoryRoot(): string {
   const root = resolve(process.cwd(), '../../..')
   if (!existsSync(resolve(root, 'pnpm-workspace.yaml'))) throw new Error(`docs-site: run the site from delo/apps/docs; ${process.cwd()} does not lie in the repository`)
   return root
-}
-
-/**
- * The route slugs of a page, relative to its section.
- * @param pagePath - the page's path relative to its section directory, such as `trust.zh.md` or `divergence/README.md`.
- * @returns the slugs; an index page (`README`) yields the slugs of its directory.
- */
-export function slugsOf(pagePath: string): string[] {
-  const base = pagePath.replace(/(?:\.zh)?\.md$/, '')
-  if (base === 'README') return []
-  return base.replace(/\/README$/, '').split('/').filter(part => part !== '')
-}
-
-/**
- * The site route of a published page.
- * @param section - the section, `guide` or `reference`.
- * @param slugs - the page's slugs within its section.
- * @param chinese - whether the page is the Chinese half.
- * @returns such as `/guide/trust` or `/zh/reference/divergence`.
- */
-export function routeOf(section: Section, slugs: readonly string[], chinese: boolean): string {
-  return [chinese ? '/zh' : '', section, ...slugs].join('/')
 }
 
 /**
@@ -132,15 +100,4 @@ export function englishHeadingIds(englishPath: string): string[] {
     ids.push(slugger.slug(plainText(match[1] ?? '')))
   }
   return ids
-}
-
-/**
- * The text a heading shows, without its inline Markdown.
- * @param markdown - the heading's inline Markdown.
- * @returns the text, which the slugger turns into the id.
- */
-export function plainText(markdown: string): string {
-  return markdown
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[`*_~]/g, '')
 }

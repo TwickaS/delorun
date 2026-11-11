@@ -10,12 +10,12 @@ if (!existsSync(outDir)) {
   process.exit(1)
 }
 
-/** Every file under a directory, skipping Next's runtime payloads and assets, which carry no page links. */
+/** Every file under a directory, skipping the bundled assets, which carry no page links. */
 function filesUnder(dir) {
   return readdirSync(dir).flatMap(name => {
     const path = join(dir, name)
-    if (statSync(path).isDirectory()) return name === '_next' ? [] : filesUnder(path)
-    return name.startsWith('__next') ? [] : [path]
+    if (!statSync(path).isDirectory()) return [path]
+    return path === join(outDir, 'assets') ? [] : filesUnder(path)
   })
 }
 

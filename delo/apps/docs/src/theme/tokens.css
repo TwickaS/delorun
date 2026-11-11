@@ -1,0 +1,6 @@
+/*
+ * The site's design tokens: colours, radii and typography, from Fumadocs UI's neutral theme and its Tailwind preset.
+ * Site-wide token overrides belong in this file; components read the tokens through the `fd-` utilities.
+ */
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
