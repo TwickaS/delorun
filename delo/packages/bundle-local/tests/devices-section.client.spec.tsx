@@ -11,8 +11,8 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  apply, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, inject, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER,
-  readReachStatus, REMOTE_NOTICE_ID,
+  apply, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, FULL_ACCESS_CONSENT_ID, inject, MCP_SERVERS_SECTION_ID, MCP_SERVERS_SECTION_ORDER,
+  PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, WORKSPACE_ACCESS_SECTION_ID, WORKSPACE_ACCESS_SECTION_ORDER,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -499,13 +499,16 @@ describe('the plugin', () => {
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const sections = slots.entries('settings.section').map(entry => entry.options)
-      expect(sections).toMatchObject([{ id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER }])
+      expect(sections).toMatchObject([
+        { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
+        { id: WORKSPACE_ACCESS_SECTION_ID, order: WORKSPACE_ACCESS_SECTION_ORDER }, { id: MCP_SERVERS_SECTION_ID, order: MCP_SERVERS_SECTION_ORDER },
+      ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
-      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav])
+      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav, 'Workspace access', 'MCP servers'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([REMOTE_NOTICE_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
       const devicesEntry = slots.entries('settings.section')[1]

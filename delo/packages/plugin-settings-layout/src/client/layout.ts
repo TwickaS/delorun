@@ -21,6 +21,8 @@ export const SECTIONS = {
   sidebar: 'delo-sidebar',
   chatStates: 'delo-chat-states',
   privacy: 'delo-privacy',
+  workspaceAccess: 'delo-workspace-access',
+  mcpServers: 'delo-mcp-servers',
   models: 'models',
   modes: 'agent-presets',
   toolSettings: 'delo-tool-settings',
@@ -114,11 +116,14 @@ export function deloSettingsLayout(t: (key: SettingsLayoutLocaleKey) => string):
           },
           {
             id: 'permissions', label: text('page.permissions'), icon: IconShieldOutlineMedium, keywords: text('page.permissions.keywords'),
-            blocks: [{ kind: 'items', id: 'new-chats', heading: text('card.newChats'), items: [item('permission')] }],
+            blocks: [
+              { kind: 'items', id: 'new-chats', heading: text('card.newChats'), items: [item('permission')] },
+              { kind: 'section', id: SECTIONS.workspaceAccess },
+            ],
           },
           {
             id: 'tools', label: text('page.tools'), icon: IconCordisPluginOutlineMedium, keywords: text('page.tools.keywords'),
-            blocks: [{ kind: 'section', id: SECTIONS.toolSettings }, { kind: 'section', id: SECTIONS.inventory }],
+            blocks: [{ kind: 'section', id: SECTIONS.toolSettings }, { kind: 'section', id: SECTIONS.mcpServers }, { kind: 'section', id: SECTIONS.inventory }],
           },
         ],
       },

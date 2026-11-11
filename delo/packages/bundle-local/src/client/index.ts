@@ -7,7 +7,12 @@
  *
  * It also registers the Devices section, which shows the reach state and manages the devices the home approved, and
  * the notice that an answer the home refused, such as a full-access grant from a remote studio, must be given at the
- * home's own computer.
+ * home's own computer. The consent surfaces of Delo's two consent plugins come from here too: the full-access consent,
+ * which upstream's permission control asks through the `permissionSwitchConsent` service before a chat switches to
+ * full access in a workspace without a grant; the Workspace access section, where full access is turned on and off per
+ * workspace; and the MCP servers section, where a stdio server the add-time consent holds stopped is accepted or
+ * declined. Each reads its plugin's routes, which answer only the home's own computer and are absent while the plugin's
+ * switch is off.
  *
  * Other surfaces open the sections with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)` or
  * `ctx.settingsShell.openSection(DEVICES_SECTION_ID)`.
@@ -35,9 +40,19 @@ import { PrivacySection, type OptInId, type PrivacySectionInjected } from './Pri
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
+// Type-only: the ctx.permissionSwitchConsent merge.
+import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
+import { en as consentsEn, zh as consentsZh, type ConsentsLocaleKey } from './consents-locales.ts'
+import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent } from './FullAccessConsent.tsx'
+import { McpServersSection, type McpServersSectionInjected } from './McpServersSection.tsx'
+import { WorkspaceAccessSection, type WorkspaceAccessSectionInjected } from './WorkspaceAccessSection.tsx'
 
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
+export type { ConsentsLocaleKey } from './consents-locales.ts'
+export type { WorkspaceAccessSectionInjected, WorkspaceAccessSectionProps } from './WorkspaceAccessSection.tsx'
+export type { McpServersSectionInjected, McpServersSectionProps } from './McpServersSection.tsx'
+export type { FullAccessConsentProps, FullAccessConsentSource, FullAccessConsentState } from './FullAccessConsent.tsx'
 export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
 export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
 export type { OptInMutation, OptInSettings } from './opt-in.ts'
@@ -72,6 +87,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'deloPrivacy': PrivacyLocaleKey
     /** The Devices section's copy and the remote studio's refused-answer notice. */
     'deloDevices': DevicesLocaleKey
+    /** The full-access consent, the Workspace access section and the MCP servers section. */
+    'deloConsents': ConsentsLocaleKey
   }
 }
 
@@ -111,6 +128,24 @@ export const DEVICES_SECTION_ORDER = 21
 
 /** The `shell.overlay` id of the remote studio's refused-answer notice. */
 export const REMOTE_NOTICE_ID = 'delo-remote-full-access'
+
+/** Dictionary namespace of the consent surfaces. */
+export const CONSENTS_NS = 'deloConsents'
+
+/** The `settings.section` id of the Workspace access section. */
+export const WORKSPACE_ACCESS_SECTION_ID = 'delo-workspace-access'
+
+/** The Workspace access section's place in the Settings navigation: right after Devices. */
+export const WORKSPACE_ACCESS_SECTION_ORDER = 22
+
+/** The `settings.section` id of the MCP servers section. */
+export const MCP_SERVERS_SECTION_ID = 'delo-mcp-servers'
+
+/** The MCP servers section's place in the Settings navigation: right after Workspace access. */
+export const MCP_SERVERS_SECTION_ORDER = 23
+
+/** The `shell.overlay` id of the full-access consent. */
+export const FULL_ACCESS_CONSENT_ID = 'delo-full-access-consent'
 
 /** Required services. */
 export const inject = ['slots', 'locale', 'configForms']
@@ -186,6 +221,47 @@ export function apply(ctx: Context): void {
     inject: devicesFace,
   }, DevicesSection))
   applyRemoteNotice(ctx)
+  applyConsents(ctx, browserFetch)
+}
+
+/**
+ * Register the consent surfaces: the full-access consent behind upstream's `permissionSwitchConsent` service and its
+ * `shell.overlay` entry, and the Workspace access and MCP servers sections.
+ * @param ctx - the browser plugin context.
+ * @param fetch - the request function every surface sends through.
+ */
+export function applyConsents(ctx: Context, fetch: HostFetch): void {
+  ctx.effect(() => ctx.locale.register(CONSENTS_NS, { en: consentsEn, zh: consentsZh }), 'delo-consents: dictionaries')
+  const t = ctx.locale.bind(CONSENTS_NS)
+  const consent = createFullAccessConsentSource(fetch)
+  ctx.provide('permissionSwitchConsent', {
+    confirm: (sessionId, preset) => confirmPermissionSwitch(fetch, consent, sessionId, preset),
+  } satisfies PermissionSwitchConsent)
+  ctx.effect(() => () => { consent.cancel() }, 'delo-consents: an open consent answers no once the plugin unloads')
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: FULL_ACCESS_CONSENT_ID,
+    locale: CONSENTS_NS,
+    inject: () => ({ hooks: consent.hooks, confirm: consent.confirm, cancel: consent.cancel }),
+  }, FullAccessConsent))
+  const accessFace = (): WorkspaceAccessSectionInjected => ({ fetch, ask: consent.ask })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: WORKSPACE_ACCESS_SECTION_ID,
+    order: WORKSPACE_ACCESS_SECTION_ORDER,
+    label: () => t('access.nav'),
+    locale: CONSENTS_NS,
+    inject: accessFace,
+  }, WorkspaceAccessSection))
+  const serversFace = (): McpServersSectionInjected => ({ fetch })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: MCP_SERVERS_SECTION_ID,
+    order: MCP_SERVERS_SECTION_ORDER,
+    label: () => t('mcp.nav'),
+    locale: CONSENTS_NS,
+    inject: serversFace,
+  }, McpServersSection))
 }
 
 /**
