@@ -108,7 +108,7 @@ describe('the data suite', () => {
 
   it('quotes a shell word so the shell gives back the same text', () => {
     const text = 'it\'s a "path" with $HOME'
-    expect(execFileSync('sh', ['-c', `printf %s ${shellWord(text)}`], { encoding: 'utf8' })).toBe(text)
+    expect(execFileSync('sh', ['-c', `printf %s ${shellWord(text)}`], { encoding: 'utf8', timeout: 30_000 })).toBe(text)
     expect(Object.keys(DATA_ITEMS)).toContain('import-workspace')
   })
 })

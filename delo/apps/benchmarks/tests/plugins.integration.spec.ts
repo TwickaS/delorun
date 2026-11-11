@@ -73,9 +73,9 @@ describe('the synthetic plugin packages', () => {
     expect(packageTarball(files).equals(tarball)).toBe(true)
     const root = directory()
     writeFileSync(join(root, 'plugin.tgz'), tarball)
-    const listing = execFileSync('tar', ['-tvzf', join(root, 'plugin.tgz')], { encoding: 'utf8' })
+    const listing = execFileSync('tar', ['-tvzf', join(root, 'plugin.tgz')], { encoding: 'utf8', timeout: 30_000 })
     expect(listing).toContain('1985-10-26')
-    execFileSync('tar', ['-xzf', join(root, 'plugin.tgz'), '-C', root])
+    execFileSync('tar', ['-xzf', join(root, 'plugin.tgz'), '-C', root], { timeout: 30_000 })
     expect(readdirSync(join(root, 'package')).sort()).toEqual(Object.keys(files))
     for (const [path, text] of Object.entries(files)) expect(readFileSync(join(root, 'package', path), 'utf8')).toBe(text)
   })
@@ -83,7 +83,7 @@ describe('the synthetic plugin packages', () => {
   it('pads an entry whose size is a whole number of blocks with nothing', () => {
     const root = directory()
     writeFileSync(join(root, 'block.tgz'), packageTarball({ 'block.txt': 'x'.repeat(512) }))
-    execFileSync('tar', ['-xzf', join(root, 'block.tgz'), '-C', root])
+    execFileSync('tar', ['-xzf', join(root, 'block.tgz'), '-C', root], { timeout: 30_000 })
     expect(readFileSync(join(root, 'package', 'block.txt'), 'utf8')).toHaveLength(512)
   })
 
@@ -171,11 +171,11 @@ describe('the closure\'s pnpm', () => {
     chmodSync(join(runtime, 'node', 'bin', 'node'), 0o755)
     const bin = writePnpmShim(runtime, join(runtime, 'shim'))
     expect(statSync(join(bin, 'pnpm')).mode & 0o777).toBe(0o755)
-    expect(execFileSync(join(bin, 'pnpm'), ['add', 'a b'], { encoding: 'utf8' })).toBe(`${join(runtime, 'pnpm', 'bin/pnpm.mjs')}|add|a b|`)
+    expect(execFileSync(join(bin, 'pnpm'), ['add', 'a b'], { encoding: 'utf8', timeout: 30_000 })).toBe(`${join(runtime, 'pnpm', 'bin/pnpm.mjs')}|add|a b|`)
   })
 
   it('quotes paths that hold a single quote', () => {
-    expect(execFileSync('sh', ['-c', pnpmShim('/bin/echo', 'it\'s here').split('\n')[1]!.replace('"$@"', 'x')], { encoding: 'utf8' })).toBe('it\'s here x\n')
+    expect(execFileSync('sh', ['-c', pnpmShim('/bin/echo', 'it\'s here').split('\n')[1]!.replace('"$@"', 'x')], { encoding: 'utf8', timeout: 30_000 })).toBe('it\'s here x\n')
   })
 })
 

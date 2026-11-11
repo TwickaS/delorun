@@ -87,7 +87,7 @@ describe('planSourceOf', () => {
 
   it('leaves the Delo build out of a tree whose packages declare none', () => {
     const tree = readTree(makeTree(false))
-    const source = planSourceOf({ ...tree, packages: tree.packages.map(({ buildOutputs: _, ...pkg }) => pkg) }, { tiers: {}, checks: { boundary: { memoryGiB: 1 }, gates: { memoryGiB: 1 }, whitespace: { memoryGiB: 1 }, docs: { memoryGiB: 1 }, typecheck: { memoryGiB: 1 }, generate: { memoryGiB: 1 }, 'docs-site': { memoryGiB: 1 }, tests: { memoryGiB: 1 }, parity: { memoryGiB: 1 } } })
+    const source = planSourceOf({ ...tree, packages: tree.packages.map(({ buildOutputs: _, ...pkg }) => pkg) }, { tiers: {}, checks: { boundary: { memoryGiB: 1 }, gates: { memoryGiB: 1 }, whitespace: { memoryGiB: 1 }, docs: { memoryGiB: 1 }, typecheck: { memoryGiB: 1 }, generate: { memoryGiB: 1 }, 'docs-site': { memoryGiB: 1 }, tests: { memoryGiB: 1 }, parity: { memoryGiB: 1 }, benchmark: { memoryGiB: 1 } } })
     expect(source.select(['delo/apps/a/src/a.ts']).map(check => check.id)).not.toContain('build:delo')
   })
 })

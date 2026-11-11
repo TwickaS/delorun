@@ -146,12 +146,20 @@ export function readHomeLog(deloHome: string): readonly LogMark[] {
 
 /** Reads the times of the update's steps. */
 export class UpdateTimeline {
+  private readonly since: number
+  private readonly marks: readonly Mark[]
+  private readonly logs: readonly LogMark[]
+
   /**
    * @param since - the command's start; earlier records belong to an earlier command.
    * @param marks - the driver's records.
    * @param logs - the home log's records.
    */
-  constructor(private readonly since: number, private readonly marks: readonly Mark[], private readonly logs: readonly LogMark[]) {}
+  constructor(since: number, marks: readonly Mark[], logs: readonly LogMark[]) {
+    this.since = since
+    this.marks = marks
+    this.logs = logs
+  }
 
   /**
    * The first driver record of an event at or after the command's start.
