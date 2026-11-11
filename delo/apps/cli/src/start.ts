@@ -350,11 +350,16 @@ export async function upstreamAddStudioBundle(home: string, profile: string, out
 /**
  * Link the headless bundle through upstream's resolution and `dsh plugin add`.
  * @param home - the Delo home.
- * @param output - where pnpm's output goes, on stderr.
+ * @param output - where the progress line goes; pnpm's output goes to the `headless` profile's `home-headless` log.
  * @returns whether the profile's bundle list did not name the bundle before.
  */
-export function upstreamAddHeadlessBundle(home: string, output: CommandOutput): Promise<boolean> {
-  return addHeadlessBundle(home, () => upstreamLinking(home, HEADLESS_PROFILE), (text) => { output.stderr(text) })
+export async function upstreamAddHeadlessBundle(home: string, output: CommandOutput): Promise<boolean> {
+  const log = openSetupLog(home, HEADLESS_PROFILE)
+  try {
+    return await addHeadlessBundle(home, () => upstreamLinking(home, HEADLESS_PROFILE), { log, progress: (text) => { output.stdout(text) } })
+  } finally {
+    log.close()
+  }
 }
 
 /**

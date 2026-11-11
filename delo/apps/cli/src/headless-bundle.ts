@@ -12,7 +12,7 @@
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 import { HEADLESS_PROFILE } from '@delo/contract-home-layout'
 import type { CommandOutput } from './command.ts'
-import { linkDeloBundles, type BundleLinking } from './delo-bundles.ts'
+import { linkDeloBundles, type BundleLinking, type LinkReport } from './delo-bundles.ts'
 import type { ProfileMigration } from './profile-migrations.ts'
 import { profileBundles } from './studio-bundle.ts'
 
@@ -24,13 +24,13 @@ export const HEADLESS_BUNDLE_MIGRATION = 'headless-bundle'
  * does not exist.
  * @param home - the Delo home.
  * @param linking - upstream's resolution and plugin operation for the `headless` profile.
- * @param onOutput - receives the plugin operation's output.
+ * @param report - the log that receives the plugin operation's output, and the writer of the one progress line.
  * @returns true when the profile's bundle list did not name the bundle before.
  * @throws {CliError} when the bundle cannot be linked, as {@link linkDeloBundles} throws.
  */
-export async function addHeadlessBundle(home: string, linking: () => Promise<BundleLinking>, onOutput: (text: string, stream: 'stdout' | 'stderr') => void): Promise<boolean> {
+export async function addHeadlessBundle(home: string, linking: () => Promise<BundleLinking>, report: LinkReport): Promise<boolean> {
   const listed = profileBundles(home, HEADLESS_PROFILE)?.includes(HEADLESS_BUNDLE) === true
-  await linkDeloBundles(home, HEADLESS_PROFILE, [HEADLESS_BUNDLE], await linking(), onOutput)
+  await linkDeloBundles(home, HEADLESS_PROFILE, [HEADLESS_BUNDLE], await linking(), report)
   return !listed
 }
 

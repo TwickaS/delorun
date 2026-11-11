@@ -9,14 +9,25 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 import { HEADLESS_PROFILE } from '@delo/contract-home-layout'
-import type { BundleLinking } from '../src/delo-bundles.ts'
+import type { SurfaceLog } from '@delo/logs'
+import type { BundleLinking, LinkReport } from '../src/delo-bundles.ts'
 import { addHeadlessBundle, HEADLESS_BUNDLE_MIGRATION, headlessBundleMigration } from '../src/headless-bundle.ts'
 import { migrationsPath, runProfileMigrations } from '../src/profile-migrations.ts'
+import { openSetupLog } from '../src/setup/index.ts'
 
 let home: string
+let log: SurfaceLog
+let report: LinkReport
 
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'delo-headless-bundle-')) })
-afterEach(() => { rmSync(home, { recursive: true, force: true }) })
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), 'delo-headless-bundle-'))
+  log = openSetupLog(home, HEADLESS_PROFILE)
+  report = { log, progress: () => undefined }
+})
+afterEach(() => {
+  log.close()
+  rmSync(home, { recursive: true, force: true })
+})
 
 /**
  * Write the headless profile's manifest with a bundle list.
@@ -57,19 +68,19 @@ describe('adding the headless bundle', () => {
   it('links it into a profile whose list lacks it, reports that it was added, and links the bundle\'s directory', async () => {
     manifest(['@deepseek-ai/dsh-base'])
     const calls: (readonly string[])[] = []
-    expect(await addHeadlessBundle(home, () => Promise.resolve(linking(calls)), () => undefined)).toBe(true)
+    expect(await addHeadlessBundle(home, () => Promise.resolve(linking(calls)), report)).toBe(true)
     expect(calls).toHaveLength(1)
     expect(calls[0]?.[0]).toBe('add')
     expect(calls[0]?.[1]).toMatch(/^link:.*bundle-headless\/$/u)
   })
 
   it('links it into a profile that does not exist yet, which counts as lacking it', async () => {
-    expect(await addHeadlessBundle(home, () => Promise.resolve(linking([])), () => undefined)).toBe(true)
+    expect(await addHeadlessBundle(home, () => Promise.resolve(linking([])), report)).toBe(true)
   })
 
   it('reports that nothing was added when the list already names the bundle', async () => {
     manifest(['@deepseek-ai/dsh-base', HEADLESS_BUNDLE])
-    expect(await addHeadlessBundle(home, () => Promise.resolve(linking([])), () => undefined)).toBe(false)
+    expect(await addHeadlessBundle(home, () => Promise.resolve(linking([])), report)).toBe(false)
   })
 })
 
