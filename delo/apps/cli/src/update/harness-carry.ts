@@ -56,7 +56,8 @@ export function scanFailure(error: unknown, copy: string): string | undefined {
  * @param step - the step.
  * @returns what the step returns.
  * @throws {HomeProcessError} `HARNESS_CHANGES_PENDING` with the files when a change waits for review;
- *   `HARNESS_COPY_UNREADABLE` with what failed and the commands that clear it when the copy's scan fails; any other
+ *   `HARNESS_COPY_UNREADABLE` with what failed and the commands that clear it when the copy's scan fails or the copy
+ *   cannot be read (`@delo/changes`' own `HARNESS_COPY_UNREADABLE`, whose words it keeps); any other
  *   error unchanged.
  */
 async function refusing<T>(home: string, from: RuntimeVersion, step: () => Promise<T>): Promise<T> {
@@ -64,6 +65,8 @@ async function refusing<T>(home: string, from: RuntimeVersion, step: () => Promi
     return await step()
   } catch (error) {
     if (isChangesError(error) && error.code === 'HARNESS_CHANGES_PENDING') throw new HomeProcessError('HARNESS_CHANGES_PENDING', error.detail)
+    // The copy's own scan already names what failed and the commands that clear it.
+    if (isChangesError(error) && error.code === 'HARNESS_COPY_UNREADABLE') throw new HomeProcessError('HARNESS_COPY_UNREADABLE', error.detail)
     const failure = scanFailure(error, harnessCopyDirectory(home, from))
     if (failure !== undefined) {
       throw new HomeProcessError('HARNESS_COPY_UNREADABLE', `Delo could not scan your copy of Delo ${from} itself (${failure}), so it cannot tell whether changes there wait for review; ${COPY_REMEDIES}`)

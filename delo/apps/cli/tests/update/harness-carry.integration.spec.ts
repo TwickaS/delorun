@@ -157,9 +157,10 @@ describe('the CLI home\'s harness carry', () => {
       for (const failure of [checked, carried]) {
         expect(failure).toBeInstanceOf(HomeProcessError)
         expect(failure).toMatchObject({ code: 'HARNESS_COPY_UNREADABLE' })
-        expect((failure as HomeProcessError).detail).toContain(`EACCES at ${directory}`)
+        // The copy's scan names the failure and the entry; its words are kept.
+        expect((failure as HomeProcessError).detail).toContain('EACCES')
+        expect((failure as HomeProcessError).detail).toContain(directory)
         expect((failure as HomeProcessError).detail).toContain('delorun changes edit-harness --discard')
-        expect((failure as HomeProcessError).detail).toContain('delorun changes list')
       }
     } finally {
       chmodSync(directory, 0o755)
