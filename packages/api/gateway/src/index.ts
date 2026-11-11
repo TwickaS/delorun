@@ -709,7 +709,7 @@ export class TypertGatewayService extends Service implements TypertGateway {
   /**
    * Whether one event stream receives a scoped waterfall and may answer it: an owner stream always; another Peer's
    * stream while its access policy allows `event:<name>` on the global resource, asked at delivery and again at its
-   * answer.
+   * answer. That grant covers the waterfall from every Session.
    */
   private answersWaterfall(client: RemoteEventClient, event: string): boolean {
     return client.answers || this.ctx.remoteAccess.decide({
