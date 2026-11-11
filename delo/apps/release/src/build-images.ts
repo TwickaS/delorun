@@ -22,7 +22,6 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
 import { archiveEntries } from '@delo/release-formats/archive/inspect'
 import { semanticVersion } from '@delo/release-formats/brands'
 import { closureFileNames } from './closure/tree.ts'
@@ -54,13 +53,14 @@ async function main(argv: readonly string[]): Promise<number> {
     if (first.done === true) throw new Error('the linux-x64 closure holds no entry')
     await mkdir(resolve(values.oci), { recursive: true })
     const builder = builderVersions()
-    const problems = builderProblems(readRecipe().toolchain.images, builder)
+    const recipe = readRecipe()
+    const problems = builderProblems(recipe.toolchain.images, builder)
     if (problems.length > 0) throw new Error(problems.join('\n'))
     const images = await buildImages({ recipe: readImagesRecipe(), out, oci: resolve(values.oci), version, epoch: first.value.mtime, builder })
     for (const [name, image] of Object.entries(images)) console.log(`build-images: ${name}: ${image.repository}@${image.index}`)
-    const complete = RUNTIME_PLATFORMS.every(platform => existsSync(join(out, closureFileNames(version, platform).archive)))
-    if (complete) console.log(`build-images: rewrote ${await writeReleaseSbom(out, version, readRecipe().toolchain, readImagesRecipe().base)} with both images`)
-    else console.log('build-images: the output does not hold every platform\'s closure, so no SBOM is written')
+    const complete = recipe.closure.platforms.every(platform => existsSync(join(out, closureFileNames(version, platform).archive)))
+    if (complete) console.log(`build-images: rewrote ${await writeReleaseSbom(out, version, recipe.closure.platforms, recipe.toolchain, readImagesRecipe().base)} with both images`)
+    else console.log('build-images: the output does not hold every release platform\'s closure, so no SBOM is written')
     if (attestationKey !== undefined && attestationPath !== undefined && attested !== undefined) {
       const extended = extendAttestation(attested, await outputRefs(out), [imagesName(version), sbomName(version), ...(['s2', 's3'] as const).flatMap(image => [seccompName(version, image), seccompLicenceName(version, image)])])
       await writeFile(attestationPath, attestationText(attestationKey, extended), { mode: 0o644 })

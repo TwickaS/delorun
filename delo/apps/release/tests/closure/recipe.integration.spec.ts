@@ -4,15 +4,18 @@
  * its own environment; and every pinned download is used only when its bytes match the pin, against a local HTTP
  * stand-in.
  */
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { devNull } from 'node:os'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { create as createTar } from 'tar'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildClosures, buildClosuresChecked, buildEnvironment, toolchainProblems } from '../../src/build-closure.ts'
-import { readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR, Toolchain } from '../../src/closure/config.ts'
+import { readRecipe, readRecipeFile, RebuildExceptions, RECIPE_DIR, RECIPE_FILES, Toolchain } from '../../src/closure/config.ts'
+import { RECIPE_PATH, recipeAt } from '../../src/rebuild/record.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { fetchPinned, stageNode, stageNpmPackage, stagePnpm } from '../../src/closure/sources.ts'
 import { scratch, writeTree } from '../support.ts'
@@ -67,6 +70,39 @@ describe('recipe files', () => {
     expect(() => readRecipeFile(RebuildExceptions, join(RECIPE_DIR, 'missing.json'))).toThrow(/missing\.json/u)
     writeFileSync(path, '{ not json')
     expect(() => readRecipeFile(RebuildExceptions, path)).toThrow(/rebuild-exceptions\.json: .*JSON/u)
+  })
+
+  it('list each release platform once, and never one whose native addon the recipe does not build', (test) => {
+    const directory = scratch(test)
+    for (const file of RECIPE_FILES) copyFileSync(join(RECIPE_DIR, file), join(directory, file))
+    expect(readRecipe(directory).closure.platforms).toEqual(['linux-x64', 'linux-arm64', 'win32-x64'])
+    const closure = JSON.parse(readFileSync(join(RECIPE_DIR, 'closure.json'), 'utf8')) as { platforms: string[] }
+    const write = (platforms: readonly string[]): void => { writeFileSync(join(directory, 'closure.json'), JSON.stringify({ ...closure, platforms })) }
+    write(['linux-x64', 'darwin-arm64', 'darwin-x64'])
+    expect(() => readRecipe(directory)).toThrow('closure.json lists darwin-arm64 as a release platform, but toolchain.json builds no native system addon for it\nclosure.json lists darwin-x64 as a release platform')
+    write([])
+    expect(() => readRecipe(directory)).toThrow(/platforms/u)
+    write(['linux-x64', 'linux-x64'])
+    expect(() => readRecipe(directory)).toThrow(/each platform once/u)
+    write(['linux-x64', 'freebsd-x64'])
+    expect(() => readRecipe(directory)).toThrow(/platforms/u)
+  })
+
+  it('read at a commit refuse a committed release platform the recipe does not build', (test) => {
+    const repository = scratch(test)
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.test', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.test' }
+    const git = (args: readonly string[]): string => execFileSync('git', args, { cwd: repository, env, encoding: 'utf8', timeout: 30_000 }).trim()
+    git(['init', '-q', '-b', 'main'])
+    mkdirSync(join(repository, RECIPE_PATH), { recursive: true })
+    for (const file of RECIPE_FILES) copyFileSync(join(RECIPE_DIR, file), join(repository, RECIPE_PATH, file))
+    git(['add', '-A'])
+    git(['commit', '-q', '-m', 'recipe'])
+    expect(recipeAt(repository, git(['rev-parse', 'HEAD'])).closure.platforms).toEqual(['linux-x64', 'linux-arm64', 'win32-x64'])
+    const closure = JSON.parse(readFileSync(join(RECIPE_DIR, 'closure.json'), 'utf8')) as { platforms: string[] }
+    writeFileSync(join(repository, RECIPE_PATH, 'closure.json'), JSON.stringify({ ...closure, platforms: [...closure.platforms, 'darwin-arm64'] }))
+    git(['commit', '-q', '-am', 'darwin'])
+    const commit = git(['rev-parse', 'HEAD'])
+    expect(() => recipeAt(repository, commit)).toThrow(`the recipe at ${commit}: closure.json lists darwin-arm64 as a release platform, but toolchain.json builds no native system addon for it`)
   })
 
   it('pin the native builder by exact Debian versions and name a route for every platform', (test) => {
@@ -190,9 +226,9 @@ describe('the checked build', () => {
       .rejects.toThrow('Node v1.0.0 runs the build, but toolchain.json pins v24.22.0')
   })
 
-  it('refuses a platform whose native addon the recipe does not build before it exports the tree', async (test) => {
+  it('refuses a platform that is not in this release before it exports the tree', async (test) => {
     const root = scratch(test)
-    await expect(buildClosures(root, readRecipe(), { version: '0.1.0', commit: 'HEAD', out: join(root, 'out'), platforms: ['linux-x64', 'darwin-arm64'], cache: join(root, 'cache'), writePins: false }))
-      .rejects.toThrow(/^darwin-arm64: toolchain\.json builds no native system addon for this platform/u)
+    await expect(buildClosures(root, readRecipe(), { version: '0.1.0', commit: 'HEAD', out: join(root, 'out'), platforms: ['linux-x64', 'darwin-arm64', 'darwin-x64'], cache: join(root, 'cache'), writePins: false }))
+      .rejects.toThrow('darwin-arm64, darwin-x64 is not in this release; closure.json lists linux-x64, linux-arm64, win32-x64')
   })
 })

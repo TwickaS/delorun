@@ -184,7 +184,7 @@ describe('the launcher’s main function', () => {
     const world = await surroundings()
     const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('plan9' as NodeJS.Platform)
     expect(await main([], world.context())).toBe(2)
-    expect(world.stderr.join('')).toContain('Delo publishes a runtime for')
+    expect(world.stderr.join('')).toContain('Delo has no runtime for')
     platform.mockRestore()
   })
 

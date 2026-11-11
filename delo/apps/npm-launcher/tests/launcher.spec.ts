@@ -444,6 +444,7 @@ describe('an install step that refuses', () => {
       'ARCHIVE_REFUSED',
       'RELEASE_LOG_FAILED',
       'RELEASE_NOT_OFFERED',
+      'PLATFORM_NOT_RELEASED',
       'RELEASE_METADATA_INVALID',
       'TRUST_STATE_INVALID',
       'NO_TRUSTED_ROOT',

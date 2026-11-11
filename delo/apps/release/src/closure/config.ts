@@ -2,7 +2,7 @@
  * The committed recipe files of the runtime closure build, read and validated before any build step runs:
  * `toolchain.json` (the pinned Node distributions, pnpm, and the builder image and route of upstream's native addon),
  * `prebuilt-pins.json` (the SHA-256 of every native file each closure holds),
- * `closure.json` (the fixed build root and the deployed package) and `rebuild-exceptions.json` (the differences the
+ * `closure.json` (the release platforms, the fixed build root and the deployed package) and `rebuild-exceptions.json` (the differences the
  * rebuild comparison accepts, each with its reason). Unknown fields fail the read.
  *
  * @module @delo/release/closure/config
@@ -72,6 +72,11 @@ export type PrebuiltPins = z.output<typeof PrebuiltPins>
 /** `closure.json`. */
 export const ClosureRecipe = z.strictObject({
   schema: z.literal('delo.release-closure/1'),
+  /**
+   * The platforms this release publishes a runtime for, in build order. The build, the rebuild record, the SBOM and
+   * signing cover exactly these; a platform whose native addon `toolchain.json` marks `unbuilt` cannot be listed.
+   */
+  platforms: z.array(z.enum(RUNTIME_PLATFORMS)).min(1).refine(list => new Set(list).size === list.length, 'each platform once'),
   buildRoot: z.string().regex(/^\/[A-Za-z0-9._/-]+$/u, 'an absolute POSIX path'),
   deployRoot: z.string().min(1),
   /** The product name the client artifacts are built with, as `DSH_CLIENT_TITLE`. */
@@ -101,6 +106,17 @@ export const RebuildExceptions = z.strictObject({
 
 /** {@link RebuildExceptions}' parsed value. */
 export type RebuildExceptions = z.output<typeof RebuildExceptions>
+
+/**
+ * Why the release platforms cannot be built: each listed platform whose native addon the recipe does not build.
+ * @param toolchain - the pinned toolchain.
+ * @param closure - the closure recipe.
+ * @returns one message per such platform; empty when every listed platform can be built.
+ */
+export function releasePlatformProblems(toolchain: Toolchain, closure: ClosureRecipe): string[] {
+  return closure.platforms.filter(platform => toolchain.native.platforms[platform] === 'unbuilt')
+    .map(platform => `closure.json lists ${platform} as a release platform, but toolchain.json builds no native system addon for it`)
+}
 
 /**
  * Validate one recipe file's text.
@@ -151,13 +167,16 @@ export interface Recipe {
  * Read every recipe file from a directory.
  * @param directory - the directory that holds them, {@link RECIPE_DIR} by default.
  * @returns the parsed recipe.
- * @throws Error when any file does not parse or validate.
+ * @throws Error when any file does not parse or validate, or `closure.json` lists a platform the recipe cannot build.
  */
 export function readRecipe(directory: string = RECIPE_DIR): Recipe {
-  return {
+  const recipe = {
     toolchain: readRecipeFile(Toolchain, join(directory, 'toolchain.json')),
     pins: readRecipeFile(PrebuiltPins, join(directory, 'prebuilt-pins.json')),
     closure: readRecipeFile(ClosureRecipe, join(directory, 'closure.json')),
     exceptions: readRecipeFile(RebuildExceptions, join(directory, 'rebuild-exceptions.json')),
   }
+  const problems = releasePlatformProblems(recipe.toolchain, recipe.closure)
+  if (problems.length > 0) throw new Error(problems.join('\n'))
+  return recipe
 }

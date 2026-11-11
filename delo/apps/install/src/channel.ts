@@ -141,6 +141,7 @@ export class LauncherChannel implements RuntimeChannel {
    * @param target - the version a person asked for, or `undefined` for the channel's current release.
    * @returns the release's version and the root it verified with.
    * @throws {InstallError} `DOWNLOAD_REFUSED`, `DOWNLOAD_FAILED`, `INSTALL_VERIFY_FAILED`, `RELEASE_NOT_OFFERED`,
+   *   `PLATFORM_NOT_RELEASED` when the verified manifest lists no runtime for this computer's platform,
    *   `RELEASE_LOG_FAILED` or `TRUST_STATE_INVALID`; no file appears under `runtimes/` on any of them. A log that does
    *   not answer, answers with no checkpoint its key signed, or whose checkpoint the witnesses have not cosigned is
    *   `unchecked`, which never refuses.
@@ -169,6 +170,10 @@ export class LauncherChannel implements RuntimeChannel {
       ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
     })
     this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
+    const released = Object.keys(verified.manifest.runtime)
+    if (!released.includes(this.options.platform)) {
+      throw new InstallError('PLATFORM_NOT_RELEASED', String(pointer.release), `${this.options.platform} is not in this release, which publishes a runtime for ${released.join(', ')} only`)
+    }
     const log = await this.checkLog({ root: root.metadata, version: pointer.release, manifest: manifest.bytes, bundle: bundle.bytes, now, transport: this.logFor(root.metadata), mode: 'enforce' })
     if (log.state === 'failed') {
       throw new InstallError('RELEASE_LOG_FAILED', `release ${pointer.release}`, `the release log failed its check (${String(log.refusal)}: ${String(log.detail)}); nothing was installed`)
@@ -194,7 +199,8 @@ export class LauncherChannel implements RuntimeChannel {
     const resolved = this.resolved.get(release.version)
     if (resolved === undefined) throw new InstallError('INSTALL_VERIFY_FAILED', String(release.version), `${NO_RELEASE}: ${release.version} was not resolved before it was installed`)
     const { manifest } = resolved.verified
-    const artifacts = manifest.runtime[this.options.platform]
+    // resolve() refused a platform the manifest does not list.
+    const artifacts = manifest.runtime[this.options.platform]!
     const format = archiveFormat(this.options.platform)
     // The store holds its lock while it fills, so no other install owns a download directory of a past run.
     await sweepDownloads(dirname(directory))

@@ -101,7 +101,8 @@ export const ManifestSchema = z.strictObject({
   channel: z.enum(['stable', 'beta']),
   source: z.strictObject({ repository: z.string().min(1), tag: z.string().min(1), commit: z.string().regex(/^[0-9a-f]{40}$/u) }),
   published: timestamp,
-  runtime: z.strictObject(Object.fromEntries(RUNTIME_PLATFORMS.map(platform => [platform, z.strictObject({ archive: fileRef, files: fileRef })])) as Record<(typeof RUNTIME_PLATFORMS)[number], z.ZodObject<{ archive: typeof fileRef, files: typeof fileRef }, z.core.$strict>>),
+  runtime: z.partialRecord(z.enum(RUNTIME_PLATFORMS), z.strictObject({ archive: fileRef, files: fileRef }))
+    .refine(runtime => Object.keys(runtime).length > 0, 'a release publishes the runtime of at least one platform'),
   desktop: z.strictObject(Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, z.strictObject({ installer: desktopRef, update: desktopRef, blockmap: fileRef })])) as Record<(typeof DESKTOP_PLATFORMS)[number], z.ZodObject<{ installer: typeof desktopRef, update: typeof desktopRef, blockmap: typeof fileRef }, z.core.$strict>>),
   images: z.strictObject({ s2: ImageRefSchema, s3: ImageRefSchema }),
   sbom: fileRef.extend({ format: z.literal('SPDX-2.3+json') }),

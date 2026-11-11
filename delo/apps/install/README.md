@@ -74,6 +74,7 @@ Every refusal is an `InstallError`, which `isInstallError` tests for:
 | `ARCHIVE_REFUSED` | The archive holds an entry its format forbids or its signed list does not name |
 | `RELEASE_LOG_FAILED` | Contract C18's bundle or online check failed verifiably; an online check that could not run is not a failure |
 | `RELEASE_NOT_OFFERED` | The version a person named is not the release the fresh timestamp names |
+| `PLATFORM_NOT_RELEASED` | The verified release lists no runtime for this computer's platform; the refusal names the platform and the platforms the release lists |
 | `RELEASE_METADATA_INVALID` | A release file does not read at all |
 | `TRUST_STATE_INVALID` | A file under `trust/` does not read or cannot be written |
 | `NO_TRUSTED_ROOT` | The launcher supplied no root, so nothing can be verified |

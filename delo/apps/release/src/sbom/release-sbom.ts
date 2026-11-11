@@ -7,7 +7,7 @@
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
+import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import { archiveEntries } from '@delo/release-formats/archive/inspect'
 import { fileDigest } from '@delo/release-formats/archive/sink'
 import type { Toolchain } from '../closure/config.ts'
@@ -56,19 +56,20 @@ export async function readArchiveContents(path: string, format: 'tar.gz' | 'zip'
 }
 
 /**
- * The SBOM text of a build output that holds every platform's archive.
+ * The SBOM text of a build output that holds every release platform's archive.
  * @param directory - the output directory.
  * @param version - the release.
+ * @param platforms - the release platforms, `closure.json`'s `platforms`.
  * @param toolchain - the pinned toolchain.
  * @param base - the images' base by digest, from the `images.json` that built them.
  * @returns the document's text, or `undefined` when an archive is missing. When the output holds
  * `delorun-<version>.images.json`, the document describes both images too.
  */
-export async function deriveSbomText(directory: string, version: string, toolchain: Toolchain, base: string): Promise<string | undefined> {
+export async function deriveSbomText(directory: string, version: string, platforms: readonly RuntimePlatform[], toolchain: Toolchain, base: string): Promise<string | undefined> {
   const present = new Set(await readdir(directory))
   const archives: ArchiveContents[] = []
   let epoch = 0
-  for (const platform of RUNTIME_PLATFORMS) {
+  for (const platform of platforms) {
     const name = closureFileNames(version, platform).archive
     if (!present.has(name)) return undefined
     const contents = await readArchiveContents(join(directory, name), platform === 'win32-x64' ? 'zip' : 'tar.gz')
@@ -76,22 +77,23 @@ export async function deriveSbomText(directory: string, version: string, toolcha
     archives.push({ platform, name, sha256: (await fileDigest(join(directory, name))).sha256, packages: contents.packages, lockfile: contents.lockfile })
   }
   const images = present.has(imagesName(version)) ? imageContents(JSON.parse(await readFile(join(directory, imagesName(version)), 'utf8')) as ImagesFile, base) : undefined
-  const document = spdxDocument(version, epoch, { node: { version: toolchain.node.version, origin: toolchain.node.origin }, pnpm: { version: toolchain.pnpm.version, integrity: toolchain.pnpm.integrity } }, archives, images)
+  const document = spdxDocument(version, epoch, { node: { version: toolchain.node.version, origin: toolchain.node.origin }, pnpm: { version: toolchain.pnpm.version, integrity: toolchain.pnpm.integrity }, builder: { packages: toolchain.native.builder.packages, platforms: platforms.filter(platform => toolchain.native.platforms[platform] === 'source') } }, archives, images)
   return `${JSON.stringify(document, undefined, 2)}\n`
 }
 
 /**
  * Write a build output's SBOM.
- * @param directory - the output directory, holding every platform's archive.
+ * @param directory - the output directory, holding every release platform's archive.
  * @param version - the release.
+ * @param platforms - the release platforms, `closure.json`'s `platforms`.
  * @param toolchain - the pinned toolchain.
  * @param base - the images' base by digest, from `images.json`.
  * @returns the file's name.
  * @throws Error when an archive is missing. An existing SBOM is replaced, so the image build can extend it.
  */
-export async function writeReleaseSbom(directory: string, version: string, toolchain: Toolchain, base: string): Promise<string> {
-  const text = await deriveSbomText(directory, version, toolchain, base)
-  if (text === undefined) throw new Error(`the SBOM covers every platform, and ${directory} lacks an archive`)
+export async function writeReleaseSbom(directory: string, version: string, platforms: readonly RuntimePlatform[], toolchain: Toolchain, base: string): Promise<string> {
+  const text = await deriveSbomText(directory, version, platforms, toolchain, base)
+  if (text === undefined) throw new Error(`the SBOM covers every release platform, and ${directory} lacks an archive`)
   await writeFile(join(directory, sbomName(version)), text, { mode: 0o644 })
   return sbomName(version)
 }

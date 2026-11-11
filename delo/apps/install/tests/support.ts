@@ -10,7 +10,7 @@ import { createHash, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { TIMESTAMP_LIFETIME_SECONDS, RELEASE_SCHEMAS, type DesktopFileRef, type FileRef, type NpmIntegrity, type OciDigest, type ReleaseManifest, type RootMetadata, type RuntimeFileList, type RuntimePlatform, type Sha256Hex, type Sha512Base64, type SemanticVersion, type TimestampMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
+import { TIMESTAMP_LIFETIME_SECONDS, RELEASE_SCHEMAS, RUNTIME_PLATFORMS, type DesktopFileRef, type FileRef, type NpmIntegrity, type OciDigest, type ReleaseManifest, type RootMetadata, type RuntimeFileList, type RuntimePlatform, type Sha256Hex, type Sha512Base64, type SemanticVersion, type TimestampMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
 import { gzip } from '@delo/release-formats/archive/bytes'
 import type { ArchiveEntry } from '@delo/release-formats/archive/entry'
 import { tarStream } from '@delo/release-formats/archive/tar'
@@ -138,6 +138,8 @@ export interface FixtureOptions {
   readonly tamperInclusion?: boolean
   /** The version the release carries; {@link VERSION} by default. */
   readonly version?: string
+  /** The platforms the manifest publishes a runtime for; every platform by default. */
+  readonly released?: readonly RuntimePlatform[]
 }
 
 /**
@@ -176,13 +178,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
     channel: 'stable',
     source: { repository: 'https://github.com/Delo-Run/delo', tag: `v${releaseVersion}`, commit: 'a'.repeat(40) },
     published: utc('2027-01-01T00:00:00Z'),
-    runtime: {
-      'linux-x64': artifacts('linux-x64'),
-      'linux-arm64': artifacts('linux-arm64'),
-      'darwin-x64': artifacts('darwin-x64'),
-      'darwin-arm64': artifacts('darwin-arm64'),
-      'win32-x64': artifacts('win32-x64'),
-    },
+    runtime: Object.fromEntries((options.released ?? RUNTIME_PLATFORMS).map(entry => [entry, artifacts(entry)])),
     desktop: {
       'mac-arm64': { installer: desktopFile('Delo-0.1.0-mac-arm64.dmg'), update: desktopFile('Delo-0.1.0-mac-arm64.zip'), blockmap: dummy('Delo-0.1.0-mac-arm64.dmg.blockmap') },
       'mac-x64': { installer: desktopFile('Delo-0.1.0-mac-x64.dmg'), update: desktopFile('Delo-0.1.0-mac-x64.zip'), blockmap: dummy('Delo-0.1.0-mac-x64.dmg.blockmap') },

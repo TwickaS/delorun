@@ -6,7 +6,8 @@
  * [--platform <platform>]... [--cache <dir>] [--write-pins] [--artifacts build|existing]
  * [--attestation-key <file> --attestation <file>]`
  *
- * It refuses a platform whose native system addon `toolchain.json` marks `unbuilt` before any step runs. It exports the
+ * It builds the release platforms `closure.json` lists, or the named ones, and refuses a platform the list does not
+ * name before any step runs; the list cannot name a platform whose native addon the recipe does not build. It exports the
  * commit's tree to the fixed build root `closure.json` names, so absolute paths that bundlers embed
  * are the same on every builder, holding the root's lock so a second build on the computer refuses
  * ([build root](./closure/build-root.ts)); installs the locked dependencies and builds the artifacts, with the client title
@@ -17,7 +18,7 @@
  * dependencies for that platform, transpiles Delo's packages to JavaScript, stamps the release version into the
  * `delorun` package, has the install anchor declare Delo's bundles, adds the pinned Node and pnpm, writes
  * `data-formats.json` (contract C3) at the closure's root, checks every native file against `prebuilt-pins.json`, and
- * writes the deterministic archive and its unsigned runtime file list to `--out`; when it built every platform, it also
+ * writes the deterministic archive and its unsigned runtime file list to `--out`; when it built every release platform, it also
  * writes the release's SPDX SBOM derived from the archives. It refuses to run under a Node or pnpm
  * other than `toolchain.json` pins. `--artifacts existing` skips the artifact build and copies the worktree's built
  * artifacts into the exported tree instead, after checking that the worktree
@@ -48,7 +49,7 @@ import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { declareAnchorBundles, stampDeloVersion, transpileDeloPackages } from './closure/delo.ts'
-import { buildNativeAddons, unbuiltPlatformProblems } from './closure/native-build.ts'
+import { buildNativeAddons } from './closure/native-build.ts'
 import { stageNode, stagePnpm } from './closure/sources.ts'
 import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
@@ -149,8 +150,8 @@ export function buildEnvironment(inherited: NodeJS.ProcessEnv, buildRoot: string
  * @returns each platform's release files.
  */
 export async function buildClosures(repository: string, recipe: Recipe, request: BuildRequest): Promise<Map<RuntimePlatform, ClosureFiles>> {
-  const unbuilt = unbuiltPlatformProblems(recipe.toolchain, request.platforms)
-  if (unbuilt.length > 0) throw new Error(unbuilt.join('\n'))
+  const unlisted = request.platforms.filter(platform => !recipe.closure.platforms.includes(platform))
+  if (unlisted.length > 0) throw new Error(`${unlisted.join(', ')} is not in this release; closure.json lists ${recipe.closure.platforms.join(', ')}`)
   const epoch = Number(execFileSync('git', ['log', '-1', '--format=%ct', request.commit], { cwd: repository, encoding: 'utf8' }).trim())
   if (process.env.SOURCE_DATE_EPOCH !== undefined && process.env.SOURCE_DATE_EPOCH !== String(epoch)) {
     throw new Error(`SOURCE_DATE_EPOCH is ${process.env.SOURCE_DATE_EPOCH}, but the commit's committer time is ${String(epoch)}`)
@@ -211,7 +212,7 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     console.log(`build-closure: ${platform}: ${files.archive.name} (${String(files.entries)} files, ${String(files.archive.length)} bytes, sha256 ${files.archive.sha256})`)
     results.set(platform, files)
   }
-  if (RUNTIME_PLATFORMS.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.toolchain, readImagesRecipe().base)}`)
+  if (recipe.closure.platforms.every(platform => results.has(platform))) console.log(`build-closure: wrote ${await writeReleaseSbom(request.out, request.version, recipe.closure.platforms, recipe.toolchain, readImagesRecipe().base)}`)
   return results
 }
 
@@ -256,12 +257,12 @@ async function main(argv: readonly string[]): Promise<number> {
   try {
     if (values.version === undefined || values.out === undefined) throw new Error('pass --version <version> and --out <dir>')
     if (process.platform !== 'linux' && process.platform !== 'darwin') throw new Error('the recipe runs on Linux or macOS')
-    const platforms = (values.platform ?? RUNTIME_PLATFORMS).map((platform) => {
+    const recipe = readRecipe()
+    const platforms = (values.platform ?? recipe.closure.platforms).map((platform) => {
       if (!isRuntimePlatform(platform)) throw new Error(`unknown platform ${platform}; use ${RUNTIME_PLATFORMS.join(', ')}`)
       return platform
     })
     if (!isArtifactSource(values.artifacts)) throw new Error(`--artifacts is build or existing, not ${values.artifacts}`)
-    const recipe = readRecipe()
     const problems = toolchainProblems(recipe, process.version, execFileSync('pnpm', ['--version'], { encoding: 'utf8' }).trim())
     if (problems.length > 0) throw new Error(problems.join('\n'))
     const repository = repositoryRoot(process.cwd())

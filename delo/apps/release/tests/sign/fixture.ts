@@ -13,11 +13,11 @@ import { join } from 'node:path'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { TestContext } from 'vitest'
-import { DESKTOP_PLATFORMS, RELEASE_REPOSITORY_URL, RELEASE_SCHEMAS, RUNTIME_PLATFORMS, type FileRef, type ReleaseManifest, type RootMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
+import { DESKTOP_PLATFORMS, RELEASE_REPOSITORY_URL, RELEASE_SCHEMAS, type FileRef, type ReleaseManifest, type RootMetadata, type UtcTimestamp } from '@delo/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { releaseAdvisoryCheck } from '../../src/advisory/release.ts'
 import { semanticVersion, sha256Hex } from '@delo/release-formats/brands'
-import { RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
+import { readRecipe, RECIPE_DIR, RECIPE_FILES } from '../../src/closure/config.ts'
 import { attestationText } from '../../src/rebuild/attestation.ts'
 import { outputRefs, recipeAt } from '../../src/rebuild/record.ts'
 import { imagesName, writeSeccompProfiles } from '../../src/images/build.ts'
@@ -31,6 +31,9 @@ import { runEntry, scratch, writeTree, type RunResult } from '../support.ts'
 
 /** The fixture release's version. */
 export const VERSION = '0.1.0'
+
+/** The release platforms `closure.json` lists, which the fixture release publishes. */
+export const PLATFORMS = readRecipe().closure.platforms
 
 const EPOCH = 1_793_981_656
 
@@ -91,7 +94,7 @@ function ref(directory: string, name: string): FileRef {
 
 async function closures(directory: string, marker: string): Promise<void> {
   mkdirSync(directory, { recursive: true })
-  for (const platform of RUNTIME_PLATFORMS) {
+  for (const platform of PLATFORMS) {
     const stage = join(directory, '..', `stage-${marker}-${platform}`)
     writeTree(stage, { 'app/package.json': '{"name":"dsh-python-runtime-closure"}\n', 'app/pnpm-lock.yaml': LOCKFILE, 'app/lib/bin.js': `// ${platform}\n`, 'node/LICENSE': 'licence\n' })
     await archiveClosure({ stage, outDir: directory, version: VERSION, platform, epoch: EPOCH, pins: undefined })
@@ -172,7 +175,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     const seccomp = await writeSeccompProfiles(recipe.images, directory, VERSION)
     images = { s2: { ...image, seccomp: seccomp.s2 }, s3: { ...image, seccomp: seccomp.s3 } }
     writeFileSync(join(directory, imagesName(VERSION)), `${JSON.stringify({ ...images, builder: recipe.toolchain.images, debian: { s2: { 'linux/amd64': [], 'linux/arm64': [] }, s3: { 'linux/amd64': [], 'linux/arm64': [] } } }, undefined, 2)}\n`)
-    await writeReleaseSbom(directory, VERSION, recipe.toolchain, recipe.images.base)
+    await writeReleaseSbom(directory, VERSION, recipe.closure.platforms, recipe.toolchain, recipe.images.base)
   }
   const feed = await feedStandIn(test, {})
   const report = await releaseAdvisoryCheck(repo, commit, release, semanticVersion(VERSION), feed.url)
@@ -191,7 +194,7 @@ export async function releaseFixture(test: TestContext): Promise<ReleaseFixture>
     dsh: '0.2.2-rc.1',
     channel: 'stable',
     source: { repository: RELEASE_REPOSITORY_URL, tag: `v${VERSION}`, commit },
-    runtime: Object.fromEntries(RUNTIME_PLATFORMS.map((platform) => {
+    runtime: Object.fromEntries(PLATFORMS.map((platform) => {
       const archive = `delorun-${VERSION}-${platform}.${platform === 'win32-x64' ? 'zip' : 'tar.gz'}`
       return [platform, { archive: ref(release, archive), files: ref(release, `delorun-${VERSION}-${platform}.files.json`) }]
     })),

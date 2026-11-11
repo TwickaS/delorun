@@ -25,13 +25,14 @@ export const RELEASE_LOG_API_PREFIX = '/api/v2'
  * @param platform - Node's `process.platform`.
  * @param arch - Node's `process.arch`.
  * @returns the platform whose runtime closure this machine installs.
- * @throws {Error} when Delo publishes no closure for the pair, naming it.
+ * @throws {Error} when no release can publish a closure for the pair, naming it. Whether the current release lists the
+ * platform is the channel's check, once the manifest verifies.
  */
 export function platformOf(platform: string, arch: string): RuntimePlatform {
   const name = `${platform}-${arch}`
   const known = RUNTIME_PLATFORMS.find(candidate => candidate === name)
   if (known === undefined) {
-    throw new Error(`Delo publishes a runtime for ${RUNTIME_PLATFORMS.join(', ')}, not for ${name}`)
+    throw new Error(`Delo has no runtime for ${name}; a release can publish one only for ${RUNTIME_PLATFORMS.join(', ')}, and its manifest lists the ones it does`)
   }
   return known
 }

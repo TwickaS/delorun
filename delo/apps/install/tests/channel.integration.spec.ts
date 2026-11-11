@@ -124,6 +124,18 @@ describe('a release the channel can verify', () => {
   })
 })
 
+describe('a release without this computer\'s platform', () => {
+  it('refuses before the log check and any download, naming the platform and the platforms the release lists', async () => {
+    const fixture = await fixtureRelease({ released: ['linux-x64', 'linux-arm64', 'win32-x64'] })
+    const steps: string[] = []
+    const { channel } = await harness(fixture, { platform: 'darwin-arm64', progress: (event) => { steps.push(event.step) } })
+    const error = await refusal(channel.resolve(), 'PLATFORM_NOT_RELEASED')
+    expect(error.detail).toBe('darwin-arm64 is not in this release, which publishes a runtime for linux-x64, linux-arm64, win32-x64 only')
+    expect(error.source).toBe(VERSION)
+    expect(steps).not.toContain('log-checked')
+  })
+})
+
 describe('a download the rule does not allow', () => {
   it('refuses a release file on a host contract C1 does not list', async () => {
     const fixture = await fixtureRelease()

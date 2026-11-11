@@ -42,7 +42,7 @@ export const RELEASE_CHANNELS: readonly ReleaseChannel[] = ['stable', 'beta']
 /** Runtime closure platforms: Node's `process.platform` and `process.arch` joined by a hyphen. */
 export type RuntimePlatform = 'linux-x64' | 'linux-arm64' | 'darwin-x64' | 'darwin-arm64' | 'win32-x64'
 
-/** Every runtime closure platform a release publishes. */
+/** Every runtime closure platform a release can publish; each release's manifest lists the ones it does. */
 export const RUNTIME_PLATFORMS: readonly RuntimePlatform[] = ['linux-x64', 'linux-arm64', 'darwin-x64', 'darwin-arm64', 'win32-x64']
 
 /** Desktop installer platforms. */
@@ -287,8 +287,11 @@ export interface ReleaseManifest {
   }
   /** When the targets key signed it. */
   readonly published: UtcTimestamp
-  /** Runtime closures per platform. */
-  readonly runtime: Readonly<Record<RuntimePlatform, RuntimeArtifacts>>
+  /**
+   * Runtime closures per platform: exactly the platforms the release publishes, at least one. A platform without an
+   * entry is not in this release, and a client on it installs nothing.
+   */
+  readonly runtime: Readonly<Partial<Record<RuntimePlatform, RuntimeArtifacts>>>
   /** Desktop files per platform. */
   readonly desktop: Readonly<Record<DesktopPlatform, DesktopArtifacts>>
   /** The Docker images contract C9 runs. */

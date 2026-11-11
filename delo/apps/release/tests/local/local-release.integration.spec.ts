@@ -82,19 +82,19 @@ describe('a local release', () => {
     const list = verifyFileList(root.metadata, manifest, 'linux-x64', readFileSync(join(releaseDirectory(channel, '0.1.0'), 'delorun-0.1.0-linux-x64.files.json')))
     expect(list.files.map(file => file.path)).toEqual(['app/node_modules/@delo/cli/package.json', 'app/node_modules/@delo/cli/src/bin.js', 'node/bin/node'])
     const archive = readFileSync(join(releaseDirectory(channel, '0.1.0'), 'delorun-0.1.0-linux-x64.tar.gz'))
-    expect(manifest.runtime['linux-x64'].archive).toEqual({ name: 'delorun-0.1.0-linux-x64.tar.gz', length: archive.byteLength, sha256: createHash('sha256').update(archive).digest('hex') })
+    expect(manifest.runtime['linux-x64']?.archive).toEqual({ name: 'delorun-0.1.0-linux-x64.tar.gz', length: archive.byteLength, sha256: createHash('sha256').update(archive).digest('hex') })
     const bundle = readBundle(readFileSync(join(releaseDirectory(channel, '0.1.0'), 'delorun-0.1.0.manifest.log.json')))
     expect(verifyBundle(root.metadata, manifestBytes, '0.1.0', bundle).treeSize).toBe(1)
     expect(built.timestampVersion).toBe(1)
   })
 
-  it('names the files it does not build as zero-length placeholders, and no other', async (test) => {
+  it('lists only its own platform, and names the other files it does not build as zero-length placeholders', async (test) => {
     const directory = scratch(test)
     const trusted = trust()
     await buildLocalRelease(await request(test, directory, trusted, '0.1.0'))
     const manifest = readEnvelope('manifest', readFileSync(join(releaseDirectory(join(directory, 'channel'), '0.1.0'), 'delorun-0.1.0.manifest.json'))).signed
-    expect(manifest.runtime['darwin-arm64'].archive).toEqual({ name: 'delorun-0.1.0-darwin-arm64.tar.gz', length: 0, sha256: createHash('sha256').update('').digest('hex') })
-    expect(manifest.runtime['linux-x64'].archive.length).toBeGreaterThan(0)
+    expect(Object.keys(manifest.runtime)).toEqual(['linux-x64'])
+    expect(manifest.runtime['linux-x64']?.archive.length).toBeGreaterThan(0)
     expect(manifest.sbom.length).toBe(0)
     expect(manifest.npm).toEqual([])
   })

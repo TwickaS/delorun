@@ -15,7 +15,7 @@ import { BUILD_CONSTANTS, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREF
 describe('the platform a machine installs', () => {
   it('names the closure of a pair contract C2 publishes, and refuses one it does not', () => {
     expect(platformOf('linux', 'x64')).toBe('linux-x64')
-    expect(() => platformOf('plan9', 'vax')).toThrow(/Delo publishes a runtime for/)
+    expect(() => platformOf('plan9', 'vax')).toThrow(/^Delo has no runtime for plan9-vax; a release can publish one only for /u)
   })
 })
 

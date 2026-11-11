@@ -2,7 +2,8 @@
  * Signing a release with the targets key (contract C2): the checks that refuse to sign without the targets-key
  * holder's rebuild, then the signed runtime file lists, the published rebuild record and the signed manifest. Signing
  * runs on the holder's machine with the release workflow's files in a local directory and the holder's rebuild
- * record and rebuild output outside it; it checks every file the manifest names, compares every runtime archive and
+ * record and rebuild output outside it; it checks every file the manifest names, holds the manifest's runtime entries
+ * to exactly the release platforms `closure.json` lists at the release's commit, compares every runtime archive and
  * file list of the workflow's output with the holder's rebuild again, and writes nothing before every check passes.
  *
  * @module @delo/release/sign/release
@@ -18,6 +19,8 @@ import {
   type FileRef,
   type ReleaseManifest,
   type RebuildRecord,
+  type RuntimeArtifacts,
+  type RuntimePlatform,
   type SignedEnvelope,
   type UtcTimestamp,
 } from '@delo/contract-release-manifest'
@@ -99,10 +102,22 @@ async function refOf(directory: string, name: string): Promise<FileRef> {
   return { name, length, sha256: sha256Hex(sha256) }
 }
 
+/**
+ * The runtime entries of a draft, by platform.
+ * @param draft - the draft.
+ * @returns each listed platform with its archive and file list, in the manifest's platform order.
+ */
+function runtimeEntries(draft: ManifestDraft): Array<[RuntimePlatform, RuntimeArtifacts]> {
+  return RUNTIME_PLATFORMS.flatMap(platform => {
+    const artifacts = draft.runtime[platform]
+    return artifacts === undefined ? [] : [[platform, artifacts] as [RuntimePlatform, RuntimeArtifacts]]
+  })
+}
+
 /** Every file reference of a draft, with where it sits. */
 function draftRefs(draft: ManifestDraft): Array<{ where: string, ref: FileRef }> {
   const refs: Array<{ where: string, ref: FileRef }> = []
-  for (const platform of RUNTIME_PLATFORMS) refs.push({ where: `runtime.${platform}.archive`, ref: draft.runtime[platform].archive })
+  for (const [platform, artifacts] of runtimeEntries(draft)) refs.push({ where: `runtime.${platform}.archive`, ref: artifacts.archive })
   for (const [platform, files] of Object.entries(draft.desktop)) {
     refs.push({ where: `desktop.${platform}.installer`, ref: files.installer }, { where: `desktop.${platform}.update`, ref: files.update }, { where: `desktop.${platform}.blockmap`, ref: files.blockmap })
   }
@@ -166,6 +181,10 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
     refuse(`the recipe at ${record.commit} does not read: ${(error as Error).message}`)
   }
   if (record.recipe !== recipeDigest(request.repository, record.commit)) refuse(`the rebuild record's recipe digest is not the recipe at ${record.commit}`)
+  const drafted = runtimeEntries(draft).map(([platform]) => platform)
+  if (JSON.stringify([...drafted].sort()) !== JSON.stringify([...recipe.closure.platforms].sort())) {
+    throw new SigningRefusal(`signing refuses: the draft publishes a runtime for ${drafted.join(', ')}, but the release platforms closure.json lists at ${record.commit} are ${recipe.closure.platforms.join(', ')}`)
+  }
   const pinned = recordToolchain(recipe.toolchain)
   if (JSON.stringify(record.toolchain) !== JSON.stringify(pinned)) {
     refuse(`the rebuild record's toolchain ${JSON.stringify(record.toolchain)} is not the toolchain pinned at ${record.commit}, ${JSON.stringify(pinned)}`)
@@ -180,8 +199,8 @@ async function checkRebuild(request: SigningRequest, draft: ManifestDraft): Prom
     refuse(`the files in ${rebuild} do not reproduce the digests the rebuild record lists`)
   }
   const names = new Set(local.map(ref => ref.name))
-  const missing = requiredOutputs(draft.version, draft.images).filter(name => !names.has(name))
-  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
+  const missing = requiredOutputs(draft.version, recipe.closure.platforms, draft.images).filter(name => !names.has(name))
+  if (missing.length > 0) refuse(`the rebuild output lacks ${missing.join(', ')}; the comparison covers every release platform's runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
   let attestationPath: string
   let attestation: Buffer
   try {
@@ -243,9 +262,8 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   if (draft.source.repository !== RELEASE_REPOSITORY_URL || draft.source.tag !== `v${draft.version}`) {
     throw new SigningRefusal(`signing refuses: the draft's source must be ${RELEASE_REPOSITORY_URL} at tag v${draft.version}`)
   }
-  for (const platform of RUNTIME_PLATFORMS) {
+  for (const [platform, named] of runtimeEntries(draft)) {
     const expected = closureFileNames(draft.version, platform)
-    const named = draft.runtime[platform]
     if (named.archive.name !== expected.archive || named.files.name !== expected.files) {
       throw new SigningRefusal(`signing refuses: the draft names ${named.archive.name} and ${named.files.name} for ${platform}; a release's ${platform} runtime is ${expected.archive} and ${expected.files}`)
     }
@@ -286,8 +304,8 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   }
   const signedLists = new Map<string, string>()
   const runtime: Record<string, { archive: FileRef, files: FileRef }> = {}
-  for (const platform of RUNTIME_PLATFORMS) {
-    const listRef = draft.runtime[platform].files
+  for (const [platform, artifacts] of runtimeEntries(draft)) {
+    const listRef = artifacts.files
     let list: SignedEnvelope<JsonValue>
     try {
       const envelope = readEnvelope('files', await readFile(join(request.release, listRef.name)))
@@ -298,7 +316,7 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
     }
     const text = `${JSON.stringify(signEnvelope(list, [request.key]), undefined, 2)}\n`
     signedLists.set(listRef.name, text)
-    runtime[platform] = { archive: draft.runtime[platform].archive, files: { name: listRef.name, length: Buffer.byteLength(text), sha256: sha256Hex(createHash('sha256').update(text).digest('hex')) } }
+    runtime[platform] = { archive: artifacts.archive, files: { name: listRef.name, length: Buffer.byteLength(text), sha256: sha256Hex(createHash('sha256').update(text).digest('hex')) } }
   }
   const manifest: ReleaseManifest = {
     ...draft,

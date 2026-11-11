@@ -24,6 +24,7 @@ describe('an install refusal', () => {
     ['ARCHIVE_REFUSED', 'Delo refused the runtime archive the source. Nothing was installed.'],
     ['RELEASE_LOG_FAILED', 'Delo refused the source because its release-log check failed.'],
     ['RELEASE_NOT_OFFERED', 'Delo did not install that release.'],
+    ['PLATFORM_NOT_RELEASED', 'Release the source has no runtime for this computer. Nothing was installed.'],
     ['RELEASE_METADATA_INVALID', 'Delo could not read the release metadata at the source. Nothing was installed.'],
     ['TRUST_STATE_INVALID', 'Delo could not read what it stored about verified releases. Nothing was installed.'],
     ['NO_TRUSTED_ROOT', 'This launcher cannot verify any release.'],

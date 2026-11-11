@@ -160,6 +160,7 @@ describe('advisory check', () => {
       '.github/CODEOWNERS': '* @example-maintainer\n',
       'delo/apps/release/toolchain.json': toolchain,
       'delo/apps/release/rebuild-exceptions.json': readFileSync(join(RECIPE_DIR, 'rebuild-exceptions.json'), 'utf8'),
+      'delo/apps/release/closure.json': readFileSync(join(RECIPE_DIR, 'closure.json'), 'utf8'),
       'delo/apps/release/images.json': readFileSync(join(RECIPE_DIR, 'images.json'), 'utf8'),
     })
     const release = scratch(test)

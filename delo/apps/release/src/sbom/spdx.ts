@@ -39,11 +39,19 @@ export interface ImageContents {
   readonly debian: Readonly<Record<'s2' | 's3', Readonly<Record<string, ReadonlyArray<{ readonly name: string, readonly version: string, readonly architecture: string }>>>>>
 }
 
-/** The pinned toolchain parts each closure carries. */
+/** The pinned toolchain parts each closure carries, and the builder image packages that compiled its native code. */
 export interface ToolchainParts {
   readonly node: { readonly version: string, readonly origin: string }
   readonly pnpm: { readonly version: string, readonly integrity: string }
+  /**
+   * The Debian packages `toolchain.json` pins in the native builder image, as `name=version`, and the platforms whose
+   * archives hold native code that image compiled.
+   */
+  readonly builder: { readonly packages: readonly string[], readonly platforms: readonly string[] }
 }
+
+/** The Debian architecture of the builder image that compiles each Linux platform's native code. */
+const BUILDER_ARCHITECTURES: Readonly<Record<string, string>> = { 'linux-x64': 'amd64', 'linux-arm64': 'arm64' }
 
 /**
  * Whether an archive entry path is an installed package's manifest: `node_modules/<name>/package.json` or
@@ -105,7 +113,7 @@ function license(value: string | undefined): string {
  * The SBOM document.
  * @param version - the release.
  * @param epoch - the release's `SOURCE_DATE_EPOCH`.
- * @param toolchain - the pinned Node and pnpm.
+ * @param toolchain - the pinned Node and pnpm, and the native builder's packages.
  * @param archives - each archive's contents.
  * @param images - the S2 and S3 images, when the build output holds them.
  * @returns the SPDX document, ready for `JSON.stringify`.
@@ -122,6 +130,15 @@ export function spdxDocument(version: string, epoch: number, toolchain: Toolchai
     packages.set(archiveId, { SPDXID: archiveId, name: archive.name, versionInfo: version, downloadLocation: `${RELEASE_REPOSITORY_URL}/releases/download/v${version}/${archive.name}`, filesAnalyzed: false, primaryPackagePurpose: 'ARCHIVE', licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', checksums: [{ algorithm: 'SHA256', checksumValue: archive.sha256 }] })
     relationships.push({ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: archiveId })
     relationships.push({ spdxElementId: archiveId, relationshipType: 'CONTAINS', relatedSpdxElement: node }, { spdxElementId: archiveId, relationshipType: 'CONTAINS', relatedSpdxElement: pnpm })
+    const architecture = BUILDER_ARCHITECTURES[archive.platform]
+    if (architecture !== undefined && toolchain.builder.platforms.includes(archive.platform)) {
+      for (const pin of toolchain.builder.packages) {
+        const [name, debVersion] = [pin.slice(0, pin.indexOf('=')), pin.slice(pin.indexOf('=') + 1)]
+        const debId = spdxId('deb', `${name}:${architecture}`, debVersion)
+        addPackage(packages, debId, { SPDXID: debId, name, versionInfo: debVersion, downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', externalRefs: [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: `pkg:deb/debian/${encodeURIComponent(name)}@${encodeURIComponent(debVersion)}?arch=${architecture}` }] })
+        relationships.push({ spdxElementId: debId, relationshipType: 'BUILD_TOOL_OF', relatedSpdxElement: archiveId })
+      }
+    }
     const locked = integrities(archive.lockfile)
     for (const entry of archive.packages) {
       const id = spdxId('npm', entry.name, entry.version)

@@ -71,7 +71,7 @@ describe('image digests', () => {
 
   it('describes both images in the SBOM by index digest, descended from the base, with their Debian packages', () => {
     const index = `sha256:${'d'.repeat(64)}`
-    const document = spdxDocument('0.1.0', 1_793_981_656, { node: { version: '24.22.0', origin: 'https://nodejs.org/dist/v24.22.0' }, pnpm: { version: '11.28.5', integrity: `sha512-${'B'.repeat(86)}==` } }, [], {
+    const document = spdxDocument('0.1.0', 1_793_981_656, { node: { version: '24.22.0', origin: 'https://nodejs.org/dist/v24.22.0' }, pnpm: { version: '11.28.5', integrity: `sha512-${'B'.repeat(86)}==` }, builder: { packages: [], platforms: [] } }, [], {
       base: `docker.io/library/debian:bookworm-slim@sha256:${'e'.repeat(64)}`,
       images: { s2: { repository: 'ghcr.io/delo-run/delo-workspace-s2', index }, s3: { repository: 'ghcr.io/delo-run/delo-harness-s3', index } },
       debian: { s2: { 'linux/amd64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'amd64' }], 'linux/arm64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'arm64' }] }, s3: { 'linux/amd64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'amd64' }], 'linux/arm64': [] } },

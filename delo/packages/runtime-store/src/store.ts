@@ -579,7 +579,8 @@ export class RuntimeStore {
    * @returns the digest.
    */
   private listDigest(release: VerifiedRelease): string {
-    return release.manifest.runtime[this.paths.platform].files.sha256
+    // A verified release's file list is this platform's, which its manifest lists (`verifyFileList`).
+    return release.manifest.runtime[this.paths.platform]!.files.sha256
   }
 
   /**

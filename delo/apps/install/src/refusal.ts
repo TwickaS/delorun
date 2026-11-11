@@ -23,6 +23,8 @@ export function installRemedies(code: InstallErrorCode): readonly string[] {
       return ['Move the file named above out of the way and run the same command again; Delo stores it again from the release it verifies.']
     case 'RELEASE_NOT_OFFERED':
       return ['Name the release your channel publishes, or run the same command without a release to install the current one.']
+    case 'PLATFORM_NOT_RELEASED':
+      return ['Run Delo on a computer whose platform this release lists, or wait for a release that includes this platform.']
     case 'DOWNLOAD_REFUSED':
     case 'INSTALL_VERIFY_FAILED':
     case 'ARCHIVE_REFUSED':
@@ -51,6 +53,8 @@ function installLead(error: InstallError): string {
       return `Delo refused ${error.source} because its release-log check failed.`
     case 'RELEASE_NOT_OFFERED':
       return 'Delo did not install that release.'
+    case 'PLATFORM_NOT_RELEASED':
+      return `Release ${error.source} has no runtime for this computer. Nothing was installed.`
     case 'RELEASE_METADATA_INVALID':
       return `Delo could not read the release metadata at ${error.source}. Nothing was installed.`
     case 'TRUST_STATE_INVALID':

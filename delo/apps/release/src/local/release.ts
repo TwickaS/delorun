@@ -11,8 +11,8 @@
  * - `releases/download/v<version>/`, the version's release files: the manifest, its log bundle and entry request, and
  *   the Linux x64 runtime archive with its signed file list.
  *
- * A local release is signed over the Linux x64 runtime only. The other files the manifest schema requires (the other
- * platforms' runtimes, the desktop installers, the images, the SBOM, the install scripts, the rebuild record and the
+ * A local release is signed over the Linux x64 runtime only, the one platform its manifest lists. The other files the
+ * manifest schema requires (the desktop installers, the images, the SBOM, the install scripts, the rebuild record and the
  * advisory report) are zero-length placeholders that nothing in the channel serves, so the manifest says plainly that
  * those files do not exist. It does not replace the signing ceremony of `sign-release.ts`: nothing here is reproduced
  * by a second builder or checked against the advisory feed.
@@ -27,7 +27,6 @@ import {
   DESKTOP_PLATFORMS,
   RELEASE_REPOSITORY_URL,
   RELEASE_SCHEMAS,
-  RUNTIME_PLATFORMS,
   type FileRef,
   type ReleaseManifest,
   type RuntimePlatform,
@@ -123,11 +122,6 @@ async function refOf(directory: string, name: string): Promise<FileRef> {
 /** The manifest of a local release: the built runtime, and placeholders for everything the schema requires beyond it. */
 function localManifest(request: LocalReleaseRequest, runtime: { readonly archive: FileRef, readonly files: FileRef }): ReleaseManifest {
   const version = semanticVersion(request.version)
-  const placeholderRuntime = Object.fromEntries(RUNTIME_PLATFORMS.map((platform) => {
-    if (platform === LOCAL_PLATFORM) return [platform, runtime]
-    const names = closureFileNames(request.version, platform)
-    return [platform, { archive: absent(names.archive), files: absent(names.files) }]
-  }))
   const sha512 = `${'A'.repeat(86)}==`
   const desktop = Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, {
     installer: { ...absent(`Delo-${request.version}-${platform}.installer`), sha512 },
@@ -143,7 +137,7 @@ function localManifest(request: LocalReleaseRequest, runtime: { readonly archive
     channel: 'stable',
     source: { repository: RELEASE_REPOSITORY_URL, tag: `v${request.version}`, commit: request.commit },
     published: utc(request.now),
-    runtime: placeholderRuntime,
+    runtime: { [LOCAL_PLATFORM]: runtime },
     desktop,
     images: { s2: image, s3: image },
     sbom: { ...absent(`delorun-${request.version}.spdx.json`), format: 'SPDX-2.3+json' },

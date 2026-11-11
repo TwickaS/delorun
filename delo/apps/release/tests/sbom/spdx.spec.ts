@@ -21,7 +21,7 @@ const ARCHIVE: ArchiveContents = {
   lockfile: LOCKFILE,
 }
 
-const TOOLCHAIN = { node: { version: '24.22.0', origin: 'https://nodejs.org/dist/v24.22.0' }, pnpm: { version: '11.28.5', integrity: `sha512-${'B'.repeat(86)}==` } }
+const TOOLCHAIN = { node: { version: '24.22.0', origin: 'https://nodejs.org/dist/v24.22.0' }, pnpm: { version: '11.28.5', integrity: `sha512-${'B'.repeat(86)}==` }, builder: { packages: ['gcc-12=12.2.0-14+deb12u1'], platforms: ['linux-x64'] } }
 
 describe('spdxDocument', () => {
   it('describes each archive, the toolchain and every package, deterministically', () => {
@@ -39,6 +39,18 @@ describe('spdxDocument', () => {
     const archiveId = document.packages.find(item => item.name === ARCHIVE.name)!.SPDXID as string
     expect(archiveId).toMatch(/^SPDXRef-archive-[0-9a-f]{32}$/u)
     expect(document.relationships).toContainEqual({ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: archiveId })
+  })
+
+  it('names the native builder\'s pinned packages as build tools of each archive whose native code they compiled', () => {
+    const arm = { ...ARCHIVE, platform: 'linux-arm64' as const, name: 'delorun-0.1.0-linux-arm64.tar.gz' }
+    const windows = { ...ARCHIVE, platform: 'win32-x64' as const, name: 'delorun-0.1.0-win32-x64.zip' }
+    const document = spdxDocument('0.1.0', 1_793_981_656, { ...TOOLCHAIN, builder: { ...TOOLCHAIN.builder, platforms: ['linux-x64', 'win32-x64'] } }, [ARCHIVE, arm, windows]) as { packages: Array<Record<string, unknown>>, relationships: Array<Record<string, string>> }
+    const gcc = document.packages.filter(item => item.name === 'gcc-12')
+    expect(gcc).toHaveLength(1)
+    expect(gcc[0]).toMatchObject({ versionInfo: '12.2.0-14+deb12u1', externalRefs: [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: 'pkg:deb/debian/gcc-12@12.2.0-14%2Bdeb12u1?arch=amd64' }] })
+    const archiveId = (name: string): string => document.packages.find(item => item.name === name)!.SPDXID as string
+    const builds = document.relationships.filter(item => item.relationshipType === 'BUILD_TOOL_OF')
+    expect(builds).toEqual([{ spdxElementId: gcc[0]!.SPDXID, relationshipType: 'BUILD_TOOL_OF', relatedSpdxElement: archiveId(ARCHIVE.name) }])
   })
 
   it('keeps packages whose names differ only in characters an SPDX id cannot hold', () => {

@@ -24,7 +24,7 @@ import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delo/contract-release-manifest'
+import type { RuntimePlatform } from '@delo/contract-release-manifest'
 import { repositoryRoot } from '@delo/tools/src/git.ts'
 import { buildClosuresChecked, type BuildRequest } from './build-closure.ts'
 import type { ClosureFiles } from './closure/archive-closure.ts'
@@ -116,7 +116,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       closures,
       now: new Date(),
     })
-    console.log(`local-release: signed ${released.manifestName} for ${LOCAL_PLATFORM} in ${resolve(out)} (timestamp ${String(released.timestampVersion)}); the manifest's other ${String(RUNTIME_PLATFORMS.length - 1)} platforms are placeholders`)
+    console.log(`local-release: signed ${released.manifestName} for ${LOCAL_PLATFORM} in ${resolve(out)} (timestamp ${String(released.timestampVersion)}); the manifest lists no other platform`)
     return 0
   } catch (error) {
     console.error(`local-release: ${error instanceof Error ? error.message : String(error)}`)

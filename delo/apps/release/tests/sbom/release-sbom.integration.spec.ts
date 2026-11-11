@@ -2,10 +2,9 @@
  * The release SBOM written from a build output's archives: it lists the packages each archive installs, and the
  * rebuild comparison accepts a copy only when it equals the SBOM derived from the archives beside it.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, type TestContext } from 'vitest'
-import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { readRecipe } from '../../src/closure/config.ts'
 import { readImagesRecipe } from '../../src/images/build.ts'
@@ -19,12 +18,12 @@ async function output(test: TestContext): Promise<string> {
   const directory = scratch(test)
   const out = join(directory, 'out')
   mkdirSync(out)
-  for (const platform of RUNTIME_PLATFORMS) {
+  for (const platform of readRecipe().closure.platforms) {
     const stage = join(directory, `stage-${platform}`)
     writeTree(stage, { 'app/pnpm-lock.yaml': LOCKFILE, 'app/node_modules/zod/package.json': '{"name":"zod","version":"4.4.3","license":"MIT"}\n', 'app/node_modules/zod/index.js': '' })
     await archiveClosure({ stage, outDir: out, version: '0.1.0', platform, epoch: 1_793_981_656, pins: undefined })
   }
-  await writeReleaseSbom(out, '0.1.0', readRecipe().toolchain, readImagesRecipe().base)
+  await writeReleaseSbom(out, '0.1.0', readRecipe().closure.platforms, readRecipe().toolchain, readImagesRecipe().base)
   return out
 }
 
@@ -38,10 +37,22 @@ describe('release SBOM', ARCHIVE_TIMEOUT, () => {
     const text = readFileSync(join(first, sbomName('0.1.0')), 'utf8')
     expect(text).toBe(readFileSync(join(second, sbomName('0.1.0')), 'utf8'))
     const document = JSON.parse(text) as { packages: Array<{ name: string }>, relationships: Array<{ relationshipType: string }> }
-    expect(document.packages.map(item => item.name)).toEqual(expect.arrayContaining(['zod', 'node', 'pnpm', 'delorun-0.1.0-win32-x64.zip']))
-    expect(document.relationships.filter(item => item.relationshipType === 'DESCRIBES')).toHaveLength(RUNTIME_PLATFORMS.length)
+    expect(document.packages.map(item => item.name)).toEqual(expect.arrayContaining(['zod', 'node', 'pnpm', 'delorun-0.1.0-win32-x64.zip', 'gcc-12', 'musl-tools']))
+    expect(document.relationships.filter(item => item.relationshipType === 'DESCRIBES')).toHaveLength(readRecipe().closure.platforms.length)
     const recipe = { ...readRecipe(), images: readImagesRecipe() }
     expect((await compareOutputs(first, second, recipe)).differences).toEqual([])
+  })
+
+  it('covers exactly the release platforms closure.json lists', async (test) => {
+    const out = await output(test)
+    const stage = join(out, '..', 'stage-darwin-arm64')
+    writeTree(stage, { 'app/pnpm-lock.yaml': LOCKFILE, 'app/node_modules/zod/package.json': '{"name":"zod","version":"4.4.3","license":"MIT"}\n' })
+    await archiveClosure({ stage, outDir: out, version: '0.1.0', platform: 'darwin-arm64', epoch: 1_793_981_656, pins: undefined })
+    const { platforms } = readRecipe().closure
+    await writeReleaseSbom(out, '0.1.0', platforms, readRecipe().toolchain, readImagesRecipe().base)
+    expect(readFileSync(join(out, sbomName('0.1.0')), 'utf8')).not.toContain('darwin-arm64')
+    rmSync(join(out, 'delorun-0.1.0-linux-arm64.tar.gz'))
+    await expect(writeReleaseSbom(out, '0.1.0', platforms, readRecipe().toolchain, readImagesRecipe().base)).rejects.toThrow(/covers every release platform, and .* lacks an archive/u)
   })
 
   it('makes the rebuild comparison fail on an SBOM that its archives do not derive', async (test) => {

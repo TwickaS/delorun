@@ -8,7 +8,6 @@ import { createHash, randomBytes } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { RUNTIME_PLATFORMS } from '@delo/contract-release-manifest'
 import { sha256Hex } from '@delo/release-formats/brands'
 import { logEntryName, verifyBundle } from '@delo/release-formats/log/bundle'
 import { readEntryRequest } from '@delo/release-formats/log/entry'
@@ -17,7 +16,7 @@ import { outputRefs, REQUIRED_SOURCE } from '../../src/rebuild/record.ts'
 import { LogStandIn, WitnessStandIn } from '../log/standin.ts'
 import { checkFileRef, verifyFileList, verifySignedManifest } from '@delo/release-formats/sign/verify'
 import { writeTree } from '../support.ts'
-import { COMMITTED_BASE_DIGEST, COMMITTED_COMPILER, releaseFixture, rootFile, VERSION, type ReleaseFixture } from './fixture.ts'
+import { COMMITTED_BASE_DIGEST, COMMITTED_COMPILER, PLATFORMS, releaseFixture, rootFile, VERSION, type ReleaseFixture } from './fixture.ts'
 
 const MANIFEST = `delorun-${VERSION}.manifest.json`
 const RECORD = `delorun-${VERSION}.rebuild.json`
@@ -61,10 +60,12 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     expect(() => checkFileRef(manifest.rebuild.record, readFileSync(join(fixture.release, RECORD)))).not.toThrow()
     expect(readFileSync(join(fixture.release, RECORD))).toEqual(readFileSync(fixture.recordPath))
     expect((JSON.parse(readFileSync(fixture.recordPath, 'utf8')) as { toolchain: { compiler: string } }).toolchain.compiler).toBe(COMMITTED_COMPILER)
-    for (const platform of RUNTIME_PLATFORMS) {
-      verifyFileList(root, manifest, platform, readFileSync(join(fixture.release, manifest.runtime[platform].files.name)))
-      checkFileRef(manifest.runtime[platform].archive, readFileSync(join(fixture.release, manifest.runtime[platform].archive.name)))
+    expect(Object.keys(manifest.runtime)).toEqual([...PLATFORMS])
+    for (const platform of PLATFORMS) {
+      verifyFileList(root, manifest, platform, readFileSync(join(fixture.release, manifest.runtime[platform]!.files.name)))
+      checkFileRef(manifest.runtime[platform]!.archive, readFileSync(join(fixture.release, manifest.runtime[platform]!.archive.name)))
     }
+    expect(() => verifyFileList(root, manifest, 'darwin-arm64', Buffer.from('{}'))).toThrow(`release ${VERSION} publishes no runtime for darwin-arm64: the platform is not in this release`)
   })
 
   it('refuses without a rebuild record, naming the required source, and writes nothing', async (test) => {
@@ -180,19 +181,33 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     refusedWithoutWriting(fixture, await fixture.sign(), `the draft names delorun-${VERSION}-linux-arm64.tar.gz and delorun-${VERSION}-linux-arm64.files.json for linux-x64`)
   })
 
+  it('refuses a draft whose runtime platforms are not exactly the release platforms committed at the release', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    editDraft(fixture, (draft) => {
+      draft.runtime['darwin-arm64'] = { archive: { ...draft.runtime['linux-x64']!.archive, name: `delorun-${VERSION}-darwin-arm64.tar.gz` }, files: { ...draft.runtime['linux-x64']!.files, name: `delorun-${VERSION}-darwin-arm64.files.json` } }
+    })
+    refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft publishes a runtime for linux-x64, linux-arm64, darwin-arm64, win32-x64, but the release platforms closure.json lists at ${fixture.commit} are ${PLATFORMS.join(', ')}`)
+    editDraft(fixture, (draft) => {
+      delete draft.runtime['darwin-arm64']
+      delete draft.runtime['win32-x64']
+    })
+    refusedWithoutWriting(fixture, await fixture.sign(), `signing refuses: the draft publishes a runtime for linux-x64, linux-arm64, but the release platforms`)
+  })
+
   it('refuses a rebuild that lacks a platform, and a record of no outputs over an empty rebuild', async (test) => {
     const fixture = await releaseFixture(test)
     const archive = join(fixture.rebuild, `delorun-${VERSION}-linux-arm64.tar.gz`)
     const aside = join(fixture.rebuild, '..', 'aside.tar.gz')
     renameSync(archive, aside)
     const partial = fixture.record()
-    expect(partial.stderr).toContain(`lacks delorun-${VERSION}-linux-arm64.tar.gz; rebuild every platform's runtime`)
+    expect(partial.stderr).toContain(`lacks delorun-${VERSION}-linux-arm64.tar.gz; rebuild every release platform's runtime`)
     expect(partial.status).toBe(2)
     renameSync(aside, archive)
     expect(fixture.record().status).toBe(0)
     rmSync(archive)
     editRecord(fixture, record => ({ ...record, outputs: (record.outputs as Array<{ name: string }>).filter(output => !output.name.endsWith('linux-arm64.tar.gz')) }))
-    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}-linux-arm64.tar.gz; the comparison covers every runtime archive and file list`)
+    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}-linux-arm64.tar.gz; the comparison covers every release platform's runtime archive and file list`)
     const empty = join(fixture.rebuild, '..', 'empty')
     mkdirSync(empty)
     editRecord(fixture, record => ({ ...record, outputs: [] }))
@@ -278,13 +293,13 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     const aside = join(fixture.rebuild, '..', 'aside.spdx.json')
     renameSync(sbom, aside)
     const partial = fixture.record()
-    expect(partial.stderr).toContain(`lacks delorun-${VERSION}.spdx.json; rebuild every platform's runtime, the SBOM and the images`)
+    expect(partial.stderr).toContain(`lacks delorun-${VERSION}.spdx.json; rebuild every release platform's runtime, the SBOM and the images`)
     expect(partial.status).toBe(2)
     renameSync(aside, sbom)
     expect(fixture.record().status).toBe(0)
     rmSync(sbom)
     editRecord(fixture, record => ({ ...record, outputs: (record.outputs as Array<{ name: string }>).filter(output => !output.name.endsWith('.spdx.json')) }))
-    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.spdx.json; the comparison covers every runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
+    refusedWithoutWriting(fixture, await fixture.sign(), `the rebuild output lacks delorun-${VERSION}.spdx.json; the comparison covers every release platform's runtime archive and file list, the SBOM, the images file and the images' seccomp profiles`)
   })
 
   it('refuses a draft that names another file as the SBOM', async (test) => {

@@ -9,11 +9,11 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { lstat, readdir } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
-import { RUNTIME_PLATFORMS, type FileRef, type RebuildRecord, type Sha256Hex } from '@delo/contract-release-manifest'
+import type { FileRef, RebuildRecord, RuntimePlatform, Sha256Hex } from '@delo/contract-release-manifest'
 import { compareEntryPaths } from '@delo/release-formats/archive/entry'
 import { fileDigest } from '@delo/release-formats/archive/sink'
 import { sha256Hex } from '@delo/release-formats/brands'
-import { parseRecipeText, RebuildExceptions, Toolchain } from '../closure/config.ts'
+import { ClosureRecipe, parseRecipeText, RebuildExceptions, releasePlatformProblems, Toolchain } from '../closure/config.ts'
 import { closureFileNames } from '../closure/tree.ts'
 import { ImagesRecipe, imagesName, seccompLicenceName, type ReleaseImages } from '../images/build.ts'
 import { sbomName } from '../sbom/release-sbom.ts'
@@ -56,25 +56,32 @@ export interface CommittedRecipe {
   readonly toolchain: Toolchain
   /** The rebuild exceptions. */
   readonly exceptions: RebuildExceptions
+  /** The closure recipe, whose `platforms` are the platforms the release publishes. */
+  readonly closure: ClosureRecipe
   /** The image recipe, whose base the SBOM names. */
   readonly images: ImagesRecipe
 }
 
 /**
- * Read the toolchain, rebuild exceptions and image recipe as committed at a commit, not as the running checkout
- * holds them.
+ * Read the toolchain, rebuild exceptions, closure recipe and image recipe as committed at a commit, not as the running
+ * checkout holds them.
  * @param repository - the repository.
  * @param commit - the commit.
  * @returns the parsed files.
- * @throws Error when a file is missing at the commit or does not validate.
+ * @throws Error when a file is missing at the commit or does not validate, or the closure recipe lists a release
+ * platform the toolchain cannot build.
  */
 export function recipeAt(repository: string, commit: string): CommittedRecipe {
   const read = (file: string): string => execFileSync('git', ['show', `${commit}:${RECIPE_PATH}/${file}`], { cwd: repository, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-  return {
+  const recipe = {
     toolchain: parseRecipeText(Toolchain, read('toolchain.json'), `${RECIPE_PATH}/toolchain.json at ${commit}`),
     exceptions: parseRecipeText(RebuildExceptions, read('rebuild-exceptions.json'), `${RECIPE_PATH}/rebuild-exceptions.json at ${commit}`),
+    closure: parseRecipeText(ClosureRecipe, read('closure.json'), `${RECIPE_PATH}/closure.json at ${commit}`),
     images: parseRecipeText(ImagesRecipe, read('images.json'), `${RECIPE_PATH}/images.json at ${commit}`),
   }
+  const problems = releasePlatformProblems(recipe.toolchain, recipe.closure)
+  if (problems.length > 0) throw new Error(`the recipe at ${commit}: ${problems.join('; ')}`)
+  return recipe
 }
 
 /**
@@ -87,18 +94,19 @@ export function recordToolchain(toolchain: Toolchain): RebuildRecord['toolchain'
 }
 
 /**
- * The files every rebuild and every comparison must cover: each platform's runtime archive and file list, the
+ * The files every rebuild and every comparison must cover: each release platform's runtime archive and file list, the
  * release SBOM, the images file, and each seccomp profile the images list with the licence published beside it.
  * @param version - the release.
+ * @param platforms - the release platforms, `closure.json`'s `platforms` at the release's commit.
  * @param images - the image references, when known; their seccomp profiles and licences are required then.
  * @returns their names.
  */
-export function requiredOutputs(version: string, images?: ReleaseImages): string[] {
+export function requiredOutputs(version: string, platforms: readonly RuntimePlatform[], images?: ReleaseImages): string[] {
   const profiles = images === undefined ? [] : (['s2', 's3'] as const).flatMap(image => {
     const profile = images[image].seccomp
     return profile === undefined ? [] : [profile.name, seccompLicenceName(version, image)]
   })
-  return [...RUNTIME_PLATFORMS.flatMap(platform => Object.values(closureFileNames(version, platform))), sbomName(version), imagesName(version), ...new Set(profiles)]
+  return [...platforms.flatMap(platform => Object.values(closureFileNames(version, platform))), sbomName(version), imagesName(version), ...new Set(profiles)]
 }
 
 /**

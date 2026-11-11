@@ -58,8 +58,8 @@ async function main(argv: readonly string[]): Promise<number> {
     if (isWithin(await realpath(dirname(path)), release)) throw new Error(`write the rebuild record outside the release directory ${release}`)
     const outputs = await outputRefs(rebuild)
     const names = new Set(outputs.map(output => output.name))
-    const missing = requiredOutputs(version, await readReleaseImages(rebuild, version)).filter(name => !names.has(name))
-    if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every platform's runtime, the SBOM and the images`)
+    const missing = requiredOutputs(version, recipe.closure.platforms, await readReleaseImages(rebuild, version)).filter(name => !names.has(name))
+    if (missing.length > 0) throw new Error(`${rebuild} lacks ${missing.join(', ')}; rebuild every release platform's runtime, the SBOM and the images`)
     const comparison = await compareOutputs(release, rebuild, recipe, names)
     for (const line of comparisonReport(comparison)) console.log(line)
     const record: RebuildRecord = {

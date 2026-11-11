@@ -21,6 +21,7 @@ export type InstallLayoutCode = Extract<HomeLayoutErrorCode, 'DOWNLOAD_REFUSED' 
  * - `RELEASE_LOG_FAILED`: contract C18's bundle or online check failed verifiably. An online check that could not run
  *   is not an error: the install warns and records it.
  * - `RELEASE_NOT_OFFERED`: the requested version is not the release the fresh timestamp names for the channel.
+ * - `PLATFORM_NOT_RELEASED`: the verified release publishes no runtime for this computer's platform.
  * - `RELEASE_METADATA_INVALID`: a release file does not read at all, such as a timestamp that is not JSON.
  * - `TRUST_STATE_INVALID`: a stored root, timestamp or log checkpoint under `trust/` does not read.
  * - `NO_TRUSTED_ROOT`: the caller supplied no root to trust, so nothing can be verified.
@@ -31,6 +32,7 @@ export type InstallErrorCode =
   | 'ARCHIVE_REFUSED'
   | 'RELEASE_LOG_FAILED'
   | 'RELEASE_NOT_OFFERED'
+  | 'PLATFORM_NOT_RELEASED'
   | 'RELEASE_METADATA_INVALID'
   | 'TRUST_STATE_INVALID'
   | 'NO_TRUSTED_ROOT'

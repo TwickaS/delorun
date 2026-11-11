@@ -74,7 +74,7 @@ describe('release verification', () => {
     const timestamp = verifyTimestamp(release.root, release.timestamp.bytes, ISSUED + 60)
     const verified = verifyChannelManifest(release.root.metadata, timestamp, 'stable', release.manifestBytes)
     expect(verified.version).toBe('0.1.0')
-    expect(() => checkFileRef(verified.runtime['linux-x64'].archive, release.archive)).not.toThrow()
+    expect(() => checkFileRef(verified.runtime['linux-x64']!.archive, release.archive)).not.toThrow()
   })
 
   it('refuses a tampered archive', () => {
@@ -82,8 +82,8 @@ describe('release verification', () => {
     const verified = verifySignedManifest(release.root.metadata, release.manifestBytes)
     const tampered = Buffer.from(release.archive)
     tampered.writeUInt8(tampered.readUInt8(0) ^ 1, 0)
-    expect(() => checkFileRef(verified.runtime['linux-x64'].archive, tampered)).toThrow(/has SHA-256 [0-9a-f]{64}; signed metadata lists/u)
-    expect(() => checkFileRef(verified.runtime['linux-x64'].archive, Buffer.concat([release.archive, Buffer.from('x')]))).toThrow(/bytes; signed metadata lists/u)
+    expect(() => checkFileRef(verified.runtime['linux-x64']!.archive, tampered)).toThrow(/has SHA-256 [0-9a-f]{64}; signed metadata lists/u)
+    expect(() => checkFileRef(verified.runtime['linux-x64']!.archive, Buffer.concat([release.archive, Buffer.from('x')]))).toThrow(/bytes; signed metadata lists/u)
   })
 
   it('refuses timestamp metadata one second past its expiry, naming the expiry and the local clock', () => {
@@ -138,7 +138,7 @@ describe('release verification', () => {
     const withList = (bytes: Buffer): ReleaseManifest => {
       const content = manifestContent('0.1.0', release.archive)
       const files = { name: 'delorun-0.1.0-linux-x64.files.json', length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
-      return { ...content, runtime: { ...content.runtime, 'linux-x64': { ...content.runtime['linux-x64'], files } } }
+      return { ...content, runtime: { ...content.runtime, 'linux-x64': { ...content.runtime['linux-x64']!, files } } }
     }
     const own = list('0.1.0', 'linux-x64')
     expect(verifyFileList(release.root.metadata, withList(own), 'linux-x64', own).platform).toBe('linux-x64')
@@ -230,6 +230,15 @@ describe('release verification', () => {
     expect(() => verifySignedManifest(release.root.metadata, Buffer.from(text.replace('"channel": "stable",', '"channel": "stable",\n    "channel": "beta",')))).toThrow(/duplicate key "channel"/u)
     expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...manifestContent('0.1.0', release.archive), extra: true }, [release.keys.targets]))).toThrow(/extra/u)
     expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...manifestContent('0.1.0', release.archive), schema: 'delo.release-manifest/2' }, [release.keys.targets]))).toThrow(/schema/u)
+  })
+
+  it('accepts a manifest that lists some platforms, and refuses one that lists none or an unknown platform', () => {
+    const release = publish()
+    const content = manifestContent('0.1.0', release.archive)
+    const linux = { 'linux-x64': content.runtime['linux-x64'] }
+    expect(Object.keys(verifySignedManifest(release.root.metadata, envelopeBytes({ ...content, runtime: linux }, [release.keys.targets])).runtime)).toEqual(['linux-x64'])
+    expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...content, runtime: {} }, [release.keys.targets]))).toThrow(/a release publishes the runtime of at least one platform/u)
+    expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...content, runtime: { ...linux, 'freebsd-x64': content.runtime['linux-x64'] } }, [release.keys.targets]))).toThrow(/runtime/u)
   })
 
   it.each(['../delorun-0.1.0-linux-x64.tar.gz', 'release/delorun.tar.gz', '..', '.', 'a\\b', ''])('refuses the file name %j, which is not one path segment', (name) => {

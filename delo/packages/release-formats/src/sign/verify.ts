@@ -265,11 +265,13 @@ export function verifySignedManifest(root: RootMetadata, bytes: Uint8Array): Rel
  * @param platform - the platform.
  * @param bytes - the file list.
  * @returns the list.
- * @throws VerificationError when the bytes differ from the manifest's reference, the signature fails or the list
- * names another release or platform.
+ * @throws VerificationError when the manifest lists no runtime for the platform, the bytes differ from the manifest's
+ * reference, the signature fails or the list names another release or platform.
  */
 export function verifyFileList(root: RootMetadata, manifest: ReleaseManifest, platform: RuntimePlatform, bytes: Uint8Array): RuntimeFileList {
-  checkFileRef(manifest.runtime[platform].files, bytes)
+  const artifacts = manifest.runtime[platform]
+  if (artifacts === undefined) throw new VerificationError(`release ${manifest.version} publishes no runtime for ${platform}: the platform is not in this release`)
+  checkFileRef(artifacts.files, bytes)
   const envelope = readEnvelope('files', bytes)
   requireTargets(root, `file list ${platform}`, asJson(envelope), manifest.version)
   if (envelope.signed.version !== manifest.version || envelope.signed.platform !== platform) throw new VerificationError(`the file list is for ${envelope.signed.version} ${envelope.signed.platform}, not ${manifest.version} ${platform}`)
