@@ -126,6 +126,20 @@ function installFakeLefthook(root: string): void {
   chmodSync(shim, 0o755)
 }
 
+/**
+ * Replace a fixture's fake Lefthook with a shim that runs the installed Lefthook, so the hooks it writes are its own.
+ * @param root - the fixture checkout whose `node_modules/.bin` receives the shim.
+ */
+function installRealLefthook(root: string): void {
+  const real = fileURLToPath(new URL('../node_modules/lefthook/bin/index.js', import.meta.url))
+  const binDirectory = join(root, 'node_modules/.bin')
+  if (process.platform === 'win32') {
+    writeFileSync(join(binDirectory, 'lefthook.cmd'), `@echo off\r\n"${process.execPath}" "${real}" %*\r\n`)
+  } else {
+    write(join(binDirectory, 'lefthook'), `#!/bin/sh\nexec "${process.execPath}" "${real}" "$@"\n`, 0o755)
+  }
+}
+
 function createFixture(names: { main?: string; linked?: string } = {}): Fixture {
   const container = mkdtempSync(join(tmpdir(), 'dsh-lefthook-'))
   fixtures.push(container)
@@ -480,13 +494,7 @@ syncBuiltinESMExports()
 
   it('finds the not-found branch in the hooks the installed Lefthook writes', async () => {
     const fixture = createFixture()
-    const real = fileURLToPath(new URL('../node_modules/lefthook/bin/index.js', import.meta.url))
-    const binDirectory = join(fixture.main, 'node_modules/.bin')
-    if (process.platform === 'win32') {
-      writeFileSync(join(binDirectory, 'lefthook.cmd'), `@echo off\r\n"${process.execPath}" "${real}" %*\r\n`)
-    } else {
-      write(join(binDirectory, 'lefthook'), `#!/bin/sh\nexec "${process.execPath}" "${real}" "$@"\n`, 0o755)
-    }
+    installRealLefthook(fixture.main)
     write(join(fixture.main, 'lefthook.yml'), 'commit-msg:\n  jobs:\n    - run: "true"\npre-commit:\n  jobs:\n    - run: "true"\npre-push:\n  jobs:\n    - run: "true"\n')
     const result = await runInstaller(fixture, fixture.main)
     expect(result.status, result.stderr).toBe(0)
@@ -499,13 +507,7 @@ syncBuiltinESMExports()
 
   it('installs without a commit-msg hook when no config defines one, and refuses a config without pre-push', async () => {
     const fixture = createFixture()
-    const real = fileURLToPath(new URL('../node_modules/lefthook/bin/index.js', import.meta.url))
-    const binDirectory = join(fixture.main, 'node_modules/.bin')
-    if (process.platform === 'win32') {
-      writeFileSync(join(binDirectory, 'lefthook.cmd'), `@echo off\r\n"${process.execPath}" "${real}" %*\r\n`)
-    } else {
-      write(join(binDirectory, 'lefthook'), `#!/bin/sh\nexec "${process.execPath}" "${real}" "$@"\n`, 0o755)
-    }
+    installRealLefthook(fixture.main)
     write(join(fixture.main, 'lefthook.yml'), 'pre-commit:\n  jobs:\n    - run: "true"\npre-push:\n  jobs:\n    - run: "true"\n')
     const result = await runInstaller(fixture, fixture.main)
     expect(result.status, result.stderr).toBe(0)

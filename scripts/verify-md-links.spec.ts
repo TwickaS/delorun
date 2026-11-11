@@ -69,13 +69,11 @@ describe('Markdown source discovery', () => {
       'delo/docs/guide/other.md': '# Other\n',
       'delo/apps/tools/README.md': '[missing](missing.md)\n',
     })
-    const sources = markdownLinkSourcePaths(root)
-    const violations = sources.flatMap(file => findViolations(join(root, file), markdownLinkCache(), root))
-    expect(violations.map(({ file, reason }) => ({ file, reason })).sort((a, b) => a.file.localeCompare(b.file)))
-      .toEqual([
-        { file: join('delo', 'docs', 'guide', 'page.md'), reason: 'target' },
-        { file: join('delo', 'docs', 'guide', 'page.md'), reason: 'anchor' },
-      ])
+    const page = join('delo', 'docs', 'guide', 'page.md')
+    const found = markdownLinkSourcePaths(root)
+      .flatMap(file => findViolations(join(root, file), markdownLinkCache(), root))
+      .map(violation => `${violation.file} ${violation.reason}`)
+    expect(found).toEqual([`${page} target`, `${page} anchor`])
   })
 })
 
