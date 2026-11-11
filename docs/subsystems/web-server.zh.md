@@ -27,7 +27,8 @@ interface WebRoute {
 ```ts type-equiv
 /**
  * Answers one GET or HEAD request with a Fetch response. An HTTP request
- * arrives without a Peer and carries the client's headers; an in-process
+ * carries the client's headers and arrives without a Peer, except on an
+ * additional listener whose gate passed it with one; an in-process
  * {@link WebServer.readResource} read passes the Peer its caller admitted.
  */
 type WebResource = (request: Request, peer?: PeerScope) => Promise<Response>

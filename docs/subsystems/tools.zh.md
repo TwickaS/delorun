@@ -536,15 +536,15 @@ interface ToolErrorInfo {
  * model-facing reason and optional structured error identity; `cancel` selects
  * the canonical cancellation result without presenting a policy denial; `ask`
  * runs only after an approval service returns `allowed-once` and otherwise
- * denies; its `reason` is the audited approval reason and its optional
- * `displayReason` is the localized prompt text. Input rewriting is excluded because arguments are already logged and
- * presented.
+ * denies; its `reason` is the audited approval reason, its optional
+ * `displayReason` is the localized prompt text, and its optional `grants` is the approval request's marker of what
+ * allowing the call grants. Input rewriting is excluded because arguments are already logged and presented.
  */
 type PreToolDecision =
   | { kind: 'allow' }
   | { kind: 'deny'; reason: string; info?: ToolErrorInfo }
   | { kind: 'cancel' }
-  | { kind: 'ask'; reason?: string; displayReason?: { readonly en: string; readonly [locale: string]: string } }
+  | { kind: 'ask'; reason?: string; displayReason?: { readonly en: string; readonly [locale: string]: string }; grants?: ApprovalGrant }
 ```
 
 ```ts type-equiv

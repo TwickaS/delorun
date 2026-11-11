@@ -48,6 +48,14 @@ interface SkillProvider {
    * @returns the full skill body, or `undefined` if it is no longer loadable.
    */
   readonly get: (candidate: SkillCandidate, options: SkillLookupOptions) => Promise<SkillDefinition | undefined>
+  /**
+   * The skill directories this provider reads without a workspace, when its configuration names them: a consent over
+   * the writes that change a skill classifies a target against these paths instead of restating them, so a root the
+   * deployment configures is a root the consent reviews. A provider whose roots depend on a lookup cwd — or on an
+   * answer only the filesystem gives — omits it.
+   * @returns absolute root paths, in the order this provider reads them.
+   */
+  readonly configuredRoots?: () => readonly string[]
 }
 ```
 
