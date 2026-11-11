@@ -183,7 +183,7 @@ export async function runTrust(scratch: string): Promise<RunTrust> {
  */
 export async function publish(trust: RunTrust, log: JourneyLog, channel: string, version: string, closures: string): Promise<void> {
   const signed = await runEntryAsync('local-release.ts', [
-    '--version', version, '--out', channel, '--root', trust.rootPath,
+    '--version', version, '--summary', `Journey release ${version}`, '--out', channel, '--root', trust.rootPath,
     '--targets-key', trust.targetsKey, '--timestamp-key', trust.timestampKey, '--state', trust.state,
     '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles,
     '--log-poll-seconds', '0', '--closures-from', closures,

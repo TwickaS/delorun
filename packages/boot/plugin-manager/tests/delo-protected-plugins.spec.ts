@@ -116,7 +116,7 @@ async function fixture(options: FixtureOptions = {}) {
   // Delo links its bundle into the profile, and the fixture's bundles are not dependencies, so no pnpm run is real.
   writeBundle(dir, GUARD_BUNDLE, [{ insert: PROTECTED.map(name => ({ id: rowId(name), name, config: { enabled: true } })) }])
   for (const [name, patch] of Object.entries(bundles)) writeBundle(dir, name, patch)
-  writePackage(dir, LOCAL_BUNDLE, {}, ['update-gate'])
+  writePackage(dir, LOCAL_BUNDLE, {}, ['update-check', 'update-gate'])
   for (const name of PROTECTED.filter(name => !name.startsWith(`${LOCAL_BUNDLE}/`))) writePackage(dir, name)
   writeFileSync(join(dir, 'cordis.yml'), '[]\n')
   const profile: ProfileContext = {
@@ -201,9 +201,9 @@ const WEAKENING: ReadonlyArray<readonly [string, Patch]> = [
 ]
 
 describe('plugin_manager in danger-full-access with @delo/bundle-local\'s protection', () => {
-  it('names the consent and guard plugins, the update gate, sign-in and reach, and the sandbox rows', () => {
+  it('names the consent and guard plugins, the update gate, the update check, sign-in and reach, and the sandbox rows', () => {
     expect([...PROTECTED].sort()).toEqual([
-      '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delo/bundle-local/update-gate',
+      '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delo/bundle-local/update-check', '@delo/bundle-local/update-gate',
       '@delo/home-auth', '@delo/plugin-fetch-guard', '@delo/plugin-instruction-consent', '@delo/plugin-mcp-consent',
       '@delo/plugin-permission-defaults', '@delo/plugin-schedule-consent', '@delo/reach',
     ])
