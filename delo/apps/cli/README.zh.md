@@ -35,6 +35,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 | `delorun status [--profile <name>] [--json]` | 打印 home、profile、`delorun` 忽略的已继承 `DSH_HOME`，以及 home 进程的状态、进程 id、启动 id、运行时版本、运行中的 chat 与进行中的更新；`--json` 只打印其 `status` 应答 |
 | `delorun doctor [--port <n>]` | 检查 Delo home、Docker 引擎、DeepSeek API 密钥的格式以及 studio 的端口，每项检查输出一行；不联系任何模型，不启动容器，也不运行任何命令，只有只读的 `docker version` 探测例外 |
 | `delorun plugin …` | 上游的 `dsh plugin …`，针对 Delo home 运行；未给出 `--profile` 时作用于 CLI profile。pnpm 拒绝某个包的构建时，在终端询问是否只允许这一个包的构建，或按 `--allow-build <name>` 允许，写入 `allowBuilds` 中的确切键后再运行一次；被拒绝的构建保持未决 |
+| `delorun plugin new <name> [--kind tool\|preset\|ui\|bundle] [--dir <folder>]` | 在新的或空的文件夹中写出一个 `delorun plugin check` 接受的插件包，带有针对当前版本的版本范围 |
 | `delorun headless …` | 上游的 `dsh headless …`，不作改动，针对 Delo home 运行 |
 | `delorun --version [--json]` | 打印 `Delo <delo>` 与 `DSH <dsh>`，即 Delo 的版本和它所运行于的 DSH 的版本；`--json` 以一行打印 `{"delo":…,"dsh":…}`。`-v` 与 `--version` 相同 |
 
