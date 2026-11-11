@@ -590,6 +590,9 @@ describe('PluginManagerPage', () => {
     set({ busy: [versionKey(earlier)] })
     expect(screen.getByRole('button', { name: 'Restore "Installed dsh-better-sidebar"' }).getAttribute('aria-busy')).toBe('true')
     expect(screen.getByRole('button', { name: 'Restore "Changed outside plugin management"' }).hasAttribute('disabled')).toBe(true)
+    // A change the history did not save is named above the versions.
+    set({ history: { status: 'ready', reason: 'the patch holds a key', versions: [{ id: current, at: 0, summary: 'Turned off include:sidebar', changedBy: { kind: 'person' } }] } })
+    expect(screen.getByRole('status').textContent).toBe('The history did not save the latest change: the patch holds a key')
     // A failed re-read keeps the versions, with the retry.
     set({ busy: [], history: { ...READY.history, status: 'error', versions: [{ id: current, at: 0, summary: 'Turned off include:sidebar', changedBy: { kind: 'person' } }] } })
     expect(screen.getByRole('alert').textContent).toBe(en.historyError)

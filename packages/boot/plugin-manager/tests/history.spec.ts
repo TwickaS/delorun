@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { HISTORY_DIR, HistoryUnavailableError, MAX_LIST, ProfileHistory } from '../src/history.ts'
+import { HISTORY_DIR, HistoryUnavailableError, MAX_LIST, ProfileHistory, VersionRefusedError } from '../src/history.ts'
 import type { ProfileVersionId } from '../src/types.ts'
 
 const FILES = ['package.json', 'cordis.patch.yml'] as const
@@ -168,7 +168,7 @@ it('saves no version that its admission refuses, and saves the next one it admit
   })
   writeFileSync(join(dir, 'package.json'), '{}\n')
   writeFileSync(join(dir, 'cordis.patch.yml'), '- id: a\n  config:\n    key: refused\n')
-  await expect(profile.record('Refused', { kind: 'person' })).rejects.toThrow(new HistoryUnavailableError('this version of the profile was not saved: the patch holds a refused value'))
+  await expect(profile.record('Refused', { kind: 'person' })).rejects.toThrow(new VersionRefusedError('the patch holds a refused value'))
   expect(seen).toEqual([new Map([['package.json', '{}\n'], ['cordis.patch.yml', '- id: a\n  config:\n    key: refused\n']])])
   expect(await profile.list(10)).toEqual([])
   // Nothing was staged either: no object in the history's store holds the refused text.
@@ -176,6 +176,38 @@ it('saves no version that its admission refuses, and saves the next one it admit
   rmSync(join(dir, 'cordis.patch.yml'))
   const saved = await profile.record('Admitted', { kind: 'person' })
   expect(seen.at(-1)).toEqual(new Map([['package.json', '{}\n'], ['cordis.patch.yml', undefined]]))
+  expect((await profile.list(10)).map(version => version.id)).toEqual([saved])
+  expect([...(await profile.filesAt(saved!)).entries()]).toEqual([['package.json', '{}\n'], ['cordis.patch.yml', undefined]])
+})
+
+it('shows its admission every file a version would hold, those a wider caller admitted and those it tracks included', async () => {
+  writeFileSync(join(dir, 'package.json'), '{}\n')
+  writeFileSync(join(dir, 'extra.json'), '{"v":1}\n')
+  await new ProfileHistory(dir, ['package.json', 'extra.json'], 'git', 30_000).record('Wide', { kind: 'person' })
+  const seen: Array<Map<string, string | undefined>> = []
+  const narrow = new ProfileHistory(dir, ['package.json'], 'git', 30_000, (files) => {
+    seen.push(new Map(files))
+    return files.get('extra.json')?.includes('refused') === true ? 'extra.json holds a refused value' : undefined
+  })
+  writeFileSync(join(dir, 'extra.json'), '{"v":"refused"}\n')
+  await expect(narrow.record('Narrow', { kind: 'person' })).rejects.toThrow(new VersionRefusedError('extra.json holds a refused value'))
+  expect(seen).toEqual([new Map([['package.json', '{}\n'], ['extra.json', '{"v":"refused"}\n']])])
+  expect(execFileSync('git', ['--git-dir', join(dir, HISTORY_DIR), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain('refused')
+})
+
+it('saves the text its admission read, not an edit made after the read, and refuses when the admission throws', async () => {
+  writeFileSync(join(dir, 'package.json'), '{"v":1}\n')
+  const profile = new ProfileHistory(dir, FILES, 'git', 30_000, () => {
+    writeFileSync(join(dir, 'package.json'), '{"v":"edited during the save"}\n')
+    return undefined
+  })
+  const saved = await profile.record('Read once', { kind: 'person' })
+  expect((await profile.filesAt(saved!)).get('package.json')).toBe('{"v":1}\n')
+  const failing = new ProfileHistory(dir, FILES, 'git', 30_000, () => { throw new Error('no schema') })
+  const failure = await failing.record('Unchecked', { kind: 'person' }).catch((error: unknown) => error)
+  expect(failure).toBeInstanceOf(VersionRefusedError)
+  expect(failure).toBeInstanceOf(HistoryUnavailableError)
+  expect((failure as VersionRefusedError).reason).toBe('the check of this version failed: no schema')
   expect((await profile.list(10)).map(version => version.id)).toEqual([saved])
 })
 

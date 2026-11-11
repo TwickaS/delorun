@@ -20,7 +20,7 @@ The [boot package group](../../packages/boot/README.md) owns launcher-provided p
 
 `ChangeResult.changed` reports a disk edit independently of `application`: `applied`, `restart-required`, `overridden` or `failed`. Optional `error` carries a localizable code and external diagnostic. `packageResult` records the run's exit status, bounded output, truncation flag and complete diagnostic log path, plus `timedOut` when the manager terminated a run that stopped printing or the GitHub connection check hit its deadline; a terminated run records the coerced status 1 because its process returned none. A terminated run is classified `timeout` whatever exit status the signal left behind, so installation and removal report failure instead of success and no further registry is asked. `pendingBuilds` lists undecided packages across the profile; `approvedBuilds` records the names granted permission by this operation; `registries` lists the registries an installation asked, in order; `bundle` and `version` name the package a finished installation added and its manifest version; `failedAt` says whether the last failed run could not reach the registry it asked or the host a git or tarball spec is fetched from.
 
-`ProfileVersionId` identifies one version in a profile's history, a git commit id; callers obtain it from `history`. `ProfileHistoryInfo` is either `available: true` with `versions`, newest first, each with its `id`, time `at` in epoch milliseconds, one-line `summary` and `changedBy` (`person`, `agent` with its `sessionId`, or `outside`), or `available: false` with the `reason` git gave. `ChangeResult.undone` and `restored` name the version an undo took back or a restore put back, and `changes` lists what it changed. `ProfileVersionPreview` is what `previewUndo` and `previewRestore` read without saving a version: `ok: true` with the target `version` and its `changes` (the dependencies added, removed or at another spec, the bundles selected or deselected, the `allowBuilds` decisions, the version exemptions granted or revoked, whether `cordis.patch.yml` differs, and the files that could not be parsed), or `ok: false` with the refusal the operation would end with. An undo or a restore audits each package it brings back with `pluginAudit` before any of its code runs.
+`ProfileVersionId` identifies one version in a profile's history, a git commit id; callers obtain it from `history`. `ProfileHistoryInfo` is either `available: true` with `versions`, newest first, each with its `id`, time `at` in epoch milliseconds, one-line `summary` and `changedBy` (`person`, `agent` with its `sessionId`, or `outside`), and `unsaved` naming why `plugin-manager/before-record` refused to save an edit made outside plugin management, or `available: false` with the `reason` git gave. `ChangeResult.undone` and `restored` name the version an undo took back or a restore put back, and `changes` lists what it changed. `ProfileVersionPreview` is what `previewUndo` and `previewRestore` read without saving a version: `ok: true` with the target `version` and its `changes` (the dependencies added, removed or at another spec, the bundles selected or deselected, the `allowBuilds` decisions, the version exemptions granted or revoked, whether `cordis.patch.yml` differs, and the files that could not be parsed), or `ok: false` with the refusal the operation would end with. An undo or a restore audits each package it brings back with `pluginAudit` before any of its code runs.
 
 `pluginAudit` is a distribution's optional plugin audit, a Service Definition the manager consumes and does not provide: `audit(target)` receives a `PluginAuditTarget` (the package's `name`, `version`, installed `dir` and the digests the user `accepted` for it) and answers a `PluginAuditResult` (a `decision` of `clear`, `accepted`, `needs-acceptance` or `refused`, the findings' `digest`, the `findings`, each a rule, title, severity, file, line and excerpt, and whether it was `truncated`). The manager asks it at every installation and before it enables a bundle; `needs-acceptance` refuses with `audit-findings` and `refused` with `audit-refused`, each error carrying `audit`. `InstallBundleOptions.acceptedAudit` names a digest the user accepted, which the manager saves for the package in `.plugin-manager/audits.json` once the audit accepts it, and `ChangeResult.audit` carries the findings a change went on with. Without the service nothing is audited.
 
@@ -285,10 +285,11 @@ Manage profile files and apply their declared reload lifecycle.
 /**
  * Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit
  * made outside plugin management since the last change is saved as a version first, so it is that edit undo takes
- * back. It installs and audits what it brings back as {@link restore} does. The undo is itself a version, so undoing
- * it is another undo.
- * @returns Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in
- * `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
+ * back; when the `plugin-manager/before-record` check refuses to save that edit, undo takes it back by restoring the
+ * latest version instead. It installs and audits what it brings back as {@link restore} does. The undo is itself a
+ * version, so undoing it is another undo.
+ * @returns Saved and runtime outcomes, naming the version taken back as `undone`, or the latest version as `restored`
+ * when an unsaved edit was taken back, and listing what changed in `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
  * git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
  */
 @Remote undo(): Promise<ChangeResult>
@@ -307,7 +308,8 @@ Manage profile files and apply their declared reload lifecycle.
 /**
  * The profile's versions, newest first, after saving an edit made outside plugin management as a version.
  * @param limit - the most to read, from 1 to 500.
- * @returns the versions, or why the profile has no history.
+ * @returns the versions, with `unsaved` naming why the edit was not saved when `plugin-manager/before-record` refused
+ *   it, or why the profile has no history.
  */
 @Remote history(limit: number): Promise<ProfileHistoryInfo>
 

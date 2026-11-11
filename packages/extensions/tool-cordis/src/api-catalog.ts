@@ -2277,9 +2277,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote undo(): Promise<ChangeResult>',
-        description: 'Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit made outside plugin management since the last change is saved as a version first, so it is that edit undo takes back. It installs and audits what it brings back as restore does. The undo is itself a version, so undoing it is another undo.',
+        description: 'Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit made outside plugin management since the last change is saved as a version first, so it is that edit undo takes back; when the `plugin-manager/before-record` check refuses to save that edit, undo takes it back by restoring the latest version instead. It installs and audits what it brings back as restore does. The undo is itself a version, so undoing it is another undo.',
         parameters: [],
-        returns: 'Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.',
+        returns: 'Saved and runtime outcomes, naming the version taken back as `undone`, or the latest version as `restored` when an unsaved edit was taken back, and listing what changed in `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.',
       },
       {
         signature: '@Remote restore(version: ProfileVersionId): Promise<ChangeResult>',
@@ -2291,7 +2291,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote history(limit: number): Promise<ProfileHistoryInfo>',
         description: 'The profile\'s versions, newest first, after saving an edit made outside plugin management as a version.',
         parameters: [{ name: 'limit', description: 'the most to read, from 1 to 500.' }],
-        returns: 'the versions, or why the profile has no history.',
+        returns: 'the versions, with `unsaved` naming why the edit was not saved when `plugin-manager/before-record` refused it, or why the profile has no history.',
       },
       {
         signature: 'async listHistory(limit: number): Promise<ProfileHistoryInfo>',
@@ -7860,7 +7860,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ProfileHistoryInfo',
-    declaration: 'export type ProfileHistoryInfo = {\n    readonly available: true;\n    readonly versions: readonly ProfileVersion[];\n} | {\n    readonly available: false;\n    readonly reason: string;\n};',
+    declaration: 'export type ProfileHistoryInfo = {\n    readonly available: true;\n    readonly versions: readonly ProfileVersion[];\n    readonly unsaved?: string;\n} | {\n    readonly available: false;\n    readonly reason: string;\n};',
   },
   {
     name: 'ProfilePluginChange',

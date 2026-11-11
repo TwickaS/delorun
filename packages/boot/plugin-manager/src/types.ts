@@ -538,7 +538,15 @@ export type ProfileVersionPreview =
 
 /** The profile's history, newest version first, or why there is none. */
 export type ProfileHistoryInfo =
-  | { readonly available: true; readonly versions: readonly ProfileVersion[] }
+  | {
+    readonly available: true
+    readonly versions: readonly ProfileVersion[]
+    /**
+     * Why an edit made outside plugin management was not saved as a version: the `plugin-manager/before-record` check
+     * refused it. Absent when every edit is saved.
+     */
+    readonly unsaved?: string
+  }
   | { readonly available: false; readonly reason: string }
 
 /** Identifies one manager invocation, including time spent waiting for its profile lock. */

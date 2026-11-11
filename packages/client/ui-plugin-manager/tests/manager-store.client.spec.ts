@@ -605,6 +605,9 @@ describe('PluginManagerController', () => {
     plugins.history.mockResolvedValueOnce(ok({ available: false, reason: 'git could not run' }) as never)
     face.loadHistory()
     await vi.waitFor(() => { expect(state().history).toEqual({ status: 'unavailable', versions: [], reason: 'git could not run' }) })
+    plugins.history.mockResolvedValueOnce(ok({ available: true, versions: VERSIONS, unsaved: 'the patch holds a key' }) as never)
+    face.loadHistory()
+    await vi.waitFor(() => { expect(state().history).toEqual({ status: 'ready', versions: VERSIONS, reason: 'the patch holds a key' }) })
   })
 
   it('keeps the newest history read when an older one answers last', async () => {

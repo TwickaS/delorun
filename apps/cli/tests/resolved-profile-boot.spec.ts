@@ -156,6 +156,42 @@ describe('runProfile with an application-owned profile', () => {
     }
   })
 
+  it('calls prepare with the root context before any plugin package mounts', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-profile-prepare-'))
+    homes.push(home)
+    mkdirSync(join(home, 'runtime'))
+    writeFileSync(join(home, 'runtime/package.json'), '{"name":"test-runtime","version":"1.0.0"}')
+    writeFileSync(join(home, 'package.json'), '{"name":"test-bundle","version":"1.0.0"}')
+    vi.stubEnv('DSH_HOME', home)
+    vi.spyOn(process, 'on').mockReturnValue(process)
+    const ctx = new Context()
+    ctx.provide('loader', { create: vi.fn() })
+    ctx.provide('hmr', {})
+    vi.mocked(installProxyFromEnvironment).mockResolvedValue(vi.fn().mockResolvedValue(undefined))
+    const order: string[] = []
+    const plugin = vi.spyOn(ctx, 'plugin')
+    plugin.mockImplementation(((value: unknown) => { order.push(value === PluginPackages ? 'plugin-packages' : 'plugin'); return Promise.resolve() }) as never)
+    vi.mocked(boot).mockImplementation(async (_name, _root, _patches, setup) => {
+      await setup?.(ctx)
+      return ctx
+    })
+    const profile: Profile = { skippedBundles: [],
+      name: 'desktop', dir: home, patchPath: join(home, 'cordis.patch.yml'),
+      patches: [], layers: [],
+    }
+    try {
+      await runProfile({
+        environment: createLaunchEnvironmentSnapshot([]), profile: 'desktop', patchFiles: [], args: ['--no-open'],
+        resolvedProfile: { profile, installAnchor: join(home, 'runtime/package.json') },
+        prepare: (root) => { order.push(root === ctx ? 'prepare' : 'prepare-other') },
+      })
+      expect(order.slice(0, 2)).toEqual(['prepare', 'plugin-packages'])
+    } finally {
+      plugin.mockRestore()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('uses shared layers, runtime resolution, and shutdown', async () => {
     const home = mkdtempSync(join(tmpdir(), 'dsh-resolved-profile-'))
     homes.push(home)

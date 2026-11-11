@@ -2137,13 +2137,47 @@ it('leaves a settings edit saved when git cannot keep the history', async () => 
   expect(changed).not.toHaveBeenCalled()
 })
 
-it('saves no version that a before-record listener refuses, and reports the history as unavailable with its reason', async () => {
+it('saves no version that a before-record listener refuses, and still lists the versions with why the edit is unsaved', async () => {
   const { manager, ctx, dir } = await fixture()
   ctx.on('plugin-manager/before-record', files => files.get('cordis.patch.yml')?.includes('refused-value') === true ? 'the patch holds a refused value' : undefined)
-  const versions = await manager.history(10)
+  const versions = await manager.listHistory(10)
   writeFileSync(join(dir, 'cordis.patch.yml'), `${readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')}- id: extra-row\n  config:\n    limit: refused-value\n`)
-  expect(await manager.history(10)).toEqual({ available: false, reason: 'this version of the profile was not saved: the patch holds a refused value' })
+  expect(await manager.history(10)).toEqual({ ...versions, unsaved: 'the patch holds a refused value' })
   expect(await manager.listHistory(10)).toEqual(versions)
+})
+
+it('undoes an edit the before-record listener refused by restoring the latest version, and restores a chosen version without saving it', async () => {
+  const { manager, ctx, dir } = await fixture()
+  await manager.setBundleEnabled('extra', false)
+  ctx.on('plugin-manager/before-record', files => files.get('cordis.patch.yml')?.includes('refused-value') === true ? 'the patch holds a refused value' : undefined)
+  const patch = join(dir, 'cordis.patch.yml')
+  const before = readFileSync(patch, 'utf8')
+  writeFileSync(patch, `${before}- id: extra-row\n  config:\n    limit: refused-value\n`)
+  const listed = await manager.listHistory(1)
+  const latest = listed.available ? listed.versions[0] : undefined
+  expect(latest).toBeDefined()
+  expect(await manager.undo()).toMatchObject({ application: 'applied', restored: { version: latest?.id, summary: latest?.summary } })
+  expect(readFileSync(patch, 'utf8')).toBe(before)
+  // The profile is the latest version again, so the undo adds no version and nothing is left unsaved.
+  expect(await manager.history(1)).toEqual(listed)
+  writeFileSync(patch, `${before}- id: extra-row\n  config:\n    limit: refused-value\n`)
+  expect(await manager.restore(latest?.id ?? brandString<ProfileVersionId>(''))).toMatchObject({ application: 'applied', restored: { version: latest?.id } })
+  expect(readFileSync(patch, 'utf8')).toBe(before)
+})
+
+it('undoes the latest version as usual when the refused files are the ones it holds, and finds nothing to undo in an empty history', async () => {
+  const { manager, ctx, dir } = await fixture()
+  await manager.setBundleEnabled('extra', false)
+  const patch = join(dir, 'cordis.patch.yml')
+  const before = readFileSync(patch, 'utf8')
+  writeFileSync(patch, `${before}- id: extra-row\n  config:\n    limit: refused-value\n`)
+  await manager.history(1)
+  ctx.on('plugin-manager/before-record', files => files.get('cordis.patch.yml')?.includes('refused-value') === true ? 'the patch holds a refused value' : undefined)
+  expect(await manager.undo()).toMatchObject({ application: 'applied', undone: { summary: 'Changed outside plugin management' } })
+  expect(readFileSync(patch, 'utf8')).toBe(before)
+  const empty = await fixture()
+  empty.ctx.on('plugin-manager/before-record', () => 'every version is refused')
+  expect(await empty.manager.undo()).toMatchObject({ application: 'failed', error: { code: 'nothing-to-undo' } })
 })
 
 it('restores a chosen version, installing its dependency set from its lockfile', async () => {

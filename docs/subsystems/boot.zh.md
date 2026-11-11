@@ -20,7 +20,7 @@
 
 `ChangeResult.changed` 报告磁盘修改，独立于 `application`：`applied`、`restart-required`、`overridden` 或 `failed`。可选的 `error` 包含可本地化的错误码和外部诊断。`packageResult` 记录运行的退出状态、有界输出、截断标志及完整诊断日志路径；当管理器终止了一个停止打印的运行，或 GitHub 连接检查到达期限，还记录 `timedOut`；被终止的运行记录强制填入的状态 1，因为它的进程没有返回任何状态。被终止的运行不论信号留下什么退出状态都归类为 `timeout`，因此安装与删除都报告失败而非成功，也不会再询问下一个注册表。`pendingBuilds` 列出整个 profile 尚未决定的包；`approvedBuilds` 记录本次操作授予权限的包名；`registries` 按顺序列出一次安装问过的注册表；`bundle` 与 `version` 给出完成的安装新增的包及其清单版本；`failedAt` 说明最后一次失败的运行连不上的是所问的注册表，还是 git 或 tarball spec 自身拉取的主机。
 
-`ProfileVersionId` 标识 profile 历史中的一个版本，即一个 git 提交 id；调用方从 `history` 获得它。`ProfileHistoryInfo` 要么是 `available: true` 并带 `versions`（从新到旧，每个带 `id`、以纪元毫秒表示的时间 `at`、单行 `summary` 和 `changedBy`：`person`、带 `sessionId` 的 `agent`，或 `outside`），要么是 `available: false` 并带 git 给出的 `reason`。`ChangeResult.undone` 与 `restored` 指明一次撤销取回的版本或一次恢复放回的版本，`changes` 列出它改动的内容。`ProfileVersionPreview` 是 `previewUndo` 与 `previewRestore` 在不保存版本的情况下读到的内容：要么是 `ok: true` 并带目标 `version` 及其 `changes`（新增、移除或改为其他 spec 的依赖，选入或取消选入的组合包，`allowBuilds` 决定，授予或撤销的版本豁免，`cordis.patch.yml` 是否不同，以及无法解析的文件），要么是 `ok: false` 并带该操作将以之结束的拒绝。撤销或恢复会在它带回的每个包的任何代码运行之前，用 `pluginAudit` 审计该包。
+`ProfileVersionId` 标识 profile 历史中的一个版本，即一个 git 提交 id；调用方从 `history` 获得它。`ProfileHistoryInfo` 要么是 `available: true` 并带 `versions`（从新到旧，每个带 `id`、以纪元毫秒表示的时间 `at`、单行 `summary` 和 `changedBy`：`person`、带 `sessionId` 的 `agent`，或 `outside`）以及说明 `plugin-manager/before-record` 为何拒绝保存插件管理之外所做编辑的 `unsaved`，要么是 `available: false` 并带 git 给出的 `reason`。`ChangeResult.undone` 与 `restored` 指明一次撤销取回的版本或一次恢复放回的版本，`changes` 列出它改动的内容。`ProfileVersionPreview` 是 `previewUndo` 与 `previewRestore` 在不保存版本的情况下读到的内容：要么是 `ok: true` 并带目标 `version` 及其 `changes`（新增、移除或改为其他 spec 的依赖，选入或取消选入的组合包，`allowBuilds` 决定，授予或撤销的版本豁免，`cordis.patch.yml` 是否不同，以及无法解析的文件），要么是 `ok: false` 并带该操作将以之结束的拒绝。撤销或恢复会在它带回的每个包的任何代码运行之前，用 `pluginAudit` 审计该包。
 
 `pluginAudit` 是发行版可选的插件审计，一个由管理器消费而不提供的 Service Definition：`audit(target)` 接收一个 `PluginAuditTarget`（包的 `name`、`version`、已安装的 `dir`，以及用户对它 `accepted` 的摘要），返回一个 `PluginAuditResult`（`decision` 为 `clear`、`accepted`、`needs-acceptance` 或 `refused`，发现项的 `digest`，`findings`，每项含规则、标题、严重程度、文件、行和摘录，以及是否 `truncated`）。管理器在每次安装时以及启用组合包之前询问它；`needs-acceptance` 以 `audit-findings` 拒绝，`refused` 以 `audit-refused` 拒绝，两种错误都带 `audit`。`InstallBundleOptions.acceptedAudit` 指明用户接受的摘要，审计接受之后管理器把它为该包保存在 `.plugin-manager/audits.json` 中；`ChangeResult.audit` 携带一次改动继续进行时所带的发现项。没有该服务时不审计任何内容。
 
@@ -285,10 +285,11 @@ Manage profile files and apply their declared reload lifecycle.
 /**
  * Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit
  * made outside plugin management since the last change is saved as a version first, so it is that edit undo takes
- * back. It installs and audits what it brings back as {@link restore} does. The undo is itself a version, so undoing
- * it is another undo.
- * @returns Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in
- * `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
+ * back; when the `plugin-manager/before-record` check refuses to save that edit, undo takes it back by restoring the
+ * latest version instead. It installs and audits what it brings back as {@link restore} does. The undo is itself a
+ * version, so undoing it is another undo.
+ * @returns Saved and runtime outcomes, naming the version taken back as `undone`, or the latest version as `restored`
+ * when an unsaved edit was taken back, and listing what changed in `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
  * git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
  */
 @Remote undo(): Promise<ChangeResult>
@@ -307,7 +308,8 @@ Manage profile files and apply their declared reload lifecycle.
 /**
  * The profile's versions, newest first, after saving an edit made outside plugin management as a version.
  * @param limit - the most to read, from 1 to 500.
- * @returns the versions, or why the profile has no history.
+ * @returns the versions, with `unsaved` naming why the edit was not saved when `plugin-manager/before-record` refused
+ *   it, or why the profile has no history.
  */
 @Remote history(limit: number): Promise<ProfileHistoryInfo>
 

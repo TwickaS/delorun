@@ -55,7 +55,7 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | `delorun-launcher` | `runCli` takes its arguments from the launcher | shipped `cli` |
 | `doctor` | The doctor checks, app, bundle and profile template | shipped `cli` |
 | `fork-gates` | Upstream's documentation and repository gates run over Delo's tree | repository tooling |
-| `home-process-signals` | `runProfile`'s `signals` and `failLoud` options, which leave the termination-signal handlers and the last-resort error listeners to a caller that owns them | shipped `cli` (the home process) |
+| `home-process-signals` | `runProfile`'s `signals` and `failLoud` options, which leave the termination-signal handlers and the last-resort error listeners to a caller that owns them, and its `prepare` option, which registers a caller's listeners before the first row mounts | shipped `cli` (the home process, and its secret-field refusals) |
 | `host-qualified-keys` | Browser storage keys qualified by the host (C10) | parked `contract-host-qualified-keys` only |
 | `instruction-consent` | Instruction files and skill roots named for the consent check | shipped `plugin-instruction-consent` |
 | `late-projection-keys` | Projection keys registered after a Session's baseline reach open control streams | no Delo consumer on `v5` |

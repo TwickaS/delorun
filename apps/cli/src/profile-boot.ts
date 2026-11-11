@@ -270,6 +270,12 @@ export interface RunProfileOptions {
    * so the handlers do not accumulate across boots.
    */
   failLoud?: boolean | undefined
+  /**
+   * Called with the root context before the first config-tree entry mounts, so a caller's listeners also see the
+   * events the boot itself raises, such as an edit a plugin saves while it starts. What it registers is an effect of
+   * the root context.
+   */
+  prepare?: ((ctx: Context) => void) | undefined
 }
 
 /**
@@ -341,6 +347,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       // Before any config-tree entry mounts, so plugins resolve all launch-time
       // environment values from the same immutable launch snapshot.
       hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)
+      options.prepare?.(hostCtx)
       await hostCtx.plugin(PluginPackages, {
         resolution: composed.resolution,
       })

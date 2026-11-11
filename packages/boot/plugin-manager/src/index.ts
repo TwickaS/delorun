@@ -41,7 +41,7 @@ import { approveBuilds, recordPendingBuilds } from './build-approval.ts'
 import { checkGithubConnection, type GithubConnectionFailure } from './github-connection.ts'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { acceptAudit, acceptedAudits } from './audit.ts'
-import { PROFILE_FILES, ProfileHistory, writeProfileVersion } from './history.ts'
+import { PROFILE_FILES, ProfileHistory, VersionRefusedError, writeProfileVersion } from './history.ts'
 import { broughtBack, profileVersionChanges } from './version-changes.ts'
 import { chooseGitTransport, sshGitSpec } from './git-transport.ts'
 import { newerVersions, VERSION_FIELDS, VERSION_LIST_FIELDS, versionFacts } from './versions.ts'
@@ -532,17 +532,29 @@ export class PluginManager extends TypertRemoteService {
   /**
    * Take back the latest change: put the profile back as the version before the latest held it, and apply it. An edit
    * made outside plugin management since the last change is saved as a version first, so it is that edit undo takes
-   * back. It installs and audits what it brings back as {@link restore} does. The undo is itself a version, so undoing
-   * it is another undo.
-   * @returns Saved and runtime outcomes, naming the version taken back as `undone` and listing what changed in
-   * `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
-   * git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+   * back; when the `plugin-manager/before-record` check refuses to save that edit, undo takes it back by restoring the
+   * latest version instead. It installs and audits what it brings back as {@link restore} does. The undo is itself a
+   * version, so undoing it is another undo.
+   * @returns Saved and runtime outcomes, naming the version taken back as `undone`, or the latest version as `restored`
+   * when an unsaved edit was taken back, and listing what changed in `changes`. Fails with `nothing-to-undo` when the
+   * history holds fewer than two versions, `history-unavailable` when git cannot keep it, and `audit-findings` or
+   * `audit-refused` when the plugin audit refuses a package it brings back.
    */
   @Remote
   undo(): Promise<ChangeResult> {
     let summary = ''
     return this.change(result => this.configure(async () => {
-      const [latest, previous] = await this.readHistory(() => this.versions.list(2))
+      const { value: { latest, previous }, unsaved } = await this.readHistory(async () => {
+        const [latest, previous] = await this.versions.list(2)
+        return { latest: latest === undefined ? undefined : { ...latest, files: await this.versions.filesAt(latest.id) }, previous }
+      })
+      const current = this.profileFiles()
+      if (unsaved !== undefined && latest !== undefined && PROFILE_FILES.some(name => current.get(name) !== latest.files.get(name))) {
+        result.restored = { version: latest.id, summary: latest.summary }
+        summary = 'Undid an edit made outside plugin management that the history did not save'
+        await this.restoreVersion(latest.id, result)
+        return
+      }
       if (latest === undefined || previous === undefined) throw new ManagementFailure('nothing-to-undo')
       result.undone = { version: latest.id, summary: latest.summary }
       summary = `Undid "${latest.summary}"`
@@ -563,7 +575,7 @@ export class PluginManager extends TypertRemoteService {
   restore(version: ProfileVersionId): Promise<ChangeResult> {
     let summary = ''
     return this.change(result => this.configure(async () => {
-      const held = await this.readHistory(() => this.versions.version(version))
+      const { value: held } = await this.readHistory(() => this.versions.version(version))
       if (held === undefined) throw new ManagementFailure('unknown-version')
       result.restored = { version: held.id, summary: held.summary }
       summary = `Restored the version "${held.summary}"`
@@ -574,15 +586,16 @@ export class PluginManager extends TypertRemoteService {
   /**
    * The profile's versions, newest first, after saving an edit made outside plugin management as a version.
    * @param limit - the most to read, from 1 to 500.
-   * @returns the versions, or why the profile has no history.
+   * @returns the versions, with `unsaved` naming why the edit was not saved when `plugin-manager/before-record` refused
+   *   it, or why the profile has no history.
    */
   @Remote
   history(limit: number): Promise<ProfileHistoryInfo> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) return Promise.reject(new RangeError('limit must be an integer from 1 to 500'))
     return withFileLock(join(this.profile.dir, 'package.json'), async (): Promise<ProfileHistoryInfo> => {
       try {
-        await this.versions.record(OUTSIDE_SUMMARY, { kind: 'outside' })
-        return { available: true, versions: await this.versions.list(limit) }
+        const unsaved = await this.recordOutsideEdit()
+        return { available: true, versions: await this.versions.list(limit), ...unsaved === undefined ? {} : { unsaved } }
       } catch (error) {
         // Every failure of the history is a HistoryUnavailableError.
         return { available: false, reason: messageOf(error) }
@@ -662,13 +675,30 @@ export class PluginManager extends TypertRemoteService {
   }
 
   /**
-   * Read the profile's history for an undo or a restore, which cannot proceed without it: the edit made outside plugin
-   * management is saved first, and a history git cannot keep is the `history-unavailable` refusal.
+   * Save an edit made outside plugin management as its own version.
+   * @returns why the `plugin-manager/before-record` check refused to save it, or undefined when it was saved or there was
+   *   none.
+   * @throws HistoryUnavailableError when git cannot keep the history.
    */
-  private async readHistory<T>(read: () => Promise<T>): Promise<T> {
+  private async recordOutsideEdit(): Promise<string | undefined> {
     try {
       await this.versions.record(OUTSIDE_SUMMARY, { kind: 'outside' })
-      return await read()
+      return undefined
+    } catch (error) {
+      if (!(error instanceof VersionRefusedError)) throw error
+      return error.reason
+    }
+  }
+
+  /**
+   * Read the profile's history for an undo or a restore, which cannot proceed without it: the edit made outside plugin
+   * management is saved first, unless `plugin-manager/before-record` refuses it, which leaves it unsaved and names why;
+   * a history git cannot keep is the `history-unavailable` refusal.
+   */
+  private async readHistory<T>(read: () => Promise<T>): Promise<{ value: T; unsaved?: string }> {
+    try {
+      const unsaved = await this.recordOutsideEdit()
+      return { value: await read(), ...unsaved === undefined ? {} : { unsaved } }
     } catch (error) {
       // Every failure of the history is a HistoryUnavailableError.
       throw new ManagementFailure('history-unavailable', undefined, messageOf(error))
@@ -688,7 +718,7 @@ export class PluginManager extends TypertRemoteService {
    */
   private async restoreVersion(version: ProfileVersionId, result: ChangeResult): Promise<void> {
     const current = this.profileFiles()
-    const files = await this.readHistory(() => this.versions.filesAt(version))
+    const { value: files } = await this.readHistory(() => this.versions.filesAt(version))
     const changes = profileVersionChanges(current, files)
     result.changes = changes
     const provided = changes.plugins.flatMap(plugin => this.providedProtected(plugin.name))

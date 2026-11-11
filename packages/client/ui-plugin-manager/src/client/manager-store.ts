@@ -68,7 +68,7 @@ export interface HistoryState {
   readonly status: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
   /** Newest first; the first is the profile as it stands. */
   readonly versions: readonly ProfileVersion[]
-  /** Why the history is unavailable; empty otherwise. */
+  /** Why the history is unavailable, or, while it is `ready`, why it did not save the latest change; empty otherwise. */
   readonly reason: string
 }
 
@@ -938,7 +938,7 @@ export class PluginManagerController {
     try {
       const answer = await this.ctx.remote.pluginManager.history(HISTORY_LIMIT)
       if (!answer.ok) next = { ...this.getSnapshot().history, status: 'error' }
-      else if (answer.value.available) next = { status: 'ready', versions: answer.value.versions, reason: '' }
+      else if (answer.value.available) next = { status: 'ready', versions: answer.value.versions, reason: answer.value.unsaved ?? '' }
       else next = { status: 'unavailable', versions: [], reason: answer.value.reason }
     } catch (_error) {
       // A rejected transport request keeps the versions already shown, with the view's retry.

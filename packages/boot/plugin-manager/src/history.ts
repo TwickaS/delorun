@@ -55,8 +55,9 @@ const FIELD = '\u001f'
 const RECORD = '\u001e'
 
 /**
- * Decides whether one version may be saved, from the managed files as they are about to be saved.
- * @param files - each managed file's text, by name relative to the profile, or undefined for an absent file.
+ * Decides whether one version may be saved, from the files it would hold.
+ * @param files - the text of every file the version would hold, by name relative to the profile, or undefined for an
+ *   absent file: the caller's managed files, every file the history's exclusions admit and every file it tracks.
  * @returns undefined to save the version, or why it may not be saved.
  */
 export type VersionAdmission = (files: ReadonlyMap<string, string | undefined>) => string | undefined
@@ -73,6 +74,22 @@ export class HistoryUnavailableError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options)
     this.name = 'HistoryUnavailableError'
+  }
+}
+
+/** A version the history's admission refused, or could not decide on; nothing was staged or saved. */
+export class VersionRefusedError extends HistoryUnavailableError {
+  /** Why the version was not saved, as the admission gave it. */
+  readonly reason: string
+
+  /**
+   * @param reason - the admission's reason.
+   * @param options - the admission's own failure, when it threw.
+   */
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`this version of the profile was not saved: ${reason}`, options)
+    this.name = 'VersionRefusedError'
+    this.reason = reason
   }
 }
 
@@ -102,16 +119,13 @@ export class ProfileHistory {
    * @param summary - what changed, not blank; whitespace runs become one space.
    * @param changedBy - who changed it.
    * @returns the new version's id, or undefined when nothing changed.
-   * @throws HistoryUnavailableError when git cannot run or refuses, or when the admission refuses the managed files as
-   *   they are; nothing is staged or saved then.
+   * @throws HistoryUnavailableError when git cannot run or refuses; {@link VersionRefusedError} when the admission
+   *   refuses the version or throws, and nothing is staged or saved then.
    */
   async record(summary: string, changedBy: ProfileChangedBy): Promise<ProfileVersionId | undefined> {
     await this.ensure()
-    if (this.admit !== undefined) {
-      const refusal = this.admit(await this.managedFiles())
-      if (refusal !== undefined) throw new HistoryUnavailableError(`this version of the profile was not saved: ${refusal}`)
-    }
-    await this.git(['add', '--all', '--', '.'])
+    if (this.admit === undefined) await this.git(['add', '--all', '--', '.'])
+    else await this.stageAdmitted(this.admit)
     if ((await this.git(['diff', '--cached', '--quiet'], [0, 1])).exitCode === 0) return undefined
     const trailers = [`Changed-by: ${changedBy.kind}`, ...changedBy.kind === 'agent' ? [`Session: ${changedBy.sessionId}`] : []]
     await this.git(['commit', '--quiet', '--no-verify', '-m', oneLine(summary), '-m', trailers.join('\n')])
@@ -143,10 +157,18 @@ export class ProfileHistory {
     return (await this.log(['--max-count', '1', id]))[0]
   }
 
-  // The managed files as they are in the profile; an absent file reads as undefined.
-  private async managedFiles(): Promise<Map<string, string | undefined>> {
+  /**
+   * Read every file a version would hold once, ask the admission about exactly that text, and stage exactly that text,
+   * so an edit made after the read never reaches the version. The files are the managed ones, every name the
+   * exclusions admit, which a caller managing more files may have added, and every file the history tracks.
+   */
+  private async stageAdmitted(admit: VersionAdmission): Promise<void> {
+    const exclusions = (await readFile(join(this.gitDir, 'info', 'exclude'), 'utf8')).split('\n')
+    const tracked = (await this.git(['ls-files', '-z'])).stdout.split('\0')
+    const names = [...new Set([...this.files, ...exclusions.filter(line => line.startsWith('!/')).map(line => line.slice(2)), ...tracked])]
+      .filter(name => name !== '')
     const files = new Map<string, string | undefined>()
-    for (const name of this.files) {
+    for (const name of names) {
       try {
         files.set(name, await readFile(join(this.dir, name), 'utf8'))
       } catch (error) {
@@ -154,7 +176,21 @@ export class ProfileHistory {
         files.set(name, undefined)
       }
     }
-    return files
+    let refusal: string | undefined
+    try {
+      refusal = admit(files)
+    } catch (error) {
+      throw new VersionRefusedError(`the check of this version failed: ${(error as Error).message}`, { cause: error })
+    }
+    if (refusal !== undefined) throw new VersionRefusedError(refusal)
+    for (const [name, text] of files) {
+      if (text === undefined) {
+        await this.git(['update-index', '--force-remove', '--', name])
+        continue
+      }
+      const blob = (await this.git(['hash-object', '-w', '--stdin'], [0], text)).stdout.trim()
+      await this.git(['update-index', '--add', '--cacheinfo', `100644,${blob},${name}`])
+    }
   }
 
   // Whether the history holds a version with this id: a commit that its latest version reaches.
@@ -246,11 +282,11 @@ export class ProfileHistory {
     }
   }
 
-  private async git(args: readonly [string, ...string[]], accepted: readonly number[] = [0]): Promise<GitRun> {
+  private async git(args: readonly [string, ...string[]], accepted: readonly number[] = [0], input?: string): Promise<GitRun> {
     // With `reject: false`, a git that cannot start or is ended by the timeout resolves with no exit code.
     const options = ['-c', `core.hooksPath=${devNull}`, '-c', 'commit.gpgSign=false', '-c', 'core.autocrlf=false']
     const run = await execa(this.gitCommand, [...options, ...args], {
-      cwd: this.dir, reject: false, stripFinalNewline: false, timeout: this.timeoutMs,
+      cwd: this.dir, reject: false, stripFinalNewline: false, timeout: this.timeoutMs, ...input === undefined ? {} : { input },
       env: {
         GIT_DIR: this.gitDir, GIT_WORK_TREE: this.dir, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: devNull, GIT_TERMINAL_PROMPT: '0',
         GIT_AUTHOR_NAME: IDENTITY.name, GIT_AUTHOR_EMAIL: IDENTITY.email,

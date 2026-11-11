@@ -522,6 +522,7 @@ function HistoryView({ history, t, busy, onLoad, onRestore }: {
   return (
     <section className={css.detailSection} data-profile-history>
       <p className={css.historyIntro}>{t('historyIntro')}</p>
+      {history.status === 'ready' && history.reason !== '' ? <p className={css.status} role="status" data-history-unsaved>{t('historyUnsaved', { reason: history.reason })}</p> : null}
       {history.versions.length === 0 ? null : (
         <ul className={css.rows}>
           {history.versions.map((version, index) => (
