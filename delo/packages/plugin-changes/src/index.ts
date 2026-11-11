@@ -188,6 +188,7 @@ export function apply(ctx: Context, config: Config): void {
       reload: () => reloadProfile(scope.get('hmr')),
       installationBundles: config.installationBundles,
       logger: scope.logger,
+      loopbackPort: () => scope.webServer.port,
     })
     scope.effect(() => {
       const registered = routes.map(route => scope.webServer.register(route))

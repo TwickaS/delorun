@@ -66,7 +66,7 @@ import {
   type WorkReview,
   type WorkStarted,
 } from '@delo/changes'
-import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type StampedRequest } from '@delo/home'
+import { isForeignFetchSite, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, type LoopbackPort, type StampedRequest } from '@delo/home'
 import { isProfileSafetyError, readSafeMode, recover } from '@delo/profile-safety'
 import {
   ACTION_PATHS,
@@ -143,18 +143,30 @@ export interface RouteDependencies {
   readonly installationBundles: readonly string[]
   /** The Host's log, which names a failure the person sees only as `INTERNAL`, and words withheld from an answer. */
   readonly logger: { warn(message: string): void }
+  /** The loopback listener's bound port, the web server's `port` in the Host: an unstamped request is on the loopback listener only when it arrived on that socket. */
+  readonly loopbackPort: LoopbackPort
 }
 
 /** A refusal a route answers with: its status, its code and the sentence the person reads. */
 class RouteRefusal extends Error {
+  /** The HTTP status. */
+  readonly status: number
+  /** The stable code. */
+  readonly code: string
+  /** Person-facing fields the screen shows with it. */
+  readonly details: Readonly<Record<string, unknown>>
+
   /**
    * @param status - the HTTP status.
    * @param code - the stable code.
    * @param message - the sentence.
    * @param details - person-facing fields the screen shows with it.
    */
-  constructor(readonly status: number, readonly code: string, message: string, readonly details: Readonly<Record<string, unknown>> = {}) {
+  constructor(status: number, code: string, message: string, details: Readonly<Record<string, unknown>> = {}) {
     super(message)
+    this.status = status
+    this.code = code
+    this.details = details
   }
 }
 
@@ -217,12 +229,13 @@ function header(request: IncomingMessage, name: string): string | undefined {
 /**
  * Where a request arrived, decided from its listener, its `Host` and its admission, before its body is read.
  * @param request - the request.
+ * @param loopbackPort - the loopback listener's bound port.
  * @param credential - whether Connection admitted it.
  * @param remote - whether a reach listener admitted it.
  * @returns the facts `attestStudio` decides from.
  */
-export function arrivalOf(request: IncomingMessage & StampedRequest, credential: boolean, remote: boolean): StudioArrival {
-  const loopback = listenerOf(request) === 'loopback' && loopbackAddressOf(header(request, 'host')) !== undefined
+export function arrivalOf(request: IncomingMessage & StampedRequest, loopbackPort: LoopbackPort, credential: boolean, remote: boolean): StudioArrival {
+  const loopback = listenerOf(request, loopbackPort) === 'loopback' && loopbackAddressOf(header(request, 'host')) !== undefined
   return { loopback, credential, remoteSession: remote || !loopback }
 }
 
@@ -661,9 +674,10 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
  * @param request - the request.
  * @param response - the response.
  * @param connection - Connection's admission.
+ * @param loopbackPort - the loopback listener's bound port.
  * @returns the arrival and a rolled credential, or undefined when the request was answered.
  */
-function admitted(request: IncomingMessage, response: ServerResponse, connection: RouteConnection): { readonly arrival: StudioArrival, readonly setCookie?: string } | undefined {
+function admitted(request: IncomingMessage, response: ServerResponse, connection: RouteConnection, loopbackPort: LoopbackPort): { readonly arrival: StudioArrival, readonly setCookie?: string } | undefined {
   const admission = connection.admit(request)
   if ('rejection' in admission) {
     sendRefusal(response, admission.rejection === 401
@@ -671,7 +685,7 @@ function admitted(request: IncomingMessage, response: ServerResponse, connection
       : new RouteRefusal(403, 'FORBIDDEN', 'The studio does not answer this address or page.'))
     return undefined
   }
-  const arrival = arrivalOf(request, true, connection.isReachPeer(admission.peer))
+  const arrival = arrivalOf(request, loopbackPort, true, connection.isReachPeer(admission.peer))
   return { arrival, ...admission.setCookie === undefined ? {} : { setCookie: admission.setCookie } }
 }
 
@@ -712,7 +726,7 @@ function profileOf(dependencies: RouteDependencies): ChangesContext {
  */
 function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean, home: HomeWords) => Promise<object>, dependencies: RouteDependencies): RouteHandler {
   return async (request, response) => {
-    const admission = admitted(request, response, dependencies.connection)
+    const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
     if (admission === undefined) return
     let home: HomeWords | undefined
     try {
@@ -734,7 +748,7 @@ function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean,
  */
 function actionRoute(action: ChangesAction, dependencies: RouteDependencies): RouteHandler {
   return async (request, response) => {
-    const admission = admitted(request, response, dependencies.connection)
+    const admission = admitted(request, response, dependencies.connection, dependencies.loopbackPort)
     if (admission === undefined) return
     let home: HomeWords | undefined
     try {

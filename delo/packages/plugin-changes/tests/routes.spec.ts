@@ -93,7 +93,7 @@ describe('who reaches the Changes routes', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     // No route names the protection setting, and the studio's proof is refused by the setting's writer.
-    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), installationBundles: [], logger: { warn: () => {} } }).map(route => route.path)
+    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), installationBundles: [], logger: { warn: () => {} }, loopbackPort: () => undefined }).map(route => route.path)
     expect(paths.filter(path => path.includes('protection'))).toEqual([])
     expect((await post(server.port, '/delo/changes/protection', { level: 'off' })).status).toBe(404)
     await expect(setProtection(ctx.home, 'off', attestStudio({ loopback: true, credential: true, remoteSession: false }))).rejects.toMatchObject({ code: 'NOT_AT_COMPUTER' })
@@ -101,10 +101,14 @@ describe('who reaches the Changes routes', () => {
   })
 
   it('decides the arrival from the listener, the Host and the admission', () => {
-    const request = (host: string | undefined) => ({ headers: host === undefined ? {} : { host } }) as never
-    expect(arrivalOf(request('127.0.0.1:3080'), true, false)).toEqual({ loopback: true, credential: true, remoteSession: false })
-    expect(arrivalOf(request('[::1]:3080'), true, true)).toEqual({ loopback: true, credential: true, remoteSession: true })
-    expect(arrivalOf(request(undefined), true, false)).toEqual({ loopback: false, credential: true, remoteSession: true })
+    const request = (host: string | undefined, localPort = 3080) => ({ headers: host === undefined ? {} : { host }, socket: { localAddress: '127.0.0.1', localPort } }) as never
+    const port = (): number => 3080
+    expect(arrivalOf(request('127.0.0.1:3080'), port, true, false)).toEqual({ loopback: true, credential: true, remoteSession: false })
+    expect(arrivalOf(request('[::1]:3080'), port, true, true)).toEqual({ loopback: true, credential: true, remoteSession: true })
+    expect(arrivalOf(request(undefined), port, true, false)).toEqual({ loopback: false, credential: true, remoteSession: true })
+    // A loopback Host on a socket other than the loopback listener's, or before it is bound, is not at the computer.
+    expect(arrivalOf(request('127.0.0.1:3080', 4000), port, true, false)).toEqual({ loopback: false, credential: true, remoteSession: true })
+    expect(arrivalOf(request('127.0.0.1:3080'), () => undefined, true, false)).toEqual({ loopback: false, credential: true, remoteSession: true })
   })
 })
 

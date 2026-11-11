@@ -98,6 +98,7 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
   let profileReads = 0
   let reloads = 0
   const warnings: string[] = []
+  let port: number | undefined
   const routes = changesRoutes({
     connection: {
       admit: (request: IncomingMessage) => {
@@ -117,6 +118,7 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     },
     installationBundles: [],
     logger: { warn: (message: string) => { warnings.push(message) } },
+    loopbackPort: () => port,
     ...options,
   })
   const server = createServer((request, response) => {
@@ -132,8 +134,9 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
   })
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
+  port = (server.address() as AddressInfo).port
   onTestFinished(() => new Promise<void>((resolve) => { server.close(() => { resolve() }) }))
-  return { port: (server.address() as AddressInfo).port, profileReads: () => profileReads, reloads: () => reloads, warnings }
+  return { port, profileReads: () => profileReads, reloads: () => reloads, warnings }
 }
 
 /**

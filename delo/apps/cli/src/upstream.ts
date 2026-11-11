@@ -52,11 +52,15 @@ async function runUpstreamCli(argv: readonly string[]): Promise<void> {
 
 /** What upstream's command line threw in place of exiting the process, so the plugin command can finish its part. */
 class UpstreamExit extends Error {
+  /** The exit code upstream asked for. */
+  readonly code: number
+
   /**
    * @param code - the exit code upstream asked for.
    */
-  constructor(readonly code: number) {
+  constructor(code: number) {
     super(`upstream exited with ${String(code)}`)
+    this.code = code
   }
 }
 

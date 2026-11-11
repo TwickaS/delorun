@@ -47,15 +47,25 @@ export type ChangesCode =
 
 /** A refusal or failure of Changes. */
 export class ChangesError extends Error {
+  /** The closed code. */
+  readonly code: ChangesCode
+  /** The path, plugin or change id it concerns. */
+  readonly subject: string
+  /** What the person reads. */
+  readonly detail: string
+
   /**
    * @param code - the closed code.
    * @param subject - the path, plugin or change id it concerns.
    * @param detail - what the person reads.
    * @param options - the underlying error.
    */
-  constructor(readonly code: ChangesCode, readonly subject: string, readonly detail: string, options?: ErrorOptions) {
+  constructor(code: ChangesCode, subject: string, detail: string, options?: ErrorOptions) {
     super(detail, options)
     this.name = 'ChangesError'
+    this.code = code
+    this.subject = subject
+    this.detail = detail
   }
 }
 

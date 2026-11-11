@@ -189,13 +189,13 @@ describe('the plugin\'s routes in the Host', () => {
     onTestFinished(() => host.fiber.dispose())
     host.provide('tools', { guard: () => () => {} } as never)
     const handlers = new Map<string, ChangesRoute['handler']>()
-    host.provide('webServer', { register: (route: ChangesRoute) => { handlers.set(route.path, route.handler); return () => {} } } as never)
+    host.provide('webServer', { port: 3080, register: (route: ChangesRoute) => { handlers.set(route.path, route.handler); return () => {} } } as never)
     host.provide('connection', { admit: () => ({ peer: {} }), isReachPeer: () => false } as never)
     host.provide('profileContext', { name: ctx.profile, dir: ctx.profileDir, home: ctx.home } as never)
     let reconciled = 0
     host.provide('hmr', { runExclusive: <T>(operation: () => Promise<T>) => operation(), reconcileProfile: () => { reconciled += 1; return Promise.resolve({}) } } as never)
     await host.plugin(plugin, { enabled: false, installationBundles: [] })
-    const request = Object.assign(Readable.from([Buffer.from('{"plugin":"plug"}')]), { method: 'POST', url: ACTION_PATHS.off, headers: { host: '127.0.0.1:3080' } })
+    const request = Object.assign(Readable.from([Buffer.from('{"plugin":"plug"}')]), { method: 'POST', url: ACTION_PATHS.off, headers: { host: '127.0.0.1:3080' }, socket: { localAddress: '127.0.0.1', localPort: 3080 } })
     let status = 0
     let text = ''
     await handlers.get(ACTION_PATHS.off)!(request as never, { writeHead: (code: number) => { status = code }, end: (body: string) => { text = body } } as never)

@@ -56,12 +56,19 @@ export interface ChangesControllerDeps {
 
 /** A route's refusal or failed answer. */
 export class ChangesRequestError extends Error {
+  /** The HTTP status. */
+  readonly status: number
+  /** The refusal's code and sentence, or undefined when the answer carried none. */
+  readonly refusal: RefusalView | undefined
+
   /**
    * @param status - the HTTP status.
    * @param refusal - the refusal's code and sentence, or undefined when the answer carried none.
    */
-  constructor(readonly status: number, readonly refusal: RefusalView | undefined) {
+  constructor(status: number, refusal: RefusalView | undefined) {
     super(`delo-changes: the harness answered ${String(status)}${refusal === undefined ? '' : ` ${refusal.code}`}`)
+    this.status = status
+    this.refusal = refusal
   }
 }
 
@@ -104,8 +111,13 @@ export class ChangesController {
   /** Whether an action was refused because this page is not at the computer, which the state may not say yet. */
   readonly refusedRemote = createSnapshotStore<boolean>(false)
 
+  /** The page's toast. */
+  private readonly deps: ChangesControllerDeps
+
   /** @param deps - the page's toast. */
-  constructor(private readonly deps: ChangesControllerDeps) {}
+  constructor(deps: ChangesControllerDeps) {
+    this.deps = deps
+  }
 
   /**
    * Read the state. A failure keeps a state already shown.

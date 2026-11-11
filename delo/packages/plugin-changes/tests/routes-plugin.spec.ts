@@ -38,7 +38,7 @@ it('gives the routes the profile the Host runs and its hot reload', async () => 
   onTestFinished(() => ctx.fiber.dispose())
   ctx.provide('tools', { guard: () => () => {} } as never)
   const handlers = new Map<string, ChangesRoute['handler']>()
-  ctx.provide('webServer', { register: (route: ChangesRoute) => { handlers.set(route.path, route.handler); return () => {} } } as never)
+  ctx.provide('webServer', { port: 3080, register: (route: ChangesRoute) => { handlers.set(route.path, route.handler); return () => {} } } as never)
   ctx.provide('connection', { admit: () => ({ peer: {} }), isReachPeer: () => false } as never)
   ctx.provide('hmr', { runExclusive: <T>(operation: () => Promise<T>) => operation(), reconcileProfile: () => Promise.resolve({}) } as never)
   await ctx.plugin(plugin, { enabled: false, installationBundles: [] })
@@ -46,7 +46,7 @@ it('gives the routes the profile the Host runs and its hot reload', async () => 
   const answer = async (): Promise<{ status: number, body: Record<string, unknown> }> => {
     let status = 0
     let text = ''
-    await handlers.get(STATE_PATH)!({ method: 'GET', url: STATE_PATH, headers: { host: '127.0.0.1:3080' } } as never, {
+    await handlers.get(STATE_PATH)!({ method: 'GET', url: STATE_PATH, headers: { host: '127.0.0.1:3080' }, socket: { localAddress: '127.0.0.1', localPort: 3080 } } as never, {
       writeHead: (code: number) => { status = code },
       end: (body: string) => { text = body },
     } as never)
