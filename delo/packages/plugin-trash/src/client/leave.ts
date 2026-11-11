@@ -54,11 +54,14 @@ export interface TrashLeaveDeps {
 
 /** Moves the main pane and the keyboard on after the chat it shows moved to the trash; one per page. */
 export class TrashLeave {
+  private readonly deps: TrashLeaveDeps
   private readonly waits = new Set<() => void>()
   private disposed = false
 
   /** @param deps - the page's chat, workspaces, New chat and document. */
-  constructor(private readonly deps: TrashLeaveDeps) {}
+  constructor(deps: TrashLeaveDeps) {
+    this.deps = deps
+  }
 
   /**
    * Read the main pane before a chat moves to the trash.
