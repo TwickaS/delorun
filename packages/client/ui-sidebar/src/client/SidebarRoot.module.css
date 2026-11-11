@@ -41,13 +41,14 @@
   pointer-events: none;
 }
 
-.backdrop:empty {
+/* The slot outlet always renders its `[data-slot]` anchor, and a crashed occupant leaves a `[data-slot-error]` face, so the box counts as empty while it holds nothing else. */
+.backdrop:not(:has(:not([data-slot], [data-slot-error]))) {
   display: none;
 }
 
-/* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. `:has()` may not nest inside `:has()`, so the plain-art test sits beside the first `:has()`, not inside it. */
-.root:has(> .backdrop:not(:empty)):not(:has(> .backdrop > [data-backdrop-plain])) .logoRow,
-.root:has(> .backdrop:not(:empty)):not(:has(> .backdrop > [data-backdrop-plain])) .topStrip {
+/* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. Both tests look through the slot's anchor, and `:has()` may not nest inside `:has()`, so the plain-art test sits beside the first `:has()`, not inside it. */
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .logoRow,
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .topStrip {
   color: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-secondary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 82%, transparent);

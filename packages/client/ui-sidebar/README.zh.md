@@ -45,7 +45,7 @@ root 作用域的 `sidebar.panellist.actions` list 有注册项时，导航区�
 
 发行版可通过 `ctx.sidebarLayout.setPanelPlacement('footer')` 把面板列表移入侧边栏底部：此时面板为图标按钮，标签以 tooltip 显示，位于 `sidebar.settings` 行的末尾；收起的 rail 上则是其上方的一列。最近一次调用生效，直到其 disposer 运行；未调用时面板列表位于 New Session 之下。`ctx.sidebarLayout.setLeadPanel(panelId)` 让该面板的行位于侧边栏顶部，处于品牌行与 New Session 之间，且不再出现在面板列表中，直到其 disposer 运行；与 placement 一样，最近一次调用生效。第二个参数是布尔值的 observable，为 true 时该行同时标记为当前项，适用于把主视图交给其代表的 Session 的面板。
 
-`ctx.sidebarLayout.setNewSessionButton(false)` 为自带 New chat 列表的发行版隐藏展开侧边栏中的 New Session 按钮；收起的 rail 仍保留该按钮，最近一次调用生效，直到其 disposer 运行。`ctx.sidebarLayout.setFootRow(true)` 把展开侧边栏的底部排成一行：依次为 `sidebar.settings` 区域、位于底部时的面板列表，然后 `sidebar.footer.action` 条目占满其余空间，每个条目都带有 `inline: true`，以便紧凑绘制；否则底部操作堆叠在设置行上方。最近一次调用生效，直到其 disposer 运行。展开的侧边栏还会在品牌行之下的 80px 盒子中绘制单个 `sidebar.backdrop` slot；占用该 slot 时，品牌与切换按钮会变为浅色以便在图片上可读，除非占用方的顶层元素带有 `data-backdrop-plain`（如小徽章）。占用方填满该盒子，不接收指针事件，并与侧边栏渐融为一体。
+`ctx.sidebarLayout.setNewSessionButton(false)` 为自带 New chat 列表的发行版隐藏展开侧边栏中的 New Session 按钮；收起的 rail 仍保留该按钮，最近一次调用生效，直到其 disposer 运行。`ctx.sidebarLayout.setFootRow(true)` 把展开侧边栏的底部排成一行：依次为 `sidebar.settings` 区域、位于底部时的面板列表，然后 `sidebar.footer.action` 条目占满其余空间，每个条目都带有 `inline: true`，以便紧凑绘制；否则底部操作堆叠在设置行上方。最近一次调用生效，直到其 disposer 运行。展开的侧边栏还会在品牌行之下的 80px 盒子中绘制单个 `sidebar.backdrop` slot；占用方在其中渲染元素时，品牌与切换按钮会变为浅色以便在图片上可读，除非占用方的某个元素带有 `data-backdrop-plain`（如小徽章或品牌行下的遮罩）；未渲染任何元素的占用方让该盒子保持隐藏。占用方填满该盒子，不接收指针事件，并与侧边栏渐融为一体。
 
 ### 折叠行为
 
