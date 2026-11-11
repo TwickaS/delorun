@@ -754,6 +754,18 @@ describe('the sandbox provider\'s protected home', () => {
     }
   })
 
+  it('leaves out of a directory listing a child that links to the home, with everything below it', async () => {
+    const { ctx, root, owner } = await setup({}, { sandboxMode: 'workspace-write' })
+    const { home } = await protectedHomeFixture(root)
+    await ctx.plugin(ProtectingProvider)
+    await mkdir(join(root, 'proj', 'src'), { recursive: true })
+    await symlink(home, join(root, 'proj', 'h'), 'dir')
+    const listing = text(await call(ctx, owner, { command: 'view', path: join(root, 'proj') }))
+    expect(listing).toContain(join(root, 'proj', 'src'))
+    expect(listing).not.toContain(join(root, 'proj', 'h'))
+    expect(listing).not.toContain('secrets')
+  })
+
   it('reads under the home under danger-full-access, and without a provider that protects it', async () => {
     const { ctx, root, owner } = await setup({}, { sandboxMode: 'danger-full-access' })
     const { home } = await protectedHomeFixture(root)

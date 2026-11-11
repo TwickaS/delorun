@@ -12,7 +12,7 @@ import { truncateWithoutSplittingSurrogatePair } from '@deepseek-ai/dsh-output-r
 import { sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
-import { refuseProtectedRead } from '@deepseek-ai/dsh-tool-fs'
+import { protectedReadCheck, refuseProtectedRead } from '@deepseek-ai/dsh-tool-fs'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
 
@@ -202,13 +202,16 @@ async function listDirectory(
   maxOutputChars: number,
   exec: ToolRunContext,
 ): Promise<string> {
+  // A child that resolves under the protected home, such as a link to it, is left out with everything below it.
+  const refused = protectedReadCheck(ctx, exec)
   async function visit(dir: FsTarget, depth: number): Promise<string[]> {
     const entries = await ctx.fs.listDir(dir, exec.signal)
     const rows: string[] = []
     for (const entry of entries.filter(candidate =>
       !candidate.name.startsWith('.')
       && candidate.name !== 'node_modules'
-      && candidate.name !== '__pycache__')) {
+      && candidate.name !== '__pycache__'
+      && !refused(candidate.target))) {
       const type = entry.type === 'directory' ? 'd' : entry.type === 'file' ? 'f' : '?'
       rows.push(`${type}\t${entry.target.displayPath}`)
       if (entry.type === 'directory' && depth < 2) {

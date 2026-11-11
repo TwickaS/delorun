@@ -1133,8 +1133,8 @@
     {
       "path": "packages/fs/tool-fs/src/index.ts",
       "class": "security",
-      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. Protected home: exports `refuseProtectedRead` so `dsh-tool-str-replace-editor` applies the same check. Lead verdict (2026-11-11): kept; with no writeConsent service the gate calls next() as upstream does, and a refusal writes nothing.",
-      "sha256": "133b0ca44037dc3f7caa4f8d89dd7ce2c753e7c15d2b049ce8604840e7d7f783"
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. Protected home: exports `refuseProtectedRead` and `protectedReadCheck` so `dsh-tool-str-replace-editor` applies the same check.",
+      "sha256": "4e0d88705239ed87ae826b9e6d7af5dfc2256084a44c527b96f4efbcda2355f2"
     },
     {
       "path": "packages/fs/tool-fs/src/patch/plan.ts",
@@ -1145,8 +1145,8 @@
     {
       "path": "packages/fs/tool-fs/src/read-target.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes. Lead verdict (2026-11-11): kept; the protected-read refusal runs on the canonical target before any read and is skipped only under danger-full-access; the read itself is confirmed on the opened descriptor in fs-local.",
-      "sha256": "1f6fbd3db4b364620bb9e4308cc5c6924d387a02fccd234f862545e5529741b4"
+      "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes. `protectedReadCheck` returns the same check as a predicate read once per call, for a tool that checks many targets, such as a directory listing.",
+      "sha256": "c64ba2bd7ba02953c051705ef167e54ed1e6baf32587c38677f6407bf6151cb4"
     },
     {
       "path": "packages/fs/tool-fs/src/sandbox.ts",
@@ -1157,8 +1157,8 @@
     {
       "path": "packages/fs/tool-str-replace-editor/src/index.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): every command resolves its path through `dsh-tool-fs`'s shared `refuseProtectedRead`, so `view` cannot read or list under the protected home and its aliases outside the readable and tool-readable entries, unless the call runs under `danger-full-access`. Lead verdict (2026-11-11): kept; view and edit call the shared refuseProtectedRead from dsh-tool-fs instead of a private copy, and a target swapped after the check fails on the opened descriptor.",
-      "sha256": "648c19c45e0ce139f656062dd7631199e6986e8308aef4ff6e55a75bbf5d2870"
+      "reason": "Protected home, read fence (review of #66): every command resolves its path through `dsh-tool-fs`'s shared `refuseProtectedRead`, so `view` cannot read or list under the protected home and its aliases outside the readable and tool-readable entries, unless the call runs under `danger-full-access`. A directory listing leaves out each child whose resolved target the check refuses, with everything below it.",
+      "sha256": "d57a0e11f4f3b278cbfddc6db32e64fcc26eae8b9029d850ddf05ec62fd38064"
     },
     {
       "path": "packages/host/open-in-app/src/resolver.ts",

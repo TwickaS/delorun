@@ -13,8 +13,25 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { sessionResolveOptions } from './session-cwd.ts'
 
 /**
+ * The sandbox provider's protected-read check for one tool call, read once: true for a target under the protected home
+ * or another path that reaches it, outside its readable and tool-readable entries, unless the call runs under
+ * `danger-full-access`. A provider that protects nothing makes it always false.
+ * @param ctx - the plugin context.
+ * @param exec - the tool execution, whose session decides the sandbox mode when `mode` is omitted.
+ * @param mode - the call's resolved mode, when the tool already resolved its policy.
+ * @returns a predicate that is true for a target the tool must not read or list.
+ */
+export function protectedReadCheck(ctx: Context, exec: ToolExecution, mode?: SandboxMode): (target: FsTarget) => boolean {
+  const reads = ctx.get('sandbox')?.protectedReads
+  if (reads === undefined) return () => false
+  const callMode = mode ?? ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
+  const refused = protectedReadGuard(reads, callMode)
+  return target => refused(target.targetKey)
+}
+
+/**
  * Refuse a model-facing tool's access to a target under the sandbox provider's protected home, outside its readable
- * entries, unless the call runs under `danger-full-access`.
+ * entries, unless the call runs under `danger-full-access` ({@link protectedReadCheck}).
  * @param ctx - the plugin context.
  * @param exec - the tool execution, whose session decides the sandbox mode when `mode` is omitted.
  * @param target - the resolved target.
@@ -22,10 +39,7 @@ import { sessionResolveOptions } from './session-cwd.ts'
  * @throws {FsError} `FS_SANDBOX_DENIED` for a protected target.
  */
 export function refuseProtectedRead(ctx: Context, exec: ToolExecution, target: FsTarget, mode?: SandboxMode): void {
-  const reads = ctx.get('sandbox')?.protectedReads
-  if (reads === undefined) return
-  const callMode = mode ?? ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
-  if (protectedReadGuard(reads, callMode)(target.targetKey)) {
+  if (protectedReadCheck(ctx, exec, mode)(target)) {
     throw new FsError(`cannot read "${target.displayPath}": file access denied under the protected home`, 'FS_SANDBOX_DENIED')
   }
 }

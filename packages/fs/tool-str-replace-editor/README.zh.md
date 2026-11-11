@@ -52,7 +52,7 @@ kind: "package-reference"
 
 ### 失败与恢复
 
-`view`、`str_replace` 或 `insert` 发生元数据未命中时，工具会在返回 `FS_NOT_FOUND` 前记录确认缺失，因此后续 `create` 可以通过已挂载策略的防护创建流程恢复外部删除的路径；缺失状态绝不会授权 `str_replace` 或 `insert`。防护变更继承策略插件的错误码与恢复指令——`FS_NOT_OBSERVED`（先读取文件再重试）、`FS_STALE_VERSION`（先重新读取再重试）——沙箱拒绝则表现为 `[sandbox: file access denied under <mode> mode]` 标记。路径必须是绝对路径；相对路径会被拒绝并给出提示。每个命令都对解析后的路径应用 `dsh-tool-fs` 的受保护主目录读取检查 `refuseProtectedRead`。当挂载的 `ctx.sandbox` 提供方报告 `protectedReads` 时，位于受保护主目录或到达它的其他路径之下、且不在其可读条目与工具可读条目内的目标会以 `FS_SANDBOX_DENIED` 被拒绝，除非该调用在 `danger-full-access` 下运行；直接通过 `ctx.fs` 读取的插件不受影响。
+`view`、`str_replace` 或 `insert` 发生元数据未命中时，工具会在返回 `FS_NOT_FOUND` 前记录确认缺失，因此后续 `create` 可以通过已挂载策略的防护创建流程恢复外部删除的路径；缺失状态绝不会授权 `str_replace` 或 `insert`。防护变更继承策略插件的错误码与恢复指令——`FS_NOT_OBSERVED`（先读取文件再重试）、`FS_STALE_VERSION`（先重新读取再重试）——沙箱拒绝则表现为 `[sandbox: file access denied under <mode> mode]` 标记。路径必须是绝对路径；相对路径会被拒绝并给出提示。每个命令都对解析后的路径应用 `dsh-tool-fs` 的受保护主目录读取检查 `refuseProtectedRead`，目录列表会略去解析到受保护主目录之下的每个子项（例如指向它的链接）及其下的一切。当挂载的 `ctx.sandbox` 提供方报告 `protectedReads` 时，位于受保护主目录或到达它的其他路径之下、且不在其可读条目与工具可读条目内的目标会以 `FS_SANDBOX_DENIED` 被拒绝，除非该调用在 `danger-full-access` 下运行；直接通过 `ctx.fs` 读取的插件不受影响。
 
 -----
 
