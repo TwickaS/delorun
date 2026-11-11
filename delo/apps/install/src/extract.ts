@@ -145,7 +145,8 @@ async function writeEntry(target: string, data: Buffer, mode: number): Promise<s
  * @returns how many files were written, and each one's identity.
  * @throws {InstallError} `ARCHIVE_REFUSED` for an entry type, path or name the archive may not hold, or one the list
  *   does not name; `INSTALL_VERIFY_FAILED` for a length or digest the list contradicts, or a listed file the archive
- *   does not hold. Every write has ended when it throws.
+ *   does not hold; `DOWNLOAD_FAILED` for a file that cannot be written, as for a download that cannot be. Every write
+ *   has ended when it throws.
  */
 export async function extractArchive(request: ExtractRequest): Promise<Extracted> {
   const listed = new Map(request.files.files.map(file => [file.path, file]))
@@ -178,9 +179,14 @@ export async function extractArchive(request: ExtractRequest): Promise<Extracted
       const created = directory
       const { path, data } = entry
       await pool.add(data.byteLength, async () => {
-        const failed = await created
-        if (failed !== undefined) throw failed.error
-        written.set(path, await writeEntry(target, data, installedFileMode(expected.mode)))
+        try {
+          const failed = await created
+          if (failed !== undefined) throw failed.error
+          written.set(path, await writeEntry(target, data, installedFileMode(expected.mode)))
+        } catch (error) {
+          // A full disk or a staging directory changed under the install is a write failure, not an unreadable archive.
+          throw new InstallError('DOWNLOAD_FAILED', target, `${target} cannot be written: ${messageOf(error)}`, { cause: error })
+        }
       })
     }
     await pool.finish()

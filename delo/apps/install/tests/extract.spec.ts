@@ -199,6 +199,16 @@ describe('an archive the format may not hold', () => {
   })
 })
 
+describe('a file that cannot be written', () => {
+  it('stops the extraction as a write failure, not as an archive that cannot be read', async () => {
+    const directory = await scratch()
+    const staging = join(directory, 'staging')
+    await writeFile(staging, 'a file where the staging directory should be')
+    const error = await refusal(extractArchive({ archive: await archiveOf(ENTRIES), format: 'tar.gz', files: fileList(ENTRIES), directory: staging }), 'DOWNLOAD_FAILED')
+    expect(error.detail).toContain('cannot be written')
+  })
+})
+
 describe('a path outside the staging directory', () => {
   it('is refused before anything is written', () => {
     for (const path of ['../outside', '/etc/passwd', 'a/../../b', 'a//b', '..']) {
