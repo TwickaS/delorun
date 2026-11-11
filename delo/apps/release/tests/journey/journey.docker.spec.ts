@@ -421,7 +421,8 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     const link = /(http:\/\/\S+)/u.exec(printed.stdout)?.[1]
     expect(link, printed.stdout.slice(-2000)).toBeDefined()
     expect(await probe('exchange', link!)).toEqual({ status: 303 })
-    await expect(probe('exchange', link!)).rejects.toThrow('not 303')
+    // The link works once: the probe reports the status without throwing, and a second use is refused as not signed in.
+    expect(await probe('exchange', link!)).toEqual({ status: 401 })
   }, STEP)
 
   it('step 2: with the log silent a fresh install warns and records unchecked; with the log contradicting it refuses and installs nothing', async () => {
@@ -517,13 +518,18 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     customised.files = await customisations()
   }, STEP)
 
-  it('step 4a: delorun update stops before it fetches anything when git cannot run, and says what to install', async () => {
+  it('step 4a: delorun update stops before it fetches anything when git cannot run, and says what to install; the update check needs no git', async () => {
     await ensureRunning()
     const before = await stats(`${HOME}/runtimes`)
     // The person's PATH without the system directories, where Debian puts git; the launcher and its Node stay on it.
-    const refused = await delorun(['update', '--check'], { PATH: `${PERSON_HOME}/.local/bin:/usr/local/bin` })
+    const noGit = { PATH: `${PERSON_HOME}/.local/bin:/usr/local/bin` }
+    const refused = await delorun(['update', '--report'], noGit)
     expect(refused.stderr).toContain('git cannot run here: no git command is on PATH. Install git, then run delorun update again. Nothing was fetched or changed.')
     expect(refused.status).toBe(1)
+    // The update check reads the channel's signed files and changes nothing, so it runs without git.
+    const checked = await delorun(['update', '--check'], noGit)
+    expect(checked.stdout, checked.stderr).toBe(`Delorun ${R1} is the newest release on the stable channel.\n`)
+    expect(checked.status).toBe(0)
     expect(await stats(`${HOME}/runtimes`)).toEqual(before)
   }, STEP)
 
@@ -633,12 +639,18 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     expect(await hashes(`${PERSON_HOME}/tampered-home/runtimes`)).toEqual({})
   }, STEP)
 
-  it('step 9b: an update to that release is refused before installation, with runtimes/ unchanged', async () => {
+  it('step 9b: an update to that release is refused before installation, with runtimes/ unchanged; the update check names it, as it reads no archive', async () => {
     await ensureRunning()
     const before = await stats(`${HOME}/runtimes`)
-    const refused = await delorun(['update', '--check'])
-    expect(`${refused.stdout}\n${refused.stderr}`).toMatch(/data-formats\.json|did not verify|INSTALL_VERIFY_FAILED/u)
-    expect(refused.status).toBe(1)
+    // The channel's signed metadata is intact; only a file inside the archive changed, which the check never downloads.
+    const checked = await delorun(['update', '--check'])
+    expect(checked.stdout, checked.stderr).toContain(`Delorun ${R4} is available`)
+    expect(checked.status).toBe(0)
+    for (const args of [['update', '--report'], ['update', '--yes']]) {
+      const refused = await delorun(args)
+      expect(`${refused.stdout}\n${refused.stderr}`).toMatch(/data-formats\.json|did not verify|INSTALL_VERIFY_FAILED/u)
+      expect(refused.status).toBe(1)
+    }
     expect(await stats(`${HOME}/runtimes`)).toEqual(before)
   }, STEP)
 
