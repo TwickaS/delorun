@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Serve the built Web shell to browsers from its configured distribution directory. The root and configured index path render the bootstrapped index; existing assets are served directly, while missing or non-file paths return 404, traversal returns 403, and unsupported methods return 405. Index access requires a valid process token or browser cookie, and so does every other file except the install files at the dist root: the Web app manifest, the icons it lists, the favicons and the touch icons. Only one instance can handle unmatched routes at a time; a second activation fails, and unloading the active instance makes unmatched requests return 404.
+Serve the built Web shell to browsers from its configured distribution directory. The root and configured index path render the bootstrapped index; existing assets are served directly, missing or non-file paths return 404, traversal returns 403, and unsupported methods return 405. The index and every file need a valid process token or browser cookie, except the install files at the dist root: the Web app manifest, its icons, the favicons and the touch icons. One instance handles unmatched routes at a time; a second activation fails, and unloading the active instance makes unmatched requests return 404.
 
 ## Table of Contents
 
