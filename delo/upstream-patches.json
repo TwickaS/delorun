@@ -432,7 +432,7 @@
       "path": "packages/client/connection/src/reach.ts",
       "class": "security",
       "reason": "Admission seam (C4): reach listeners. `openReachListener` opens one only while an authenticator provider serves a valid reach policy for it, in a fiber that injects `authenticator`, so it closes before the provider is removed or replaced and never reopens by itself. Its dispatcher removes `tailscale-*` headers, refuses a foreign or loopback `Host`, a foreign SNI, a foreign or absent upgrade `Origin`, the launch token, `/connect` and `dsh-auth-*` cookies, then admits through the provider, sending a pre-login request only to its listed route. `builtinAdmission` exposes Connection's built-in loopback admission for providers to delegate to. The dispatcher also refuses a non-origin-form target and a second `Host` line, removes identity headers from the parsed, distinct and raw header views, records each admitted connection's session and device for `closeReachConnections`, and applies a policy change announced while the listener binds. Every reach response, refusals included, carries C4's security headers and a Content Security Policy with a fresh nonce, which the pass decision hands to the index renderer; the policy allows no string evaluation, images only from the origin, `data:` and `blob:`, and `no-store` covers `/auth/` and `/api`. The dispatcher records each admitted Peer so Connection can tell reach Peers apart. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): the dispatcher consumes every one-time launch token a reach request presents before it refuses it. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10).",
-      "sha256": "4b0a711186a59c6474ad665261364a7ea817c59603258248d95b962886c43b60"
+      "sha256": "16256374633044e68f41b0c18873a3e2867da42969d402ea1f2d825dd2a9a0b0"
     },
     {
       "path": "packages/client/connection/src/rpc-host.ts",
@@ -444,7 +444,7 @@
       "path": "packages/client/connection/src/rpc.ts",
       "class": "security",
       "reason": "Admission seam (C4): `PeerAdmission`'s admitted result carries the provider's `setCookie`, and `ConnectionIndexResponse` may offer `setHeader`, through which an admitted loopback index response receives it. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): `HostConnectionHandle.oneTimeLaunchTokens` reports whether `authenticatedUrl` mints a one-time token per call. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). An exact Fetch route may declare `admitPeer(request, peer)`, the hook through which it admits a non-owner Peer; a route without it keeps upstream's owner-only behaviour.",
-      "sha256": "6de63acb47e2bfa09fbd832b3c862e9d370b947bdd47cf9f2858ae2506e79b80"
+      "sha256": "796e0301f6dcc0738b7709fb63db027155c63922820548d14e8d5bd5d5ab614d"
     },
     {
       "path": "packages/client/connection/tests/minted.host.spec.ts",

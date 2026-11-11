@@ -263,9 +263,10 @@ export interface HostConnectionHandle {
   /**
    * Admit an HTTP request against its signed browser or API credential and live Peer.
    * @param request - request headers from the HTTP or upgrade request.
+   * @param options - allowances the route declares about its own arrival traffic.
    * @returns the credential's Peer, or the rejection status.
    */
-  admit(request: ConnectionTrustRequest): PeerAdmission
+  admit(request: ConnectionTrustRequest, options?: ConnectionTrustOptions): PeerAdmission
 
   /**
    * Create an independent in-process Peer, disposed with the Context that read `ctx.connection`.

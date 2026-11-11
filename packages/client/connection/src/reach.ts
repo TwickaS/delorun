@@ -336,7 +336,11 @@ export class ReachState {
     return closed
   }
 
-  /** Record that a connection carried a request admitted for a session and a device. */
+  /**
+   * Record that a connection carried a request admitted for a session and a device.
+   * @param socket - the connection that carried the request.
+   * @param admission - the session id and the device id the request was admitted for, when it named them.
+   */
   admitted(socket: Duplex, admission: { readonly sessionId?: string; readonly deviceId?: string }): void {
     let connection = this.connections.get(socket)
     if (connection === undefined) {
