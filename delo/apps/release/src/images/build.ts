@@ -1,7 +1,7 @@
 /**
  * Builds the S2 and S3 images of contract C9 within C2's reproducible-rebuild scope: each from the digest-pinned base
  * `images.json` names, for `linux/amd64` and `linux/arm64`, with BuildKit's `rewrite-timestamp` at the release's
- * `SOURCE_DATE_EPOCH`, no cache, and no provenance or SBOM attestation (they record build times and invocation ids).
+ * `SOURCE_DATE_EPOCH`, no cache, and no SLSA build or SBOM attestation (they record build times and invocation ids).
  * The S3 image carries each platform's Linux runtime closure, extracted read-only. Each image's seccomp profile and
  * its licence, the committed files `images.json` names for it, are copied to `delorun-<version>.<image>.seccomp.json`
  * and `delorun-<version>.<image>.seccomp.LICENSE`. The OCI index and
@@ -282,11 +282,16 @@ async function extractReadOnly(archive: string, destination: string): Promise<vo
 
 function buildx(context: string, base: string, epoch: number, tar: string): void {
   const result = spawnSync('docker', [
-    'buildx', 'build', '--builder', 'default', '--no-cache', '--provenance=false', '--sbom=false',
+    'buildx', 'build', '--builder', 'default', '--no-cache', '--sbom=false',
     '--platform', PLATFORMS.map(item => item.oci).join(','),
     '--build-arg', `BASE=${base}`, '--build-arg', `SOURCE_DATE_EPOCH=${String(epoch)}`,
     '--output', `type=oci,dest=${tar},rewrite-timestamp=true`, context,
-  ], { encoding: 'utf8', env: { ...process.env, SOURCE_DATE_EPOCH: String(epoch) }, maxBuffer: 64 * 1024 * 1024 })
+  ], {
+    encoding: 'utf8',
+    // Buildx adds its default SLSA build attestation unless this variable is set.
+    env: { ...process.env, SOURCE_DATE_EPOCH: String(epoch), BUILDX_NO_DEFAULT_ATTESTATIONS: '1' },
+    maxBuffer: 64 * 1024 * 1024,
+  })
   if (result.error !== undefined) throw result.error
   if (result.status !== 0) throw new Error(`docker buildx build of ${context} failed:\n${result.stderr.slice(-4000)}`)
 }

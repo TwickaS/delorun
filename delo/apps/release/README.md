@@ -180,7 +180,7 @@ The state file (`delo.release-timestamp-state/1`) holds the root the signer trus
 
 ## Images
 
-`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--attestation-key <file> --attestation <file>]` runs after `build-closure.ts` on the same output. It builds the images `images.json` names, each for `linux/amd64` and `linux/arm64` from the Debian base it pins by digest, with BuildKit's `rewrite-timestamp` at the closures' `SOURCE_DATE_EPOCH`, no cache and no provenance or SBOM attestation, whose build times and invocation ids would differ between builds. The Dockerfiles pin their frontend by digest.
+`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--attestation-key <file> --attestation <file>]` runs after `build-closure.ts` on the same output. It builds the images `images.json` names, each for `linux/amd64` and `linux/arm64` from the Debian base it pins by digest, with BuildKit's `rewrite-timestamp` at the closures' `SOURCE_DATE_EPOCH`, no cache and no SLSA build or SBOM attestation, whose build times and invocation ids would differ between builds. The Dockerfiles pin their frontend by digest.
 
 - The S2 workspace image (`images/s2/`) adds the empty helper socket directory `/run/delo-helper`. The S2 helper and the egress proxy are not in it yet.
 - The S3 harness image (`images/s3/`) adds the users `delo` (uid 1000) and `delo-harness` (uid 1001) and each architecture's Linux runtime closure, read-only, at `/opt/delo/runtime`, and runs as `delo-harness`.

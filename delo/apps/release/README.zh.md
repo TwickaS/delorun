@@ -130,7 +130,7 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 
 ## 镜像
 
-`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--attestation-key <file> --attestation <file>]` 紧接在 `build-closure.ts` 之后，对同一输出运行。它为 `images.json` 所列的每个镜像构建 `linux/amd64` 与 `linux/arm64` 两个平台，各自以其按摘要固定的 Debian 基础镜像为基础；构建时使用 BuildKit 的 `rewrite-timestamp`，时间戳取运行时发行包的 `SOURCE_DATE_EPOCH`，不使用缓存，也不生成 provenance 或 SBOM attestation，因为二者的构建时间与调用 id 会使各次构建不同。Dockerfile 按摘要固定其 frontend。
+`node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--attestation-key <file> --attestation <file>]` 紧接在 `build-closure.ts` 之后，对同一输出运行。它为 `images.json` 所列的每个镜像构建 `linux/amd64` 与 `linux/arm64` 两个平台，各自以其按摘要固定的 Debian 基础镜像为基础；构建时使用 BuildKit 的 `rewrite-timestamp`，时间戳取运行时发行包的 `SOURCE_DATE_EPOCH`，不使用缓存，也不生成 SLSA 构建或 SBOM attestation，因为二者的构建时间与调用 id 会使各次构建不同。Dockerfile 按摘要固定其 frontend。
 
 - S2 工作区镜像（`images/s2/`）添加空的辅助套接字目录 `/run/delo-helper`。S2 辅助程序与出站代理（egress proxy）尚未包含在其中。
 - S3 harness 镜像（`images/s3/`）添加用户 `delo`（uid 1000）与 `delo-harness`（uid 1001），以及各架构的 Linux 运行时发行包（只读，位于 `/opt/delo/runtime`），并以 `delo-harness` 身份运行。
