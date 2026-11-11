@@ -11,6 +11,11 @@
   "include": ["src", "tests"],
   "references": [
     { "path": "../../../vendor/cordis" },
-    { "path": "../../../packages/mcp/mcp-client" }
+    { "path": "../../../vendor/loader" },
+    { "path": "../../../packages/client/connection/tsconfig.host.json" },
+    { "path": "../../../packages/mcp/mcp-client" },
+    { "path": "../../../packages/core/system-prompt" },
+    { "path": "../../../packages/core/tools" },
+    { "path": "../../../packages/core/tool-executor-native" }
   ]
 }

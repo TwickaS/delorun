@@ -7,21 +7,33 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./store": "./src/store.ts"
+    "./store": "./src/store.ts",
+    "./review": "./src/review.ts",
+    "./wire": "./src/wire.ts"
   },
   "dependencies": {
     "@delo/contract-home-layout": "workspace:*",
-    "@delo/home": "workspace:*"
+    "@delo/home": "workspace:*",
+    "@delo/home-auth": "workspace:*",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:~",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:~",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",
-    "@deepseek-ai/schemastery": "workspace:~"
+    "@deepseek-ai/dsh-system-prompt": "workspace:*",
+    "@deepseek-ai/dsh-tool-executor-native": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@modelcontextprotocol/client": "2.2.0"
   },
   "delo": {
     "state": "shipped"

@@ -16,6 +16,7 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 - [接受存储](#the-acceptance-store)
 - [审查](#reviews)
 - [记录一次接受](#recording-an-acceptance)
+- [待处理的审查](#pending-reviews)
 - [mcp_add_consent 开关](#the-mcp_add_consent-switch)
 - [开发](#development)
 
@@ -56,6 +57,17 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 `accept(start)` 记录本人接受了一次服务器启动——命令、其参数、其工作目录、其已配置环境，以及审查看到的解析得到的可执行文件路径、命令 shell 和工作目录——成为审查所允许的那次接受；解析得到的路径不是绝对路径的启动会被拒绝。再次接受一个命令会替换它早先的接受，因此变更过的启动以它现在携带的参数、工作目录、环境和解析得到的路径被接受后即获得许可。Delo 的 MCP 服务器添加流程中向本人询问的界面调用它；在这样的界面挂载之前，存储只经由它增长，每个未被接受的命令都让它的服务器保持停止。
 
+<a id="pending-reviews"></a>
+
+## 待处理的审查
+
+每次被拒绝的审查都在本进程中保留，作为该服务器的待处理审查：每个服务器名称一条，即最新的一条，因此审查之后发生变更的启动会替换那条审查。该服务也以 `mcpReviews` 提供（[`src/review.ts`](src/review.ts)）：
+
+- `pending()` 以界面显示的形式列出每条待处理审查：服务器名称、命令、其参数、其工作目录、已配置环境变量的名称（不含其值）、拒绝的原因、审查时间及其审查 id——启动的每个字段的摘要，环境通过其摘要计入（[`mcpReviewId`](src/review.ts)）。
+- `acceptReview(serverName, reviewId, confirmed)` 通过 `accept` 原样记录该审查所显示的启动，移除该审查，并以各自的配置再次启动本同意为该服务器拒绝过的每个 Loader 配置项，因此服务器无需重启 studio 即可运行；没有 Loader 时，下一次启动会运行它。`declineReview(serverName, reviewId)` 移除该审查且不记录任何内容；服务器保持停止，直到它的配置项再次启动并再次被审查。
+- 遇到 `UNCONFIRMED`（没有 `confirmed: true` 的接受）、`STALE_REVIEW`（该服务器没有带此 id 的待处理审查：它在显示之后被再次审查、接受或拒绝）以及（对接受而言）`STORE_REFUSED` 时，两者都以 `McpReviewError` 拒绝且不记录任何内容。每次答复记录一行写明该服务器的日志。
+- 在 Connection 为 studio 提供服务的地方，`/api` 下的三条精确路由承载它们（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/deloMcpConsent.pending`、`POST /api/deloMcpConsent.accept` 与 `POST /api/deloMcpConsent.decline`。每条路由只回答经回环监听器到达且 `Host` 为回环地址的请求；远程访问设备在请求体被读取之前就以 `403 LOOPBACK_REQUIRED` 被拒绝。studio 的“MCP 服务器”部分位于 [`@delo/bundle-local`](../bundle-local/README.zh.md)；`delorun mcp` 通过 home 进程的 `mcp.list`、`mcp.accept` 与 `mcp.decline`（[C19](../../docs/contracts/c19-home-process.zh.md)）到达同样的调用，只有本人自己的命令可以得到它们的答复。
+
 <a id="the-mcp_add_consent-switch"></a>
 
 ## mcp_add_consent 开关
@@ -66,4 +78,4 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 ## 开发
 
-规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent` 运行，包的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json` 运行。
+`tests/consent.spec.ts` 覆盖存储与审查；`tests/reviews.spec.ts` 覆盖待处理的审查、再次启动的配置项与路由，以及拒绝情形：远程访问设备、未确认的答复与过期的审查都不记录任何内容。规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent` 运行，包的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json` 运行。

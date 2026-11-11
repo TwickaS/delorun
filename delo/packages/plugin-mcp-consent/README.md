@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package is the `mcpAddConsent` provider of Delo's MCP add-time consent, the protection the C16 switch [`mcp_add_consent`](../../docs/contracts/c16-parity-composition.md) turns on. A stdio MCP server command runs as a local child process outside the agent sandbox, so before such a server starts, the mcp-client plugin asks the mounted `mcpAddConsent` service whether the configured command is granted. This package answers from the acceptance store, one JSON file under the home's protected state: a command the person accepted with exactly the arguments, working directory, configured environment and resolved executable path, command shell and working directory under review starts at once, and every other review holds the server stopped with a refusal that names the command. No screen or command records an acceptance ([Recording an acceptance](#recording-an-acceptance)), so in effect every stdio server the store does not already hold stays stopped. Off, or without a mounted provider, an mcp-client starts every configured server exactly as upstream does; `@delo/bundle-local` mounts it on in the CLI profile that `delorun` starts, `@delo/bundle-headless` mounts it on in the profile `delorun headless` runs, and the desktop app runs upstream's profiles, which do not mount it.
+This package is the `mcpAddConsent` provider of Delo's MCP add-time consent, the protection the C16 switch [`mcp_add_consent`](../../docs/contracts/c16-parity-composition.md) turns on. A stdio MCP server command runs as a local child process outside the agent sandbox, so before such a server starts, the mcp-client plugin asks the mounted `mcpAddConsent` service whether the configured command is granted. This package answers from the acceptance store, one JSON file under the home's protected state: a command the person accepted with exactly the arguments, working directory, configured environment and resolved executable path, command shell and working directory under review starts at once, and every other review holds the server stopped with a refusal that names the command. The person accepts a held server at the home's own computer, in the studio's Settings, MCP servers, or with `delorun mcp accept`, and the server then starts without a restart ([Pending reviews](#pending-reviews)). Off, or without a mounted provider, an mcp-client starts every configured server exactly as upstream does; `@delo/bundle-local` mounts it on in the CLI profile that `delorun` starts, `@delo/bundle-headless` mounts it on in the profile `delorun headless` runs, and the desktop app runs upstream's profiles, which do not mount it.
 
 ## Contents
 
@@ -16,6 +16,7 @@ This package is the `mcpAddConsent` provider of Delo's MCP add-time consent, the
 - [The acceptance store](#the-acceptance-store)
 - [Reviews](#reviews)
 - [Recording an acceptance](#recording-an-acceptance)
+- [Pending reviews](#pending-reviews)
 - [The mcp_add_consent switch](#the-mcp_add_consent-switch)
 - [Development](#development)
 
@@ -46,7 +47,16 @@ The review covers the executable's path, not the file's contents or a symbolic l
 
 ## Recording an acceptance
 
-`accept(start)` records that the person accepted a server start — the command, its arguments, its working directory, its configured environment and the resolved executable path, command shell and working directory a review was shown — as the acceptance the reviews allow; a start whose resolved paths are not absolute is refused. Accepting a command again replaces its earlier acceptance, so a changed start is granted by accepting it with the arguments, working directory, environment and resolved paths it now carries. The asking surface of Delo's MCP server add flow calls this; until such a surface is mounted, the store only grows through it and every unaccepted command keeps its server stopped.
+`accept(start)` records that the person accepted a server start — the command, its arguments, its working directory, its configured environment and the resolved executable path, command shell and working directory a review was shown — as the acceptance the reviews allow; a start whose resolved paths are not absolute is refused. Accepting a command again replaces its earlier acceptance, so a changed start is granted by accepting it with the arguments, working directory, environment and resolved paths it now carries. The store grows only through it; `acceptReview` calls it with the start a pending review showed.
+
+## Pending reviews
+
+Every refused review is kept, in this process, as the server's pending review: one per server name, the latest, so a start that changed after a review replaces that review. The service is also provided as `mcpReviews` ([`src/review.ts`](src/review.ts)):
+
+- `pending()` lists each pending review as a surface shows it: the server name, the command, its arguments, its working directory, the names of the configured environment variables without their values, the refusal's reason, when it was reviewed and its review id — a digest of every field of the start, the environment through its digest ([`mcpReviewId`](src/review.ts)).
+- `acceptReview(serverName, reviewId, confirmed)` records exactly the start that review showed through `accept`, removes the review, and starts each Loader row that this consent refused for that server again with its own configuration, so the server runs without a restart of the studio; without a Loader, the next start runs it. `declineReview(serverName, reviewId)` removes the review and records nothing; the server stays stopped until its row starts again and is reviewed again.
+- Both refuse with `McpReviewError` and record nothing for `UNCONFIRMED` (an acceptance without `confirmed: true`), `STALE_REVIEW` (the server has no pending review with that id: it was reviewed again, accepted or declined after it was shown) and, for an acceptance, `STORE_REFUSED`. Each answer logs one line naming the server.
+- Where a Connection serves the studio, three exact routes under `/api` carry them ([`src/wire.ts`](src/wire.ts), [`src/routes.ts`](src/routes.ts)): `GET /api/deloMcpConsent.pending`, `POST /api/deloMcpConsent.accept` and `POST /api/deloMcpConsent.decline`. Each answers only a request that arrived on the loopback listener under a loopback `Host`; a reach device is refused with `403 LOOPBACK_REQUIRED` before the body is read. The studio's MCP servers section lives in [`@delo/bundle-local`](../bundle-local/README.md); `delorun mcp` reaches the same calls through the home process's `mcp.list`, `mcp.accept` and `mcp.decline` ([C19](../../docs/contracts/c19-home-process.md)), which only the person's own command may answer.
 
 ## The mcp_add_consent switch
 
@@ -54,4 +64,4 @@ The `enabled` config field, the C16 switch `mcp_add_consent`, decides whether th
 
 ## Development
 
-The specs run with `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent`, and the package typechecks with `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json`.
+`tests/consent.spec.ts` covers the store and the reviews; `tests/reviews.spec.ts` covers the pending reviews, the restarted row and the routes, with the denial cases: a reach device, an unconfirmed answer and a stale review record nothing. The specs run with `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent`, and the package typechecks with `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json`.

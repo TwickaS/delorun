@@ -27,6 +27,8 @@
  */
 import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the ctx.loader merge, read to start a refused server row again.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import schema from '@deepseek-ai/schemastery'
@@ -39,6 +41,16 @@ import {
   writeAcceptanceStore,
 } from './store.ts'
 import type { AcceptedCommand, ServerStart } from './store.ts'
+import { McpReviewError, pendingReviewOf, type McpReviews, type PendingReview } from './review.ts'
+import type { PendingServer } from './wire.ts'
+import { registerMcpConsentRoutes } from './routes.ts'
+
+export { mcpReviewId, MCP_REVIEW_ID_LENGTH, MCP_REVIEW_ID_PATTERN, McpReviewError, pendingReviewOf, type McpReviews, type PendingReview } from './review.ts'
+export {
+  MAX_MCP_CONSENT_REQUEST_BYTES, MCP_CONSENT_REFUSAL_CODES, MCP_CONSENT_ROUTES, SERVER_NAME_PATTERN,
+  type AcceptServerAnswer, type AcceptServerRequest, type DeclineServerAnswer, type DeclineServerRequest,
+  type McpConsentRefusalCode, type PendingServer, type PendingServersAnswer,
+} from './wire.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'mcp-consent'
@@ -76,15 +88,19 @@ export const Config: schema<Config> = schema.object({
  * the server row until the command is accepted, and an acceptance given after
  * a refusal lets the next boot start the server.
  */
-export class DeloMcpConsent extends McpAddConsent {
+export class DeloMcpConsent extends McpAddConsent implements McpReviews {
   /** The writes to the store, chained so a grant and a review's write never interleave. */
   private queue: Promise<unknown> = Promise.resolve()
+  /** The latest refused review of each server name, until the person answers it or a review allows the server. */
+  private readonly reviews = new Map<string, PendingReview>()
 
   /**
    * @param ctx - the plugin context.
    */
   constructor(ctx: Context) {
     super(ctx)
+    // The pending reviews under a name of their own, for the home process's `mcp.*` operations and the studio's routes.
+    ctx.provide('mcpReviews', this)
   }
 
   /**
@@ -106,8 +122,59 @@ export class DeloMcpConsent extends McpAddConsent {
    *   superseded or not this version's format, which asks the person again.
    *   No reason names an environment value.
    */
-  review(command: McpServerCommand): Promise<McpConsentDecision> {
-    return this.decide(command)
+  async review(command: McpServerCommand): Promise<McpConsentDecision> {
+    const decision = await this.decide(command)
+    if (decision.allow) this.reviews.delete(command.serverName)
+    else this.reviews.set(command.serverName, pendingReviewOf(command, decision.reason, Date.now()))
+    return decision
+  }
+
+  /**
+   * The servers whose latest review the consent refused and the person has not answered yet: one per server name, the
+   * latest, so a start that changed after a review replaces that review. The list lives in this process; each start of
+   * a server row reviews it again.
+   * @returns the pending reviews as a surface shows them, sorted by server name; none names an environment value.
+   */
+  pending(): readonly PendingServer[] {
+    return [...this.reviews.values()].map(review => review.shown).sort((left, right) => (left.serverName < right.serverName ? -1 : 1))
+  }
+
+  /**
+   * Accept one pending review at the home's own computer, after the person confirmed the start it shows; the route and
+   * the update channel that call this refuse every other caller first. The start is recorded exactly as the review
+   * judged it ({@link accept}), the review leaves the list, and each server row this consent refused for that server
+   * name is started again, so the server runs without a restart of the studio.
+   * @param serverName - the server the person answered for.
+   * @param reviewId - the id of the review the person was shown.
+   * @param confirmed - whether the person confirmed the start.
+   * @returns how many refused server rows started again; a row that fails again stays stopped with its own error.
+   * @throws {McpReviewError} `UNCONFIRMED` without the answer, `STALE_REVIEW` when the server has no pending review with
+   *   that id, and `STORE_REFUSED` when the store cannot be written; each records nothing.
+   */
+  async acceptReview(serverName: string, reviewId: string, confirmed: boolean): Promise<{ readonly started: number }> {
+    if (!confirmed) throw new McpReviewError('UNCONFIRMED', 'the person has not confirmed the server\'s start, so nothing is accepted')
+    const review = this.pendingReview(serverName, reviewId)
+    try {
+      await this.accept(review.start)
+    } catch (error) {
+      throw new McpReviewError('STORE_REFUSED', reasonOf(error), { cause: error })
+    }
+    if (this.reviews.get(serverName) === review) this.reviews.delete(serverName)
+    this.ctx.logger.info(`mcp-consent: the person accepted the start of the stdio server ${serverName} at the home's computer`)
+    return { started: await this.startRefusedRows(serverName) }
+  }
+
+  /**
+   * Set one pending review aside at the home's own computer: the server stays stopped, nothing is recorded, and the
+   * review leaves the list until the server's row starts again and is reviewed again.
+   * @param serverName - the server the person answered for.
+   * @param reviewId - the id of the review the person was shown.
+   * @throws {McpReviewError} `STALE_REVIEW` when the server has no pending review with that id.
+   */
+  declineReview(serverName: string, reviewId: string): void {
+    const review = this.pendingReview(serverName, reviewId)
+    this.reviews.delete(serverName)
+    this.ctx.logger.info(`mcp-consent: the person declined the start of the stdio server ${review.shown.serverName}; it stays stopped`)
   }
 
   /**
@@ -144,6 +211,48 @@ export class DeloMcpConsent extends McpAddConsent {
       entries.set(start.command, acceptanceOfStart(start, Date.now()))
       await writeAcceptanceStore(path, entries)
     })
+  }
+
+  /**
+   * The pending review an answer names.
+   * @param serverName - the server.
+   * @param reviewId - the review id the answer carries.
+   * @returns the review.
+   * @throws {McpReviewError} `STALE_REVIEW` when the server's pending review has another id, or it has none.
+   */
+  private pendingReview(serverName: string, reviewId: string): PendingReview {
+    const review = this.reviews.get(serverName)
+    if (review === undefined || review.shown.reviewId !== reviewId) {
+      throw new McpReviewError('STALE_REVIEW', `the server ${serverName} has no pending review with this id: its start was reviewed again, accepted or set aside since it was shown`)
+    }
+    return review
+  }
+
+  /**
+   * Start again every server row of the Loader that stopped because this consent refused the server's start, now that
+   * the start is accepted. A row restarts with the configuration it has, so its next review judges its start as it is
+   * now; without a Loader nothing restarts, and the next start of the studio starts the server.
+   * @param serverName - the accepted server.
+   * @returns how many rows became active.
+   */
+  private async startRefusedRows(serverName: string): Promise<number> {
+    let started = 0
+    for (const entry of this.ctx.get('loader')?.entries() ?? []) {
+      const fiber = entry.fiber
+      // Only a row configured for this server name is awaited: a refused row settled when it failed, so its wait ends
+      // at once with the refusal, while another row may still be starting.
+      if (fiber === undefined || !configuresServer(fiber.config, serverName)) continue
+      const failure = await fiber.await().then(() => undefined, (error: unknown) => error)
+      if (refusedServer(failure) !== serverName) continue
+      try {
+        // `update` with the row's own configuration clears the refusal and applies the row again; nothing is saved.
+        await fiber.update(fiber.config, true)
+        started++
+      } catch (error) {
+        this.ctx.logger.warn(`mcp-consent: the server ${serverName} was accepted, and its row ${entry.id} did not start again: ${reasonOf(error)}`)
+      }
+    }
+    return started
   }
 
   /**
@@ -203,7 +312,10 @@ export class DeloMcpConsent extends McpAddConsent {
 
 /**
  * With the `mcp_add_consent` switch on: mount the consent service, whose
- * review the mcp-client plugin consults before it starts a stdio server. The
+ * review the mcp-client plugin consults before it starts a stdio server, its
+ * pending reviews as the `mcpReviews` service, and, where a Connection serves
+ * the studio, the routes of the studio's MCP servers section
+ * ([`./routes.ts`](./routes.ts)). The
  * mount is the service's own plugin fiber, and the returned promise is this
  * plugin's startup work, so the service is registered before this row is
  * active; an mcp-client row waits for this row to settle
@@ -215,6 +327,31 @@ export class DeloMcpConsent extends McpAddConsent {
 export async function apply(ctx: Context, config: Config): Promise<void> {
   if (!config.enabled) return
   await ctx.plugin(DeloMcpConsent)
+  // The studio's routes, in a profile that serves a studio.
+  ctx.inject(['connection', 'mcpReviews'], (child) => { registerMcpConsentRoutes(child, child.mcpReviews) })
+}
+
+/**
+ * The server a row's failure is this consent's refusal of. The refusal is the mcp-client's `McpConsentRefusedError`,
+ * read by its name and its server field rather than by its class, because the row may load the mcp-client from
+ * another copy of the module than this plugin imports.
+ * @param failure - what the row's fiber failed with.
+ * @returns the refused server's name, or undefined for any other failure.
+ */
+function refusedServer(failure: unknown): string | undefined {
+  if (!(failure instanceof Error) || failure.name !== 'McpConsentRefusedError') return undefined
+  const serverName: unknown = Reflect.get(failure, 'serverName')
+  return typeof serverName === 'string' ? serverName : undefined
+}
+
+/**
+ * Whether a Loader row's raw configuration names a server.
+ * @param config - the row's configuration as the Loader holds it.
+ * @param serverName - the server.
+ * @returns true for an object whose `serverName` is the server's.
+ */
+function configuresServer(config: unknown, serverName: string): boolean {
+  return typeof config === 'object' && config !== null && Reflect.get(config, 'serverName') === serverName
 }
 
 /**

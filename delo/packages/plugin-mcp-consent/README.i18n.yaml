@@ -12,8 +12,8 @@
   en: 2b976bd37230ad2b
   zh: dca832cbb0ca865d
 /delo-plugin-mcp-consent/contents:
-  en: 8bc096ffae54d223
-  zh: d49ed81601876652
+  en: dbcc66fdedfde92b
+  zh: 32d619b3c1308fa9
 /delo-plugin-mcp-consent/the-service:
   en: 3cdd67d904b8d07e
   zh: 6ebe2f9dc854eb1d
@@ -26,9 +26,12 @@
 /delo-plugin-mcp-consent/recording-an-acceptance:
   en: 2814df35c18a6db2
   zh: c2cbe466872646d0
+/delo-plugin-mcp-consent/pending-reviews:
+  en: d8531c879da813c9
+  zh: 2a9230c0a867098b
 /delo-plugin-mcp-consent/the-mcp-add-consent-switch:
   en: c714ef3ea575a700
   zh: e90dac9057e7fe71
 /delo-plugin-mcp-consent/development:
-  en: 98e3eb81c0d00e45
-  zh: c1bff0516bec4834
+  en: 19c7e7c0fdf96781
+  zh: 62f0ed011ff10654
