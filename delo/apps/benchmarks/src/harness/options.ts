@@ -47,8 +47,8 @@ export interface CommandLine {
 }
 
 /** A command line the harness refuses. */
-export class UsageError extends Error {
-  override readonly name = 'UsageError'
+export class BenchmarkUsageError extends Error {
+  override readonly name = 'BenchmarkUsageError'
 }
 
 /**
@@ -57,12 +57,12 @@ export class UsageError extends Error {
  * @param text - its value.
  * @param fallback - its default.
  * @returns the number.
- * @throws {UsageError} when it is not a positive whole number.
+ * @throws {BenchmarkUsageError} when it is not a positive whole number.
  */
 function count(name: string, text: string | undefined, fallback: number): number {
   if (text === undefined) return fallback
   const value = Number(text)
-  if (!Number.isSafeInteger(value) || value < 1) throw new UsageError(`--${name} takes a positive whole number, not ${JSON.stringify(text)}`)
+  if (!Number.isSafeInteger(value) || value < 1) throw new BenchmarkUsageError(`--${name} takes a positive whole number, not ${JSON.stringify(text)}`)
   return value
 }
 
@@ -71,7 +71,7 @@ function count(name: string, text: string | undefined, fallback: number): number
  * @param argv - the arguments after the script.
  * @param suites - the known suites, which `--suite` and `--scenario` must name.
  * @returns the parsed line.
- * @throws {UsageError} for an unknown option, suite or scenario, or a malformed number.
+ * @throws {BenchmarkUsageError} for an unknown option, suite or scenario, or a malformed number.
  */
 export function parseCommandLine(argv: readonly string[], suites: readonly Suite[]): CommandLine {
   let values
@@ -98,14 +98,14 @@ export function parseCommandLine(argv: readonly string[], suites: readonly Suite
       },
     }))
   } catch (error) {
-    throw new UsageError(error instanceof Error ? error.message : String(error))
+    throw new BenchmarkUsageError(error instanceof Error ? error.message : String(error))
   }
   const known = new Set(suites.map(suite => suite.id))
   const selected = values.suite ?? []
-  for (const id of selected) if (!known.has(id)) throw new UsageError(`no suite is called ${JSON.stringify(id)}; the suites are ${[...known].join(', ')}`)
+  for (const id of selected) if (!known.has(id)) throw new BenchmarkUsageError(`no suite is called ${JSON.stringify(id)}; the suites are ${[...known].join(', ')}`)
   const scenarios = values.scenario ?? []
   const reachable = new Set(suites.filter(suite => selected.length === 0 || selected.includes(suite.id)).flatMap(suite => suite.scenarios.map(scenario => scenario.id)))
-  for (const id of scenarios) if (!reachable.has(id)) throw new UsageError(`no selected suite has a scenario called ${JSON.stringify(id)}`)
+  for (const id of scenarios) if (!reachable.has(id)) throw new BenchmarkUsageError(`no selected suite has a scenario called ${JSON.stringify(id)}`)
   return {
     prepare: values.prepare,
     list: values.list,

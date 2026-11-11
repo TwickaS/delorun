@@ -22,7 +22,7 @@ import { BENCH_PLATFORM, buildBase, cachedBase, closureCache, closureFrom, deriv
 import { checkBudgets, proposeBudgets, readBudgets, unjudgeable } from './harness/budgets.ts'
 import { assertIsolated, ISOLATED_ENV, rerunIsolated } from './harness/isolation.ts'
 import { ioPressure, loadAverages, machineFacts } from './harness/machine.ts'
-import { parseCommandLine, selection, USAGE, UsageError, type CommandLine } from './harness/options.ts'
+import { parseCommandLine, selection, USAGE, BenchmarkUsageError, type CommandLine } from './harness/options.ts'
 import { RESULT_SCHEMA, Scrubber, type BenchmarkResult, type SuiteResult } from './harness/result.ts'
 import { canonical, createRoot, realHomes, type BenchRoot } from './harness/roots.ts'
 import type { SharedFixtures, SuiteContext } from './harness/suite.ts'
@@ -195,7 +195,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   try {
     line = parseCommandLine(argv, SUITES)
   } catch (error) {
-    if (!(error instanceof UsageError)) throw error
+    if (!(error instanceof BenchmarkUsageError)) throw error
     log(`${error.message}\n\n${USAGE}`)
     return 2
   }

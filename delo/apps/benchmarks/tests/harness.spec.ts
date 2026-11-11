@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { BUDGETS_SCHEMA, checkBudgets, IO_PRESSURE_LIMIT, proposeBudgets, proposeCeiling, readBudgets, unjudgeable, type BudgetFile } from '../src/harness/budgets.ts'
 import { assertIsolated, IsolationRefusal, isolatedCommand, nonLoopbackInterfaces } from '../src/harness/isolation.ts'
 import { clonesFiles, fileSystemType, ioPressure, loadAverages, machineFacts } from '../src/harness/machine.ts'
-import { parseCommandLine, selection, UsageError } from '../src/harness/options.ts'
+import { parseCommandLine, selection, BenchmarkUsageError } from '../src/harness/options.ts'
 import { RESULT_SCHEMA, Samples, Scrubber, type BenchmarkResult, type ScenarioResult } from '../src/harness/result.ts'
 import { median, summarize } from '../src/harness/stats.ts'
 import type { Suite } from '../src/harness/suite.ts'
@@ -162,11 +162,11 @@ describe('the command line', () => {
   })
 
   it('refuses an unknown option, suite or scenario and a count that is not positive', () => {
-    expect(() => parseCommandLine(['--fast'], [SUITE])).toThrow(UsageError)
+    expect(() => parseCommandLine(['--fast'], [SUITE])).toThrow(BenchmarkUsageError)
     expect(() => parseCommandLine(['--suite', 'nope'], [SUITE])).toThrow('no suite is called "nope"')
     expect(() => parseCommandLine(['--suite', 'start', '--scenario', 'a'], [SUITE, OTHER])).toThrow('no selected suite has a scenario called "a"')
     expect(() => parseCommandLine(['--repeat', '0'], [SUITE])).toThrow('--repeat takes a positive whole number')
-    expect(() => parseCommandLine(['--plugins', '1.5'], [SUITE])).toThrow(UsageError)
+    expect(() => parseCommandLine(['--plugins', '1.5'], [SUITE])).toThrow(BenchmarkUsageError)
   })
 
   it('selects every suite by default, and only the scenarios named', () => {

@@ -33,6 +33,7 @@ const FORK = fileURLToPath(new URL('../../../', import.meta.url))
 const PLUGIN = 'raised inside a plugin of the home process and reported to the studio or the model, never to delorun'
 const TOOLS = 'developer tooling under delo/apps/tools with its own entry points'
 const RELEASE_PIPELINE = 'the release pipeline\'s signing and advisory commands, which delorun does not import'
+const BENCHMARKS = 'the wait-time benchmark under delo/apps/benchmarks, which runs delorun from outside and is not imported by it'
 
 /** The exported error classes that never reach `delorun`'s entry point, each with the reason. */
 const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
@@ -62,6 +63,9 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   NetworkGuardRefusal: TOOLS,
   SigningRefusal: RELEASE_PIPELINE,
   FeedFailure: RELEASE_PIPELINE,
+  BenchmarkUsageError: BENCHMARKS,
+  IsolationRefusal: BENCHMARKS,
+  RealHomeRefusal: BENCHMARKS,
 }
 
 /**
