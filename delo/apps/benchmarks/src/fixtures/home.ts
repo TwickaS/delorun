@@ -146,7 +146,8 @@ export function startDriver(home: InstalledHome, version: string, driver: string
   return start({
     command: join(runtime, 'node', 'bin', 'node'),
     args: [file, ...args],
-    env: { ...deloEnvironment(home.root), DSH_HOME: home.root.deloHome, DELO_HOME: home.root.deloHome, DELO_PROFILE: PROFILE },
+    // The launcher sets DELO_LAUNCHER_ROOTS for the runtime it starts; the driver gets the same roots.
+    env: { ...deloEnvironment(home.root), DSH_HOME: home.root.deloHome, DELO_HOME: home.root.deloHome, DELO_PROFILE: PROFILE, DELO_LAUNCHER_ROOTS: join(dirname(dirname(home.launcher)), 'roots') },
     cwd: home.root.home,
     timeoutMs,
   })

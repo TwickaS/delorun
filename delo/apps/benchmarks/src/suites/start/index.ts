@@ -16,7 +16,7 @@
 import { readLines, resolveSurface } from '@delo/logs'
 import { copyHome, delorun, deloRequest, PROFILE, stopHome, type InstalledHome } from '../../fixtures/home.ts'
 import { installedChannel, templateHome } from '../../fixtures/releases.ts'
-import { expectSuccess, run, start, type Finished, type Running } from '../../harness/processes.ts'
+import { expectSuccess, run, type Finished } from '../../harness/processes.ts'
 import { Samples, type ScenarioResult, type SuiteResult } from '../../harness/result.ts'
 import type { Suite, SuiteContext } from '../../harness/suite.ts'
 
@@ -43,7 +43,7 @@ export const START_ITEMS: Readonly<Record<string, string>> = {
 export function studioOrigin(deloHome: string, since: number): string | undefined {
   const lines = readLines(resolveSurface({ kind: 'home', home: deloHome, profile: PROFILE }), 10_000, line => line.record !== undefined && Date.parse(line.record.ts) >= since)
   for (const { record } of lines) {
-    const match = /dsh web: (http:\/\/127\.0\.0\.1:\d+)\//u.exec(record!.msg)
+    const match = /dsh web: (http:\/\/127\.0\.0\.1:\d+)/u.exec(record!.msg)
     if (match !== null) return match[1]
   }
   return undefined
@@ -77,55 +77,42 @@ export async function studioAnswered(deloHome: string, since: number): Promise<n
   throw new Error(`the studio did not answer within ${String(STUDIO_TIMEOUT_MS / 1000)} seconds: ${last}`)
 }
 
-/** A home process started in the foreground, which prints the studio's start link with its token. */
-export interface ForegroundStart {
-  /** The process; `delorun stop` ends it. */
-  readonly running: Running
-  /** The start link the Host printed. */
+/** Delo started, with a fresh sign-in link to its studio. */
+export interface LinkedStart {
+  /** The sign-in link `delorun open --print` printed. */
   readonly link: string
-  /** When the command started. */
+  /** When the start command started. */
   readonly startedAt: number
 }
 
 /**
- * The start link in a line the Host printed.
- * @param text - the line.
+ * The sign-in link in `delorun open --print`'s output.
+ * @param lines - the output's lines.
  * @returns the link, or `undefined`.
  */
-export function startLinkIn(text: string): string | undefined {
-  return /dsh web: (http:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+)/u.exec(text)?.[1]
+export function signInLink(lines: readonly string[]): string | undefined {
+  for (const line of lines) {
+    const match = /(http:\/\/127\.0\.0\.1:\d+\/\S*)/u.exec(line)
+    if (match !== null) return match[1]
+  }
+  return undefined
 }
 
 /**
- * Start Delo with `delorun start --foreground`, which prints the studio's start link on its own output (the home log
- * keeps it redacted), and wait for the link. No browser opens.
+ * Start Delo with `delorun start`, then ask it for a sign-in link with `delorun open --print`, as a person does on a
+ * computer whose browser the benchmark does not drive. No browser opens.
  * @param home - the home.
- * @param env - variables added to the command's environment.
- * @returns the process and the link.
- * @throws {Error} when the process exits or the deadline passes before the link appears.
+ * @param env - variables added to the start command's environment.
+ * @returns the link and when the start began.
+ * @throws {Error} when either command fails or prints no link.
  */
-export async function startForLink(home: InstalledHome, env: NodeJS.ProcessEnv = {}): Promise<ForegroundStart> {
-  const request = deloRequest(home, ['start', '--foreground'], 3_600_000)
-  let found: ((link: string) => void) | undefined
-  const linked = new Promise<string>((resolve) => { found = resolve })
-  const running = start({ ...request, env: { ...request.env, ...env }, onLine: (line) => {
-    const link = startLinkIn(line.text)
-    if (link !== undefined) found?.(link)
-  } })
-  let settled = false
-  const ended = running.finished.then((finished) => {
-    if (settled) return ''
-    throw new Error(`\`delorun start --foreground\` ended before the studio printed its link:\n${finished.lines.slice(-20).map(line => line.text).join('\n')}`)
-  })
-  const timeout = new Promise<never>((_, reject) => { setTimeout(() => { reject(new Error('the studio printed no link in time')) }, STUDIO_TIMEOUT_MS).unref() })
-  try {
-    const link = await Promise.race([linked, ended, timeout])
-    settled = true
-    return { running, link, startedAt: Date.now() }
-  } catch (error) {
-    running.kill()
-    throw error
-  }
+export async function startForLink(home: InstalledHome, env: NodeJS.ProcessEnv = {}): Promise<LinkedStart> {
+  const request = deloRequest(home, ['start'], 300_000)
+  const started = expectSuccess(await run({ ...request, env: { ...request.env, ...env } }), '`delorun start`')
+  const opened = expectSuccess(await run(deloRequest(home, ['open', '--print'], 120_000)), '`delorun open --print`')
+  const link = signInLink(opened.lines.filter(line => line.stream === 'stdout').map(line => line.text))
+  if (link === undefined) throw new Error(`\`delorun open --print\` printed no link:\n${opened.lines.map(line => line.text).join('\n')}`)
+  return { link, startedAt: started.startedAt }
 }
 
 /**

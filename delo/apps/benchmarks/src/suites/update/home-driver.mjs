@@ -1,22 +1,21 @@
 /**
  * The home process of the update suite: `delorun start --foreground`'s own function, run by the installed runtime's
- * own Node from the runtime's own modules, with one start dependency replaced. The update support is the CLI's
- * (`homeUpdateSupport` over C1's store, the CLI's report sources, profile history and session-data copies), except that
- * its release channel reads the benchmark's loopback channel and log instead of the published hosts, which the runtime
- * names as constants. The channel is `@delo/install`'s `LauncherChannel`, anchored on the root chain the home stored at
- * install, as `homeReleaseChannel` builds it, with the download rule a launcher built for a loopback channel uses.
+ * own Node from the runtime's own modules, with its update support built exactly as `storeUpdateSupport` builds it:
+ * the store, the launcher's anchored roots, the release-log start check, the channel the installing launcher recorded
+ * in `trust/channel.json` (the run's loopback channel), the CLI's report sources, profile history and data copies.
  *
- * Every other step is unchanged. The driver only observes: it wraps the support's store, channel, downloader, report
- * sources, profile history and copies to append one timing record per step boundary to a JSON-lines file, and changes
- * no argument or result. The successor an update starts is the target runtime's own `delorun start`, not this driver.
+ * The driver only observes: it wraps the support's store, channel, report sources, profile history and copies to append
+ * one timing record per call boundary to a JSON-lines file, and changes no argument or result. The successor an update
+ * starts is the target runtime's own `delorun start`, not this driver.
  *
- * Arguments: `<channel origin> <log origin> <timings file>`. The file sits in a directory whose `node_modules` links to
- * the runtime's `app/node_modules`, so every import resolves to the runtime's files.
+ * Argument: `<timings file>`. The file sits in a directory whose `node_modules` links to the runtime's
+ * `app/node_modules`, so every import resolves to the runtime's files; `DELO_LAUNCHER_ROOTS` names the launcher's
+ * roots, as the launcher sets it for the runtime it starts.
  */
 import { appendFileSync } from 'node:fs'
 
-const [channelOrigin, logOrigin, timings] = process.argv.slice(2)
-if (timings === undefined) throw new Error('usage: home-driver.mjs <channel origin> <log origin> <timings file>')
+const [timings] = process.argv.slice(2)
+if (timings === undefined) throw new Error('usage: home-driver.mjs <timings file>')
 
 /** Append one timing record. */
 function mark(event, data = {}) {
@@ -48,46 +47,32 @@ const { prepareHome } = await import('@delo/cli/src/command.js')
 const { startForeground, upstreamDependencies } = await import('@delo/cli/src/start.js')
 const { homeUpdateSupport } = await import('@delo/cli/src/update/support.js')
 const { storeReportSources } = await import('@delo/cli/src/update/sources.js')
-const { installLines, runtimePlatformOf } = await import('@delo/cli/src/update/channel.js')
-const { Downloader, LauncherChannel, readStoredRootBytes, readStoredRootChain } = await import('@delo/install')
-const { tilesTransport } = await import('@delo/release-verify')
-const { readStoredRoot, RuntimeStore } = await import('@delo/runtime-store')
+const { storeChannelOpener } = await import('@delo/cli/src/update/store-support.js')
+const { launcherAnchor } = await import('@delo/cli/src/update/trusted-root.js')
+const { releaseLogStartCheck } = await import('@delo/cli/src/update/release-check.js')
+const { runtimePlatformOf } = await import('@delo/cli/src/update/channel.js')
+const { RuntimeStore } = await import('@delo/runtime-store')
 
 const context = { env: { ...process.env }, stdout: text => void process.stdout.write(text), stderr: text => void process.stderr.write(text) }
 applyDeloVersionEnvironment()
 const { home, profile } = await prepareHome(context, undefined)
 const cli = upstreamDependencies()
 
-/** The update support of `storeUpdateSupport`, over the loopback channel. */
-function updates(homePath, profileName, running, logger) {
+/** `storeUpdateSupport`'s wiring, with each part timed. */
+function updates(homePath, profileName, running, logger, env) {
   const store = new RuntimeStore({ home: homePath, platform: runtimePlatformOf(process.platform, process.arch), logger })
+  const anchor = launcherAnchor(homePath, env)
+  const opener = storeChannelOpener(homePath, store, running, anchor)
   const openChannel = async (line) => {
     mark('channel.open:start')
-    const release = await store.checkRuntime(running, await readStoredRoot(homePath))
-    const chain = await readStoredRootChain(homePath)
-    const root = await readStoredRootBytes(homePath)
-    const roots = chain.length > 0 ? chain : root === undefined ? [] : [root]
-    if (roots.length === 0) throw new Error('this home stores no verified release root')
-    const fetch = globalThis.fetch.bind(globalThis)
-    const progress = installLines(line)
-    const channel = new LauncherChannel({
-      home: homePath,
-      platform: store.paths.platform,
-      roots,
-      channel: release.manifest.channel,
-      log: () => tilesTransport({ fetch, checkpoint: `${logOrigin}/checkpoint`, tiles: logOrigin }),
-      source: { metadata: channelOrigin, files: (version, name) => `${channelOrigin}/releases/download/v${version}/${name}` },
-      // The download rule a launcher built for a loopback channel uses: that origin's scheme and host only.
-      downloader: timed(new Downloader({ hosts: { scheme: new URL(channelOrigin).protocol, hosts: [new URL(channelOrigin).hostname], maxRedirects: 5 } }), 'download', ['bytes', 'file']),
-      progress: (event) => {
-        mark(`install.${event.step}`)
-        progress(event)
-      },
+    const channel = await opener((text) => {
+      mark('install.line', { text: text.slice(0, 40) })
+      line(text)
     })
     mark('channel.open:end')
     return timed(channel, 'channel', ['resolve', 'fill', 'recordInstalled'])
   }
-  const sources = storeReportSources({ home: homePath, profile: profileName, store, running })
+  const sources = storeReportSources({ home: homePath, profile: profileName, store, running, root: anchor.root })
   const timedSources = Object.fromEntries(Object.entries(sources).map(([name, read]) => [name, name === 'now' ? read : async (...args) => {
     mark(`report.${name}:start`)
     try {
@@ -96,7 +81,11 @@ function updates(homePath, profileName, running, logger) {
       mark(`report.${name}:end`)
     }
   }]))
-  const support = homeUpdateSupport({ home: homePath, profile: profileName, store, openChannel, sources: timedSources, now: () => new Date() })
+  const support = homeUpdateSupport({
+    home: homePath, profile: profileName, store, root: anchor.root,
+    preLaunch: (version, root) => releaseLogStartCheck(homePath, store.paths.platform, version, root),
+    openChannel, sources: timedSources, now: () => new Date(),
+  })
   return {
     store: timed(support.store, 'store', ['prepare', 'switchTo', 'restore', 'reportRollback']),
     snapshots: timed(support.snapshots, 'snapshots', ['save']),
@@ -105,5 +94,5 @@ function updates(homePath, profileName, running, logger) {
 }
 
 mark('driver.start')
-await startForeground({ home: home.path, profile, open: false, output: context }, { ...cli, updates })
+await startForeground({ home: home.path, profile, open: false, output: context, env: context.env }, { ...cli, updates })
 mark('driver.ready')

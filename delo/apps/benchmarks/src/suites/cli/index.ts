@@ -41,6 +41,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { id: 'plugin-list', args: ['plugin', '--profile', 'default', 'list'], running: false, pnpm: true },
   { id: 'logs', args: ['logs'], running: false },
   { id: 'status-running', args: ['status'], running: true },
+  { id: 'open-print', args: ['open', '--print'], running: true },
   { id: 'trash-list-running', args: ['trash', 'list'], running: true },
 ]
 

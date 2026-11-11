@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Finished } from '../src/harness/processes.ts'
-import { difference, readMarks, rollbackItems, UPDATE_ITEMS, UPDATE_SCENARIOS, UpdateTimeline, updateItems } from '../src/suites/update/index.ts'
+import { difference, readMarks, splitRecord, rollbackItems, UPDATE_ITEMS, UPDATE_SCENARIOS, UpdateTimeline, updateItems } from '../src/suites/update/index.ts'
 
 const made: string[] = []
 afterEach(() => {
@@ -23,6 +23,7 @@ const MARKS = [
   { event: 'install.resolved', at: 1350 },
   { event: 'install.signature-checked', at: 1400 },
   { event: 'install.log-checked', at: 1450 },
+  { event: 'channel.resolve:end', at: 1450 },
   { event: 'channel.fill:start', at: 1460 },
   { event: 'download.file:start', at: 1470 },
   { event: 'download.file:end', at: 2470 },
@@ -59,8 +60,8 @@ const LOGS = [
 describe('the update timeline', () => {
   it('reads every item of an update with a copy from the records after the command started', () => {
     expect(updateItems(COMMAND, new UpdateTimeline(COMMAND.startedAt, MARKS, LOGS), true)).toEqual({
-      'total': 7000, 'command': 8000, 'cli-start': 200, 'running-check': 90, 'channel-index': 50, 'release-verify': 50, 'log-verify': 50,
-      'download': 1000, 'unpack': 530, 'store-install': 200, 'report': 600, 'report-target': 390, 'report-data': 100, 'report-profile': 40,
+      'total': 7000, 'command': 8000, 'cli-start': 200, 'running-check': 90, 'channel-verify': 150,
+      'download-unpack': 1540, 'store-install': 200, 'report': 600, 'report-target': 390, 'report-data': 100, 'report-profile': 40,
       'confirm': 100, 'snapshot': 50, 'drain': 90, 'stop-host': 400, 'data-copy': 1000, 'switch': 20, 'target-boot': 1470, 'health-check': 1000, 'handover': 100,
     })
   })
@@ -84,6 +85,14 @@ describe('the update timeline', () => {
     const rollback: Finished = { ...COMMAND, lines: [{ at: 2000, stream: 'stdout', text: '… waiting' }, { at: 3000, stream: 'stdout', text: '… switching' }, { at: 5000, stream: 'stdout', text: '… health-check' }] }
     expect(rollbackItems(rollback)).toEqual({ 'rollback': 8000, 'rollback-switch': 2000, 'rollback-target': 4000 })
     expect(rollbackItems(COMMAND)).toEqual({ rollback: 8000 })
+  })
+
+  it('splits the details a record\'s message carries from the message', () => {
+    expect(splitRecord('update phase {"phase":"switching","from":"0.1.0"}', undefined)).toEqual({ msg: 'update phase', phase: 'switching' })
+    expect(splitRecord('update committed {"from":"0.1.0"}', undefined)).toEqual({ msg: 'update committed', phase: undefined })
+    expect(splitRecord('update phase', { phase: 'waiting' })).toEqual({ msg: 'update phase', phase: 'waiting' })
+    expect(splitRecord('a brace { that is not JSON}', undefined)).toEqual({ msg: 'a brace { that is not JSON}', phase: undefined })
+    expect(splitRecord('running', null)).toEqual({ msg: 'running', phase: undefined })
   })
 
   it('gives no difference for a missing or reversed pair of times', () => {

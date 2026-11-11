@@ -10,7 +10,7 @@ import { chatIds, corpusModules } from '../src/fixtures/data.ts'
 import { DATA_ITEMS, gatherIntoWorkspace, shellWord } from '../src/suites/data/index.ts'
 import { INSTALL_ITEMS, installItems } from '../src/suites/install/index.ts'
 import { oldestVersion } from '../src/suites/recovery/index.ts'
-import { startLinkIn, studioOrigin } from '../src/suites/start/index.ts'
+import { signInLink, studioOrigin } from '../src/suites/start/index.ts'
 import { SUITES } from '../src/suites/index.ts'
 
 const made: string[] = []
@@ -104,17 +104,17 @@ describe('the start suite', () => {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
     const record = (ts: string, msg: string): string => JSON.stringify({ ts, level: 'info', surface: 'home-default', pid: 1, logger: 'stdout', source: 'captured', msg })
     writeFileSync(file, [
-      record('2026-11-10T00:00:00.000Z', 'dsh web: http://127.0.0.1:1111/?token=[redacted:url-parameter]'),
+      record('2026-11-10T00:00:00.000Z', 'dsh web: http://127.0.0.1:1111'),
       record('2026-11-10T00:00:02.000Z', 'booting'),
-      record('2026-11-10T00:00:03.000Z', 'dsh web: http://127.0.0.1:2222/?token=[redacted:url-parameter]'),
+      record('2026-11-10T00:00:03.000Z', 'dsh web: http://127.0.0.1:2222/'),
       '',
     ].join('\n'), { mode: 0o600 })
     expect(studioOrigin(home, Date.parse('2026-11-10T00:00:01.000Z'))).toBe('http://127.0.0.1:2222')
     expect(studioOrigin(home, Date.parse('2026-11-10T00:00:04.000Z'))).toBeUndefined()
   })
 
-  it('reads the start link with its token from the line the Host printed', () => {
-    expect(startLinkIn('dsh web: http://127.0.0.1:2222/?token=a-b_c')).toBe('http://127.0.0.1:2222/?token=a-b_c')
-    expect(startLinkIn('dsh web: http://127.0.0.1:2222/?token=[redacted:url-parameter]')).toBeUndefined()
+  it('reads the sign-in link from what delorun open --print printed', () => {
+    expect(signInLink(['Sign in within one minute:', 'http://127.0.0.1:2222/?token=a-b_c'])).toBe('http://127.0.0.1:2222/?token=a-b_c')
+    expect(signInLink(['no link here'])).toBeUndefined()
   })
 })

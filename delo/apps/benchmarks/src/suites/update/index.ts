@@ -39,11 +39,8 @@ export const UPDATE_ITEMS: Readonly<Record<string, string>> = {
   'command': 'From the command starting to the command exiting',
   'cli-start': 'The launcher\'s start check, the runtime\'s start and the CLI asking the home process to prepare',
   'running-check': 'The start check of the running release before the channel opens',
-  'channel-index': 'Fetching the channel\'s timestamp and verifying it and the root chain',
-  'release-verify': 'Fetching the manifest and its log bundle and verifying the signature',
-  'log-verify': 'The release-log check: the checkpoint and the consistency proof from the log\'s tiles',
-  'download': 'Downloading the runtime archive and checking it against the manifest',
-  'unpack': 'Fetching and verifying the file list and unpacking the archive into staging',
+  'channel-verify': 'Fetching and verifying the channel\'s timestamp and root chain, the manifest, its signature and the release-log check',
+  'download-unpack': 'Downloading the runtime archive and its file list, checking both against the manifest, and unpacking the archive into staging',
   'store-install': 'The store checking the staged files and moving them into the runtime store',
   'report': 'Building the update report',
   'report-target': 'The report reading the target: its bundle tables, read by the target\'s own Node, and its bundles',
@@ -114,14 +111,36 @@ export function readMarks(path: string): readonly Mark[] {
 }
 
 /**
+ * A home log record's message and the details the logger appended to it as one JSON object, or a `data` field where
+ * the record carries one.
+ * @param msg - the record's message.
+ * @param data - the record's `data` field, if any.
+ * @returns the message without the details, and the update phase they name.
+ */
+export function splitRecord(msg: string, data: unknown): { readonly msg: string, readonly phase: string | undefined } {
+  const phaseOf = (value: unknown): string | undefined => {
+    const phase = typeof value === 'object' && value !== null ? (value as { readonly phase?: unknown }).phase : undefined
+    return typeof phase === 'string' ? phase : undefined
+  }
+  const at = msg.indexOf(' {')
+  if (at === -1 || !msg.endsWith('}')) return { msg, phase: phaseOf(data) }
+  try {
+    return { msg: msg.slice(0, at), phase: phaseOf(JSON.parse(msg.slice(at + 1))) ?? phaseOf(data) }
+  } catch (_notJson) {
+    // A message that merely contains a brace stays whole.
+    return { msg, phase: phaseOf(data) }
+  }
+}
+
+/**
  * Read the home log's records of a home.
  * @param deloHome - the Delo home.
  * @returns each record's time, message, process and update phase.
  */
 export function readHomeLog(deloHome: string): readonly LogMark[] {
   return readLines(resolveSurface({ kind: 'home', home: deloHome, profile: PROFILE }), 100_000, line => line.record !== undefined).map(({ record }) => {
-    const data = (record as { readonly data?: { readonly phase?: unknown } }).data
-    return { at: Date.parse(record!.ts), msg: record!.msg, pid: record!.pid, phase: typeof data?.phase === 'string' ? data.phase : undefined }
+    const { msg, phase } = splitRecord(record!.msg, (record as { readonly data?: unknown }).data)
+    return { at: Date.parse(record!.ts), msg, pid: record!.pid, phase }
   })
 }
 
@@ -217,17 +236,13 @@ export function updateItems(command: Finished, timeline: UpdateTimeline, copied:
   const healthCheck = timeline.phase('health-check')
   const booted = timeline.log('the Host booted on the new runtime; checking its health')
   const applyStart = copied ? timeline.mark('copies.plan:start') : timeline.mark('snapshots.save:start')
-  const archiveDownloaded = timeline.lastMark('download.file:end')
   const candidates: Record<string, number | undefined> = {
     'total': difference(t0, committed),
     'command': command.endedAt - t0,
     'cli-start': difference(t0, timeline.mark('store.prepare:start')),
     'running-check': timeline.span('channel.open'),
-    'channel-index': difference(timeline.mark('channel.resolve:start'), timeline.mark('install.resolved')),
-    'release-verify': difference(timeline.mark('install.resolved'), timeline.mark('install.signature-checked')),
-    'log-verify': difference(timeline.mark('install.signature-checked'), timeline.mark('install.log-checked')),
-    'download': difference(timeline.mark('download.file:start'), archiveDownloaded),
-    'unpack': difference(archiveDownloaded, filled),
+    'channel-verify': timeline.span('channel.resolve'),
+    'download-unpack': difference(timeline.mark('channel.fill:start'), filled),
     'store-install': difference(filled, reportStart),
     'report': difference(reportStart, prepared),
     'report-target': timeline.span('report.target'),
@@ -329,7 +344,7 @@ async function runScenario(context: SuiteContext, scenario: UpdateScenario, prep
     try {
       copyHome(prepared.template, root)
       channel.serve(prepared.target)
-      samples.addAll(await repetitionItems(home, scenario, channel))
+      samples.addAll(await repetitionItems(home, scenario))
       completed++
     } catch (error) {
       failures.push(context.scrubber.scrub(error instanceof Error ? error.message : String(error)))
@@ -363,12 +378,11 @@ async function waitReady(timings: string, exited: Promise<Finished>): Promise<vo
  * One repetition: start the home process, update, and roll back where the scenario does.
  * @param home - the home copied from the template.
  * @param scenario - the scenario.
- * @param channel - the run's channel.
  * @returns the repetition's items.
  */
-async function repetitionItems(home: InstalledHome, scenario: UpdateScenario, channel: Awaited<ReturnType<SuiteContext['fixtures']>>['channel']): Promise<Record<string, number>> {
+async function repetitionItems(home: InstalledHome, scenario: UpdateScenario): Promise<Record<string, number>> {
   const timings = join(home.root.path, 'timings.jsonl')
-  const driver = startDriver(home, VERSIONS.from, DRIVER, [channel.origin, channel.logOrigin, timings], 3_600_000)
+  const driver = startDriver(home, VERSIONS.from, DRIVER, [timings], 3_600_000)
   await waitReady(timings, driver.finished)
   const items: Record<string, number> = {}
   if (scenario.store === 'warm') {
