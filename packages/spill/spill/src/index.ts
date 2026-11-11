@@ -70,8 +70,9 @@ export abstract class SpillStore extends Service {
 
 /**
  * The directories a read tool running for one session may read inside a sandbox provider's tool-readable entries: the
- * mounted spill store's directories for that session and for the session it was forked or delegated from, whose
- * locators a forked session's log carries. Earlier ancestors are not included. An agentless call gets none.
+ * mounted spill store's directories for that session and for the session its header names as `parentSession`, such as
+ * a subagent's delegating session. A fork records no parent session, so a forked session is not granted the spill files
+ * its inherited log names, and earlier ancestors are not included. An agentless call gets none.
  * @param ctx - context whose optional `spillStore` service is read.
  * @param header - the calling session's header, or `undefined` for an agentless call.
  * @returns the grants for `protectedReadGuard` from `@deepseek-ai/dsh-sandbox`.

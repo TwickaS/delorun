@@ -733,8 +733,11 @@ describe('the sandbox provider\'s protected home', () => {
     expect(text(await read('.delo/spill/session-a/grep.txt'))).toContain('spilled output a')
     expect(await read('.delo/spill/session-b/grep.txt')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
     expect(await read('.delo/secrets/key')).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
-    // A session forked from `b` reads the spill files its log inherited from `b`.
+    // A subagent session whose header names `b` as its parent reads `b`'s spill files.
     expect(text(await read('.delo/spill/session-b/grep.txt', { id: 'c', parentSession: 'b', cwd: dir }))).toContain('spilled output b')
+    // A fork records no parent session: the spill files its inherited log names stay unreadable.
+    expect(await read('.delo/spill/session-b/grep.txt', { id: 'fork-of-b', isSeeded: true, cwd: dir }))
+      .toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
     // A call without a session is granted no spill directory.
     expect(await call('read', { file_path: '.delo/spill/session-a/grep.txt' })).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
   })

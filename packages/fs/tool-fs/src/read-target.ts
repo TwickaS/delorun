@@ -16,7 +16,7 @@ import { sessionResolveOptions } from './session-cwd.ts'
 /**
  * The sandbox provider's protected-read check for one tool call, read once: true for a target under the protected home
  * or another path that reaches it, outside its readable entries and outside the spill directories of the calling
- * session and the session it was forked from within its tool-readable entries, unless the call runs under
+ * session and its header's parent session within its tool-readable entries, unless the call runs under
  * `danger-full-access`. A provider that protects nothing makes it always false.
  * @param ctx - the plugin context.
  * @param exec - the tool execution, whose session decides the sandbox mode when `mode` is omitted.

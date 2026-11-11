@@ -1146,7 +1146,7 @@
       "path": "packages/fs/tool-fs/src/read-target.ts",
       "class": "security",
       "reason": "Protected home, read fence (review of #66): `refuseProtectedRead` refuses a model-facing read or patch target under the sandbox provider's `protectedReads` (the home and its aliases, outside the readable entries) with `FS_SANDBOX_DENIED` unless the call runs under `danger-full-access`; `read` and `read_image` apply it after resolving. Without protected reads nothing changes. `protectedReadCheck` returns the same check as a predicate read once per call, for a tool that checks many targets, such as a directory listing. The check grants the calling session's spill directories from `spillReadGrants`.",
-      "sha256": "8d4b660febe1ad92330b4e205299396e44130021df000fc49a31cabb699a3a21"
+      "sha256": "05ea2da5cabd19f509a7c54567ee18b7a524a16cfbf7f4520b1644bc4927f09e"
     },
     {
       "path": "packages/fs/tool-fs/src/sandbox.ts",
@@ -1985,8 +1985,8 @@
     {
       "path": "packages/spill/spill/src/index.ts",
       "class": "security",
-      "reason": "Protected home, spill reads: adds `SpillStore.sessionDirectory(sessionId)`, undefined by default, the local directory holding one session's artifacts, and `spillReadGrants(ctx, header)`, the directories of the calling session and of the session it was forked from that the read tools may read inside the sandbox provider's tool-readable entries. Without a store that reports a directory nothing is granted; `saveText` is unchanged.",
-      "sha256": "fa77f0efad04c66730c96d83f75ea2e6431409d3ebdda83f82c1305262843dac"
+      "reason": "Protected home, spill reads: adds `SpillStore.sessionDirectory(sessionId)`, undefined by default, the local directory holding one session's artifacts, and `spillReadGrants(ctx, header)`, the directories of the calling session and of its header's `parentSession` (a subagent's delegating session; a fork records none) that the read tools may read inside the sandbox provider's tool-readable entries. Without a store that reports a directory nothing is granted; `saveText` is unchanged.",
+      "sha256": "d7bb1ed48a2ebf9fd4bed5f2de0132d4beb880cf4f796b3d3b10096bea8be823"
     },
     {
       "path": "packages/mcp/mcp-client/src/server-start.ts",
