@@ -95,6 +95,10 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'delo.release-log-state': null,
   // A cache of the start check under trust/: a release that cannot read it, or reads another schema, hashes every file.
   'delo.runtime-identity': null,
+  // The plugin install check's records under a profile: a release that cannot read one lists its plugin as unrecorded,
+  // never unchanged, and the next installation writes it again; the trust status is replaced by every check.
+  'delo.plugin-install': null,
+  'delo.plugin-trust': null,
 }
 
 describe('c03-previous-release-reads-delorun-records', () => {

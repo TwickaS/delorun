@@ -1016,11 +1016,10 @@ function AuditFindings({ audit, kind, onAccept, t }: {
   readonly t: Translate
 }) {
   const titleId = useId()
-  const description = kind === 'acceptable' ? 'installAuditDescription' : kind === 'refused' ? 'installAuditRefusedDescription' : 'installAuditInstalledDescription'
   return (
     <section className={css.approval} role="group" aria-labelledby={titleId} data-install-audit>
       <h3 id={titleId} className={css.approvalTitle}>{t('installAuditTitle')}</h3>
-      <p className={css.approvalText}>{t(description)}</p>
+      <p className={css.approvalText}>{t(AUDIT_DESCRIPTION_KEYS[kind])}</p>
       <ul className={css.auditList}>
         {audit.findings.map(finding => (
           <li key={`${finding.rule}:${finding.path}:${String(finding.line)}:${finding.excerpt}`} data-severity={finding.severity}>
@@ -1041,6 +1040,9 @@ function AuditFindings({ audit, kind, onAccept, t }: {
     </section>
   )
 }
+
+/** The description above the findings on each screen that lists them. */
+const AUDIT_DESCRIPTION_KEYS = { acceptable: 'installAuditDescription', refused: 'installAuditRefusedDescription', installed: 'installAuditInstalledDescription' } as const satisfies Record<'acceptable' | 'refused' | 'installed', PluginManagerLocaleKey>
 
 /** The words each finding's severity reads as. */
 const AUDIT_SEVERITY_KEYS = { critical: 'auditSeverityCritical', warning: 'auditSeverityWarning', notice: 'auditSeverityNotice' } as const satisfies Record<PluginAuditResult['findings'][number]['severity'], PluginManagerLocaleKey>
