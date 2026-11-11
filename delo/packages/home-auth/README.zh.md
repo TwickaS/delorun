@@ -8,11 +8,12 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 
 ## 摘要
 
-本包承载 [约定 C4](../../docs/contracts/c04-admission.zh.md#authenticator) 的 authenticator 提供方 `@delo/home-auth`，同时包含 [约定 C5](../../docs/contracts/c05-device-approval.zh.md) 的所有者认领与设备批准、[约定 C14](../../docs/contracts/c14-oidc-passkeys.zh.md) 的身份因子，以及 C4 的服务端远程访问会话。前半部分是所有者认领与设备列表：`~/.delo/secrets/home-auth/` 下的记录、应答这些记录的路由，以及结束设备在线会话的移除。后半部分是 C4 的准入拒绝测试套件，用于证明准入 seam 的上游一半：上游的 connection 声明 `Authenticator` Service Definition，并通过 `ctx.connection.openReachListener` 打开远程访问监听器；web 服务器在任何路由、upgrade 或回退之前，运行每个远程访问监听器的分发器。约定的标识符、代码与限制来自 [`@delo/contract-admission`](../contract-admission/README.zh.md)。
+本包承载 [约定 C4](../../docs/contracts/c04-admission.zh.md#authenticator) 的 authenticator 提供方，同时包含 [C5](../../docs/contracts/c05-device-approval.zh.md) 的所有者认领与设备批准、[C14](../../docs/contracts/c14-oidc-passkeys.zh.md) 的身份因子，以及 C4 的服务端远程访问会话。它提供 `authenticator`，包括以已批准设备的密钥登录、批准窗口与本地批准、`tailnet-membership` 身份因子，以及已批准设备可调用内容的允许列表，每个 CLI profile 都以 `delo-home-auth` 行加载它。回环 studio 仍由上游的启动令牌与 cookie 准入，远程访问监听器只在远程访问提供方请求时才提供服务，因此远程访问关闭时，任何远程访问路由都不应答。前半部分是所有者认领与设备列表：`~/.delo/secrets/home-auth/` 下的记录、应答这些记录的路由，以及结束设备在线会话的移除。C4 的准入拒绝测试套件证明准入 seam 的上游一半，它位于组合 studio 的 CLI 中，即 `delo/apps/cli/tests/denial/`：上游的 connection 声明 `Authenticator` Service Definition，并通过 `ctx.connection.openReachListener` 打开远程访问监听器；web 服务器在任何路由、upgrade 或回退之前，运行每个远程访问监听器的分发器。约定的标识符、代码与限制来自 [`@delo/contract-admission`](../contract-admission/README.zh.md)。
 
 ## 目录
 
 - [所有者认领与设备列表](#the-owner-claim-and-device-list)
+- [远程访问登录](#reach-sign-in)
 - [准入拒绝测试套件](#the-admission-denial-suite)
 - [给提供方的说明](#notes-for-the-provider)
 - [测试](#tests)
@@ -24,23 +25,37 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 
 - **所有者验证码**（`owner-code.json`）。128 位随机数写成 26 个 base32 字符，只打印一次，并且只以 SHA-256 摘要保存。验证码只能使用一次，并在打印后 10 分钟过期；错误的验证码会保留原有的验证码，新的验证码则取代它。
 - **认领**（`owner.json`、`devices.json`）。只接受回环访问，且即使没有任何分发器标记请求，`Host` 指向远程访问地址也会被拒绝。认领记录的是监听器自身的 origin `http://127.0.0.1:3080`，无论请求使用哪种回环写法——`localhost`、`127.0.0.1`、`[::1]`、`.localhost` 名称、带或不带端口、经由 SSH 端口转发——并且会以 `BAD_REQUEST` 拒绝根本不是 authority 的 `Host`，因此攻击者写入的请求头永远不会成为设备的地址。一个 home 只有一个所有者：持有效新验证码的第二个认领者会以 `ALREADY_OWNED` 被拒绝，第一个所有者保有自己的 home；同时发起的两个认领会串行执行，因此恰好一个赢得所有者席位。验证码在写入任何记录之前就被消耗，因此认领过 home 的验证码不会再认领第二个 home；而记录了设备却没有所有者的 home 会以 `STORE_INVALID` 拒绝认领，而不是接管这些设备。
-- **设备路由的到达。** `GET /auth/devices` 与 `POST /auth/devices/remove` 只在回环监听器上应答：两者都在读取任何内容之前判断到达，`Host` 指向其他地址会以 `421 HOST_MISMATCH` 被拒绝；移除还会以 `403 ORIGIN_MISMATCH` 拒绝来自其他 origin 的页面——`Origin` 不是请求自身的 origin，或 `Sec-Fetch-Site` 指向外部。正是这一点，使一个由解析到 `127.0.0.1` 的名称所提供的页面（DNS rebinding）无法读取 home 的记录或移除设备，也使跨站表单无法提交移除。
-- **设备列表**。所有者与每一台受信任设备，不含密钥材料。未认领的 home 会以 `NO_OWNER` 拒绝列表与移除，而不是像拥有空设备列表那样应答。所有者记录与设备列表会相互核对，因此被复制过来、指名本 home 未记录的设备的 `owner.json` 会以 `STORE_INVALID` 失败而不是成为所有者，任何列表、会话或移除都不会替它行事。
+- **到达**。只有当请求不带任何远程访问监听器的标记、且由回环监听器自己的 socket 接受时，它才是回环请求：其本地端口是 web 服务器绑定的端口，其本地地址是回环地址。其他任何请求都绝不是回环请求（`a request without a listener stamp is not loopback` 这个 spec），因此漏掉标记的转发请求得不到任何东西。
+- **设备路由的到达**。`GET /auth/devices` 与 `POST /auth/devices/remove` 只在回环监听器上应答：两者都在读取任何内容之前判断到达，对远程访问监听器准入的请求应答 `403 LOOPBACK_REQUIRED`，`Host` 指向其他地址会以 `421 HOST_MISMATCH` 被拒绝；移除还会以 `403 ORIGIN_MISMATCH` 拒绝来自其他 origin 的页面——`Origin` 不是请求自身的 origin，或 `Sec-Fetch-Site` 指向外部。正是这一点，使一个由解析到 `127.0.0.1` 的名称所提供的页面（DNS rebinding）无法读取 home 的记录或移除设备，也使跨站表单无法提交移除。回环上的每条设备路由——列表、移除、批准窗口、待处理请求与批准——还需要 studio 自己的凭据，`connection.requestRejection` 像对上游自己的路由一样检查它：浏览器已签名的启动 cookie，或在线的 API 凭据。没有它的请求以 `401 NOT_SIGNED_IN` 被拒绝，因此电脑上的其他程序、对话运行的命令或其他用户只能到达该端口，别无其他。状态变更还需要与 studio 自己的回环 origin 相同的 `Origin`；没有它的请求以 `403 ORIGIN_MISMATCH` 被拒绝。`delorun devices` 使用 home 套接字的 `devices.approve` 与 `devices.remove`，从不使用这些路由。任何路由都不返回匹配码：待处理列表只携带请求的标签、平台、地址与时间。
+- **设备列表**。所有者与每一台受信任设备，不含密钥材料。未认领的 home 会以 `NO_OWNER` 拒绝列表与移除，而不是像拥有空设备列表那样应答。所有者记录与设备列表会相互核对，因此被复制过来、指名本 home 未记录的第一台设备的 `owner.json` 会以 `STORE_INVALID` 失败而不是成为所有者，任何列表、会话或移除都不会替它行事。
 - **会话**（`sessions.json`）。令牌只下发一次，并以作为记录键的 SHA-256 摘要保存，因此复制该文件无法让任何人登录。会话只会为已记录、且记录地址与请求一致的设备签发：没有所有者的 home 以 `NO_OWNER` 拒绝，无法读取的所有者记录以 `STORE_INVALID` 拒绝，本 home 未记录的密钥——另一个 home 的设备、位于其他地址的设备，或刚被撤销的设备——以 `DEVICE_NOT_TRUSTED` 拒绝。只有当设备仍按其会话地址被记录时，会话才被视为在线，因此设备记录已消失的令牌不会再应答任何内容，即使它自己的记录仍然存在。
-- **移除**。删除设备记录、使其令牌的每个在线会话失效，并通过 `ctx.connection.closeReachConnections({ deviceId })` 关闭这些会话准入的远程访问连接，全部在返回之前完成；没有记录的设备同样会结束其会话。**轮换尚未实现。** C5 的“移除”还会轮换 home 的其他每个会话，而本 home 尚无可以兑换轮换后令牌的令牌轮换路由，因此一次移除恰好结束被移除设备的会话，并保留其他每台设备的会话。轮换属于登录路由；在那之前，结束另一台设备的会话会把个人并未触碰的设备登出，而本包没有任何路由要求这样做（`leaves another device's sessions live` 这个 spec 固定了这一偏差）。
+- **移除**。删除设备记录、使其令牌的每个在线会话失效、轮换其他每个会话、释放该设备的 Peer，并通过 `ctx.connection.closeReachConnections({ deviceId })` 关闭这些会话准入的远程访问连接，全部在返回之前完成；没有记录的设备同样会结束其会话。
 - **限制**。一个 home 最多信任 32 台设备（`DEVICE_LIMIT_REACHED`，`429`），一台设备最多持有 16 个在线会话（`SESSION_LIMIT_REACHED`，`429`）；在统计上限之前会先丢弃已过期的会话记录，因此在会话过期后再次登录的设备永远不会被它们拒绝。
 - **记录**。每个文件都经 [约定 C1](../../docs/contracts/c01-home-layout.zh.md) 的受保护文件检查读取，因此其他用户可以读取的文件，或不是本包 JSON 的文件，会以 `STORE_INVALID` 拒绝，而不是被当作空内容读取并让一次认领覆盖它。
+
+<a id="reach-sign-in"></a>
+## 远程访问登录
+
+`src/authenticator.ts` 是上游 `authenticator`（[C4](../../docs/contracts/c04-admission.zh.md#authenticator)）的提供方，服务把它作为子插件加载。它在回环监听器上保留上游的准入，并且只在远程访问提供方为某个远程访问监听器调用了 `homeAuth.serve()` 时才服务该监听器，使用该提供方声明的身份因子；只接受 Tailscale 私有监听器的 `ts.net` 地址上的 `tailnet-membership`（否则为 `TAILNET_IDENTITY_UNAVAILABLE`）。`admit` 在存储的内存副本上同步运行，每次变更都会在返回之前重新读取该副本；它给每个请求标记其监听器、应答登录前路由，并把 `__Host-delo-session` cookie 准入为每台设备、每个监听器一个 Peer，它代表设备的 `reach-device` 主体，绝不代表所有者；超过 12 小时未使用或已满 14 天时拒绝为 `SESSION_EXPIRED`，在设备批准或移除之后拒绝为 `ROTATION_REQUIRED`；会话打开的远程访问连接在同样的时刻关闭，无需等待请求。在令牌已满 24 小时的会话上，不带 `Upgrade` 的请求会在 `setCookie` 中收到新令牌；旧令牌再准入 30 秒后被删除，两者都不延长绝对上限。
+
+- **批准窗口与本地批准**（[C5](../../docs/contracts/c05-device-approval.zh.md#approval-window)）。回环上的 `POST /auth/devices/window`，或 home 套接字的 `devices.approve`，打开一个 5 分钟的窗口，并为本地的本人认领没有所有者的 home。窗口之外的 `POST /auth/device/request` 在读取请求体之前应答 `APPROVALS_CLOSED`。`GET /auth/devices/pending`、`POST /auth/devices/approve` 与 `POST /auth/devices/cancel` 是回环批准表单，位于 studio 的凭据之后；第三次错误的匹配码只取消该请求，`Approvals.cancel` 按本人的选择取消一个待处理请求（带 `cancelRequestId` 的 home 套接字 `devices.approve`），批准会记录批准者 `local`、轮换每个会话并关闭窗口。已满的 home 拒绝第六个请求，且不替换任何请求。带有控制字符或双向格式字符的标签或平台以 `BAD_REQUEST` 被拒绝。
+- **登录**。`POST /auth/device/challenge` 与 `POST /auth/session` 校验对 `delo-signin-v1`、地址以及一次性 60 秒质询的 ECDSA P-256 签名；在 Tailscale 私有监听器上，仅凭已批准设备的签名即可创建带因子 `tailnet-membership` 的完整会话。登录页面（`GET /auth/sign-in`）从 `assets/` 加载两个以内容哈希命名的资产，把设备密钥以不可导出的形式保存在 IndexedDB 中，并以与 `src/match-code.ts` 相同的推导计算匹配码。
+- **home 自己电脑的拒绝**（[C14](../../docs/contracts/c14-oidc-passkeys.zh.md#tailnet-membership)）。窗口、批准与移除路由对远程访问会话应答 `403 LOOPBACK_REQUIRED` 并写明操作。提供方还提供上游的 `remoteAnswerGuard`：远程访问 Peer 对携带 `grants: "full-access"`（升级到 `danger-full-access`，包括 `plugin_manager` 的升级，或工作区的完全访问同意）或 `grants: "workspace-management"`（主对话的账户工具及其受防护的工具调用，以及 `@delo/plugin-instruction-consent` 询问的指令层写入）的审批提示给出的授予性答复（除 `rejected`、`cancelled` 或 `unavailable` 之外的任何答复）会以 `LOOPBACK_REQUIRED` 被拒绝并写明 `full-access-escalation` 或 `workspace-management`，且不被应用，因此该提示对 home 电脑上的 studio 保持打开。来自设备的拒绝会被应用。其他只允许 home 自己的电脑使用的 Delo 插件路由，会在其 `connection/request` 监听器中调用 `requireComputer`（`src/computer-only.ts`）：未经回环监听器、以回环 `Host` 到达的请求，或在没有挂载 `homeAuth` 时的任何请求，都会在路由读取其请求体之前被应答 `403 LOOPBACK_REQUIRED` 并写明操作。
+- **设备可以调用什么**（[C14](../../docs/contracts/c14-oidc-passkeys.zh.md#tailnet-membership)）。`src/reach-access.ts` 声明 `reach-device` 主体（其唯一字段是设备 id），以及提供方通过上游的 `remoteAccess.registerPolicy` 为它注册的远程访问策略。上游的 Gateway 在分派远程访问 Peer 的每次调用之前、在向其转发每个事件之前，都会询问该策略。该策略默认拒绝：它在全局资源、Workspace 注册表中的每个 Workspace，以及属于某个 Workspace 或在 Host 中在线的每个 Session 上绑定 `REACH_ALLOWED_ACTIONS` 的操作（读取对话、工作区与已脱敏的设置，开始对话，发送消息，停止运行，答复审批提示与 agent 问题）；Session 或 Workspace 变更时重新计算快照。其他每个操作——`REACH_DENIED_ACTIONS` 中带原因的每一项，或两张表都未列出的操作——都以 `remote-access/denied` 被拒绝，原因为 `loopback-required: <action>`；在策略无法指名的 Session 上（例如不属于任何 Workspace 且不在线的已存储 Session）执行允许的操作，会以 `resource-unlisted: <action>` 被拒绝。
+- **设备能到达哪些路径**（[C4](../../docs/contracts/c04-admission.zh.md#pre-login-allowlist)）。登录之后，`admit` 只放行目标是 `REACH_DEVICE_PATHS`（`src/reach-paths.ts`）上普通路径的远程访问请求，该表每个条目都带一个原因：studio 页面 `/`、它的 `/assets` 与安装时文件、`/api` 及其 `/api/remote.mux` upgrade、`/plugins` 下的客户端插件包、本包的 `/auth` 路由，以及 `/delo/reach/status`。其他每个目标，无论属于哪条精确、前缀或 upgrade 路由或回退，都在其路由运行之前以 `403 LOOPBACK_REQUIRED` 被拒绝，时间在会话自身的拒绝之后，且不滚动会话，因此只检查请求是否已准入的路由（例如上游的 `open-in-app`）绝不会应答设备。目标在解析不改变任何内容、且不含空段与转义的 `/` 或 `\` 时才是普通路径；只匹配其路径，从不匹配其查询。在 `/api` 下，每条精确 Fetch 路由只有在准入该 Peer 时才应答设备，而 Delo 的路由都不准入。`delo/apps/cli/tests/denial/reach/reach-paths.integration.spec.ts` 启动整个 CLI 组合，以已登录设备的身份请求 web 服务器的每个注册项，当设备能到达某个未列出的注册项，或某条精确 Fetch 路由没有已记录的决定时失败。
+
+此处未构建：通行密钥、OpenID Connect、恢复套件、重置、警报，以及 C4 所描述的回环凭据记录及其空闲上限。回环凭据是上游的启动 cookie 与 API 凭据，由上游的内置准入接受；不存在按凭据的记录，因此没有任何回环请求会因缺少记录而被拒绝。
 
 <a id="the-admission-denial-suite"></a>
 ## 准入拒绝测试套件
 
-`tests/denial/admission/` 在测试进程中启动 Delo CLI profile 的 web 组合：上游的 web 模板（Delo 的 profile 在其上扩展）以操作系统分配的端口运行 web 服务器。Delo 自身的 bundle 层被排除在外，因为其 host 部分不注册任何 web 路由。随后，该套件加载一个替身提供方 `StandInHomeAuth`，它准入一个会话 cookie，并把回环监听器委托给 Connection 的内置准入；另有一个社区插件 fixture（测试前置数据），带有一条精确路由、一条前缀路由与一条 upgrade 路由。它打开全部三个远程访问监听器：`reach-tailscale-private` 与 `reach-tailscale-funnel` 位于 `127.0.0.1` 的端口上，`reach-self-hosted-relay` 则在本地 TCP 服务器交给它的字节流上运行，证书来自替身堆栈的测试 authority。
+`delo/apps/cli/tests/denial/admission/` 在测试进程中启动 Delo CLI profile 的 web 组合：上游的 web 模板（Delo 的 profile 在其上扩展）以操作系统分配的端口运行 web 服务器。Delo 自身的组合包层被排除在该组合之外；`delo/apps/cli/tests/denial/reach/reach-paths.integration.spec.ts` 启动整个 CLI profile（包括 Delo 的组合包及其 web 路由），并以已登录设备的身份请求每个注册项。随后，该套件加载一个替身提供方 `StandInHomeAuth`，它准入一个会话 cookie，并把回环监听器委托给 Connection 的内置准入；另有一个社区插件 fixture（测试前置数据），带有一条精确路由、一条前缀路由与一条 upgrade 路由。它打开全部三个远程访问监听器：`reach-tailscale-private` 与 `reach-tailscale-funnel` 位于 `127.0.0.1` 的端口上，`reach-self-hosted-relay` 则在本地 TCP 服务器交给它的字节流上运行，证书来自替身堆栈的测试 authority。
 
 各测试的名称取自 C4 的拒绝表：
 
 | 测试 | 证明什么 |
 | --- | --- |
-| `every route and upgrade answers 401 before sign-in on each reach listener` | 启动后的 web 组合注册的每条精确路由、前缀路由、upgrade 路由以及回退，以及 fixture 插件的每条路由，在每个远程访问监听器上登录前都应答 401，且没有任何 fixture handler 运行；携带会话时，同一 fixture 路由与 upgrade 则会运行。 |
+| `every route and upgrade answers 401 before sign-in on each reach listener` | 启动后的组合注册的每条精确路由、前缀路由、upgrade 路由以及回退，以及 fixture 插件的每条路由，在每个远程访问监听器上登录前都应答 401，且没有任何 fixture handler 运行；携带会话时，同一 fixture 路由与 upgrade 则会运行。 |
 | `a plugin route is pre-login only when the profile lists it` | 提供方作为登录前请求应答的 fixture 路由，在监听器策略列出它之前会被拒绝，在列表被移除后会再次被拒绝。 |
 | `a pre-login request never reaches the fallback or another route` | 一条位于允许列表中、却没有注册路由的路径会被拒绝，而不是由回退应答。 |
 | `a cookie minted with upstream's secret is refused on a reach listener` | 上游以其密钥为远程访问监听器自身的 authority 签发、且在回环监听器上可以准入的 `dsh-auth-*` cookie，在远程访问监听器上会以 `UPSTREAM_COOKIE_REFUSED` 被拒绝，即使同时带有会话 cookie 也是如此。 |
@@ -53,16 +68,22 @@ description: "Delo 的远程访问登录，供 admission seam 的维护者使用
 
 一项类型级检查保证 C4 的 `Admission` 与 `ListenerPolicy` 类型可以赋值给上游 seam 的对应类型；一个 spec 保证分发器的拒绝状态与 C4 的状态相等。
 
+<a id="the-reach-access-denial-suite"></a>
+## 远程访问拒绝测试套件
+
+`delo/apps/cli/tests/denial/reach/` 启动同样的 web 组合，加载本包的服务，为一台已批准设备打开会话并通过提供方准入它，然后以返回的 Peer 调用 Gateway。`REACH_DENIED_ACTIONS` 列出的每一族操作都会被拒绝并写明操作，包括组合所描述的每个设置命名空间中的设置写入；读取对话列表与已脱敏的设置、开始对话、发送消息与停止运行都会成功，设备的事件流携带对话事件，不携带任何插件管理事件。该套件还列出组合注册的每个 Remote 方法及其转发的每个事件，当某个方法或事件两张表都未列出、或某个表条目没有对应项时失败，因此新方法默认被拒绝，其分类是一个需要做出的决定。
+
 <a id="notes-for-the-provider"></a>
 ## 给提供方的说明
 
 - **登录前资产路由。** 处理 `GET /auth/assets/<asset>` 的 handler 会把该段与一张固定的已构建资产名表进行匹配。它从不先解码该段再把它拼接到目录路径上，因为解码后的 `..` 或分隔符会使路径离开资产目录。
 - **认领的到达。** 认领路由在读取请求体之前就判断请求从何处到达，其拒绝语句会点名回环监听器与 SSH 端口转发；远程访问监听器在任何路由被查询之前，通过 `reachClaimRefusal()` 应答同样的拒绝。
-- **设备路由的到达。** 列表与移除在读取任何内容之前判断到达，两者都会拒绝 `Host` 指向其他地址的请求；移除还会拒绝来自其他 origin 的页面。两条路由都尚未读取 home-auth 的会话 cookie：本包没有为 studio 签发该 cookie 的路由，而 C5 中“处于在线会话中的受信任设备”所指的设备界面属于远程访问 UI，因此在那个界面落地之前，回环到达——加上移除的 origin 校验——就是这两条路由提供的保证。也正因如此，远程访问监听器的已认证请求目前不会到达这两条路由中的任何一条。
+- **设备路由的到达。** 列表与移除在读取任何内容之前判断到达，两者都会拒绝 `Host` 指向其他地址的请求；移除还会拒绝来自其他 origin 的页面。设备只能在 home 自己的电脑上被列出、批准与移除，因此远程访问会话的请求会被应答 `LOOPBACK_REQUIRED`。
 - **撤销。** 移除设备或结束会话时，会在返回之前调用 `ctx.connection.closeReachConnections({ deviceId })` 或 `({ sessionId })`，使不携带 Peer 的流与已升级的 socket（例如 `/plugins/events` 与插件 upgrade 路由）随会话一同结束；对设备的 Peer 执行 dispose（资源释放），会结束替它发言的流。
-- **回环凭据。** 每次回环签发都以 `authenticator/minted` 到达，提供方在写出设置该凭据的响应之前记录它。
+- **过期与轮换。** 轮换触发时，会在写入轮换标记之前以 `({ sessionId })` 关闭每个会话的远程访问连接。每个会话还有一个 unref 的计时器，对应其空闲上限、绝对上限，以及（对于被滚动替换的令牌）其 30 秒宽限期结束这三者中最早的一个；计时器触发时，若此后没有任何请求被准入，它就关闭该会话的连接，无论是否有请求到达，停止服务会清除每个计时器。使用是指以该会话的令牌准入的 HTTP 请求或 upgrade：先前已准入的连接上的字节从不到达 `admit`，因此打开的流或 WebSocket 不会让任何东西保持在线。客户端在打开的 WebSocket 上发送的帧也不计入，因为远程访问分发器与本提供方都看不到它们，而连接层无法区分 Remote 调用与应答 Gateway 心跳 Ping 的自动 Pong；所提供的 studio 通过 HTTP 发送其一元调用，因此使用它的本人会让会话保持在线。连接按会话关闭，从不按设备关闭，因为一台设备最多持有 16 个会话。被重新登录替换的会话会保留其打开的连接，直到它自己的空闲或绝对上限，因此登录自身的响应绝不会被切断。
+- **回环凭据。** 上游的 connection 对每次回环签发发出 `authenticator/minted`，时间在它写出设置该凭据的响应之前。本包不监听该事件；记录回环凭据的提供方必须在该响应写出之前记录每次签发。
 
 <a id="tests"></a>
 ## 测试
 
-`node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/home-auth` 运行该套件。它通过上游包的已发布入口导入这些包，因此需要当前的 `pnpm run build:artifacts` 产物；构建过期时，Delo 的检查运行器会启动该构建。
+`node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/home-auth` 运行本包的 spec，`node_modules/.bin/vitest run --config delo/vitest.config.ts delo/apps/cli/tests/denial` 运行拒绝测试套件，后者启动组合后的 studio，因此位于 CLI 中、`@delo/bundle-local` 之上。它通过上游包的已发布入口导入这些包，因此需要当前的 `pnpm run build:artifacts` 产物；构建过期时，Delo 的检查运行器会启动该构建。
