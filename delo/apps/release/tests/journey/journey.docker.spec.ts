@@ -414,15 +414,14 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     expect(JSON.stringify(await probe('page', chats.first))).toContain(MODEL_REPLY)
   }, STEP)
 
-  // FIXME(product): a background start leaves a person without a browser no way into the studio. The start token is
-  // printed once into the home log, whose redaction (contract C20) writes it as `token=[redacted:url-parameter]`, and
-  // setup's ending reads the address from that log (`delo/apps/cli/src/setup/ending.ts`, `studioAddressFromLog`), so the
-  // address setup and `delorun logs` give is refused; `delorun start` prints the address without a token.
-  it.fails('step 1d: a person without a browser reaches the studio with the address Delorun gives', async () => {
-    const logs = await delorun(['logs'])
-    const address = /dsh web: (http:\/\/\S+)/u.exec(logs.stdout)?.[1]
-    expect(address, logs.stdout.slice(-2000)).toBeDefined()
-    expect(await probe('exchange', address!)).toEqual({ status: 303 })
+  // The address in the home log carries no start token (contract C20 redacts it), so it cannot sign anyone in. What
+  // `delorun start`, `delorun status` and setup's ending tell a person without a browser to run is `delorun open --print`.
+  it('step 1d: a person without a browser reaches the studio once with the link `delorun open --print` gives', async () => {
+    const printed = await delorun(['open', '--print'])
+    const link = /(http:\/\/\S+)/u.exec(printed.stdout)?.[1]
+    expect(link, printed.stdout.slice(-2000)).toBeDefined()
+    expect(await probe('exchange', link!)).toEqual({ status: 303 })
+    await expect(probe('exchange', link!)).rejects.toThrow('not 303')
   }, STEP)
 
   it('step 2: with the log silent a fresh install warns and records unchecked; with the log contradicting it refuses and installs nothing', async () => {
