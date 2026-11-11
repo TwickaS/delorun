@@ -24,7 +24,7 @@ import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 
 /** The rows of `@delo/bundle-headless`. */
-const HEADLESS_ROWS = ['delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent', 'delo-permission-defaults', 'delo-fetch-guard', 'delo-update-gate'] as const
+const HEADLESS_ROWS = ['delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent', 'delo-permission-defaults', 'delo-plugin-changes', 'delo-fetch-guard', 'delo-update-gate'] as const
 
 /** The services the headless bundle's rows provide and the row each comes from. */
 const HEADLESS_SERVICES = [
@@ -357,6 +357,7 @@ describe('the headless profile', { timeout: 60_000 }, () => {
       { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent' },
       { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults' },
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard' },
+      { id: 'delo-plugin-changes', name: '@delo/plugin-changes' },
       { id: 'delo-update-gate', name: '@delo/bundle-local/update-gate' },
     ])
     expect(composed.prompts).toBeUndefined()

@@ -34,6 +34,11 @@ interface DriverReport {
   readonly fetch?: Refusal
   readonly instructionWrite?: { readonly toolResults: readonly { readonly isError: boolean, readonly error?: { readonly name: string, readonly code: string } }[], readonly written: boolean }
   readonly fullAccess?: { readonly guardReason: string | null, readonly selection: Refusal, readonly modes: readonly string[] }
+  readonly pluginChange?: {
+    readonly decision: { readonly kind: string, readonly reason?: string, readonly info?: { readonly name: string, readonly code: string } }
+    readonly pending: readonly { readonly kind: string, readonly state: string, readonly spec?: string }[]
+    readonly installed: boolean
+  }
   readonly turnGate?: {
     readonly present: boolean
     readonly held: boolean
@@ -78,7 +83,7 @@ function headlessDriver(mode: 'probe' | 'permission-mode' | 'disable-guard' | 'r
 }
 
 describe('the headless profile booted with upstream\'s real profile runner', { timeout: 180_000 }, () => {
-  it('refuses a loopback fetch, an instruction-file write, full access without a grant, and runs its turns only after the gate is released', () => {
+  it('refuses a loopback fetch, an instruction-file write, full access without a grant and an agent\'s plugin install, and runs its turns only after the gate is released', () => {
     const run = headlessDriver('probe')
     expect(run.report.outcome, run.report.message ?? run.stderr).toBe('booted')
     expect(run.status).toBe(0)
@@ -95,6 +100,11 @@ describe('the headless profile booted with upstream\'s real profile runner', { t
     expect(run.report.fullAccess?.guardReason).toMatch(/needs one consent for that workspace first/)
     expect(run.report.fullAccess?.selection).toMatchObject({ refused: true, name: 'SandboxModeRefusedError' })
     expect(run.report.fullAccess?.modes).not.toContain('danger-full-access')
+
+    // An agent's plugin install does not run: Changes records it in the headless profile's change log for the person.
+    expect(run.report.pluginChange?.decision).toMatchObject({ kind: 'deny', info: { name: 'PluginChangePending', code: 'PLUGIN_CHANGE_PENDING' } })
+    expect(run.report.pluginChange?.pending).toEqual([{ kind: 'plugin-install', state: 'pending', spec: 'left-pad' }])
+    expect(run.report.pluginChange?.installed).toBe(false)
 
     // A turn started before the release waited at the gate: it was logged as started, and no model request was made.
     expect(run.report.turnGate?.beforeRelease).toMatchObject({ turnStarts: 1, modelRequests: 0, agentStatus: 'running', gateHeld: false, releases: 0 })

@@ -7,7 +7,7 @@ kind: "package-bundle"
 
 ## Summary
 
-`@delo/bundle-headless` is the bundle that gives the home's `headless` profile Delo's guards. It holds no code; its [`cordis.patch.yml`](cordis.patch.yml) turns off two privacy defaults, inserts six guard rows and protects them from plugin management, after upstream's `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-headless` bundles. `delorun headless` links it into the profile, refuses a profile that does not load it, and holds its rows to [C19](../../docs/contracts/c19-home-process.md#host-invariants)'s Host invariants before and after boot.
+`@delo/bundle-headless` is the bundle that gives the home's `headless` profile Delo's guards. It holds no code; its [`cordis.patch.yml`](cordis.patch.yml) turns off two privacy defaults, inserts seven guard rows and protects them from plugin management, after upstream's `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-headless` bundles. `delorun headless` links it into the profile, refuses a profile that does not load it, and holds its rows to [C19](../../docs/contracts/c19-home-process.md#host-invariants)'s Host invariants before and after boot.
 
 ## Contents
 
@@ -30,11 +30,12 @@ kind: "package-bundle"
 | --- | --- | --- |
 | `session-log-deepseek` | upstream's session-log upload | `enabled: false`: DeepSeek's session-log upload is off ([C11](../../docs/contracts/c11-setup-answers.md)) |
 | `session-telemetry-otel` | upstream's feedback telemetry exporter | `disabled: true` |
-| `delo-instruction-consent` | [`@delo/plugin-instruction-consent`](../plugin-instruction-consent/README.md) | A model-authored write to a skill, a preset or an `AGENTS.md` asks for consent, which no one answers, so it is refused |
+| `delo-instruction-consent` | [`@delo/plugin-instruction-consent`](../plugin-instruction-consent/README.md), with `approvedPluginWrites` | A model-authored write to a skill, a preset or an `AGENTS.md`, and the agent's first write in a chat to the folder of a plugin approved under Changes, asks for consent, which no one answers, so it is refused |
 | `delo-mcp-consent` | [`@delo/plugin-mcp-consent`](../plugin-mcp-consent/README.md) | A new stdio MCP server that a person's own patch adds is not started until its command is accepted |
 | `delo-schedule-consent` | [`@delo/plugin-schedule-consent`](../plugin-schedule-consent/README.md) | A scheduled follow-up that a person's own patch makes possible asks for consent, which no one answers, so it is refused |
 | `delo-permission-defaults` | [`@delo/plugin-permission-defaults`](../plugin-permission-defaults/README.md) | A switch to full access for a workspace without a recorded grant is refused |
 | `delo-fetch-guard` | [`@delo/plugin-fetch-guard`](../plugin-fetch-guard/README.md) | A fetch of a private, loopback or link-local address is refused |
+| `delo-plugin-changes` | [`@delo/plugin-changes`](../plugin-changes/README.md) | An agent's `plugin_manager` install or removal does not run; it is recorded in the profile's change log as a change waiting for the person's review at their computer ([C21](../../docs/contracts/c21-changes.md#the-agent-and-plugins)); the profile serves no studio, so the plugin registers no Changes route |
 | `delo-update-gate` | `@delo/bundle-local/update-gate`, with `holdUntilChecked` | The first step of every turn waits until `delorun headless` has checked the booted Host's rows and services; no update or stop waits on a headless run's chats; a turn that waits longer than `checkWaitSeconds` (60 by default) ends with `START_CHECK_PENDING` instead of waiting without a message |
 | `plugin-manager` | upstream's plugin management, `protectedPlugins` | The guard rows above and the sandbox rows cannot be disabled, reconfigured or removed through the `plugin_manager` tool, which full access runs without a prompt, as in [`@delo/bundle-local`](../bundle-local/README.md) |
 

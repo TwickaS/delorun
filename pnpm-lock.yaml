@@ -1752,6 +1752,9 @@ importers:
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
+      '@delo/plugin-changes':
+        specifier: workspace:*
+        version: link:../plugin-changes
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
