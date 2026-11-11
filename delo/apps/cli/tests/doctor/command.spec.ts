@@ -1,7 +1,7 @@
 /**
- * `delorun doctor` run in this process through {@link createDoctorCommand}, with a fixed clock, release and import
- * reader: the record lines it adds after the four checks, the import line only when a reader is wired, and the key's
- * sources. The command sets the launch variables and loads `.env` layers into `process.env`, so every case runs from
+ * `delorun doctor` run in this process through {@link createDoctorCommand}, with a fixed clock, release, versions,
+ * installation and import reader: the record lines it adds after the four checks, the plugin lines, the import line
+ * only when a reader is wired, and the key's sources. The command sets the launch variables and loads `.env` layers into `process.env`, so every case runs from
  * a temporary working directory and puts the environment and the directory back afterwards.
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -11,7 +11,7 @@ import { recorded, serializeCheckState } from '@delo/release-verify'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDoctorCommand, doctorCommand, type DoctorEnvironment } from '../../src/doctor/index.ts'
 import type { DshImportRecordEntry } from '../../src/doctor/records.ts'
-import { closeServer, GOOD_KEY, listenOnEphemeralPort } from './fixtures.ts'
+import { closeServer, GOOD_KEY, listenOnEphemeralPort, plantInstallation, RUNNING_VERSIONS, writeJson } from './fixtures.ts'
 
 const RELEASE = '0.4.0'
 /** 2026-11-10T12:00:00Z. */
@@ -68,7 +68,7 @@ async function freePort(): Promise<number> {
 async function run(environment: Partial<DoctorEnvironment> = {}, env: Record<string, string> = {}, args?: readonly string[]): Promise<Run> {
   let stdout = ''
   let stderr = ''
-  const command = createDoctorCommand({ now: () => NOW, running: () => RELEASE, ...environment })
+  const command = createDoctorCommand({ now: () => NOW, running: () => RELEASE, versions: () => RUNNING_VERSIONS, installAnchor: () => plantInstallation(join(base, 'install')), ...environment })
   const code = await command.run(args ?? ['--port', String(await freePort())], {
     env: { DELO_HOME: home, PATH: join(base, 'no-bin'), ...env },
     stdout: (text) => { stdout += text },
@@ -96,7 +96,7 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('pass release-log: release 0.4.0 verified against the release log at 2026-11-10T10:00:00Z.\n')
-    expect(result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log', 'update'])
+    expect(result.lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'plugins', 'plugins', 'port', 'release-log', 'update'])
     expect(result.lines.some(line => / import: /.test(line))).toBe(false)
   })
 
@@ -139,6 +139,39 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     const failed = await run({ importRecord: () => Promise.reject(new Error('the record is a directory')) }, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(failed.code).toBe(1)
     expect(failed.stderr).toContain('fail import: the check could not complete: the record is a directory\n')
+  })
+
+  it('prints the plugin lines with the plugin\'s name, escapes what a manifest carries, and fails the exit code', async () => {
+    writeState('verified')
+    const profileDir = join(home, 'profiles', 'default')
+    writeJson(join(profileDir, 'package.json'), { dependencies: { 'acme-tools': '^1.0.0' }, dsh: { profile: { bundles: ['acme-tools'] } } })
+    writeJson(join(profileDir, 'node_modules', 'acme-tools', 'package.json'), { name: 'acme-tools', version: '1.0.0\u001b[2J', engines: { dsh: '^0.1.0' }, dsh: { bundle: {} } })
+    const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('pass plugins: the profile default has 1 installed package; it enables 1 bundle, loaded in this order: acme-tools.\n')
+    expect(result.stdout).toContain('pass plugin acme-tools: acme-tools@1.0.0\\u001b[2J from the registry (^1.0.0): enabled, and it declares dsh.bundle.\n')
+    expect(result.stderr).toContain('fail plugin acme-tools: acme-tools@1.0.0\\u001b[2J requires DSH "^0.1.0" (engines.dsh), and this is DSH 0.2.2, ')
+    expect(result.stdout + result.stderr).not.toContain('\u001b')
+  })
+
+  it('fails one plugins line for a broken profile manifest and still runs the other checks', async () => {
+    writeState('verified')
+    mkdirSync(join(home, 'profiles', 'default'), { recursive: true })
+    writeFileSync(join(home, 'profiles', 'default', 'package.json'), '{')
+    const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/^fail plugins: .*package\.json is not JSON: .*; the profile's plugins are not checked\.$/m)
+    expect(result.stdout).toContain('pass release-log: ')
+    expect(result.stdout).toContain('pass plugins: no start of the profile default is logged, so no plugin is known to have failed to load.\n')
+  })
+
+  it('fails the plugins line when the installation or the versions cannot be read, and goes on', async () => {
+    writeJson(join(home, 'profiles', 'default', 'package.json'), { dependencies: { 'acme-tools': '^1.0.0' } })
+    writeJson(join(home, 'profiles', 'default', 'node_modules', 'acme-tools', 'package.json'), { name: 'acme-tools', version: '1.0.0' })
+    const result = await run({ versions: () => { throw new Error('the DSH version cannot be read') } }, { DEEPSEEK_API_KEY: GOOD_KEY })
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('fail plugins: the check could not complete: the DSH version cannot be read\n')
+    expect(result.stdout).toContain('pass plugins: no start of the profile default is logged')
   })
 
   it('reports a thrown value that is not an Error by its text', async () => {

@@ -33,7 +33,7 @@ description: "delorun 命令：它的命令、如何在上游运行前通过 @de
 | `delorun start [--foreground] [--profile <name>] [--patch <file>]... [--inspect]` | 以脱离终端的方式启动 home 进程，并最多等待 120 秒使其报告 `running`；`--foreground` 则在此终端中运行它。两者都不打开 studio。`--patch` 像 `dsh --patch` 一样添加覆盖层，位于 profile 各层之上、沙箱覆盖层之下，同样受组合不变量约束，安全模式下拒绝；更新启动的后继进程不带这些覆盖层。`--inspect` 在 profile 启动前于 127.0.0.1:9229 打开 Node 的调试器，并警告本机任何能连到该端口的程序都能以 Delo 的身份运行代码 |
 | `delorun stop [--now] [--profile <name>]` | 在运行中的 chat 结束后停止 home 进程，最多等待 1,800 秒；`--now` 先取消它们 |
 | `delorun status [--profile <name>] [--json]` | 打印 home、profile、`delorun` 忽略的已继承 `DSH_HOME`，以及 home 进程的状态、进程 id、启动 id、运行时版本、运行中的 chat 与进行中的更新；`--json` 只打印其 `status` 应答 |
-| `delorun doctor [--port <n>]` | 检查 Delo home、Docker 引擎、DeepSeek API 密钥的格式以及 studio 的端口，每项检查输出一行；不联系任何模型，不启动容器，也不运行任何命令，只有只读的 `docker version` 探测例外 |
+| `delorun doctor [--port <n>]` | 检查 Delo home、Docker 引擎、DeepSeek API 密钥的格式以及 studio 的端口，每项检查输出一行；随后为 CLI profile 输出一行 `plugins` 和每个已安装包一行 `plugin`：来源、组合包是否启用、版本范围是否接受当前版本、是否被同名的随附包遮蔽，以及上次启动时它的行是否未能激活（从 home 日志读取）；不联系任何模型，不启动容器，也不运行任何命令，只有只读的 `docker version` 探测例外 |
 | `delorun plugin …` | 上游的 `dsh plugin …`，针对 Delo home 运行；未给出 `--profile` 时作用于 CLI profile。pnpm 拒绝某个包的构建时，在终端询问是否只允许这一个包的构建，或按 `--allow-build <name>` 允许，写入 `allowBuilds` 中的确切键后再运行一次；被拒绝的构建保持未决 |
 | `delorun plugin new <name> [--kind tool\|preset\|ui\|bundle] [--dir <folder>]` | 在新的或空的文件夹中写出一个 `delorun plugin check` 接受的插件包，带有针对当前版本的版本范围 |
 | `delorun plugin dev <folder> [--profile <name>]` | 把文件夹链接进 profile（或沿用已有链接），有构建脚本时构建它，并通过上游 HMR 让运行中的 Host 持续重新加载它，直到按 Ctrl+C；运行期间在 profile 的 `cordis.patch.yml` 中保留一个带标记的 `hmr` 行补丁 |
