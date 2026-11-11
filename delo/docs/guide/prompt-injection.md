@@ -43,20 +43,25 @@ The setting applies to every command the model runs in the sandbox, `read-only` 
 
 Under `allowlist`, a command reaches the network only through an HTTP proxy that Delo runs. The command's `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` variables name it, and most tools use them: `curl`, `git` over HTTPS, `npm`, `pip`, `cargo` and Node's own HTTP clients. A tool that ignores these variables has no network at all. The proxy:
 
-- checks the host name against the list before anything else, so a name that is not listed is never looked up, and a command cannot send data out in DNS questions;
+- checks the host name and port against the list before anything else, so a name that is not listed is never looked up, and a command cannot send data out in DNS questions;
 - refuses a listed name that resolves to a private, loopback, link-local or other address the fetch guard refuses, so a listed name cannot be pointed at your router or a service on your computer;
-- connects only to the addresses it checked;
+- connects only to the addresses it checked, and sends a plain-HTTP request with the host name it checked;
+- holds at most a set number of connections for each list and closes a connection that stays idle, both set in the `delo-permission-defaults` row;
 - answers each refusal with a sentence naming the host, which the model reads, and writes the refusal to the harness's log.
 
-An entry is a host name such as `registry.npmjs.org`, a wildcard such as `*.npmjs.org` that matches every name below `npmjs.org` but not `npmjs.org` itself, or a public IP address. An entry has no scheme, port or path; any port on a listed host is allowed.
+The command itself cannot look names up either: under `allowlist` and `off` the sandbox hides the sockets of the services that resolve names or send traffic for a program, which are systemd-resolved, nscd, avahi, the system D-Bus and Tailscale's daemon. A command that needs the system D-Bus, such as `systemctl`, `timedatectl` or `nmcli`, fails in such a workspace.
+
+An entry is a host name such as `registry.npmjs.org`, a wildcard such as `*.npmjs.org` that matches every name below `npmjs.org` but not `npmjs.org` itself, or a public IP address. An entry allows ports 80 and 443; to allow another port, write it after a colon, such as `github.com:22` for Git over SSH, and that entry allows only that port. An entry has no scheme or path.
 
 The setting is enforced only where the sandbox can enforce it: with bubblewrap on Linux, and so under WSL2. On a Linux system that confines commands with Landlock alone, on Windows and on macOS, a workspace whose setting is `allowlist` or `off` refuses to run commands at all, with a message saying why, rather than run them with your network. Setting it back to `open` runs them again.
 
 ## What each setting closes
 
 - **`open`** closes nothing. Commands can send anything anywhere. This is stock DeepSeek Harness's behaviour and Delo's default.
-- **`allowlist`** closes every route from commands and `web_fetch` except the hosts you list. What stays open is what those hosts accept. A command that can reach `github.com` can push to any repository your Git credentials allow, or open an issue there; a command that can reach a package registry can publish to it with credentials it finds. A wildcard lets a command ask the proxy to look up any name below that domain, which reaches that domain's DNS servers. List the fewest hosts that the work needs.
-- **`off`** closes every network route from commands and `web_fetch`. Commands that need to download dependencies fail; install them before you switch, or use `allowlist` with your registries.
+- **`allowlist`** closes every route from commands and `web_fetch` except the hosts you list. What stays open is what those hosts accept. A command that can reach `github.com` can push to any repository your Git credentials allow, or open an issue there; a command that can reach a package registry can publish to it with credentials it finds. A wildcard lets a command ask the proxy to look up any name below that domain, which reaches that domain's DNS servers. The proxy does not read inside an HTTPS connection: it checks the name the command asks to connect to, not the name inside the encrypted connection, so a host that serves many sites from one address, such as a content delivery network, can be asked for a site that is not on your list. List the fewest hosts that the work needs.
+- **`off`** closes every network connection that commands and `web_fetch` open themselves. Commands that need to download dependencies fail; install them before you switch, or use `allowlist` with your registries.
+
+Both restrictive settings hold against a command that opens the network itself. They do not yet hold against a command that asks a service outside the sandbox to open it: a confined command can still reach Unix sockets in your user's runtime directory, such as your D-Bus session bus, and through it can ask `systemd-run --user` to start a program outside the sandbox, which has your network. Until Delo hides those sockets, treat `allowlist` and `off` as closing the routes a command opens itself, not every route.
 
 ## What no setting closes
 
@@ -64,6 +69,7 @@ The setting governs sandboxed commands and `web_fetch`. These routes stay open u
 
 - **Full access.** A command approved under `danger-full-access`, or a workspace whose preset is full access, runs outside the sandbox with your network.
 - **Plugins and MCP servers.** They run outside the sandbox, in the harness or as their own processes, with your network. An MCP server that fetches URLs or posts messages is a route out if the model can call it with your data.
+- **Plugins the model writes.** Under the Web `cordis` preset, the model writes Cordis plugins and installs them through plugin management; they run in the harness's own process, outside the sandbox, with your network.
 - **Agents and language servers the harness starts.** The Claude Code and ACP subagent tools start their agent processes, and the language-server tool starts language servers, outside the sandbox.
 - **`web_search`.** The query goes to the search provider your profile configures, under every setting. It reaches that provider and nobody else.
 - **The model's reply.** The model can put data into its answer. In the studio on your computer, an image that a reply links to is loaded from its host, so the image's URL, and anything written into it, reaches that host; on a phone over remote access it shows as a placeholder instead. A link you click sends its URL the same way.
@@ -91,6 +97,6 @@ A starter list for common package registries and Git hosts follows. Nothing on i
 
 ## Changing the setting
 
-Open Settings, Network, in the studio on the computer that runs Delo, and choose the setting for each workspace. Tightening applies at once. A change that lets commands reach more, such as `off` to `open` or a new host on a list, asks you to confirm it first. The setting is read and changed only at that computer: a phone over remote access cannot open it, the model has no tool that changes it, and confined commands cannot read or write the file under `~/.delo` that holds it. If that file is damaged or other users can read it, every workspace counts as `off` until you fix it. The default for workspaces you have not chosen for is the `network` and `allowedHosts` setting of the `delo-permission-defaults` row in your profile's `cordis.yml`, which plugin management in a chat cannot change.
+Open Settings, Network, in the studio on the computer that runs Delo, and choose the setting for each workspace. Tightening applies at once. A change that lets commands reach more, such as `off` to `open` or a new host or port on a list, asks you to confirm it first. The setting is read and changed only at that computer: a phone over remote access cannot open it, the model has no tool that changes it, though a plugin it writes under the `cordis` preset runs with the harness's own access, and confined commands cannot read or write the file under `~/.delo` that holds it. If that file is damaged or other users can read it, every workspace counts as `off` until you fix it. The default for workspaces you have not chosen for is the `network` and `allowedHosts` setting of the `delo-permission-defaults` row in your profile's `cordis.yml`, which plugin management in a chat cannot change.
 
 The [threat model](../security/threat-model.md) gives the defences and limits in full.
