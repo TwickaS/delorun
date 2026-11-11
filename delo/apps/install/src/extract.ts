@@ -145,8 +145,9 @@ async function writeEntry(target: string, data: Buffer, mode: number): Promise<s
  * @returns how many files were written, and each one's identity.
  * @throws {InstallError} `ARCHIVE_REFUSED` for an entry type, path or name the archive may not hold, or one the list
  *   does not name; `INSTALL_VERIFY_FAILED` for a length or digest the list contradicts, or a listed file the archive
- *   does not hold; `DOWNLOAD_FAILED` for a file that cannot be written, as for a download that cannot be. Every write
- *   has ended when it throws.
+ *   does not hold; `ARCHIVE_REFUSED` too for an entry whose file already exists, as two names that differ only by
+ *   case do on a file system that ignores case; `DOWNLOAD_FAILED` for a file that cannot be written otherwise, as for a
+ *   download that cannot be. Every write has ended when it throws.
  */
 export async function extractArchive(request: ExtractRequest): Promise<Extracted> {
   const listed = new Map(request.files.files.map(file => [file.path, file]))
@@ -184,6 +185,11 @@ export async function extractArchive(request: ExtractRequest): Promise<Extracted
           if (failed !== undefined) throw failed.error
           written.set(path, await writeEntry(target, data, installedFileMode(expected.mode)))
         } catch (error) {
+          // An entry whose file already exists names one the archive already wrote under another spelling, such as
+          // a name that differs only by case on a file system that ignores case: the archive does not fit this one.
+          if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+            throw new InstallError('ARCHIVE_REFUSED', path, `${request.archive} holds ${path}, whose file already exists in the staging directory; this file system takes it and another entry for one file, as it does names that differ only by case`, { cause: error })
+          }
           // A full disk or a staging directory changed under the install is a write failure, not an unreadable archive.
           throw new InstallError('DOWNLOAD_FAILED', target, `${target} cannot be written: ${messageOf(error)}`, { cause: error })
         }

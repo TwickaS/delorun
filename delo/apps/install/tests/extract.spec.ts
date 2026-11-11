@@ -6,7 +6,7 @@
  * to produce one.
  */
 import { lstatSync } from 'node:fs'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -206,6 +206,15 @@ describe('a file that cannot be written', () => {
     await writeFile(staging, 'a file where the staging directory should be')
     const error = await refusal(extractArchive({ archive: await archiveOf(ENTRIES), format: 'tar.gz', files: fileList(ENTRIES), directory: staging }), 'DOWNLOAD_FAILED')
     expect(error.detail).toContain('cannot be written')
+  })
+
+  it('refuses the archive when an entry\'s file already exists, as a name differing only by case does where case is ignored', async () => {
+    const directory = await scratch()
+    const staging = join(directory, 'staging')
+    await mkdir(join(staging, 'node', 'bin'), { recursive: true })
+    await writeFile(join(staging, 'node', 'bin', 'node'), 'written under another spelling')
+    const error = await refusal(extractArchive({ archive: await archiveOf(ENTRIES), format: 'tar.gz', files: fileList(ENTRIES), directory: staging }), 'ARCHIVE_REFUSED')
+    expect(error.detail).toContain('node/bin/node, whose file already exists')
   })
 })
 
