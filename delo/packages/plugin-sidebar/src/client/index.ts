@@ -348,9 +348,11 @@ export function applyStudio(ctx: Context): void {
       }
     }, 'delo-sidebar: width')
   })
-  // The list's header offers New chat, so the wide sidebar drops upstream's button; the foot is T3 Code's one row.
+  // The list's header offers New chat, so the wide sidebar drops upstream's button; the foot is T3 Code's one row, which
+  // also holds the global panels (Plugins, Automation tasks, More) as icon buttons, so the brand sits directly above the list.
   ctx.inject(['sidebarLayout'], (child) => {
     child.effect(() => child.sidebarLayout.setNewSessionButton(false), 'delo-sidebar: New chat in the list header')
     child.effect(() => child.sidebarLayout.setFootRow(true), 'delo-sidebar: the foot in one row')
+    child.effect(() => child.sidebarLayout.setPanelPlacement('footer'), 'delo-sidebar: the panels in the foot row')
   })
 }
