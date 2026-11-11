@@ -123,15 +123,15 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.mcpAddConsent` — `McpAddConsent` (abstract seam)
 
-Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis' standard duplicate-service behavior).
+Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis' standard duplicate-service behavior). The plugin module that mounts it exports MCP_ADD_CONSENT_PROVIDER_EXPORT as `true`.
 
 ```ts cordis-catalog
 /**
- * Review one configured server command before the mcp-client plugin starts
+ * Review one configured server start before the mcp-client plugin starts
  * that server. The review runs at every boot of the server row, before any
- * child process starts, so the provider can let an accepted command through
- * at once and ask again when the command it is shown differs from the one
- * it accepted before.
+ * child process starts, so the provider can let an accepted start through
+ * at once and ask again when the command, arguments, working directory or
+ * environment it is shown differ from the ones it accepted before.
  *
  * The returned promise gates the server's start: the mcp-client plugin's
  * activation does not finish, and the server does not start, until it

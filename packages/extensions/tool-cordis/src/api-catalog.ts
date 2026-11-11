@@ -2069,11 +2069,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'mcpAddConsent',
     summary: 'Abstract add-time consent service.',
-    description: 'Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior).',
+    description: 'Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The plugin module that mounts it exports MCP_ADD_CONSENT_PROVIDER_EXPORT as `true`.',
     methods: [
       {
         signature: 'abstract review(command: McpServerCommand): Promise<McpConsentDecision>',
-        description: 'Review one configured server command before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, so the provider can let an accepted command through at once and ask again when the command it is shown differs from the one it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
+        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, so the provider can let an accepted start through at once and ask again when the command, arguments, working directory or environment it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
         parameters: [{ name: 'command', description: 'the server start under review.' }],
         returns: '`allow: true` to start the server, or `allow: false` with the reason that leaves the server stopped.',
       },
@@ -7313,7 +7313,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpServerCommand',
-    declaration: 'export interface McpServerCommand {\n    readonly serverName: string;\n    readonly command: string;\n    readonly args: readonly string[];\n}',
+    declaration: 'export interface McpServerCommand {\n    readonly serverName: string;\n    readonly command: string;\n    readonly args: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n    readonly cwd: string;\n}',
   },
   {
     name: 'Mergeability',
