@@ -10,46 +10,52 @@
   zh: 44daf94307fa4455
 /c19-home-process-and-update-handshake/summary:
   en: d6e128de35315da4
-  zh: d634ce8892284c0a
+  zh: 0dc3a14d61d0015b
+/c19-home-process-and-update-handshake/status:
+  en: fbd5379435718a4c
+  zh: 68dfe0f8d2d76b88
 /c19-home-process-and-update-handshake/contents:
-  en: d1c9f6cf158ddc35
-  zh: 7a02af009f368cf9
+  en: 3ef67699fbb0b789
+  zh: a9861e6985ba100f
 /c19-home-process-and-update-handshake/the-home-process:
-  en: 8abdec8184961adf
-  zh: cfc56a274dca4fd4
+  en: cadc44c43b5c553d
+  zh: fa0f76518340c1cc
+/c19-home-process-and-update-handshake/the-home-process/host-invariants:
+  en: a1a40b548476cb23
+  zh: 1c20387a4e7e48cb
 /c19-home-process-and-update-handshake/commands:
-  en: 73ecd0f316b9e1e5
-  zh: d0f22e0d0d049301
+  en: d9a4f467109bcf98
+  zh: c338c7aadcf94166
 /c19-home-process-and-update-handshake/start-at-login:
-  en: 440a1beafc09b7be
-  zh: 33f7f4c245e8b434
+  en: 5dc45d0224a5ca97
+  zh: 829d87cf8b9078ae
 /c19-home-process-and-update-handshake/the-update-channel:
-  en: 5d8725b3027318f6
-  zh: 68a1f4019b1a29a1
+  en: 6890e8cc8d5a6099
+  zh: 18e2c8ddaee11ce8
 /c19-home-process-and-update-handshake/requests-and-responses:
-  en: 90609420381817b9
-  zh: 9cde0cde2790d843
+  en: c7a73a7a35aedeca
+  zh: 6c0ef6ca4def0366
 /c19-home-process-and-update-handshake/the-update-handshake:
-  en: f2122908b4ad050b
-  zh: 42110d406a9bfe4c
+  en: 918dc2becd613877
+  zh: c91c5a63889fcbc5
 /c19-home-process-and-update-handshake/interrupted-updates:
-  en: 6177a4327b982ed2
-  zh: 387ebe37822e43fd
+  en: c2e8131d8d51a0b9
+  zh: 01d0bb7554633588
 /c19-home-process-and-update-handshake/rollback:
-  en: 9e9fce636d21baec
-  zh: 11afe1a89bbdba0a
+  en: 3c03e71848f7a993
+  zh: 5b99a847d98ed7be
 /c19-home-process-and-update-handshake/the-desktop-app:
   en: 0b0274971c572027
   zh: 0c8a2246e7941287
 /c19-home-process-and-update-handshake/limits:
-  en: ce0f27148271effc
-  zh: 7401d601fab02cab
+  en: 580c2c1fe9afed7a
+  zh: 724b38b4f39b1436
 /c19-home-process-and-update-handshake/errors:
-  en: 1f39b78ec3be67f4
-  zh: 3d36ae1866761fa1
+  en: fc85d0b1b3daf026
+  zh: 7b8e2512d6348ba3
 /c19-home-process-and-update-handshake/consumers:
-  en: ac4f50004e9467c8
-  zh: 56a2f902087e53af
+  en: a1cb56f70767ab37
+  zh: 3a6d4fff634bfbb7
 /c19-home-process-and-update-handshake/compatibility:
   en: a4c1c0054f093282
   zh: dcfc3a086e8c7110
@@ -57,14 +63,14 @@
   en: 52543dba9bf0d349
   zh: e612a6c5b83e9afc
 /c19-home-process-and-update-handshake/security/requirements:
-  en: cf53e8e2d00205a3
-  zh: 30fa71f1e69d56e2
+  en: 5000b1eb1130caa4
+  zh: f291d108b6b2cc6b
 /c19-home-process-and-update-handshake/security/denial-tests:
-  en: b501d2b1abeba422
-  zh: 9cec2ffe11740579
+  en: 95364959b85ec75c
+  zh: 386eadf2add49db1
 /c19-home-process-and-update-handshake/security/what-this-does-not-prove:
-  en: 4c8e8fb78a1345a1
-  zh: 9d59464f4e9ea9ea
+  en: c3d3b10067f52e51
+  zh: c2fd4407fe7b25b9
 /c19-home-process-and-update-handshake/enforcement-per-platform-and-dialect:
-  en: 77c63515835d78fd
-  zh: 7250f46b22d64ff8
+  en: dfb33297550a57da
+  zh: bbc55f9e038a66e3

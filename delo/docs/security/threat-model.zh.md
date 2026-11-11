@@ -1,20 +1,21 @@
 ---
-description: "Delo 的威胁模型：绝不比 stock DSH 更不安全的目标及每项变更的默认值、资产、各方能看到和能做的事、每个信任边界上的防护及规定它的约定、Delo 不防范的内容，以及变更如何保持该模型成立。"
+description: "Delo 的威胁模型：绝不比 stock DSH 更不安全的目标、Delo 改变的默认值、哪些命令带有 Delo 的保护、资产、各方能看到和能做的事、每个信任边界上当前已构建的防护及规定它的约定、Delo 不防范的内容，以及变更如何保持该模型成立。"
 ---
 
 # Delo 威胁模型
 
 [English](threat-model.md) | 中文
 
-Delo 尚无正式发布；本页描述首个发布版本。
+Delo 尚无发布；本页描述本仓库中的代码。
 
 ## 摘要
 
-本页说明 Delo 保护什么、防范谁、如何防范，以及在哪些地方无法防范。它在上游的[安全声明](../../../SAFETY.zh.md)与[进程沙箱参考](../../../docs/subsystems/sandbox.zh.md)之上扩展出 Delo 的资产、各方、信任边界与局限，上游这两份文档原样适用于 Delo。每个边界都链接到规定其防护的约定及其拒绝测试；实现某项防护的包尚未发布时，本页陈述的是该约定的要求。Delo 的约定要求 `delorun verify` 报告哪些防护在某台机器上成立。疑似漏洞请通过 [SECURITY.md](../../../SECURITY.md) 报告。
+本页说明 Delo 保护什么、防范谁、如何防范，以及在哪些地方无法防范。它在上游的[安全声明](../../../SAFETY.zh.md)与[进程沙箱参考](../../../docs/subsystems/sandbox.zh.md)之上扩展出 Delo 的资产、各方、信任边界与局限，上游这两份文档原样适用于 Delo。每个边界都陈述已构建的防护，并链接规定它的约定；尚未构建的防护会被标明为未构建，并附上保存其规则的设计或约定。疑似漏洞请通过 [SECURITY.md](../../../SECURITY.md) 报告。
 
 ## 目录
 
 - [目标](#goal)
+- [Delo 的保护在哪里适用](#where-delos-protections-apply)
 - [资产](#assets)
 - [各方与信任](#parties-and-trust)
 - [边界及其防护](#boundaries-and-their-defences)
@@ -25,38 +26,47 @@ Delo 尚无正式发布；本页描述首个发布版本。
 
 ## 目标
 
-Delo 的约定要求 Delo 在任何路径上都不比 stock DSH 更不安全，并且在它改变默认值的地方更安全。Delo 运行指定 DSH 版本的上游代码，保留上游的批准、权限与沙箱决策，包括没有应答者的批准请求会被拒绝这一规则（[批准](../../../docs/subsystems/approval.zh.md)）。Delo 在这些决策之外增加保护，每项改变批准、拒绝或提权的 Delo 变更都遵循[下文的规则](#how-changes-keep-this-true)。[对等组合](../contracts/c16-parity-composition.zh.md)关闭所有模型可见的 Delo 变更并回放上游录制的场景，因此 stock 行为始终可以达到并受到检查。
+Delo 的目标是在任何路径上都不比 stock DSH 更不安全，并且在它改变默认值的地方更安全。Delo 运行指定 DSH 版本的上游代码，保留上游的批准、权限与沙箱决策，包括没有应答者的批准请求会被拒绝这一规则（[批准](../../../docs/subsystems/approval.zh.md)）。Delo 在这些决策之外增加保护，每项改变批准、拒绝或提权的 Delo 变更都遵循[下文的规则](#how-changes-keep-this-true)。[对等组合](../contracts/c16-parity-composition.zh.md)关闭所有模型可见的 Delo 变更并回放上游录制的场景，因此 stock 行为始终可以达到并受到检查。
 
 上游的安全声明原样适用于 Delo：沙箱、批准与权限控制能降低风险，但不保证隔离。在原生（native）工作区中，命令以本人（the person）自己的权限运行。
 
-首个发布版本改变了以下默认值。[对等清单](../reference/parity.zh.md)列出每一项及其证据。
+CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)列出每一项及其证据。
 
-| 默认值 | stock DSH | Delo | 对安全的影响 |
+| 默认值 | stock DSH | Delo 的 CLI profile | 对安全的影响 |
 | --- | --- | --- | --- |
-| 原生命令的限制 | 沙箱限制文件写入；读取、Unix 套接字与网络保持开放 | Delo 的约定要求沙箱还拒绝受限命令在 Delo 的 home 下写入、在其下读取（三个豁免除外），以及连接 home 的控制通道与 Docker 套接字，前提是方言能强制执行相应规则（[C1](../contracts/c01-home-layout.zh.md)） | 更安全；Delo 的约定要求 `delorun verify` 按机器报告每条规则 |
-| 完全访问 | 新工作区以 `workspace-write` 开始，完全访问无需同意 | 沿用 stock 自身的 `workspace-write` 默认值，并在完全访问之前要求每个工作区一次同意，这是 Delo 的约定要求的；提权提示说明完全访问能触及 Delo 的 home、其密钥与令牌、Docker 监管器（Docker supervisor）与更新通道 | 更安全 |
-| `web_fetch` 的目标 | 在所有模式下无需确认即抓取回环、链路本地与私有网络主机（[web-fetch-http](../../../packages/web/web-fetch-http/README.zh.md)） | Delo 的约定要求抓取防护拒绝这些目标（包括云元数据地址），并给出模型可读的类型化原因 | 更安全；本人可以关闭它 |
-| 计划任务 | 一次获批的调用就能创建无人值守、反复运行的轮次 | Delo 的约定要求创建或编辑任务时写明重复规则、目标会话及其权限预设；向完全访问的工作区投递需要每个工作区的同意 | 更安全 |
-| 指令层文件 | 模型对 skill、预设或 `AGENTS.md` 的写入，即使需要批准，也只作为文件写入批准 | Delo 的约定要求批准写明其效果，即该文本会作为指令加载到其范围内今后的每个 chat，并显示差异 | 更安全 |
-| MCP 服务器 | 每个服务器命令都作为可信代码在 agent（智能体）沙箱之外运行 | Delo 的约定要求添加服务器时在写明命令及其参数的界面上请求同意 | 更安全 |
-| 数据共享 | 桌面分析与 DeepSeek 会话日志上传默认开启 | Delo 的约定要求两者在本人开启之前都关闭；Delo 没有自己的遥测 | 更安全 |
-| 容器拒绝 | 没有 Docker 工作区 | 首个发布版本为被容器只读根文件系统拒绝的文件操作附加标记，且不附加提权提示 | 只适用于 Docker 工作区 |
-| studio 附加功能 | stock 外观，没有主 chat | 默认开启，包括主 chat；其中写入另一个工作区的指令、导入工作区或恢复工作区的工具每次都会询问，这是 Delo 的约定要求的 | 新增工具，每个持久效果都会询问 |
-| `plugin_manager` 的读取操作 | 每个操作都需要 `danger-full-access` 提权 | 首个发布版本无需提权即可运行插件管理器的读取操作：`list_plugins`、`list_bundles`、`list_version_exemptions`、`history` 与 `read_config`；`read_config` 遮盖密钥字段，并扣留非原生 schema 的 Config 的值；每个写入操作仍需提权 | 首个发布版本唯一去掉提权的默认值：范围窄、可关闭 |
-| 入门模式与模型可见工具 | Standard 模式；没有 `preset_inspect` | 首个发布版本预选 PTC；首个发布版本默认增加 `preset_inspect`，且可关闭；doctor 是命令，没有模型能看到它 | 不改变批准或限制 |
-| home 目录 | `~/.dsh` | Delo 的约定要求 `~/.delo` 权限模式为 0700，且从不读取或写入 `~/.dsh` | 分开两个 home |
+| 原生命令的限制 | 沙箱限制文件写入；读取、Unix 套接字与网络保持开放 | 在 bwrap、Landlock 与 Seatbelt 上，沙箱还拒绝受限命令在 Delo 的 home 下写入、在其下读取（三个豁免除外）；在 bwrap 与 Seatbelt 上，还拒绝其连接更新通道的套接字与 Docker context 的套接字（[C1](../contracts/c01-home-layout.zh.md)）；在 Windows 上只限制写入 | 在 Linux 与 macOS 上更安全；没有任何东西按机器报告哪些规则成立 |
+| 完全访问 | 新工作区以 `workspace-write` 开始，完全访问无需同意 | 沿用 stock 的 `workspace-write` 默认值；把工作区的预设切换为完全访问会被拒绝，直到本人在 home 的电脑上为该工作区授权：通过 studio 的同意（它写明 Delo 的 home、其密钥与令牌以及其通道），或使用 `delorun workspace full-access`；按调用的提权经过上游的批准提示，该提示不提及 Delo 的 home | 对预设切换更安全；按调用的提权与 stock 相同；“与 stock 相同”会关闭该拒绝 |
+| `web_fetch` 的目标 | 在所有模式下无需确认即抓取回环、链路本地与私有网络主机（[web-fetch-http](../../../packages/web/web-fetch-http/README.zh.md)） | 抓取防护在任何连接之前拒绝这些目标（包括云元数据地址），并给出模型可读的类型化原因 | 更安全；设置的提示答复会保持它开启 |
+| 计划任务 | 一次获批的调用就能创建无人值守、反复运行的轮次 | 创建或编辑任务时会写明重复规则、目标会话及其权限预设并询问；当目标 chat 的预设与获批的预设不同时，投递会被拒绝 | 在设置的默认提示答复下更安全；“与 stock 相同”会关闭它 |
+| 指令层文件 | 模型对 skill、预设或 `AGENTS.md` 的写入，即使需要批准，也只作为文件写入批准 | 通过文件工具的写入会询问，并写明其效果（该文本会作为指令加载到其范围内今后的每个 chat）与差异；shell 命令或 PTC 代码的写入不经询问。审查按目标已存在目录的设备号与 inode，将其与 skill 提供方和 profile 启动器读取的根目录比对，因此链接或不同的大小写会得到相同的答复，并在卷不区分大小写时对不存在的部分折叠大小写；硬链接只在它指向指令文件本身时才询问，指向其他位置的链接文件则不询问。这是针对文件工具写入的提示，而不是针对拥有 shell 的模型的边界 | 仅对文件工具更安全；“与 stock 相同”会关闭它 |
+| MCP 服务器 | 每个服务器命令都作为可信代码在 agent（智能体）沙箱之外运行 | 新的 stdio 服务器会被拒绝，并写明其命令、参数、工作目录以及已配置环境变量的名称（不含其值）；其中任何一项发生变化（例如 `PATH`、`NODE_OPTIONS` 或 `LD_PRELOAD`）都视为新服务器，在审查工作目录与环境之前记录的接受不被采纳，并且无论顺序如何，服务器行都会等待同意行。本人在主机的电脑上通过工作室的「MCP 服务器」部分或 `delorun mcp accept` 接受被暂停的服务器，两者显示相同的启动信息；远程设备会被拒绝 | 更安全；新的 stdio 服务器在一次接受后启动；“与 stock 相同”会关闭该拒绝 |
+| `plugin_manager` 下的防护插件 | 在完全访问下，该工具无需提示即可运行，并能停用、重新配置或移除除插件管理自身组件之外的每个插件 | 插件管理还保护 Delo 的同意与防护插件、更新闸门、更新检查、`dsh-sandbox-local` 与 `dsh-sandbox-policy`。在所有模式下，该工具都会拒绝这样的变更：根据 profile 变更前后的组合行判断，它会丢弃、替换、重新配置、停用或复制一个受保护的行，把其 id 给另一行，或添加一个受保护模块的行，无论是通过 `set_plugin`、`configure`、组合包的安装、选择、取消选择或移除、`undo` 还是 `restore`；它还拒绝提供受保护模块的包。完全访问的命令仍可直接编辑 profile 的文件，嵌套在另一个组合包依赖中的遮蔽包不受检查；防护包的版本豁免无法通过撤销或恢复去除 | 更安全 |
+| 数据共享 | 桌面分析与 DeepSeek 会话日志上传默认开启 | 会话日志上传关闭；Delo 没有自己的遥测。桌面分析属于桌面应用，桌面应用是上游的，保持其开启 | 在 CLI profile 中更安全 |
+| studio 附加功能 | stock 外观 | Delo 的主题、设置布局、chat 状态、侧栏与入门引导；不挂载主 chat | 不改变批准或限制 |
+| home 目录 | `~/.dsh` | `~/.delo`，在 Linux 与 macOS 上权限模式为 0700；`delorun` 从不读取或写入 `~/.dsh` | 分开两个 home |
+
+对等注册表还为容器拒绝标记、无需提权的 `plugin_manager` 读取操作、`preset_inspect` 与 profile 历史声明了开关；CLI profile 不开启其中任何一个，因此每一项都保持 stock 行为。
+
+<a id="where-delos-protections-apply"></a>
+
+## Delo 的保护在哪里适用
+
+- **CLI profile。** 由 `delorun setup` 创建、由 `delorun` 或 `delorun start` 启动的 profile：上游的 web 模板加上 `@delo/bundle-local` 与 `@delo/bundle-studio`。本页称为已构建的每项保护都在这里适用。
+- **`delorun headless`。** 它启动 home 的 `headless` profile：上游的 `headless` 模板加上 `@delo/bundle-headless`，运行在 C1 的沙箱 overlay 之下。抓取防护、指令写入、MCP 与计划任务的同意、完全访问同意以及回合闸门都适用，插件管理无法关闭它们，DeepSeek 的会话日志上传也与 CLI profile 一样关闭。会询问本人的防护会拒绝，因为该 profile 不组合任何批准应答者。对于没有在 home 的电脑上记录完全访问授权的工作目录，完全访问同意会拒绝完全访问；在参数或 `DSH_PERMISSION_MODE` 中请求完全访问也会在启动之前被提前拒绝。组合会拒绝不含该组合包的 `headless` profile，并且任务只在 Delo 检查过该组合包的行与服务之后才开始。该模板不挂载 MCP 客户端，也不挂载计划任务运行时；MCP 与计划任务的同意保护的是本人自己的 patch 添加的客户端或运行时。
+- **`delorun plugin`。** 它运行上游的 pnpm 操作，不带 Delo 的任何行：没有受保护的 home、没有被拒绝的套接字、没有同意、没有抓取防护，也没有隐私默认值。让每个启动 Host 的命令都应用 Delo 的层，见[原生限制设计](../design/native-confinement.md#every-way-a-host-boots)。
+- **桌面应用。** 它是上游的，未作改动，Delo 的任何行都不适用于它。
+- **Windows。** 沙箱只限制写入。受限命令可以读取整个 home，包括 Delo 的密钥、上游的凭据文件与启动令牌，并且不会对 home 运行任何权限模式或访问列表检查。
 
 <a id="assets"></a>
 
 ## 资产
 
-- **本人的文件与工作区**：机器上的工作区根目录，以及 Docker 工作区挂载的根目录。
-- **模型提供方密钥与其他密钥**：home 下上游的 `.credentials.yaml` 与 `.env`；`~/.delo/secrets/` 下 Delo 的密钥，包括 home 认证密钥、中继与 TLS 密钥、会话密钥，以及工作区转发的部署密钥与令牌。
+- **本人的文件与工作区**：机器上的工作区根目录。
+- **模型提供方密钥与其他密钥**：home 下上游的 `.credentials.yaml`（它还保存浏览器会话密钥）与 `.env`；`~/.delo/secrets/` 下 Delo 的文件，其中保存 `delorun export` 创建的 home 密钥以及 Delo 同意插件的同意记录。
 - **会话**：chat 历史（其中常含密钥），以及附件、全文索引、溢出文件与浏览器中的草稿。
-- **Delo 的 home**：`~/.delo`，包括其密钥、每次启动的令牌、Docker 监管器与更新通道的套接字、已验证的发布根与检查点、插件索引缓存，以及运行时仓库（runtime store）。
-- **发布完整性**：已签名的发布清单、运行时文件、工作区镜像、桌面安装程序与 npm 启动器，以及为它们签名的离线 root 与 targets 密钥。
-- **插件供应**：已安装的插件及其固定版本与完整性哈希、插件索引、撤销列表以及插件索引密钥。
-- **来自其他设备的 studio 访问**：studio 地址、受信任设备（trusted device）的密钥、身份因子（identity factor）、恢复套件（recovery kit），以及 home 的 TLS 证书与密钥。
+- **Delo 的 home**：`~/.delo`，包括其密钥、每次启动的令牌、更新通道的套接字、已验证的发布根与检查点，以及运行时仓库（runtime store）。
+- **发布完整性**：已签名的发布清单、运行时文件与 npm 启动器，以及为它们签名的离线 root 与 targets 密钥。
+- **插件供应**：已安装的插件，上游的插件管理器在 profile 的 `pnpm-lock.yaml` 中记录其版本与 tarball 完整性。
 
 <a id="parties-and-trust"></a>
 
@@ -64,53 +74,51 @@ Delo 的约定要求 Delo 在任何路径上都不比 stock DSH 更不安全，�
 
 ### 本人
 
-本人拥有 home 与机器。凡是其操作系统用户能看到和能做的事，本人都能看到和做到：home 下的每个文件、每个 chat 与密钥，以及在其账户能运行时的 `delorun` 与 Docker。Delo 的约定要求其检查不限制本人：`delorun verify` 只做报告，在 `enforce` 模式下，失败的检查也只阻止它所指明的启动或远程访问（reach）。本人批准提权、同意、设备与更新，Delo 的约定要求每个提示都在本人作答之前说明其效果。
+本人拥有 home 与机器。凡是其操作系统用户能看到和能做的事，本人都能看到和做到：home 下的每个文件、每个 chat 与密钥，以及在其账户能运行时的 `delorun` 与 Docker。`delorun verify` 只做报告，不改变任何内容。本人批准提权、同意与更新；Delo 自己的提示会在本人作答之前说明其效果，按调用的提权提示则是上游的。
 
 ### 模型及其工具调用
 
-模型能看到系统提示、chat 的历史、工具描述与工具结果。这些文本中的任何一段都可能带有通过网页、文件、仓库、issue、其他 chat 或工具输出注入的指令；Delo 的约定要求导入的 chat 的历史在本人将其标记为可信之前不进入模型上下文。模型可以调用其预设提供的工具，每次都经过上游的批准与工作区的沙箱模式，也可以请求只有本人才能批准的提权；它看不到提权提示。它的命令以本人自己的权限运行，Delo 的约定要求它们按 [C1](../contracts/c01-home-layout.zh.md) 的规定受到限制，它的 `web_fetch` 调用也只能到达抓取防护允许的目标。Delo 的约定要求具有持久效果的 Delo 工具，例如写入另一个工作区的指令、导入工作区或恢复工作区，每次都询问本人。
+模型能看到系统提示、chat 的历史、工具描述与工具结果。这些文本中的任何一段都可能带有通过网页、文件、仓库、issue、其他 chat 或工具输出注入的指令。导入的 chat 不会进入任何模型请求，因为没有任何东西打开导入的 chat（[C8](../contracts/c08-archive-and-trash.zh.md#untrusted-imported-chats)）。模型可以调用其预设提供的工具，每次都经过上游的批准与工作区的沙箱模式，也可以请求只有本人才能批准的提权；它看不到提权提示。它的命令以本人自己的权限运行。在 CLI profile 中，它们按 [C1](../contracts/c01-home-layout.zh.md) 的规定受到限制，它的 `web_fetch` 调用也只能到达抓取防护允许的目标。它运行的 shell 命令或 PTC 代码可以在可写根目录中写入指令文件，而无需指令同意。
 
 ### 插件
 
-插件是本人安装的代码，其可信程度以本人的安装为限。Host 插件在 harness 进程中以 harness 的权限运行：它能读取 Host 读取的内容，包括 Host 加载的凭据以及 home 进程（home process）在内存中持有的启动令牌，并能向更新通道与 Docker 监管器发送其固定请求集合中的任何请求。客户端插件在 studio 页面中以已登录会话的权限运行。Delo 不对插件做沙箱隔离，也不审计插件；Delo 的约定要求它用完整性哈希固定版本、检查版本要求，并在被撤销版本下次加载时停用它。每个 MCP 服务器命令都按上游所述，作为可信代码在 agent 沙箱之外运行；添加服务器时，Delo 的约定要求请求写明该命令的同意。
+插件是本人安装的代码，其可信程度以本人的安装为限。Host 插件在 harness 进程中以 harness 的权限运行：它能读取 Host 读取的内容，包括 Host 加载的凭据以及 home 进程（home process）在内存中持有的启动令牌，并能向更新通道发送其固定请求集合中的任何请求。客户端插件在 studio 页面中以浏览器的权限运行。Delo 不对插件做沙箱隔离，也不审计插件。Delo 在安装时与启动时检查每个插件的 DSH 与 Delo 版本要求（[C17](../contracts/c17-plugin-versions.zh.md)）；除上游的锁文件之外它不固定任何东西，插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）。每个 MCP 服务器命令都按上游所述，作为可信代码在 agent 沙箱之外运行；在 CLI profile 中，新的 stdio 服务器，或命令、参数、工作目录或环境发生变化的服务器，会被拒绝。
 
 ### 同一用户下的其他本地进程
 
-在沙箱之外运行的本人用户进程，可以读取和修改 home 下的一切、读取启动令牌，并在本人能运行 `delorun` 与 `docker` 时运行它们。Delo 不声称防范这样的进程。home 的权限模式防范的是其他用户，而不是它，也不存在 root 所有的辅助程序。Delo 的约定规定，只有当这样的进程的篡改没有同时改动启动器、已存储的 root 或检查本身时，验证才能发现它。
+在沙箱之外运行的本人用户进程，可以读取和修改 home 下的一切、读取启动令牌，并在本人能运行 `delorun` 与 `docker` 时运行它们。凭借启动令牌，它可以使用更新通道的每个操作（[C19](../contracts/c19-home-process.zh.md#the-update-channel)），包括 `devices.approve`、`devices.remove` 与 `studio.open-token`：它可以打开批准窗口并用匹配码批准待处理的设备请求、取消请求、移除设备，以及获取新的 studio 登录链接。当它还控制着一台请求批准的设备时，它可以在无人在场的情况下批准该设备，该设备随后通过远程访问（reach）登录。Host 自己的通道令牌对这些操作会被拒绝，受限命令也无法读取令牌文件或访问该套接字（[C1](../contracts/c01-home-layout.zh.md#sockets-and-the-start-token)）；这种限制是让 agent 无法执行同样操作的唯一保障，而在沙箱之外运行的命令（例如在 `danger-full-access` 下获批的命令）拥有这些能力。Delo 不声称防范这样的进程。home 的权限模式防范的是其他用户，而不是它，也不存在 root 所有的辅助程序。只有当篡改没有同时改动启动器、已存储的 root 或 `trust/runtime-files/` 下运行时的身份记录时，启动器的启动检查才能发现被改动的运行时文件。
 
 ### 机器上的其他用户
 
-Delo 的约定要求其他非管理员用户无法读取 home：其目录权限模式为 0700、受保护文件为 0600，在 Windows 上则由只允许本人、`SYSTEM` 与 Administrators 的 DACL 保护。他们无法连接 home 的套接字（位于 0700 目录内、权限模式为 0600），也无法连接其命名管道（其 DACL 只授权本人并拒绝远程客户端）。他们可以与 studio 的回环监听器建立 TCP 连接，该监听器只接受上游的启动令牌，或 Delo 在签发时记录过的回环凭据（[C4](../contracts/c04-admission.zh.md)）。管理员或 root 能做本人能做的一切。在 rootful Docker 引擎上，`docker` 组成员身份等同于 root。
+在 Linux 与 macOS 上，其他非管理员用户无法读取 home（其目录权限模式为 0700、受保护文件为 0600），也无法连接更新通道的套接字（位于 0700 目录内、权限模式为 0600）。在 Windows 上，Delo 不检查任何访问列表，home 的访问权限就是操作系统为本人 profile 中新目录赋予的权限。其他用户可以与 studio 的回环监听器建立 TCP 连接，该监听器接受启动令牌与上游的签名 cookie（[C4](../contracts/c04-admission.zh.md#sessions)）。在 CLI profile 中，启动令牌是一次性的：`delorun` 以本人的启动令牌从 home 进程获取每个启动令牌，它在 60 秒后过期，第一次出示即被消耗（[C4](../contracts/c04-admission.zh.md#launch-tokens)）。它仍然在交给浏览器启动器的 URL 中传递，而在没有 `hidepid` 的 Linux 上，其他用户可以读取该启动器的命令行，因此另一个用户可以在浏览器第一次请求之前的几秒内抢先使用它。以这种方式获得或从浏览器复制的 cookie 在 30 天内都能被准入。`delorun headless` 与桌面应用运行上游的 profile，其中启动令牌在 Host 进程的整个生命周期内都可重复使用。管理员或 root 能做本人能做的一切。在 rootful Docker 引擎上，`docker` 组成员身份等同于 root。
 
 <a id="the-network"></a>
 
 ### 网络
 
-网络上的一方能看到机器的连接。Delo 的约定要求完整性检查默认运行，获取公开的已签名文件：每次启动时的发布日志检查、每次 Host 启动时及每 6 小时一次的撤销列表获取，以及更新检查；Docker 工作区还会拉取镜像，自有域名远程访问还会查询证书日志。这些请求不携带个人数据，它们会向其主机暴露机器的 IP 地址、请求时间与 Delo 版本，证书日志查询则暴露域名。Delo 的约定要求 `integrity.mode: off` 关闭完整性检查。Delo 的约定要求这些文件都通过签名验证，因此其主机不受信任：被改动的文件无法通过验证，被扣留的文件会在其签名元数据过期时被发现。Delo 的约定要求在本人开启远程访问之前，studio 只监听回环地址，且远程访问的 TLS 在 home 上终止。Delo 的约定要求 Docker 工作区只能通过其出口代理与允许列表访问网络。
+网络上的一方能看到机器的连接。安装与更新会获取发布的公开签名文件，而每次通过 npm 启动器启动时，只要网络可达，都会检查发布日志。这些请求不携带个人数据，它们会向其主机暴露机器的 IP 地址、请求时间与 Delo 版本。这些文件都通过签名验证，因此其主机不受信任：被改动的文件无法通过验证，被扣留的文件会在安装或更新时因其 timestamp 过期而被发现。没有任何设置可以关闭发布日志检查。studio 监听回环地址；只有在本人开启 Tailscale 私有远程访问之后，它才同时监听本人的 tailnet，在此之前该访问保持关闭。
 
 ### Tailscale、本人自己的中继与 OIDC 提供方
 
-- **Tailscale** 承载 Tailscale 远程访问，Delo 的约定要求它不经过任何 Delo 基础设施。其协调服务能看到 home 的名称、home 与每台设备的 IP 地址、连接时间与流量大小，使用 Funnel 时 Funnel 的服务器也能看到同样的内容。除非开启 Tailnet Lock，Tailscale 可以向 tailnet 添加设备；它为 `ts.net` 名称获取证书并持有其 TLS 密钥，因此任何应用都无法固定该密钥。
-- **自托管中继**由本人在自己的服务器与域名上运行。其运营者能看到每个连接的名称、客户端地址、时间与流量大小，可以拒绝或断开任何连接，并能强制重新绑定某个名称；在[下文](#reach-providers)的自有域名条件成立时，Delo 的约定要求它只转发自己无法读取的加密字节。它声称的客户端地址会被标记为未验证。Let's Encrypt 与该域名的 DNS 提供方仍可能影响该域名的证书，证书日志来源能看到 home 的 IP 地址与域名。
-- **本人的 OIDC 提供方**可以为所有者固定的身份签发有效令牌，也可以拒绝登录，因此控制本人在该处账户的一方可以通过身份因子。Delo 的约定要求这样的令牌本身不能完成登录：home 还要求一个已批准的设备密钥。
+远程访问关闭时，任何 Tailscale 节点、中继或身份提供方都不在通往 studio 的路径上。开启 Tailscale 私有远程访问时，由 Tailscale 承载流量：其协调服务能看到机器的名称、机器与每台设备的 IP 地址、连接时间与流量大小，除非开启 Tailnet Lock，它可以向 tailnet 添加设备，并获取 `ts.net` 证书。被添加的设备可以打开登录页面并请求批准，在本人于电脑上批准之前无法打开任何 chat。自托管中继与 OpenID Connect 提供方尚未构建，因此两者都不在任何路径上。[远程访问设计](../design/reach.md)以及约定 [C5](../contracts/c05-device-approval.zh.md)、[C6](../contracts/c06-relay-protocol.zh.md)、[C7](../contracts/c07-reach-providers.zh.md) 与 [C14](../contracts/c14-oidc-passkeys.zh.md) 说明了每一方能看到和能做的事，并各自附有已存在内容的状态。
 
 ### Delo Run 项目
 
-Delo Run 持有离线的 root 与 targets 密钥、在线的 timestamp 密钥与在线的插件索引密钥。它发布版本、发布元数据、插件索引、撤销列表、文档网站与候补名单。它可以发布本人可能安装的版本，该版本已签名并记录在公开日志中；Delo 的约定要求在本人确认更新之前，没有客户端会安装它，也没有客户端会自行降级。它可以通过撤销列表在某个插件版本下次加载时停用它，studio 会显示原因，并记录到 profile 历史（profile history）。Delo 的约定要求它无法自行进入 home：Tailscale 远程访问或自托管中继的路径上没有 Delo 基础设施，Delo 不持有任何 studio 的 TLS 密钥或设备密钥，它无法伪造设备批准（device approval）或指挥机器，也无法改变已安装插件的固定版本。本人对 Delo Run 的剩余信任包括其发布、插件索引与撤销列表，以及提供这些内容的 `delorun.com` 名称。
+Delo Run 持有离线的 root 与 targets 密钥，以及在线的 timestamp 密钥。它可以发布一个已签名并记录在公开日志中的版本。在本人确认之前，没有客户端会安装它：npm 启动器只安装到空的运行时仓库中，`delorun update` 只在本人确认之后才应用。没有客户端会比较版本，因此被 timestamp 签名者移到更低版本的渠道会被作为更新提供；timestamp 命令拒绝这样的移动，客户端也拒绝比已存储的 timestamp 更旧的 timestamp（[C2](../contracts/c02-release-manifest.zh.md#freshness-and-rollback-protection)）。Delo Run 无法进入 home：通往 studio 的路径上没有 Delo 基础设施，它也不持有 home 的任何密钥。本人对 Delo Run 的剩余信任包括其发布，以及提供其元数据的 `delorun.com` 名称。
 
 ### 上游与依赖作者
 
-上游的代码就是 harness，因此其作者如同 harness 一样受到信任。Delo 合并上游的每次发布，为每个改动的文件记录结论，并重新运行对等回放与插件语料。依赖由锁文件固定，Delo 的约定要求发布会根据公告源检查锁文件。带标签源码或固定依赖中的恶意改动会被重建复现并签名；签名与日志条目表明发布来自何处，而不表明它没有缺陷。
+上游的代码就是 harness，因此其作者如同 harness 一样受到信任。Delo 合并上游的每次发布，为每个改动的文件记录结论，并重新运行对等回放与插件语料。依赖由锁文件固定，签名命令在签名之前会根据公告源检查锁文件。带标签源码或固定依赖中的恶意改动会被重建复现并签名；签名与日志条目表明发布来自何处，而不表明它没有缺陷。
 
 ### 持有被盗设备的一方
 
-Delo 的约定要求受信任设备持有绑定到某个 studio 地址的不可导出设备密钥。Delo 的约定要求远程访问中的新登录还需要身份因子。持有带实时会话设备的窃贼，或者还能使用身份因子（例如已解锁设备上的通行密钥）的窃贼，可以在该 studio 地址上以本人身份行事，直到另一台受信任设备或 home 上的 `delorun devices remove` 移除该设备，移除会在返回之前结束其会话。Delo 的约定要求在远程访问地址上批准另一台设备，同时还需要新设备显示的代码，以及一个经过用户验证的通行密钥断言；在没有通行密钥的地址上，则需要在所有者的 OIDC 提供方重新登录一次。运行 home 的计算机被盗时，持有者获得本人用户持有的一切；在这种情况下，Delo 依靠操作系统的登录与磁盘加密。
+本人批准过的设备，只要处于解锁状态且其会话仍然有效，就会让持有者获得 chat 以及允许列表所允许的操作：无请求 12 小时后失效，最长 14 天。本人在电脑上移除丢失的设备，这会立即结束其会话。home 电脑上持有回环 cookie 的浏览器 profile，自签发起最长 30 天内都能以本人身份被准入，跨越重启仍然有效，且没有任何命令可以撤销它。运行 home 的计算机被盗时，持有者获得本人用户持有的一切；在这种情况下，Delo 依靠操作系统的登录与磁盘加密。
 
 <a id="boundaries-and-their-defences"></a>
 
 ## 边界及其防护
 
-每一节写明边界、其约定要求的防护，以及报告它的检查。
+每一节写明边界、已构建的防护以及规定它的约定。
 
 - [原生命令的限制](#confinement-of-native-commands)
 - [home 的控制通道](#the-homes-control-channels)
@@ -133,91 +141,58 @@ Delo 的约定要求受信任设备持有绑定到某个 studio 地址的不可�
 
 ### 原生命令的限制
 
-[C1](../contracts/c01-home-layout.zh.md) 要求为每个在 `read-only` 或 `workspace-write` 下运行的命令，在上游的沙箱配置之上设置五条规则：不得在 home 下写入（`home-write`），不得在其下读取，`runtimes/`、`skills/` 与 `dsh-runtimes/` 除外（`home-read`），不得读取启动令牌（`token-read`），不得连接 home 的通道（`home-connect`），也不得连接位于真实路径的 Docker 套接字（`docker-connect`）。
+[C1](../contracts/c01-home-layout.zh.md) 定义了 CLI profile 在上游沙箱之上为每个在 `read-only` 或 `workspace-write` 下运行的命令添加的六条规则；第六条 `wsl-interop` 见下文。前五条是：不得在 home 下写入（`home-write`），不得在其下读取，`runtimes/`、`skills/` 与 `dsh-runtimes/` 除外（`home-read`），不得读取启动令牌（`token-read`），不得连接 home 的通道（`home-connect`），也不得连接位于真实路径的 Docker 套接字（`docker-connect`）。
 
-- Delo 的密钥保存在 `secrets/` 下的文件中，文件权限模式为 0600、所在目录为 0700，从不放在读取豁免、profile、命令行、命令的环境变量或日志中。上游的凭据文件位于 home 下，受 `home-read` 约束。Delo 不使用操作系统的密钥存储，因为受限命令可以通过 D-Bus 访问 Linux Secret Service，也能运行 macOS 钥匙串项目所信任的 `node` 可执行文件。
+- bwrap 强制执行全部五条。Landlock 强制执行 `home-write`、`home-read` 与 `token-read`，无法表达两条套接字规则。Seatbelt 强制执行全部五条。windows-acl 只强制执行 `home-write`。
+- Delo 的密钥保存在 `secrets/` 下的文件中，在 Linux 与 macOS 上文件权限模式为 0600、所在目录为 0700，从不放在读取豁免、profile、命令行、命令的环境变量或日志中。上游的凭据文件位于 home 下，受 `home-read` 约束。Delo 不使用操作系统的密钥存储，因为受限命令可以通过 D-Bus 访问 Linux Secret Service，也能运行 macOS 钥匙串项目所信任的 `node` 可执行文件。
 - 当某个可写根目录等于 home、位于 home 内或包含 home 时，`workspace-write` 会被拒绝。
-- `danger-full-access` 的批准提示会在本人批准之前说明：完全访问允许该命令读取 Delo 的 home（包括其密钥与令牌），并访问 Docker 监管器与更新通道。
-- 其他 Unix 套接字（例如 ssh-agent 套接字、D-Bus 与显示服务器）以及网络，对受限命令仍然可达。
-- home 进程在每次启动时探测每条规则。只有当方言能表达某条规则且其探测被拒绝时，`confinement-rule` 检查才把该规则报告为 `pass`；方言无法表达时报告 `not-enforced`，工作区不受限制地运行时报告 `fail`，探测没有运行时报告 `unknown`。C1 的各方言表格说明了 bwrap、Landlock、Seatbelt 与 windows-acl 各自强制执行什么。
+- 其他 Unix 套接字（例如 ssh-agent 套接字、D-Bus 与显示服务器）以及网络，对受限命令仍然可达。Docker Desktop 除 context 套接字之外的控制套接字不被拒绝。
+- `danger-full-access` 的批准提示是上游的；它不说明完全访问能触及 Delo 的 home。
+- 没有任何东西按机器报告哪些规则成立：启动时不运行探测，`delorun verify` 把 `confinement-rule` 检查报告为未运行。
+- 在 WSL 下，互操作（interop）会让受限命令启动 Windows 程序，该程序在每个 Linux 命名空间、挂载规则与受保护的 home 之外，以本人的 Windows 账户运行，并能读取 Windows 进程的命令行。`delorun start` 把 WSL 的互操作目录 `/run/WSL` 指定为逃逸套接字目录（`wsl-interop`）；在它存在的地方，bwrap 会隐藏它，因此不会有 Windows 程序通过互操作套接字启动，无论是按路径、按裸名称、作为副本、通过 `/init` 还是设置了 `WSL_INTEROP`；Landlock 无法隐藏它，因此改为拒绝每个受限命令。在 bwrap 下，一个 seccomp 过滤器还会拒绝 vsock 套接字（互操作套接字之下 WSL 与 Windows 之间的传输）以及 io_uring（其请求创建的套接字该过滤器看不到）（`vsock`）；它适用于内核提供 vsock 的任何虚拟机，在那里需要 io_uring 的程序会失败，通过 `socketcall` 创建套接字的 32 位程序得不到套接字。抽象 Unix 套接字在每种方言上都仍可访问；WSL 不在任何抽象套接字上监听，而本人运行的、在抽象套接字上监听的程序是可访问的（[C1](../contracts/c01-home-layout.zh.md#what-this-does-not-prove)）。
+- harness 自身会在工作区的仓库上运行 git，以记录每个回合改动的文件。每条这样的命令都在 Session 的沙箱中运行，可写根目录为 Session 的可写根目录加上插件的快照目录；当 Session 为 `read-only` 时，只有该目录可写；只有当 Session 的命令不受限制时它才不受限制地运行，沙箱无法限制的命令，或没有挂载沙箱的受限 Session，不记录任何内容。快照目录位于每个用户的缓存目录中，在 Delo 的 home 之外；除非某个 Session 的可写根目录包含它，任何方言都不会把它授予受限命令。每次快照与复制都先将其与每个活动 Session 的可写根目录比对，有重叠时不记录任何内容；harness 在每次使用之前检查其中每个目录的设备号与 inode，它在那里的文件操作会拒绝最后一级路径组件是链接的情况、命名管道以及不是它创建的条目。通过已批准的完全访问提权运行的命令不在此范围内。每条命令都在移除每个继承的 `GIT_*` 变量的情况下运行，并带有命令范围的配置，关闭文件系统监视器、钩子、仓库配置定义的每个过滤器与 diff 驱动、分页器、编辑器、凭据助手与传输，因此受限命令写入的 `.git/config`、`.gitattributes`、钩子或 `.git` 文件不会启动任何程序（[workspace-changes](../../../packages/deliverables/workspace-changes/README.zh.md#git-hardening)）。stock 不受限制地运行这些命令，且仓库的配置生效。
+- 本人自己的 git 与编辑器没有加固。在 `workspace-write` 下，受限命令可以写入仓库的 `.git/config`、钩子与属性文件，下次本人在沙箱之外于该仓库中运行 git 或编辑器的 git 集成时，这类设置指定的程序会以本人的完全权限运行。一项让这些文件对受限命令保持只读的[设计选项](../design/workspace-git-state.md)尚待决定。
+- 文件工具自行应用 `home-read` 与 `home-write`。`read`、`read_image`、`apply_patch` 与 `str_replace_editor` 拒绝位于 home 下或通往 home 的其他路径（读取豁免除外），本地文件系统会确认它打开的文件或目录就是它检查过的那个，因此在检查与打开之间被替换为指向 home 的链接的工作区目录会导致读取失败：在 Linux 上依据描述符自身的路径，在其他平台上依据其设备号与 inode，在这两次查找之间换入又恢复的链接不会被发现。写入围栏拒绝 home 以及提供方找到的 home 的其他每个挂载。`glob` 与 `grep` 在 ripgrep 启动之前解析其根目录，并在 `read-only` 下以受限方式运行 ripgrep，因此方言的 `home-read` 在搜索的每一层深度都成立，与命令相同；在没有运行器能限制的地方，搜索会失败；在不限制任何读取的 Windows 上，搜索期间换入又恢复的链接不会被发现。这些工具还可以读取 `spill/`，那里保存对 chat 而言过长的工具输出，溢出提示会告诉模型去读取它；受限命令则不能。溢出文件只写入 `spill/`（权限模式 0700，若更宽松则收紧）：当 home 无法容纳它时，输出留在 chat 中，而不是写入受限命令可能读取的临时目录。
+- harness 通过其子进程服务启动的命令与其他进程继承其环境，但不包括上游过滤器丢弃的条目：保存凭据的名称，例如 `*_TOKEN`、`*_CREDENTIALS`、`*PASSPHRASE*`、`MYSQL_PWD`、`KUBECONFIG` 与 `KRB5CCNAME`，以及含有带用户信息的 URL 的值，包括仅含令牌的 `https://<token>@host` 或 Sentry DSN。像 `PATH` 这样的搜索列表只丢弃其中指向凭据文件或 agent 套接字的元素。以过滤器不认识的名称和形式出现的凭据会被继承。
+- 有些工具会在工作区中于沙箱之外启动程序：Claude Code 与 ACP 子 agent 工具启动其 agent 进程，stdio 语言服务器工具启动语言服务器，均不受限制。这些程序以本人的完全权限读取工作区的文件与配置，因此受限命令在那里写入的文件可以改变它们的行为。
+
+探测、检查、提示的说明、Docker Desktop 的控制套接字目录、Windows，以及 `delorun headless` 下的相同规则，见[原生限制设计](../design/native-confinement.md)。
 
 <a id="the-homes-control-channels"></a>
 
 ### home 的控制通道
 
-Docker 监管器（[C9](../contracts/c09-runtime-supervisor.zh.md)）与更新通道（[C19](../contracts/c19-home-process.zh.md)）监听 `run/<profile>/` 下的套接字，在 Windows 上则是命名管道。两者都只接受携带本次 home 进程启动令牌的请求：该令牌为来自操作系统随机源的 256 位数据，以恒定时间比较，从不出现在命令行、环境变量、响应或日志中。两个通道都不转发请求：监管器的 API 采用固定 schema，没有任何字段能指定镜像、参数、挂载、环境变量、命令、设备、能力或网络；更新请求不携带路径、归档、URL 或命令，因此持有令牌的调用方只能选择一个由 home 进程自己获取并验证的版本。这种保护依赖于对 agent 命令的限制，如 C1 所述。
+更新通道（[C19](../contracts/c19-home-process.zh.md)）监听套接字 `run/<profile>/update.sock`。它只接受携带本次 home 进程启动令牌的请求：该令牌为来自操作系统随机源的 256 位数据，以恒定时间比较，从不出现在命令行、环境变量、响应或日志中。它不转发请求：更新请求不携带路径、归档、URL 或命令，因此持有令牌的调用方只能选择一个版本：由 home 进程从渠道获取并验证的版本，或已安装在运行时仓库中的版本。这种保护依赖于对 agent 命令的限制（如 C1 所述），并且只在方言拒绝读取令牌的地方成立。[C9](../contracts/c09-runtime-supervisor.zh.md) 的 Docker 监管器通道不监听，因为没有命令启动监管器，Windows 上也不存在命名管道。
 
 <a id="container-isolation"></a>
 
 ### 容器隔离
 
-[C9](../contracts/c09-runtime-supervisor.zh.md) 以两种 Docker 形态定义 Docker 工作区。在 S2 下，harness 在机器上运行，每个 Docker 工作区有自己的容器，将其与计算机以及其他每个工作区隔离。受限的 S3 在一个容器中运行 harness 与所有工作区，它把计算机与工作区隔离开，但不把工作区彼此隔离；其 harness 以单独的用户在只读目录树上运行，远程访问拒绝开启。
-
-- 每个容器都丢弃所有能力、设置 `no-new-privileges`、使用发布附带的 seccomp 配置与只读根文件系统，并且不会获得 Docker 套接字、设备或宿主机的任何命名空间。
-- 每个工作区都有自己的内部网络，没有通往机器的路由，只能通过其出口代理访问外部；该代理拒绝回环、链路本地、私有以及机器自身的地址，并在本人没有为该工作区另作选择时只允许默认允许列表。
-- 监管器只挂载位于设置时所选父目录下的工作区根目录，并拒绝 `/`、`$HOME` 与 `~/.delo`。
-- 它只运行已验证发布清单所列摘要的 S2 与 S3 镜像，并按摘要拉取。
-- 凭据转发默认关闭，按工作区选择：单个仓库的部署密钥、每次使用都需确认的 ssh agent，或限定于单个仓库的令牌。studio 会说明该工作区的代码可以在该范围内以本人身份行事。
-- 能力报告只在检查探测容器确实显示某项限制时，才把它报告为已强制执行；设置会在本人选择形态之前列出每项限制，并推荐 Docker 的 rootless 引擎。
+Docker 工作区尚未构建。[C9](../contracts/c09-runtime-supervisor.zh.md) 规定了它们以及将创建它们的监管器；监管器包已存在，而 `delorun start` 从不启动它。
 
 <a id="admission-and-listeners"></a>
 
 ### 准入与监听器
 
-[C4](../contracts/c04-admission.zh.md) 定义准入。回环监听器在 Delo 的 profile 中为 `127.0.0.1:3080`，保留上游的启动令牌与会话 cookie；Delo 在签发每个回环凭据时记录它，拒绝没有记录的凭据，并把每个凭据限制为闲置 7 天、总计 30 天。在本人开启远程访问之前，远程访问保持关闭，设置的 `--yes` 与 `--config` 形式从不开启它（[C11](../contracts/c11-setup-answers.zh.md)）。C4 对每个远程访问监听器提出以下要求：
-
-- 它只绑定 `127.0.0.1` 上由操作系统分配的端口、一个 Unix 套接字，或不绑定任何地址，并且没有任何配置字段能覆盖它。它只在 `@delo/home-auth` 提供认证器时运行，从不回退到上游的 cookie。
-- 在任何路由、升级或回退之前，其分发器会移除 Tailscale 身份请求头，拒绝非绑定名称的 `Host`（在中继监听器上还拒绝与 SNI 不同的 `Host`）、外来的 `Origin`、上游的启动令牌、`/connect` 与 `dsh-auth-*` cookie，然后才准入或拒绝该请求。
-- 登录之前，它只提供登录、批准与恢复路由组成的登录前允许列表，插件路由只有在 profile 列出它时才能加入。
-- 远程访问会话保存在服务器端，以 `__Host-` cookie 中 32 字节令牌的 SHA-256 哈希为键，并且可撤销；会话在闲置 12 小时或总计 14 天后过期，设备批准或移除、登录因子变更或远程访问变更时，每个会话都会轮换。
-- 其内容安全策略把脚本、连接、图片与媒体限制在 studio 自身的源（图片与媒体另允许 `data:`），并强制执行 Trusted Types；chat 中的远程图片显示为占位符，从不请求其来源。
-
-`reach-binding` 检查报告该监听器的绑定与当前的远程访问方式（reach option）。
+[C4](../contracts/c04-admission.zh.md) 定义准入。回环监听器在 CLI profile 中为 `127.0.0.1:3080`，运行上游的准入并开启一次性启动令牌：启动令牌在 60 秒内只能使用一次，`/connect`，以及无状态的签名 cookie，它们在签发 30 天后过期，没有闲置限制、没有服务器端记录，也不可撤销。能读取 home 的 `.credentials.yaml` 的一方无需任何启动令牌即可签出这样的 cookie。每个持有 cookie 的浏览器都以唯一所有者的身份行事，回环 studio 不发送内容安全策略。设置的 `--yes` 与 `--config` 形式从不开启远程访问（[C11](../contracts/c11-setup-answers.zh.md)）；`delorun reach on tailscale` 以及设置 Full 模式中的“是”答复会开启它。开启远程访问时，远程访问监听器的分发器在任何路由、升级或回退之前认证每个请求。回环凭据是上游的启动 cookie 与 API 凭据，由上游内置的准入接受；不存在按凭据的记录，因此没有任何东西会因为缺少记录而拒绝有效凭据。以 7 天闲置限制记录每个回环凭据，见[远程访问设计](../design/reach.md#loopback-credentials)，尚未构建。
 
 <a id="device-approval"></a>
 
 ### 设备批准
 
-[C5](../contracts/c05-device-approval.zh.md) 定义受信任设备。
-
-- **所有者认领。** 在某台设备认领之前，home 没有所有者，远程访问在此之前保持关闭。在 C7 的回退方案（即当前约定）下，所有者认领只在回环监听器上接受，即在 home 自己的计算机上或通过 SSH 端口转发访问，并使用一次性的所有者验证码（owner code）：它有 128 位熵，10 分钟后过期，只打印到终端，从不记录到日志。
-- **批准。** 设备密钥不可导出，并绑定到一个 studio 地址。受信任设备只通过自己的实时会话批准新设备：用其设备密钥签名，并附带本人从新设备屏幕上输入的 8 位匹配码，该匹配码承诺两个公钥、两个 nonce 与该地址。在远程访问地址上，批准还要附带一个经过用户验证的通行密钥断言；在没有通行密钥的地址上，则附带一次绑定到该批准的 OIDC 重新认证。拥有回环会话的浏览器无需批准即可登记其设备密钥。
-- **提示。** 批准提示显示设备的标签、平台、请求时间与来源地址；由中继、`tailscaled` 或转发请求头声称的地址会被标记为未验证或省略。
-- **移除与重置。** 受信任设备或 `delorun devices remove` 可以移除设备，并在返回之前结束其会话。`delorun devices reset` 在 home 运行时拒绝执行；它会关闭远程访问，删除所有者、每台设备、会话与通行密钥记录，使恢复套件失效，并替换回环会话密钥。
-- **恢复。** 有通行密钥或 OIDC 身份因子时，恢复使用恢复套件与 home 的终端；没有时只能使用终端。恢复套件只能使用一次，需要所有者的身份因子，并等待 72 小时，期间任何受信任设备都可以取消。
-- **桌面应用。** 打开另一个 home 的桌面应用与其他设备一样需要批准。在会跨证书续期保留同一 TLS 叶子密钥的 home 上，它根据一份由其匹配码所承诺的 home 密钥签名的声明固定该密钥；在 `ts.net` 地址上不固定任何密钥。
-- **告警。** home 通过以下方式发出每条告警：自己的屏幕、`~/.delo/alerts/` 下的已签名告警文件、每台受信任设备下次连接时显示的告警页面，以及本人配置的命令或 webhook；没有任何告警只依赖 Delo 基础设施。
-
-`owner-and-devices` 检查报告每个地址的所有者、受信任设备与身份因子。
+[C5](../contracts/c05-device-approval.zh.md) 规定设备批准，每个 CLI profile 都加载的 `@delo/home-auth` 为 Tailscale 私有路由构建了它。新设备只能在 home 的电脑上获得批准：本人在那里打开一个 5 分钟的批准窗口，并输入设备屏幕上显示的 8 位匹配码来批准该设备，可以在回环上的 studio 中进行（需要 studio 自己的凭据），也可以通过更新通道使用 `delorun devices approve`（需要启动令牌）。home 无法验证请求来自何处，因为该路由上每个请求的来源都是 `127.0.0.1`；匹配码把批准绑定到本人读取过其屏幕的那台设备，它并不证明谁持有该设备。远程访问会话不能批准或移除设备、打开窗口或认领 home（[基本原则](fundamentals.md) F12 与 F13）。通行密钥、恢复套件、重置与告警尚未构建。
 
 <a id="reach-providers"></a>
 
 ### 远程访问方式
 
-[C7](../contracts/c07-reach-providers.zh.md) 定义各远程访问方式，以及每种方式在开启之前和开启期间显示的可见性说明；[C6](../contracts/c06-relay-protocol.zh.md) 定义中继协议。这些方式都不使用 Delo 基础设施。在回退方案下，Tailscale 私有目标是 `127.0.0.1` 上的一个 TCP 端口，在已记录的验证实验为某个平台采用 Unix 套接字方案之前，回退方案就是当前约定：Tailscale 身份请求头在任何监听器上都不受信任，tailnet 私有远程访问与公开远程访问一样需要通行密钥或 OIDC 身份因子，连接该目标的本地进程只会像远程设备一样被准入。
-
-| 远程访问方式 | 提供方能看到或做到的事 | 端到端条件 |
-| --- | --- | --- |
-| Tailscale 私有 | Tailscale 的协调服务能看到名称、home 与每台设备的 IP 地址、连接时间与流量大小；除非开启 Tailnet Lock，Tailscale 可以向 tailnet 添加设备，并获取 `ts.net` 证书 | 只有 tailnet 设备能连接；TLS 在 home 上的 `tailscaled` 中终止，任何应用都无法固定 `ts.net` 的密钥 |
-| Tailscale Funnel | 与 Tailscale 私有相同，Funnel 的服务器也能看到同样的内容；互联网上的任何人都能打开该地址，它使用不信任任何身份请求头的独立监听器 | 与 Tailscale 私有相同 |
-| 本人域名上的自托管中继 | 中继运营者能看到每个连接的名称、客户端地址、时间与流量大小，可以拒绝或断开连接，并能强制重新绑定 | 当该域名的 CAA 记录只允许 home 的 Let's Encrypt 账户签发（`accounturi`，并带 `validationmethods=tls-alpn-01`），且 home 自己应答证书质询时，才是端到端的 |
-
-- **自有域名规则。** 所指定的证书颁发机构是 Let's Encrypt。home 在远程访问启动之前、每次证书订单之前以及每 24 小时检查一次 CAA 记录，缺失或不匹配的记录会在所有验证模式下让该域名的远程访问保持关闭。中继位于路径上时，home 只通过其经过密钥证明的隧道应答 TLS-ALPN-01，不发起 HTTP-01 或 DNS-01 质询，并拒绝委托给 Delo 所控制区域的质询。`own-domain-caa` 检查只断言 Let's Encrypt 文档所述的 `accounturi` 与 `validationmethods`。
-- **中继。** 隧道用一次性令牌，针对新的 nonce 证明其绑定的 home 密钥。每个名称只有一条活动隧道；第二条即使密钥有效也会被拒绝并通告，home 会发出告警。重新绑定需要旧 home 密钥的签名或运营者的强制重新绑定，等待 60 秒并会被通告。中继只读取 SNI，不持有任何已绑定名称的 TLS 密钥。
-- **证书监控。** 启用自有域名远程访问的运行中 home，每 30 分钟查询一次公开证书日志中覆盖其名称的证书，包括精确名称、通配符与多名称证书。只要存在一张不是其自身账户申请、且尚未解释的证书，home 就会发出阻断性告警，其中继客户端会关闭隧道并不再打开。检测发生在某个日志收录该证书之后，延迟由各日志的收录策略决定，在此期间拒绝无法生效；桌面应用的密钥固定不需要等待日志。`ts.net` 名称不受监控，因为其证书由 Tailscale 获取。`certificates` 检查报告证书状态与告警。
-
-Delo 中继（Delo relay）是路线图中的一个阶段，不是远程访问方式；宣布它的页面会说明 Delo 能看到什么。
+Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md)）：它通过 `tailscale serve` 提供一个固定的本地端口，拒绝 Funnel，移除其端口上不属于它的 serve 规则，并每分钟重新检查 Tailscale。Funnel 与自有域名提供方尚未构建，自托管中继的服务器已构建，但没有任何 home 连接它（[C6](../contracts/c06-relay-protocol.zh.md)）。规格测试伪造 `tailscale`；[远程访问设计](../design/reach.md#never-run-on-a-real-tailnet-or-phone)列出了尚未在真实 tailnet 或手机上验证的内容。
 
 <a id="sign-in"></a>
 
 ### 登录
 
-[C14](../contracts/c14-oidc-passkeys.zh.md) 定义远程访问在设备批准之外要求的身份因子，它在添加 studio 地址时为该地址登记。在自有域名上，它是一个通行密钥（其依赖方 ID 是该地址的主机名，从不是上级域名），或本人自己的 OIDC 提供方。在 `ts.net` 地址上，当前约定下没有通行密钥，因此身份因子是本人的 OIDC 提供方；除非采用 C7 的套接字方案，tailnet 身份会被拒绝。身份因子从不取代设备批准：没有已批准设备密钥的有效身份证明不会创建会话。
-
-- 通行密钥要求用户验证，其签名计数器从不减少。
-- home 在本人的提供方注册为自己的客户端，因此客户端 ID 就是指明该 home 的受众。每个流程都带有绑定到浏览器的一次性 `state`、一个 `nonce` 与一个 S256 PKCE 验证码，并且只从该流程的签发方获取令牌端点、密钥集与签发方；来自其他签发方的令牌或 `iss` 参数会被拒绝。ID 令牌必须由签发方密钥集中的密钥以非对称算法签名。
-- 所有者的签发方与主体在首次 OIDC 登记时固定，之后的每次登录、恢复与重新认证都必须与之匹配。
-- 客户端密钥保存在 `~/.delo/secrets/` 下的密钥文件中，从不放在配置行里。
+回环 studio 使用 `delorun open` 提供的启动令牌登录。远程访问会话仅凭已批准设备的密钥登录，即身份因子 `tailnet-membership`（[C14](../contracts/c14-oidc-passkeys.zh.md#tailnet-membership)）。C14 还规定了通行密钥与 OpenID Connect 身份因子，它们尚未构建。
 
 <a id="releases-the-log-and-the-rebuild"></a>
 
@@ -225,100 +200,96 @@ Delo 中继（Delo relay）是路线图中的一个阶段，不是远程访问�
 
 [C2](../contracts/c02-release-manifest.zh.md) 与 [C18](../contracts/c18-release-log.zh.md) 定义发布完整性。
 
-- 离线的 targets 密钥为每个发布清单签名，离线的 root 密钥为每个角色的密钥及每次轮换签名。在线的 timestamp 密钥只为新鲜度签名，其文件在签发 3 天后过期；客户端拒绝过期或更旧的 timestamp，也从不自行降到更低的版本。
-- 每个清单在 Sigstore 的公开 Rekor 日志中都有条目，并由 root 所列的见证者共同签名。安装或更新需要经过验证的包含证明。经过验证的签名或发布日志失败会在所有验证模式下阻止启动；离线或未知的结果从不阻止启动。
+- 离线的 targets 密钥为每个发布清单签名，离线的 root 密钥为每个角色的密钥及每次轮换签名。在线的 timestamp 密钥只为新鲜度签名，其文件在签发 3 天后过期；客户端拒绝过期或更旧的 timestamp。
+- 安装或更新需要发布日志中经过验证的包含证明，并由 root 所列的见证者共同签名。每次启动时，经过验证的发布日志失败会停止启动；离线或未知的结果从不阻止启动。
 - targets 密钥持有者只在自己控制的、CI 之外的机器上，使用公开的配方从带标签源码重建发布之后才签名；没有匹配的重建记录时，签名命令会拒绝。
-- 发布会根据 GitHub Advisory Database 检查其锁文件，遇到没有已记录接受的公告时失败。
-- 在签名、摘要与日志检查通过之前，任何文件都不会进入 `~/.delo/runtimes/`。在每次启动时，无论验证模式如何，启动器都会在完整性包之外，根据已签名的文件列表检查每个已安装的运行时文件。
-- 桌面应用在每次更新应用之前验证清单、下载文件的摘要与日志条目，并拒绝自动降级。
-- npm 启动器是安装前的信任锚：`npx delorun` 会在任何 Delo 检查之前运行 npm 提供的启动器，因此它通过 npm 为 Delo 发布工作流发布的构建证明获得信任，该工作流不持有 npm 令牌。安装脚本通过其公开的哈希获得信任。
+- 签名命令根据 GitHub Advisory Database 检查锁文件，遇到没有有效接受的公告时拒绝。
+- 在签名、摘要与日志检查通过之前，任何文件都不会进入 `~/.delo/runtimes/`。每次启动时，npm 启动器都会根据已签名的文件列表检查每个已安装的运行时文件：它对每个文件计算哈希，或将文件的身份与上次计算哈希后记录的身份比较，并默认至少每 7 天对每个文件计算一次哈希。不改变文件变更时间的存储损坏，由该完整检查或 `delorun verify` 发现，而不是由下一次启动发现。
+- npm 启动器是安装前的信任锚：`npx delorun` 会在任何 Delo 检查之前运行 npm 提供的启动器。
+
+发布工作流尚不存在：每 24 小时重新签名 timestamp、带构建证明且不使用令牌地发布到 npm，以及安装脚本，见[发布工作流设计](../design/release-workflow.md)。桌面应用的更新器是上游的，不检查任何 Delo 签名或日志条目（[更新与回滚设计](../design/update-and-rollback.md#the-desktop-app)）。
 
 <a id="the-catalogue-and-revocation"></a>
 
 ### 插件索引与撤销
 
-[C13](../contracts/c13-catalogue-revocation.zh.md) 定义插件索引与撤销列表，两者都用插件索引密钥签名，并从不受信任的主机提供。安装会固定确切版本及其完整性哈希；对于被撤销的版本，或在撤销列表过期期间，安装会被拒绝。该列表带有防重放的序列号，在签发 48 小时后过期，最长缓存时间为 24 小时；超过后，studio 会说明这一点，新的插件索引安装暂停，已安装的插件继续加载，已被撤销的版本保持停用。被撤销的版本会在下次加载时停用，并附带原因与一个 profile 历史版本。徽章只显示「tested with Delo X」，由不运行插件代码的发布作业写入。Delo 不审计插件：条目列出的发现是作者或评审者的主张，Delo 不验证它们，studio 在显示它们的地方会说明这一点。[C17](../contracts/c17-plugin-versions.zh.md) 对 DSH 或 Delo 版本要求未满足或无法读取的插件，在安装时拒绝、在启动时停用，并且从不为此导入插件代码。`plugin-pins` 检查报告固定版本、徽章与撤销列表的状态。
+插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）：除上游的锁文件之外，Delo 不固定任何插件版本，也无法停用任何已安装的版本。[C17](../contracts/c17-plugin-versions.zh.md) 对 DSH 或 Delo 版本要求未满足或无法读取的插件，在安装时拒绝、在启动时停用，并且从不为此导入插件代码。Delo 不审计插件。
 
 <a id="updates-and-rollback"></a>
 
 ### 更新与回滚
 
-[C3](../contracts/c03-update-report.zh.md) 与 [C19](../contracts/c19-home-process.zh.md) 定义更新如何应用。在更新之前，更新报告会显示目标版本将停用、移除或改变的每个插件、组合包与 profile 行，把 Delo 无法预测的内容标记为未验证且从不算作安全，并在本人确认之前不应用任何内容。只有通过签名、新鲜度与日志检查的目标才会生成报告。先写入快照；切换会等到旧运行时上没有 chat 运行；120 秒内的健康检查失败时会自动回滚，本人之后也可以随时回滚。profile 历史的撤销与恢复会运行安装时的插件检查，并在应用之前列出它们改变的插件、构建与豁免。CLI home 与桌面应用各自独立更新，更新其中一个从不切换另一个。
+[C3](../contracts/c03-update-report.zh.md) 与 [C19](../contracts/c19-home-process.zh.md) 定义 CLI home 的更新如何应用。在更新之前，`delorun update` 会显示目标版本将停用、移除或改变的每个插件、组合包与 profile 行，以及 chat 数据的格式是否改变，把 Delo 无法预测的内容标记为未验证且从不算作安全，并在本人确认之前不应用任何内容。先写入快照；切换会等到旧运行时上没有 chat 运行，期间新回合会被拒绝；120 秒内的健康检查失败时会自动回滚，本人之后也可以用 `delorun recover` 回滚。`delorun recover restore` 立即应用某个 profile 历史版本，不经批准提示，也不运行安装时的插件检查。桌面应用通过上游的更新器更新。
 
 <a id="archives-and-untrusted-chats"></a>
 
 ### 导出文件与不受信任的 chat
 
-[C8](../contracts/c08-archive-and-trash.zh.md) 定义导出文件与回收站。导入会先在暂存区验证整个归档，然后才写入任何内容，并且从不覆盖工作区或 chat。定制内容是封闭 schema 下的数据：不会求值任何 `!!js` 表达式，不接受任何 `insert` 行，也没有任何行能设置沙箱模式、凭据引用、远程访问方式或出口。如果归档没有导入方 home 能担保的签名，就只能以未验证状态导入，差异界面与导入报告都会显示这一状态。导入的插件声明只会列出，从不安装；导入的预设不能把权限提升到本人自己的预设之上；导入的 skill 初始为停用；导入的 chat 初始为不受信任，带有写明其来源的横幅，其历史在本人标记为可信之前不进入模型上下文。清除会从 C8 所列的每个存储中移除条目；[C10](../contracts/c10-host-qualified-keys.zh.md) 让每个连接的浏览器状态彼此分开，清除会在执行它的浏览器中移除某个 chat 在每个主机范围下的草稿。
+[C8](../contracts/c08-archive-and-trash.zh.md) 定义导出文件与回收站。导入会先在暂存区验证整个归档，然后才写入任何内容，并且从不覆盖工作区或 chat。定制内容是封闭 schema 下的数据：不会求值任何 `!!js` 表达式，不接受任何 `insert` 行，也没有任何行能设置沙箱模式、凭据引用、远程访问方式或出口。没有导入方 home 能担保的签名的归档，只有在本人将其作为未验证内容接受之后才会导入。不会应用任何定制行，导入的 chat 保存在没有任何东西读取它们的地方，因此它们不会进入任何模型请求。把导入的 chat 作为不受信任的 chat 打开以及应用定制内容，见[导入 chat 设计](../design/imported-chats.md)。清除会从 C8 所列的每个存储中移除条目，请求图片缓存除外；在 studio 中清除会移除该浏览器中该 chat 的草稿，而从 `delorun trash` 清除或在保留期结束时清除不会触及任何草稿。
 
 <a id="logs-and-redaction"></a>
 
 ### 日志与遮盖
 
-[C20](../contracts/c20-operational-logs.zh.md) 定义 Delo 的运行日志。每条记录在写入之前都经过遮盖器，它会替换已登记的密钥值、名称表明是密钥的字段以及所列的凭据形式，因此任何密钥、令牌、私钥、所有者验证码或 cookie 都不会进入日志。Delo 自己的记录不包含 chat 文本、提示、模型输出、工具参数或文件内容。日志文件位于 home 下，权限模式为 0600，受限命令不能写入它们，并且在 `home-read` 被强制执行的地方也不能读取它们。Delo 运行期间，日志在写入 14 天后被删除。
+[C20](../contracts/c20-operational-logs.zh.md) 定义 Delo 的运行日志。每条记录在写入之前都经过遮盖器，它会替换已登记的密钥值（即启动令牌与中继密钥）、名称表明是密钥的字段以及所列的凭据形式。不匹配任何所列形式且未登记的密钥，例如形式未被识别的模型密钥，可能进入日志。Delo 自己的记录不包含 chat 文本、提示、模型输出、工具参数或文件内容。日志文件位于 home 下，权限模式为 0600，CLI profile 中的受限命令不能写入它们，并且在 `home-read` 被强制执行的地方也不能读取它们。每次 `delorun` 调用都会删除 14 天之前写入的日志；运行更久的 home 进程会保留它们，直到下一次调用。
 
 <a id="verification"></a>
 
 ### 验证
 
-[C15](../contracts/c15-verification-checks.zh.md) 定义 `delorun verify` 与 studio 的验证面板。检查在 home 的进程中以本人的权限运行，每份报告都说明以该权限运行的程序可以改变这些检查。结果为 `pass`、`fail`、`not-enforced` 或 `unknown`；`not-enforced` 与 `unknown` 从不算作通过。这些检查默认运行，不携带个人数据。模式默认为 `warn`，也可以是 `enforce` 或 `off`，每个显示结果的界面都会同时显示模式；`integrity.mode: off` 会关闭这些检查。在所有模式下，启动器的运行时哈希检查以及经过验证的签名或发布日志失败都会阻止启动，离线或未知的结果从不阻止启动。只有在 `enforce` 模式下且每项检查都通过时，徽章才是绿色。任何详情都不包含密钥、令牌、所有者验证码、cookie、私钥或文件内容。
+[C15](../contracts/c15-verification-checks.zh.md) 定义 `delorun verify`。它运行两项检查：`release-signature`，它把已存储的 root 锚定到启动器附带的 root 上，并检查清单的签名、timestamp 的新鲜度与发布日志包，除非指定 `--offline`，还会进行在线日志检查；以及 `runtime-files`，它根据已签名的文件列表对每个已安装文件计算哈希。C15 列表中的其他每项检查都报告为未运行。检查以本人的权限运行，每份报告都说明以该权限运行的程序可以改变这些检查。结果为 `pass`、`fail`、`not-enforced` 或 `unknown`；`not-enforced` 与 `unknown` 从不算作通过。没有任何东西读取验证模式：`delorun verify` 以 `warn` 报告且不阻止任何内容，启动器在经过验证的签名、文件或发布日志失败时总是停止。任何详情都不包含密钥、令牌、cookie、私钥或文件内容。
 
 <a id="parity"></a>
 
 ### 对等
 
-[C16](../contracts/c16-parity-composition.zh.md) 定义对等组合。其 overlay 只在回放流程设置 `DSH_SNAPSHOT_PATCH` 时加载；任何随产品发布的 profile、配置或命令行选项都不会选择它。在对等组合中，抓取防护、计划任务、指令层与 MCP 的同意，以及容器拒绝标记都处于关闭状态，它们提供的保护在那里不存在；Delo 的约定要求默认组合保持每一项开启。
+[C16](../contracts/c16-parity-composition.zh.md) 定义对等组合。其 overlay 只在回放流程设置 `DSH_SNAPSHOT_PATCH` 时加载；任何随产品发布的 profile、配置或命令行选项都不会选择它。在对等组合中，抓取防护、沙箱以及搜索、`read` 与 `present` 工具的受保护 home、计划任务、指令层、MCP 与完全访问的同意以及更新闸门都处于关闭状态，它们提供的保护在那里不存在；CLI profile 保持每一项开启。
 
 <a id="the-web_fetch-guard"></a>
 
 ### web_fetch 抓取防护
 
-Delo 的约定要求抓取防护让 `web_fetch` 与 HTTP 抓取提供方拒绝回环、链路本地与私有网络目标（包括云元数据地址），并给出模型可读的类型化原因；该工具仍保留在模型的工具列表中（[决策](../../../.agents/notes/proposed/feature/2026-11-06-delo-web-fetch-private-targets.zh.md)）。Delo 的约定要求它在请求发送之前检查目标。它限制的是 `web_fetch` 的目标，而不是命令能访问什么。
+在 CLI profile 中，抓取防护让 `web_fetch` 与 HTTP 抓取提供方在任何连接之前拒绝回环、链路本地与私有网络目标（包括云元数据地址），并给出模型可读的类型化原因；该工具仍保留在模型的工具列表中（[决策](../../../.agents/notes/proposed/feature/2026-11-06-delo-web-fetch-private-targets.zh.md)）。它检查每次重定向，并且只连接到它批准过的地址。它限制的是 `web_fetch` 的目标，而不是命令能访问什么。
 
 <a id="data-sharing"></a>
 
 ### 数据共享
 
-Delo 的约定要求任何关于本人、离开机器的内容都需要本人选择开启（[C11](../contracts/c11-setup-answers.zh.md)）。Delo 没有自己的遥测。上游的桌面分析与 DeepSeek 会话日志上传仍然可用，在首个发布版本中默认关闭；设置与同意界面可以分别开启或关闭它们，`--yes` 与 `--config` 不能开启其中任何一个。Delo 的约定要求完整性检查默认运行、不携带个人数据，并可以用 `integrity.mode: off` 关闭；如[网络](#the-network)一节所述，它们的请求会向其主机暴露机器的 IP 地址与版本。新增一个默认开启的、发往 Delo 主机的请求，需要负责人批准，并在网络测试的允许列表中登记。`data-sharing` 检查报告这两个选项。
+Delo 没有自己的遥测。在 CLI profile 中，DeepSeek 的会话日志上传在本人于设置的“隐私”分区中开启之前保持关闭，DeepSeek 的反馈发送已被移除；设置流程无法开启上传（[C11](../contracts/c11-setup-answers.zh.md)）。在 `delorun headless` 下，会话日志上传同样默认关闭，桌面应用保留上游的分析。每当安装、更新或启动发布时，发布检查都会运行；如[网络](#the-network)一节所述，它们的请求会向其主机暴露机器的 IP 地址与版本。更新检查每天获取一次发布渠道的签名文件，并在已过去一天时于启动时获取，直到在设置的“隐私”分区中关闭；它不发送任何标识符。新增一个默认开启的、发往 Delo 主机的请求，需要负责人批准，并在网络测试的允许列表 [`network-requests.json`](../../apps/tools/src/checks/network-requests.json) 中登记，该列表写明 Delo 未经请求发出的每个请求及其主机、用途、开关与披露；当随产品发布的、发起网络请求的源文件未被列出时，其规格测试会失败，但它发现不了在已列出的文件中新增的请求。`delorun verify` 把 `data-sharing` 检查报告为未运行。
 
 <a id="what-delo-does-not-protect-against"></a>
 
 ## Delo 不防范的内容
 
-下面每项局限都写在拥有它的约定中。当 `delorun verify` 能看到某项局限时，最后一列写明它报告什么。
+下面每项局限都写在拥有它的约定中。`delorun verify` 只报告发布的签名、日志状态与文件，因此其他局限都不会按机器报告。
 
-| 局限 | 仍然可能发生的事 | `delorun verify` 报告什么 |
-| --- | --- | --- |
-| Landlock 无法拒绝对路径名套接字的连接 | 在只有 Landlock 的系统上，受限命令可以连接 home 的通道（通道会因其无法读取启动令牌而拒绝它），也可以连接 rootful Docker 套接字，这等同于 root | `confinement-rule`：`home-connect` 与 `docker-connect` 未被强制执行，并写明套接字路径；设置会提供 Docker 的 rootless 引擎 |
-| Windows 不限制读取 | 在 no-read-up 标签的拒绝测试不通过的地方，受限命令可以读取 home 的密钥与启动令牌；通道只依靠命名管道的写入拒绝 | `confinement-rule`：在该机器上 `home-read` 与 `token-read` 未被强制执行 |
-| 经 TCP 或 SSH 访问 Docker | 任何有网络访问的命令都能访问该引擎 | `confinement-rule`：`docker-connect` 未被强制执行；该 context 上不提供 Docker 形态 |
-| 其他 Unix 套接字与网络 | 受限命令可以访问 ssh-agent 套接字、D-Bus、显示服务器以及任何网络主机 | 不报告；原生模式会说明命令以本人自己的权限运行 |
-| 已提权的命令 | `danger-full-access` 下的命令不受限制：它可以读取 home 下的每个密钥与启动令牌、访问两个通道，并修改监管器的根目录文件 | `confinement-rule`：对处于该模式的工作区报告 `fail` |
-| 沙箱之外的同一用户进程 | 它们可以读取和修改 home 下的一切（包括 home 密钥、设备记录与会话存储）、批准设备、签发回环凭据、运行 `delorun` 与 `docker`，并改动启动器、已存储的 root 与检查本身 | 每份报告都说明检查以本人的权限运行，并可被具有该权限的程序改变 |
-| macOS 与 Windows 上的进程内存 | home 进程内存的保护依赖操作系统的规则，没有 Delo 测试检查它 | 不报告 |
-| 插件 | 插件以 harness 的权限运行；撤销只在其下次加载时生效，即撤销后最多 6 小时，再加上直到重启的时间；列出的发现是未经验证的主张 | `plugin-pins`：固定版本、徽章与撤销列表的状态 |
-| 插件索引密钥或发布作业被攻破 | 它可以为任何索引条目、徽章或撤销签名；已安装的版本保持其固定的完整性 | 客户端无法发现 |
-| 对时钟的信任 | 被调慢的时钟会接受已超过实际过期时间的发布 timestamp、撤销列表或日志检查点；被调快的时钟会拒绝新的元数据 | 拒绝信息会写明过期时间与本地时间 |
-| 从不联网的 home | 其发布相对于日志一直是 `unchecked`，展示给它的不同日志视图不会被发现，其撤销列表会过期，从而暂停插件索引安装 | `release-signature`：发布的日志状态；`plugin-pins`：过期状态 |
-| 见证者的独立性 | 检查的是所列见证者的共同签名；它独立于日志与 Delo 与否，取决于 root 列出了哪些见证者 | 不报告 |
-| 日志条目或重建能说明什么 | 已记录、已重建的发布来自带标签的源码；它仍可能含有缺陷或漏洞，重建也无法证实签名者的机器与工具链未被攻破 | `release-signature`：签名与日志条目 |
-| 公告覆盖范围 | 公告检查不覆盖 Node 二进制、原生插件的工具链、镜像的系统软件包或桌面应用的 Python 与 Office 载荷，也不覆盖没有公开公告的漏洞 | 不报告 |
-| 引擎未强制执行的容器限制 | 能否访问宿主网关取决于引擎；磁盘限制在大多数存储驱动、rootless 引擎与 Docker Desktop 上只是建议性的；Docker Desktop 的虚拟机不是容器的用户命名空间 | `workspace-isolation`：每项限制按探测结果报告 |
-| S3 与 S2 辅助程序 | S3 不把工作区彼此隔离；S2 辅助程序的密钥不能保护它免受同一容器内命令的影响 | `workspace-isolation` |
-| 转发的凭据 | 转发凭据的工作区，允许其代码在该凭据的范围内以本人身份行事 | `workspace-isolation` |
-| 遮盖 | Delo 从未加载、也不匹配任何所列形式的密钥可能进入日志；捕获的输出可能包含 chat 与文件文本，直到保留期限或清除将其移除 | 不报告 |
-| Delo 停止期间的日志保留 | 过期记录会一直保留，直到某个 Delo 进程启动或本人运行 `delorun logs --prune` | 不报告 |
-| 清除后的残留 | 已清除 chat 的片段会留在进程日志中，直到其保留期限将其移除，除非本人在清除时清理它们；另一个浏览器 profile 中的草稿仍会保留 | 不报告；清除时会说明 |
-| 抓取防护的作用范围 | 命令可以访问任何地址；通过已配置代理或远程抓取提供方发出的请求，会在防护之外解析其目标 | 不报告 |
-| 证书检测延迟 | 在某个日志收录且下一次查询运行之前，覆盖自有域名名称的证书就可能被使用，中继隧道也保持打开；该路径上的拦截者可以丢弃告警页面，而告警文件、home 的屏幕以及配置的命令或 webhook 仍会送达；`ts.net` 名称不受监控 | `certificates`：在日志收录该证书后告警 |
-| Tailscale | 除非开启 Tailnet Lock，Tailscale 可以向 tailnet 添加设备，并获取 `ts.net` 证书 | Delo 的检查无法发现 |
-| 中继运营者 | 它能看到每个连接的元数据，可以拒绝或断开连接，并能强制重新绑定某个名称，home 会得到通知 | 对被拒绝的第二条隧道与重新绑定发出告警 |
-| 本人的 OIDC 提供方 | 控制本人在该处账户的一方可以通过身份因子；设备批准仍然适用 | 不报告 |
-| 通行密钥的用户验证 | 在 `attestation: "none"` 下，home 读取的是用户验证标志，因此该标志的可信程度取决于认证器本身 | 不报告 |
-| 转发的来源地址 | 在中继、Funnel 与 Tailscale 路径上，来源地址是声称的，因此按来源的请求限制在那里只是建议性的；每个 home 最多 5 个待处理批准请求的限制仍然成立 | 不报告；提示会把这类地址标记为未验证 |
-| 受信任源上的代码 | 客户端插件，或绕过清理器的脚本，以会话的全部权限运行，每台受信任设备都以所有者身份行事 | 不报告 |
-| Tailscale 回退方案下的本地进程 | 它可以连接 Tailscale 私有目标并尝试登录，与远程设备一样 | 不报告 |
-| 对等组合 | 其开关关闭的保护在那里不存在 | 不适用；任何随产品发布的 profile 都不会选择它 |
+| 局限 | 仍然可能发生的事 |
+| --- | --- |
+| CLI profile 之外的命令 | 在 `delorun plugin` 下，命令可以读取整个 home（包括启动令牌与上游的凭据文件）并连接更新通道；任何同意、抓取防护或隐私默认值都不适用。在 `delorun headless` 下，受限命令受沙箱 overlay 的规则约束，而以完全访问运行的命令（需要在 home 的电脑上为该工作目录记录授权）不受限制 |
+| Windows 不限制读取 | 受限命令可以读取 home 的密钥、上游的凭据文件与启动令牌，因此令牌无法阻止它们访问更新通道；不检查 home 的权限模式与访问列表；在 ripgrep 完成之前换入搜索路径又恢复的链接可以触及 home |
+| 隐藏 home 其他挂载的文件系统 | 当 home 位于 btrfs、bcachefs 或 overlayfs 上，或挂载表未列出其设备时，提供方找不到它的其他挂载，命令只在 home 自身的路径上受到保护，因此同一文件系统的第二个挂载对受限命令与文件工具仍然可达；提供方把其别名覆盖报告为 `unknown`，目前还没有任何东西显示这一点（[C1](../contracts/c01-home-layout.zh.md#what-this-does-not-prove)） |
+| Landlock 无法拒绝对路径名套接字的连接 | 在只有 Landlock 的系统上，受限命令可以连接更新通道（通道会因其无法读取启动令牌而拒绝它），也可以连接 rootful Docker 套接字，这等同于 root |
+| 经 TCP 或 SSH 访问 Docker | 任何有网络访问的命令都能访问该引擎 |
+| Docker Desktop 的控制套接字 | Docker Desktop 控制目录中除 context 套接字之外的套接字，对受限命令仍然可达 |
+| 其他 Unix 套接字与网络 | 受限命令可以访问 ssh-agent 套接字、D-Bus、显示服务器以及任何网络主机 |
+| 模型发起的写入指令文件的命令 | shell 命令或 PTC 代码可以在可写根目录中修改 `AGENTS.md`、skill 或预设，而无需指令同意 |
+| 已提权的命令 | `danger-full-access` 下的命令不受限制：它可以读取 home 下的每个密钥与启动令牌，并访问更新通道；上游的提示不说明这一点 |
+| 沙箱之外的同一用户进程 | 它们可以读取和修改 home 下的一切、签发回环凭据、运行 `delorun` 与 `docker`、凭启动令牌使用更新通道（批准设备、移除设备、获取 studio 登录链接），并改动启动器、已存储的 root 与检查本身 |
+| macOS 与 Windows 上的进程内存 | home 进程内存的保护依赖操作系统的规则，没有 Delo 测试检查它 |
+| 回环 studio 的凭据 | 在 CLI profile 中，启动令牌在 60 秒内只能使用一次，但它会出现在浏览器启动器的命令行中，另一个用户或 Landlock 与 Seatbelt 下的受限命令可以在这一分钟内抢先于浏览器使用它；cookie 在 30 天内都能被准入，跨越重启仍然有效且无法撤销；能读取 `.credentials.yaml` 的一方可以签出 cookie；每个持有者都以所有者身份行事，且不适用任何内容安全策略 |
+| 插件 | 插件以 harness 的权限运行；除上游的锁文件之外，Delo 不固定任何东西，也无法撤销任何东西 |
+| 对时钟的信任 | 被调慢的时钟会接受已超过实际过期时间的发布 timestamp 或日志检查点；被调快的时钟会拒绝新的元数据，拒绝信息会写明过期时间与本地时间 |
+| 从不联网的 home | 其发布相对于日志一直是 `unchecked`，展示给它的不同日志视图不会被发现 |
+| 见证者的独立性 | 检查的是所列见证者的共同签名；它独立于日志与 Delo 与否，取决于 root 列出了哪些见证者 |
+| 日志条目或重建能说明什么 | 已记录、已重建的发布来自带标签的源码；它仍可能含有缺陷或漏洞，重建也无法证实签名者的机器与工具链未被攻破 |
+| 公告覆盖范围 | 公告检查不覆盖 Node 二进制、原生插件的工具链，也不覆盖没有公开公告的漏洞 |
+| 不比较版本 | 只要渠道的发布与正在运行的发布不同（包括更低的版本），`delorun update` 就会提供它；timestamp 命令拒绝降低渠道版本，这是唯一的保护 |
+| 遮盖 | 未登记且不匹配任何所列形式的密钥可能进入日志；捕获的输出可能包含 chat 与文件文本，直到保留期限或清除将其移除 |
+| 日志保留 | 过期记录会一直保留，直到下一次 `delorun` 调用或 `delorun logs --prune` |
+| 清除后的残留 | 已清除 chat 的片段会留在进程日志中，直到其保留期限将其移除，除非本人在清除时清理它们；缩放后的图片留在请求图片缓存中；另一个浏览器 profile 中的草稿，以及从 `delorun trash` 清除后的每份草稿，都会保留 |
+| 抓取防护的作用范围 | 命令可以访问任何地址；通过已配置代理或远程抓取提供方发出的请求，会在防护之外解析其目标 |
+| studio 源上的代码 | 客户端插件或注入的脚本以浏览器对 studio 的全部权限运行；回环 studio 不强制执行 Trusted Types |
+| 对等组合 | 其开关关闭的保护在那里不存在；任何随产品发布的 profile 都不会选择它 |
 
 <a id="how-changes-keep-this-true"></a>
 
@@ -327,5 +298,5 @@ Delo 的约定要求任何关于本人、离开机器的内容都需要本人选
 - 改变批准、拒绝或提权的变更，在[差异台账](../../upstream-patches.json)中是一条 `security` 类条目，附带负责人的结论，并包含一项在变更前失败、变更后通过的拒绝测试（[决策](../../../.agents/notes/implemented/process/2026-11-06-delo-never-less-safe-than-stock.zh.md)）。Delo 对 stock 检查的豁免范围很窄，写明它覆盖的检查与情形，并置于一个在对等组合中关闭的开关之后。
 - 涉及信任边界的变更（登录、设备、中继、运行时、导出文件、更新或签名）在其 brief 中标记为 Lead，并接受逐行审查；安全路径由人类代码所有者批准（[规则](../../../AGENTS.md)）。
 - 拒绝测试针对本地替身运行，从不联系真实服务。
-- 本页与它所陈述的边界、某一方的权限或某项局限在同一次变更中修改。
+- 本页与它所陈述的边界、某一方的权限或某项局限在同一次变更中修改，某次变更构建的防护也在该次变更中于本页从未构建改为已构建。
 - 安全报告通过 [SECURITY.md](../../../SECURITY.md) 提交，从不通过公开 issue。

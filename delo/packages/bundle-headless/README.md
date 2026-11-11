@@ -41,7 +41,7 @@ kind: "package-bundle"
 ## Refusals
 
 - **Guards that ask a person.** The profile composes no approval answerer, so an ask resolves `unavailable` and the guard refuses the action with its reason.
-- **Full access before boot.** `--permission-mode danger-full-access` and `DSH_PERMISSION_MODE=danger-full-access` are refused for a working directory without a full-access grant recorded in the studio, and when the record of grants cannot be read; no task starts.
+- **Full access before boot.** `--permission-mode danger-full-access` and `DSH_PERMISSION_MODE=danger-full-access` are refused for a working directory without a full-access grant, which the person records at the home's computer with `delorun workspace full-access <folder> on` or in the studio, and when the record of grants cannot be read; no task starts.
 - **The turn gate.** The task's first step waits for the post-boot check. A Host the check refuses is stopped with the task.
 
 ## Parity composition

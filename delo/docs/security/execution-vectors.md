@@ -14,7 +14,7 @@ The [threat model](threat-model.md) gives the parties, the assets and each defen
 
 Three things decide the posture: **which command boots the Host**, **where the model's commands run** (the execution vector) and **who can reach the studio** (the reach vector).
 
-Delo's protections are in the CLI profile, which `delorun setup` creates and `delorun` or `delorun start` boots: upstream's web template with `@delo/bundle-local` and `@delo/bundle-studio`. `delorun headless` boots the home's `headless` profile, upstream's `headless` template with `@delo/bundle-headless`: the sandbox overlay, the fetch guard, the instruction write, MCP and schedule consents, the full-access consent and the turn gate, protected from plugin management, with session-log upload off. A guard that asks a person refuses there, and full access is refused for a working directory without a grant recorded in the studio. `delorun plugin` runs upstream's own pnpm operation with none of Delo's rows. The desktop app is upstream's, unchanged.
+Delo's protections are in the CLI profile, which `delorun setup` creates and `delorun` or `delorun start` boots: upstream's web template with `@delo/bundle-local` and `@delo/bundle-studio`. `delorun headless` boots the home's `headless` profile, upstream's `headless` template with `@delo/bundle-headless`: the sandbox overlay, the fetch guard, the instruction write, MCP and schedule consents, the full-access consent and the turn gate, protected from plugin management, with session-log upload off. A guard that asks a person refuses there, and full access is refused for a working directory without a grant recorded at the home's computer, in the studio or with `delorun workspace full-access`. `delorun plugin` runs upstream's own pnpm operation with none of Delo's rows. The desktop app is upstream's, unchanged.
 
 | Execution vector | What runs there | Enforced by | Built |
 | --- | --- | --- | --- |
@@ -42,9 +42,9 @@ The rows are the guarantees a person reasonably expects of a native workspace. "
 | `web_fetch` refuses loopback, link-local and private-network targets | no | yes | yes |
 | A model-authored write to instructions needs an approval that names the effect | no | through the file tools only; a shell command or PTC code writes without it | through the file tools only, and the write is refused because no one can answer |
 | A chat cannot switch off, reconfigure or remove Delo's guards through `plugin_manager` | no | yes, judged on the profile's composed rows; a full-access command can still edit the profile's files | no |
-| A new stdio MCP server needs the person's consent | no | a new stdio server is refused with its command named, and no surface asks for or records a consent, so it stays refused | no |
+| A new stdio MCP server needs the person's consent | no | a new stdio server is held with its command named until the person accepts it at the home's computer, in the studio's MCP servers section or with `delorun mcp accept`, after which it starts without a restart | no |
 | A scheduled delivery is refused when the target chat's permission preset changed | no | yes | no |
-| A switch of a workspace to full access needs the person's consent | no | the switch is refused, because no surface asks the consent; a per-call escalation still goes through upstream's approval | full access by option or variable is refused before boot for a working directory without a grant recorded in the studio |
+| A switch of a workspace to full access needs the person's consent | no | the switch is refused until the person grants the workspace at the home's computer, in the studio's consent or with `delorun workspace full-access`; a per-call escalation still goes through upstream's approval | full access by option or variable is refused before boot for a working directory without a recorded grant |
 | The release is signature-checked before it runs | no | yes, when the npm launcher starts it: every installed file is checked at each start | yes, as for the CLI profile |
 | An update reports, snapshots and rolls back | no: incompatible plugins are disabled silently | yes, for the CLI home through `delorun update` | not applicable |
 | Archives are a closed data schema and never evaluate code | no: `!!js` is evaluated with `new Function` | yes | yes: `delorun import` is the same command |
@@ -75,7 +75,7 @@ Delo is stock DSH with a Delo layer. On confinement the two are the same mechani
 | --- | --- | --- | --- |
 | Home protection | nothing hides the home from a confined command | in the CLI profile the home is a protected read for the in-process tools, and for confined commands on Linux and macOS | [C1](../contracts/c01-home-layout.md) |
 | Reach | none | Tailscale private only, off until the person turns it on; no Funnel, relay or passkey | [reach design](../design/reach.md) |
-| Permission consent | none | in the CLI profile: a refusal of full-access switches, the instruction-layer consent for file-tool writes, the refusal of new stdio MCP servers, the schedule consent and the fetch guard; off in the parity composition | [C16](../contracts/c16-parity-composition.md) |
+| Permission consent | none | in the CLI profile: the full-access consent per workspace, the instruction-layer consent for file-tool writes, the consent for new stdio MCP servers, the schedule consent and the fetch guard; off in the parity composition | [C16](../contracts/c16-parity-composition.md) |
 | Releases | no verification | signature, freshness, release-log check and file list before running | [C2](../contracts/c02-release-manifest.md), [C18](../contracts/c18-release-log.md) |
 | Updates | silent disable and rewrite | report, snapshot, restore and rollback for the CLI home | [C3](../contracts/c03-update-report.md) |
 | Archives | `!!js` evaluated during load | a closed data schema, no evaluation | [C8](../contracts/c08-archive-and-trash.md) |

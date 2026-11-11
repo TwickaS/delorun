@@ -44,6 +44,8 @@ Under `/api`, an exact Fetch route answers a device only when it admits that Pee
 | `/api/deloMainChat.open`, `/api/deloMainChat.reports` | Refused | Opening the main chat chooses its preset, and the report count marks the computer's sidebar; a device reads the main chat through `session/page`. |
 | `/api/deloUpdateCheck.notice` | Refused | The notice names the running release and how many plugins an update would turn off, and an update runs only at the computer. |
 | `/api/deloTrash.*` | Refused | Moving to, restoring from or deleting from the trash is not in the device rule. |
+| `/api/deloPermission.workspaces`, `/api/deloPermission.review`, `/api/deloPermission.setFullAccess` | Refused, `LOOPBACK_REQUIRED` | A workspace's full access is a full-access grant, which only the home's computer gives; `@delo/plugin-permission-defaults` refuses a device before upstream's gate, and the studio there says to turn it on at the computer. |
+| `/api/deloMcpConsent.pending`, `/api/deloMcpConsent.accept`, `/api/deloMcpConsent.decline` | Refused, `LOOPBACK_REQUIRED` | Accepting a stdio MCP server lets its command run outside the sandbox, which only the home's computer allows; `@delo/plugin-mcp-consent` refuses a device before upstream's gate. |
 | `/api/session.export`, `/api/session.markdown`, `/api/plugin-manager/detail-file`, `/api/file`, `/api/present.host`, `/api/present.open`, `/api/changes.summary`, `/api/changes.open`, `/api/changes.diff` | Refused | Upstream declares no device admission, so only the owner reaches them. |
 
 ## The rules
@@ -130,4 +132,3 @@ Open follow-ups:
 - `@delo/reach` reads only the serve rule on its own address and port, so another serve port or a TCP forward to the listener port goes unnoticed, and it keeps serving after repeated unreadable `tailscale serve status` output.
 - The loopback credential records of rules 10 to 12.
 - The Gateway decides whether a non-owner Peer receives and may answer a forwarded waterfall on the global resource, not on the chat that raised it.
-- No shipped surface selects a workspace's full access yet; the full-access consent spec selects it from inside a chat's open turn, as the approval service requires.

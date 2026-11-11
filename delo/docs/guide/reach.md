@@ -59,6 +59,7 @@ It can:
 It cannot:
 
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
+- accept or decline a new MCP server; Settings, MCP servers on the phone says to answer at your computer;
 - install, enable or remove plugins, undo profile changes, or change any setting, the model a chat saves as default, or a chat's preset;
 - run slash commands, open a terminal, browse folders, read files on your computer by path, or apply, discard or undo changes;
 - answer a prompt that would let the agent manage workspaces and their instructions, change a chat's goals, or record feedback;
