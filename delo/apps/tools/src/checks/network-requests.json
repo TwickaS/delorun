@@ -60,6 +60,11 @@
       "sources": ["delo/apps/cli/src/verify/index.ts"]
     },
     {
+      "id": "plugin-install-check",
+      "purpose": "The plugin install check when the person installs, enables or restores a plugin, in the studio or with delorun plugin: npm's bulk advisory API for the new packages' names and versions, and the registry's package document of each for its publish time.",
+      "sources": ["delo/packages/release-formats/src/advisory/feed.ts", "delo/packages/plugin-install-check/src/findings.ts"]
+    },
+    {
       "id": "key-check",
       "purpose": "Setup's live check of a typed model key, through upstream's model-listing client, to the provider's origin only.",
       "sources": ["delo/apps/cli/src/setup/key-check.ts"]

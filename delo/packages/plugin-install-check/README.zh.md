@@ -1,0 +1,82 @@
+---
+description: "Delo 的插件安装检查与安装记录，供维护者修改安装检查的内容、什么会拒绝安装、启动时用什么比对已安装的插件，以及其他界面读取的信任状态。"
+---
+
+# @delo/plugin-install-check
+
+[English](README.md) | 中文
+
+## 摘要
+
+`@delo/plugin-install-check` 提供上游的 `pluginAudit` 钩子和 `deloPluginTrust` 服务。[插件管理器](../../../packages/boot/plugin-manager/README.zh.md)在选入、启用或恢复组合包之前询问该钩子，即在组合包的任何插件代码加载之前。对插件及其安装向 profile 锁文件新增的每个包，它显示每一项发现：缺少完整性或 git 来源没有完整提交、GitHub 安全公告、发布时间短于可配置时长的版本，以及与 profile 或 Delo 已有名称相近的名称。已知的严重公告会拒绝安装，直到本人允许；其他发现都不拒绝。随后它记录每个已安装文件的 SHA-256，每次启动以低成本比对，`delorun verify` 完整比对。`delorun plugin` 在 pnpm 操作之后运行同样的检查（[`plugin-install-check.ts`](../../apps/cli/src/plugin-install-check.ts)）。开关关闭时（对等值），它不提供任何服务，也不审计任何内容，与 stock 相同；`@delo/bundle-local` 和 `@delo/bundle-headless` 把它挂载为开启。
+
+## 目录
+
+- [约定](#contract)
+- [信任状态](#the-trust-status)
+- [配置](#configuration)
+- [已知限制](#known-limitations)
+- [测试](#tests)
+
+<a id="contract"></a>
+
+## 约定
+
+- **检查什么。** 来自 npm、tarball 或 git 的插件，每个已安装的锁文件引用检查一次。插件自身的包总会检查；其依赖只检查尚无其他安装记录持有的锁文件条目。链接的文件夹（`link:`）或本地文件夹（`file:` 目录）既不检查也不记录：本人在其中工作时文件会变化。profile 不依赖的插件，例如安装自带的可选组合包，会被跳过。
+- **发现。** `missing-integrity` 与 `unpinned-commit` 读取锁文件的 `resolution`；`advisory` 通过 [`@delo/release-formats/advisory/feed`](../release-formats/src/advisory/feed.ts)（发布自身的公告检查使用的同一客户端）询问 npm 的批量公告 API，其答案来自 GitHub Advisory Database；`recent-publish` 从注册表的包文档读取 `time[version]`；`similar-name` 在折叠 scope 与标点后按编辑距离比较名称。公告源或注册表无法访问、超时或答复格式错误时，会产生 `advisory-unchecked` 或 `publish-time-unchecked` 发现并说明原因；没有任何检查被悄然跳过。每项发现都写明包、其版本及其在锁文件中的行。
+- **拒绝。** 只有严重程度为 `critical` 的公告会拒绝。审计答复 `needs-acceptance`，studio 列出每项发现并显示「仍然安装」按钮；接受只针对这一组公告（`blockingDigest` 计算的摘要），因此新的严重公告会再次询问。`delorun plugin` 拒绝同样的公告，并接受 `--allow-advisory <GHSA id>`。其他发现都答复 `clear`，studio 在完成页面列出每一项。
+- **可信来源。** npm scope 或 git 所有者列在 `trustedSources` 中的插件只显示严重公告，严重公告仍会拒绝。
+- **安装记录。** `<profile>/delo-plugin-installs/records/<name>.json`（scope 名称中的 `/` 写作 `+`），权限 0600，位于 0700 的目录中：来源（`registry`、`tarball` 或 `git`，以及锁文件引用、完整性、提交与 URL）、版本、显示过的发现、允许的公告、插件闭包的锁文件条目，以及闭包中每个包的目录、每个文件的 SHA-256（链接为 `link:<target>`）与文件标识。被拒绝的安装不写记录。审计遇到记录指明其当前锁文件引用的插件时（例如再次启用），它比对文件，显示记录的发现，文件不同时再加一项 `changed-files` 发现，并保持记录不变。
+- **改动检查。** `checkProfileTrust` 把每个已记录插件的文件与其记录比对。每次启动在 Host 启动前运行快速检查，只对文件标识（`@delo/runtime-store/identity`：inode、模式、大小、修改与变更时间）与记录不同的文件计算哈希，或对标识无法作证的文件计算哈希：其变更时间距记录时间不足两秒，或其文件系统的变更时间并非只由本地内核设置；`delorun verify` 运行完整检查，对每个文件计算哈希。新增或删除的文件也算改动。计算哈希后发现未改动的文件，会重新记录其标识。
+- **不因自身失败而阻止。** 审计内部出错时答复 `clear` 并附 `delo.check-failed` 发现；启动时改动检查失败只打印警告并继续。
+
+<a id="the-trust-status"></a>
+
+## 信任状态
+
+启动与 `delorun verify` 把改动检查的结果写入 `<profile>/delo-plugin-installs/trust.json`，权限 0600，格式为 `delo.plugin-trust/1`。用 `@delo/plugin-install-check/check` 的 `readPluginTrust(profileDir)` 读取，或在 Host 中通过 `deloPluginTrust` 服务读取：`status()` 读取上一次结果，`check(full)` 立即运行检查并写入。记录：
+
+| 字段 | 含义 |
+| --- | --- |
+| `checkedAt` | 检查完成的时间，自纪元起的毫秒数。 |
+| `mode` | `quick`（启动）或 `full`（`delorun verify` 或 `check(true)`）。 |
+| `plugins[]` | 每个来自 npm、tarball 或 git 的插件一项，按名称排序；链接的与本地的文件夹不列出。 |
+| `plugins[].state` | `unchanged`、`changed`（记录的文件不同、新增或已不存在）或 `unrecorded`（没有记录，或记录对应另一个锁文件引用）。没有记录时绝不是 `unchanged`。 |
+| `plugins[].changedCount`、`changedFiles` | 不同的文件数，以及其中最多 20 个，形式为 `<包目录>/<文件>`。 |
+| `plugins[].version`、`installedAt`、`installFindings` | 记录的版本、安装时间与当时显示的发现数；没有记录时为 `null` 与 0。 |
+| `problem` | profile 的锁文件无法读取时出现，此时 `plugins` 为空。 |
+
+<a id="configuration"></a>
+
+## 配置
+
+| 字段 | 默认值 | 含义 |
+| --- | --- | --- |
+| `enabled` | `false` | 提供 `pluginAudit` 与 `deloPluginTrust`。关闭（对等值）时不审计任何内容；Delo 的组合包把它挂载为开启。 |
+| `advisoryFeed` | npm 的批量公告端点 | https URL。 |
+| `registry` | `https://registry.npmjs.org/` | 提供发布时间的 https 注册表。 |
+| `minimumAgeHours` | `24` | 比这更新的版本会产生警告。 |
+| `similarNameDistance` | `1` | 产生警告的名称最大编辑距离，0 到 3。 |
+| `similarNameMinLength` | `4` | 更短的名称不比较。 |
+| `requestTimeoutMs` | `15000` | 每个请求的时限。 |
+| `requestConcurrency` | `8` | 同时读取的包文档数。 |
+| `metadataMaxBytes` | 64 MiB | 读取的包文档上限。 |
+| `maxFiles` | `20000` | 每个包记录的文件数；更多文件的包只记录一部分，未记录的文件不比对。 |
+| `trustedSources` | `[]` | 其插件只显示严重公告的 npm scope（`@scope`）与 git 所有者（`github.com/owner`）。 |
+
+本人在 profile 自己的 `cordis.patch.yml` 中以完整的 `config` 重述 `delo-plugin-install-check` 行来修改它们。`delorun plugin` 与启动读取同一组合后的行。
+
+<a id="known-limitations"></a>
+
+## 已知限制
+
+- 检查只知道已发布的公告。尚无公告的恶意版本最多只得到发布时间或名称警告。
+- 在 studio 中，pnpm 在审计之前运行本人允许的构建脚本；`delorun plugin` 在 pnpm 之后检查，情况相同。恢复在运行构建之前审计，允许的构建在记录之后写入文件的包，在下次启动时会显示为已改动，直到重新安装。
+- 记录检测插件之外造成的改动：被编辑的文件、经链接被编辑的 pnpm 存储、Delo 之外的包操作。以本人身份运行的代码同样可以改写记录。
+- 发布时间来自配置的注册表；来自私有注册表的包会得到 `publish-time-unchecked` 发现。
+
+<a id="tests"></a>
+
+## 测试
+
+[`tests/install-check.integration.spec.ts`](tests/install-check.integration.spec.ts) 在手写的 profile 和回环上的公告源与注册表替身上覆盖每项发现：严重公告在被允许之前的拒绝、公告源与注册表的失败、可信的 scope 与 git 所有者、链接的文件夹、记录及其文件哈希，以及改动检查发现被编辑、新增或删除的文件。[`tests/provider.integration.spec.ts`](tests/provider.integration.spec.ts) 挂载插件，覆盖其开关、审计的 `clear`、`needs-acceptance` 与 `accepted` 答复、自身失败、`deloPluginTrust`，以及配置的 https 与可信来源校验。
