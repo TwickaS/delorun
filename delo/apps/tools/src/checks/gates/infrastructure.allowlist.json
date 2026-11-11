@@ -202,7 +202,17 @@
       "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address, named in its refusal matrix; protocol prefixes, not a deployment's address."
     },
     {
+      "path": "delo/packages/plugin-fetch-guard/README.zh.md",
+      "value": "2001::",
+      "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address, named in its refusal matrix; protocol prefixes, not a deployment's address."
+    },
+    {
       "path": "delo/packages/plugin-fetch-guard/README.md",
+      "value": "2002::",
+      "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address, named in its refusal matrix; protocol prefixes, not a deployment's address."
+    },
+    {
+      "path": "delo/packages/plugin-fetch-guard/README.zh.md",
       "value": "2002::",
       "reason": "The 6to4 and Teredo prefixes the web_fetch guard classifies by their embedded IPv4 address, named in its refusal matrix; protocol prefixes, not a deployment's address."
     },
