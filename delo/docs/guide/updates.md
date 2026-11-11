@@ -19,6 +19,7 @@ Delorun tells you when a newer release exists, shows what it would change before
 - [Chat data that changes format](#chat-data-that-changes-format)
 - [Going back](#going-back)
 - [Channels](#channels)
+- [For the technically curious](#for-the-technically-curious)
 
 ## The update notice
 
@@ -45,10 +46,10 @@ delorun update --report    # what would the newest release change? applies nothi
 
 - the versions you go from and to, of Delorun and of the DeepSeek Harness it runs on, and the channel;
 - the release checks: the signature, the freshness of the release files and the public release log;
-- every plugin, bundle and profile row the update would change, with the reason: `kept`, `changed`, `disabled` or `removed`. A plugin whose declared version ranges exclude the new release is listed as `disabled`, with the range it declares. An item Delorun cannot predict, such as a plugin whose `package.json` it cannot read, says so;
+- every plugin, bundle and profile entry the update would change, with the reason (a bundle is a package of plugins and settings, and a profile entry, which the report calls a row, is one plugin in your profile's list): `kept`, `changed`, `disabled` or `removed`. A plugin whose declared version ranges exclude the new release is listed as `disabled`, with the range it declares. An item Delorun cannot predict, such as a plugin whose `package.json` it cannot read, says so;
 - whether the chat data changes format, with the size of the copy and the free disk space ([Chat data that changes format](#chat-data-that-changes-format)).
 
-When nothing changes, the report says `No plugin, bundle or profile row changes.` The report covers plugins, bundles and profile rows; it does not list setting values, which carry over unchanged.
+When nothing changes, the report says `No plugin, bundle or profile row changes.` The report covers plugins, bundles and profile entries; it does not list setting values, which carry over unchanged.
 
 ## Apply an update
 
@@ -68,7 +69,7 @@ Delorun never applies an update you have not confirmed, and the check applies no
 2. **Snapshot.** Delorun saves a profile history version named `Before update to Delo <version>`, holding your profile's patches, bundle list and plugin version exemptions.
 3. **Waiting.** Running chats finish their turns; a new message gets "Delo started no new turn: an update is waiting for running chats" and you send it again once Delorun is back. Delorun waits up to 30 minutes, then stops the update with `DRAIN_TIMEOUT` and changes nothing.
 4. **Switching.** The studio stops, the chat-data copy is written when one is taken, and the new release starts. The studio is unavailable for this step.
-5. **Health check.** Within two minutes the new release must verify its own files, answer its health request, start every plugin row that started before, keep the profile's bundle list, and turn off nothing the report did not name.
+5. **Health check.** Within two minutes the new release must verify its own files, answer its health request, start every plugin that started before, keep the profile's bundle list, and turn off nothing the report did not name.
 
 If the health check fails, or the new release stops, Delorun goes back on its own to the release and profile you had and prints which check failed: `Delo <version> failed its health check (<check>); Delo <previous> runs again with the profile from before. See delorun logs.` On success it prints `Delo <version> runs now.`
 
@@ -103,3 +104,7 @@ A rollback does not merge. When the data format changed, the chat data as the ne
 ## Channels
 
 Each release belongs to a channel, `stable` or `beta`, and checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it differs from the running one, a lower version included.
+
+## For the technically curious
+
+The [update report contract](../contracts/c03-update-report.md) defines the report, the health check and rollback, the [release manifest contract](../contracts/c02-release-manifest.md) defines channels and signatures, and the [update and rollback design](../design/update-and-rollback.md) and [update notice design](../design/update-notice.md) explain why updates work this way.

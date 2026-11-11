@@ -1,16 +1,16 @@
 ---
-description: "What you trust when you use Delo: what runs on your computer, what Delo Run can and cannot do, what each reach option shows its provider, what leaves your machine by default and what leaves only when you opt in, and how to check it yourself."
+description: "What you trust when you use Delorun: what runs on your computer, what Delo Run can and cannot do, what each reach option shows its provider, what leaves your machine by default and what leaves only when you opt in, and how to check it yourself."
 ---
 
-# What you trust when you use Delo
+# What you trust when you use Delorun
 
 English | [中文](trust.zh.md)
 
-Delo has no release yet; this page describes the first release.
+Delorun has no release yet; this page describes the first release.
 
 ## Summary
 
-Delo runs on your computer under your own user account. Delo's contract requires that Delo Run, the project behind it, cannot reach your studio on its own. Delo has no telemetry of its own. Delo's contract requires the integrity checks that run by default to send no personal data, and every other network feature to turn on only when you choose it. This page states what each party can see or do; the [threat model](../security/threat-model.md) gives each defence, its contract and its limits.
+Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run, the project that publishes it, has no way into your studio. Delorun has no telemetry: it sends nothing about you. A few checks that keep your installation honest talk to the internet by default, and everything else that leaves your computer does so only when you turn it on. This page says, party by party, what each one can see and do, so you can decide what you are comfortable with.
 
 ## Contents
 
@@ -20,78 +20,79 @@ Delo runs on your computer under your own user account. Delo's contract requires
 - [What leaves your machine](#what-leaves-your-machine)
 - [Checking it yourself](#checking-it-yourself)
 - [Reporting a problem](#reporting-a-problem)
+- [For the technically curious](#for-the-technically-curious)
 
 ## What runs on your computer
 
-- The studio, the harness and its plugins run under your operating-system user, with that user's access. A program that you run as the same user can read everything under `~/.delo`, and Delo does not protect against such a program.
-- Commands that the model runs in a native workspace run with your own access. Delo's contract requires that these commands cannot write under Delo's home, and cannot read Delo's secrets and tokens or connect to its control sockets and the Docker socket, wherever your system can enforce those rules; nothing reports yet which of them your computer enforces ([What Delorun protects](safety.md#the-sandbox) lists them by sandbox). Other Unix sockets and the network stay open to commands.
-- Docker workspaces, which would run a workspace's commands in a container, are not available yet; every workspace is native.
-- Plugins run with the harness's access. Delo checks a plugin's declared DeepSeek Harness and Delo version ranges when you install it and at each start; it does not check a plugin's files again after install, so a plugin installed from npm, git or a tarball whose files change on disk loads as it now is at the next start.
+- **Delorun itself.** The studio, the harness and its plugins run as your user, with your user's access. Any other program you run as yourself can read everything in `~/.delo`, and Delorun cannot stop that.
+- **Commands the model runs.** They run with your access too, inside a sandbox: a set of operating-system rules that limits what a command can touch. The sandbox keeps them from writing into Delorun's home, and, where your system supports it, from reading Delorun's secrets and tokens or talking to its control socket and to Docker. Nothing tells you yet which of these rules your computer enforces; [What Delorun protects](safety.md#the-sandbox) lists them per sandbox. Commands can still use the network and other local sockets.
+- **Docker workspaces**, which would run a workspace's commands in a container, are not available yet. Every workspace runs on your computer directly.
+- **Plugins** run with the harness's full access. When you install a plugin and at each start, Delorun checks which DeepSeek Harness and Delorun versions it says it supports. It does not check the plugin's files again after install: if a plugin you installed from npm, git or a tarball changes on disk, the changed version loads at the next start.
 
 ## What Delo Run can and cannot do
 
-Delo Run publishes Delo's releases, the documentation website and the waitlist. A plugin catalogue and a plugin revocation list are not available yet.
+Delo Run publishes Delorun's releases, this documentation and the waitlist. A plugin catalogue and a list of revoked plugins are not available yet.
 
 Delo Run can:
 
-- publish a release that you may install. No client installs it until you confirm an update, and no client downgrades on its own;
-- sign each release and enter it in a public log.
+- publish a release. Your installation installs it only when you confirm an update, and never goes back to an older release on its own;
+- sign each release and record it in a public log, so anyone can check that every installation got the same release.
 
-Under Delo's contract, Delo Run cannot:
+Delo Run cannot:
 
-- reach your studio on its own. Tailscale reach and a self-hosted relay use no Delo infrastructure, and Delo holds no studio TLS key and no device key;
-- approve a device for you, command your machine, or change the plugin version pinned on your computer;
-- disable or revoke a plugin you installed;
-- audit plugins.
+- reach your studio. Remote access over Tailscale uses nothing of Delo Run's, and Delo Run holds none of your studio's keys or your devices' keys;
+- approve a device for you, send commands to your computer, or change the plugins you have installed;
+- turn off or revoke a plugin you installed;
+- vouch for plugins: it does not review them.
 
-You still trust:
+What you still trust:
 
-- Delo Run's releases and the `delorun.com` names that serve them;
+- Delo Run's releases and the `delorun.com` addresses that serve them;
 - each plugin you install, and the place you installed it from;
-- upstream's DeepSeek Harness code, which Delo runs at a named release;
-- your identity provider, if you sign in through one. A party that controls your account there can pass the identity check, but device approval still applies.
+- DeepSeek Harness's code, which Delorun runs at a named release.
 
 ## What each reach option shows its provider
 
-Reach uses no Delo infrastructure, and it is off until you turn it on. The one reach option available is Tailscale private ([Reach the studio from your phone](reach.md)); `delorun reach on tailscale` refuses while Tailscale Funnel is on for the address. Funnel, a self-hosted relay on your own domain, and a passkey or your own sign-in provider are not available yet. The rows below state what each provider sees; the Funnel and relay rows describe options that are not available yet.
+Remote access, which Delorun calls reach, is off until you turn it on, and uses nothing of Delo Run's. Today there is one option: Tailscale on your own tailnet ([Reach the studio from your phone](reach.md)). `delorun reach on tailscale` refuses while Tailscale Funnel, which would publish your address on the internet, is on. Funnel, a relay you host on your own domain, and sign-in with a passkey or your own sign-in provider are not available yet; the table also describes the two planned options, so you can compare.
 
 | Reach option | What the provider can see or do |
 | --- | --- |
-| Tailscale private | Only devices on your tailnet can open the address. Tailscale's coordination service sees your home's name, the IP addresses of your home and of each device, connection times and traffic volume. Tailscale can add a device to your tailnet unless Tailnet Lock is on. Tailscale controls `ts.net` and obtains the address's certificate, so no app can pin its TLS key. |
-| Tailscale Funnel | Anyone on the internet can open the address. Tailscale's Funnel servers and coordination service see your home's name, the IP addresses of your home and of each connecting device, connection times and traffic volume. Funnel passes encrypted traffic to your home, where Tailscale's software ends TLS. Tailscale can add a device to your tailnet unless Tailnet Lock is on, and it obtains the address's certificate. |
-| Self-hosted relay on your domain | Your relay sees the address's name, the IP addresses of your home and of each connecting device, connection times and traffic volume. It can refuse or drop connections and force a rebind of a name. It passes encrypted traffic it cannot read, and TLS ends on your home. Traffic stays end-to-end encrypted only while your domain's CAA record lets only your home's Let's Encrypt account obtain certificates and your home answers its own certificate challenges. Let's Encrypt and your DNS provider can still affect certificates for your domain. Your home checks public certificate logs, which see your home's IP address and domain. |
+| Tailscale on your tailnet (available) | Only devices on your tailnet can open the address. Tailscale's coordination service sees your computer's name, the IP addresses of your computer and of each device, connection times and how much traffic flows. Tailscale can add a device to your tailnet unless Tailnet Lock is on. Tailscale controls `ts.net` and obtains your address's certificate. |
+| Tailscale Funnel (not available yet) | Anyone on the internet can open the address. Tailscale's Funnel servers and coordination service see your computer's name, the IP addresses of your computer and of each device that connects, connection times and traffic volume. Funnel passes encrypted traffic to your computer, where Tailscale's software decrypts it. Tailscale can add a device to your tailnet unless Tailnet Lock is on, and it obtains the address's certificate. |
+| A relay you host on your own domain (not available yet) | Your relay sees the address, the IP addresses of your computer and of each device, connection times and traffic volume. It can refuse or drop connections. It passes encrypted traffic it cannot read, which only your computer decrypts, as long as your domain's DNS lets only your computer obtain certificates for it and your computer answers its own certificate challenges. Let's Encrypt and your DNS provider can still affect certificates for your domain. |
 
-Every device, whatever the option, needs your approval at your computer before it opens your chats.
+Whatever the option, a device opens your chats only after you approve it at your computer.
 
 ## What leaves your machine
 
 ### By default
 
-These checks run by default. They carry no personal data, but each request reveals your IP address, the request time and the Delo version to the host it reaches.
+Two checks run by default. They carry nothing about you, but each request shows the server it reaches your IP address and the time of the request.
 
-- The release-log check at each start, against Sigstore's public release log and its checkpoint distributor. No setting turns it off; when the log cannot be reached, the start goes on with a warning.
-- The update check, once a day, which fetches Delo's signed release metadata from releases.delorun.com and GitHub. Turn it off in Settings → Privacy or with `delorun setup privacy` ([Updates](updates.md#the-update-notice)).
+- **The release-log check**, at each start, against Sigstore's public release log and the service that publishes its state. It confirms that the release you run is the one Delo Run recorded publicly. No setting turns it off; when the log cannot be reached, Delorun starts anyway and warns you.
+- **The update check**, once a day, which fetches Delorun's signed release files from releases.delorun.com and GitHub. Turn it off in Settings → Privacy or with `delorun setup privacy` ([Updates](updates.md#the-update-notice)).
 
-Each file these checks fetch is verified by its signature, so a host that serves a changed file fails the check. The first release publishes no plugin revocation list and fetches none.
-
-Docker workspaces, which would pull images, and own-domain reach, which would query public certificate logs, are not available yet.
+Each file these checks download is checked against its signature, so a server that hands out a changed file fails the check. Delorun downloads no list of revoked plugins, because none is published yet. Docker images and certificate-log lookups would come with Docker workspaces and own-domain reach, which are not available yet.
 
 ### Only when you opt in
 
-Delo's contract requires that setup's `--yes` and `--config` forms never turn on reach or either upstream opt-in.
+`delorun setup --yes` and `--config` never turn on reach or DeepSeek's session-log upload.
 
-- **Upstream's desktop analytics** belongs to DeepSeek Harness's desktop app; the profile `delorun` runs collects none, and Settings → Privacy says so.
-- **DeepSeek's session-log upload** is off by default in the first release. When you turn it on, each request to the official DeepSeek API carries an incremental part of your session log, in a `dsh_session_log` field.
-- **Feedback** leaves your machine only when you send it. The feedback dialog shows the payload, including a session-log prefix, and its destination before you send.
-- **Model requests** go to the model provider you configure, and carry what the model receives for each turn.
-- **Reach** sends traffic to the provider you choose, as the table above states.
+- **DeepSeek's session-log upload** is off until you turn it on in Settings → Privacy. When it is on, each request to DeepSeek's official API also carries the part of your chat's log not sent yet: your messages, the replies, tool calls with their results, workspace paths and feedback.
+- **Desktop analytics** belong to DeepSeek Harness's desktop app. The profile `delorun` runs collects none, and Settings → Privacy says so.
+- **Feedback.** The profile `delorun` runs has no feedback dialog, so it sends no feedback.
+- **Model requests** go to the model provider you set up, and carry what the model receives for each turn.
+- **Reach** sends traffic through the provider you choose, as the table above says.
 
 ## Checking it yourself
 
-- `delorun verify` checks the installed release's signature, with its entry in the public release log, and the installed files against their signed list. Its other checks, of isolation, exposure, sign-in, plugins and data sharing, are not available yet: the report lists each as `not run` and ends with `this is not a full verification of this Delo`. The checks run as you, so a program running as you can change them.
-- `delorun logs` shows each operational log, its location and its records. Delo's own records hold no secret, chat text, prompt, model output, tool argument or file content. Captured command output can still hold chat and file text until retention deletes it. A log file is deleted at the next `delorun` command once its oldest record is 14 days old.
-- The [threat model](../security/threat-model.md) lists each boundary, its defence and what Delo does not protect against.
+- **`delorun verify`** checks that the installed release is signed, that it is in the public release log, and that its files are the signed ones. Its other planned checks, of isolation, exposure, sign-in, plugins and data sharing, are not available yet: the report lists each as `not run` and ends with `this is not a full verification of this Delo`. The checks run as you, so a program running as you could tamper with them.
+- **`delorun logs`** shows each log, where it is and what it holds ([Where Delorun keeps its logs](logs.md)).
 
 ## Reporting a problem
 
 Report a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and not in a public issue. Report other problems to support@delorun.com.
+
+## For the technically curious
+
+The [threat model](../security/threat-model.md) lists every boundary, its defence and what Delorun does not protect against, and the [verification checks contract](../contracts/c15-verification-checks.md) defines each `delorun verify` check.

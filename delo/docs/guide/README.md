@@ -17,6 +17,7 @@ The user guide is for people who install and use Delorun, the community fork of 
 - [Make it yours](#make-it-yours)
 - [Safety and trust](#safety-and-trust)
 - [When something goes wrong](#when-something-goes-wrong)
+- [For the technically curious](#for-the-technically-curious)
 
 ## Get started
 
@@ -34,9 +35,9 @@ The user guide is for people who install and use Delorun, the community fork of 
 
 [Reach the studio from your phone](reach.md) explains remote access over your own tailnet: turning it on, approving a device at your computer, what an approved phone can and cannot do, and removing a device.
 
-[Your Delo home](home.md) explains where `delorun` keeps your data, how to move it, how profiles work, and how to fix a home or secret file that other users can read.
+[Your Delorun home](home.md) explains where `delorun` keeps your data, how to move it, how profiles work, and how to fix a home or secret file that other users can read.
 
-[Where Delo keeps its logs](logs.md) lists every operational log's location, what a log holds and never holds, how long logs are kept and how `delorun logs` shows and clears them.
+[Where Delorun keeps its logs](logs.md) lists every operational log's location, what a log holds and never holds, how long logs are kept and how `delorun logs` shows and clears them.
 
 ## Make it yours
 
@@ -50,8 +51,12 @@ The user guide is for people who install and use Delorun, the community fork of 
 
 [What Delorun protects](safety.md) explains, in plain language, the sandbox and the protected home on each platform, full access, the consents, the `web_fetch` guard, release checks, and what Delorun does not protect against.
 
-[What you trust when you use Delo](trust.md) states what runs on your computer, what Delo Run can and cannot do, what each reach option shows its provider and what leaves your machine.
+[What you trust when you use Delorun](trust.md) states what runs on your computer, what Delo Run can and cannot do, what each reach option shows its provider and what leaves your machine.
 
 ## When something goes wrong
 
 [Troubleshooting](troubleshooting.md) explains how to read a refusal and lists the common refusals by code, with their fixes.
+
+## For the technically curious
+
+These pages describe what you see and do. The [Delo documentation index](../README.md) leads to the contracts, designs and threat model that define the exact rules; each guide page ends with links to the ones it relies on.

@@ -22,6 +22,7 @@ When `delorun` or its npm launcher cannot do what you asked, it prints a refusal
 - [Remote access and devices](#remote-access-and-devices)
 - [Archives, imports and the trash](#archives-imports-and-the-trash)
 - [When nothing here fits](#when-nothing-here-fits)
+- [For the technically curious](#for-the-technically-curious)
 
 ## Reading a refusal
 
@@ -57,7 +58,7 @@ A command that fails without a code of its own starts with `delorun <command>:` 
 | `HOME_IS_DSH_HOME` | `DELO_HOME` names DeepSeek Harness's home `~/.dsh` or a folder inside it. | Choose another folder; Delorun keeps `~/.dsh` untouched. |
 | `SOCKET_PATH_TOO_LONG` | The home's path is too long for the local socket through which `delorun` commands talk to the running Delorun. | Choose a shorter home with `DELO_HOME`. |
 
-On Windows, Delorun does not check these permissions yet. [Your Delo home](home.md) explains the home and its permissions.
+On Windows, Delorun does not check these permissions yet. [Your Delorun home](home.md) explains the home and its permissions.
 
 A `.env` file in the folder you run `delorun` from, or in your Delorun home, may not set a name starting with `DELO_`, because those names decide which home, profile, releases and runtime Delorun trusts. The refusal names the file; remove the names from it, and export them in your shell instead if you need them.
 
@@ -125,8 +126,8 @@ A refusal that starts "Delo refused the change and left the profile as it was" p
 
 | Code | What would have been lost or changed |
 | --- | --- |
-| `ROW_NOT_CARRIED` | A plugin row you added. |
-| `CONFIGURATION_NOT_CARRIED` | A setting you wrote for a plugin row. |
+| `ROW_NOT_CARRIED` | A plugin entry you added to your profile (a row). |
+| `CONFIGURATION_NOT_CARRIED` | A setting you wrote for a plugin. |
 | `LOCAL_PLUGIN_NOT_CARRIED` | A plugin you installed from a folder on this computer. |
 | `BUNDLE_LIST_NOT_CARRIED` | The order or the members of the profile's bundle list. |
 | `UNNAMED_CHANGE` | Anything the update report does not name. |
@@ -134,13 +135,13 @@ A refusal that starts "Delo refused the change and left the profile as it was" p
 | `PROFILE_UNREADABLE` | A profile file cannot be read, so nothing can be checked; repair the file the refusal names. |
 | `RESTORE_REFUSED`, `RECOVER_REFUSED` | An undo, restore, rollback or `delorun recover` action cannot be done as asked. |
 
-Its remedies come from this list: do not take this update; keep the item and wait for a release that carries it; update the plugin; keep the plugin disabled; eject the plugin, which keeps its rows and settings; restore a profile history version with `delorun recover restore <version>`; go back with `delorun recover rollback`; or start in safe mode with `delorun recover safe-mode`. A refusal that starts "Delo could not write the profile snapshot it takes before a change" (`SNAPSHOT_FAILED`) means nothing changed because the snapshot that makes the change undoable could not be written.
+Its remedies come from this list: do not take this update; keep the item and wait for a release that carries it; update the plugin; keep the plugin disabled; eject the plugin, which keeps its entries and settings in your profile; restore a profile history version with `delorun recover restore <version>`; go back with `delorun recover rollback`; or start in safe mode with `delorun recover safe-mode`. A refusal that starts "Delo could not write the profile snapshot it takes before a change" (`SNAPSHOT_FAILED`) means nothing changed because the snapshot that makes the change undoable could not be written.
 
 ## Protections and plugins
 
-- **`the profile default would boot without protections Delo requires`.** A setting in your profile turns off a protection, such as the sandbox row or one of Delorun's guards. The refusal lists each one with the file that sets it. Remove those settings, or start without your plugins with `delorun recover safe-mode`.
+- **`the profile default would boot without protections Delo requires`.** A setting in your profile turns off a protection, such as the sandbox or one of Delorun's guards. The refusal lists each one with the file that sets it. Remove those settings, or start without your plugins with `delorun recover safe-mode`.
 - **`the profile default could not load Delo's bundle`** or **`plugins of Delo's bundles did not start`.** Delorun stops rather than start without its guards and privacy settings, because the profile would otherwise run with DeepSeek Harness's own defaults. The refusal names each package, the cause and the fix.
-- **`the sandbox row sets the runner itself`** or **`is configured with expressions`.** Delorun adds its home protection to the sandbox row at start, so the row must use the built-in runner choice and plain YAML values. Remove what the refusal names.
+- **`the sandbox row sets the runner itself`** or **`is configured with expressions`.** Delorun adds its home protection to the sandbox's settings at start, so those settings must leave the choice of sandbox to Delorun and use plain YAML values. Remove what the refusal names.
 - **`delorun headless: … asks for full access in "<folder>", which you have not granted full access`.** A headless task asked to run outside the sandbox in a folder you have not put on full access. Open the folder as a workspace in the studio and choose Full access once, or run the task without full access.
 - **`Delo could not use the Docker engine`.** Docker did not answer, or refused the request with the HTTP status the refusal names. Start Docker and run the command again.
 
@@ -163,4 +164,8 @@ Its remedies come from this list: do not take this update; keep the item and wai
 
 ## When nothing here fits
 
-Run `delorun doctor` to check Docker, the model key's format, the home, the studio's port, the release-log check and the last update check, and `delorun logs home` to read the running Delorun's recent records. [Where Delo keeps its logs](logs.md) explains each log. A refusal that says "Report this" means Delorun found something it cannot explain: report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
+Run `delorun doctor` to check Docker, the model key's format, the home, the studio's port, the release-log check and the last update check, and `delorun logs home` to read the running Delorun's recent records. [Where Delorun keeps its logs](logs.md) explains each log. A refusal that says "Report this" means Delorun found something it cannot explain: report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
+
+## For the technically curious
+
+Each code belongs to a contract that defines when it is raised: the [home layout contract](../contracts/c01-home-layout.md) for the home and installs, the [home process contract](../contracts/c19-home-process.md) for starting, updates and devices, and the [update report contract](../contracts/c03-update-report.md) for the update report and rollback. The codes that protect your profile are listed in the [profile safety README](../../packages/profile-safety/README.md).

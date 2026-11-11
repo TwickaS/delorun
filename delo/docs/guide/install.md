@@ -22,6 +22,7 @@ One command installs Delorun and sets it up: `npx delorun`. The launcher downloa
 - [The default workspace](#the-default-workspace)
 - [A computer without a browser](#a-computer-without-a-browser)
 - [Next steps](#next-steps)
+- [For the technically curious](#for-the-technically-curious)
 
 ## Before you start
 
@@ -43,11 +44,11 @@ The launcher's own options come before any `delorun` arguments:
 
 | Option | What it does |
 | --- | --- |
-| `--profile <name>` | Uses another CLI profile than `default` ([Your Delo home](home.md#profiles)). |
+| `--profile <name>` | Uses another CLI profile than `default` ([Your Delorun home](home.md#profiles)). |
 | `--release <version>` | Installs this release instead of the channel's current one, when no release is installed yet. |
 | `--` | Ends the launcher's options; everything after it goes to `delorun`. |
 
-Delorun keeps everything in one folder, `~/.delo`, which only you can open ([Your Delo home](home.md)). Releases are installed under `runtimes/` in it.
+Delorun keeps everything in one folder, `~/.delo`, which only you can open ([Your Delorun home](home.md)). Releases are installed under `runtimes/` in it.
 
 ## What the launcher verifies
 
@@ -65,7 +66,7 @@ Installing release 0.1.0.
 - **The public release log.** Every release is entered in a public, append-only log (Sigstore's), and an independent witness countersigns the log's state. The launcher checks the release's entry and the log's consistency. A log that answers with a contradiction stops the install. A log that cannot be reached leaves the release "not checked": the launcher installs it on its signature alone, prints a warning, and checks the log again at the next start that can reach it.
 - **At every start.** The launcher checks the installed files against their signed list, and hashes every file at least every 7 days; `DELO_RUNTIME_FULL_CHECK_DAYS` sets that interval from 0, every start, to 30 days. A start with a release installed needs no network.
 
-`delorun verify` runs these checks on demand and reports each one ([Daily use](daily-use.md#check-the-release-and-your-setup)). The launcher installs from releases.delorun.com and GitHub Releases only. It does not check the release's SBOM, and the npm package carries no build attestation. [What you trust when you use Delo](trust.md) states what you still trust: Delorun's release keys and the hosts that serve releases.
+`delorun verify` runs these checks on demand and reports each one ([Daily use](daily-use.md#check-the-release-and-your-setup)). The launcher installs from releases.delorun.com and GitHub Releases only. It does not check the release's SBOM, and the npm package carries no build attestation. [What you trust when you use Delorun](trust.md) states what you still trust: Delorun's release keys and the hosts that serve releases.
 
 ## Setup: Quick or Full
 
@@ -133,5 +134,9 @@ delorun open --print
 - [Updates](updates.md): the update notice and going back.
 - [Changing your harness](https://docs.delorun.com/guide/changing-your-harness): what Delorun records when plugins or Delorun's own files change, turning protection on, and undo.
 - [Where to customise what](https://docs.delorun.com/guide/customise) and [Write a plugin for Delo](https://docs.delorun.com/guide/plugins): reshaping Delorun to suit how you work.
-- [What Delorun protects](safety.md) and [What you trust when you use Delo](trust.md).
+- [What Delorun protects](safety.md) and [What you trust when you use Delorun](trust.md).
 - [Troubleshooting](troubleshooting.md): refusals and their fixes.
+
+## For the technically curious
+
+The [release manifest contract](../contracts/c02-release-manifest.md) and the [release log contract](../contracts/c18-release-log.md) define every signature and log check the launcher makes, the [setup answers contract](../contracts/c11-setup-answers.md) defines each setup question and what it writes, and the [first run design](../design/first-run.md) explains why setup asks what it asks.

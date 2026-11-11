@@ -19,6 +19,7 @@ Delorun runs as one background process per profile, the home process, which serv
 - [Safe mode and recovery](#safe-mode-and-recovery)
 - [Trash, export and import](#trash-export-and-import)
 - [The plugin and headless commands](#the-plugin-and-headless-commands)
+- [For the technically curious](#for-the-technically-curious)
 
 ## Start, open and stop
 
@@ -36,13 +37,13 @@ Delorun runs as one background process per profile, the home process, which serv
 
 `delorun stop` refuses new turns, prints `Waiting for N running chat(s) to end…`, and waits up to 30 minutes for running chats before it stops anyway. `delorun stop --now` cancels them; if the process does not end, it is stopped with a signal, and Delorun then warns that commands it started may still be running.
 
-Most commands take `--profile <name>` after their name to act on another profile, such as `delorun status --profile work`, and `DELO_PROFILE` sets it for every command, `delorun doctor` included ([Your Delo home](home.md#profiles)). A command that needs Delorun running exits with code 3 when it is not ([Troubleshooting](troubleshooting.md#reading-a-refusal)).
+Most commands take `--profile <name>` after their name to act on another profile, such as `delorun status --profile work`, and `DELO_PROFILE` sets it for every command, `delorun doctor` included ([Your Delorun home](home.md#profiles)). A command that needs Delorun running exits with code 3 when it is not ([Troubleshooting](troubleshooting.md#reading-a-refusal)).
 
 ## Check the release and your setup
 
 - **`delorun doctor`** checks your home's permissions, whether Docker answers, the DeepSeek key's format (without sending it), whether the studio's port is free, the last release-log check and the last update check. Each line starts with `pass`, `warn` or `fail`; it exits with 1 when a check fails.
 - **`delorun verify`** checks the installed release against its signed manifest and the public release log. The first release runs two of its checks, the release signature and the installed files, and lists the others as `not run`; its report ends with `this is not a full verification of this Delo`. `--offline` skips the online log check, `--release <version>` checks another release, and `--json` prints the report as JSON. The checks run as you, so a program running as you could change them.
-- **`delorun logs`** prints where each log is and the recent records of the running Delorun; `delorun logs --follow` follows it ([Where Delo keeps its logs](logs.md)).
+- **`delorun logs`** prints where each log is and the recent records of the running Delorun; `delorun logs --follow` follows it ([Where Delorun keeps its logs](logs.md)).
 - **`delorun --version`** prints the Delorun version and the DeepSeek Harness version it runs on.
 
 ## Workspaces and what the model may change
@@ -78,7 +79,7 @@ delorun start
 delorun recover exit-safe-mode   # once it works: the next start loads everything again
 ```
 
-Safe mode leaves out every bundle and plugin you added, including plugins installed from a folder, and keeps DeepSeek Harness's own bundles and Delorun's. It changes no file: your plugins' rows and settings stay in your profile, and each start in safe mode says what it leaves out. `delorun recover safe-mode --reason <text>` records why you turned it on. Safe mode takes effect at the next start, so stop Delorun first if it runs. Delorun does not turn safe mode on by itself.
+Safe mode leaves out every bundle and plugin you added, including plugins installed from a folder, and keeps DeepSeek Harness's own bundles and Delorun's. It changes no file: your plugins and their settings stay in your profile, and each start in safe mode says what it leaves out. `delorun recover safe-mode --reason <text>` records why you turned it on. Safe mode takes effect at the next start, so stop Delorun first if it runs. Delorun does not turn safe mode on by itself.
 
 `delorun recover` with no subcommand shows where your profile stands: whether safe mode is on, the last update, the profile versions you can restore, and the plugins you ejected or kept disabled. `delorun recover restore <version>` brings back a saved profile version, and `delorun recover rollback` goes back to the release before the last update ([Updates](updates.md#going-back)).
 
@@ -100,3 +101,7 @@ These commands change chat data the studio uses, so stop Delorun first; they ref
 
 - **`delorun plugin --profile <name> …`** runs DeepSeek Harness's `dsh plugin` inside your Delorun home, so plugins install as in stock. It applies none of Delorun's protections. `delorun plugin check <directory>` reads a plugin's `package.json`, runs none of its files, and says whether this release would accept the plugin's version ranges.
 - **`delorun headless …`** answers one task and exits, as `dsh headless` does, with Delorun's sandbox protection and guards. It refuses a task that asks for full access, with `--permission-mode` or its environment variable, in a folder without a full-access grant, and the studio cannot record such a grant yet.
+
+## For the technically curious
+
+The [home process contract](../contracts/c19-home-process.md) defines start, stop, status and their exit codes, the [update report contract](../contracts/c03-update-report.md) defines safe mode and `delorun recover`, and the [archive and trash contract](../contracts/c08-archive-and-trash.md) defines the trash and archives.

@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-Delorun runs on your computer with your own access, and an agent that runs commands for you can do real damage when it is wrong or when text it reads tells it to. Delorun keeps DeepSeek Harness's approvals and sandbox and adds protections around them: commands the model runs cannot touch Delorun's own home, risky changes ask you first, `web_fetch` does not reach your local network, and releases are checked before they run. This page says what each protection does, where it applies and what it leaves open. The [threat model](../security/threat-model.md) states each one exactly, with the contract that specifies it.
+Delorun runs on your computer with your own access, and an agent that runs commands for you can do real damage when it is wrong or when text it reads tells it to. Delorun keeps DeepSeek Harness's approvals and sandbox and adds protections around them: commands the model runs cannot touch Delorun's own home, risky changes ask you first, `web_fetch` does not reach your local network, and releases are checked before they run. This page says what each protection does, where it applies and what it leaves open. For the exact rules, see [For the technically curious](#for-the-technically-curious).
 
 ## Contents
 
@@ -19,6 +19,7 @@ Delorun runs on your computer with your own access, and an agent that runs comma
 - [The web_fetch guard](#the-web_fetch-guard)
 - [Release checks](#release-checks)
 - [What Delorun does not protect against](#what-delorun-does-not-protect-against)
+- [For the technically curious](#for-the-technically-curious)
 
 ## Where the protections apply
 
@@ -41,8 +42,8 @@ The file tools, such as `read`, `grep` and `apply_patch`, refuse your Delorun ho
 
 | Sandbox | Where | What it enforces |
 | --- | --- | --- |
-| bwrap | Linux, WSL2 included | Every rule above. Under WSL2 it also hides `/run/WSL`, so commands cannot start Windows programs. |
-| Landlock | Linux without bwrap | The write and read rules; commands can still connect to Delorun's control socket, which refuses them because they cannot read its token, and to Docker's socket. |
+| bwrap (bubblewrap, a Linux sandbox tool) | Linux, WSL2 included | Every rule above. Under WSL2 it also hides `/run/WSL`, so commands cannot start Windows programs. |
+| Landlock (a Linux kernel feature) | Linux without bwrap | The write and read rules; commands can still connect to Delorun's control socket, which refuses them because they cannot read its token, and to Docker's socket. |
 | Windows access lists | Windows | Writes only: commands can read your Delorun home, its secrets and the token included. |
 
 Commands can still reach the network, other local sockets such as your ssh-agent and D-Bus, and everything else your user can read, such as `~/.ssh` and `~/.aws`. The sandbox limits writes and protects Delorun's home; it does not hide the rest of your account.
@@ -91,6 +92,10 @@ The release checks prove that you run the release Delorun's keys signed and logg
 - **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox, audit or revoke plugins. It checks a plugin's declared version ranges at install and at each start, but does not check a plugin's files again after install: a plugin from npm, git or a tarball whose files change on disk loads as it now is at the next start.
 - **Instructions in text the model reads.** Web pages, files, repositories and tool output can carry instructions; the consents and the sandbox limit what follows from them, and do not detect them.
 - **The studio's sign-in.** A browser that signed in stays signed in for 30 days, across restarts, and the sign-in cannot be revoked.
-- **Your logs.** A secret in a form Delorun does not recognise can reach an operational log ([Where Delo keeps its logs](logs.md)).
+- **Your logs.** A secret in a form Delorun does not recognise can reach an operational log ([Where Delorun keeps its logs](logs.md)).
 
-With [Changes protection](https://docs.delorun.com/guide/changing-your-harness) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change; the change is recorded and can be undone. [What you trust when you use Delo](trust.md) states what each party, Delorun's maintainers included, can and cannot do, and the [threat model](../security/threat-model.md) lists every limit.
+With [Changes protection](https://docs.delorun.com/guide/changing-your-harness) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change; the change is recorded and can be undone. [What you trust when you use Delorun](trust.md) states what each party, Delorun's maintainers included, can and cannot do, and the [threat model](../security/threat-model.md) lists every limit.
+
+## For the technically curious
+
+The [threat model](../security/threat-model.md) states every protection with the rules that define it and every limit, the [home layout contract](../contracts/c01-home-layout.md) defines the sandbox rules for Delorun's home, and the [parity checklist](../reference/parity.md) lists each consent and default with the switch that turns it back to stock.

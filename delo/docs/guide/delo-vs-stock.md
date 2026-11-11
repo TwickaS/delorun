@@ -22,6 +22,7 @@ Delorun is a community fork of DeepSeek Harness (DSH). It runs DSH's own code, k
 - [Not available yet](#not-available-yet)
 - [Moving between DSH and Delorun](#moving-between-dsh-and-delorun)
 - [Roadmap](#roadmap)
+- [For the technically curious](#for-the-technically-curious)
 
 ## Why Delorun exists
 
@@ -29,7 +30,7 @@ DSH is an excellent harness, and its maintainers do not accept outside contribut
 
 Delorun holds itself to these rules:
 
-- **Stock first.** A fresh install follows the stock DSH workflow. Delorun sends nothing about you; its default network requests are the release-log check at each start and a daily check for a newer release, which Settings → Privacy turns off ([What you trust when you use Delo](trust.md#what-leaves-your-machine)).
+- **Stock first.** A fresh install follows the stock DSH workflow. Delorun sends nothing about you; its default network requests are the release-log check at each start and a daily check for a newer release, which Settings → Privacy turns off ([What you trust when you use Delorun](trust.md#what-leaves-your-machine)).
 - **Yours to change.** Configuration, plugins, presets, skills, themes and the studio are yours, and no hidden layer overrides them.
 - **Updates never take your work away.** Before an update you see what it would change; your profile is saved first; one command goes back ([Updates](updates.md)).
 - **Delorun cannot get in on its own.** Your studio runs on your computer, and every new device needs your approval at that computer ([Reach the studio from your phone](reach.md)).
@@ -48,19 +49,19 @@ Delorun holds itself to these rules:
 | Area | Stock DSH | Delorun |
 | --- | --- | --- |
 | Install | npm package and desktop app | `npx delorun`, which verifies each release's signatures and its entry in a public release log before it installs it, on Linux x64 and arm64 and on Windows x64, WSL2 included ([Install and first run](install.md)) |
-| Home | `~/.dsh` | `~/.delo`, readable only by you; `~/.dsh` is never changed, and `delorun import-home` copies what you choose from it ([Your Delo home](home.md)) |
+| Home | `~/.dsh` | `~/.delo`, readable only by you; `~/.dsh` is never changed, and `delorun import-home` copies what you choose from it ([Your Delorun home](home.md)) |
 | Running | A command in a terminal, or the desktop app | `delorun` runs in the background and opens the studio; `delorun start`, `stop`, `status`, `open`, `doctor` and `logs` manage it ([Daily use](daily-use.md)) |
 | Setup | First-run dialogs | Quick or Full setup in the terminal: privacy, the import from `~/.dsh`, the model key, how careful prompts are, and in Full also background running, remote access, the profile and the port; `delorun setup --yes` for scripts |
 | Studio | DSH's look | Delorun's theme, sidebar, chat states, settings layout and onboarding, or the stock look in one switch |
 | Updates | Incompatible plugins may be disabled at startup | A report of what would change before you confirm, a profile snapshot and an optional copy of your chat data first, a health check after, automatic rollback when it fails, and `delorun recover` to go back ([Updates](updates.md)) |
-| Your own changes | Profile layers | Profile layers, profile history that `delorun recover restore` brings back, safe mode, and update checks that refuse to drop a plugin row, setting or local plugin you added |
+| Your own changes | Profile layers | Profile layers, profile history that `delorun recover restore` brings back, safe mode, and update checks that refuse to drop a plugin, setting or local plugin you added |
 | What commands can reach | The sandbox confines file writes | The same sandbox also keeps commands from writing or reading Delorun's home and its secrets, and from connecting to its control socket and Docker's socket, where your system can enforce it ([What Delorun protects](safety.md#the-sandbox)) |
 | Permissions | One default for every workspace | Every new workspace starts on Workspace Write; with Safer prompts, a switch of a workspace to full access is refused ([Full access](safety.md#full-access)) |
 | Consents | — | With Safer prompts, the model's file-tool writes to `AGENTS.md`, skills and presets ask first, a scheduled task asks with its schedule and target, and a new MCP server that runs a command is refused ([Consents](safety.md#consents)) |
 | Web fetch | Reaches loopback and private-network hosts in every mode | `web_fetch` refuses loopback, link-local and private-network targets, cloud metadata addresses included; commands are outside the guard |
 | Reach from other devices | Your own certificate on a LAN address, or experimental Liveshare | Tailscale on your own tailnet, with each device approved at your computer by the code it shows ([Reach the studio from your phone](reach.md)) |
 | Verification | — | `delorun verify` checks the installed release's signature, its release-log entry and its files |
-| Logs | Process output in the terminal | Operational logs per process, rotated, with secrets redacted, and `delorun logs` to find them ([Where Delo keeps its logs](logs.md)) |
+| Logs | Process output in the terminal | Operational logs per process, rotated, with secrets redacted, and `delorun logs` to find them ([Where Delorun keeps its logs](logs.md)) |
 | Data sharing | Desktop analytics and DeepSeek session-log upload on | No telemetry of Delorun's own; DeepSeek session-log upload off until you turn it on in Settings → Privacy, and no desktop analytics in the profile `delorun` runs |
 | Workspaces | Local folders | Local folders, with a trash for deleted chats and workspaces and signed export files that move them between homes |
 | Documentation | DSH's docs | This guide, at [docs.delorun.com](https://docs.delorun.com) |
@@ -94,7 +95,7 @@ These are part of Delorun's plans and are not in the code yet:
 - reach through Tailscale Funnel or your own relay on your own domain, and sign-in with a passkey or your own sign-in provider;
 - `delorun verify` checks of isolation, exposure, sign-in, plugins and data sharing, which the report lists as `not run`;
 - a community plugin catalogue with "tested with Delorun X" badges, and a revocation list for known-bad plugin versions;
-- ejecting a plugin while keeping its rows and settings;
+- ejecting a plugin while keeping its settings in your profile;
 - the main chat, importing a workspace with `git clone` and editing its `AGENTS.md` from the studio, which exist as plugins that no profile loads;
 - PTC as the default mode in onboarding.
 
@@ -123,3 +124,7 @@ The roadmap is ordered, not dated: each stage starts when the one before it is r
    - An agent team, workspaces on other machines over SSH, hosted homes and machines, and teams.
 
 Not planned: managing other harnesses as products, splitting one chat across machines, and Delorun selling model access.
+
+## For the technically curious
+
+The [parity checklist](../reference/parity.md) lists every difference from stock with its evidence, and the [parity composition contract](../contracts/c16-parity-composition.md) defines how Delorun proves it still behaves like stock with its changes switched off.
