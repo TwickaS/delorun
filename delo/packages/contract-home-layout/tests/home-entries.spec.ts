@@ -57,6 +57,12 @@ const REVIEWED: Readonly<Record<string, string>> = {
  * `<file relative to delo/>: <segment expression>`, each with the directory it is. Each was read by hand.
  */
 const NOT_THE_HOME: Readonly<Record<string, string>> = {
+  'apps/benchmarks/src/fixtures/home.ts: entry': 'the OS home of a throwaway benchmark root: its entries other than the Delo home, which the copy reads',
+  'apps/benchmarks/src/fixtures/home.ts: \'.delo\'': 'the OS home of a throwaway benchmark root: the Delo home itself',
+  'apps/benchmarks/src/harness/roots.ts: data': 'the person\'s OS home: its .delo and .dsh, which the benchmark refuses to use and never writes',
+  'apps/benchmarks/src/harness/roots.ts: \'.delo\'': 'the OS home of a throwaway benchmark root: the Delo home itself',
+  'apps/benchmarks/src/suites/studio/index.ts: \'workspaces\'': 'the OS home of a throwaway benchmark root: the folders its workspaces point at',
+  'apps/benchmarks/src/suites/turn/index.ts: PROJECT_DIRECTORY': 'the OS home of a throwaway benchmark root: the project folder a measured turn reads and writes',
   'apps/cli/src/import-home/index.ts: UPSTREAM_HOME_DIR_NAME': 'the person\'s OS home: the stock DeepSeek Harness home ~/.dsh, which the import reads',
   'apps/tools/src/checks/shared-cache.ts: \'.cache\'': 'the OS home of a developer machine: the check runner\'s shared cache',
   'packages/archive/src/dsh-import/profiles.ts: \'profile\'': 'a scratch directory under the system\'s temporary directory',
