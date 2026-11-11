@@ -11,13 +11,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { RELEASE_SCHEMAS, type RuntimeFileList, type Sha256Hex, type SemanticVersion } from '@delo/contract-release-manifest'
+import type { RuntimeFileList, Sha256Hex } from '@delo/contract-release-manifest'
 import { gzip } from '@delo/release-formats/archive/bytes'
 import type { ArchiveEntry } from '@delo/release-formats/archive/entry'
 import { identityOf } from '@delo/runtime-store'
 import { extractArchive, extractionPath } from '../src/extract.ts'
 import { isInstallError, type InstallError } from '../src/errors.ts'
-import { sha256, tarGz, VERSION } from './support.ts'
+import { entryFileList as fileList, tarGz } from './support.ts'
 
 let directories: string[] = []
 
@@ -34,25 +34,6 @@ async function scratch(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'delo-install-extract-'))
   directories.push(directory)
   return directory
-}
-
-/**
- * The signed file list of a set of entries, exactly as the release tooling writes it.
- * @param entries - the archive's entries.
- * @returns the list.
- */
-function fileList(entries: readonly ArchiveEntry[]): RuntimeFileList {
-  return {
-    schema: RELEASE_SCHEMAS.files,
-    version: brandString<SemanticVersion>(VERSION),
-    platform: 'linux-x64',
-    files: entries.map(entry => ({
-      path: entry.path,
-      length: entry.data.byteLength,
-      sha256: brandString<Sha256Hex>(sha256(entry.data)),
-      mode: entry.mode,
-    })),
-  }
 }
 
 /**
@@ -169,6 +150,18 @@ describe('an archive the list does not describe', () => {
         : file),
     }
     await refusal(extractArchive({ archive: await archiveOf(ENTRIES), format: 'tar.gz', files: tampered, directory }), 'INSTALL_VERIFY_FAILED')
+  })
+
+  it('refuses a path the archive holds twice', async () => {
+    const directory = await scratch()
+    const path = join(directory, 'runtime.tar.gz')
+    const data = Buffer.from('x')
+    await writeFile(path, await rawTarGz([{ path: 'node/bin/node', type: '0', data }, { path: 'node/bin/node', type: '0', data }]))
+    const error = await refusal(
+      extractArchive({ archive: path, format: 'tar.gz', files: fileList([{ path: 'node/bin/node', mode: '0644', data }]), directory: join(directory, 'staging') }),
+      'ARCHIVE_REFUSED',
+    )
+    expect(error.detail).toContain('twice')
   })
 
   it('refuses an archive that lacks a file its signed list names', async () => {

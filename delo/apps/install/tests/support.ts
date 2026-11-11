@@ -308,6 +308,25 @@ export async function tarGz(entries: readonly ArchiveEntry[]): Promise<Buffer> {
 }
 
 /**
+ * The signed file list of a set of entries, exactly as the release tooling writes it.
+ * @param entries - the archive's entries.
+ * @returns the list.
+ */
+export function entryFileList(entries: readonly ArchiveEntry[]): RuntimeFileList {
+  return {
+    schema: RELEASE_SCHEMAS.files,
+    version: brandString<SemanticVersion>(VERSION),
+    platform: 'linux-x64',
+    files: entries.map(entry => ({
+      path: entry.path,
+      length: entry.data.byteLength,
+      sha256: brandString<Sha256Hex>(sha256(entry.data)),
+      mode: entry.mode,
+    })),
+  }
+}
+
+/**
  * A bundle with one field replaced, for a spec that tampers with it.
  * @param fixture - the fixture release.
  * @param change - the fields to replace.
