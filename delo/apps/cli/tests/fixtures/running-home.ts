@@ -38,6 +38,7 @@ export async function startRunningHome(home: string, profile: string, studio: st
     studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
     failedRows: () => [],
     rows: () => [],
+    protection: () => undefined,
     check: () => Promise.resolve({ passed: true }),
     suspend: () => Promise.resolve(),
     close: () => Promise.resolve(),
