@@ -17,8 +17,8 @@ import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/type
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
-import { FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
-import { reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
+import { FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
+import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
 import { DeviceStore } from '../src/devices.ts'
 import { claimOf, recordOf } from './fixtures/home.ts'
@@ -263,6 +263,18 @@ describe('the authenticator provider', () => {
         invalidated,
       }
     }
+
+    it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
+      const registered: string[] = []
+      const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [] })
+      expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
+      // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
+      expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
+      expect(registered).toEqual([])
+      registerReachPolicy({ check: () => {} }, registry, policy)
+      expect(registered).toEqual(['reach-device'])
+    })
 
     it('creates every reach Peer for the device\'s principal, never the owner', async () => {
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })

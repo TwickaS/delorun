@@ -26,14 +26,15 @@ import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import { Authenticator, LOOPBACK_LISTENER, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
-import type { RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
+import type { RemoteAnswerGuard, RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
+import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
 import { RemoteError, type PeerId, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { REACH_SESSION_COOKIE, type ReachListenerId } from '@delo/contract-admission'
 import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc-passkeys'
 import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie } from './reach-routes.ts'
-import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal } from './reach-access.ts'
+import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
 import { HOME_AUTH_HTTP_STATUS } from './errors.ts'
 
@@ -61,6 +62,26 @@ const REFUSED_GRANTS: ReadonlyMap<unknown, { readonly action: LoopbackRequiredAc
 
 /** The approval outcomes that grant nothing, which a reach Peer may answer to any prompt. */
 const NON_GRANTING_OUTCOMES: ReadonlySet<unknown> = new Set(['rejected', 'cancelled', 'unavailable'])
+
+/** The remote access registry's member that {@link registerReachPolicy} calls. */
+export type ReachPolicyRegistry = Pick<Context['remoteAccess'], 'registerPolicy'>
+
+/**
+ * Register the `reach-device` policy. The policy lets a device answer `event:approval/request`, and only the answer
+ * guard keeps that answer from granting what the home's computer reserves, so the policy is registered only while a
+ * guard is mounted.
+ * @param guard - the mounted `remoteAnswerGuard`, or undefined while none is.
+ * @param registry - remote access, which holds the policies.
+ * @param policy - the `reach-device` policy.
+ * @returns the policy's disposer.
+ * @throws Error when no guard is mounted; nothing is registered, so a device is refused every call and event.
+ */
+export function registerReachPolicy(guard: RemoteAnswerGuard | undefined, registry: ReachPolicyRegistry, policy: RemoteAccessPolicy<ReachDevicePrincipal>): () => void {
+  if (guard === undefined) {
+    throw new Error('home-auth: no remoteAnswerGuard is mounted, so the reach-device policy, which lets a device answer approval prompts, is not registered')
+  }
+  return registry.registerPolicy(REACH_DEVICE, policy)
+}
 
 /** What the home knows about one Peer a reach listener admitted. */
 export interface ReachPeer {
@@ -140,9 +161,11 @@ export class HomeAuthAuthenticator extends Authenticator {
     }, 'home-auth reach peers')
     ctx.effect(() => ctx.homeAuth.onDeviceRemoved((deviceId) => { this.disposeDevice(deviceId) }), 'home-auth peer removal')
     ctx.effect(() => ctx.provide('remoteAnswerGuard', { check: (answer: RemoteEventAnswer) => { this.checkAnswer(answer) } }), 'home-auth reserved grant guard')
-    // Without remote access no Gateway is mounted, so no reach Peer's call is dispatched at all.
-    ctx.inject(['remoteAccess'], (access) => {
-      access.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({
+    // Without remote access no Gateway is mounted, so no reach Peer's call is dispatched at all. The policy lives in
+    // a scope that also needs the answer guard, which becomes visible once this fiber is active and takes the policy
+    // with it when it goes.
+    ctx.inject(['remoteAccess', 'remoteAnswerGuard'], (access) => {
+      registerReachPolicy(access.get('remoteAnswerGuard'), access.remoteAccess, createReachAccessPolicy({
         admitted: deviceId => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId),
         workspaces: () => access.get('workspaceRegistry')?.list() ?? [],
         liveSessions: () => (access.get('sessions')?.list() ?? []).map(session => session.id),

@@ -32,7 +32,9 @@ export interface RemoteEventAnswer {
  * `RemoteError` to refuse: the answer is then not applied, the event stays pending for the other Clients it was
  * delivered to, and the answering Client receives the failure with its code and details. The Client reports a
  * `LOOPBACK_REQUIRED` refusal as its `remote/answer-refused` event and keeps its event stream; any other failure ends
- * that Client's event generation.
+ * that Client's event generation. A non-owner access policy that allows answering a forwarded waterfall, such as
+ * `event:approval/request`, needs a provider: without one, that Peer's answer applies as an owner's would, a granting
+ * answer included.
  */
 export interface RemoteAnswerGuard {
   /**
