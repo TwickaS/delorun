@@ -452,6 +452,14 @@ describe('search tools and the sandbox provider\'s protected home', () => {
     expect(refused).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
   })
 
+  it('refuses a search rooted at a missing directory below a link to the home', async () => {
+    for (const [name, args] of [['glob', { pattern: '**/*', path: 'home-link/not-yet' }], ['grep', { pattern: 'needle', path: 'home-link/not-yet/deeper' }]] as const) {
+      const result = await call(name, args, agent())
+      expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })
+    }
+    expect(ProtectingProvider.wraps).toEqual([])
+  })
+
   it('refuses a search with no path in a session whose workspace is the home', async () => {
     const result = await call('glob', { pattern: '**/*' }, { session: { header: { id: 'session-home', cwd: join(dir, '.delo') } } })
     expect(result).toMatchObject({ isError: true, error: { info: { code: 'SEARCH_SANDBOX_DENIED' } } })

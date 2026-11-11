@@ -20,7 +20,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import { ItemRetainer, TextRetainer } from '@deepseek-ai/dsh-output-retention'
@@ -204,6 +204,27 @@ export function resolveRgPath(): Promise<string> {
   return rgPathPromise
 }
 
+/**
+ * The canonical spelling of an absolute path that may not exist yet: the deepest existing ancestor resolved through
+ * its links, with the missing rest appended, as `ctx.fs.resolve` spells a missing target. A root under a link to the
+ * protected home is therefore checked against the home even before the directory below the link exists.
+ * @param path - an absolute path.
+ * @returns the canonical path.
+ */
+function resolvedPath(path: string): string {
+  const missing: string[] = []
+  let ancestor = path
+  for (;;) {
+    const canonical = canonicalPath(ancestor)
+    // canonicalPath returns its argument unchanged only when the path cannot be resolved.
+    if (canonical !== ancestor || existsSync(ancestor)) return join(canonical, ...missing.reverse())
+    const parent = dirname(ancestor)
+    if (parent === ancestor) return path
+    missing.push(basename(ancestor))
+    ancestor = parent
+  }
+}
+
 /** How one `rg` run treats the sandbox provider's protected reads, planned before ripgrep starts. */
 interface SearchTarget {
   /** The directory ripgrep runs in. */
@@ -260,7 +281,7 @@ function searchTarget(ctx: Context, exec: ToolExecution, toolName: string, workd
     return { cwd: workdir, path: searchPath, confine: undefined, refused, keep: () => true, display: path => path, verify: () => {} }
   }
   const root = resolve(workdir, searchPath ?? '.')
-  const canonicalRoot = canonicalPath(root)
+  const canonicalRoot = resolvedPath(root)
   const shown = searchPath ?? '.'
   if (refused(canonicalRoot)) {
     throw new SearchError(`${toolName} cannot search "${shown}": file access denied under the protected home`, 'SEARCH_SANDBOX_DENIED')
@@ -286,7 +307,7 @@ function searchTarget(ctx: Context, exec: ToolExecution, toolName: string, workd
       return searchPath.endsWith(sep) || searchPath.endsWith('/') ? `${searchPath}${rest}` : `${searchPath}${sep}${rest}`
     },
     verify: () => {
-      if (canonicalPath(root) !== canonicalRoot || canonicalPath(canonicalRoot) !== canonicalRoot) {
+      if (resolvedPath(root) !== canonicalRoot || resolvedPath(canonicalRoot) !== canonicalRoot) {
         throw new SearchError(`${toolName} cannot search "${shown}": the search root changed while the search ran`, 'SEARCH_SANDBOX_DENIED')
       }
     },
