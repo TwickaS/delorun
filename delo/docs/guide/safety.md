@@ -88,7 +88,7 @@ The release checks prove that you run the release Delorun's keys signed and logg
 - **Windows reads.** On Windows, the model's commands can read Delorun's secrets and token.
 - **Landlock sockets.** On a Linux system with Landlock but no bwrap, commands can connect to Docker's socket, which gives root on a rootful Docker.
 - **The network and other sockets.** Commands reach any network host, your ssh-agent, D-Bus and the display server.
-- **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox or audit plugins, and cannot revoke one in the first release.
+- **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox, audit or revoke plugins. It checks a plugin's declared version ranges at install and at each start, but does not check a plugin's files again after install: a plugin from npm, git or a tarball whose files change on disk loads as it now is at the next start.
 - **Instructions in text the model reads.** Web pages, files, repositories and tool output can carry instructions; the consents and the sandbox limit what follows from them, and do not detect them.
 - **The studio's sign-in.** A browser that signed in stays signed in for 30 days, across restarts, and the sign-in cannot be revoked.
 - **Your logs.** A secret in a form Delorun does not recognise can reach an operational log ([Where Delo keeps its logs](logs.md)).
