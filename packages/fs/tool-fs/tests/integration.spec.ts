@@ -10,6 +10,7 @@ import * as PtcToolExecutor from '@deepseek-ai/dsh-tool-executor-ptc'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { mountAgentLoopTestDependencies, provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { rmSync, symlinkSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -56,6 +57,7 @@ function notObservedDiagnostic(path: string): string {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await fiber.dispose()
   await rm(dir, { recursive: true, force: true })
 })
@@ -694,6 +696,32 @@ describe('the sandbox provider\'s protected home', () => {
       expect(text(result)).not.toContain('secret-key')
     }
     expect(text(await call('read', { file_path: '.delo/runtimes/tool.txt' }))).toContain('runtime')
+  })
+
+  it.skipIf(process.platform === 'win32')('refuses a read whose directory is replaced by a link to the home after the check', async () => {
+    await mkdir(join(dir, 'flip', 'secrets'), { recursive: true })
+    await writeFile(join(dir, 'flip', 'secrets', 'key'), 'decoy\n')
+    // The tool checks the resolved path and then stats it; the directory becomes a link to the home in between.
+    const stat = ctx.fs.stat.bind(ctx.fs)
+    vi.spyOn(ctx.fs, 'stat').mockImplementation(async (target, signal) => {
+      const info = await stat(target, signal)
+      rmSync(join(dir, 'flip'), { recursive: true })
+      symlinkSync(home, join(dir, 'flip'), 'dir')
+      return info
+    })
+    const result = await call('read', { file_path: 'flip/secrets/key' })
+    expect(result).toMatchObject({ isError: true, error: { info: { code: 'FS_IO_ERROR' } } })
+    expect(text(result)).toContain('the path changed while it was opened')
+    expect(text(result)).not.toContain('secret-key')
+  })
+
+  it('reads a tool-readable entry under the home, such as spilled output, and refuses the rest of the home', async () => {
+    await mkdir(join(home, 'spill', 'session-1'), { recursive: true })
+    await writeFile(join(home, 'spill', 'session-1', 'grep.txt'), 'spilled output\n')
+    const canonical = await realpath(dir)
+    ProtectingProvider.reads = { ...ProtectingProvider.reads!, toolReadable: [join(canonical, '.delo', 'spill')] }
+    expect(text(await call('read', { file_path: '.delo/spill/session-1/grep.txt' }))).toContain('spilled output')
+    expect(await call('read', { file_path: '.delo/secrets/key' })).toMatchObject({ isError: true, error: { info: { code: 'FS_SANDBOX_DENIED' } } })
   })
 
   it('reads under the home in a session under danger-full-access', async () => {

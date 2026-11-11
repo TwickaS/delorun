@@ -6,8 +6,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { createReadStream, realpath as realpathCallback } from 'node:fs'
-import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat } from 'node:fs/promises'
+import { constants as fsConstants, createReadStream, realpath as realpathCallback } from 'node:fs'
+import { chmod, link, lstat, mkdir, open, readFile, readdir, readlink, rename, rm, stat } from 'node:fs/promises'
+import type { FileHandle } from 'node:fs/promises'
 import type { BigIntStats, Dirent, Stats } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { TextDecoder, promisify } from 'node:util'
@@ -307,6 +308,36 @@ async function resolveListedChildTarget(parent: LocalTarget, name: string): Prom
 }
 
 /**
+ * Read a directory's entries from the directory its target key names. On Linux the directory is opened, its descriptor
+ * confirmed ({@link assertOpenedTarget}) and its entries read through `/proc/self/fd`, so a component of the key
+ * replaced by a link after the caller's check cannot redirect the listing. Elsewhere the entries are read by name and
+ * the listing is refused when the key no longer names the directory it named before the read.
+ * @param target - the resolved directory.
+ * @returns its entries.
+ * @throws {FsError} `FS_IO_ERROR` when the directory changed while it was opened.
+ */
+async function readDirectoryEntries(target: LocalTarget): Promise<Dirent[]> {
+  if (process.platform === 'linux') {
+    const handle = await open(target.targetKey, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY)
+    try {
+      await assertOpenedTarget(handle, target, 'list')
+      return await readdir(`/proc/self/fd/${handle.fd}`, { withFileTypes: true, encoding: 'utf8' })
+    } finally {
+      await handle.close()
+    }
+  }
+  /* v8 ignore start -- native macOS and Windows coverage takes the by-name listing. */
+  const before = await stat(target.targetKey, { bigint: true })
+  const entries = await readdir(target.targetKey, { withFileTypes: true, encoding: 'utf8' })
+  const after = await stat(target.targetKey, { bigint: true })
+  if (before.dev !== after.dev || before.ino !== after.ino || await realpath(target.targetKey) !== target.targetKey) {
+    throw changedWhileOpenedError('list', target)
+  }
+  return entries
+  /* v8 ignore stop */
+}
+
+/**
  * List direct children of a directory in stable name order. Each child includes
  * a resolved target plus stat metadata when still available; file contents are
  * never read.
@@ -327,9 +358,8 @@ export async function listDirectory(target: LocalTarget, signal?: AbortSignal): 
 
   let entries: Dirent[]
   try {
-    entries = await readdir(target.targetKey, { withFileTypes: true, encoding: 'utf8' })
+    entries = await readDirectoryEntries(target)
   } catch (error: unknown) {
-    /* v8 ignore next -- requires permission/kernel failure from readdir after a successful directory stat. */
     throw listingIoError(target.displayPath, error)
   }
   throwIfAborted(signal, 'list')
@@ -400,6 +430,80 @@ async function statRegularFile(target: LocalTarget, verb: 'read', signal?: Abort
   return info
 }
 
+/** The failure of a read whose opened file is not the one its target key names. */
+function changedWhileOpenedError(verb: 'read' | 'list', target: LocalTarget): FsError {
+  return new FsError(`cannot ${verb} "${target.displayPath}": the path changed while it was opened; retry`, 'FS_IO_ERROR')
+}
+
+/**
+ * Confirm that an open descriptor is the file or directory its target key names, so a check made on the key covers
+ * what is read through the descriptor even when a component of the key is replaced by a link between the check and
+ * the open. On Linux the descriptor's own path, read from `/proc/self/fd`, must equal the key. Elsewhere, and on a
+ * Linux host without `/proc`, the descriptor's device and inode must equal those the key names after the open and the
+ * key must still be its own canonical path; a component replaced and restored between those two lookups is not
+ * detected there.
+ * @param handle - the descriptor opened from `target.targetKey`.
+ * @param target - the target the caller checked.
+ * @param verb - the operation, for the error.
+ * @throws {FsError} `FS_IO_ERROR` when the descriptor is another file.
+ */
+async function assertOpenedTarget(handle: FileHandle, target: LocalTarget, verb: 'read' | 'list'): Promise<void> {
+  if (process.platform === 'linux') {
+    let opened: string | undefined
+    try {
+      opened = await readlink(`/proc/self/fd/${handle.fd}`)
+    } catch (error: unknown) {
+      // ENOENT: /proc is not mounted in this process's namespace, so the identity comparison below decides.
+      /* v8 ignore next -- a mounted /proc reports every open descriptor; only a non-ENOENT fault reaches this. */
+      if (!isENOENT(error)) throw error
+    }
+    if (opened !== undefined) {
+      if (opened !== target.targetKey) throw changedWhileOpenedError(verb, target)
+      return
+    }
+  }
+  /* v8 ignore start -- the Linux coverage lane decides through /proc; native macOS and Windows coverage take this path. */
+  const held = await handle.stat({ bigint: true })
+  const named = await probeStats(target.targetKey, path => stat(path, { bigint: true }))
+  const canonical = await realpath(target.targetKey).catch(() => undefined)
+  if (named === null || named.dev !== held.dev || named.ino !== held.ino || canonical !== target.targetKey) {
+    throw changedWhileOpenedError(verb, target)
+  }
+  /* v8 ignore stop */
+}
+
+/** Open flags for a read that never blocks on a FIFO swapped in after the regular-file check; Windows has no FIFO open. */
+const READ_FLAGS = process.platform === 'win32' ? fsConstants.O_RDONLY : fsConstants.O_RDONLY | fsConstants.O_NONBLOCK
+
+/**
+ * Open a regular file for reading and confirm the descriptor is the file its target key names
+ * ({@link assertOpenedTarget}) and still a regular file.
+ * @param target - the resolved file.
+ * @param verb - the operation, for errors.
+ * @param signal - aborts before the open (`FS_ABORTED`).
+ * @returns the open descriptor, which the caller closes.
+ */
+async function openRegularFile(target: LocalTarget, verb: 'read', signal?: AbortSignal): Promise<{ handle: FileHandle; info: Stats }> {
+  await statRegularFile(target, verb, signal)
+  let handle: FileHandle
+  try {
+    handle = await open(target.targetKey, READ_FLAGS)
+  } catch (error: unknown) {
+    /* v8 ignore next 2 -- the file must vanish between the regular-file check and the open. */
+    if (isENOENT(error) || isENOTDIR(error)) throw new FsError(`cannot ${verb} "${target.displayPath}": not found`, 'FS_NOT_FOUND', { cause: error })
+    throw error
+  }
+  try {
+    await assertOpenedTarget(handle, target, 'read')
+    const info = await handle.stat()
+    if (!info.isFile()) throw new FsError(`cannot ${verb} "${target.displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE')
+    return { handle, info }
+  } catch (error: unknown) {
+    await handle.close()
+    throw error
+  }
+}
+
 /**
  * Read a whole regular UTF-8 text file into a single decoded string. Rejects
  * non-regular files, invalid UTF-8, and NUL-byte binary samples.
@@ -408,8 +512,17 @@ async function statRegularFile(target: LocalTarget, verb: 'read', signal?: Abort
  * @returns the full decoded text, byte-for-byte (no normalization).
  */
 export async function readWholeText(target: LocalTarget, signal?: AbortSignal): Promise<string> {
-  await statRegularFile(target, 'read', signal)
-  const raw = await readFileAbortable(target.targetKey, 'read', signal)
+  const { handle } = await openRegularFile(target, 'read', signal)
+  let raw: Buffer
+  try {
+    raw = await handle.readFile(signal ? { signal } : {})
+  } catch (error: unknown) {
+    /* v8 ignore next 2 -- a non-abort read rejection needs a permission/IO fault racing an open file. */
+    if (!isAbortError(error)) throw error
+    throw new FsError('read aborted', 'FS_ABORTED')
+  } finally {
+    await handle.close()
+  }
   throwIfAborted(signal, 'read')
   if (raw.subarray(0, BINARY_SAMPLE_BYTES).includes(0)) {
     throw new FsError(`cannot read "${target.displayPath}": binary file`, 'FS_NOT_TEXT')
@@ -434,12 +547,20 @@ export async function readWholeBytes(
   maxBytes: number,
   internals: FsIoInternals = {},
 ): Promise<Uint8Array> {
-  const info = await statRegularFile(target, 'read', signal)
+  const { handle, info } = await openRegularFile(target, 'read', signal)
   if (info.size > maxBytes) {
+    await handle.close()
     throw new FsError(`cannot read "${target.displayPath}": ${info.size} bytes exceeds the ${maxBytes}-byte limit`, 'FS_TOO_LARGE')
   }
-  await internals.inspectReadBytesAfterStat?.(target)
-  const stream = createReadStream(target.targetKey, {
+  try {
+    await internals.inspectReadBytesAfterStat?.(target)
+  } catch (error: unknown) {
+    await handle.close()
+    throw error
+  }
+  // The stream owns the descriptor from here and closes it when it ends, fails or is destroyed.
+  const stream = createReadStream('', {
+    fd: handle,
     end: maxBytes,
     ...signal ? { signal } : {},
   })
@@ -476,9 +597,13 @@ export async function readByteWindow(
   range: { offset: number; length: number },
   signal?: AbortSignal,
 ): Promise<Uint8Array> {
-  await statRegularFile(target, 'read', signal)
-  if (range.length === 0) return new Uint8Array(0)
-  const stream = createReadStream(target.targetKey, {
+  const { handle } = await openRegularFile(target, 'read', signal)
+  if (range.length === 0) {
+    await handle.close()
+    return new Uint8Array(0)
+  }
+  const stream = createReadStream('', {
+    fd: handle,
     start: range.offset,
     end: range.offset + range.length - 1,
     ...signal ? { signal } : {},
@@ -508,8 +633,8 @@ export async function readByteWindow(
  * @returns decoded text chunks in file order; chunk boundaries carry no meaning.
  */
 export async function* streamWholeText(target: LocalTarget, signal?: AbortSignal): AsyncIterable<string> {
-  await statRegularFile(target, 'read', signal)
-  const stream = createReadStream(target.targetKey, signal ? { signal } : {})
+  const { handle } = await openRegularFile(target, 'read', signal)
+  const stream = createReadStream('', { fd: handle, ...signal ? { signal } : {} })
   const decoder = new TextDecoder('utf-8', { fatal: true })
   let sampledBytes = 0
 

@@ -1133,8 +1133,8 @@
     {
       "path": "packages/fs/tool-fs/src/index.ts",
       "class": "security",
-      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream.",
-      "sha256": "22f97345c7c1ee9ace77fb2afa307b60fe1f420410e11ab5b857a3effcc64eff"
+      "reason": "Instruction-layer consent seam (WP2.15, A101): the mode-change hook and the write-commit consent let a plugin refuse a sandbox/mode change or require an approval for a model-authored file write before it commits; with no service the behaviour is byte-identical to upstream. Protected home: exports `refuseProtectedRead` so `dsh-tool-str-replace-editor` applies the same check.",
+      "sha256": "133b0ca44037dc3f7caa4f8d89dd7ce2c753e7c15d2b049ce8604840e7d7f783"
     },
     {
       "path": "packages/fs/tool-fs/src/patch/plan.ts",
@@ -1157,8 +1157,8 @@
     {
       "path": "packages/fs/tool-str-replace-editor/src/index.ts",
       "class": "security",
-      "reason": "Protected home, read fence (review of #66): every command resolves its path through the protected-read refusal, so `view` cannot read or list under the protected home and its aliases outside the readable entries, unless the call runs under `danger-full-access`.",
-      "sha256": "a8a804c49a2d0f14927c2d670e2ef9eadb8dc7ff77b5364ff96b5d4bed0f5aea"
+      "reason": "Protected home, read fence (review of #66): every command resolves its path through `dsh-tool-fs`'s shared `refuseProtectedRead`, so `view` cannot read or list under the protected home and its aliases outside the readable and tool-readable entries, unless the call runs under `danger-full-access`.",
+      "sha256": "648c19c45e0ce139f656062dd7631199e6986e8308aef4ff6e55a75bbf5d2870"
     },
     {
       "path": "packages/host/open-in-app/src/resolver.ts",
@@ -1975,6 +1975,12 @@
       "class": "security",
       "reason": "Exports the `ApprovalGrant` marker type, so Delo plugins can mark prompts that only the home's own computer may grant.",
       "sha256": "6665282b9987bd80b84ecc92e929d32db98394ced3798e29feb764f56c2eb74d"
+    },
+    {
+      "path": "packages/fs/fs-local/src/fsio.ts",
+      "class": "security",
+      "reason": "Protected home, read fence: a read or listing opens the target key and confirms the descriptor is the file or directory the key names before reading through it, so a read tool's protected-read check on the key covers the content when a component of the key is swapped for a link between the check and the open. On Linux the descriptor's `/proc/self/fd` path must equal the key and a listing reads its entries through that descriptor; elsewhere the descriptor's device and inode must equal the key's after the open and the key must still be its own realpath. A mismatch fails with `FS_IO_ERROR`. Reads open with `O_NONBLOCK` outside Windows so a FIFO swapped in after the regular-file check cannot block the open. Content, errors and limits are otherwise upstream's.",
+      "sha256": "c9ecfb2f19a574d05d80a0917300c6a72ecbb3d9a7ab9290113dc87c09131d42"
     }
   ],
   "retired": []

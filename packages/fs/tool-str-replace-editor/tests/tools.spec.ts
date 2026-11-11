@@ -1,9 +1,10 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { FsVersion } from '@deepseek-ai/dsh-fs'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -28,6 +29,7 @@ const roots: string[] = []
 let callNumber = 0
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true })
 })
@@ -726,6 +728,30 @@ describe('the sandbox provider\'s protected home', () => {
     expect(edit.isError).toBe(true)
     expect(await readFile(join(home, 'secrets', 'key'), 'utf8')).toBe('secret-key\n')
     expect(text(await call(ctx, owner, { command: 'view', path: join(home, 'runtimes', 'tool.txt') }))).toContain('runtime')
+  })
+
+  it.skipIf(process.platform === 'win32')('refuses viewing a file or directory replaced by a link to the home after the check', async () => {
+    const { ctx, root, owner } = await setup({}, { sandboxMode: 'workspace-write' })
+    const { home } = await protectedHomeFixture(root)
+    await ctx.plugin(ProtectingProvider)
+    const flip = join(root, 'flip')
+    // The tool checks the resolved path and then stats it; the directory becomes a link to the home in between.
+    const stat = ctx.fs.stat.bind(ctx.fs)
+    vi.spyOn(ctx.fs, 'stat').mockImplementation(async (target, signal) => {
+      const info = await stat(target, signal)
+      rmSync(flip, { recursive: true })
+      symlinkSync(home, flip, 'dir')
+      return info
+    })
+    for (const path of [join(flip, 'secrets', 'key'), join(flip, 'secrets')]) {
+      rmSync(flip, { recursive: true, force: true })
+      mkdirSync(join(flip, 'secrets'), { recursive: true })
+      writeFileSync(join(flip, 'secrets', 'key'), 'decoy\n')
+      const result = await call(ctx, owner, { command: 'view', path })
+      expect(result).toMatchObject({ isError: true, error: { info: { code: 'FS_IO_ERROR' } } })
+      expect(text(result)).toContain('the path changed while it was opened')
+      expect(text(result)).not.toContain('secret-key')
+    }
   })
 
   it('reads under the home under danger-full-access, and without a provider that protects it', async () => {

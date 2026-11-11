@@ -73,6 +73,7 @@ This section explains the design decisions behind the local backend and points a
 The backend builds on three ideas:
 
 - **Realpath identity.** The `targetKey` is the file's `realpath`, so two input paths reaching the same file through symlinks share one identity, and writes land on the link target while preserving the link.
+- **Reads read the checked file.** A read or listing opens the target key and confirms the descriptor is the file or directory the key names, so a check a caller made on the key covers the content even when a component of the key is replaced by a link between the check and the open: on Linux the descriptor's path from `/proc/self/fd` must equal the key, and a listing reads its entries through that descriptor; elsewhere the descriptor's device and inode must equal the key's after the open. A mismatch fails with `FS_IO_ERROR`. Outside Linux a component replaced and restored between those lookups is not detected.
 - **Atomic publication.** Writes stage into an exclusive temp file inside a private staging directory next to the target, fsync, then publish; an existing file's mode is preserved and Windows DACLs survive replacement.
 - **One mutation critical section.** A per-target FIFO lock serializes read→guard→write windows, so concurrent writes and edits are deterministically ordered — one wins, the rest see the new version and reject as stale.
 

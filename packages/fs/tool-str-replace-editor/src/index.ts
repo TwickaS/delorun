@@ -9,9 +9,10 @@ import z from '@deepseek-ai/schemastery'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import type { FsInfo, FsTarget, FsWriteIntent } from '@deepseek-ai/dsh-fs'
 import { truncateWithoutSplittingSurrogatePair } from '@deepseek-ai/dsh-output-retention'
-import { protectedReadGuard, sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
+import { sandboxDenialMarker } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
+import { refuseProtectedRead } from '@deepseek-ai/dsh-tool-fs'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
 
@@ -106,12 +107,7 @@ async function resolveTarget(
     throw new Error(`The path ${path} is not an absolute path, it should start with \`/\`. Maybe you meant /${path}?`)
   }
   const target = await ctx.fs.resolve(path, { signal: exec.signal })
-  const reads = ctx.get('sandbox')?.protectedReads
-  if (reads === undefined) return target
-  const mode = ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session }).mode ?? 'read-only'
-  if (protectedReadGuard(reads, mode)(target.targetKey)) {
-    throw new FsError(`cannot read "${target.displayPath}": file access denied under the protected home`, 'FS_SANDBOX_DENIED')
-  }
+  refuseProtectedRead(ctx, exec, target)
   return target
 }
 
