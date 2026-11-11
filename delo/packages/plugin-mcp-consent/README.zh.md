@@ -51,6 +51,8 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 审查覆盖的是可执行文件的路径，而不是该文件的内容或符号链接的目标；脚本 `#!` 行所指定的解释器会在 spawn 之后于服务器自己的 `PATH` 中查找。
 
+每个拒绝的原因都以本人在何处接受该服务器结尾：Delo 运行期间在 home 的电脑上使用 `delorun mcp accept <name>`，或在 studio 的设置的“权限”部分（[`acceptHint`](src/review.ts)）。
+
 <a id="recording-an-acceptance"></a>
 
 ## 记录一次接受
@@ -63,10 +65,11 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 每次被拒绝的审查都在本进程中保留，作为该服务器的待处理审查：每个服务器名称一条，即最新的一条，因此审查之后发生变更的启动会替换那条审查。该服务也以 `mcpReviews` 提供（[`src/review.ts`](src/review.ts)）：
 
-- `pending()` 以界面显示的形式列出每条待处理审查：服务器名称、命令、其参数、其工作目录、已配置环境变量的名称（不含其值）、拒绝的原因、审查时间及其审查 id——启动的每个字段的摘要，环境通过其摘要计入（[`mcpReviewId`](src/review.ts)）。
+- `pending()` 以界面显示的形式列出每条待处理审查：服务器名称、命令、其参数、其工作目录、已配置环境变量的名称（不含其值）、拒绝的原因、该审查所询问的内容（`change`，取自 [`SERVER_CHANGES`](src/wire.ts)：`new` 表示没有接受的命令、不存在的存储或已被取代的存储；`arguments`、`directory` 或 `environment` 表示启动中第一个与该命令的接受不同的部分；`unreadable` 表示被拒绝的存储或无法解析的 home）、审查时间及其审查 id——启动的每个字段的摘要，环境通过其摘要计入（[`mcpReviewId`](src/review.ts)）。
 - `acceptReview(serverName, reviewId, confirmed)` 通过 `accept` 原样记录该审查所显示的启动，移除该审查，并以各自的配置再次启动本同意为该服务器拒绝过的每个 Loader 配置项，因此服务器无需重启 studio 即可运行；没有 Loader 时，下一次启动会运行它。`declineReview(serverName, reviewId)` 移除该审查且不记录任何内容；服务器保持停止，直到它的配置项再次启动并再次被审查。
-- 遇到 `UNCONFIRMED`（没有 `confirmed: true` 的接受）、`STALE_REVIEW`（该服务器没有带此 id 的待处理审查：它在显示之后被再次审查、接受或拒绝）以及（对接受而言）`STORE_REFUSED` 时，两者都以 `McpReviewError` 拒绝且不记录任何内容。每次答复记录一行写明该服务器的日志。
-- 在 Connection 为 studio 提供服务的地方，`/api` 下的三条精确路由承载它们（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/deloMcpConsent.pending`、`POST /api/deloMcpConsent.accept` 与 `POST /api/deloMcpConsent.decline`。每条路由只回答经回环监听器到达且 `Host` 为回环地址的请求；远程访问设备在请求体被读取之前就以 `403 LOOPBACK_REQUIRED` 被拒绝。studio 的“MCP 服务器”部分位于 [`@delo/bundle-local`](../bundle-local/README.zh.md)；`delorun mcp` 通过 home 进程的 `mcp.list`、`mcp.accept` 与 `mcp.decline`（[C19](../../docs/contracts/c19-home-process.zh.md)）到达同样的调用，只有本人自己的命令可以得到它们的答复。
+- `accepted()` 按存储所持有的形式列出每次已接受的启动：命令、其参数、其工作目录、其环境变量的名称、接受时间，以及启动该命令的 Loader 已配置服务器；存储不存在或无法读取时，它不列出任何内容。`revokeAcceptance(command, acceptedAt, confirmed)` 从存储中移除该命令的接受，随后以各自的配置再次应用启动该命令的每个 Loader 配置项，于是其审查拒绝该启动，服务器停止，直到本人再次接受它；它答复停止了多少个配置项。
+- 遇到 `UNCONFIRMED`（没有 `confirmed: true` 的答复）、`STALE_REVIEW`（该服务器没有带此 id 的待处理审查，因为它在显示之后被再次审查、接受或拒绝；或存储不持有该命令在所显示时间的接受）以及（对接受或撤销而言）`STORE_REFUSED` 时，这些答复都以 `McpReviewError` 拒绝且不记录任何内容。每次答复记录一行日志。
+- 在 Connection 为 studio 提供服务的地方，`/api` 下的五条精确路由承载它们（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/deloMcpConsent.pending`（待处理的审查与已接受的启动）、`GET /api/deloMcpConsent.waiting`、`POST /api/deloMcpConsent.accept`、`POST /api/deloMcpConsent.decline` 与 `POST /api/deloMcpConsent.revoke`。除 `waiting` 外，每条路由只回答经回环监听器到达且 `Host` 为回环地址的请求；远程访问设备在请求体被读取之前就以 `403 LOOPBACK_REQUIRED` 被拒绝，因此服务器只能在 home 的电脑上被接受或撤销。`waiting` 还接纳远程访问已准入设备的 Peer（`admitPeer`），只答复每个等待中服务器的名称与 `change`，从不答复其命令、参数、目录或环境，因此手机可以说明有服务器在等待、需在电脑上批准。studio 的“权限”部分、MCP 服务器审查与等待中服务器的提示位于 [`@delo/bundle-local`](../bundle-local/README.zh.md#the-consent-surfaces)；`delorun mcp` 通过 home 进程的 `mcp.list`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke`（[C19](../../docs/contracts/c19-home-process.zh.md)）到达同样的调用，只有本人自己的命令可以得到它们的答复。
 
 <a id="the-mcp_add_consent-switch"></a>
 
@@ -78,4 +81,4 @@ description: "@delo/plugin-mcp-consent 插件：Delo 的 MCP 添加时同意（m
 
 ## 开发
 
-`tests/consent.spec.ts` 覆盖存储与审查；`tests/reviews.spec.ts` 覆盖待处理的审查、再次启动的配置项与路由，以及拒绝情形：远程访问设备、未确认的答复与过期的审查都不记录任何内容。规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent` 运行，包的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json` 运行。
+`tests/consent.spec.ts` 覆盖存储与审查；`tests/reviews.spec.ts` 覆盖带有变化的待处理审查与拒绝结尾的提示、再次启动的配置项、已接受的启动及其撤销，以及路由，并包括拒绝情形：远程访问设备只能读取等待中服务器的名称与变化，其他每条路由都拒绝它；未确认或过期的答复与撤销都不记录任何内容。规格测试用 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/plugin-mcp-consent` 运行，包的类型检查用 `node_modules/.bin/tsc --noEmit -p delo/packages/plugin-mcp-consent/tsconfig.json` 运行。

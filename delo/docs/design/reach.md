@@ -33,7 +33,7 @@ Reach lets a person open their studio from their own phone or laptop over their 
 
 ## Exact Fetch routes a device meets
 
-Under `/api`, an exact Fetch route answers a device only when it admits that Peer. Every route of the CLI composition has a decision here, and `delo/apps/cli/tests/denial/reach/reach-paths.integration.spec.ts` fails on a route without one. A new route is refused unless a device needs it to use a chat it can already read.
+Under `/api`, an exact Fetch route answers a device only when it admits that Peer. Every route of the CLI composition has a decision here, and `delo/apps/cli/tests/denial/reach/reach-paths.integration.spec.ts` fails on a route without one. A new route is refused unless a device needs it to use a chat it can already read or to send the person to the computer.
 
 | Route | A device | Why |
 | --- | --- | --- |
@@ -45,7 +45,8 @@ Under `/api`, an exact Fetch route answers a device only when it admits that Pee
 | `/api/deloUpdateCheck.notice` | Refused | The notice names the running release and how many plugins an update would turn off, and an update runs only at the computer. |
 | `/api/deloTrash.*` | Refused | Moving to, restoring from or deleting from the trash is not in the device rule. |
 | `/api/deloPermission.workspaces`, `/api/deloPermission.review`, `/api/deloPermission.setFullAccess` | Refused, `LOOPBACK_REQUIRED` | A workspace's full access is a full-access grant, which only the home's computer gives; `@delo/plugin-permission-defaults` refuses a device before upstream's gate, and the studio there says to turn it on at the computer. |
-| `/api/deloMcpConsent.pending`, `/api/deloMcpConsent.accept`, `/api/deloMcpConsent.decline` | Refused, `LOOPBACK_REQUIRED` | Accepting a stdio MCP server lets its command run outside the sandbox, which only the home's computer allows; `@delo/plugin-mcp-consent` refuses a device before upstream's gate. |
+| `/api/deloMcpConsent.pending`, `/api/deloMcpConsent.accept`, `/api/deloMcpConsent.decline`, `/api/deloMcpConsent.revoke` | Refused, `LOOPBACK_REQUIRED` | Accepting or revoking a stdio MCP server decides whether its command runs outside the sandbox, which only the home's computer decides; `@delo/plugin-mcp-consent` refuses a device before upstream's gate. |
+| `/api/deloMcpConsent.waiting` | Admitted, through the route's `admitPeer` | It answers only the names of the servers waiting for the person's OK and what changed, without their commands, arguments, folders or environment, so a phone says to approve them at the computer. |
 | `/api/session.export`, `/api/session.markdown`, `/api/plugin-manager/detail-file`, `/api/file`, `/api/present.host`, `/api/present.open`, `/api/changes.summary`, `/api/changes.open`, `/api/changes.diff` | Refused | Upstream declares no device admission, so only the owner reaches them. |
 
 ## The rules

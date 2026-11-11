@@ -53,7 +53,7 @@ Stop DeepSeek Harness and Delorun before you import. If a file in `~/.dsh` chang
 - **Instructions and skills, when you say so.** Your `AGENTS.md` and your skills. Every chat reads the instructions, and a skill can tell the agent what to do, so read them before you say yes.
 - **Your DeepSeek key, when you say so.** The import lists your stored keys by name, never showing a value, and offers only the DeepSeek key, which it copies into Delorun's credentials file, which only you can read. Add other keys again in Delorun.
 
-A chat that ran with full access in DeepSeek Harness opens in Delorun on Workspace Write, the safer preset, until you turn on full access for its workspace in Delorun: pick Full access in the chat, or use Settings, Workspace access, or `delorun workspace full-access <folder> on`.
+A chat that ran with full access in DeepSeek Harness opens in Delorun on Workspace Write, the safer preset, until you turn on full access for its workspace in Delorun: pick Full access in the chat, choose "Allow full access for this workspace" on an approval card that asks for it, or use Settings, Permissions, or `delorun workspace full-access <folder> on`.
 
 The import never runs anything from `~/.dsh`.
 

@@ -406,7 +406,7 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
  * With the `mcp_add_consent` switch on: mount the consent service, whose
  * review the mcp-client plugin consults before it starts a stdio server, its
  * pending reviews as the `mcpReviews` service, and, where a Connection serves
- * the studio, the routes of the studio's MCP servers section
+ * the studio, the routes of the studio's Permissions section
  * ([`./routes.ts`](./routes.ts)). The
  * mount is the service's own plugin fiber, and the returned promise is this
  * plugin's startup work, so the service is registered before this row is

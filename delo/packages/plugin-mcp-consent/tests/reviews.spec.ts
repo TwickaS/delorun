@@ -1,6 +1,6 @@
 /**
  * Specs of the pending reviews of `@delo/plugin-mcp-consent`: each refused stdio server start is kept for the studio's
- * MCP servers section and `delorun mcp`, without an environment value; an acceptance records exactly the start shown
+ * Permissions section and `delorun mcp`, without an environment value; an acceptance records exactly the start shown
  * and starts the refused row again; a decline records nothing. The denial cases prove that an unconfirmed answer, a
  * stale review and a request from a reach device record nothing. A review names what changed since the acceptance, the
  * accepted starts are listed, and a revoke withdraws one and stops the rows that start it; a stale or unconfirmed

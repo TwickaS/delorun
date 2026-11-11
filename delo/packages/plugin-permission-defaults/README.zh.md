@@ -8,9 +8,9 @@ description: "Delo 的按工作区权限默认值，供维护者修改新工作�
 
 ## 概述
 
-上游为整个部署组合一套权限：每个新对话都从同一个预设开始，选择 `danger-full-access` 立即生效。本插件改为让预设成为工作区的属性。新对话从个人为其文件夹选择的预设开始——无人选择过的工作区从 `workspace-write` 开始——与部署默认值无关，完全访问只在该工作区获得一次同意之后生效。个人在 home 自己的电脑上给出同意：在 studio 中选择完全访问时或在设置的“工作区访问”部分，或使用 `delorun workspace full-access`。同意写入 home 的受保护状态，因此它覆盖该文件夹，直到个人在那里选择另一个预设；显式选择更安全的预设会撤回该同意，因此再次回到完全访问会重新询问。
+上游为整个部署组合一套权限：每个新对话都从同一个预设开始，选择 `danger-full-access` 立即生效。本插件改为让预设成为工作区的属性。新对话从个人为其文件夹选择的预设开始——无人选择过的工作区从 `workspace-write` 开始——与部署默认值无关，完全访问只在该工作区获得一次同意之后生效。个人在 home 自己的电脑上给出同意：在 studio 中选择完全访问时、在请求完全访问的审批卡片上或在设置的“权限”部分，或使用 `delorun workspace full-access`。同意写入 home 的受保护状态，因此它覆盖该文件夹，直到个人在那里选择另一个预设；显式选择更安全的预设会撤回该同意，因此再次回到完全访问会重新询问。
 
-拒绝未经同意的完全访问切换的防护，会在会话记录任何内容之前运行。因此被拒绝的切换不会追加 `sandbox/mode` 事件，也不会追加预设标识，会话继续解析它原本的模式，在同一步中启动的命令仍在沙箱内运行。防护覆盖整个选择，而不只是模式变更：保持模式但放弃审批策略的预设同样会被拒绝，因此审批提示不是绕过同意的办法。按调用的 `sandbox_permissions` 升级不是模式切换：它走上游的按调用审批，本防护看不到它。拒绝的措辞指明工作区并说明该怎么做，所以模型读到的是它，而不是堆栈信息。
+拒绝未经同意的完全访问切换的防护，会在会话记录任何内容之前运行。因此被拒绝的切换不会追加 `sandbox/mode` 事件，也不会追加预设标识，会话继续解析它原本的模式，在同一步中启动的命令仍在沙箱内运行。防护覆盖整个选择，而不只是模式变更：保持模式但放弃审批策略的预设同样会被拒绝，因此审批提示不是绕过同意的办法。按调用的 `sandbox_permissions` 升级不是模式切换：它走上游的按调用审批，本防护看不到它。拒绝的措辞指明工作区以及个人在何处允许完全访问——审批卡片上的“允许此工作区使用完全权限”、studio 的设置的“权限”部分，或带有该工作区文件夹的 `delorun workspace full-access "<folder>" on`（[`fullAccessRefusal`](src/index.ts)）——所以模型读到的是它，而不是堆栈信息。
 
 一切（包括路由）都位于开关 `permission_defaults` 之后，默认关闭；`@delo/bundle-local` 在 `delorun` 启动的 CLI 配置中开启它，而 `delorun headless` 与桌面应用运行不含它的上游配置。关闭时插件不挂载任何内容：部署默认值按上游的方式抵达每个新对话，每次模式切换都被记录，这正是 parity 组成所断言的。
 
@@ -33,9 +33,9 @@ description: "Delo 的按工作区权限默认值，供维护者修改新工作�
 
 studio 与 CLI 自行询问同意，并通过该服务记录答复，且只在 home 自己的电脑上进行。同意的措辞来自 [`fullAccessNote`](src/review.ts)：此后该工作区中的命令可以在沙箱外运行并写入任何位置，读取个人的用户能读取的一切（包括 Delo 的 home 及其密钥与令牌），并连接 Docker 监管器与 Delo 的更新通道；答复只覆盖该工作区。
 
-- **服务调用。** `workspaces()` 列出界面显示的每个工作区——已注册的工作区、存储中持有的工作区以及打开的对话所在的文件夹——每个都带有其完全访问状态与一个审查 id（[`src/review.ts`](src/review.ts)）；`reviewChat(sessionId)` 是一个打开的对话的工作区。`setFullAccess({ workspace, reviewId, on, confirmed })` 记录个人的答复：开启时记录授权与完全访问预设，关闭时撤回授权，并把该工作区中以完全访问运行的每个打开的对话设回更安全的预设，这会追加该对话的 `sandbox/mode` 与 `permission/preset` 事件。遇到 `UNCONFIRMED`（没有 `confirmed: true`）、`UNKNOWN_WORKSPACE`、`STALE_REVIEW`（显示同意之后该工作区的完全访问已改变）和 `STORE_REFUSED` 时，它以 `FullAccessChangeError` 拒绝且不记录任何内容。每次变更都先从磁盘读取存储，因此 CLI 写入的变更绝不会被撤销，并记录一行不含文件夹路径的日志。
+- **服务调用。** `workspaces()` 列出界面显示的每个工作区——已注册的工作区、存储中持有的工作区以及打开的对话所在的文件夹——每个都带有其完全访问状态与一个审查 id（[`src/review.ts`](src/review.ts)）；`reviewChat(sessionId)` 是一个打开的对话的工作区。`setFullAccess({ workspace, reviewId, on, confirmed, chat })` 记录个人的答复：开启时记录授权与完全访问预设，并在带有 `chat`（询问同意时所在的打开对话）时把该对话切换为完全访问，使其不再询问；关闭时撤回授权，并把该工作区中以完全访问运行的每个打开的对话设回更安全的预设，这会追加该对话的 `sandbox/mode` 与 `permission/preset` 事件。遇到 `UNCONFIRMED`（没有 `confirmed: true`）、`UNKNOWN_WORKSPACE`、`UNKNOWN_CHAT`（`chat` 不是该工作区中打开的对话）、`STALE_REVIEW`（显示同意之后该工作区的完全访问已改变）和 `STORE_REFUSED` 时，它以 `FullAccessChangeError` 拒绝且不记录任何内容。每次变更都先从磁盘读取存储，因此 CLI 写入的变更绝不会被撤销，并记录一行不含文件夹路径的日志。
 - **重新读取存储。** `reload()` 在 `delorun workspace full-access` 写入存储后读取它，把失去授权的工作区中打开的对话设回更安全的预设，并返回条目的摘要，让 CLI 可以核对 Host 持有的正是它写入的内容；home 进程为更新通道的 `permission.reload` 调用它（[C19](../../docs/contracts/c19-home-process.zh.md)）。
-- **路由。** 在 Connection 为 studio 提供服务的地方，`/api` 下有三条精确路由（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/deloPermission.workspaces`、`POST /api/deloPermission.review` 与 `POST /api/deloPermission.setFullAccess`。每条路由只回答经回环监听器到达且 `Host` 为回环地址的请求；远程访问设备在请求体被读取之前就以 `403 LOOPBACK_REQUIRED` 被拒绝（[C14](../../docs/contracts/c14-oidc-passkeys.zh.md#tailnet-membership)）。studio 的同意、其工作区访问部分，以及上游权限控件询问的 `permissionSwitchConsent` 问题位于 [`@delo/bundle-local`](../bundle-local/README.zh.md)。
+- **路由。** 在 Connection 为 studio 提供服务的地方，`/api` 下有三条精确路由（[`src/wire.ts`](src/wire.ts)、[`src/routes.ts`](src/routes.ts)）：`GET /api/deloPermission.workspaces`、`POST /api/deloPermission.review` 与 `POST /api/deloPermission.setFullAccess`。每条路由只回答经回环监听器到达且 `Host` 为回环地址的请求；远程访问设备在请求体被读取之前就以 `403 LOOPBACK_REQUIRED` 被拒绝（[C14](../../docs/contracts/c14-oidc-passkeys.zh.md#tailnet-membership)）。studio 的同意、审批卡片的完全访问操作、其“权限”部分，以及上游权限控件询问的 `permissionSwitchConsent` 问题位于 [`@delo/bundle-local`](../bundle-local/README.zh.md#the-consent-surfaces)。
 
 ## 配置
 
@@ -45,4 +45,4 @@ studio 与 CLI 自行询问同意，并通过该服务记录答复，且只在 h
 
 ## 测试
 
-`tests/store.spec.ts` 覆盖存储的路径、格式的往返、使存储不作数的各种拒绝（更宽松的模式、符号链接、其他格式）、条目查询，以及让一个目录成为一个工作区的工作区键。`tests/permission-defaults.spec.ts` 覆盖关闭状态的开关、新工作区获得的播种、每个文件夹询问一次的同意、不记录任何内容的拒绝、防护拒绝的模式切换，以及已持有授权的工作区。`tests/surfaces.spec.ts` 覆盖这些界面的调用与路由：列出的工作区、让切换通过的授权、把打开的对话设回的撤回、CLI 写入后被保留并重新读取的存储，以及拒绝情形——远程访问设备、未确认的答复与过期的审查都不记录任何内容。
+`tests/store.spec.ts` 覆盖存储的路径、格式的往返、使存储不作数的各种拒绝（更宽松的模式、符号链接、其他格式）、条目查询，以及让一个目录成为一个工作区的工作区键。`tests/permission-defaults.spec.ts` 覆盖关闭状态的开关、新工作区获得的播种、每个文件夹询问一次的同意、不记录任何内容的拒绝、防护拒绝的模式切换，以及已持有授权的工作区。`tests/surfaces.spec.ts` 覆盖这些界面的调用与路由：列出的工作区、让切换通过、并只把询问同意时所在的对话切换为完全访问的授权、把打开的对话设回的撤回、CLI 写入后被保留并重新读取的存储，以及拒绝情形——远程访问设备、未确认的答复、过期的审查与不在该工作区中打开的对话都不记录任何内容。

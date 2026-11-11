@@ -124,7 +124,7 @@ setup 按以下顺序提出这些问题。本人接受默认值时即采用该�
 | 回答 | 写入 | 目标 |
 | --- | --- | --- |
 | `modelProvider` | 输入的密钥进入上游的凭据存储，即 home 下的 `.credentials.yaml`，模式 0600。从环境读取的密钥不保存在任何地方。 | home。 |
-| `prompts` | `delo-permission-defaults`、`delo-instruction-consent`、`delo-mcp-consent` 与 `delo-schedule-consent` 各行的 `config.enabled`，按约定 C16 的注册表设为每个开关的 Delo 默认值（`safer`）或对等取值（`stock`）。选择 `safer` 时，本人在 home 的电脑上开启工作区的完全访问、接受新的 stdio MCP 服务器：在 studio 的设置的“工作区访问”与“MCP 服务器”部分，或使用 `delorun workspace full-access` 与 `delorun mcp`；选择 `stock` 时两项同意都不挂载，这些界面说明该 profile 不询问。抓取防护是拒绝而非提示，任何回答都不改变它。 | profile 的 `cordis.patch.yml`。 |
+| `prompts` | `delo-permission-defaults`、`delo-instruction-consent`、`delo-mcp-consent` 与 `delo-schedule-consent` 各行的 `config.enabled`，按约定 C16 的注册表设为每个开关的 Delo 默认值（`safer`）或对等取值（`stock`）。选择 `safer` 时，本人在 home 的电脑上允许工作区的完全访问与新的 stdio MCP 服务器：在 studio 的设置的“权限”部分，或使用 `delorun workspace full-access` 与 `delorun mcp`；选择 `stock` 时两项同意都不挂载，这些界面说明该 profile 不询问。抓取防护是拒绝而非提示，任何回答都不改变它。 | profile 的 `cordis.patch.yml`。 |
 | `background` | 记录在回答记录 `setup-answers.json` 中；启动命令读取它。 | profile 目录。 |
 | `profile.name` | CLI profile 以此名称创建。 | home。 |
 | `profile.port` | 带有该端口的 `webserver` 行，重述 Web bundle 的其他键。默认端口时不写入。 | profile 的 `cordis.patch.yml`。 |
