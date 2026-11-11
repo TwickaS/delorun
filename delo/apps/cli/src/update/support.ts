@@ -48,12 +48,14 @@ export interface UpdateSupportOptions {
 
 /**
  * The profile history an update saves and a rollback restores: C3's snapshot named for the update, with the report,
- * and Delo's record of the update in `delo-safety.json`. `save` holds upstream's profile writer lock while it writes;
- * `restore` runs inside {@link rollbackRecordedUpdate}, which holds that lock across the whole rollback.
+ * and Delo's record of the update in `delo-safety.json`, which `save` writes as `applying`, `committed` rewrites as
+ * `committed` once the update committed, and `restore` as `rolled-back`. `save` and `committed` hold upstream's
+ * profile writer lock while they write; `restore` runs inside {@link rollbackRecordedUpdate}, which holds that lock
+ * across the whole rollback.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile.
  * @param now - the clock.
- * @param lockWaitMs - how long `save` waits for the profile's writer lock; `PROFILE_LOCK_WAIT_MS` by default.
+ * @param lockWaitMs - how long `save` and `committed` wait for the profile's writer lock; `PROFILE_LOCK_WAIT_MS` by default.
  * @returns the snapshots, whose `restore` brings back the version the update record names; the caller holds the lock.
  */
 export function profileSnapshots(home: string, profile: string, now: () => Date, lockWaitMs?: number): ProfileSnapshots & { restore(record: Pick<UpdateJournal, 'from' | 'to' | 'snapshot'>): Promise<void> } {
@@ -63,6 +65,11 @@ export function profileSnapshots(home: string, profile: string, now: () => Date,
       const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: `Before update to Delo ${to}`, changedBy: { kind: 'person' }, report })
       await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from, to, at: now().toISOString(), state: 'applying', snapshot }))
       return snapshot
+    }, lockWaitMs),
+    committed: (from, to) => withProfileLock(profileDir, 'SNAPSHOT_FAILED', async () => {
+      const update = readSafetyRecord(profileDir).update
+      const snapshot = update?.from === from && update.to === to ? update.snapshot : undefined
+      await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from, to, at: now().toISOString(), state: 'committed', ...snapshot === undefined ? {} : { snapshot } }))
     }, lockWaitMs),
     restore: async (record) => {
       const update = readSafetyRecord(profileDir).update

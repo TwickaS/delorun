@@ -167,7 +167,7 @@ function statusLines(
   return [
     lastUpdate === undefined
       ? 'This profile has not been through a Delo update yet.'
-      : `The last update, from Delo ${lastUpdate.from} to Delo ${lastUpdate.to}, ended ${lastUpdate.state}${lastUpdate.failure === undefined ? '' : `: ${lastUpdate.failure}`}.`,
+      : `The last update, from Delo ${lastUpdate.from} to Delo ${lastUpdate.to}, ${updateOutcome(lastUpdate)}.`,
     ...lastUpdate?.snapshot === undefined ? [] : [`Its snapshot is profile version ${lastUpdate.snapshot}.`],
     safeMode === undefined ? 'Safe mode is off.' : `Safe mode is on since ${safeMode.since}: ${safeMode.reason}.`,
     versionLine(versions),
@@ -175,6 +175,21 @@ function statusLines(
     ...disabled.length === 0 ? [] : [`Kept disabled by a restore: ${disabled.map(entry => `${entry.name} (${entry.message})`).join(', ')}.`],
     'Run `delorun recover rollback` to go back, `delorun recover restore <version>` for another version, or `delorun recover safe-mode` to start without third-party plugins.',
   ]
+}
+
+/**
+ * How the last update stands, in the person's words: committed, rolled back, still applying (an update that has not
+ * committed, or one stopped before it did), or the state it ended in with its reason.
+ * @param update - the profile's record of the update.
+ * @returns the clause after the update's versions.
+ */
+function updateOutcome(update: LastUpdate): string {
+  switch (update.state) {
+    case 'committed': return 'committed'
+    case 'rolled-back': return 'was rolled back'
+    case 'applying': return 'has not committed: it is applying, or it stopped before it committed'
+    default: return `ended ${update.state}${update.failure === undefined ? '' : `: ${update.failure}`}`
+  }
 }
 
 /**

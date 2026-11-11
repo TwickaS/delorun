@@ -252,12 +252,20 @@ function preparedFor(home: string, target: RuntimeVersion): PreparedRuntime {
 
 /** A profile history that records its calls. */
 export class FixtureSnapshots implements ProfileSnapshots {
-  /** Every call, as `save:<from>>to` or `restore:<from>>to`. */
+  /** Every call, as `save:<from>>to`, `committed:<from>>to` or `restore:<from>>to`. */
   readonly calls: string[] = []
+  /** Whether {@link FixtureSnapshots.committed} fails. */
+  committedFails = false
 
   async save(from: RuntimeVersion, to: RuntimeVersion): Promise<string> {
     this.calls.push(`save:${from}>${to}`)
     return Promise.resolve(`snapshot-${from}-${to}`)
+  }
+
+  async committed(from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
+    this.calls.push(`committed:${from}>${to}`)
+    if (this.committedFails) throw new Error('the profile record could not be written')
+    return Promise.resolve()
   }
 }
 
@@ -538,6 +546,7 @@ export interface StartHomeOptions {
 /** The fixture parts of a start, which {@link StartHomeOptions.configure} receives before the start runs. */
 export interface StartParts {
   readonly copies: FixtureCopies
+  readonly snapshots: FixtureSnapshots
   readonly hosts: FixtureHostRunner
   readonly store: FixtureStore | undefined
   readonly startId: StartId
@@ -566,7 +575,7 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const listeners: (() => void)[] = []
   const startId = options.log?.startId ?? newStartId()
   const signals = new FixtureSignals()
-  options.configure?.({ copies, hosts, store, startId, signals, exits })
+  options.configure?.({ copies, snapshots, hosts, store, startId, signals, exits })
   const homeOptions: HomeProcessOptions = {
     home, profile: PROFILE, running, startId, host: hosts, preStart: () => copies.recover(), probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
     updates: store === undefined ? undefined : { store, snapshots, copies }, supervisor: options.supervisor,

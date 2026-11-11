@@ -184,6 +184,14 @@ export interface ProfileSnapshots {
    * @returns the id of the profile history version, which the update record keeps as `snapshot`.
    */
   save(from: RuntimeVersion, to: RuntimeVersion, report: unknown): Promise<string>
+  /**
+   * The update committed: record in the profile that the update from `from` to `to` committed, so `delorun recover`
+   * reports it as committed rather than applying. Running it again does nothing more.
+   * @param from - the version the update left.
+   * @param to - the version it committed to.
+   * @returns when the profile's record says so.
+   */
+  committed(from: RuntimeVersion, to: RuntimeVersion): Promise<void>
 }
 
 /** The steps of a rollback its caller owns. */

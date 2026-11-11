@@ -676,6 +676,7 @@ export class HomeProcess implements HandshakeSubject {
       if (current === record.to) {
         if (await hasStash(journal)) {
           this.logger.info('an update committed before its stashed record went; it goes now', { data })
+          await this.recordCommitted(record.from, record.to)
           await updates.copies.commit(record.to)
           await removeStash(journal)
         }
@@ -801,6 +802,7 @@ export class HomeProcess implements HandshakeSubject {
       return
     }
     await markCommitted(this.journal)
+    await this.recordCommitted(record.from, record.to)
     await this.options.updates?.copies.commit(to)
     await removeStash(this.journal)
     // The committed update leaves `current` and `previous`, which the record names; every other runtime goes.
@@ -808,6 +810,20 @@ export class HomeProcess implements HandshakeSubject {
       this.logger.warn('the runtime store could not remove the runtimes the update left; the next update retries it', { err: error })
     })
     if (retained !== undefined) this.logger.info('retained the runtimes the pointers name', { data: { retention: retained } })
+  }
+
+  /**
+   * Record in the profile that an update committed. The update has committed whatever this write does, so a failure
+   * is logged as a warning and the start goes on; `delorun recover status` then names the update as applying.
+   * @param from - the version the update left.
+   * @param to - the version it committed to.
+   */
+  private async recordCommitted(from: RuntimeVersion, to: RuntimeVersion): Promise<void> {
+    try {
+      await this.options.updates?.snapshots.committed(from, to)
+    } catch (error) {
+      this.logger.warn('the profile\'s record of the update could not be marked committed; delorun recover status names it as applying', { err: error, data: { from, to } })
+    }
   }
 
   private startSupervisor(): void {
@@ -840,6 +856,7 @@ export class HomeProcess implements HandshakeSubject {
       await markCommitted(this.journal)
       // Committed: a failure from here on is no reason to roll the update back.
       this.recovering = undefined
+      await this.recordCommitted(recovering.from, recovering.to)
       await this.options.updates?.copies.commit(recovering.to)
       await removeStash(this.journal)
       this.logger.info('finished an interrupted update', { data: { from: recovering.from, to: recovering.to } })

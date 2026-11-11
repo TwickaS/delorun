@@ -55,6 +55,21 @@ describe.skipIf(!hasGit)('recover', () => {
     }
   })
 
+  it.each([
+    ['committed', 'committed.'],
+    ['rolled-back', 'was rolled back.'],
+    ['applying', 'has not committed: it is applying, or it stopped before it committed.'],
+  ])('reports an update the record holds as %s in the person\'s words', async (state, words) => {
+    const profile = fixture({ record: { ...emptyRecord(), update: { from: '1.0.0', to: '1.0.1', at: '2026-01-04T00:00:00.000Z', state, snapshot: 'abc123' } } })
+    try {
+      const report = await recover({ profileDir: profile.profileDir, homeDir: profile.homeDir, profile: 'default', action: { kind: 'status' } })
+      expect(report.lines[0]).toBe(`The last update, from Delo 1.0.0 to Delo 1.0.1, ${words}`)
+      expect(report.lines[0]).not.toContain('ended')
+    } finally {
+      profile.remove()
+    }
+  })
+
   it('rolls back to the snapshot an update took, and says what it changed', async () => {
     const profile = fixture({
       bundles: ['@deepseek-ai/dsh-base', '@me/own-bundle'],

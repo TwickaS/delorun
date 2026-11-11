@@ -51,7 +51,10 @@ export interface LastUpdate {
   readonly to: string
   /** When the update applied, ISO 8601. */
   readonly at: string
-  /** The state the update ended in, from contract C3's states. */
+  /**
+   * The state the update ended in: one of contract C3's states, `applying` from the snapshot until it commits, or
+   * `committed` once the update committed.
+   */
   readonly state: string
   /** Why the update failed or rolled back, when it did. */
   readonly failure?: string
