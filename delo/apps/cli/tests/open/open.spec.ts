@@ -82,7 +82,7 @@ async function runHome(ctx: Context | undefined): Promise<void> {
   const running = await HomeProcess.start({
     home, profile: PROFILE, running: brandString<RuntimeVersion>('1.0.0'), startId: newStartId(),
     host: { boot: async () => Promise.resolve({
-      chats: new CountingChatGate(), failedRows: () => [], rows: () => [],
+      chats: new CountingChatGate(), failedRows: () => [], rows: () => [], protection: () => undefined,
       studio: () => ctx === undefined ? undefined : `http://127.0.0.1:${String(ctx.webServer.port)}/`,
       studioLink: port => ctx === undefined ? { kind: 'unavailable', reason: 'the Host serves no studio' } : hostStudioLink(ctx, port),
       check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve(),

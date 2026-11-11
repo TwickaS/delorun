@@ -94,7 +94,7 @@ interface Running {
 
 /** A Host that boots at once, counts no chats and passes the health check. */
 function host(): RunningHost {
-  return { chats: new CountingChatGate(), failedRows: () => [], rows: () => [], studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve() }
+  return { chats: new CountingChatGate(), failedRows: () => [], rows: () => [], protection: () => undefined, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve() }
 }
 
 /**

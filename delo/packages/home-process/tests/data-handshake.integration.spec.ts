@@ -10,7 +10,11 @@ import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { HandoverMessage, UpdateJournal } from '@delo/contract-home-process'
 import { CountingChatGate, HomeProcessError, journalPath, readJournal, stashPath, startSuccessor, UpdateHandshake, writeJournal, type HandoverLine, type HandshakeSubject, type Successor } from '../src/index.ts'
+import type { HostProtection } from '../src/index.ts'
 import { FixtureCopies, FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, REPOSITORY, tempHome, V0, V1, V2, type TempHome } from './support.ts'
+
+/** The sandbox protection the running Host booted with. */
+const PROTECTION: HostProtection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'] }
 
 let temp: TempHome | undefined
 const successors: Successor[] = []
@@ -75,6 +79,7 @@ async function setUp(options: SetUpOptions = {}) {
     handOver: () => { events.push('handOver') },
     failedRows: () => (hostRuns ? [{ id: 'row-that-failed-before', name: 'plugin-f', generated: false }] : []),
     rows: () => (hostRuns ? [{ id: 'row-a', name: 'plugin-a', generated: false }, { id: 'b08ab057', name: 'plugin-b', generated: true }] : []),
+    protection: () => (hostRuns ? PROTECTION : undefined),
   }
   const handshake = new UpdateHandshake(subject, { store, snapshots, copies })
   return { home, events, handovers, store, snapshots, copies, handshake, journal, gate }
@@ -105,7 +110,7 @@ describe('an update with a session-data copy', () => {
   it('holds the successor to what the running Host had at boot, read before that Host stopped', async () => {
     const { handshake, handovers } = await setUp()
     await update(handshake, true)
-    expect(handovers[0]?.health).toEqual({ disabledPlugins: [], namedRows: [], previousFailures: [{ id: 'row-that-failed-before', name: 'plugin-f', generated: false }], previousRows: [{ id: 'row-a', name: 'plugin-a', generated: false }, { id: 'b08ab057', name: 'plugin-b', generated: true }] })
+    expect(handovers[0]?.health).toEqual({ disabledPlugins: [], namedRows: [], previousFailures: [{ id: 'row-that-failed-before', name: 'plugin-f', generated: false }], previousRows: [{ id: 'row-a', name: 'plugin-a', generated: false }, { id: 'b08ab057', name: 'plugin-b', generated: true }], previousProtection: PROTECTION })
   })
 
   it('records the profile history version and the health expectations, so a start that finishes it runs H1 to H5', async () => {

@@ -28,6 +28,7 @@ import {
   type HomeCommand,
   type HomeCommandMode,
   type HomeProcessOptions,
+  type HostProtection,
   type HomeSignal,
   type HostRunner,
   type PreparedRuntime,
@@ -73,6 +74,8 @@ export interface FixtureBehaviour {
   readonly dataDiffers?: boolean
   /** The rows its Host has at boot. */
   readonly rows?: readonly string[]
+  /** The sandbox protection its Host boots with; none by default. */
+  readonly protection?: HostProtection
   /** Whether the store's check before a start refuses this version. */
   readonly launchRefused?: boolean
   /**
@@ -398,12 +401,19 @@ export class FixtureHost implements RunningHost {
     return (this.behaviour.rows ?? []).map(id => ({ id, name: `plugin-${id}`, generated: false }))
   }
 
+  protection(): HostProtection | undefined {
+    return this.behaviour.protection
+  }
+
   async check(expect: HealthExpectations | undefined): Promise<HealthVerdict> {
     if (!this.behaviour.healthy) return Promise.resolve({ passed: false, criterion: 'H2-host-ready', detail: 'the fixture is unhealthy' })
     if (expect === undefined) return Promise.resolve({ passed: true })
     const allowed = new Set([...expect.disabledPlugins, ...expect.previousFailures.map(row => row.id)])
     const unexpected = this.behaviour.disabled.filter(plugin => !allowed.has(plugin))
     if (unexpected.length > 0) return Promise.resolve({ passed: false, criterion: 'H3-only-named-disabled', detail: unexpected.join(',') })
+    const denied = this.behaviour.protection?.deniedSockets ?? []
+    const lost = expect.previousProtection?.deniedSockets.filter(socket => !denied.includes(socket)) ?? []
+    if (lost.length > 0) return Promise.resolve({ passed: false, criterion: 'H3-only-named-disabled', detail: `no longer denies ${lost.join(',')}` })
     const present = this.rows().map(row => row.id)
     const gone = expect.previousRows.filter(row => !present.includes(row.id) && !expect.namedRows.includes(row.id)).map(row => row.id)
     return Promise.resolve(gone.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-rows-kept', detail: gone.join(',') })

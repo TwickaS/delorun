@@ -25,7 +25,7 @@ import { join } from 'node:path'
 import { composeEntries, type Profile } from '@deepseek-ai/dsh-app-boot'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { runDirectory, writeProtectedFile } from '@delo/home'
-import { updateSocketPath } from '@delo/home-process'
+import { updateSocketPath, type HostProtection } from '@delo/home-process'
 import { resolveDockerContext, supervisorSocketPath } from '@delo/supervisor'
 import { stringify } from 'yaml'
 import { CliError, EXIT } from './exit.ts'
@@ -43,8 +43,14 @@ export interface SandboxProtection {
   readonly protectedHome: string
   /** C1's read exemptions, relative to the home. */
   readonly protectedHomeReadable: readonly string[]
-  /** The sockets confined commands cannot connect to. */
+  /** The sockets confined commands cannot connect to: the home's own and those in {@link observedSockets}. */
   readonly deniedSockets: readonly string[]
+  /**
+   * The entries of {@link deniedSockets} the start found on this computer: the Docker context's socket with its real
+   * path and Docker Desktop's sockets. The next start may find others, so C3's H3 leaves them out of what it compares
+   * across an update; the rest of the protection is fixed by the release and the home.
+   */
+  readonly observedSockets: readonly string[]
   /** The directories whose sockets start programs outside the sandbox; see {@link WSL_INTEROP_DIRECTORIES}. */
   readonly escapeSocketDirectories: readonly string[]
 }
@@ -117,11 +123,13 @@ async function dockerDesktopSockets(osHome: string): Promise<string[]> {
  */
 export async function sandboxProtection(home: string, profile: string, env: Readonly<Record<string, string | undefined>>, osHome: string): Promise<SandboxProtection> {
   const canonical = realpathSync.native(home)
-  const sockets = [updateSocketPath(canonical, profile), supervisorSocketPath(canonical, profile), ...await dockerSockets(env), ...await dockerDesktopSockets(osHome)]
+  const fixed = [updateSocketPath(canonical, profile), supervisorSocketPath(canonical, profile)]
+  const observed = [...new Set([...await dockerSockets(env), ...await dockerDesktopSockets(osHome)])].filter(socket => !fixed.includes(socket))
   return {
     protectedHome: canonical,
     protectedHomeReadable: [...READ_EXEMPTIONS],
-    deniedSockets: [...new Set(sockets)],
+    deniedSockets: [...new Set([...fixed, ...observed])],
+    observedSockets: observed,
     escapeSocketDirectories: [...WSL_INTEROP_DIRECTORIES],
   }
 }
@@ -141,27 +149,56 @@ export function missingEscapeSocketDirectories(protection: Pick<SandboxProtectio
   return protection.escapeSocketDirectories.filter(directory => !named.has(directory))
 }
 
+/** The keys of a sandbox row's config that hold its protection, which H3 compares by {@link protectionWeakenings}. */
+const PROTECTION_KEYS: readonly string[] = ['protectedHome', 'protectedHomeReadable', 'deniedSockets', 'escapeSocketDirectories']
+
 /**
- * A sandbox row's settings without what one start set from this computer's state at that time: the protected home and
- * its read exemptions where they are the start's, and the start's own denied sockets and escape directories. The next
- * start computes them again, and a Docker socket that appeared, or a Docker context the person switched, changes them
- * without any layer of the profile changing. Entries a layer lists stay, and so does a value the start did not set.
+ * A sandbox row's settings without its protection, which C3's H3 hashes: the protection is compared by
+ * {@link protectionWeakenings} instead, so a release may tighten it without H3 failing.
  * @param config - the row's config as the Loader mounted it.
- * @param protection - the settings that start set.
- * @returns the remaining settings; a config that is not an object as it is.
+ * @returns the other settings; a config that is not an object as it is.
  */
-export function settingsBeyondProtection(config: unknown, protection: SandboxProtection): unknown {
-  if (!isRecord(config)) return config
-  const { protectedHome, protectedHomeReadable, deniedSockets, escapeSocketDirectories, ...rest } = config
-  const sameList = (value: unknown, list: readonly string[]): boolean => Array.isArray(value) && value.length === list.length && value.every((entry, at) => entry === list[at])
-  const beyond = (value: unknown, list: readonly string[]): unknown => Array.isArray(value) ? value.filter(entry => typeof entry !== 'string' || !list.includes(entry)) : value
+export function settingsBeyondProtection(config: unknown): unknown {
+  return isRecord(config) ? Object.fromEntries(Object.entries(config).filter(([key]) => !PROTECTION_KEYS.includes(key))) : config
+}
+
+/**
+ * The protection a booted sandbox row gives confined commands, without the sockets one start found on the computer.
+ * @param config - the row's config as the Loader mounted it.
+ * @param observed - the sockets to leave out: the start's {@link SandboxProtection.observedSockets}, or none to keep
+ *   every socket the row denies.
+ * @returns the protection, or `undefined` when the config names no protected home.
+ */
+export function hostProtectionOf(config: unknown, observed: readonly string[]): HostProtection | undefined {
+  if (!isRecord(config) || typeof config.protectedHome !== 'string') return undefined
+  const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
   return {
-    ...rest,
-    ...protectedHome === protection.protectedHome ? {} : { protectedHome },
-    ...sameList(protectedHomeReadable, protection.protectedHomeReadable) ? {} : { protectedHomeReadable },
-    ...deniedSockets === undefined ? {} : { deniedSockets: beyond(deniedSockets, protection.deniedSockets) },
-    ...escapeSocketDirectories === undefined ? {} : { escapeSocketDirectories: beyond(escapeSocketDirectories, protection.escapeSocketDirectories) },
+    protectedHome: config.protectedHome,
+    protectedHomeReadable: strings(config.protectedHomeReadable),
+    deniedSockets: strings(config.deniedSockets).filter(socket => !observed.includes(socket)),
+    escapeSocketDirectories: strings(config.escapeSocketDirectories),
   }
+}
+
+/**
+ * How a protection is weaker than an earlier one: another protected home, a read exemption the earlier one did not
+ * have, or a denied socket or hidden escape directory it no longer names. A protection that only adds denied sockets or
+ * escape directories, or drops read exemptions, is not weaker.
+ * @param before - the earlier protection.
+ * @param after - the later one, with every socket its row denies.
+ * @returns one clause per weakening, in that order; none when the later protection is at least as strict.
+ */
+export function protectionWeakenings(before: HostProtection, after: HostProtection): string[] {
+  const added = (list: readonly string[], earlier: readonly string[]): string[] => list.filter(entry => !earlier.includes(entry))
+  const weakenings: string[] = []
+  if (after.protectedHome !== before.protectedHome) weakenings.push(`protects ${after.protectedHome} instead of ${before.protectedHome}`)
+  const readable = added(after.protectedHomeReadable, before.protectedHomeReadable)
+  if (readable.length > 0) weakenings.push(`lets confined commands read ${readable.join(', ')}`)
+  const sockets = added(before.deniedSockets, after.deniedSockets)
+  if (sockets.length > 0) weakenings.push(`no longer denies ${sockets.join(', ')}`)
+  const escapes = added(before.escapeSocketDirectories, after.escapeSocketDirectories)
+  if (escapes.length > 0) weakenings.push(`no longer hides ${escapes.join(', ')}`)
+  return weakenings
 }
 
 /**

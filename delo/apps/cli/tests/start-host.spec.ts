@@ -12,7 +12,7 @@ import { bootedRows, FIBER_STATES, runningHost, serviceProvider, type BootedProf
 import type { SandboxProtection } from '../src/sandbox-protection.ts'
 
 /** A start's sandbox protection, which the Host's rows' settings hashes leave out. */
-const PROTECTION: SandboxProtection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: [], escapeSocketDirectories: ['/run/WSL'] }
+const PROTECTION: SandboxProtection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: [], observedSockets: [], escapeSocketDirectories: ['/run/WSL'] }
 
 /**
  * A root context whose Loader holds the given entries.

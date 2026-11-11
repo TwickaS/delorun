@@ -1,9 +1,9 @@
 /**
  * The post-boot check of the sandbox row's escape directories: a booted row must name every directory the start set,
- * and may name more; and the row's settings beyond what one start set, which C3's H3 compares across an update.
+ * and may name more; and the row's protection and other settings as C3's H3 compares them across an update.
  */
 import { describe, expect, it } from 'vitest'
-import { missingEscapeSocketDirectories, settingsBeyondProtection, WSL_INTEROP_DIRECTORIES } from '../src/sandbox-protection.ts'
+import { hostProtectionOf, missingEscapeSocketDirectories, protectionWeakenings, settingsBeyondProtection, WSL_INTEROP_DIRECTORIES } from '../src/sandbox-protection.ts'
 
 const START = { escapeSocketDirectories: [...WSL_INTEROP_DIRECTORIES, '/run/other'] }
 
@@ -28,18 +28,23 @@ describe('the escape directories a booted sandbox row must name', () => {
   })
 })
 
-describe('a sandbox row\'s settings beyond one start\'s protection', () => {
-  const protection = { protectedHome: '/h', protectedHomeReadable: ['runtimes', 'skills'], deniedSockets: ['/h/run/default/update.sock', '/var/run/docker.sock'], escapeSocketDirectories: ['/run/WSL'] }
+describe('a sandbox row\'s protection as H3 compares it', () => {
+  const config = { networkAccess: false, protectedHome: '/h', protectedHomeReadable: ['runtimes', 7], deniedSockets: ['/srv/mine.sock', '/h/run/default/update.sock', '/var/run/docker.sock'], escapeSocketDirectories: ['/run/WSL'] }
 
-  it('leaves out what the start set and keeps every setting and entry a layer gives', () => {
-    const config = { networkAccess: false, protectedHome: '/h', protectedHomeReadable: ['runtimes', 'skills'], deniedSockets: ['/srv/mine.sock', '/h/run/default/update.sock', '/var/run/docker.sock'], escapeSocketDirectories: ['/srv/escape', '/run/WSL'] }
-    expect(settingsBeyondProtection(config, protection)).toEqual({ networkAccess: false, deniedSockets: ['/srv/mine.sock'], escapeSocketDirectories: ['/srv/escape'] })
+  it('hashes the settings beyond the protection, and reads the protection without the sockets the start found', () => {
+    expect(settingsBeyondProtection(config)).toEqual({ networkAccess: false })
+    expect(settingsBeyondProtection(null)).toBeNull()
+    expect(hostProtectionOf(config, ['/var/run/docker.sock'])).toEqual({ protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/srv/mine.sock', '/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'] })
+    expect(hostProtectionOf({ protectedHome: '/h', deniedSockets: 'not a list' }, [])).toEqual({ protectedHome: '/h', protectedHomeReadable: [], deniedSockets: [], escapeSocketDirectories: [] })
+    expect(hostProtectionOf({ deniedSockets: [] }, [])).toBeUndefined()
+    expect(hostProtectionOf('no config', [])).toBeUndefined()
   })
 
-  it('keeps a protected home or read exemptions the start did not set, and lists that are not lists', () => {
-    const config = { protectedHome: '/elsewhere', protectedHomeReadable: ['runtimes'], deniedSockets: 'not a list' }
-    expect(settingsBeyondProtection(config, protection)).toEqual(config)
-    expect(settingsBeyondProtection({ protectedHomeReadable: ['skills', 'runtimes'] }, protection)).toEqual({ protectedHomeReadable: ['skills', 'runtimes'] })
-    expect(settingsBeyondProtection(null, protection)).toBeNull()
+  it('names every way a later protection is weaker, and none for a stricter one', () => {
+    const before = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/a.sock'], escapeSocketDirectories: ['/run/WSL'] }
+    expect(protectionWeakenings(before, { ...before, protectedHomeReadable: [], deniedSockets: ['/a.sock', '/b.sock'], escapeSocketDirectories: ['/run/WSL', '/x'] })).toEqual([])
+    expect(protectionWeakenings(before, { protectedHome: '/g', protectedHomeReadable: ['runtimes', 'secrets'], deniedSockets: [], escapeSocketDirectories: [] })).toEqual([
+      'protects /g instead of /h', 'lets confined commands read secrets', 'no longer denies /a.sock', 'no longer hides /run/WSL',
+    ])
   })
 })

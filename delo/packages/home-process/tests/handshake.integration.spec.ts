@@ -26,6 +26,7 @@ function subject(home: string, gate: CountingChatGate, events: string[]): Handsh
     handOver: () => { events.push('handOver') },
     failedRows: () => [],
     rows: () => [],
+    protection: () => undefined,
   }
 }
 

@@ -59,6 +59,12 @@ const handoverSchema = z.strictObject({
     bundles: z.array(z.string()).optional(),
     previousFailures: z.array(bootRow),
     previousRows: z.array(bootRow),
+    previousProtection: z.strictObject({
+      protectedHome: z.string(),
+      protectedHomeReadable: z.array(z.string()),
+      deniedSockets: z.array(z.string()),
+      escapeSocketDirectories: z.array(z.string()),
+    }).optional(),
   }),
   startedAt: z.string().datetime(),
 })

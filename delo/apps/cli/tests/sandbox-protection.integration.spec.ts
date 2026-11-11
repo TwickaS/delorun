@@ -58,6 +58,7 @@ describe('the CLI profile\'s sandbox protection', () => {
       protectedHome: home,
       protectedHomeReadable: [...READ_EXEMPTIONS],
       deniedSockets: [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock'), link, engine],
+      observedSockets: [link, engine],
       escapeSocketDirectories: ['/run/WSL'],
     })
   })

@@ -339,6 +339,16 @@ describe('health-check-rollback', TIMEOUT, () => {
     expect(existsSync(journalPath(home, PROFILE))).toBe(false)
   })
 
+  it('hands the running Host\'s sandbox protection to the successor: one that denies fewer sockets is rolled back, one that denies more commits', async () => {
+    const protection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock', '/h/run/default/supervisor.sock'], escapeSocketDirectories: ['/run/WSL'] }
+    const home = await setUp({ protection: { ...protection, deniedSockets: ['/h/run/default/update.sock'] } })
+    installFixture(home, V1, { protection })
+    await start(home)
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'rolled-back', reason: 'HEALTH_CHECK_FAILED', criterion: 'H3-only-named-disabled' })
+    installFixture(home, V2, { protection: { ...protection, deniedSockets: [...protection.deniedSockets, '/h/run/default/other.sock'] } })
+    expect(final(await sendHomeRequest(home, PROFILE, { op: 'update.apply', args: { reportId: await prepare(home), wait: 'drain', dataCopy: false } }))).toEqual({ ok: true, outcome: 'committed' })
+  })
+
   it('a successor whose studio listener does not answer is rolled back, and the outcome names the criterion it failed', async () => {
     const home = await setUp({ healthy: false })
     await start(home)

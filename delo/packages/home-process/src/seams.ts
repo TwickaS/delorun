@@ -40,6 +40,28 @@ export interface HealthExpectations {
    * report named it or disabled its plugin.
    */
   readonly previousRows: readonly BootRow[]
+  /**
+   * H3: the sandbox protection the previous release's Host booted with, which the target's may tighten and not loosen;
+   * absent where no Host ran before, as in the check after a rollback's restart.
+   */
+  readonly previousProtection?: HostProtection | undefined
+}
+
+/**
+ * The confinement a Host's sandbox row gives confined commands, as a successor's H3 compares its own with the previous
+ * Host's: the protected home, the entries of it they may read, the sockets they cannot connect to and the directories
+ * whose sockets would start programs outside the sandbox. Sockets the start found on the computer, such as Docker's,
+ * are left out, because the next start may find others.
+ */
+export interface HostProtection {
+  /** The protected home. */
+  readonly protectedHome: string
+  /** The entries of the home confined commands may read, relative to it. */
+  readonly protectedHomeReadable: readonly string[]
+  /** The sockets confined commands cannot connect to. */
+  readonly deniedSockets: readonly string[]
+  /** The directories whose sockets the sandbox hides. */
+  readonly escapeSocketDirectories: readonly string[]
 }
 
 /** A row a Host had at boot, as the next release's health check compares it with its own. */
@@ -69,7 +91,7 @@ export interface PreparedRuntime {
   /** C3's update report, returned to the caller as it is. */
   readonly report: unknown
   /** What the health check holds the target to, apart from what the previous release's Host had at boot. */
-  readonly health: Omit<HealthExpectations, 'previousFailures' | 'previousRows'>
+  readonly health: Omit<HealthExpectations, 'previousFailures' | 'previousRows' | 'previousProtection'>
   /** Whether the report names a data change (C3, "Data formats"). */
   readonly dataDiffers: boolean
 }
@@ -320,6 +342,11 @@ export interface RunningHost {
   rows(): readonly BootRow[]
   /** The local device approval, when the profile loads `@delo/home-auth`; `devices.approve` drives it. */
   readonly devices?: LocalDeviceApproval
+  /**
+   * The sandbox protection the Host booted with, which a successor's H3 holds its own to.
+   * @returns the protection, or `undefined` when the Host has no sandbox row that sets one.
+   */
+  protection(): HostProtection | undefined
   /**
    * Contract C3's health check: H1 to H5 against the report's expectations, or H1 and H2 alone without them.
    * @param expect - what the report predicted, or `undefined` for a start whose record keeps no expectations, such

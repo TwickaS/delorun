@@ -52,7 +52,7 @@ import { hostStopFailure, HostNotStoppedError, REFUSED_HOST_STOP_S, stopHostWith
 import { startSuccessor, type HandoverPipe, type Successor } from './handover.ts'
 import { UpdateHandshake, type HandshakeSubject, type UpdateSupport } from './handshake.ts'
 import { endUpdateRecord, hasStash, journalledUpdate, journalPath, markCommitted, readJournal, removeJournal, removeStash, writeJournal } from './journal.ts'
-import type { BootRow, ChatGate, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
+import type { BootRow, ChatGate, HostProtection, HostRunner, RunningHost, RuntimePointers, UpdateChannelAccess } from './seams.ts'
 import { SIGNAL_EXIT_CODES, type HomeSignal } from './signals.ts'
 import { ChannelTokenCheck, studioOpenToken } from './studio-link.ts'
 import { approveDevices, removeDevice } from './devices-approve.ts'
@@ -393,6 +393,11 @@ export class HomeProcess implements HandshakeSubject {
   /** @inheritdoc */
   rows(): readonly BootRow[] {
     return this.host?.rows() ?? []
+  }
+
+  /** @inheritdoc */
+  protection(): HostProtection | undefined {
+    return this.host?.protection()
   }
 
   /** @inheritdoc */

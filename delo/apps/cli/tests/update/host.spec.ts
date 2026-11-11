@@ -15,13 +15,10 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { JobEvent, JobEventListener, JobView } from '@deepseek-ai/dsh-jobs'
 import type { WebRoute, WebServer } from '@deepseek-ai/dsh-host-webserver'
 import * as UpdateGate from '@delo/bundle-local/update-gate'
-import { CountingChatGate } from '@delo/home-process'
+import { CountingChatGate, type HealthExpectations } from '@delo/home-process'
 import type { BootedRow } from '../../src/delo-bundles.ts'
 import { sandboxProtection, type SandboxProtection } from '../../src/sandbox-protection.ts'
-import { arrivedOnLoopbackListener, bootRowsOf, checkHealth, HEALTH_PATH, inactiveRows, serveHealth, STOP_REASON, studioHealthUrl, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
-
-/** A start's sandbox protection, for rows whose settings hash leaves it out. */
-const PROTECTION: SandboxProtection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'] }
+import { arrivedOnLoopbackListener, bootProtectionOf, bootRowsOf, checkHealth, HEALTH_PATH, inactiveRows, serveHealth, STOP_REASON, studioHealthUrl, watchChats, type HostHealthFacts } from '../../src/update/host.ts'
 
 /** An agent that records the cancellations it is asked for. */
 interface FakeAgent {
@@ -246,19 +243,19 @@ describe('rows', () => {
       row({ id: 'b08ab057', state: 'failed' }),
     ]
 
-    expect(inactiveRows(rows, PROTECTION).map(({ id, generated }) => `${id}${generated ? ' (generated)' : ''}`)).toEqual(['off', 'broken', 'waiting', 'skipped', 'off-and-failed', 'b08ab057 (generated)'])
+    expect(inactiveRows(rows).map(({ id, generated }) => `${id}${generated ? ' (generated)' : ''}`)).toEqual(['off', 'broken', 'waiting', 'skipped', 'off-and-failed', 'b08ab057 (generated)'])
   })
 
   it('hashes the config of a protected plugin\'s rows, the same config the same way whatever its key order, and no other row\'s', () => {
     const manager = row({ id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } })
     const guard = (config: unknown): BootedRow => row({ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config })
-    const [, first] = bootRowsOf([manager, guard({ block: true, hosts: ['a'] })], PROTECTION)
-    const [, reordered] = bootRowsOf([manager, guard({ hosts: ['a'], block: true })], PROTECTION)
-    const [, changed] = bootRowsOf([manager, guard({ block: false, hosts: ['a'] })], PROTECTION)
+    const [, first] = bootRowsOf([manager, guard({ block: true, hosts: ['a'] })])
+    const [, reordered] = bootRowsOf([manager, guard({ hosts: ['a'], block: true })])
+    const [, changed] = bootRowsOf([manager, guard({ block: false, hosts: ['a'] })])
     expect(first?.configHash).toMatch(/^[0-9a-f]{64}$/u)
     expect(reordered?.configHash).toBe(first?.configHash)
     expect(changed?.configHash).not.toBe(first?.configHash)
-    expect(bootRowsOf([manager, row({ id: 'other', config: { a: 1 } })], PROTECTION)[1]).toEqual({ id: 'other', name: 'plugin-a', generated: false })
+    expect(bootRowsOf([manager, row({ id: 'other', config: { a: 1 } })])[1]).toEqual({ id: 'other', name: 'plugin-a', generated: false })
   })
 })
 
@@ -431,7 +428,7 @@ describe('checkHealth', () => {
    * @returns the facts.
    */
   function facts(port: number, change: Partial<HostHealthFacts> = {}): HostHealthFacts {
-    return { rows: () => [], studio: () => ({ host: '127.0.0.1', port }), profileDir: '/nowhere', protection: PROTECTION, verifyRuntime: async () => Promise.resolve(), ...change }
+    return { rows: () => [], studio: () => ({ host: '127.0.0.1', port }), profileDir: '/nowhere', verifyRuntime: async () => Promise.resolve(), ...change }
   }
 
   const NOTHING_NAMED = { namedRows: [], previousFailures: [], previousRows: [], disabledPlugins: [] }
@@ -614,14 +611,14 @@ describe('checkHealth', () => {
     const target: BootedRow[] = [{ id: 'c19d0a77', name: 'plugin-off', disabled: true, state: 'active' }]
     const previous: BootedRow[] = [{ id: 'b08ab057', name: 'plugin-off', disabled: true, state: 'active' }]
 
-    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousFailures: inactiveRows(previous, PROTECTION), previousRows: bootRowsOf(previous, PROTECTION) })).toEqual({ passed: true })
+    expect(await checkHealth(facts(port, { rows: () => target }), { ...NOTHING_NAMED, previousFailures: inactiveRows(previous), previousRows: bootRowsOf(previous) })).toEqual({ passed: true })
   })
 
   it('fails H3 when a protected row\'s settings changed and the report did not name it, and passes when it did', async () => {
     const port = await studioAnswering(204)
     const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } }
     const guard = (block: boolean): BootedRow => ({ id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', disabled: false, state: 'active', config: { block } })
-    const previous = bootRowsOf([manager, guard(true)], PROTECTION)
+    const previous = bootRowsOf([manager, guard(true)])
 
     expect(await checkHealth(facts(port, { rows: () => [manager, guard(true)] }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({ passed: true })
     expect(await checkHealth(facts(port, { rows: () => [manager, guard(false)] }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({
@@ -630,30 +627,94 @@ describe('checkHealth', () => {
     expect(await checkHealth(facts(port, { rows: () => [manager, guard(false)] }), { ...NOTHING_NAMED, namedRows: ['delo-fetch-guard'], previousRows: previous })).toEqual({ passed: true })
   })
 
-  it('passes H3 when the start\'s own sandbox protection changed with the computer: a Docker socket that appeared between the two starts', async () => {
-    const port = await studioAnswering(204)
-    const machine = mkdtempSync(join(tmpdir(), 'dhh-docker-'))
-    directories.push(machine)
-    // `/var/run` and `/run` on Linux: the socket's configured path lies under a link, so its real path is a second spelling.
-    mkdirSync(join(machine, 'run'))
-    symlinkSync(join(machine, 'run'), join(machine, 'var-run'))
-    const env = { DOCKER_HOST: `unix://${join(machine, 'var-run', 'docker.sock')}` }
+  describe('the sandbox row\'s protection', () => {
     const manager: BootedRow = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active', config: { protectedPlugins: ['@deepseek-ai/dsh-sandbox-local'] } }
-    const sandbox = (protection: SandboxProtection, layerSockets: readonly string[]): BootedRow => ({
+    /**
+     * A booted sandbox row whose config the start's overlay wrote: the layers' sockets, then the start's own.
+     * @param protection - the start's protection.
+     * @param layerSockets - the sockets a profile layer lists.
+     * @param change - settings to replace.
+     * @returns the row.
+     */
+    const sandbox = (protection: SandboxProtection, layerSockets: readonly string[] = [], change: Record<string, unknown> = {}): BootedRow => ({
       id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'active',
-      config: { networkAccess: false, protectedHome: protection.protectedHome, protectedHomeReadable: [...protection.protectedHomeReadable], deniedSockets: [...new Set([...layerSockets, ...protection.deniedSockets])], escapeSocketDirectories: [...protection.escapeSocketDirectories] },
+      config: { networkAccess: false, protectedHome: protection.protectedHome, protectedHomeReadable: [...protection.protectedHomeReadable], deniedSockets: [...new Set([...layerSockets, ...protection.deniedSockets])], escapeSocketDirectories: [...protection.escapeSocketDirectories], ...change },
     })
-    // The running Host started before Docker did; the target starts once the socket exists.
-    const before = await sandboxProtection(machine, 'default', env, machine)
-    writeFileSync(join(machine, 'run', 'docker.sock'), '')
-    const after = await sandboxProtection(machine, 'default', env, machine)
-    expect(after.deniedSockets.length).toBe(before.deniedSockets.length + 1)
-    const previous = bootRowsOf([manager, sandbox(before, ['/srv/listed.sock'])], before)
+    /**
+     * The expectations a Host booted with a sandbox row hands its successor.
+     * @param rows - its rows.
+     * @param protection - its start's protection.
+     * @returns the expectations.
+     */
+    const handedOver = (rows: readonly BootedRow[], protection: SandboxProtection): HealthExpectations => {
+      const previousProtection = bootProtectionOf(rows, protection.observedSockets)
+      return { ...NOTHING_NAMED, previousRows: bootRowsOf(rows), ...previousProtection === undefined ? {} : { previousProtection } }
+    }
+    /**
+     * A start's protection over a home whose Docker socket lies under a linked directory, as `/var/run/docker.sock`
+     * does under `/run`, so its real path is a second spelling once the socket exists.
+     * @returns the computer, and the protection before and after the socket appears.
+     */
+    async function dockerAppears(): Promise<{ readonly machine: string, readonly before: SandboxProtection, readonly after: SandboxProtection }> {
+      const machine = mkdtempSync(join(tmpdir(), 'dhh-docker-'))
+      directories.push(machine)
+      mkdirSync(join(machine, 'run'))
+      symlinkSync(join(machine, 'run'), join(machine, 'var-run'))
+      const env = { DOCKER_HOST: `unix://${join(machine, 'var-run', 'docker.sock')}`, DOCKER_CONFIG: join(machine, 'no-config') }
+      const before = await sandboxProtection(machine, 'default', env, machine)
+      writeFileSync(join(machine, 'run', 'docker.sock'), '')
+      const after = await sandboxProtection(machine, 'default', env, machine)
+      expect(after.observedSockets).toEqual([join(machine, 'var-run', 'docker.sock'), join(machine, 'run', 'docker.sock')])
+      return { machine, before, after }
+    }
 
-    expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after, ['/srv/listed.sock'])], protection: after }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({ passed: true })
-    // A socket a layer of the profile lists is the profile's setting, not the start's: an update that drops it changed the row.
-    expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after, [])], protection: after }), { ...NOTHING_NAMED, previousRows: previous })).toEqual({
-      passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row sandbox changed and the report did not name it',
+    it('passes H3 when a Docker socket appeared between the two starts', async () => {
+      const port = await studioAnswering(204)
+      const { before, after } = await dockerAppears()
+      expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after)] }), handedOver([manager, sandbox(before)], before))).toEqual({ passed: true })
+    })
+
+    it('passes H3 when a layer lists the Docker socket\'s real path and the socket appeared between the two starts', async () => {
+      const port = await studioAnswering(204)
+      const { machine, before, after } = await dockerAppears()
+      const listed = [join(machine, 'run', 'docker.sock')]
+      expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(after, listed)] }), handedOver([manager, sandbox(before, listed)], before))).toEqual({ passed: true })
+    })
+
+    it('passes H3 for a stricter protection: more denied sockets and escape directories, fewer read exemptions', async () => {
+      const port = await studioAnswering(204)
+      const { before } = await dockerAppears()
+      const stricter = sandbox(before, ['/srv/more.sock'], { protectedHomeReadable: before.protectedHomeReadable.slice(1), escapeSocketDirectories: [...before.escapeSocketDirectories, '/srv/escape'] })
+      expect(await checkHealth(facts(port, { rows: () => [manager, stricter] }), handedOver([manager, sandbox(before)], before))).toEqual({ passed: true })
+    })
+
+    it.each([
+      ['a dropped supervisor socket', (protection: SandboxProtection) => ({ deniedSockets: protection.deniedSockets.filter(socket => !socket.endsWith('supervisor.sock')) }), 'no longer denies'],
+      ['a dropped escape directory', () => ({ escapeSocketDirectories: [] }), 'no longer hides /run/WSL'],
+      ['a wider read exemption', (protection: SandboxProtection) => ({ protectedHomeReadable: [...protection.protectedHomeReadable, 'secrets'] }), 'lets confined commands read secrets'],
+      ['another protected home', () => ({ protectedHome: '/elsewhere' }), 'protects /elsewhere instead of'],
+      ['no protected home', () => ({ protectedHome: undefined }), 'sets no protected home'],
+    ])('fails H3 for a weaker protection, %s, even when the report names the row', async (_case, weaken, detail) => {
+      const port = await studioAnswering(204)
+      const { before } = await dockerAppears()
+      const verdict = await checkHealth(facts(port, { rows: () => [manager, sandbox(before, [], weaken(before))] }), { ...handedOver([manager, sandbox(before)], before), namedRows: ['sandbox'] })
+      expect(verdict).toMatchObject({ passed: false, criterion: 'H3-only-named-disabled' })
+      expect(verdict.passed ? '' : verdict.detail).toContain(detail)
+    })
+
+    it('fails H3 when a socket a profile layer lists is no longer denied', async () => {
+      const port = await studioAnswering(204)
+      const { before } = await dockerAppears()
+      const verdict = await checkHealth(facts(port, { rows: () => [manager, sandbox(before)] }), handedOver([manager, sandbox(before, ['/srv/listed.sock'])], before))
+      expect(verdict).toEqual({ passed: false, criterion: 'H3-only-named-disabled', detail: "the sandbox row's protection is weaker than before the update: it no longer denies /srv/listed.sock" })
+    })
+
+    it('still hashes the row\'s other settings', async () => {
+      const port = await studioAnswering(204)
+      const { before } = await dockerAppears()
+      expect(await checkHealth(facts(port, { rows: () => [manager, sandbox(before, [], { networkAccess: true })] }), handedOver([manager, sandbox(before)], before))).toEqual({
+        passed: false, criterion: 'H3-only-named-disabled', detail: 'the settings of protected row sandbox changed and the report did not name it',
+      })
     })
   })
 

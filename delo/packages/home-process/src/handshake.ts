@@ -33,7 +33,7 @@ import type { DeloLogger } from '@delo/logs'
 import { HomeProcessError, isRollbackRefusal } from './errors.ts'
 import type { HandoverLine, Successor } from './handover.ts'
 import { endUpdateRecord, journalledUpdate, journalRecord, readJournal, removeJournal, stashCommitted, writeJournal, type JournalledUpdate } from './journal.ts'
-import type { BootRow, ChatGate, HealthExpectations, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore, SessionDataCopies } from './seams.ts'
+import type { BootRow, ChatGate, HealthExpectations, HostProtection, PreparedRuntime, ProfileSnapshots, RuntimePointers, RuntimeStore, SessionDataCopies } from './seams.ts'
 
 /** What the handshake needs from the home process it runs in. */
 export interface HandshakeSubject {
@@ -86,6 +86,11 @@ export interface HandshakeSubject {
    * @returns their ids and plugin names, or none without a running Host.
    */
   rows(): readonly BootRow[]
+  /**
+   * The sandbox protection the running Host booted with, which the successor's H3 holds its own to.
+   * @returns the protection, or `undefined` without a running Host or without a sandbox row that sets one.
+   */
+  protection(): HostProtection | undefined
   /**
    * Hand the home lock to the successor.
    * @param successor - the successor.
@@ -383,7 +388,8 @@ export class UpdateHandshake {
    * read while that Host still runs.
    */
   private expectations(health: PreparedRuntime['health']): HealthExpectations {
-    return { ...health, previousFailures: this.subject.failedRows(), previousRows: this.subject.rows() }
+    const protection = this.subject.protection()
+    return { ...health, previousFailures: this.subject.failedRows(), previousRows: this.subject.rows(), ...protection === undefined ? {} : { previousProtection: protection } }
   }
 
   /**

@@ -17,10 +17,10 @@ import type { JobId } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@delo/bundle-local/update-gate'
-import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict } from '@delo/home-process'
+import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict, HostProtection } from '@delo/home-process'
 import { bundleListOf } from '@delo/profile-safety'
 import type { BootedRow } from '../delo-bundles.ts'
-import { SANDBOX_ROW, settingsBeyondProtection, type SandboxProtection } from '../sandbox-protection.ts'
+import { hostProtectionOf, protectionWeakenings, SANDBOX_ROW, settingsBeyondProtection } from '../sandbox-protection.ts'
 
 /** How long the Host's health route has to answer H2's request. */
 export const STUDIO_HEALTH_TIMEOUT_MS = 10_000
@@ -89,8 +89,6 @@ export interface HostHealthFacts {
   readonly studio: () => { readonly host: string, readonly port: number } | undefined
   /** The profile directory, whose `package.json` holds the bundle list. */
   readonly profileDir: string
-  /** The sandbox protection this Host's start set, which H3 leaves out of the sandbox row's settings ({@link bootRowsOf}). */
-  readonly protection: SandboxProtection
   /**
    * H1: check the running runtime's files against its signed file list, or nothing when it does not run from the store.
    * @throws when a file differs.
@@ -212,20 +210,18 @@ function canonicalJson(value: unknown): string {
 
 /**
  * The rows a Host had at boot as the next release's health check compares them: id, plugin, whether the Loader made
- * the id up, and the config hash of a protected plugin's row. The sandbox row's hash leaves out the protection the
- * Host's own start set from this computer's state ({@link settingsBeyondProtection}), which the next start sets again
- * and which no update changes, so a Docker socket that appeared between the two starts is not a change.
+ * the id up, and the config hash of a protected plugin's row. The sandbox row's hash leaves out its protection
+ * ({@link settingsBeyondProtection}), which H3 compares on its own ({@link bootProtectionOf}).
  * @param rows - the Loader's rows.
- * @param protection - the sandbox protection the Host's start set.
  * @returns the rows.
  */
-export function bootRowsOf(rows: readonly BootedRow[], protection: SandboxProtection): BootRow[] {
+export function bootRowsOf(rows: readonly BootedRow[]): BootRow[] {
   const protectedPlugins = protectedPluginsOf(rows)
   return rows.map(row => ({
     id: row.id,
     name: row.name,
     generated: isGeneratedRowId(row.id),
-    ...protectedPlugins.has(row.name) ? { configHash: createHash('sha256').update(canonicalJson((row.id === SANDBOX_ROW ? settingsBeyondProtection(row.config, protection) : row.config) ?? null)).digest('hex') } : {},
+    ...protectedPlugins.has(row.name) ? { configHash: createHash('sha256').update(canonicalJson((row.id === SANDBOX_ROW ? settingsBeyondProtection(row.config) : row.config) ?? null)).digest('hex') } : {},
   }))
 }
 
@@ -233,12 +229,22 @@ export function bootRowsOf(rows: readonly BootedRow[], protection: SandboxProtec
  * The rows that were disabled or did not load at boot: disabled, failed, pending or not imported, which the next
  * release's health check allows.
  * @param rows - the Loader's rows.
- * @param protection - the sandbox protection the Host's start set.
  * @returns those rows, as {@link bootRowsOf} describes them.
  */
-export function inactiveRows(rows: readonly BootedRow[], protection: SandboxProtection): BootRow[] {
+export function inactiveRows(rows: readonly BootedRow[]): BootRow[] {
   const inactive = new Set(rows.filter(row => row.disabled || row.state !== 'active').map(row => row.id))
-  return bootRowsOf(rows, protection).filter(row => inactive.has(row.id))
+  return bootRowsOf(rows).filter(row => inactive.has(row.id))
+}
+
+/**
+ * The protection a Host's sandbox row booted with, as the next release's H3 holds its own to: without the sockets the
+ * Host's start found on the computer, which the next start may find otherwise.
+ * @param rows - the Loader's rows.
+ * @param observed - the sockets the start found on the computer.
+ * @returns the protection, or `undefined` without a sandbox row that names a protected home.
+ */
+export function bootProtectionOf(rows: readonly BootedRow[], observed: readonly string[]): HostProtection | undefined {
+  return hostProtectionOf(rows.find(row => row.id === SANDBOX_ROW)?.config, observed)
 }
 
 /**
@@ -291,7 +297,7 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
   const named = new Set(expect.namedRows)
   const disabledPlugins = new Set(expect.disabledPlugins)
   const reported = (row: { readonly id: string, readonly name: string }): boolean => named.has(row.id) || named.has(row.name) || disabledPlugins.has(row.name)
-  const target = bootRowsOf(facts.rows(), facts.protection)
+  const target = bootRowsOf(facts.rows())
   const failedBefore = new Set(expect.previousFailures.map(row => row.id))
   // A row the Loader gave a new id is matched by its plugin, one previous row for one target row; no other row is.
   const failedSpares = countByPlugin(expect.previousFailures.filter(row => row.generated))
@@ -317,6 +323,12 @@ export async function checkHealth(facts: HostHealthFacts, expect: HealthExpectat
     if (reported(row)) continue
     if (row.generated && claim(spares, row.name)) continue
     return { passed: false, criterion: 'H3-only-named-disabled', detail: `row ${row.id} was in the profile before the update, is gone, and the report did not name it or disable its plugin` }
+  }
+  if (expect.previousProtection !== undefined) {
+    // Every socket the target's row denies counts, those its start found on the computer included; a report cannot excuse a weaker one.
+    const now = bootProtectionOf(facts.rows(), [])
+    const weaker = now === undefined ? ['sets no protected home'] : protectionWeakenings(expect.previousProtection, now)
+    if (weaker.length > 0) return { passed: false, criterion: 'H3-only-named-disabled', detail: `the ${SANDBOX_ROW} row's protection is weaker than before the update: it ${weaker.join('; it ')}` }
   }
   if (expect.bundles !== undefined) {
     const path = join(facts.profileDir, 'package.json')
