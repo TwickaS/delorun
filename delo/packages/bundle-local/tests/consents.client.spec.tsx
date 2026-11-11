@@ -381,18 +381,22 @@ describe('the MCP server review', () => {
  * @returns the render result.
  */
 function renderNotice(host: ReturnType<typeof fakeHost>, review: McpReviewSource['ask'] = async () => undefined) {
-  const props = { t: makeTranslate(en), fetch: host.fetch, review } as McpWaitingNoticeProps
-  return render(<McpWaitingNotice {...props} />)
+  const notify = vi.fn<McpWaitingNoticeProps['notify']>()
+  const props = { t: makeTranslate(en), fetch: host.fetch, review, notify } as McpWaitingNoticeProps
+  return { notify, ...render(<McpWaitingNotice {...props} />) }
 }
 
 describe('the notice that an MCP server waits', () => {
   it('names the waiting server and opens its review from "Review and allow this server"', async () => {
     const review = vi.fn(async () => 1)
-    renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) }), review)
+    const { notify } = renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) }), review)
     await settle()
     expect(screen.getByText('An MCP server is waiting for your OK: files.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en['mcp.notice.review'] }))
     expect(review).toHaveBeenCalledWith(SERVER)
+    await settle()
+    // Allowing from the notice says so, as an answer in Settings does.
+    expect(notify).toHaveBeenCalledWith('files is allowed and running.', false)
   })
 
   it('offers each waiting server in turn, and none that the person declined or revoked', async () => {

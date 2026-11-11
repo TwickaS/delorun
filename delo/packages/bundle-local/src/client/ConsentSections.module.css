@@ -181,3 +181,7 @@
 .start .command {
   white-space: pre-wrap;
 }
+
+.hint {
+  color: var(--dsw-alias-label-secondary);
+}

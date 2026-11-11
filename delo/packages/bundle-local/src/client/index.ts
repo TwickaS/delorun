@@ -268,7 +268,8 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: () => ({ hooks: review.hooks, confirm: review.confirm, cancel: review.cancel }),
   }, McpServerReview))
-  const noticeFace = (): McpWaitingNoticeInjected => ({ fetch, review: review.ask })
+  const toast = createConsentToastSource()
+  const noticeFace = (): McpWaitingNoticeInjected => ({ fetch, review: review.ask, notify: toast.show })
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: MCP_WAITING_NOTICE_ID,
@@ -281,7 +282,6 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: (sessionId): FullAccessActionInjected => ({ sessionId, fetch, ask: consent.ask }),
   }, FullAccessAction))
-  const toast = createConsentToastSource()
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: CONSENT_TOAST_ID,

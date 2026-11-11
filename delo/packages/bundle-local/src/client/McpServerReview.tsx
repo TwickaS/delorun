@@ -132,7 +132,10 @@ export function ServerStart({ t, start }: { t: Translate; start: PendingServer |
     <dt>{t('mcp.cwd')}</dt>
     <dd>{start.cwd === '' ? t('mcp.cwdHost') : <code className={css.command}>{start.cwd}</code>}</dd>
     <dt>{t('mcp.env')}</dt>
-    <dd>{start.env.length === 0 ? t('mcp.envNone') : <code className={css.command}>{start.env.map(variable => variable.value === undefined ? variable.name : `${variable.name}=${variable.value}`).join('\n')}</code>}</dd>
+    <dd>{start.env.length === 0 ? t('mcp.envNone') : <>
+      <code className={css.command}>{start.env.map(variable => variable.value === undefined ? variable.name : `${variable.name}=${variable.value}`).join('\n')}</code>
+      <div className={css.hint}>{t('mcp.envHidden')}</div>
+    </>}</dd>
   </dl>
 }
 

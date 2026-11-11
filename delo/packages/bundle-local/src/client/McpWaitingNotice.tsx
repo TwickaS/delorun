@@ -13,6 +13,7 @@ import { IconWarningOutlineRegular, Toast } from '@deepseek-ai/dsh-client-ui-pri
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { readServers, readWaitingServers, type PendingServer, type WaitingServer } from './consents-api.ts'
 import { isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
+import type { ConsentToastSource } from './ConsentToast.tsx'
 import type { McpReviewSource } from './McpServerReview.tsx'
 
 /** Full-opacity hold of the notice: a sentence and an action to read. */
@@ -24,6 +25,8 @@ export interface McpWaitingNoticeInjected {
   fetch: HostFetch
   /** Shows a waiting server's review and waits for the person's answer. */
   review: McpReviewSource['ask']
+  /** Shows an answer's outcome as a toast. */
+  notify: ConsentToastSource['show']
 }
 
 /** Props of the `shell.overlay` entry. */
@@ -68,7 +71,7 @@ function dismissKey(server: PendingServer | WaitingServer): string {
  * @param props - the request function, the review and the copy.
  * @returns the banner, or nothing.
  */
-export function McpWaitingNotice({ fetch, review, t }: McpWaitingNoticeProps): ReactNode {
+export function McpWaitingNotice({ fetch, review, notify, t }: McpWaitingNoticeProps): ReactNode {
   const [waiting, setWaiting] = useState<Waiting>({ kind: 'computer', servers: [] })
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set())
   const [reviewing, setReviewing] = useState(false)
@@ -92,7 +95,9 @@ export function McpWaitingNotice({ fetch, review, t }: McpWaitingNoticeProps): R
     if (first === undefined) return
     setReviewing(true)
     // Only the reviewed server is set aside: the notice then offers the next one that waits.
-    void review(first).finally(() => {
+    void review(first).then((started) => {
+      if (started !== undefined) notify(t(started > 0 ? 'mcp.started' : 'mcp.acceptedLater', { server: first.serverName }), false)
+    }).finally(() => {
       setDismissed(current => new Set([...current, dismissKey(first)]))
       setReviewing(false)
       void refresh()
