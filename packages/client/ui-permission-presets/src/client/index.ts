@@ -13,7 +13,9 @@
  * confirmation. The Full access row carries the same explicit risk gate as
  * the composer chip; the shared popup shell owns the modal mechanics.
  * The General-settings row separately writes the default preset for sessions
- * created later through the host Settings API.
+ * created later through the host Settings API. A composition may mount a
+ * `permissionSwitchConsent` service ({@link PermissionSwitchConsent}); both
+ * current-session surfaces ask it before they submit a pick.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionFace } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -54,6 +56,33 @@ export type { PermissionSelectInjected, PermissionSelectProps } from './Permissi
 export type {
   PermissionDefaultOption, PermissionSettingsState,
 } from './settings-store.ts'
+
+/**
+ * Optional client service a composition mounts as `permissionSwitchConsent` to
+ * ask its own question before a current-session preset switch is submitted,
+ * such as a consent the host requires before it accepts the switch. Both the
+ * composer control and the `/permission` picker ask it after their own risk
+ * confirmation, at the moment of submission; without a mounted service they
+ * submit at once. An argument-bearing `/permission <preset>` typed in the
+ * composer does not pass through it.
+ */
+export interface PermissionSwitchConsent {
+  /**
+   * Ask the composition's question about one switch.
+   * @param sessionId - the Session the switch belongs to.
+   * @param preset - the preset the person picked.
+   * @returns true to submit the switch; false to leave the Session's preset
+   *   unchanged, which the surfaces treat as a cancelled pick.
+   */
+  confirm(sessionId: SessionId, preset: string): Promise<boolean>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The optional question asked before a current-session preset switch is submitted. */
+    permissionSwitchConsent: PermissionSwitchConsent
+  }
+}
 
 /** Required services (cordis fiber inject). */
 export const inject = [
@@ -133,6 +162,8 @@ export function apply(ctx: ClientContext): void {
   const submit = async (sessionId: SessionId, preset: string): Promise<boolean> => {
     const live = sessions.binding(sessionId)?.session
     if (live === undefined) throw new Error('this session is not materialized yet')
+    const consent = ctx.get('permissionSwitchConsent')
+    if (consent !== undefined && !await consent.confirm(sessionId, preset)) return false
     const result = await live.command(`/permission ${preset}`)
     if (!result.ok) {
       throw new Error(`permission switch failed: ${result.error.code}: ${result.error.message}`)

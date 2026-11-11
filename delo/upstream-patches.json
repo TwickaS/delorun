@@ -2047,6 +2047,12 @@
       "class": "security",
       "reason": "Tunnelled requests in the browser preview carry one raw header line per name, so the web server's repeated-Host check reads them. Lead verdict (2026-11-11): kept; tunnelled requests carry one raw header line per name, so the repeated-Host check reads them without throwing.",
       "sha256": "29e8303e3b605120dbcbe78d967ee1ea4715df3d3b3b0b91a8488b4567bae2dc"
+    },
+    {
+      "path": "packages/client/ui-permission-presets/src/client/index.ts",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Extension point for the per-workspace full-access consent: the optional `permissionSwitchConsent` client service, which both current-session pickers ask after their own risk confirmation and right before they submit `/permission <preset>`; `false` submits nothing. Without a mounted service a pick submits exactly as upstream does, and a typed `/permission <preset>` never asks it. `@delo/bundle-local`'s browser half provides it to show the workspace's consent first. Offer upstream as a generic pre-submit hook."
     }
   ],
   "retired": []

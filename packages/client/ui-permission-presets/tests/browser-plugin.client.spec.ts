@@ -150,6 +150,11 @@ async function bench() {
       .find(entry => entry.component === PermissionRow),
     permissionSelect: () => ctx.slots.entries('conversation.input.permission')
       .find(entry => entry.component === PermissionSelect),
+    /** The composer control's injected face for one Session. */
+    selectFace: (sessionId: SessionId): PermissionSelectInjected => {
+      const select = ctx.slots.entries('conversation.input.permission').find(entry => entry.component === PermissionSelect)!
+      return (select.inject as unknown as (id: SessionId) => PermissionSelectInjected)(sessionId)
+    },
   }
 }
 
@@ -178,10 +183,8 @@ describe('ui-permission browser plugin', () => {
     expect(typeof injected?.select).toBe('function')
     await injected!.load()
     await injected!.select('read-only')
-    const select = b.permissionSelect()!
-    const injectSelect = select.inject as unknown as (sessionId: SessionId) => PermissionSelectInjected
     b.values.set(sid('s1'), { currentValue: 'workspace-write' })
-    const selectInjected = injectSelect(sid('s1'))
+    const selectInjected = b.selectFace(sid('s1'))
     expect(selectInjected?.hooks.permissionCatalog.getSnapshot().value).toEqual(CATALOG)
     await expect(selectInjected.select('auto')).resolves.toBe(true)
     expect(b.commands).toEqual(['/permission auto'])
@@ -325,6 +328,27 @@ describe('ui-permission browser plugin', () => {
     // An unmaterialized session throws before any submit.
     await expect(b.popup().onSelect({ id: 'read-only', label: 'read-only' }, { sessionId: sid('ghost') }))
       .rejects.toThrow(/not materialized/)
+  })
+
+  it('asks a mounted permissionSwitchConsent before either surface submits, and submits nothing it declines', async () => {
+    const b = await bench()
+    const asked: Array<[SessionId, string]> = []
+    let answer = false
+    b.ctx.provide('permissionSwitchConsent', {
+      confirm: (sessionId: SessionId, preset: string) => {
+        asked.push([sessionId, preset])
+        return Promise.resolve(answer)
+      },
+    })
+    const proj = { sessionId: sid('s1') }
+    b.values.set(sid('s1'), { currentValue: 'workspace-write' })
+    await b.popup().onSelect({ id: 'danger-full-access', label: 'danger-full-access' }, proj)
+    await expect(b.selectFace(sid('s1')).select('danger-full-access')).resolves.toBe(false)
+    expect(b.commands).toEqual([])
+    answer = true
+    await expect(b.selectFace(sid('s1')).select('danger-full-access')).resolves.toBe(true)
+    expect(b.commands).toEqual(['/permission danger-full-access'])
+    expect(asked).toEqual([[sid('s1'), 'danger-full-access'], [sid('s1'), 'danger-full-access'], [sid('s1'), 'danger-full-access']])
   })
 
   it('disposal removes the decoration (HMR safety)', async () => {
