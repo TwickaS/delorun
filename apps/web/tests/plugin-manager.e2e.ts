@@ -1212,7 +1212,10 @@ describe('web e2e: plugin manager', () => {
         await action.waitFor({ timeout: 20_000 })
         await action.getByRole('button', { name: '智能体团队', exact: true }).click()
         const teamPanel = teamPage.getByRole('dialog', { name: '智能体团队', exact: true })
-        await teamPanel.getByText('Team 暂不可用', { exact: true }).waitFor()
+        // The Team projection registers after this session opened; the session control stream sends a key that becomes
+        // live after its baseline, so the open page shows the Team at once and needs no reload.
+        await teamPanel.getByText('暂无共享任务，可以通过对话创建').waitFor()
+        expect(await teamPanel.getByText('Team 暂不可用', { exact: true }).count()).toBe(0)
         await teamPage.reload({ waitUntil: 'load' })
         await action.getByRole('button', { name: '智能体团队', exact: true }).click()
         await teamPanel.getByText('暂无共享任务，可以通过对话创建').waitFor()
