@@ -5,7 +5,9 @@
  * - `network-off-denied`: a command of an `off` workspace reaches neither a listener on this machine nor any proxy.
  * - `network-allowlist-proxy`: a command of an `allowlist` workspace fetches a listed host through the proxy, by its
  *   proxy environment and by `CONNECT`, and is refused an unlisted one, which the proxy never looks up.
- * - `network-dns-closed`: the command itself cannot resolve a name, so DNS carries nothing out.
+ * - `network-dns-closed`: the command itself cannot resolve a name, so DNS carries nothing out, and cannot connect to a
+ *   daemon that resolves names or sends traffic for it: systemd-resolved's varlink socket, the system D-Bus, nscd,
+ *   avahi and tailscaled. Each socket this machine lacks is skipped; the others are connected to only to be refused.
  * - `network-private-refused`: a listed name that resolves to a private address is refused.
  * - `network-lists-separate`: a command sees only its own list's proxy socket.
  *
@@ -13,7 +15,7 @@
  * Skips when bwrap or user namespaces are unavailable.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -77,7 +79,7 @@ async function composition(): Promise<Composition> {
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SandboxPolicyService, { mode: 'read-only', workspaceRoot: work })
   await ctx.plugin(LocalSandboxProvider, { protectedHome: home })
-  await ctx.plugin(CommandNetwork, { defaultNetwork: { access: 'open', hosts: [] }, proxyConnectTimeoutMs: 2_000 })
+  await ctx.plugin(CommandNetwork, { defaultNetwork: { access: 'open', hosts: [] }, proxyConnectTimeoutMs: 2_000, proxyMaxConnections: 16, proxyIdleTimeoutMs: 60_000 })
   const network = ctx.deloCommandNetwork
   const names: Record<string, string> = { 'allowed.example': '203.0.113.10', 'private.example': '10.0.0.1', 'other.example': '203.0.113.20' }
   network.internals = {
@@ -117,6 +119,15 @@ const tcp = (host: string, port: number): string => `const s = require('node:net
 
 /** A program that connects to one Unix socket and prints `connected` or the error's code. */
 const unix = (path: string): string => `require('node:net').connect(${JSON.stringify(path)}).on('connect', function () { console.log('connected'); this.destroy() }).on('error', e => console.log('error ' + e.code))`
+
+/** The sockets of daemons that resolve names or send traffic for a command, at their usual paths on Linux. */
+const RESOLVER_SOCKETS = [
+  '/run/systemd/resolve/io.systemd.Resolve',
+  '/run/dbus/system_bus_socket',
+  '/run/nscd/socket',
+  '/run/avahi-daemon/socket',
+  '/run/tailscale/tailscaled.sock',
+]
 
 /** A program that sends one request to the bridge's port, then a plain GET through the tunnel when it opens. */
 const tunnel = (host: string): string => `
@@ -161,6 +172,10 @@ describe.skipIf(!bwrapUsable)('a workspace\'s network under a real bwrap', () =>
     expect(resolved.stdout).toBe('error\n')
     await run(sandbox, policyFor(work), tunnel('secret-data.other.example'))
     expect(lookups).toEqual([])
+    const present = RESOLVER_SOCKETS.filter(path => existsSync(path))
+    for (const path of present) {
+      expect((await run(sandbox, policyFor(work), unix(path))).stdout, path).toMatch(/^error E[A-Z]+\n$/u)
+    }
   })
 
   it('network-private-refused: a listed name that resolves to a private address is refused', async () => {

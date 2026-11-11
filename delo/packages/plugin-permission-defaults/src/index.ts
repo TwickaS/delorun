@@ -110,10 +110,10 @@ export type { CommandNetworkSettings, NetworkListAnswer, NetworkListEntry } from
 export { EgressProxy, parseAuthority, refusalSentence } from './egress-proxy.ts'
 export type { EgressProxyOptions, EgressRefusal, EgressRefusalCode, ResolvedAddress } from './egress-proxy.ts'
 export {
-  entryAdmits, hostAllowed, hostEntryProblem, isNetworkAccess, loosens, MAX_ALLOWED_HOSTS, NETWORK_ACCESSES, normalizeHostEntry,
-  OPEN_NETWORK, parseHostList,
+  DEFAULT_PORTS, entryAdmits, hostAllowed, hostEntryParts, hostEntryProblem, hostListed, isNetworkAccess, loosens, MAX_ALLOWED_HOSTS,
+  NETWORK_ACCESSES, normalizeHost, normalizeHostEntry, OPEN_NETWORK, parseHostList,
 } from './network.ts'
-export type { NetworkAccess, WorkspaceNetwork } from './network.ts'
+export type { HostEntryParts, NetworkAccess, WorkspaceNetwork } from './network.ts'
 export {
   NETWORK_STORE_FILE, NETWORK_STORE_VERSION, NetworkStoreError, networkStorePath, parseNetworkStore, readNetworkStore,
   serializeNetworkStore, writeNetworkStore,
@@ -150,12 +150,18 @@ export interface Config {
    * The allowlist of a workspace without its own setting, used while
    * {@link network} is `allowlist`: host names such as `registry.npmjs.org`,
    * `*.` names such as `*.npmjs.org` for every name below a domain, or public
-   * IP addresses. Validated at load; an entry with a scheme, a port or a path,
-   * a single-label name, a top-level wildcard or a private address fails the load.
+   * IP addresses; each admits ports 80 and 443, and one written `host:port`,
+   * such as `github.com:22`, admits that port instead. Validated at load; an
+   * entry with a scheme or a path, a single-label name, a top-level wildcard or
+   * a private address fails the load.
    */
   readonly allowedHosts: string[]
   /** How long the egress proxy waits for a connection to a listed host to open, in milliseconds. */
   readonly proxyConnectTimeoutMs: number
+  /** The most connections one allowlist's egress proxy holds at once; one more is refused. */
+  readonly proxyMaxConnections: number
+  /** How long a connection through the egress proxy may carry no byte either way before it is closed, in milliseconds. */
+  readonly proxyIdleTimeoutMs: number
 }
 
 /** Validated configuration. The default is the parity value. */
@@ -164,6 +170,8 @@ export const Config: z<Config> = z.object({
   network: z.union(NETWORK_ACCESSES).default('open'),
   allowedHosts: z.array(z.string()).default([]),
   proxyConnectTimeoutMs: z.natural().default(30_000),
+  proxyMaxConnections: z.natural().default(256),
+  proxyIdleTimeoutMs: z.natural().default(300_000),
 })
 
 /** Stable failure code for a full-access consent the person refused, or no channel could carry. */
@@ -808,7 +816,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const allowed = parseHostList(config.allowedHosts)
   if ('problem' in allowed) throw new Error(`permission-defaults: allowedHosts is refused: ${allowed.problem}`)
-  if (!(config.proxyConnectTimeoutMs > 0)) throw new Error('permission-defaults: proxyConnectTimeoutMs must be a positive number of milliseconds')
+  for (const field of ['proxyConnectTimeoutMs', 'proxyMaxConnections', 'proxyIdleTimeoutMs'] as const) {
+    if (!(config[field] > 0)) throw new Error(`permission-defaults: ${field} must be a positive number`)
+  }
   // Awaited, with the service's own injections declared on the plugin, so the store is read and the guard provided
   // before the Loader counts this row as started; the network's proxies listen and its resolver is provided the same way.
   await ctx.plugin(PermissionDefaults).await()
@@ -817,6 +827,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   await ctx.plugin(CommandNetwork, {
     defaultNetwork: { access: config.network, hosts: allowed.hosts },
     proxyConnectTimeoutMs: config.proxyConnectTimeoutMs,
+    proxyMaxConnections: config.proxyMaxConnections,
+    proxyIdleTimeoutMs: config.proxyIdleTimeoutMs,
   } satisfies CommandNetworkSettings).await()
 }
 

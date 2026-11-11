@@ -203,7 +203,7 @@ describe('the Network section', () => {
   })
 
   it('shows the Host\'s sentence in the row for a host entry it refuses, and keeps the draft', async () => {
-    const message = '"https://example.com" is not a host name: write a name such as registry.npmjs.org or *.npmjs.org, with no scheme, port or path'
+    const message = '"https://example.com" is not a host name: write a name such as registry.npmjs.org or *.npmjs.org, with no scheme or path, and a port only after a colon'
     const host = fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: LIST, [`POST ${NETWORK_ROUTES.set}`]: refusal(422, 'NETWORK_INVALID', message) })
     renderSection(host)
     const beta = await rowOf('Beta')

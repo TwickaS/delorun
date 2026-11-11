@@ -4,17 +4,18 @@
  * counting every workspace as `off`, the `web_fetch` refusal, the two routes, and the plugin's switch and validation.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { IncomingMessage, ServerResponse } from 'node:http'
+import { connect, Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { apply, Config } from '../src/index.ts'
 import {
-  arrivedAtComputer, CommandNetwork, listKey, NETWORK_LIST_PATH, NETWORK_LOOPBACK_ONLY, NETWORK_SET_PATH, NetworkChangeError, webFetchRefusal,
-  type CommandNetworkSettings,
+  arrivedAtComputer, CommandNetwork, listKey, NETWORK_LIST_PATH, NETWORK_LOOPBACK_ONLY, NETWORK_SET_PATH, NetworkChangeError, routedPath,
+  webFetchRefusal, type CommandNetworkSettings,
 } from '../src/command-network.ts'
 import { networkStorePath, serializeNetworkStore } from '../src/network-store.ts'
 import type { WorkspaceNetwork } from '../src/network.ts'
@@ -49,11 +50,11 @@ interface Mounted {
  * Mount the service under a fresh home with two workspace folders, a fake Connection that captures its routes, and a
  * fake registry that lists both folders.
  */
-async function mounted(settings: Partial<CommandNetworkSettings> = {}, store?: (paths: { work: string, other: string }) => string): Promise<Mounted> {
+async function mounted(settings: Partial<CommandNetworkSettings> = {}, store?: (paths: { work: string, other: string }) => string, homeName = 'home'): Promise<Mounted> {
   // A short prefix: the proxy's socket path under the home must stay within 107 bytes under the check runner's TMPDIR.
   const root = mkdtempSync(join(tmpdir(), 'dcn-'))
   roots.push(root)
-  const home = join(root, 'home')
+  const home = join(root, homeName)
   const work = join(root, 'work')
   const other = join(root, 'other')
   for (const directory of [home, work, other]) mkdirSync(directory, { recursive: true, mode: 0o700 })
@@ -68,7 +69,7 @@ async function mounted(settings: Partial<CommandNetworkSettings> = {}, store?: (
   const routes = new Map<string, Route>()
   ctx.provide('connection', { fetch: { register: (route: Route) => { routes.set(route.path, route); return () => { routes.delete(route.path) } } } } as never)
   ctx.provide('workspaceRegistry', { list: () => [{ path: work, title: 'Work' }, { path: other, title: 'Other' }] } as never)
-  await ctx.plugin(CommandNetwork, { defaultNetwork: { access: 'open', hosts: [] }, proxyConnectTimeoutMs: 1_000, ...settings })
+  await ctx.plugin(CommandNetwork, { defaultNetwork: { access: 'open', hosts: [] }, proxyConnectTimeoutMs: 1_000, proxyMaxConnections: 8, proxyIdleTimeoutMs: 60_000, ...settings })
   return { ctx, network: ctx.deloCommandNetwork, home, work, other, routes }
 }
 
@@ -102,6 +103,15 @@ describe('the network a workspace\'s policy carries', () => {
   it('applies the deployment default to a workspace without its own setting, and starts its proxy at start', async () => {
     const { ctx, work } = await mounted({ defaultNetwork: allowlist('a.example') })
     expect(ctx.sandboxNetwork({ workspaceRoot: work })).toMatchObject({ mode: 'proxy' })
+  })
+
+  it('gives an allowlist whose proxy cannot listen no network, never the host\'s, and records no such setting', async () => {
+    const { ctx, network, work, other } = await mounted({ defaultNetwork: allowlist('a.example') }, undefined, 'h'.repeat(120))
+    expect(ctx.sandboxNetwork({ workspaceRoot: work })).toEqual({ mode: 'off' })
+    await network.set(other, { access: 'off', hosts: [] }, false)
+    await expect(network.set(other, allowlist('b.example'), true)).rejects.toMatchObject({ code: 'PROXY', message: expect.stringContaining('longer than 107 bytes') as string })
+    expect(ctx.sandboxNetwork({ workspaceRoot: other })).toEqual({ mode: 'off' })
+    expect(network.networkOf(other)).toEqual({ access: 'off', hosts: [] })
   })
 
   it('reads the store at start', async () => {
@@ -155,6 +165,11 @@ describe('changing a workspace\'s network', () => {
     expect(ctx.sandboxNetwork({ workspaceRoot: other })).toEqual(shared)
     await network.set(other, allowlist(), false)
     expect(ctx.sandboxNetwork({ workspaceRoot: other })).not.toEqual(shared)
+    if (shared?.mode !== 'proxy') throw new Error('the shared list resolves to a proxy')
+    const reached = await new Promise<string>((resolve) => {
+      connect(shared.socket).on('connect', function (this: Socket) { this.destroy(); resolve('connected') }).on('error', (error: NodeJS.ErrnoException) => { resolve(error.code ?? 'error') })
+    })
+    expect(reached).toBe('ENOENT')
   })
 })
 
@@ -170,8 +185,10 @@ describe('web_fetch', () => {
     const { network, work, other } = await mounted()
     await network.set(work, { access: 'off', hosts: [] }, false)
     await network.set(other, allowlist('*.example.org'), true)
-    expect(network.reviewFetch(fetchCall(work, 'https://docs.example.org/'))).toBe(webFetchRefusal({ access: 'off', hosts: [] }, 'docs.example.org'))
+    expect(network.reviewFetch(fetchCall(work, 'https://docs.example.org/'))).toBe(webFetchRefusal({ access: 'off', hosts: [] }, { host: 'docs.example.org', port: 443 }))
     expect(network.reviewFetch(fetchCall(other, 'https://docs.example.org/x'))).toBeUndefined()
+    expect(network.reviewFetch(fetchCall(other, 'http://docs.example.org/x'))).toBeUndefined()
+    expect(network.reviewFetch(fetchCall(other, 'https://docs.example.org:8443/x'))).toContain('"docs.example.org" is on this workspace\'s network allowlist for ports 80 and 443 only, unless an entry names port 8443')
     expect(network.reviewFetch(fetchCall(other, 'https://example.com/'))).toContain('"example.com" is not on this workspace\'s network allowlist')
     expect(network.reviewFetch(fetchCall(other, 'not a url'))).toContain('the URL could not be read')
     expect(network.reviewFetch(fetchCall(other, 7))).toContain('the URL could not be read')
@@ -221,9 +238,57 @@ describe('the routes', () => {
   })
 })
 
+describe('the route hook', () => {
+  /** A request as the Connection's `connection/request` waterfall receives it, and the response it is answered with. */
+  function arrival(url: string, host: string): { request: IncomingMessage, response: ServerResponse, writeHead: ReturnType<typeof vi.spyOn>, end: ReturnType<typeof vi.spyOn> } {
+    const request = new IncomingMessage(new Socket())
+    request.url = url
+    request.headers.host = host
+    const response = new ServerResponse(request)
+    const writeHead = vi.spyOn(response, 'writeHead').mockReturnValue(response)
+    const end = vi.spyOn(response, 'end').mockReturnValue(response)
+    return { request, response, writeHead, end }
+  }
+
+  /** The service mounted with a `homeAuth` that places every request on one listener. */
+  async function withListener(listener: string): Promise<Context> {
+    const { ctx } = await mounted()
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }) } as never)
+    return ctx
+  }
+
+  it('refuses a device\'s request for either route with LOOPBACK_ONLY, however its path is spelled', async () => {
+    const ctx = await withListener('reach-tailscale-private')
+    const spellings = [NETWORK_LIST_PATH, `${NETWORK_SET_PATH}?confirmed=1`, '/x/../api/deloNetwork.list', '/api/x/%2e%2e/deloNetwork.set', '/api\\deloNetwork.list', 'http://127.0.0.1:3080/api/deloNetwork.list', 'http://[bad']
+    for (const url of spellings) {
+      const { request, response, writeHead, end } = arrival(url, '127.0.0.1:3080')
+      const next = vi.fn(async () => {})
+      await ctx.waterfall('connection/request', request, response, next)
+      expect([url, next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([url, 0, 403])
+      expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: NETWORK_LOOPBACK_ONLY })
+    }
+  })
+
+  it('lets the home\'s own computer through, and leaves a device\'s request for another path alone', async () => {
+    for (const [listener, url] of [['loopback', NETWORK_LIST_PATH], ['reach-tailscale-private', '/api/other']] as const) {
+      const ctx = await withListener(listener)
+      const { request, response, writeHead } = arrival(url, '127.0.0.1:3080')
+      const next = vi.fn(async () => {})
+      await ctx.waterfall('connection/request', request, response, next)
+      expect([next.mock.calls.length, writeHead.mock.calls.length]).toEqual([1, 0])
+    }
+  })
+
+  it('reads a target as the router does, and names no path for one that does not parse', () => {
+    expect(routedPath('/x/../api/deloNetwork.list?y')).toBe(NETWORK_LIST_PATH)
+    expect(routedPath(undefined)).toBe('/')
+    expect(routedPath('http://[bad')).toBeUndefined()
+  })
+})
+
 describe('the plugin\'s network configuration', () => {
   it('defaults to the parity value and an open network', () => {
-    expect(Config()).toEqual({ enabled: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000 })
+    expect(Config()).toEqual({ enabled: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000, proxyMaxConnections: 256, proxyIdleTimeoutMs: 300_000 })
   })
 
   it('refuses an invalid default allowlist, a zero timeout and a second resolver at load', async () => {
@@ -231,6 +296,8 @@ describe('the plugin\'s network configuration', () => {
     contexts.push(ctx)
     await expect(apply(ctx, { ...Config(), enabled: true, allowedHosts: ['https://x.example'] })).rejects.toThrow('allowedHosts is refused')
     await expect(apply(ctx, { ...Config(), enabled: true, proxyConnectTimeoutMs: 0 })).rejects.toThrow('proxyConnectTimeoutMs')
+    await expect(apply(ctx, { ...Config(), enabled: true, proxyMaxConnections: 0 })).rejects.toThrow('proxyMaxConnections must be a positive number')
+    await expect(apply(ctx, { ...Config(), enabled: true, proxyIdleTimeoutMs: 0 })).rejects.toThrow('proxyIdleTimeoutMs must be a positive number')
     ctx.provide('sandboxNetwork', () => undefined)
     await expect(apply(ctx, { ...Config(), enabled: true })).rejects.toThrow('another plugin already provides the sandbox network resolver')
   })

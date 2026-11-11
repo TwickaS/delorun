@@ -28,7 +28,7 @@ import { isLoopbackHost, type HomeAuthService } from '@delo/home-auth'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { resolveDeloHome } from '@delo/home'
 import { EgressProxy, type EgressProxyOptions, type EgressRefusal } from './egress-proxy.ts'
-import { hostAllowed, isNetworkAccess, loosens, parseHostList, type WorkspaceNetwork } from './network.ts'
+import { hostAllowed, hostListed, isNetworkAccess, loosens, normalizeHost, parseHostList, type WorkspaceNetwork } from './network.ts'
 import { networkStorePath, readNetworkStore, writeNetworkStore } from './network-store.ts'
 import { PERMISSION_STORE_DIR } from './store.ts'
 import { NO_WORKSPACE, workspaceKey } from './workspace.ts'
@@ -60,6 +60,10 @@ export interface CommandNetworkSettings {
   readonly defaultNetwork: WorkspaceNetwork
   /** How long the proxy waits for a listed host's connection to open. */
   readonly proxyConnectTimeoutMs: number
+  /** The most connections one proxy holds at once. */
+  readonly proxyMaxConnections: number
+  /** How long a connection through a proxy may stay idle before it is closed. */
+  readonly proxyIdleTimeoutMs: number
 }
 
 /** One workspace as the Network section lists it. */
@@ -100,13 +104,16 @@ export class NetworkChangeError extends Error {
 /**
  * The sentence `web_fetch` reads when a workspace's network refuses its URL.
  * @param network - the workspace's network.
- * @param host - the URL's host, or `undefined` when the URL could not be read.
+ * @param target - the URL's host and port, or `undefined` when the URL could not be read.
  * @returns the refusal reason.
  */
-export function webFetchRefusal(network: WorkspaceNetwork, host: string | undefined): string {
+export function webFetchRefusal(network: WorkspaceNetwork, target: { readonly host: string, readonly port: number } | undefined): string {
   if (network.access === 'off') return 'web_fetch refused: this workspace\'s network is off, so neither its commands nor web_fetch reach the internet. The person can change it in Settings, Network, at the computer that runs Delo.'
-  if (host === undefined) return 'web_fetch refused: the URL could not be read, and this workspace\'s network allows only the hosts on its allowlist.'
-  return `web_fetch refused: ${JSON.stringify(host)} is not on this workspace's network allowlist. The person can add it in Settings, Network, at the computer that runs Delo.`
+  if (target === undefined) return 'web_fetch refused: the URL could not be read, and this workspace\'s network allows only the hosts on its allowlist.'
+  if (hostListed(network.hosts, normalizeHost(target.host))) {
+    return `web_fetch refused: ${JSON.stringify(target.host)} is on this workspace's network allowlist for ports 80 and 443 only, unless an entry names port ${String(target.port)}. The person can add it in Settings, Network, at the computer that runs Delo.`
+  }
+  return `web_fetch refused: ${JSON.stringify(target.host)} is not on this workspace's network allowlist. The person can add it in Settings, Network, at the computer that runs Delo.`
 }
 
 /**
@@ -254,15 +261,16 @@ export class CommandNetwork extends Service {
     const network = this.networkOf(exec.agent?.session.header.cwd ?? '')
     if (network.access === 'open') return undefined
     const url = (exec.arguments as { url?: unknown } | undefined)?.url
-    let host: string | undefined
+    let target: { readonly host: string, readonly port: number } | undefined
     try {
-      host = typeof url === 'string' ? new URL(url).hostname : undefined
+      const parsed = typeof url === 'string' ? new URL(url) : undefined
+      target = parsed === undefined ? undefined : { host: parsed.hostname, port: parsed.port === '' ? (parsed.protocol === 'http:' ? 80 : 443) : Number(parsed.port) }
     } catch (_invalid) {
       // An unreadable URL names no host the allowlist could admit.
-      host = undefined
+      target = undefined
     }
-    if (network.access === 'allowlist' && host !== undefined && hostAllowed(network.hosts, host)) return undefined
-    return webFetchRefusal(network, host)
+    if (network.access === 'allowlist' && target !== undefined && hostAllowed(network.hosts, target.host, target.port)) return undefined
+    return webFetchRefusal(network, target)
   }
 
   /**
@@ -272,8 +280,8 @@ export class CommandNetwork extends Service {
    */
   private mountRoutes(ctx: Context): void {
     ctx.on('connection/request', async (request, response, next) => {
-      const path = request.url?.split('?', 1)[0]
-      if ((path === NETWORK_LIST_PATH || path === NETWORK_SET_PATH) && !arrivedAtComputer(request, response, ctx.get('homeAuth'))) return
+      const path = routedPath(request.url)
+      if ((path === undefined || path === NETWORK_LIST_PATH || path === NETWORK_SET_PATH) && !arrivedAtComputer(request, response, ctx.get('homeAuth'))) return
       await next()
     })
     ctx.connection.fetch.register({ path: NETWORK_LIST_PATH, methods: ['GET'], requestBody: 'buffered', fetch: () => Promise.resolve(json(200, this.list())) })
@@ -316,6 +324,8 @@ export class CommandNetwork extends Service {
       socket,
       hosts,
       connectTimeoutMs: this.settings.proxyConnectTimeoutMs,
+      maxConnections: this.settings.proxyMaxConnections,
+      idleTimeoutMs: this.settings.proxyIdleTimeoutMs,
       onRefusal: (refusal) => { this.reportRefusal(refusal) },
       ...this.internals,
     })
@@ -431,6 +441,22 @@ function processRuns(pid: number): boolean {
     return true
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/**
+ * The path a request target routes to, read as the Connection's router reads it: through WHATWG URL parsing, which
+ * removes dot segments (`/x/../api`, `/x/%2e%2e/api`) and reads `\` as `/`, so no spelling reaches a network route
+ * while the route hook reads another path.
+ * @param url - the request target, or `undefined` when the carrier reports none.
+ * @returns the path, or `undefined` when the target does not parse, which the hook refuses like a network route.
+ */
+export function routedPath(url: string | undefined): string | undefined {
+  try {
+    return new URL(url ?? '/', 'http://dsh.invalid').pathname
+  } catch (_unparsable) {
+    // The router fails such a target too; until it does, the hook gives it the stricter rule.
+    return undefined
   }
 }
 

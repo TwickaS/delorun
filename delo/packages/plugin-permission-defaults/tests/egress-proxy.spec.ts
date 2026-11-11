@@ -2,7 +2,8 @@
  * Specs of Delo's egress proxy on a real Unix socket, with a resolver and a dialer that map documentation addresses
  * (`203.0.113.0/24`, which the fetch guard allows) to local listeners, so no request leaves the machine: a listed host
  * is tunnelled and forwarded, an unlisted one is refused before any lookup, a listed name that resolves to a refused
- * address is refused, every refusal is reported, and closing the proxy ends its tunnels.
+ * address is refused, a port no entry admits is refused, a forwarded request carries the checked host, every refusal
+ * is reported, the proxy refuses a connection beyond its cap and closes an idle one, and closing it ends its tunnels.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
@@ -53,7 +54,7 @@ interface Started {
  * Start a proxy for `hosts` whose resolver answers from `names` and whose dialer sends every `203.0.113.0/24` address to
  * the loopback port `target`.
  */
-async function started(hosts: readonly string[], names: Record<string, readonly string[]>, target: number): Promise<Started> {
+async function started(hosts: readonly string[], names: Record<string, readonly string[]>, target: number, limits: { readonly maxConnections?: number, readonly idleTimeoutMs?: number } = {}): Promise<Started> {
   const dir = mkdtempSync(join(tmpdir(), 'delo-egress-'))
   const socket = join(dir, 'p.sock')
   const refusals: EgressRefusal[] = []
@@ -62,6 +63,8 @@ async function started(hosts: readonly string[], names: Record<string, readonly 
     socket,
     hosts,
     connectTimeoutMs: 2_000,
+    maxConnections: limits.maxConnections ?? 8,
+    idleTimeoutMs: limits.idleTimeoutMs ?? 60_000,
     onRefusal: (refusal) => { refusals.push(refusal) },
     resolve: (host) => {
       lookups.push(host)
@@ -126,7 +129,7 @@ describe('CONNECT tunnels', () => {
   })
 
   it('refuses a listed private address literal and allows a listed public one without a lookup', async () => {
-    const { socket, lookups } = await started(['203.0.113.10', '*.example'], {}, await echoServer())
+    const { socket, lookups } = await started(['203.0.113.10:22', '*.example'], {}, await echoServer())
     expect(await exchange(socket, 'CONNECT 203.0.113.10:22 HTTP/1.1\r\n\r\n', 'x', /x$/u)).toBe('HTTP/1.1 200 Connection Established\r\n\r\nx')
     expect(await exchange(socket, 'CONNECT 10.0.0.1:443 HTTP/1.1\r\n\r\n')).toMatch(/^HTTP\/1\.1 403 /u)
     expect(lookups).toEqual([])
@@ -137,6 +140,18 @@ describe('CONNECT tunnels', () => {
     expect(await exchange(socket, 'CONNECT registry.npmjs.org:443 HTTP/1.1\r\n\r\n', 'y', /y$/u)).toBe('HTTP/1.1 200 Connection Established\r\n\r\ny')
     expect(await exchange(socket, 'CONNECT npmjs.org:443 HTTP/1.1\r\n\r\n')).toMatch(/^HTTP\/1\.1 403 /u)
     expect(refusals.map(refusal => refusal.code)).toEqual(['not-listed'])
+  })
+
+  it('refuses a listed host on a port no entry admits without looking it up, and admits the port an entry names', async () => {
+    const { socket, refusals, lookups } = await started(['allowed.example', 'git.example:22'], { 'allowed.example': ['203.0.113.10'], 'git.example': ['203.0.113.10'] }, await echoServer())
+    const answer = await exchange(socket, 'CONNECT allowed.example:22 HTTP/1.1\r\n\r\n')
+    expect(answer).toMatch(/^HTTP\/1\.1 403 Port not on this workspace's network allowlist\r\n/u)
+    expect(answer).toContain('such as allowed.example:22')
+    expect(await exchange(socket, 'CONNECT git.example:443 HTTP/1.1\r\n\r\n')).toMatch(/^HTTP\/1\.1 403 Port not on /u)
+    expect(lookups).toEqual([])
+    expect(await exchange(socket, 'CONNECT git.example:22 HTTP/1.1\r\n\r\n', 'z', /z$/u)).toBe('HTTP/1.1 200 Connection Established\r\n\r\nz')
+    expect(await exchange(socket, 'CONNECT allowed.example:80 HTTP/1.1\r\n\r\n', 'w', /w$/u)).toBe('HTTP/1.1 200 Connection Established\r\n\r\nw')
+    expect(refusals).toEqual([{ host: 'allowed.example', port: 22, code: 'port-not-listed' }, { host: 'git.example', port: 443, code: 'port-not-listed' }])
   })
 
   it('answers 502 for a listed host that does not resolve or that no address answers', async () => {
@@ -185,7 +200,55 @@ describe('absolute http:// requests', () => {
     const { socket, refusals } = await started(['private.example', 'dark.example'], { 'private.example': ['192.168.0.9'], 'dark.example': ['198.51.100.1'] }, await httpServer())
     expect(await exchange(socket, 'GET http://private.example/ HTTP/1.1\r\nHost: private.example\r\nConnection: close\r\n\r\n')).toMatch(/^HTTP\/1\.1 403 Host resolves to a refused address\r\n/u)
     expect(refusals).toEqual([{ host: 'private.example', port: 80, code: 'private' }])
-    expect(await exchange(socket, 'GET http://dark.example:8080/ HTTP/1.1\r\nHost: dark.example\r\nConnection: close\r\n\r\n')).toMatch(/^HTTP\/1\.1 502 /u)
+    expect(await exchange(socket, 'GET http://dark.example/ HTTP/1.1\r\nHost: dark.example\r\nConnection: close\r\n\r\n')).toMatch(/^HTTP\/1\.1 502 /u)
+  })
+
+  it('sends the host of the checked URL, never another Host the command sent', async () => {
+    const { socket } = await started(['allowed.example', 'alt.example:8080'], { 'allowed.example': ['203.0.113.10'], 'alt.example': ['203.0.113.10'] }, await httpServer())
+    expect(await exchange(socket, 'GET http://allowed.example/a HTTP/1.1\r\nHost: internal.example\r\nConnection: close\r\n\r\n')).toContain('GET /a allowed.example no-proxy-header')
+    expect(await exchange(socket, 'GET http://alt.example:8080/b HTTP/1.1\r\nHost: internal.example\r\nConnection: close\r\n\r\n')).toContain('GET /b alt.example:8080 no-proxy-header')
+  })
+})
+
+describe('connection limits', () => {
+  /** Open a connection to the proxy and wait until it is accepted. */
+  async function opened(socket: string): Promise<Socket> {
+    const client = connect(socket)
+    closers.push(() => { client.destroy(); return Promise.resolve() })
+    await new Promise<void>((resolve) => { client.once('connect', () => { resolve() }) })
+    return client
+  }
+
+  it('refuses a connection beyond its cap with a sentence, serves none of its requests, and accepts again once one closes', async () => {
+    const { socket, refusals, lookups } = await started(['allowed.example'], { 'allowed.example': ['203.0.113.10'] }, await echoServer(), { maxConnections: 2 })
+    const first = await opened(socket)
+    await opened(socket)
+    const refused = await exchange(socket, 'CONNECT allowed.example:443 HTTP/1.1\r\n\r\n')
+    expect(refused).toMatch(/^HTTP\/1\.1 503 Too many connections through this allowlist\r\n/u)
+    expect(refused).toContain('as many connections through this workspace\'s allowlist are open as it allows')
+    expect(lookups).toEqual([])
+    expect(refusals).toEqual([{ host: '', port: 0, code: 'busy' }])
+    const closed = new Promise<void>((resolve) => { first.once('close', () => { resolve() }) })
+    first.destroy()
+    await closed
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(await exchange(socket, 'CONNECT allowed.example:443 HTTP/1.1\r\n\r\n', 'ok', /ok$/u)).toBe('HTTP/1.1 200 Connection Established\r\n\r\nok')
+  })
+
+  it('closes a tunnel that carries no byte for its idle time, and keeps one that does', async () => {
+    const { socket } = await started(['allowed.example'], { 'allowed.example': ['203.0.113.10'] }, await echoServer(), { idleTimeoutMs: 300 })
+    const idle = connect(socket, () => { idle.write('CONNECT allowed.example:443 HTTP/1.1\r\n\r\n') })
+    const busy = connect(socket, () => { busy.write('CONNECT allowed.example:443 HTTP/1.1\r\n\r\n') })
+    closers.push(() => { idle.destroy(); busy.destroy(); return Promise.resolve() })
+    await Promise.all([idle, busy].map(client => new Promise<void>((resolve) => { client.once('data', () => { resolve() }) })))
+    const idleClosed = new Promise<number>((resolve) => { idle.once('close', () => { resolve(Date.now()) }) })
+    const start = Date.now()
+    const timer = setInterval(() => { busy.write('.') }, 100)
+    const closedAt = await idleClosed
+    expect(closedAt - start).toBeGreaterThanOrEqual(250)
+    await new Promise(resolve => setTimeout(resolve, 400))
+    clearInterval(timer)
+    expect(busy.destroyed).toBe(false)
   })
 })
 
@@ -195,6 +258,8 @@ describe('the refusal text and the authority parser', () => {
     expect(refusalSentence({ host: 'x.example', port: 443, code: 'loopback' })).toContain('a loopback address')
     expect(refusalSentence({ host: 'x.example', port: 443, code: 'unresolved' })).toContain('could not resolve')
     expect(refusalSentence({ host: '', port: 0, code: 'bad-request' })).toContain('CONNECT host:port')
+    expect(refusalSentence({ host: 'x.example', port: 22, code: 'port-not-listed' })).toContain('ports 80 and 443 unless an entry names another port, such as x.example:22')
+    expect(refusalSentence({ host: '', port: 0, code: 'busy' })).toContain('Close some and try again')
   })
 
   it('splits host and port, IPv6 brackets included, and refuses a missing or out-of-range port', () => {

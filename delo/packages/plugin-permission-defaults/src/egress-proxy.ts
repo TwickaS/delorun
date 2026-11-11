@@ -4,15 +4,18 @@
  * on the command's own loopback interface (`@deepseek-ai/dsh-sandbox-local`).
  *
  * Each request names its destination: `CONNECT host:port` for a tunnel, which carries HTTPS and anything else over
- * TCP, or an absolute `http://` URL for plain HTTP. The proxy checks the name against the allowlist before anything
- * else, so a name the list does not admit is never looked up and a command cannot send data out through DNS
- * questions. An admitted name is resolved here, every address it resolves to is classified by the fetch guard's
+ * TCP, or an absolute `http://` URL for plain HTTP. The proxy checks the name and port against the allowlist before
+ * anything else, so a name the list does not admit is never looked up and a command cannot send data out through DNS
+ * questions. A tunnel's bytes are not read: the proxy cannot check the name a TLS handshake or an inner request names,
+ * only the name the `CONNECT` names, so a listed host that serves several names behind one address can be asked for
+ * another of them. A plain-HTTP request is sent with the `Host` of the URL the proxy checked. An admitted name is resolved here, every address it resolves to is classified by the fetch guard's
  * refusal matrix, and the request is refused when any address is loopback, private, link-local or another refused
  * range, even when the name is listed. The connection then goes to the first approved address that answers, never to
- * a second lookup's answer. Every refusal is answered `403` with a sentence naming the host and the reason, and
- * reported to the owner's log.
+ * a second lookup's answer. Every refusal is answered with a sentence naming the host and the reason, and reported to
+ * the owner's log. A proxy holds at most its configured number of connections at once, refusing one more with `503`,
+ * and closes a connection that carries no byte either way for its configured idle time.
  *
- * Free of Cordis: the service that owns the proxies passes its log and the deployment's connect timeout.
+ * Free of Cordis: the service that owns the proxies passes its log and the deployment's limits.
  *
  * @module @delo/plugin-permission-defaults/egress-proxy
  */
@@ -21,12 +24,16 @@ import { createServer, request as httpRequest, type IncomingHttpHeaders, type In
 import { connect as netConnect, isIP, type Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { refusalOf, type FetchGuardRefusalCode } from '@delo/plugin-fetch-guard/guard'
-import { hostAllowed, normalizeHostEntry } from './network.ts'
+import { hostAllowed, hostListed, normalizeHost } from './network.ts'
 
 /** Why the proxy refused a request. */
 export type EgressRefusalCode =
   /** The host is not on the allowlist; it was not looked up. */
   | 'not-listed'
+  /** The host is on the allowlist, but no entry admits the port; it was not looked up. */
+  | 'port-not-listed'
+  /** The proxy holds its most connections already. */
+  | 'busy'
   /** The listed host did not resolve. */
   | 'unresolved'
   /** The request did not name a destination the proxy serves. */
@@ -57,6 +64,10 @@ export interface EgressProxyOptions {
   readonly hosts: readonly string[]
   /** How long one connection to a listed host may take to open. */
   readonly connectTimeoutMs: number
+  /** The most connections the proxy holds at once; one more is refused. */
+  readonly maxConnections: number
+  /** How long a connection may carry no byte either way before the proxy closes it. */
+  readonly idleTimeoutMs: number
   /**
    * Called once per refused request.
    * @param refusal - the refused host, port and reason.
@@ -79,8 +90,10 @@ export interface EgressProxyOptions {
 }
 
 /** The status and reason phrase of each refusal; every fetch guard code shares `address`. */
-const REFUSALS: Record<'not-listed' | 'unresolved' | 'bad-request' | 'address', { readonly status: number; readonly phrase: string }> = {
+const REFUSALS: Record<'not-listed' | 'port-not-listed' | 'busy' | 'unresolved' | 'bad-request' | 'address', { readonly status: number; readonly phrase: string }> = {
   'not-listed': { status: 403, phrase: 'Host not on this workspace\'s network allowlist' },
+  'port-not-listed': { status: 403, phrase: 'Port not on this workspace\'s network allowlist' },
+  busy: { status: 503, phrase: 'Too many connections through this allowlist' },
   unresolved: { status: 502, phrase: 'Listed host did not resolve' },
   'bad-request': { status: 400, phrase: 'Not a proxy request' },
   address: { status: 403, phrase: 'Host resolves to a refused address' },
@@ -94,6 +107,8 @@ const REFUSALS: Record<'not-listed' | 'unresolved' | 'bad-request' | 'address', 
 function refusalKind(code: EgressRefusalCode): { readonly status: number; readonly phrase: string } {
   switch (code) {
     case 'not-listed':
+    case 'port-not-listed':
+    case 'busy':
     case 'unresolved':
     case 'bad-request':
       return REFUSALS[code]
@@ -112,6 +127,10 @@ export function refusalSentence(refusal: EgressRefusal): string {
   switch (refusal.code) {
     case 'not-listed':
       return `Delo's egress proxy refused ${host}: this workspace's network allows only the hosts on its allowlist. The person can add the host in Settings, Network, at the computer that runs Delo.`
+    case 'port-not-listed':
+      return `Delo's egress proxy refused ${host} port ${String(refusal.port)}: this workspace's allowlist admits a host on ports 80 and 443 unless an entry names another port, such as ${refusal.host}:${String(refusal.port)}. The person can add it in Settings, Network, at the computer that runs Delo.`
+    case 'busy':
+      return 'Delo\'s egress proxy refused a connection: as many connections through this workspace\'s allowlist are open as it allows. Close some and try again.'
     case 'unresolved':
       return `Delo's egress proxy could not resolve ${host}.`
     case 'bad-request':
@@ -135,16 +154,18 @@ export function parseAuthority(authority: string): { readonly host: string; read
   const portText = authority.slice(colon + 1)
   const port = /^\d{1,5}$/u.test(portText) ? Number(portText) : 0
   if (port < 1 || port > 65_535) return undefined
-  return { host: normalizeHostEntry(authority.slice(0, colon)), port }
+  return { host: normalizeHost(authority.slice(0, colon)), port }
 }
 
 /** Delo's egress proxy for one allowlist. */
 export class EgressProxy {
   private readonly server: Server
-  /** Open tunnels, ended when the proxy closes. */
   /** What the proxy serves and how it reports. */
   private readonly options: EgressProxyOptions
+  /** Open tunnels, ended when the proxy closes. */
   private readonly tunnels = new Set<Duplex>()
+  /** The commands' open connections to the proxy, counted against {@link EgressProxyOptions.maxConnections}. */
+  private readonly connections = new Set<Socket>()
   private readonly resolveHost: (host: string) => Promise<readonly ResolvedAddress[]>
   private readonly dial: (address: string, port: number) => Socket
 
@@ -158,6 +179,23 @@ export class EgressProxy {
     this.server = createServer((request, response) => { void this.forward(request, response) })
     this.server.on('connect', (request: IncomingMessage, client: Duplex, head: Buffer) => { void this.tunnel(request, client, head) })
     this.server.on('clientError', (_error, client) => { client.destroy() })
+    this.server.on('connection', (socket: Socket) => { this.accept(socket) })
+  }
+
+  /**
+   * Count one connection from a command, refusing it while the proxy holds its most, and close it once it carries no
+   * byte either way for the idle time. A tunnel's bytes all pass through this connection, so its idle time is the
+   * tunnel's.
+   * @param socket - the command's connection.
+   */
+  private accept(socket: Socket): void {
+    if (this.connections.size >= this.options.maxConnections) {
+      this.refuseRaw(socket, { host: '', port: 0, code: 'busy' })
+      return
+    }
+    this.connections.add(socket)
+    socket.once('close', () => { this.connections.delete(socket) })
+    socket.setTimeout(this.options.idleTimeoutMs, () => { socket.destroy() })
   }
 
   /**
@@ -196,7 +234,7 @@ export class EgressProxy {
    */
   private async admit(host: string, port: number): Promise<{ readonly addresses: readonly ResolvedAddress[] } | { readonly refusal: EgressRefusal }> {
     const named = { host: host.slice(0, 255), port }
-    if (!hostAllowed(this.options.hosts, host)) return { refusal: { ...named, code: 'not-listed' } }
+    if (!hostAllowed(this.options.hosts, host, port)) return { refusal: { ...named, code: hostListed(this.options.hosts, host) ? 'port-not-listed' : 'not-listed' } }
     let addresses: readonly ResolvedAddress[]
     if (isIP(host) !== 0) {
       addresses = [{ address: host, family: isIP(host) }]
@@ -251,6 +289,11 @@ export class EgressProxy {
    * @param head - bytes the client sent after the request.
    */
   private async tunnel(request: IncomingMessage, client: Duplex, head: Buffer): Promise<void> {
+    // A connection refused as one too many is answered already; a request it still carries is not served.
+    if (!this.connections.has(request.socket)) {
+      client.destroy()
+      return
+    }
     this.tunnels.add(client)
     client.on('error', () => { client.destroy() })
     client.on('close', () => { this.tunnels.delete(client) })
@@ -286,6 +329,10 @@ export class EgressProxy {
    * @param response - the client's response.
    */
   private async forward(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (!this.connections.has(request.socket)) {
+      request.socket.destroy()
+      return
+    }
     let url: URL | undefined
     try {
       url = request.url !== undefined && /^http:\/\//iu.test(request.url) ? new URL(request.url) : undefined
@@ -303,7 +350,7 @@ export class EgressProxy {
       refuse({ host: (request.url ?? '').slice(0, 255), port: 0, code: 'bad-request' })
       return
     }
-    const host = normalizeHostEntry(url.hostname)
+    const host = normalizeHost(url.hostname)
     const port = url.port === '' ? 80 : Number(url.port)
     const decision = await this.admit(host, port)
     if ('refusal' in decision) {
@@ -319,10 +366,12 @@ export class EgressProxy {
     const outgoing = httpRequest({
       method: request.method,
       path: `${url.pathname}${url.search}`,
-      headers: forwardedHeaders(request.headers),
+      // The destination reads the host the proxy checked, never a different `Host` the command sent.
+      headers: { ...forwardedHeaders(request.headers), host: url.host },
       setHost: false,
       createConnection: () => socket,
     })
+    response.once('close', () => { socket.destroy() })
     outgoing.on('response', (upstream) => {
       response.writeHead(upstream.statusCode ?? 502, upstream.statusMessage, forwardedHeaders(upstream.headers))
       upstream.pipe(response)
