@@ -379,16 +379,19 @@ function isRedirectStatus(status: number): boolean {
 }
 
 /**
- * Resolve a hostname to every address the connection could use. An IP literal
- * resolves to itself without a lookup; otherwise `node:dns` resolves all
+ * Resolve a URL hostname to every address the connection could use. An IP
+ * literal resolves to itself without a lookup, an IPv6 literal without the
+ * brackets a URL hostname carries; otherwise `node:dns` resolves all
  * addresses in the order the resolver returned them. The Node-only imports are
  * dynamic so browser-worker startup stays free of them, and name `node:dns/promises`, the DNS module the
  * worker packer stubs. The default export is read so the call goes through the object `dns.promises` names.
  */
 async function resolveAddresses(hostname: string): Promise<readonly FetchGuardAddress[]> {
   const { isIP } = await import('node:net')
-  const literal = isIP(hostname)
-  if (literal !== 0) return [{ address: hostname, family: literal }]
+  // WHATWG URL writes an IPv6 host as `[2001:db8::1]`; only that form is bracketed.
+  const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+  const literal = isIP(bare)
+  if (literal !== 0) return [{ address: bare, family: literal }]
   const { default: dns } = await import('node:dns/promises')
   return await dns.lookup(hostname, { all: true, verbatim: true })
 }

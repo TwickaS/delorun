@@ -151,6 +151,23 @@ describe('the provider seam with the guard mounted and on', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('classifies an IPv6-literal destination without a lookup: a public one reaches the transport, loopback and link-local do not', async () => {
+    const ctx = await mount('enabled')
+    fetchMock.mockResolvedValue(ok('served'))
+    const result = await ctx.web.fetch({ url: 'http://[2001:db8::1]:8080/' })
+    expect(result.statusCode).toBe(200)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    for (const [url, code] of [['http://[::1]:8080/', 'loopback'], ['http://[fe80::1]/', 'link-local']] as const) {
+      const refusal = ctx.web.fetch({ url })
+      await expect(refusal).rejects.toBeInstanceOf(FetchGuardRefusedError)
+      await refusal.catch((error: unknown) => {
+        expect((error as FetchGuardRefusedError).code).toBe(code)
+      })
+    }
+    expect(lookup).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('lets a public-looking destination through the classifier to the transport', async () => {
     const ctx = await mount('enabled')
     lookup.mockResolvedValue([{ address: '203.0.113.10', family: 4 }])

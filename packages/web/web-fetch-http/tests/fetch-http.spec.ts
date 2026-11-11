@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import dns from 'node:dns'
 import { AddressInfo } from 'node:net'
 import { Context } from '@deepseek-ai/cordis'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import { HttpFetchProvider, LOCAL_FETCH_PROVIDER_ID } from '@deepseek-ai/dsh-web-fetch-http'
-import type { HttpFetchLimits } from '@deepseek-ai/dsh-web-fetch-http'
+import type { FetchGuardAddress, HttpFetchLimits } from '@deepseek-ai/dsh-web-fetch-http'
 import * as fetchPlugin from '@deepseek-ai/dsh-web-fetch-http'
 import {
   classifyContentType,
@@ -456,6 +457,28 @@ describe('HttpFetchProvider invalid URLs and abort', () => {
     // Port 1 on loopback is not listening: a real connection failure (not abort).
     await expect(provider().fetch({ url: 'http://127.0.0.1:1/' }))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR' }))
+  })
+})
+
+describe('HttpFetchProvider with a mounted guard', () => {
+  it('hands the guard an IP literal as its address, an IPv6 one without the URL brackets, and looks nothing up', async () => {
+    const lookup = vi.spyOn(dns.promises, 'lookup')
+    const seen: Array<readonly FetchGuardAddress[]> = []
+    const guarded = new HttpFetchProvider(limits, () => ({
+      async check(_url: URL, addresses: readonly FetchGuardAddress[]): Promise<void> {
+        seen.push(addresses)
+        throw new Error('guard refused')
+      },
+    }))
+    for (const url of ['http://[2001:db8::1]:8080/', 'http://[::ffff:7f00:1]/', 'http://192.0.2.7/']) {
+      await expect(guarded.fetch({ url })).rejects.toThrow('guard refused')
+    }
+    expect(seen).toEqual([
+      [{ address: '2001:db8::1', family: 6 }],
+      [{ address: '::ffff:7f00:1', family: 6 }],
+      [{ address: '192.0.2.7', family: 4 }],
+    ])
+    expect(lookup).not.toHaveBeenCalled()
   })
 })
 
