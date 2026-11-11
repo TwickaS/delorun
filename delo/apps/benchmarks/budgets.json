@@ -1,43 +1,243 @@
 {
   "schema": "delo.benchmark-budgets/1",
   "rule": "Each ceiling is four times the median measured on the recorded machine and load, at least one second, rounded up to two significant digits; see delo/docs/performance/README.md.",
-  "measured": "Provisional, not yet measured on a quiet machine: the cli and start ceilings come from one run of 2026-11-10 at 13:34 UTC on a shared machine running about a dozen other lanes (load average about 20, storage pressure up to 58%). The other suites have no ceilings yet.",
+  "measured": "Provisional: from the runs of 2026-11-11 between 03:48 and 05:50 UTC at commits 382ea85a5e and 69d5dd2342 on the trunk's 5fb7c934ed, three repetitions each (two for update/changed-format-large), on a 22-CPU WSL2 machine shared with other lanes (load average 4 to 16, storage pressure at most 16%). The studio suite and the stock scenario of the turn suite have no ceilings: they did not complete. A quiet machine replaces them.",
   "suites": {
+    "update": {
+      "same-format": {
+        "total": 350000,
+        "command": 350000,
+        "cli-start": 47000,
+        "running-check": 44000,
+        "channel-verify": 1000,
+        "download-unpack": 140000,
+        "store-install": 15000,
+        "report": 3600,
+        "report-target": 3600,
+        "report-data": 3500,
+        "report-profile": 1000,
+        "confirm": 1000,
+        "snapshot": 1000,
+        "drain": 1000,
+        "stop-host": 39000,
+        "switch": 1000,
+        "target-boot": 8000,
+        "health-check": 38000,
+        "handover": 1000,
+        "rollback": 190000,
+        "rollback-switch": 71000,
+        "rollback-target": 48000
+      },
+      "changed-format": {
+        "total": 400000,
+        "command": 400000,
+        "cli-start": 50000,
+        "running-check": 57000,
+        "channel-verify": 1000,
+        "download-unpack": 110000,
+        "store-install": 13000,
+        "report": 4000,
+        "report-target": 4000,
+        "report-data": 3700,
+        "report-profile": 1000,
+        "confirm": 1000,
+        "snapshot": 1000,
+        "drain": 1000,
+        "stop-host": 59000,
+        "data-copy": 1000,
+        "switch": 1000,
+        "target-boot": 13000,
+        "health-check": 54000,
+        "handover": 1000,
+        "rollback": 210000,
+        "rollback-switch": 69000,
+        "rollback-target": 43000
+      },
+      "changed-format-large": {
+        "total": 330000,
+        "command": 330000,
+        "cli-start": 40000,
+        "running-check": 54000,
+        "channel-verify": 1000,
+        "download-unpack": 110000,
+        "store-install": 15000,
+        "report": 3900,
+        "report-target": 3700,
+        "report-data": 3900,
+        "report-profile": 1000,
+        "confirm": 1000,
+        "snapshot": 1000,
+        "drain": 1000,
+        "stop-host": 43000,
+        "data-copy": 6800,
+        "switch": 1000,
+        "target-boot": 8500,
+        "health-check": 40000,
+        "handover": 1000,
+        "rollback": 250000,
+        "rollback-switch": 90000,
+        "rollback-target": 60000
+      },
+      "warm-store": {
+        "total": 200000,
+        "command": 200000,
+        "cli-start": 5400,
+        "running-check": 48000,
+        "channel-verify": 1000,
+        "report": 3100,
+        "report-target": 3100,
+        "report-data": 3000,
+        "report-profile": 1000,
+        "confirm": 1000,
+        "snapshot": 1000,
+        "drain": 1000,
+        "stop-host": 48000,
+        "switch": 1000,
+        "target-boot": 9700,
+        "health-check": 39000,
+        "handover": 1000,
+        "check": 240000
+      },
+      "many-plugins": {
+        "total": 390000,
+        "command": 390000,
+        "cli-start": 49000,
+        "running-check": 55000,
+        "channel-verify": 1000,
+        "download-unpack": 110000,
+        "store-install": 20000,
+        "report": 5100,
+        "report-target": 5100,
+        "report-data": 4800,
+        "report-profile": 1000,
+        "confirm": 1000,
+        "snapshot": 1000,
+        "drain": 1000,
+        "stop-host": 66000,
+        "switch": 1000,
+        "target-boot": 13000,
+        "health-check": 55000,
+        "handover": 1000
+      }
+    },
     "cli": {
       "installed": {
         "node-start": 1000,
         "launcher-only": 1000,
-        "runtime-version-direct": 1600,
-        "version:first-output": 40000,
-        "version:exit": 40000,
-        "status-stopped:first-output": 67000,
-        "status-stopped:exit": 68000,
-        "doctor:first-output": 69000,
-        "doctor:exit": 69000,
-        "verify-offline:first-output": 120000,
-        "verify-offline:exit": 120000,
-        "trash-list:first-output": 46000,
-        "trash-list:exit": 46000,
-        "recover-status:first-output": 47000,
-        "recover-status:exit": 48000,
-        "plugin-list:exit": 57000,
-        "logs:first-output": 42000,
-        "logs:exit": 42000,
-        "status-running:first-output": 65000,
-        "status-running:exit": 65000,
-        "trash-list-running:first-output": 58000,
-        "trash-list-running:exit": 58000
+        "runtime-version-direct": 1800,
+        "version:first-output": 7500,
+        "version:exit": 7700,
+        "status-stopped:first-output": 7100,
+        "status-stopped:exit": 7300,
+        "doctor:first-output": 11000,
+        "doctor:exit": 11000,
+        "verify-offline:first-output": 68000,
+        "verify-offline:exit": 69000,
+        "trash-list:first-output": 6200,
+        "trash-list:exit": 6400,
+        "recover-status:first-output": 6000,
+        "recover-status:exit": 6200,
+        "plugin-list:exit": 8400,
+        "logs:first-output": 5500,
+        "logs:exit": 5600,
+        "status-running:first-output": 4200,
+        "status-running:exit": 4300,
+        "open-print:first-output": 6100,
+        "open-print:exit": 6200,
+        "trash-list-running:first-output": 4300,
+        "trash-list-running:exit": 4400
       }
     },
     "start": {
       "installed": {
-        "start-cold": 74000,
-        "start-cold:studio": 74000,
-        "stop": 36000,
-        "start-warm": 41000,
-        "start-warm:studio": 41000,
-        "stop-now": 35000,
-        "restart": 120000
+        "start-cold": 86000,
+        "start-cold:studio": 86000,
+        "stop": 62000,
+        "start-warm": 22000,
+        "start-warm:studio": 22000,
+        "stop-now": 8900,
+        "restart": 34000
+      }
+    },
+    "install": {
+      "first-run": {
+        "install": 170000,
+        "install:resolve": 1300,
+        "install:signature": 1000,
+        "install:log": 1000,
+        "install:download": 140000,
+        "install:store-and-start": 48000,
+        "setup": 9800,
+        "first-start": 23000,
+        "first-start:studio": 23000,
+        "install-to-studio": 210000
+      }
+    },
+    "data": {
+      "small": {
+        "export-chat": 36000,
+        "trash-delete-chat": 1000,
+        "trash-restore-chat": 1000,
+        "trash-delete-all": 3100,
+        "trash-list-full": 1000,
+        "trash-list-cli": 7800
+      },
+      "large": {
+        "export-chat": 54000,
+        "trash-delete-chat": 1000,
+        "trash-restore-chat": 1000,
+        "trash-delete-all": 49000,
+        "trash-list-full": 1300,
+        "trash-list-cli": 7300
+      }
+    },
+    "plugins": {
+      "lifecycle": {
+        "install": 48000,
+        "install:loaded": 57000,
+        "disable": 8500,
+        "enable": 8600,
+        "reload": 8500
+      },
+      "start-0": {
+        "start": 54000,
+        "start:studio": 54000
+      },
+      "start-5": {
+        "start": 71000,
+        "start:studio": 71000,
+        "start:plugins": 62000
+      },
+      "start-20": {
+        "start": 57000,
+        "start:studio": 57000,
+        "start:plugins": 51000
+      }
+    },
+    "turn": {
+      "delorun": {
+        "first-token-cold": 1000,
+        "turn-end-cold": 1000,
+        "first-token": 1000,
+        "turn-end": 1000,
+        "to-model": 1000,
+        "token-delivery": 1000,
+        "model-to-end": 1000,
+        "read-first": 1000,
+        "read": 1000,
+        "read-turn": 4200,
+        "write-first": 1000,
+        "write": 1000,
+        "write-turn": 6400
+      }
+    },
+    "recovery": {
+      "installed": {
+        "recover-status": 61000,
+        "safe-mode-enter": 52000,
+        "safe-mode-start": 25000,
+        "safe-mode-start:studio": 25000,
+        "safe-mode-exit": 8300
       }
     }
   }

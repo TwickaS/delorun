@@ -66,6 +66,7 @@ export const recoverySuite: Suite = {
     const samples = new Samples()
     const failures: string[] = []
     let completed = 0
+    let noHistory = false
     for (let index = 0; index < context.options.repeat; index++) {
       context.log(`recovery/installed: repetition ${String(index + 1)} of ${String(context.options.repeat)}`)
       const root = context.newRoot()
@@ -80,8 +81,8 @@ export const recoverySuite: Suite = {
         await stopHome(home)
         samples.add('safe-mode-exit', span(await command(home, ['recover', 'exit-safe-mode'])))
         const version = oldestVersion(await command(home, ['recover', 'status', '--json']))
-        if (version === undefined) throw new Error('the profile history lists no version to restore')
-        samples.add('restore-version', span(await command(home, ['recover', 'restore', version])))
+        if (version === undefined) noHistory = true
+        else samples.add('restore-version', span(await command(home, ['recover', 'restore', version])))
         completed++
       } catch (error) {
         failures.push(context.scrubber.scrub(error instanceof Error ? error.message : String(error)))
@@ -91,6 +92,8 @@ export const recoverySuite: Suite = {
       }
     }
     const result: ScenarioResult = { scenario: 'installed', description: recoverySuite.scenarios[0]!.description, parameters: { chats: context.options.chatsSmall }, completed, phases: samples.results(Object.keys(RECOVERY_ITEMS)), failures }
-    return { suite: 'recovery', scenarios: [result], skipped: [{ item: 'rollback', reason: 'measured by the update suite, which has an update to roll back' }] }
+    const skipped = [{ item: 'rollback', reason: 'measured by the update suite, which has an update to roll back' }]
+    if (noHistory) skipped.push({ item: 'restore-version', reason: 'the profile history of a home that `delorun setup --yes` set up lists no version, so there is none to restore' })
+    return { suite: 'recovery', scenarios: [result], skipped }
   },
 }
