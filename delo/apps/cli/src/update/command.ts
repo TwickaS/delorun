@@ -9,8 +9,8 @@
  * - `--check` runs the update check ([notice](./notice.ts)) on demand, whatever the profile's switch says: it fetches
  *   and verifies only the channel's signed metadata, needs no home process, prints the notice's line, and installs and
  *   changes nothing.
- * - `--yes` confirms a report with no `disabled` or `removed` item and no unverified item, and takes the copy when the
- *   data differs.
+ * - `--yes` confirms a report with no `disabled` or `removed` item and no unverified item, so never one with a
+ *   conflicted harness file, and takes the copy when the data differs.
  * - `--data-copy` takes a copy when the data does not differ; `--no-data-copy` declines it when it does.
  *
  * @module @delo/cli/update/command
@@ -139,11 +139,14 @@ export function reportLines(report: UpdateReport): readonly string[] {
     `Release checks: signature ${report.release.signature}, freshness ${report.release.freshness}, log ${report.release.log}.`,
     `Installations: ${report.installations.map(entry => `${entry.id} ${entry.delo ?? ''} ${entry.state}`.replace(/ +/gu, ' ')).join('; ')}.`,
   ]
-  const changes = report.items.filter(item => item.kind !== 'data')
+  const changes = report.items.filter(item => item.kind !== 'data' && item.kind !== 'harness')
   lines.push(changes.length === 0 ? 'No plugin, bundle or profile row changes.' : `Changes (${String(changes.length)}):`)
   for (const item of changes) {
     lines.push(`  - ${item.effect}: ${reasonMessage(item, versions)}${item.verification === 'unverified' ? ` ${UNVERIFIED_NOTE}` : ''}`)
   }
+  const harness = report.items.filter(item => item.kind === 'harness')
+  if (harness.length > 0) lines.push(`Your changes to Delo's own files (${String(harness.length)}):`)
+  for (const item of harness) lines.push(`  - ${reasonMessage(item, versions)}`)
   for (const source of report.notChecked) lines.push(`Not checked: ${uncheckedMessage(source)}`)
   for (const item of report.items) {
     if (item.kind !== 'data') continue

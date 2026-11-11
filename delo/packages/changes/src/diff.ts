@@ -50,7 +50,7 @@ async function cachedObject(home: string, cache: ObjectCache, digest: ObjectDige
  * @param bytes - the bytes.
  * @returns whether they are binary.
  */
-function isBinary(bytes: Buffer): boolean {
+export function isBinary(bytes: Buffer): boolean {
   return bytes.subarray(0, BINARY_PROBE_BYTES).includes(0) || !isUtf8(bytes)
 }
 

@@ -3,7 +3,7 @@
   "store-layout": 1,
   "profile-safety": 1,
   "safe-mode": 1,
-  "update-report": 2,
+  "update-report": 3,
   "session-data-copy": 1,
   "data-restore-journal": 1,
   "storage:delo_workspaces": 1,
@@ -17,5 +17,6 @@
   "changes-active": 1,
   "changes-boot": 1,
   "changes-work": 1,
-  "changes-migration": 1
+  "changes-migration": 1,
+  "changes-harness": 1
 }

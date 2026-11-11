@@ -11,7 +11,7 @@ import type { ReleaseChannel, SemanticVersion, Sha256Hex, UtcTimestamp } from '@
 import type { VersionAxis } from '@delo/contract-plugin-versions'
 
 /** The `schema` value of an update report. */
-export const UPDATE_REPORT_SCHEMA = 'delo.update-report/2'
+export const UPDATE_REPORT_SCHEMA = 'delo.update-report/3'
 
 /** The two installations that update independently: the CLI home and the desktop app with its Host. */
 export type Installation = 'cli-home' | 'desktop-host'
@@ -78,7 +78,7 @@ export interface InstallationStatus {
 export type ReleaseCheckResult = 'passed' | 'failed'
 
 /** What an item is about. */
-export type ItemKind = 'plugin' | 'bundle' | 'row' | 'data'
+export type ItemKind = 'plugin' | 'bundle' | 'row' | 'data' | 'harness'
 
 /** A plugin subject. */
 export interface PluginSubject {
@@ -116,6 +116,37 @@ export interface DataSubject {
   readonly directories: readonly SessionDataDirectory[]
 }
 
+/** A `harness` subject: one file of the harness whose approved content differs from the running release's signed file. */
+export interface HarnessSubject {
+  /** The file's path relative to the runtime's root, `/`-separated, under `app/`. */
+  readonly file: string
+}
+
+/**
+ * How the person's approved content of a harness file meets the target's file, for `harness` items. The first three
+ * carry the change; the others are conflicts, where the target's file runs and the person's is kept beside it.
+ *
+ * - `release-unchanged`: the target's file equals the running release's, so the approved content carries as it is.
+ * - `merged`: both releases' files differ and the person's edit applies to the target's file without overlapping it.
+ * - `in-release`: the target's file equals the approved content.
+ * - `edits-overlap`: the person's edit does not apply to the target's file as it is.
+ * - `binary`: both sides changed a file that is not UTF-8 text.
+ * - `too-large`: both sides changed a file larger than the merge reads.
+ * - `release-removed`: the target has no such file, and the person changed it.
+ * - `release-changed-removed`: the person removed the file, and the target changed it.
+ * - `both-added`: the running release has no such file, and the target adds one with other content than the person's.
+ */
+export type HarnessMerge =
+  | 'release-unchanged'
+  | 'merged'
+  | 'in-release'
+  | 'edits-overlap'
+  | 'binary'
+  | 'too-large'
+  | 'release-removed'
+  | 'release-changed-removed'
+  | 'both-added'
+
 /** The `schema` value of a release's `data-formats.json`. */
 export const DATA_FORMATS_SCHEMA = 'delo.data-formats/1'
 
@@ -145,7 +176,7 @@ export interface DataCopySize {
   readonly free: number
 }
 
-/** Every reason code of report format 2; the list is closed for that format. */
+/** Every reason code of report format 3; the list is closed for that format. */
 export type ReportReason =
   | 'dsh-requirement-unmet'
   | 'delo-requirement-unmet'
@@ -162,6 +193,8 @@ export type ReportReason =
   | 'row-include-blocked'
   | 'data-format-changed'
   | 'data-format-unknown'
+  | 'harness-change-carried'
+  | 'harness-change-conflicts'
 
 /** What happens to an item's subject on the target. */
 export type ItemEffect = 'disabled' | 'removed' | 'changed' | 'kept'
@@ -190,13 +223,15 @@ export interface ItemDetail {
   readonly unreadable?: readonly ('from' | 'to')[]
   /** The size of the session-data copy and the free space, for `data` reasons. */
   readonly copy?: DataCopySize
+  /** How the approved content meets the target's file, for `harness` reasons. */
+  readonly merge?: HarnessMerge
 }
 
 /** Fields every item has. */
 interface ItemFields<K extends ItemKind, S> {
   /** What the item is about. */
   readonly kind: K
-  /** The plugin, bundle or row. */
+  /** The plugin, bundle, row, chat data or harness file. */
   readonly subject: S
   /** Why it changes. */
   readonly reason: ReportReason
@@ -216,6 +251,7 @@ export type ReportItem =
   | ItemFields<'bundle', BundleSubject>
   | ItemFields<'row', RowSubject>
   | ItemFields<'data', DataSubject>
+  | ItemFields<'harness', HarnessSubject>
 
 /** A source the report did not read, so no item rests on it: `revocations`, the target's revocation list, when the target publishes none. */
 export type UncheckedSource = 'revocations'
@@ -245,13 +281,14 @@ export interface UpdateReport {
   readonly items: readonly ReportItem[]
   /** The sources the report did not read; the person is told, and the health check is what holds them. */
   readonly notChecked: readonly UncheckedSource[]
-  /** Items per effect, unverified items and `data` items. */
+  /** Items per effect, unverified items, `data` items and `harness` items. */
   readonly counts: {
     readonly disabled: number
     readonly removed: number
     readonly changed: number
     readonly unverified: number
     readonly data: number
+    readonly harness: number
   }
 }
 

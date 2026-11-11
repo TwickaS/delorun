@@ -53,7 +53,7 @@ function report(change: Partial<UpdateReport> = {}): UpdateReport {
     installations,
     items: [],
     notChecked: [],
-    counts: { disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0 },
+    counts: { disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0, harness: 0 },
     ...change,
   }
 }
@@ -66,6 +66,12 @@ const DISABLED_PLUGIN: ReportItem = { kind: 'plugin', subject: { name: 'plugin-a
 
 /** A plugin whose manifest Delo could not read. */
 const UNVERIFIED_PLUGIN: ReportItem = { kind: 'plugin', subject: { name: 'plugin-b', version: semantic('2.0.0') }, reason: 'manifest-unreadable', effect: 'kept', verification: 'unverified', detail: {}, actions: [] }
+
+/** An approved harness file whose change carries. */
+const CARRIED_FILE: ReportItem = { kind: 'harness', subject: { file: 'app/a.js' }, reason: 'harness-change-carried', effect: 'kept', verification: 'verified', detail: { merge: 'merged' }, actions: [] }
+
+/** An approved harness file that conflicts with the new release's. */
+const CONFLICTED_FILE: ReportItem = { kind: 'harness', subject: { file: 'app/b.js' }, reason: 'harness-change-conflicts', effect: 'disabled', verification: 'verified', detail: { merge: 'edits-overlap' }, actions: ['skip-update'] }
 
 /**
  * The chat-data item.
@@ -106,6 +112,17 @@ describe('reportLines', () => {
       'Chat data: Delo 1.1.0 keeps chat data in a format Delo 1.0.0 may not read.',
       '  A copy holds 12 file(s), 3.0 MiB; 512.0 MiB is free.',
       '  Without the copy, Delo cannot go back to 1.0.0 after 1.1.0 first starts.',
+    ])
+  })
+
+  it('lists the person\'s changes to Delo\'s own files apart from the plugin changes', () => {
+    const lines = reportLines(report({ items: [CARRIED_FILE, CONFLICTED_FILE] }))
+
+    expect(lines.slice(3)).toEqual([
+      'No plugin, bundle or profile row changes.',
+      'Your changes to Delo\'s own files (2):',
+      '  - Your change to app/a.js carries over to Delo 1.1.0.',
+      '  - Your change to app/b.js conflicts with Delo 1.1.0\'s file; the new release\'s file runs, and yours is kept beside it as app/b.js.mine.',
     ])
   })
 
@@ -285,6 +302,13 @@ describe('runUpdate', () => {
     expect(failure).toBeInstanceOf(CliError)
     expect(failure).toMatchObject({ exit: EXIT.failed })
     expect((failure as CliError).message).toContain('so --yes does not confirm it; run delorun update without --yes to decide')
+    expect(sent('update.apply')).toHaveLength(0)
+  })
+
+  it('c03-harness-conflict-keeps-mine: refuses --yes when a changed harness file conflicts with the new release\'s', async () => {
+    await homeAnswering({ prepare: prepared(report({ items: [CARRIED_FILE, CONFLICTED_FILE] })) })
+
+    await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed })
     expect(sent('update.apply')).toHaveLength(0)
   })
 

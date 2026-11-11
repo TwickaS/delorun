@@ -20,7 +20,7 @@ Before an update changes anything, Delo shows a report of what the new release w
 
 ## What exists today
 
-- `delorun update` updates the CLI home through its home process. The home process fetches and verifies the channel's release, installs it into the runtime store and builds an update report in format `delo.update-report/2`, whose items include the `data` item of rules 1 to 3; the command prints the report, asks, and applies it with the person's choice about the session-data copy.
+- `delorun update` updates the CLI home through its home process. The home process fetches and verifies the channel's release, installs it into the runtime store and builds an update report in format `delo.update-report/3`, whose items include the `data` item of rules 1 to 3; the command prints the report, asks, and applies it with the person's choice about the session-data copy.
 - The session-data copy, the update record `run/<profile>/update.json` with `targetStarted`, the one rollback table, the set-aside directories, the restore journal, the chat gate that counts running chats and refuses new turns while an update waits, and the health checks with the automatic rollback are built for the CLI home. [C3](../contracts/c03-update-report.md), [C19](../contracts/c19-home-process.md) and [C1](../contracts/c01-home-layout.md) describe them.
 - `delorun recover` reports where the profile stands and runs one action per call: `rollback` through the one rollback table, `rollback --profile-only`, `restore <version>`, `safe-mode` and `exit-safe-mode`, and `discard <path>` for a copy or set-aside directory.
 - No client compares versions before an update: `delorun update` offers the channel's release whenever it differs from the running one.

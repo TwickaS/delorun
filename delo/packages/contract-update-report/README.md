@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@delo/contract-update-report` defines the update report built before an update applies: its items with their kind, subject, reason, effect and verification, the `data-formats.json` record a release carries and the size of a session-data copy, the update states of the CLI home and the desktop Host, the health-check criteria and rollback triggers, and what an undo or restore approval prompt lists. The package holds exported types and readonly constants only, with no runtime code, so it never changes what a process does; the contract page [C3 Update report](../../docs/contracts/c03-update-report.md) is the authority, and this package follows it. Its entry is `src/index.ts`, exported as `.`.
+`@delo/contract-update-report` defines the update report built before an update applies: its items with their kind, subject, reason, effect and verification, including the `harness` items for the files of the harness a person changed and how each merges (`HarnessMerge`), the `data-formats.json` record a release carries and the size of a session-data copy, the update states of the CLI home and the desktop Host, the health-check criteria and rollback triggers, and what an undo or restore approval prompt lists. The package holds exported types and readonly constants only, with no runtime code, so it never changes what a process does; the contract page [C3 Update report](../../docs/contracts/c03-update-report.md) is the authority, and this package follows it. Its entry is `src/index.ts`, exported as `.`.
 
 ## Contents
 
@@ -22,5 +22,5 @@ The pre-update report in `delo/packages/update/`, the studio's update screens, `
 
 ## Known Limitations and Deferred Work
 
-- The report's reason list is closed for report format 2 (`delo.update-report/2`); a new reason needs a new format version, as the contract page states. Format 1 is retired: no release shipped it.
+- The report's reason list is closed for report format 3 (`delo.update-report/3`); a new reason needs a new format version, as the contract page states. Formats 1 and 2 are retired: no release shipped either.
 - `UncheckedSource` has one value, `revocations`: no release publishes a revocation list yet, so a report names it in `notChecked`. The bundles' own layers and the bundles a target would skip are read, and are items rather than unchecked sources.

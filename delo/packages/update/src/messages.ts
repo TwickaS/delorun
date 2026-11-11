@@ -127,6 +127,19 @@ function dataMessage(item: ReportItem & { readonly kind: 'data' }, versions: Mes
 }
 
 /**
+ * The sentence of a harness item.
+ * @param item - the item, whose subject is a harness file.
+ * @param versions - the running and target releases.
+ * @returns the sentence.
+ */
+function harnessMessage(item: ReportItem & { readonly kind: 'harness' }, versions: MessageVersions): string {
+  const { file } = item.subject
+  return item.reason === 'harness-change-conflicts'
+    ? `Your change to ${file} conflicts with Delo ${versions.to.delo}'s file; the new release's file runs, and yours is kept beside it as ${file}.mine.`
+    : `Your change to ${file} carries over to Delo ${versions.to.delo}.`
+}
+
+/**
  * The sentence a report shows beside a `data` item, in C3's words: what declining the copy costs.
  * @param versions - the running and target releases.
  * @returns the sentence.
@@ -170,5 +183,7 @@ export function reasonMessage(item: ReportItem, versions: MessageVersions): stri
       return rowSentence(item)
     case 'data':
       return dataMessage(item, versions)
+    case 'harness':
+      return harnessMessage(item, versions)
   }
 }

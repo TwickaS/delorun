@@ -18,6 +18,7 @@ A person's harness is the signed release plus the changes they approved at their
 - [What a person does with a change](#what-a-person-does-with-a-change)
 - [Work sessions](#work-sessions)
 - [When a start fails](#when-a-start-fails)
+- [Harness changes across an update](#harness-changes-across-an-update)
 - [Not covered](#not-covered)
 - [Development](#development)
 
@@ -71,6 +72,10 @@ The plugin keeps loading from its active directory, so the home process watches 
 ## Changes to the harness itself
 
 `src/harness.ts` keeps the person's edits of an installed runtime's `app/` files ([C21](../../docs/contracts/c21-changes.md#harness-edits)). Every function takes a `HarnessContext`: the home, the running runtime version and `signed()`, the installation with the signed file list the runtime store's start check verified, read only when needed; every byte read from the installation is checked against that list. `createHarnessCopy` makes `changes/harness/<runtime>/copy/app/`; `harnessChanges` computes one pending `harness-edit` change per file of the copy that differs from what runs; `showHarnessChange` stores both sides and reviews them; `applyHarnessChange`, `discardHarnessChange`, `undoHarnessChange` and `discardAllHarnessChanges` decide under `withHarnessLock`, each taking a proof of presence, and log in `changes/harness/log.json`. `listHarness` gives `list` the waiting, left-out and logged changes. `src/harness-tree.ts` builds and checks the composed tree (`prepareComposedTree`, `checkComposedTree`), removes the trees and directories no start needs (`retainHarness`), and reports a runtime's harness for `verify` and `doctor` without writing (`harnessStatus`). `newestLeavableChange(ctx, runtime)` and `leaveOutNewestChange(ctx, failure, runtime)` leave a harness change out when it is the newest decision across both logs.
+
+## Harness changes across an update
+
+`src/harness-merge.ts` decides what an update does with each approved file of the harness ([C3](../../docs/contracts/c03-update-report.md#reasons)). `mergeHarnessFile({ base, mine, theirs })` merges the running release's signed file, the approved content and the target's signed file, each with its execute bit or `undefined` for no file: `same` when the target already holds the approved content, `carried` with the content the target runs when the target left the file as it was or the patch from the base to the approved text (jsdiff's `structuredPatch`) applies to the target's text with no fuzz and no line-ending conversion, and `conflict` with its reason otherwise. Both sides changing a file that is binary, not UTF-8 or larger than `DIFF_FILE_LIMIT` conflicts, and so do a file the target removes after the person changed it, a file the person removed after the target changed it, and a file both add with different content. `planHarnessCarry(home, record, readSigned)` reads each file's base and approved content from the store by the record's `signed` and `version`, asks `readSigned` for the target's verified file, and returns a `HarnessCarryPlan` with all three sides and the outcome of every file, in path order; it writes nothing. A version that is not a one-file version of its path is refused with `RECORD_UNREADABLE`. The update report's `harness` items are built from the plan by `delo/apps/cli/src/update/harness-items.ts`; applying the plan, the target's record and the `<file>.mine` files, is not built.
 
 ## Not covered
 

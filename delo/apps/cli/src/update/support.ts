@@ -253,7 +253,7 @@ export function homeUpdateSupport(options: UpdateSupportOptions): UpdateSupport 
     openChannel: options.openChannel,
     root: options.root,
     ...options.preLaunch === undefined ? {} : { preLaunch: options.preLaunch },
-    report: { build: version => buildFromSources('cli-home', options.sources, version) },
+    report: { build: async (version, purpose) => buildFromSources('cli-home', options.sources, version, purpose) },
   }, options.home)
   return { store, snapshots: profileSnapshots(options.home, options.profile, options.now, options.profileLockWaitMs), copies: sessionDataCopies(options) }
 }

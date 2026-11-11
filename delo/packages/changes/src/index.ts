@@ -3,7 +3,8 @@
  * This barrel re-exports the records and values ([types](./types.ts)), the home layout ([paths](./paths.ts)), the
  * typed failure ([errors](./errors.ts)), change ids ([ids](./ids.ts)), the content store ([tree](./tree.ts),
  * [store](./store.ts)), diffs and pending changes ([diff](./diff.ts), [pending](./pending.ts)), the risk summary
- * ([risk](./risk.ts), [review](./review.ts)), the record files ([records](./records.ts)), the profile's `link:`
+ * ([risk](./risk.ts), [review](./review.ts)), the record files ([records](./records.ts)), carrying approved harness files
+ * across an update ([harness merge](./harness-merge.ts)), the profile's `link:`
  * dependencies ([link](./link.ts)), what a start loads ([enforce](./enforce.ts)) and the invariants a booted profile keeps
  * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), what the studio's state reads of the records ([state](./state.ts)), and the Host's side of a work
  * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
@@ -25,6 +26,7 @@ export * from './pending.ts'
 export * from './risk.ts'
 export * from './review.ts'
 export * from './records.ts'
+export * from './harness-merge.ts'
 export * from './link.ts'
 export * from './enforce.ts'
 export * from './invariants.ts'

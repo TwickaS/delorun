@@ -18,6 +18,7 @@ This package builds [contract C3](../../docs/contracts/c03-update-report.md)'s u
 - [Bundles and rows](#bundles-and-rows)
 - [Both installations](#both-installations)
 - [Data formats](#data-formats)
+- [Harness changes](#harness-changes)
 - [The session-data copy](#the-session-data-copy)
 - [The one rollback function](#the-one-rollback-function)
 - [Confirming without asking](#confirming-without-asking)
@@ -28,7 +29,7 @@ This package builds [contract C3](../../docs/contracts/c03-update-report.md)'s u
 
 ## What the report decides
 
-`buildUpdateReport(input)` takes the installation being updated, both releases, the profile's facts, the target's facts and both status records, and returns the report. It sorts the items by kind — `plugin`, `bundle`, `row` — and then by subject, and it fills `counts` with the items per effect and the unverified items beside them.
+`buildUpdateReport(input)` takes the installation being updated, both releases, the profile's facts, the target's facts and both status records, and returns the report. It sorts the items by kind — `plugin`, `bundle`, `row`, `data`, `harness` — and then by subject, and it fills `counts` with the items per effect and the unverified, `data` and `harness` items beside them.
 
 Two refusals are the report's own guarantees and it raises them as a typed `UpdateReportError`. A target whose signature, freshness or log check did not pass gets no report at all (`REPORT_TARGET_UNVERIFIED`), because C3's R2 makes a report exist only for a target that passed those checks. And an item is `unverified` whenever a fact it states was missing or could not be read: an unparseable `package.json`, a declaration in a form that is not a range, a plugin that declares no requirement, a row whose plugin's metadata is unreadable. Unverified items are never counted as safe, and R3 makes that visible rather than silent.
 
@@ -53,6 +54,10 @@ The layers decide the row items: the patch layers of the bundles the target load
 ## Data formats
 
 `dataFormatsOf` writes a release's `data-formats.json` from upstream's `docs/persistence-schema.json` and `DELO_RECORDS`, the versioned records Delo's own packages keep under the home; `delo/apps/release` writes it at the root of each runtime closure, so the signed file list carries it. `compareDataFacts` compares two releases: the manifests' `dsh` versions, the `persistence` digests and `deloRecords`. Upstream's schema inventory covers the Session header, envelope and events but no storage unit under `storages/`, so a different `dsh` version counts as a change on its own. `dataItems` turns a change into one `data` item, `data-format-changed` and verified, and a missing or unreadable file on either side into `data-format-unknown` and unverified; each carries the copy's size and the free space and offers `copy-session-data` and `continue-without-copy`.
+
+## Harness changes
+
+`harnessItems` turns each approved harness file of the running runtime into one `harness` item from its `HarnessFact`: the file and the `HarnessMerge` the CLI's sources computed with `@delo/changes`'s three-way merge against the target's verified file. A merge of `release-unchanged`, `merged` or `in-release` is `harness-change-carried`, kept, with no action; any other is `harness-change-conflicts`, disabled, offering `skip-update`, so `--yes` never confirms it. Both are verified. This package reads no harness record and no store, so it does not depend on `@delo/changes`. `ReportSources.harness` is read only for a report whose purpose is `update`: a rollback's report (`rollback`) has no `harness` item, because the runtime rolled back to runs its own approved files.
 
 ## The session-data copy
 
@@ -82,10 +87,10 @@ A record already in phase `rolling-back` completes that rollback: the function n
 
 | Interface | Implemented by |
 | --- | --- |
-| `ReportSources`: `running`, `statuses`, `profile`, `target`, `data`, `now` | `delo/apps/cli/src/update/sources.ts`: C1's store for both runtimes, the profile's manifest, plugins, patch layers and exemption files, the target's bundle tables and the bundles it loads (`bundle-layers.ts`), both status records, and both releases' `data-formats.json` |
-| `UpdateReporter.build` | `buildFromSources`, which `HomeRuntimeStore.prepare` and `reportRollback` call through the CLI's update support |
+| `ReportSources`: `running`, `statuses`, `profile`, `target`, `data`, `harness`, `now` | `delo/apps/cli/src/update/sources.ts`: C1's store for both runtimes, the profile's manifest, plugins, patch layers and exemption files, the target's bundle tables and the bundles it loads (`bundle-layers.ts`), both status records, both releases' `data-formats.json`, and the running runtime's harness record merged with the target's verified files (`harness-items.ts`) |
+| `UpdateReporter.build` | `buildFromSources`, which `HomeRuntimeStore.prepare` (purpose `update`) and `reportRollback` (purpose `rollback`) call through the CLI's update support |
 
-One report is built at a time and a second request for the version already building joins it. The build is an effect of the context, so a disposed context returns no report: a caller still waiting is refused with `REPORT_DISPOSED` instead of being handed a report from a context that no longer exists.
+One report is built at a time and a second request for the version and purpose already building joins it. The build is an effect of the context, so a disposed context returns no report: a caller still waiting is refused with `REPORT_DISPOSED` instead of being handed a report from a context that no longer exists.
 
 ## Not yet implemented
 
@@ -96,4 +101,4 @@ One report is built at a time and a second request for the version already build
 
 ## Tests
 
-`node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/update` runs the specs: the manifest reader, both version axes with exemptions on either side of an update, the report's shape, order, counts and both installations, the bundle and row items, the sentences C3 states, the `--yes` gate, and the service's build, join, version check and disposal. `tests/denial.spec.ts` carries C3's own denial tests for this package — `c03-unverified-metadata-shown`, `c03-delo-requirement-excludes-target`, `c03-peer-requirement-excludes-target`, `c03-no-report-for-unverified-target` and `c03-desktop-update-leaves-cli` — by their contract ids; `tests/data-formats.spec.ts`, `tests/data-copy.spec.ts` and `tests/rollback.spec.ts` carry the data-format, copy and rollback-table ones, and `delo/apps/cli/tests/update/` the end-to-end ones.
+`node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/update` runs the specs: the manifest reader, both version axes with exemptions on either side of an update, the report's shape, order, counts and both installations, the bundle and row items, the sentences C3 states, the `--yes` gate, and the service's build, join, version check and disposal. `tests/denial.spec.ts` carries C3's own denial tests for this package — `c03-unverified-metadata-shown`, `c03-delo-requirement-excludes-target`, `c03-peer-requirement-excludes-target`, `c03-no-report-for-unverified-target` and `c03-desktop-update-leaves-cli` — by their contract ids; `tests/harness-items.spec.ts` carries `c03-harness-change-carried` and `c03-harness-conflict-keeps-mine`; `tests/data-formats.spec.ts`, `tests/data-copy.spec.ts` and `tests/rollback.spec.ts` carry the data-format, copy and rollback-table ones, and `delo/apps/cli/tests/update/` the end-to-end ones.
