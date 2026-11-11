@@ -116,12 +116,18 @@ export { DELO_BUNDLE, ejectPlugin, type EjectRequest, type EjectResult } from '.
 export {
   describeSecretField,
   describeSecretValues,
+  expressionOf,
+  findSecretValues,
   secretFieldAdmission,
+  secretFieldRemedy,
   secretFieldsSet,
   secretValuesInPatch,
   secretValuesInVersion,
   type ConfigSchemasOf,
+  type PatchRowIdentity,
   type SecretField,
+  type SecretReference,
+  type SecretValueFound,
   type SecretValuePlace,
 } from './secrets.ts'
 

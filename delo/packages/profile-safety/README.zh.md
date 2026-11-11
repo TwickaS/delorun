@@ -84,7 +84,7 @@ manifest 或补丁层无法读取的 profile 会以 `PROFILE_UNREADABLE` 拒绝�
 
 ## 密钥字段
 
-约定 [C1](../../docs/contracts/c01-home-layout.zh.md#secrets) 不让任何密钥进入 patch 文件，而历史会把 patch 文件保存在 git 中。插件用 schema 角色 `secret` 标记保存凭据的配置字段；其值应放在上游的 `.credentials.yaml` 中，插件在 `credential-ref` 字段（例如 `apiKeyEnv`）中指明它的名称。`secretValuesInPatch` 按每行的 id，用已加载插件的 Config schema 读取一个 patch 层的行，包括 `insert` 列表或分组添加的行，并返回每个含有密钥字段值的位置：文件、行与字段路径，以及旁边的引用字段，从不包含值本身。`!!js` 表达式是代码而不是值，不是 YAML 的文本不做检查。`secretFieldAdmission` 把它变成上游 `ProfileHistory` 的准入：作为 `admit` 传给 `openHistory` 或 `recordSnapshot` 后，它拒绝 profile patch 或 home patch 副本含有此类值的版本，此时 `recordSnapshot` 以 `SNAPSHOT_FAILED` 失败并指明每个位置。`delorun` 把同一准入交给插件管理器的历史，并用 `secretFieldsSet` 在配置修改保存之前拒绝它（[密钥字段](../../apps/cli/src/secret-fields.ts)）。
+约定 [C1](../../docs/contracts/c01-home-layout.zh.md#secrets) 不让任何密钥进入 patch 文件，而历史会把 patch 文件保存在 git 中。插件用 schema 角色 `secret` 标记保存凭据的配置字段；其值应放在上游的 `.credentials.yaml` 中，插件在 `credential-ref` 字段（例如 `apiKeyEnv`）中指明它的名称。`secretValuesInPatch` 按行的 id（对于没有 id 的插入行则按其插件名），用已加载插件的 Config schema 读取一个 patch 层的行，包括 `insert` 列表或分组添加的行，并返回每个含有密钥字段值的位置：文件、行与字段路径，以及旁边的引用字段，从不包含值本身。空值和 null 视为未设置；`!!js` 表达式除非只读取一个环境变量（`process.env.NAME` 或 `env.NAME`），否则算作值；不是 YAML 的文本不做检查。`findSecretValues` 另外给出移动某个值所需的信息，`delorun` 在启动时使用它。`secretFieldAdmission` 把检查变成上游 `ProfileHistory` 的准入：作为 `admit` 传给 `openHistory` 或 `recordSnapshot` 后，它拒绝 profile patch 或 home patch 副本含有此类值的版本，此时 `recordSnapshot` 以 `SNAPSHOT_FAILED` 失败并指明每个位置，同时把 profile 中的 home patch 副本放回原样，因此其他历史之后的版本不会拾取它。`delorun` 把同一准入交给插件管理器的历史，并用 `secretFieldsSet` 在配置修改保存之前拒绝它（[密钥字段](../../apps/cli/src/secret-fields.ts)）。
 
 <a id="undo-restore-and-rollback"></a>
 

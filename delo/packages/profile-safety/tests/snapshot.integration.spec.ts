@@ -16,6 +16,7 @@ import {
   SAFETY_RECORD_FILENAME,
   UPDATE_REPORT_FILENAME,
 } from '../src/files.ts'
+import { PROFILE_FILES, ProfileHistory } from '@deepseek-ai/dsh-plugin-manager/history'
 import { secretFieldAdmission } from '../src/secrets.ts'
 import { currentFiles, historyGitProblem, openHistory, recordSnapshot, rollbackToSnapshot } from '../src/snapshot.ts'
 import { fixture, readTree, report, rowItem, text } from './support.ts'
@@ -118,22 +119,29 @@ describe.skipIf(!hasGit)('recordSnapshot', () => {
     }
   })
 
-  it('refuses with SNAPSHOT_FAILED and saves nothing when a patch layer holds a value for a secret-role field', async () => {
-    const profile = fixture({ homePatch: [{ id: 'web-deepseek-api', config: { apiKey: 'sk-home-secret' } }] })
+  it('refuses a snapshot whose home patch holds a secret value, puts its copy back, and keeps the value out of the next plugin change\'s version', async () => {
+    const profile = fixture({ homePatch: [{ id: 'web-deepseek-api', config: { apiKeyEnv: 'MY_SEARCH_KEY' } }] })
     try {
       const schema = z.object({ apiKey: z.string().role('secret'), apiKeyEnv: z.string().role('credential-ref') })
-      const admit = secretFieldAdmission(entryId => entryId === 'web-deepseek-api' ? [schema] : [])
-      const history = openHistory({ profileDir: profile.profileDir, admit })
-      const request = { profileDir: profile.profileDir, homeDir: profile.homeDir, summary: 'Before update to Delo 1.0.1', changedBy: { kind: 'person' as const }, history }
-      const failure = await recordSnapshot(request).catch((error: unknown) => error)
+      const admit = secretFieldAdmission(row => row.id === 'web-deepseek-api' ? [schema] : [])
+      const delo = openHistory({ profileDir: profile.profileDir, admit })
+      const request = { profileDir: profile.profileDir, homeDir: profile.homeDir, summary: 'Before update to Delo 1.0.1', changedBy: { kind: 'person' as const }, history: delo }
+      const first = await recordSnapshot(request)
+      const copy = text(join(profile.profileDir, HOME_PATCH_COPY_FILENAME))
+      // The key, edited into the home patch by hand.
+      writeFileSync(join(profile.homeDir, 'cordis.patch.yml'), JSON.stringify([{ id: 'web-deepseek-api', config: { apiKey: 'sk-home-secret' } }]))
+      const failure = await recordSnapshot({ ...request, summary: 'Before update to Delo 1.0.2' }).catch((error: unknown) => error)
       expect(failure).toBeInstanceOf(ProfileSafetyError)
       expect((failure as ProfileSafetyError).code).toBe('SNAPSHOT_FAILED')
       expect((failure as ProfileSafetyError).detail).toContain('home-cordis.patch.yml holds a value for the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead)')
       expect((failure as ProfileSafetyError).detail).not.toContain('sk-home-secret')
-      expect(await history.list(10)).toEqual([])
-      writeFileSync(join(profile.homeDir, 'cordis.patch.yml'), JSON.stringify([{ id: 'web-deepseek-api', config: { apiKeyEnv: 'MY_SEARCH_KEY' } }]))
-      const snapshot = await recordSnapshot(request)
-      expect((await history.filesAt(snapshot)).get(HOME_PATCH_COPY_FILENAME)).toContain('MY_SEARCH_KEY')
+      expect(text(join(profile.profileDir, HOME_PATCH_COPY_FILENAME))).toBe(copy)
+      // The next plugin change, saved by the plugin manager's own five-file history.
+      const plugins = new ProfileHistory(profile.profileDir, PROFILE_FILES, 'git', 30_000, admit)
+      const manifest = JSON.parse(text(join(profile.profileDir, PROFILE_MANIFEST_FILENAME))) as { dependencies: Record<string, string> }
+      writeFileSync(join(profile.profileDir, PROFILE_MANIFEST_FILENAME), `${JSON.stringify({ ...manifest, dependencies: { ...manifest.dependencies, '@me/next': '1.0.0' } }, undefined, 2)}\n`)
+      const next = await plugins.record('Installed @me/next', { kind: 'person' })
+      expect((await plugins.list(10)).map(version => version.id)).toEqual([next, first])
       expect(execFileSync('git', ['--git-dir', join(profile.profileDir, '.plugin-manager', 'history'), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain('sk-home-secret')
     } finally {
       profile.remove()

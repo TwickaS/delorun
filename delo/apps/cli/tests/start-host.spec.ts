@@ -82,6 +82,7 @@ describe('runningHost', () => {
       calls,
       booted: {
         configSchemas: () => [],
+        settleSecretValues: () => Promise.resolve({ moved: [], notices: [] }),
         rows: () => [{ id: 'mcp', name: '@x/mcp', disabled: false, state: 'failed' }, { id: 'ok', name: '@x/ok', disabled: false, state: 'active' }],
         providerOf: () => undefined,
         releaseTurns: () => { calls.push('release') },

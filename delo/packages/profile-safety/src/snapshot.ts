@@ -11,6 +11,7 @@
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { parse, stringify } from 'yaml'
@@ -23,6 +24,7 @@ import {
   type ProfileChangedBy,
   type ProfileVersionId,
   type VersionAdmission,
+  VersionRefusedError,
 } from '@deepseek-ai/dsh-plugin-manager/history'
 import type { VersionAxis } from '@delo/contract-plugin-versions'
 import { EXEMPTION_FILES } from '@delo/contract-plugin-versions'
@@ -137,10 +139,13 @@ export interface SnapshotRequest extends HistoryOptions {
  * @param request - the profile, home, summary and report.
  * @returns the version's id; the latest version when nothing differs from it, because that version already holds this
  *   profile.
- * @throws {ProfileSafetyError} `SNAPSHOT_FAILED` when the history cannot be written, so no update may proceed.
+ * @throws {ProfileSafetyError} `SNAPSHOT_FAILED` when the history cannot be written, so no update may proceed; when the
+ *   admission refused the version, the profile's copy of the home patch is put back as it was before the snapshot.
  */
 export async function recordSnapshot(request: SnapshotRequest): Promise<ProfileVersionId> {
   const history = request.history ?? openHistory(request)
+  const copy = join(request.profileDir, HOME_PATCH_COPY_FILENAME)
+  const previousCopy = existsSync(copy) ? readFileSync(copy, 'utf8') : undefined
   try {
     await mirrorHomePatch(request.profileDir, request.homeDir)
     if (request.report !== undefined) {
@@ -155,6 +160,11 @@ export async function recordSnapshot(request: SnapshotRequest): Promise<ProfileV
     return latest.id
   } catch (error) {
     if (isProfileSafetyError(error)) throw error
+    if (error instanceof VersionRefusedError) {
+      // The refused copy of the home patch must not wait in the profile for the next version another history saves.
+      if (previousCopy === undefined) await rm(copy, { force: true })
+      else await writeFileAtomic(copy, previousCopy, { mode: 0o600, dirMode: 0o700 })
+    }
     if (error instanceof HistoryUnavailableError) {
       throw new ProfileSafetyError('SNAPSHOT_FAILED', request.profileDir, `the snapshot before the update could not be written: ${error.message}`, ['repair-profile', 'skip-update'], [], { cause: error })
     }

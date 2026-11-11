@@ -52,7 +52,7 @@ import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.
 import { addHeadlessBundle, headlessBundleMigration } from './headless-bundle.ts'
 import { studioBundleMigration } from './profile-migrations.ts'
 import { removeSandboxOverlay, sandboxOverlayPath } from './sandbox-protection.ts'
-import { assertNoSecretValues, configSchemasOf, guardSecretFields } from './secret-fields.ts'
+import { configSchemasOf, guardSecretFields, reportSecretSettlement, settleSecretValues, type SecretSettlement } from './secret-fields.ts'
 import { secretFieldAdmission, type ConfigSchemasOf } from '@delo/profile-safety'
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { bootProtectionOf, bootRowsOf, checkHealth, inactiveRows, serveHealth, watchChats } from './update/host.ts'
@@ -212,8 +212,16 @@ export interface BootedProfile {
   readonly devices?: () => LocalDeviceApproval | undefined
   /** The consents of `@delo/plugin-permission-defaults` and `@delo/plugin-mcp-consent`, each read per operation. */
   readonly consents?: () => LocalConsents
-  /** The Config schemas of the Loader's rows by row id, which the secret-field checks read ([secret fields](./secret-fields.ts)). */
+  /** The Config schemas of the Loader's rows, which the secret-field checks read ([secret fields](./secret-fields.ts)). */
   readonly configSchemas: ConfigSchemasOf
+  /**
+   * Move each value for a secret-role field out of the profile patch and the home patch into the credentials store,
+   * where the plugin can name it ([secret fields](./secret-fields.ts)).
+   * @param home - the Delo home.
+   * @param profile - the profile.
+   * @returns what was moved and what stays.
+   */
+  readonly settleSecretValues: (home: string, profile: string) => Promise<SecretSettlement>
 }
 
 /**
@@ -330,12 +338,16 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
   const { runProfile } = await import('@deepseek-ai/dsh/profile-boot')
   // An installed Delo's plugin manager runs the pnpm its closure carries ([package manager](./package-manager.ts)).
   const packageManager = shippedPackageManager()
-  const { ctx, shutdown } = await runProfile({ ...options, signals: handlers.signals, failLoud: handlers.failLoud, ...packageManager === undefined ? {} : { packageManager } })
+  const { ctx, shutdown } = await runProfile({
+    ...options, signals: handlers.signals, failLoud: handlers.failLoud, ...packageManager === undefined ? {} : { packageManager },
+    // Before the Loader mounts its first row, so an edit a plugin saves while it starts is guarded too.
+    prepare: (root) => { guardSecretFields(root, configSchemasOf(root)) },
+  })
   serveHealth(ctx)
   const configSchemas = configSchemasOf(ctx)
-  guardSecretFields(ctx, configSchemas)
   return {
     configSchemas,
+    settleSecretValues: (home, profile) => settleSecretValues(ctx, home, profile, configSchemas),
     rows: () => bootedRows(ctx),
     providerOf: name => serviceProvider(ctx, name),
     shutdown: code => shutdown.shutdown(code),
@@ -473,7 +485,9 @@ export async function startForeground(request: StartRequest, dependencies: Start
       logger: homeLog.logger,
       redactor: homeLog.redactor,
       // An update's snapshot is held to the secret-field check of the Host that runs when it is taken.
-      updates: runtime.store ? dependencies.updates(request.home, request.profile, running, homeLog.logger, request.env, files => current === undefined ? undefined : secretFieldAdmission(current.configSchemas)(files)) : undefined,
+      updates: runtime.store ? dependencies.updates(request.home, request.profile, running, homeLog.logger, request.env, files => current === undefined || current.rows().length === 0
+        ? 'no Host is running to read which plugin settings are secret, so the snapshot is not saved'
+        : secretFieldAdmission(current.configSchemas)(files)) : undefined,
       supervisor: undefined,
       onSignal: dependencies.onSignal,
       onExit: dependencies.onExit,
@@ -505,6 +519,26 @@ export async function startForeground(request: StartRequest, dependencies: Start
 }
 
 /**
+ * Settle a booted Host's patch files before it serves ([secret fields](./secret-fields.ts)) and report what was done; a
+ * failure is reported as a notice and starts nothing over, because the configuration editor and the profile history
+ * refuse the value meanwhile.
+ * @param booted - the booted profile.
+ * @param home - the Delo home.
+ * @param profile - the profile.
+ * @param output - where the lines go.
+ * @param log - the home process's log, when the command keeps one.
+ */
+export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretValues'>, home: string, profile: string, output: CommandOutput, log?: DeloLogger): Promise<void> {
+  let settlement: SecretSettlement
+  try {
+    settlement = await booted.settleSecretValues(home, profile)
+  } catch (error) {
+    settlement = { moved: [], notices: [`Delo could not check the patch files of the profile ${profile} for plugin keys: ${error instanceof Error ? error.message : String(error)}. The profile history saves no version that holds one.`] }
+  }
+  reportSecretSettlement(settlement, output, log)
+}
+
+/**
  * Compose the CLI profile and boot it: the home process's Host. The composition is the one every Host over a Delo home
  * goes through ([compose](./compose.ts)), with C1's confinement on its sandbox row, whose overlay exists while the Host
  * runs; the booted Host is held to the composition's invariants before it serves.
@@ -516,9 +550,9 @@ export async function startForeground(request: StartRequest, dependencies: Start
  * Before the boot it sets {@link DEFAULT_WORKSPACE_ENV} to the studio's first-use workspace folder
  * ([default workspace](./default-workspace.ts)).
  * @throws {CliError} when the profile skipped a Delo bundle, no folder can hold the default workspace, the profile fails
- *   to boot, a row of a Delo bundle did not activate, the composed or booted profile breaks an invariant, or a patch
- *   file holds a value for a secret-role field; a refused Host is first torn down within the home process's bound,
- *   without ending the process.
+ *   to boot, a row of a Delo bundle did not activate, or the composed or booted profile breaks an invariant; a refused
+ *   Host is first torn down within the home process's bound, without ending the process. Before the Host serves, the
+ *   values for secret-role fields its patch files hold are moved into the credentials store ({@link settleSecrets}).
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
@@ -555,7 +589,6 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
     const inactive = inactiveDeloRows(booted.rows(), deloRowIds(composed.resolvedProfile.profile))
     if (inactive.length > 0) throw inactiveRowsRefusal(request.profile, inactive)
     assertDeloInvariants(composed, booted)
-    assertNoSecretValues(request.home, request.profile, booted.configSchemas, 'delorun')
   } catch (error) {
     // The refused Host stops through its own teardown, which ends no process, so the home process's failed start runs.
     await refuseBootedHost(() => booted.dispose(), error).catch(async (failure: unknown) => {
@@ -564,6 +597,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       throw failure
     })
   }
+  await settleSecrets(booted, request.home, request.profile, request.output, logger)
   booted.releaseTurns()
   if (stored !== undefined) {
     await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) }, log: (text) => { logger.warn(text) } })

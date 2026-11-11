@@ -17,6 +17,7 @@
     { "path": "../../../packages/boot/config-editor" },
     { "path": "../../../packages/boot/plugin-manager" },
     { "path": "../../../packages/core/session" },
+    { "path": "../../../packages/credentials/credentials" },
     { "path": "../../../packages/sandbox/sandbox-local" },
     { "path": "../../../packages/session/session-persistence" },
     { "path": "../../../packages/session/session-persistence-jsonl" },

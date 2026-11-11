@@ -251,7 +251,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       runProfile: (options) => {
         seen.push({ options, dshHome: process.env.DSH_HOME })
         const booted = (): BootedRow[] => composedBootRows(deloHome, options, rows)
-        return Promise.resolve({ configSchemas: () => [], rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
+        return Promise.resolve({ configSchemas: () => [], settleSecretValues: () => Promise.resolve({ moved: [], notices: [] }), rows: () => { events.push('rows'); return booted() }, providerOf: composedProviders(booted), releaseTurns: () => { events.push('release') }, shutdown: (code) => { events.push('shutdown'); shutdowns.push(code); return Promise.resolve() }, dispose: () => { events.push('dispose'); return Promise.resolve() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) })
       },
       loadEnvironment: () => createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]),
       probe: () => () => Promise.resolve('answered'),
@@ -597,6 +597,21 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(started.report.rows.filter(row => !row.disabled && row.state !== 'active')).toEqual([])
     expect(started.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ name: LOCAL_BUNDLE, state: 'active', disabled: false })
     expect(started.report.sessionLogEnabled).toBe(false)
+  })
+
+  it('moves a plugin key a patch file holds into the credentials file and starts, so an update from a Delo that saved one commits', () => {
+    expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
+    const secret = 'sk-saved-by-an-earlier-delo'
+    const patch = join(deloHome, 'profiles', 'default', 'cordis.patch.yml')
+    writeFileSync(patch, `${readFileSync(patch, 'utf8')}\n- id: web-deepseek-api\n  config:\n    apiKey: ${secret}\n`)
+    const started = startDriver()
+    expect(started.report.outcome, started.stderr).toBe('started')
+    expect(started.status).toBe(0)
+    expect(readFileSync(patch, 'utf8')).not.toContain(secret)
+    expect(readFileSync(patch, 'utf8')).toContain('apiKeyEnv: WEB_DEEPSEEK_API_APIKEY')
+    expect(readFileSync(join(deloHome, '.credentials.yaml'), 'utf8')).toContain(`WEB_DEEPSEEK_API_APIKEY: ${secret}`)
+    expect(started.stderr).toContain(`${patch}: moved the value of the secret field apiKey of web-deepseek-api`)
+    expect(started.stderr).not.toContain(secret)
   })
 
   it('update-channel-connect-denied: a workspace command under the started profile cannot read the home or reach the update channel', (test) => {
