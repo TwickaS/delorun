@@ -14,7 +14,7 @@
 - `src/build-closure.ts` 是运行时发行包配方的命令；`src/closure/` 存放其各步骤：配方文件（`config.ts`）、固定的下载（`sources.ts`）、暂存目录树与运行时文件列表（`tree.ts`）、原生代码检查（`native.ts`）以及归档（`archive-closure.ts`）。
 - `src/archive/` 存放确定性 tar、gzip 与 ZIP 写入器、对应的读取器，以及用于检查归档是否为确定性形式的检查模块。
 - `src/compare-rebuild.ts` 是重建比较的命令；`src/rebuild/` 存放比较逻辑，以及其第一条例外所对应的 PE 规范化。
-- `src/record-rebuild.ts`、`src/sign-release.ts`、`src/sign-root.ts` 与 `src/sign-timestamp.ts` 是签名命令；`src/rebuild/record.ts` 存放重建记录的事实，`src/sign/` 存放签名信封、RFC 8785 序列化（canonical JSON）、各签名文件的读取器、时间戳元数据内容、签名与客户端验证。
+- `src/record-rebuild.ts`、`src/sign-release.ts`、`src/sign-root.ts` 与 `src/sign-timestamp.ts` 是签名命令，`src/draft-root.ts` 写出 `sign-root.ts` 所签的根草稿；`src/rebuild/record.ts` 存放重建记录的事实，`src/sign/` 存放签名信封、RFC 8785 序列化（canonical JSON）、各签名文件的读取器、时间戳元数据内容、签名与客户端验证。
 - `src/sbom/` 从运行时归档写入 SPDX SBOM；`src/check-advisories.ts` 与 `src/advisory/` 运行依赖安全公告检查。
 - `src/build-images.ts` 与 `src/images/` 从 `images.json` 与 `images/` 构建 S2 与 S3 镜像；`src/log-release.ts` 与 `src/log/` 写入并验证发布日志 bundle。
 - `tests/` 存放规格。变更片段规格在临时 git 仓库上运行两个入口；归档、运行时发行包与重建规格则在临时目录中构建 fixture（测试前置数据）运行时发行包，并从本地 HTTP 替身提供固定的下载；签名规格用测试中生成的密钥签署 fixture 发布，发布日志规格则运行本地日志与见证者（witness）替身，因此都不需要网络，也不需要真实密钥。`tests/images/images.docker.spec.ts` 将两个镜像各构建两次，仅在设置 `DELO_DOCKER_SPECS=1` 时运行，因为检查运行器（check runner）没有 Docker 通道。`tests/closure/boot.closure.spec.ts` 从已构建的运行时发行包设置一个新的 home，启动 CLI 配置，并要求每个 `@delo/` 行都处于活动状态；它仅在 `DELO_CLOSURE_ARCHIVE` 指向一个已构建的 `linux-x64` 运行时发行包归档时运行，发布工作流必须对其发布的 `linux-x64` 归档运行它。
@@ -130,6 +130,8 @@ openssl rand -out ~/.config/delo/rebuild-attestation.key 32
 ### 根元数据与时间戳元数据
 
 `node_modules/.bin/tsx delo/apps/release/src/sign-root.ts --draft <file> --key <root.pem>... [--previous <root file>] --out <root/<n>.root.json>` 在所有者的签名步骤中签署根元数据：草稿即根元数据的 `signed` 内容；只有当该文件以其自身的根阈值验证通过且尚未过期时，才会写入该文件；对于轮换，它还须作为 `--previous` 之后的版本，并以该根的阈值同样验证通过。
+
+`node_modules/.bin/tsx delo/apps/release/src/draft-root.ts --root-key <root.pub.pem>... --targets-key <pub.pem> --timestamp-key <pub.pem> --catalogue-key <pub.pem> --log-origin <origin> --log-vkey <vkey> --witness <vkey>... [--version <n>] [--root-threshold <n>] [--witness-threshold <n>] [--issued <time>] [--days <n>] --out <draft.json>` 从各角色的 Ed25519 公钥文件（`openssl pkey -pubout`）写出该草稿，因此起草步骤不读取任何私钥，并拒绝含有私钥的文件。每个密钥 ID 是原始公钥的 SHA-256，targets 密钥是唯一一个 `active` 的 targets 密钥；`issued` 为当前时间，除非 `--issued` 指定一个 UTC 时间；`expires` 为其后 `--days` 天，默认且最多 365 天。日志验证密钥必须指明 `--log-origin`，每个见证者的名称取自其验证密钥，二者都必须能按 C2SP signed-note 验证密钥解析。它从不覆盖已有文件。
 
 `node_modules/.bin/tsx delo/apps/release/src/sign-timestamp.ts --state <state.json> --root <file>... [--first] --stable <manifest> --beta <manifest> [--replaced <manifest>]... --out <timestamp.json> [--release-branch <revision>]` 使用来自 `DELO_TIMESTAMP_KEY` 环境变量的在线密钥（它必须是其所在仓库的 `--release-branch`，默认 `origin/v5`，所提交的[生产密钥登记册](#production-keys)列出的时间戳密钥），从状态所保存的最近一次时间戳继续签署下一个时间戳，并先写入新的状态，再写入时间戳。`--root` 从状态所信任的根开始，根轮换之后可重复，最后给出最新的根。状态中的最近一次时间戳必须与状态记录的摘要和版本一致，能用其所指明的根中的时间戳密钥验证通过，且与该根文件的摘要一致；它可以已经过期。调用方不传入上一个时间戳。`--first` 在没有上一个时间戳的情况下签名，仅当状态尚未记录任何时间戳时才可使用。每个通道的 manifest 都必须能用最新根中的 targets 密钥验证通过；stable 通道指明一个 stable 发布，beta 通道指明一个 beta 或 stable 发布；任何通道都不会移向更低的版本。只有当通道所指明的 manifest（以 `--replaced` 传入）与新的 manifest 仅签名不同，或在其已无法用最新根中的 targets 密钥验证通过之后（例如 targets 密钥轮换之后）仅签名与 `published` 不同时，通道才会移向同一发布的另一个 manifest；签名内容的任何其他改动都会被拒绝。新版本比 `--previous` 高一号，过期时间为签发后 3 天。
 
