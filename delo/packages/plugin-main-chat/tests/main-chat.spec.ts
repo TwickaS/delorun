@@ -23,7 +23,7 @@ import { ScriptedAdapter, text, toolCall } from './scripted-adapter.ts'
 
 const ROOT = '/workspace'
 const MAIN = SessionId(MAIN_CHAT_SESSION_ID)
-const CONFIG = { enabled: true, root: ROOT, preset: 'cordis', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 200 }
+const CONFIG = { enabled: true, root: ROOT, preset: 'coder', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 200 }
 
 interface Listed {
   readonly sessionId: SessionId
@@ -190,7 +190,7 @@ describe('the main chat', () => {
     expect(created).toEqual([])
     expect((await Promise.all([open(), open()])).map(response => response.status)).toEqual([204, 204])
     expect((await open()).status).toBe(204)
-    expect(created).toEqual([{ cwd: ROOT, sessionId: MAIN, agentPreset: 'cordis' }])
+    expect(created).toEqual([{ cwd: ROOT, sessionId: MAIN, agentPreset: 'coder' }])
     await context?.fiber.dispose()
     const again = await setup({ listed: [{ sessionId: MAIN, cwd: ROOT, updatedAt: 1, running: false, blank: true }] })
     expect((await again.open()).status).toBe(204)
@@ -202,7 +202,7 @@ describe('the main chat', () => {
     failNextCreate()
     expect((await open()).status).toBe(502)
     expect((await open()).status).toBe(204)
-    expect(created).toEqual([{ cwd: ROOT, sessionId: MAIN, agentPreset: 'cordis' }])
+    expect(created).toEqual([{ cwd: ROOT, sessionId: MAIN, agentPreset: 'coder' }])
   })
 
   it('is moved back to its preset when another is selected for it, and other chats keep theirs', async () => {
@@ -210,10 +210,10 @@ describe('the main chat', () => {
     await chat(MAIN_CHAT_SESSION_ID, ROOT)
     await chat('footer', `${ROOT}/app`)
     ctx.emit('agent-preset/selected', MAIN, 'default')
-    ctx.emit('agent-preset/selected', MAIN, 'cordis')
+    ctx.emit('agent-preset/selected', MAIN, 'coder')
     ctx.emit('agent-preset/selected', SessionId('footer'), 'default')
     await settle()
-    expect(selected).toEqual([{ session: MAIN_CHAT_SESSION_ID, preset: 'cordis' }])
+    expect(selected).toEqual([{ session: MAIN_CHAT_SESSION_ID, preset: 'coder' }])
   })
 
   it('offers its tools to the main chat alone, and each refuses a call from any other chat', async () => {

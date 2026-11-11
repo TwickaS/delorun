@@ -160,7 +160,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => { ctx.inject(['authenticator', 'homeAuth', 'reach'], () => { resolve() }) })
   const root = join(studio.home, 'workspaces')
   await mkdir(root)
-  await ctx.plugin(mainChat, { enabled: true, root, preset: 'cordis', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 2_000 })
+  await ctx.plugin(mainChat, { enabled: true, root, preset: 'coder', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 2_000 })
   ctx.homeAuth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   const record = recordOf(2, ADDRESS)
