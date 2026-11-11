@@ -309,8 +309,8 @@ describe('listDirectory', () => {
   it('translates child resolution failures into structured listing errors', async () => {
     const root = join(dir, 'listed')
     await mkdir(root)
-    const loop = join(root, 'loop')
-    await symlink(loop, loop)
+    // A link whose target names a component longer than any file name fails to resolve with ENAMETOOLONG.
+    await symlink(join(root, 'n'.repeat(300)), join(root, 'overlong'))
     await expect(listDirectory(localTarget(root))).rejects.toMatchObject({ code: 'FS_IO_ERROR' })
   })
 
