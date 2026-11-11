@@ -86,7 +86,8 @@ function chat(name: string): Agent {
   const id = SessionId(name)
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, id, createdAt: 0, isSeeded: false })
   session.append('turn/start', { turn: 1 })
-  return { id, session } as unknown as Agent
+  const agent: Partial<Agent> = { id, session }
+  return agent as Agent
 }
 
 /**
@@ -136,7 +137,7 @@ describe('the approved-plugin write consent', () => {
     const result = await write(first, join(source, 'new.js'), 'export const added = true\n')
     expect(result.isError, text(result)).toBe(false)
     expect(asks).toHaveLength(1)
-    expect(asks[0]).toMatchObject({ toolName: 'write', reason: expect.stringContaining('The agent is changing what your harness runs: plug. The change will wait for your review in Changes.') as unknown })
+    expect(asks[0]).toMatchObject({ toolName: 'write', reason: expect.stringContaining('The agent is changing what your harness runs: plug. The change will wait for your review in Changes.') as string })
     expect(asks[0]!.reason).toContain('--- new ---\nexport const added = true\n')
     expect(asks[0]!.displayReason?.zh).toContain('智能体正在更改你的 harness 运行的内容：plug。')
     expect(readFileSync(join(source, 'new.js'), 'utf8')).toBe('export const added = true\n')
@@ -272,7 +273,7 @@ describe('the consent\'s waterfall', () => {
     const request = vi.fn(async (_request: object) => 'allowed-once' as const)
     const withApproval = await bare({ profile: fixture.profile, approval: { request } })
     expect(await withApproval.waterfall('fs/write-intent', target, { name: 'custom_writer', agent: chat('b') }, () => 'next' as never)).toBe('next')
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'custom_writer', reason: expect.stringContaining('(the tool carries no diff)') as unknown }))
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'custom_writer', reason: expect.stringContaining('(the tool carries no diff)') as string }))
     expect(request.mock.calls[0]?.[0]).not.toHaveProperty('callId')
   })
 })

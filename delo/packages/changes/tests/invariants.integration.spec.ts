@@ -59,13 +59,17 @@ describe('checkChangesInvariants', () => {
     expect(await check(fx)).toEqual([`plug is linked from ${source}, not from its active directory ${activeDirectory(fx.home, PROFILE, 'plug')}.`])
   })
 
-  it('reports a link whose folder cannot be read', async () => {
+  it('reports a link to a folder that cannot be read, or to none, as any link that names no active directory', async () => {
     const { fx } = await migrated()
     const closed = join(fx.root, 'closed')
     mkdirSync(join(closed, 'other'), { recursive: true })
     linkAs(fx, 'other', join(closed, 'other'))
+    linkAs(fx, 'gone', join(fx.root, 'gone'))
     chmodSync(closed, 0o000)
-    expect(await check(fx)).toEqual([expect.stringMatching(/^The folder of other cannot be read: .*EACCES/)])
+    expect(await check(fx)).toEqual([
+      `other is linked from ${join(closed, 'other')}, not from its active directory ${activeDirectory(fx.home, PROFILE, 'other')}.`,
+      `gone is linked from ${join(fx.root, 'gone')}, not from its active directory ${activeDirectory(fx.home, PROFILE, 'gone')}.`,
+    ])
   })
 
   it('reports a manifest that cannot be read, and goes on with the rest', async () => {

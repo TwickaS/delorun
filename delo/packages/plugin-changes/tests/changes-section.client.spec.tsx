@@ -12,9 +12,20 @@ import { ACTION_PATHS, SHOW_PATH, STATE_PATH, type ChangesStateView, type Change
 const VERSION = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9'
 const HOUR = 3_600_000
 
+/** What the stand-in harness holds: the state, with the changes `show?pending` lists in place of the folders it names. */
+type FakeState = Omit<ChangesStateView, 'folders'> & { readonly pending: readonly PendingView[] }
+
 /** A state with nothing in it, at the computer. */
-function emptyState(fields: Partial<ChangesStateView> = {}): ChangesStateView {
+function emptyState(fields: Partial<FakeState> = {}): FakeState {
   return { atComputer: true, profile: 'default', protection: 'block', leftOut: [], pending: [], requests: [], recent: [], problems: [], ...fields }
+}
+
+/**
+ * @param state - what the harness holds.
+ * @returns the state route's answer: the plugin of each change waiting for review named as a folder.
+ */
+function stateView({ pending, ...state }: FakeState): ChangesStateView {
+  return { ...state, folders: pending.map(({ plugin, source, kind }) => ({ plugin, source, kind })) }
 }
 
 /** A logged change; `plugin` or `decidedAt` given as null is left out. */
@@ -58,7 +69,7 @@ const FLAGGED_CHANGE = change({
 type Route = (request: { readonly url: URL, readonly body: Record<string, unknown> }) => Response | Promise<Response>
 
 /** A stand-in harness: the state, one change per id, the work review, and every action, each replaceable. */
-function harness(initial: ChangesStateView = emptyState()) {
+function harness(initial: FakeState = emptyState()) {
   let state = initial
   const calls: Array<{ path: string, body: Record<string, unknown> }> = []
   const replaced = new Map<string, Route>()
@@ -66,8 +77,9 @@ function harness(initial: ChangesStateView = emptyState()) {
   let work: WorkReviewView = { kind: 'work', plugin: 'hello-plugin', source: '/work/hello-plugin', startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString(), version: VERSION, failedToLoad: false, change: change() }
   const decided = (body: Record<string, unknown>, fields: Partial<EntryView>) => logged({ id: String(body.id), ...fields })
   const routes: Record<string, Route> = {
-    [STATE_PATH]: () => Response.json(state),
+    [STATE_PATH]: () => Response.json(stateView(state)),
     [SHOW_PATH]: ({ url }) => {
+      if (url.searchParams.has('pending')) return Response.json({ kind: 'pending-list', pending: state.pending })
       const work = url.searchParams.get('work')
       if (work !== null) return Response.json(workReview())
       const shown = changes.get(String(url.searchParams.get('id')))
@@ -112,7 +124,7 @@ function harness(initial: ChangesStateView = emptyState()) {
   const callsTo = (path: string) => calls.filter(call => call.path === path).map(call => call.body)
   return {
     calls, callsTo,
-    set: (next: ChangesStateView) => { state = next },
+    set: (next: FakeState) => { state = next },
     setWork: (next: WorkReviewView) => { work = next },
     replace: (path: string, route: Route) => { replaced.set(path, route) },
   }
@@ -162,13 +174,14 @@ function toasts(): Array<string | null> {
 }
 
 /** Open the section with the toast host. */
-async function openSection(state?: ChangesStateView) {
+async function openSection(state?: FakeState) {
   const fake = harness(state)
   const page = await load()
   page.mount('shell.overlay')
   page.mount('settings.section')
   await screen.findByRole('heading', { name: en.title })
   await waitFor(() => { expect(document.querySelector('[aria-busy="true"]')).toBeNull() })
+  await waitFor(() => { expect(screen.queryByText(en['pending.reading'])).toBeNull() })
   return { fake, page }
 }
 
@@ -252,7 +265,7 @@ describe('the Changes section', () => {
     expect(screen.getByRole('status').textContent).toBe(en.loading)
     release()
     expect((await screen.findByRole('alert')).textContent).toBe(en['load.failed'])
-    fake.replace(STATE_PATH, () => Response.json(emptyState()))
+    fake.replace(STATE_PATH, () => Response.json(stateView(emptyState())))
     fireEvent.click(screen.getByRole('button', { name: en['load.retry'] }))
     expect(await screen.findByText(en['pending.empty'])).toBeTruthy()
     fake.replace(STATE_PATH, () => { throw new TypeError('offline') })
@@ -320,6 +333,36 @@ describe('the Changes section', () => {
   it.each(['warn', 'off'] as const)('states the %s protection setting', async (protection) => {
     await openSection(emptyState({ protection }))
     expect(screen.getByText(en[`protection.${protection}`])).toBeTruthy()
+  })
+
+  it('reads the plugins\' folders only through show?pending: when it opens, after an action and when asked, never on the state\'s poll', async () => {
+    const { fake, page } = await openSection(emptyState({ pending: [PENDING], recent: [logged({ id: 'c0000000006' })] }))
+    expect(fake.callsTo(SHOW_PATH)).toHaveLength(1)
+    const pending = screen.getByRole('region', { name: en['pending.heading'] })
+    expect(within(pending).getByText('hello-plugin')).toBeTruthy()
+    // The state's poll reads the records only.
+    await act(async () => { await (page.entryOf('settings.section').options.inject?.() as { reload: () => Promise<void> }).reload() })
+    expect(fake.callsTo(SHOW_PATH)).toHaveLength(1)
+    // The person asks; a read that is under way says so, and one that fails says the folders could not be read.
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    fake.replace(SHOW_PATH, async () => {
+      await gate
+      return new Response(null, { status: 500 })
+    })
+    fireEvent.click(within(pending).getByRole('button', { name: en['pending.check'] }))
+    expect((await screen.findByText(en['pending.reading'])).getAttribute('role')).toBe('status')
+    release()
+    expect((await within(screen.getByRole('region', { name: en['pending.heading'] })).findByRole('alert')).textContent).toBe(en['pending.unread'])
+    expect(fake.callsTo(SHOW_PATH)).toHaveLength(2)
+    // A folder that holds what was approved waits for nothing.
+    fake.replace(SHOW_PATH, () => Response.json({ kind: 'pending-list', pending: [] }))
+    fireEvent.click(screen.getByRole('button', { name: en['pending.check'] }))
+    expect(await screen.findByText(en['pending.empty'])).toBeTruthy()
+    // An action reads the folders again.
+    fireEvent.click(within(screen.getByRole('region', { name: en['recent.heading'] })).getByRole('button', { name: en['confirm.undo'] }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en['confirm.undo'] }))
+    await waitFor(() => { expect(fake.callsTo(SHOW_PATH)).toHaveLength(4) })
   })
 
   it('reviews a change with its folder, files, risk summary, the files the diff does not show and the diff, and applies one the checks did not flag', async () => {

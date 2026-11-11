@@ -5,11 +5,11 @@
  *
  * Each test's comment names the check whose removal makes it fail, so the suite is also the mutation record.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { attestStudio, protectionPath, readProtection, setProtection, writeChangeLog } from '@delo/changes'
 import { describe, expect, it, vi } from 'vitest'
-import { ACTION_PATHS, arrivalOf, changesRoutes, LOOPBACK_REQUIRED_SENTENCE, MAX_BODY_BYTES, SHOW_PATH, STATE_PATH, type ChangesAction } from '../src/routes.ts'
+import { ACTION_PATHS, arrivalOf, changesRoutes, HOME_IN_ANSWERS, HOME_WITHHELD_SENTENCE, LOOPBACK_REQUIRED_SENTENCE, MAX_BODY_BYTES, SHOW_PATH, STATE_PATH, type ChangesAction } from '../src/routes.ts'
 import { CREDENTIAL, get, json, post, routeHome, send, serveRoutes } from './routes-fixture.ts'
 
 // Each case starts a server on a loopback port and writes a temporary home; under a loaded host that takes longer than vitest's default.
@@ -31,10 +31,10 @@ describe('who reaches the Changes routes', () => {
     const server = await serveRoutes(ctx)
     for (const { path, method } of ROUTES) {
       // Pins `connection.admit` running first: without it a caller with no cookie reads the state or acts.
-      const anonymous = await send(server.port, path, { method, body: { id: 'c0123456789', plugin: 'plug' }, unfinished: 5 })
+      const anonymous = await send(server.port, path, { method, body: { id: 'c0123456789', plugin: 'plug' }, withholdBody: true })
       expect(anonymous.status, path).toBe(401)
       expect(json(anonymous)).toMatchObject({ code: 'NOT_SIGNED_IN' })
-      const fenced = await send(server.port, path, { method, headers: ['x-test-fence: refuse', CREDENTIAL], body: {}, unfinished: 5 })
+      const fenced = await send(server.port, path, { method, headers: ['x-test-fence: refuse', CREDENTIAL], body: {}, withholdBody: true })
       expect(fenced.status, path).toBe(403)
       expect(json(fenced)).toMatchObject({ code: 'FORBIDDEN' })
     }
@@ -57,7 +57,7 @@ describe('who reaches the Changes routes', () => {
     for (const action of ACTIONS) {
       for (const request of remote) {
         // Pins `attestStudio` before the body: without it a remote session turns plugins off or starts safe mode.
-        const reply = await send(server.port, ACTION_PATHS[action], { method: 'POST', ...request, body: { plugin: 'plug' }, unfinished: 5 })
+        const reply = await send(server.port, ACTION_PATHS[action], { method: 'POST', ...request, body: { plugin: 'plug' }, withholdBody: true })
         expect(reply.status, `${action} ${JSON.stringify(request)}`).toBe(403)
         expect(json(reply)).toEqual({ code: 'LOOPBACK_REQUIRED', message: LOOPBACK_REQUIRED_SENTENCE })
       }
@@ -77,7 +77,7 @@ describe('who reaches the Changes routes', () => {
     const port = String(server.port)
     for (const headers of [['Sec-Fetch-Site: cross-site'], ['Sec-Fetch-Site: same-site'], ['Origin: http://evil.example'], ['Origin: null'], [`Origin: https://127.0.0.1:${port}`]]) {
       // Pins the site check: without it a page the person visits posts the action with the studio's cookie.
-      const reply = await send(server.port, ACTION_PATHS['safe-mode'], { method: 'POST', headers: [CREDENTIAL, ...headers], body: {}, unfinished: 5 })
+      const reply = await send(server.port, ACTION_PATHS['safe-mode'], { method: 'POST', headers: [CREDENTIAL, ...headers], body: {}, withholdBody: true })
       expect(reply.status, headers.join()).toBe(403)
       expect(json(reply)).toMatchObject({ code: 'CROSS_SITE' })
     }
@@ -93,7 +93,7 @@ describe('who reaches the Changes routes', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     // No route names the protection setting, and the studio's proof is refused by the setting's writer.
-    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }) }, profile: () => undefined, reload: () => Promise.resolve(undefined), installationBundles: [], logger: { warn: () => {} } }).map(route => route.path)
+    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), installationBundles: [], logger: { warn: () => {} } }).map(route => route.path)
     expect(paths.filter(path => path.includes('protection'))).toEqual([])
     expect((await post(server.port, '/delo/changes/protection', { level: 'off' })).status).toBe(404)
     await expect(setProtection(ctx.home, 'off', attestStudio({ loopback: true, credential: true, remoteSession: false }))).rejects.toMatchObject({ code: 'NOT_AT_COMPUTER' })
@@ -156,9 +156,10 @@ describe('what a route refuses', () => {
   it('refuses a show without exactly one well-formed query, and answers a refusal of Changes with its code', async () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
-    for (const query of ['', '?id=c0123456789&work=plug', '?other=1', '?id=nope', '?work=..%2Fescape']) {
+    for (const query of ['', '?id=c0123456789&work=plug', '?other=1', '?id=nope', '?work=..%2Fescape', '?pending=1', '?pending&id=c0123456789']) {
       expect(json(await get(server.port, `${SHOW_PATH}${query}`)), query).toMatchObject({ code: 'BAD_REQUEST' })
     }
+    expect(json(await get(server.port, `${SHOW_PATH}?pending`))).toEqual({ kind: 'pending-list', pending: [] })
     const unknown = await get(server.port, `${SHOW_PATH}?id=c0123456789`)
     expect(unknown.status).toBe(404)
     expect(json(unknown)).toMatchObject({ code: 'UNKNOWN_CHANGE' })
@@ -174,7 +175,7 @@ describe('what a route refuses', () => {
     expect(reply.status).toBe(500)
     expect(json(reply)).toEqual({ code: 'INTERNAL', message: 'Delo could not answer; the Host log says why.' })
     expect(server.warnings).toEqual(['changes route failed: disk on fire'])
-    const thrown = await serveRoutes(undefined, { profile: () => { throw 'not an error' as unknown as Error } })
+    const thrown = await serveRoutes(undefined, { profile: () => { throwValue('not an error') } })
     expect((await get(thrown.port, STATE_PATH)).status).toBe(500)
     expect(thrown.warnings).toEqual(['changes route failed: not an error'])
   })
@@ -183,7 +184,7 @@ describe('what a route refuses', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     const state = json(await get(server.port, STATE_PATH))
-    expect(state).toEqual({ atComputer: true, profile: 'default', protection: 'block', leftOut: [], pending: [], requests: [], recent: [], problems: [] })
+    expect(state).toEqual({ atComputer: true, profile: 'default', protection: 'block', leftOut: [], folders: [], requests: [], recent: [], problems: [] })
     const broken = await serveRoutes({ ...ctx, home: `${ctx.home}/missing`, profileDir: `${ctx.profileDir}/missing` })
     const problems = json(await get(broken.port, STATE_PATH)).problems as string[]
     expect(problems.map(problem => problem.split(':')[0])).toEqual(['The changes waiting for review cannot be read'])
@@ -221,3 +222,60 @@ describe('the recovery state from the records', () => {
     expect(broken.protection).toBeUndefined()
   })
 })
+
+describe('what an answer says of the home', () => {
+  it('a route\'s error answer names the code and no path under the home', async () => {
+    const { root, ctx } = routeHome()
+    const server = await serveRoutes(ctx)
+    const logPath = join(ctx.home, 'changes', 'profiles', ctx.profile, 'log.json')
+    mkdirSync(join(ctx.home, 'changes', 'profiles', ctx.profile), { recursive: true, mode: 0o700 })
+    writeFileSync(logPath, 'not json', { mode: 0o600 })
+    // Pins `sayable` in `sendThrown`: without it the refusal's words carry the log's path to any admitted session.
+    const refused = await get(server.port, `${SHOW_PATH}?id=c0123456789`)
+    expect(refused.status).toBe(500)
+    expect(json(refused)).toEqual({ code: 'RECORD_UNREADABLE', message: HOME_WITHHELD_SENTENCE })
+    expect(refused.body).not.toContain(root)
+    // Pins `sayable` in `part`: an unreadable record in the state names its code, not its path.
+    const state = await get(server.port, STATE_PATH)
+    expect(state.body).not.toContain(root)
+    expect(json(state).problems).toEqual([
+      `The change log cannot be read: ${HOME_WITHHELD_SENTENCE}`,
+      `The changes waiting for review cannot be read: ${HOME_WITHHELD_SENTENCE}`,
+    ])
+    // The Host log keeps the words.
+    expect(server.warnings.every(warning => warning.includes(logPath))).toBe(true)
+    expect(server.warnings).toHaveLength(3)
+    // A recorded failure names the home as a placeholder.
+    rmSync(logPath)
+    const run = join(ctx.home, 'run', ctx.profile)
+    mkdirSync(run, { recursive: true, mode: 0o700 })
+    const active = join(ctx.home, 'changes', 'active', ctx.profile, 'plug', 'index.js')
+    writeFileSync(join(run, 'changes-boot.json'), JSON.stringify({ schema: 'delo.changes-boot/1', at: '2026-11-10T10:00:00.000Z', plugins: [{ plugin: 'plug', rows: [], loaded: false, error: `Cannot find module '${active}'` }], failure: `${active} did not load` }), { mode: 0o600 })
+    const recorded = await get(server.port, STATE_PATH)
+    expect(recorded.body).not.toContain(root)
+    expect(json(recorded).lastStart).toEqual({
+      at: '2026-11-10T10:00:00.000Z',
+      failure: `${HOME_IN_ANSWERS}/changes/active/default/plug/index.js did not load`,
+      plugins: [{ plugin: 'plug', loaded: false, error: `Cannot find module '${HOME_IN_ANSWERS}/changes/active/default/plug/index.js'` }],
+    })
+    // A home the Host names through a link is withheld under both spellings.
+    const linked = join(root, 'linked-home')
+    symlinkSync(ctx.home, linked)
+    const throughLink = await serveRoutes({ ...ctx, home: linked })
+    const viaLink = await get(throughLink.port, STATE_PATH)
+    expect(viaLink.body).not.toContain(root)
+    expect(json(viaLink).lastStart).toMatchObject({ failure: `${HOME_IN_ANSWERS}/changes/active/default/plug/index.js did not load` })
+    // A refusal whose words name no path under the home keeps them.
+    const unknown = json(await get(server.port, `${SHOW_PATH}?id=c0123456789`))
+    expect(unknown.code).toBe('UNKNOWN_CHANGE')
+    expect(unknown.message).not.toBe(HOME_WITHHELD_SENTENCE)
+  })
+})
+
+/**
+ * Throw a value that is not an `Error`, as a plugin's code can.
+ * @param value - the value thrown.
+ */
+function throwValue(value: string): never {
+  throw value
+}

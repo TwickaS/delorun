@@ -7,10 +7,13 @@
  * ones pnpm reports blocked are recorded as waiting for the person's decision, and a failed or refused operation puts
  * the profile's `package.json` and `pnpm-lock.yaml` back.
  *
- * A request whose spec names a folder never links the profile to that folder: applying it links the plugin to its
- * active directory under `changes/`, which holds nothing until the person applies the folder's content, and records
- * that content as a change waiting for review, as a start does for a plugin linked from a folder
- * ([enforce](./enforce.ts)). Nothing the agent asked for therefore loads before the person reviewed its content.
+ * A request whose spec names a folder, as a path, `file:<path>`, `link:<path>` or `<name>@file:<path>` and
+ * `<name>@link:<path>`, never links the profile to that folder: applying it links the plugin to its active directory
+ * under `changes/`, which holds nothing until the person applies the folder's content, and records that content as a
+ * change waiting for review, as a start does for a plugin linked from a folder ([enforce](./enforce.ts)). Nothing the
+ * agent asked for therefore loads before the person reviewed its content. A `<name>@<range>` spec whose range is no
+ * registry version, range or tag and no such folder (`workspace:`, `npm:`, a git or URL source, a path) is refused, so
+ * no spec that pnpm reads as a source of its own passes as a registry install.
  *
  * @module @delo/changes/install-actions
  */
@@ -136,9 +139,45 @@ function parsedSpec(spec: string): ParsedInstallSpec {
   try {
     return parseInstallSpec(spec)
   } catch (error) {
-    const reason = error instanceof InvalidInstallSpecError ? error.reason : String(error)
-    throw new ChangesError('INVALID_REQUEST', spec, `${spec} is not a plugin spec this profile can install: ${reason}.`, { cause: error })
+    throw invalidSpec(spec, error)
   }
+}
+
+/** A registry version, range or dist-tag: what may follow `<name>@` for pnpm to install from the registry. */
+const REGISTRY_RANGE = /^[\w.^~<>=|* +-]+$/
+
+/** A range that names a folder by pnpm's folder protocols. */
+const FOLDER_RANGE = /^(?:file|link):/
+
+/**
+ * Read an install spec as pnpm will, and refuse a `<name>@<range>` whose range names a source other than the registry or
+ * a folder: upstream's parser reads such a spec as a registry install, which pnpm would install from that source.
+ * @param spec - the spec, trimmed.
+ * @returns its form; a `<name>@file:<path>` or `<name>@link:<path>` as the path or tarball the range names, with the
+ *   name as `alias`.
+ * @throws {ChangesError} `INVALID_REQUEST` for a spec pnpm would not accept or one whose range names another source.
+ */
+function requestSpec(spec: string): ParsedInstallSpec & { readonly alias?: string } {
+  const parsed = parsedSpec(spec)
+  if (parsed.kind !== 'registry' || parsed.range === undefined || REGISTRY_RANGE.test(parsed.range)) return parsed
+  if (FOLDER_RANGE.test(parsed.range)) {
+    try {
+      return { ...parseInstallSpec(parsed.range), alias: parsed.name }
+    } catch (error) {
+      throw invalidSpec(spec, error)
+    }
+  }
+  throw new ChangesError('INVALID_REQUEST', spec, `${spec} is not a plugin spec this profile can install: ${parsed.range} after the package name is neither a registry version nor a folder (file: or link:).`)
+}
+
+/**
+ * @param spec - the spec.
+ * @param error - why upstream's parser refused it.
+ * @returns the refusal of the request.
+ */
+function invalidSpec(spec: string, error: unknown): ChangesError {
+  const reason = error instanceof InvalidInstallSpecError ? error.reason : String(error)
+  return new ChangesError('INVALID_REQUEST', spec, `${spec} is not a plugin spec this profile can install: ${reason}.`, { cause: error })
 }
 
 /**
@@ -147,8 +186,9 @@ function parsedSpec(spec: string): ParsedInstallSpec {
  * @param profileDir - the profile's directory.
  * @param request - the request.
  * @returns its kind, subject and summary.
- * @throws {ChangesError} `INVALID_REQUEST` for a spec pnpm would not accept or a removal of a name that is no
- *   dependency; `RECORD_UNREADABLE` when the profile's manifest cannot be read.
+ * @throws {ChangesError} `INVALID_REQUEST` for a spec pnpm would not accept, one whose range names a source other than
+ *   the registry or a folder, or a removal of a name that is no dependency; `RECORD_UNREADABLE` when the profile's
+ *   manifest cannot be read.
  */
 async function classify(profileDir: string, request: PluginRequest): Promise<Classified> {
   const spec = request.spec.trim()
@@ -157,11 +197,12 @@ async function classify(profileDir: string, request: PluginRequest): Promise<Cla
     if (!dependencies.has(spec)) throw new ChangesError('INVALID_REQUEST', spec, `${spec} is not a plugin of this profile, so there is nothing to remove.`)
     return { kind: 'plugin-remove', subject: { plugin: spec, spec }, summary: `The agent asks to remove ${spec}` }
   }
-  const parsed = parsedSpec(spec)
+  const parsed = requestSpec(spec)
   if (parsed.kind === 'registry' && dependencies.has(parsed.name)) {
     return { kind: 'plugin-update', subject: { plugin: parsed.name, spec }, summary: `The agent asks to move ${parsed.name} to ${spec}` }
   }
-  return { kind: 'plugin-install', subject: { ...parsed.kind === 'registry' ? { plugin: parsed.name } : {}, spec }, summary: `The agent asks to install ${spec}` }
+  const plugin = parsed.kind === 'registry' ? parsed.name : parsed.alias
+  return { kind: 'plugin-install', subject: { ...plugin === undefined ? {} : { plugin }, spec }, summary: `The agent asks to install ${spec}` }
 }
 
 /**
@@ -171,8 +212,9 @@ async function classify(profileDir: string, request: PluginRequest): Promise<Cla
  * @param ctx - the profile.
  * @param request - what the agent asked.
  * @returns the pending entry.
- * @throws {ChangesError} `INVALID_REQUEST` for a spec pnpm would not accept or a removal of a name that is no
- *   dependency; `RECORD_UNREADABLE` when the profile's manifest or the change log cannot be read.
+ * @throws {ChangesError} `INVALID_REQUEST` for a spec pnpm would not accept, one whose range names a source other than
+ *   the registry or a folder, or a removal of a name that is no dependency; `RECORD_UNREADABLE` when the profile's
+ *   manifest or the change log cannot be read.
  */
 export async function recordPluginRequest(ctx: ChangesContext, request: PluginRequest): Promise<ChangeEntry> {
   return locked(ctx, async () => {
@@ -231,10 +273,13 @@ async function folderName(folder: string): Promise<string> {
  * @param log - the change log.
  * @param folder - the folder the spec names.
  * @param at - the time the records carry.
+ * @param alias - the name a `<name>@file:<path>` spec gives the plugin, which must be the package the folder holds.
  * @returns the operation.
+ * @throws {ChangesError} `INVALID_REQUEST` when the folder names no valid package, or another package than `alias`.
  */
-async function folderOperation(ctx: ChangesContext, log: ChangeLog, folder: string, at: string): Promise<Operation> {
+async function folderOperation(ctx: ChangesContext, log: ChangeLog, folder: string, at: string, alias: string | undefined): Promise<Operation> {
   const plugin = await folderName(folder)
+  if (alias !== undefined && alias !== plugin) throw new ChangesError('INVALID_REQUEST', folder, `The folder ${folder} holds the package ${plugin}, not ${alias}.`)
   const active = activeDirectory(ctx.home, ctx.profile, plugin)
   const approval = approvedOf(await readApproved(ctx.profileDir), plugin)
   await holdContent(ctx.home, active, approval?.version)
@@ -271,8 +316,8 @@ async function operationFor(ctx: ChangesContext, log: ChangeLog, entry: ChangeEn
       },
     }
   }
-  const parsed = parsedSpec(spec)
-  if (parsed.kind === 'path' && await namesDirectory(parsed.path)) return folderOperation(ctx, log, parsed.path, at)
+  const parsed = requestSpec(spec)
+  if (parsed.kind === 'path' && await namesDirectory(parsed.path)) return folderOperation(ctx, log, parsed.path, at, parsed.alias)
   return { args: ['add', spec], log, after: NOTHING_AFTER }
 }
 

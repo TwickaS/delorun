@@ -34,6 +34,9 @@ export const en = {
   'pending.files.other': '{n} files',
   'pending.failed': 'Applying it did not load: {failure}',
   'pending.review': 'Review',
+  'pending.reading': 'Reading the plugins\' folders',
+  'pending.unread': 'The plugins\' folders could not be read.',
+  'pending.check': 'Read the folders again',
 
   'requests.heading': 'Asked for in a chat',
   'requests.terminal': 'Applying it installs, updates or removes a plugin, which runs in a terminal:',
@@ -182,6 +185,9 @@ export const zh: typeof en = {
   'pending.files.other': '{n} 个文件',
   'pending.failed': '应用后未能加载：{failure}',
   'pending.review': '审阅',
+  'pending.reading': '正在读取插件文件夹',
+  'pending.unread': '无法读取插件文件夹。',
+  'pending.check': '重新读取文件夹',
 
   'requests.heading': '对话中提出的请求',
   'requests.terminal': '应用它会安装、更新或移除插件，需要在终端中运行：',

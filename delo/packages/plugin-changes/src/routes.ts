@@ -14,11 +14,17 @@
  * route attests the request with `attestStudio`, the only proof a studio request carries; no route changes the
  * protection setting, which only `delorun changes protection` changes.
  *
+ * `state` reads only the records: it writes nothing and reads no plugin's folder, so the studio's repeated reads and a
+ * remote session's cost nothing. Only `show` reads folders, computes diffs and stores their content.
+ *
  * Every answer is JSON with `cache-control: no-store`; file names, diffs, summaries and failures travel as JSON strings
- * that the screen renders as text.
+ * that the screen renders as text. No answer names the Delo home's path: a refusal or an unreadable part whose words
+ * name it answers its code, or names the part, with {@link HOME_WITHHELD_SENTENCE}, and the Host log keeps the words; a recorded failure's
+ * text names the home as {@link HOME_IN_ANSWERS}.
  *
  * @module @delo/plugin-changes/routes
  */
+import { realpathSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
   applyChange,
@@ -34,6 +40,7 @@ import {
   readBootRecord,
   readChangeLog,
   readProtection,
+  recordedChanges,
   reviewWork,
   riskKindPhrase,
   showChange,
@@ -75,6 +82,8 @@ import {
   type DiscardView,
   type DoneView,
   type EntryView,
+  type PendingListView,
+  type PendingView,
   type RiskView,
   type ShownView,
   type StartedView,
@@ -92,6 +101,15 @@ export const RECENT_CHANGES = 20
 /** The sentence a request that is not at the computer is answered with. */
 export const LOOPBACK_REQUIRED_SENTENCE = 'This needs you at your computer.'
 
+/** The sentence that stands for a failure's words when they name the Delo home's path, which the Host log keeps. */
+export const HOME_WITHHELD_SENTENCE = 'Its details name files Delo keeps; the Host log has them.'
+
+/** What a recorded failure's text in an answer says in place of the Delo home's path. */
+export const HOME_IN_ANSWERS = '<Delo home>'
+
+/** The fields of an answer that carry a recorded failure's text: a failed load, start or reload. */
+const FAILURE_FIELDS: ReadonlySet<string> = new Set(['failure', 'error'])
+
 /** A request handler, as the web server takes it. */
 export type RouteHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
 
@@ -108,7 +126,7 @@ export interface RouteConnection {
    * @param peer - the admitted session.
    * @returns true for a remote session.
    */
-  isReachPeer?(peer: object): boolean
+  isReachPeer(peer: object): boolean
 }
 
 /** What the routes reach outside themselves. */
@@ -123,7 +141,7 @@ export interface RouteDependencies {
   readonly reload: ReloadHost
   /** The bundles the installation itself ships, which safe mode keeps loading; empty when the composition names none. */
   readonly installationBundles: readonly string[]
-  /** The Host's log, which names a failure the person sees only as `INTERNAL`. */
+  /** The Host's log, which names a failure the person sees only as `INTERNAL`, and words withheld from an answer. */
   readonly logger: { warn(message: string): void }
 }
 
@@ -373,39 +391,93 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** The spellings of the Delo home's path an answer must not carry, and where words withheld from it are logged. */
+interface HomeWords {
+  readonly homes: readonly string[]
+  readonly logger: RouteDependencies['logger']
+}
+
+/**
+ * @param home - the Delo home the Host names.
+ * @param logger - the Host's log.
+ * @returns the home as the Host names it and, when that differs, its real path.
+ */
+function homeWords(home: string, logger: RouteDependencies['logger']): HomeWords {
+  let real: string | undefined
+  try {
+    real = realpathSync(home)
+  } catch (_unresolved) {
+    // A home that does not resolve has only the spelling the Host names, which every failure under it carries.
+    real = undefined
+  }
+  // The longer spelling first, so one that contains the other is replaced whole.
+  return { homes: real === undefined || real === home ? [home] : [home, real].sort((a, b) => b.length - a.length), logger }
+}
+
+/**
+ * The words of a failure as an answer carries them: unchanged unless they name the Delo home, otherwise
+ * {@link HOME_WITHHELD_SENTENCE}, with the words in the Host log.
+ * @param words - the failure's words.
+ * @param code - the failure's code, or the part of the state that failed, for the log.
+ * @param home - the home's spellings and the log; undefined before the route knows the profile.
+ * @returns the words to answer with.
+ */
+function sayable(words: string, code: string, home: HomeWords | undefined): string {
+  if (home === undefined || !home.homes.some(path => words.includes(path))) return words
+  home.logger.warn(`changes route answered ${code} without its words, which name the Delo home: ${words}`)
+  return HOME_WITHHELD_SENTENCE
+}
+
+/**
+ * Replace the Delo home's path with {@link HOME_IN_ANSWERS} in every recorded failure's text of an answer.
+ * @param value - the answer, or a part of it.
+ * @param homes - the home's spellings.
+ * @returns the answer with the same fields.
+ */
+function withoutHome(value: unknown, homes: readonly string[]): unknown {
+  if (Array.isArray(value)) return value.map(item => withoutHome(item, homes))
+  if (typeof value !== 'object' || value === null) return value
+  return Object.fromEntries(Object.entries(value).map(([key, field]) => [
+    key,
+    FAILURE_FIELDS.has(key) && typeof field === 'string' ? homes.reduce((text, home) => text.replaceAll(home, HOME_IN_ANSWERS), field) : withoutHome(field, homes),
+  ]))
+}
+
 /**
  * Read one part of the state; a part that cannot be read becomes a problem the screen names, so the rest still shows.
  * @param problems - where a failure is noted.
+ * @param home - the home's spellings and the log.
  * @param what - the part, for the problem's sentence.
  * @param read - the reader.
  * @returns the part, or undefined when it cannot be read.
  */
-async function part<T>(problems: string[], what: string, read: () => Promise<T> | T): Promise<T | undefined> {
+async function part<T>(problems: string[], home: HomeWords, what: string, read: () => Promise<T> | T): Promise<T | undefined> {
   try {
     return await read()
   } catch (error) {
-    problems.push(`${what} cannot be read: ${messageOf(error)}`)
+    problems.push(`${what} cannot be read: ${sayable(messageOf(error), `"${what}"`, home)}`)
     return undefined
   }
 }
 
 /**
- * `GET state`: what failed at the last start, the changes left out at it, the changes and the agent's plugin requests
- * waiting for review, the recent changes newest first with whether each can be undone, the protection setting, safe
- * mode, the work session, and whether the request is at the computer, so the screen says so before an action is
- * refused. Computing the changes waiting for review stores each folder's content, as `delorun changes list` does.
+ * `GET state`: what failed at the last start, the changes left out at it, the plugins under Changes and the agent's
+ * plugin requests waiting for review, the recent changes newest first with whether each can be undone, the protection
+ * setting, safe mode, the work session, and whether the request is at the computer, so the screen says so before an
+ * action is refused. It reads the records only: nothing is written and no plugin's folder is read.
  * @param ctx - the profile.
  * @param atComputer - whether the request could act.
+ * @param home - the home's spellings and the log.
  * @returns the state.
  */
-async function stateOf(ctx: ChangesContext, atComputer: boolean): Promise<ChangesStateView> {
+async function stateOf(ctx: ChangesContext, atComputer: boolean, home: HomeWords): Promise<ChangesStateView> {
   const problems: string[] = []
-  const boot = await part(problems, 'The record of the last start', () => readBootRecord(ctx.home, ctx.profile))
-  const log = await part(problems, 'The change log', () => readChangeLog(ctx.home, ctx.profile))
-  const protection = await part(problems, 'The protection setting', () => readProtection(ctx.home))
-  const safeMode = await part(problems, 'The safe mode record', () => readSafeMode(ctx.home, ctx.profile))
-  const workSession = await part(problems, 'The work session', () => workSessionFact(ctx.home, ctx.profile))
-  const listing = await part(problems, 'The changes waiting for review', () => listChanges(ctx))
+  const boot = await part(problems, home, 'The record of the last start', () => readBootRecord(ctx.home, ctx.profile))
+  const log = await part(problems, home, 'The change log', () => readChangeLog(ctx.home, ctx.profile))
+  const protection = await part(problems, home, 'The protection setting', () => readProtection(ctx.home))
+  const safeMode = await part(problems, home, 'The safe mode record', () => readSafeMode(ctx.home, ctx.profile))
+  const workSession = await part(problems, home, 'The work session', () => workSessionFact(ctx.home, ctx.profile))
+  const recorded = await part(problems, home, 'The changes waiting for review', () => recordedChanges(ctx))
   const entries = log?.entries ?? []
   const recent = entries
     .map((entry, index) => ({ entry, index, at: Date.parse(entry.decidedAt ?? entry.createdAt) }))
@@ -426,16 +498,8 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean): Promise<Change
       },
     },
     leftOut: entries.filter(entry => entry.state === 'left-out-at-start').map(entryView),
-    pending: (listing?.pending ?? []).map(change => ({
-      id: change.id,
-      kind: change.kind,
-      plugin: change.plugin,
-      source: change.source,
-      files: change.files.length,
-      riskKinds: change.risk.kinds,
-      ...change.lastFailure === undefined ? {} : { lastFailure: change.lastFailure },
-    })),
-    requests: (listing?.requests ?? []).map(entryView),
+    folders: (recorded?.folders ?? []).map(({ plugin, source, kind }) => ({ plugin, source, kind })),
+    requests: (recorded?.requests ?? []).map(entryView),
     recent,
     ...workSession === undefined ? {} : { workSession },
     problems,
@@ -443,19 +507,39 @@ async function stateOf(ctx: ChangesContext, atComputer: boolean): Promise<Change
 }
 
 /**
- * `GET show`: one change by `?id=`, or the open work session's folder against the content it started from by
- * `?work=<plugin>`.
+ * `GET show`: one change by `?id=`, the open work session's folder against the content it started from by
+ * `?work=<plugin>`, or every change of a plugin's folder waiting for review by `?pending`. Each reads the folders it
+ * names and stores their content, as `delorun changes list` and `show` do.
  * @param ctx - the profile.
  * @param url - the request's URL.
  * @returns what the person reads.
  * @throws {RouteRefusal} `400 BAD_REQUEST` without exactly one well-formed query.
  */
-async function shownOf(ctx: ChangesContext, url: URL): Promise<ShownView | WorkReviewView> {
+async function shownOf(ctx: ChangesContext, url: URL): Promise<ShownView | WorkReviewView | PendingListView> {
   const names = [...url.searchParams.keys()]
-  if (names.length !== 1 || (names[0] !== 'id' && names[0] !== 'work')) throw new RouteRefusal(400, 'BAD_REQUEST', 'Ask for one change with ?id=<id>, or the work session with ?work=<plugin>.')
+  if (names.length !== 1 || (names[0] !== 'id' && names[0] !== 'work' && !(names[0] === 'pending' && url.searchParams.get('pending') === ''))) {
+    throw new RouteRefusal(400, 'BAD_REQUEST', 'Ask for one change with ?id=<id>, the work session with ?work=<plugin>, or the changes waiting for review with ?pending.')
+  }
+  if (names[0] === 'pending') return { kind: 'pending-list', pending: (await listChanges(ctx)).pending.map(pendingView) }
   if (names[0] === 'work') return workView(await reviewWork(ctx, pluginOf(url.searchParams.get('work'))))
   const shown = await showChange(ctx, changeIdOf({ id: url.searchParams.get('id') }))
   return shown.kind === 'pending' ? { kind: 'pending', change: changeView(shown.change) } : { kind: 'logged', entry: entryView(shown.entry) }
+}
+
+/**
+ * @param change - a change computed from a folder.
+ * @returns the line `show?pending` lists for it.
+ */
+function pendingView(change: ListedChange): PendingView {
+  return {
+    id: change.id,
+    kind: change.kind,
+    plugin: change.plugin,
+    source: change.source,
+    files: change.files.length,
+    riskKinds: change.risk.kinds,
+    ...change.lastFailure === undefined ? {} : { lastFailure: change.lastFailure },
+  }
 }
 
 /**
@@ -587,22 +671,24 @@ function admitted(request: IncomingMessage, response: ServerResponse, connection
       : new RouteRefusal(403, 'FORBIDDEN', 'The studio does not answer this address or page.'))
     return undefined
   }
-  const arrival = arrivalOf(request, true, connection.isReachPeer?.(admission.peer) ?? false)
+  const arrival = arrivalOf(request, true, connection.isReachPeer(admission.peer))
   return { arrival, ...admission.setCookie === undefined ? {} : { setCookie: admission.setCookie } }
 }
 
 /**
  * Answer a failure of a route: a refusal with its status, a refusal of Changes or profile safety as a conflict or as
- * its own status, and anything else as `500 INTERNAL`, reported to the Host's log.
+ * its own status, and anything else as `500 INTERNAL`, reported to the Host's log. A refusal whose words name the Delo
+ * home answers its code and {@link HOME_WITHHELD_SENTENCE}.
  * @param response - the response.
  * @param error - what was thrown.
  * @param dependencies - the log.
+ * @param home - the home's spellings, once the route knows the profile.
  * @param setCookie - a rolled credential the admission issued.
  */
-function sendThrown(response: ServerResponse, error: unknown, dependencies: RouteDependencies, setCookie?: string): void {
+function sendThrown(response: ServerResponse, error: unknown, dependencies: RouteDependencies, home: HomeWords | undefined, setCookie?: string): void {
   if (error instanceof RouteRefusal) return sendRefusal(response, error, setCookie)
-  if (isChangesError(error)) return sendRefusal(response, new RouteRefusal(CHANGES_STATUS[error.code], error.code, error.detail), setCookie)
-  if (isProfileSafetyError(error)) return sendRefusal(response, new RouteRefusal(409, error.code, error.message), setCookie)
+  if (isChangesError(error)) return sendRefusal(response, new RouteRefusal(CHANGES_STATUS[error.code], error.code, sayable(error.detail, error.code, home)), setCookie)
+  if (isProfileSafetyError(error)) return sendRefusal(response, new RouteRefusal(409, error.code, sayable(error.message, error.code, home)), setCookie)
   dependencies.logger.warn(`changes route failed: ${messageOf(error)}`)
   sendRefusal(response, new RouteRefusal(500, 'INTERNAL', 'Delo could not answer; the Host log says why.'), setCookie)
 }
@@ -624,15 +710,18 @@ function profileOf(dependencies: RouteDependencies): ChangesContext {
  * @param dependencies - what the routes reach.
  * @returns the handler.
  */
-function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean) => Promise<object>, dependencies: RouteDependencies): RouteHandler {
+function readingRoute(read: (ctx: ChangesContext, url: URL, atComputer: boolean, home: HomeWords) => Promise<object>, dependencies: RouteDependencies): RouteHandler {
   return async (request, response) => {
     const admission = admitted(request, response, dependencies.connection)
     if (admission === undefined) return
+    let home: HomeWords | undefined
     try {
       if (request.method !== 'GET') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Read Changes with a GET.')
-      sendJson(response, 200, await read(profileOf(dependencies), new URL(String(request.url), 'http://studio.invalid'), atComputer(admission.arrival)), admission.setCookie)
+      const ctx = profileOf(dependencies)
+      home = homeWords(ctx.home, dependencies.logger)
+      sendJson(response, 200, withoutHome(await read(ctx, new URL(String(request.url), 'http://studio.invalid'), atComputer(admission.arrival), home), home.homes), admission.setCookie)
     } catch (error) {
-      sendThrown(response, error, dependencies, admission.setCookie)
+      sendThrown(response, error, dependencies, home, admission.setCookie)
     }
   }
 }
@@ -647,16 +736,18 @@ function actionRoute(action: ChangesAction, dependencies: RouteDependencies): Ro
   return async (request, response) => {
     const admission = admitted(request, response, dependencies.connection)
     if (admission === undefined) return
+    let home: HomeWords | undefined
     try {
       if (request.method !== 'POST') throw new RouteRefusal(405, 'METHOD_NOT_ALLOWED', 'Changes are made with a POST.')
       if (!atComputer(admission.arrival)) throw new RouteRefusal(403, LOOPBACK_REQUIRED, LOOPBACK_REQUIRED_SENTENCE)
       const presence = attestStudio(admission.arrival)
       if (isCrossSite(request)) throw new RouteRefusal(403, 'CROSS_SITE', 'Another site cannot change what your harness runs.')
       const ctx = profileOf(dependencies)
+      home = homeWords(ctx.home, dependencies.logger)
       const body = await readBody(request)
-      sendJson(response, 200, await act(action, body, ctx, presence, dependencies), admission.setCookie)
+      sendJson(response, 200, withoutHome(await act(action, body, ctx, presence, dependencies), home.homes), admission.setCookie)
     } catch (error) {
-      sendThrown(response, error, dependencies, admission.setCookie)
+      sendThrown(response, error, dependencies, home, admission.setCookie)
     }
   }
 }
@@ -675,7 +766,7 @@ export interface ChangesRoute {
  */
 export function changesRoutes(dependencies: RouteDependencies): readonly ChangesRoute[] {
   return [
-    { kind: 'exact', path: STATE_PATH, handler: readingRoute((ctx, _url, atComputer) => stateOf(ctx, atComputer), dependencies) },
+    { kind: 'exact', path: STATE_PATH, handler: readingRoute((ctx, _url, atComputer, home) => stateOf(ctx, atComputer, home), dependencies) },
     { kind: 'exact', path: SHOW_PATH, handler: readingRoute((ctx, url) => shownOf(ctx, url), dependencies) },
     ...(Object.keys(ACTION_PATHS) as ChangesAction[]).map((action): ChangesRoute => ({ kind: 'exact', path: ACTION_PATHS[action], handler: actionRoute(action, dependencies) })),
   ]

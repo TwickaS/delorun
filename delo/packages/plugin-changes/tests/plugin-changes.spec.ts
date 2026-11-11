@@ -12,6 +12,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type PluginManager from '@deepseek-ai/dsh-plugin-manager'
+import type { ChangeResult } from '@deepseek-ai/dsh-plugin-manager/types'
 import * as tool from '@deepseek-ai/dsh-plugin-manager/tools'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
@@ -71,7 +72,8 @@ function activeAgent(): Agent {
   const id = SessionId('plugin-changes')
   const session = Session.create(id, undefined, { version: SESSION_FORMAT_VERSION, id, createdAt: 0, isSeeded: false })
   session.append('turn/start', { turn: 1 })
-  return { session } as unknown as Agent
+  const agent: Partial<Agent> = { session }
+  return agent as Agent
 }
 
 /**
@@ -86,7 +88,7 @@ async function harness(enabled: boolean, withProfile = true, profileHistory = fa
   const profile = home()
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
-  const applied = async () => ({ changed: true, application: 'applied' })
+  const applied = async (): Promise<ChangeResult> => ({ changed: true, application: 'applied', stage: 'install', target: 'plug' })
   const manager = {
     installBundle: vi.fn(applied),
     removeBundle: vi.fn(applied),
@@ -99,7 +101,7 @@ async function harness(enabled: boolean, withProfile = true, profileHistory = fa
     previewUndo: vi.fn(async () => ({ ok: false, error: { code: 'nothing-to-undo' } })),
     previewRestore: vi.fn(async () => ({ ok: false, error: { code: 'unknown-version' } })),
   }
-  ctx.provide('pluginManager', manager as unknown as PluginManager)
+  ctx.provide('pluginManager', manager as Partial<PluginManager> as PluginManager)
   if (withProfile) ctx.provide('profileContext', { name: PROFILE, dir: profile.profileDir, home: profile.home } as never)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)

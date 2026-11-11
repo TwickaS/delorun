@@ -24,11 +24,12 @@ function status(fx: Fixture): ReturnType<typeof changesStatus> {
 }
 
 /**
+ * @param home - the Delo home.
  * @param path - a folder.
  * @returns its content version, read without storing it.
  */
-async function versionOfFolder(path: string): Promise<ContentVersion> {
-  return versionOf((await scanFolder(path)).entries)
+async function versionOfFolder(home: string, path: string): Promise<ContentVersion> {
+  return versionOf((await scanFolder(path, { home })).entries)
 }
 
 describe('changesStatus', () => {
@@ -76,11 +77,11 @@ describe('changesStatus', () => {
     const waiting = folder(fx, 'waiting')
     linkAs(fx, 'waiting', waiting)
     const atStart = await start(fx)
-    const edited = await versionOfFolder(source)
+    const edited = await versionOfFolder(fx.home, source)
     const report = await status(fx)
     expect(report.pending).toEqual([
       { id: changeId('plugin-edit', { plugin: 'plug', source }, approved, edited), plugin: 'plug', source, kind: 'plugin-edit' },
-      { id: changeId('plugin-install', { plugin: 'waiting', source: waiting }, undefined, await versionOfFolder(waiting)), plugin: 'waiting', source: waiting, kind: 'plugin-install' },
+      { id: changeId('plugin-install', { plugin: 'waiting', source: waiting }, undefined, await versionOfFolder(fx.home, waiting)), plugin: 'waiting', source: waiting, kind: 'plugin-install' },
     ])
     expect(report.pending.map(change => change.id)).toEqual(atStart.pending.map(change => change.id))
     expect(report.plugins.find(plugin => plugin.plugin === 'waiting')).toEqual({ plugin: 'waiting', source: waiting })

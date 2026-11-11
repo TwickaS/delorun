@@ -16,7 +16,7 @@
  *
  * Whatever the switch says, the plugin provides upstream hot reload's `profileReconcileCheck`, which runs before every
  * recomposition of the profile, whether the person's studio, `delorun plugin`, `delorun changes`, a work session or the
- * profile's own file watch caused it: `@delo/changes`' `prepareReload` moves a `link:` dependency that names a folder to
+ * profile's own file watch caused it: `@delo/changes`' `prepareReload` moves a `link:` dependency that names a folder, a missing one included, to
  * the plugin's active directory and refuses the recomposition when a link or an active directory is not what Changes
  * keeps. A link is the harness's own when it is into the runtime store, or names the directory the running Host already
  * loads that package from: a start brought every other link under Changes.
@@ -26,20 +26,21 @@
  *
  * Whatever the switch says, once the web server and Connection are present the plugin registers the studio's Changes
  * routes ([routes](./routes.ts)) under `/delo/changes/`, which the recovery screen and the studio read and act through;
- * an action needs the person at their computer, and safe mode keeps the bundles `installationBundles` names.
+ * an action needs the person at their computer, and safe mode keeps the bundles `installationBundles` names. The routes
+ * tell a remote session by Connection's `isReachPeer`; a Connection without it registers no route.
  * @module @delo/plugin-changes
  */
 import { realpathSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
-import type {} from '@deepseek-ai/dsh-client-connection'
+import type { HostConnectionAdmission, HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { PACKAGE_NAME_PATTERN, prepareReload, reloadProfile, startNotice, type ChangeEntry } from '@delo/changes'
 import { recordPluginRequest, type PluginRequest } from '@delo/changes/install'
-import { CHANGES_ROUTE_PREFIX, changesRoutes } from './routes.ts'
+import { CHANGES_ROUTE_PREFIX, changesRoutes, type RouteConnection } from './routes.ts'
 
 /**
  * The page global upstream's boot page reads the Changes routes' prefix from (`dshRecoveryRoutes` in
@@ -179,7 +180,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.provide('profileReconcileCheck', { check: (profile: ProfileContext) => checkReload(ctx, profile) })
   ctx.inject(['webServer', 'connection'], (scope) => {
     const routes = changesRoutes({
-      connection: scope.connection,
+      connection: routeConnection(scope.connection),
       profile: () => {
         const profile = scope.get('profileContext')
         return profile === undefined ? undefined : { home: profile.home, profile: profile.name, profileDir: profile.dir }
@@ -221,6 +222,22 @@ export function apply(ctx: Context, config: Config): void {
   ctx.tools.guard(exec => (heldRequest(exec) !== undefined || atComputerAction(exec)) && !recorded.has(exec)
     ? 'Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.'
     : undefined)
+}
+
+/**
+ * Connection as the routes use it. `ctx.connection` is Connection's `HostConnectionService`, whose `isReachPeer` the
+ * Context's `connection` type does not declare.
+ * @param connection - `ctx.connection`.
+ * @returns the same service, with the admission and `isReachPeer` the routes call.
+ * @throws {Error} when the service has no `isReachPeer`, so no route could tell a remote session from the person at
+ *   their computer.
+ */
+export function routeConnection(connection: HostConnectionAdmission): RouteConnection {
+  const withReach = connection as HostConnectionAdmission & Partial<Pick<HostConnectionService, 'isReachPeer'>>
+  if (typeof withReach.isReachPeer !== 'function') {
+    throw new Error('plugin-changes: Connection does not name the sessions a reach listener admitted, so the Changes routes cannot tell a remote session from the person at their computer and are not registered.')
+  }
+  return withReach as HostConnectionAdmission & Pick<HostConnectionService, 'isReachPeer'>
 }
 
 /**

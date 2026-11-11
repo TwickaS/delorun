@@ -229,7 +229,7 @@ Trusted Types are enforced on reach listeners by the `require-trusted-types-for 
 - Upstream's `packages/client/modules/src/client/system.ts` and the upstream components that assign `innerHTML`: the Trusted Types policies.
 - `delo/packages/home-auth/`: the `authenticator` provider with the pre-login routes, the session store and rotation, the loopback-only owner claim, device list, approval window and removal; every CLI profile loads it. It records no loopback credential.
 - The reach providers of [C7](c07-reach-providers.md): the Tailscale private provider is built and supplies that listener's target; the Funnel provider and the relay client's handoff to `reach-self-hosted-relay` are not built.
-- `delo/packages/plugin-changes/`: the Changes routes ([C21](c21-changes.md#routes-and-the-recovery-screen)) call `admit` first, let a reach session read, and act only for a request on the loopback listener under a loopback `Host` that no reach dispatcher admitted, which the arrival helpers of `@delo/home` decide.
+- `delo/packages/plugin-changes/`: the Changes routes ([C21](c21-changes.md#routes-and-the-recovery-screen)) call `admit` first, let a reach session read, and act only for a request under a loopback `Host`, on the loopback listener by the listener stamp `home-auth`'s authenticator sets on every request a reach listener admits, whose session Connection's `isReachPeer` does not name; `@delo/home`'s arrival helpers decide the first two.
 - `delo/packages/contract-admission/`: listener ids, refusal codes, the cookie name and the limits.
 - [C10](c10-host-qualified-keys.md): the cookie names it leaves outside its inventory. [C15](c15-verification-checks.md): the `reach-binding` check reads the listener table.
 

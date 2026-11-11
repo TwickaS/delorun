@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { applyChange, discardChange, listChanges, showChange, undoChange } from '../src/actions.ts'
+import { changeId } from '../src/ids.ts'
 import { activeDirectory } from '../src/paths.ts'
 import { applyInstallChange, isPluginRequest, recordPluginRequest, type PluginOperation } from '../src/install-actions.ts'
 import { readApproved, readChangeLog, withEntry, writeChangeLog } from '../src/records.ts'
@@ -238,6 +239,48 @@ describe('applyInstallChange', () => {
     expect(run.folders).toEqual([source])
     expect(result.folderChange).toBeUndefined()
     expect(readdirSync(activeDirectory(fx.home, PROFILE, 'plug')).sort()).toEqual(['index.js', 'package.json'])
+  })
+
+  it('an agent install of name@file:/dir is reviewed as a folder', async () => {
+    const fx = fixture()
+    const source = folder(fx, 'plug')
+    const active = activeDirectory(fx.home, PROFILE, 'plug')
+    const run = succeeding()
+    for (const spec of [`plug@file:${source}`, `plug@link:${source}`]) {
+      const entry = await recordPluginRequest(context(fx), { action: 'install', spec })
+      expect(entry).toMatchObject({ kind: 'plugin-install', subject: { plugin: 'plug', spec } })
+      const result = await applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run })
+      expect(run.calls.at(-1)).toEqual(['add', `plug@link:${active}`])
+      expect(run.folders.at(-1)).toBe(source)
+      expect(readdirSync(active)).toEqual([])
+      expect((await readChangeLog(fx.home, PROFILE)).entries.find(candidate => candidate.id === result.folderChange)).toMatchObject({ kind: 'plugin-install', state: 'pending', subject: { plugin: 'plug', source } })
+    }
+    // The name before @ must be the package the folder holds, or the person would review one plugin and get another.
+    const renamed = await recordPluginRequest(context(fx), { action: 'install', spec: `other@file:${source}` })
+    expect((await rejection(applyInstallChange(context(fx), renamed.id, terminal(), { reload: NOT_RUNNING, run }), 'INVALID_REQUEST')).message).toBe(`The folder ${source} holds the package plug, not other.`)
+    expect(run.calls).toHaveLength(2)
+  })
+
+  it('an agent install whose range names another protocol is refused', async () => {
+    const fx = fixture()
+    const specs = ['plug@workspace:*', 'plug@git+https://example.com/o/r.git', 'plug@https://example.com/r.tgz', 'plug@github:o/r', 'plug@o/r', 'plug@git@example.com:o/r.git', 'plug@npm:other@1', 'plug@file:relative', 'plug@/abs/path']
+    for (const spec of specs) {
+      const error = await rejection(recordPluginRequest(context(fx), { action: 'install', spec }), 'INVALID_REQUEST')
+      expect(error.subject).toBe(spec)
+    }
+    expect((await rejection(recordPluginRequest(context(fx), { action: 'install', spec: 'plug@workspace:*' }), 'INVALID_REQUEST')).message).toBe('plug@workspace:* is not a plugin spec this profile can install: workspace:* after the package name is neither a registry version nor a folder (file: or link:).')
+    expect((await readChangeLog(fx.home, PROFILE)).entries).toEqual([])
+    // A request recorded before Delo refused such specs is refused when applied, and nothing runs.
+    const run = succeeding()
+    const subject = { plugin: 'plug', spec: 'plug@workspace:*' }
+    const id = changeId('plugin-install', subject, undefined, undefined, 0)
+    await writeChangeLog(fx.home, PROFILE, { schema: 'delo.changes-log/1', entries: [{ id, kind: 'plugin-install', state: 'pending', subject, summary: 'The agent asks to install plug@workspace:*', createdAt: NOW.toISOString() }] })
+    await rejection(applyInstallChange(context(fx), id, terminal(), { reload: NOT_RUNNING, run }), 'INVALID_REQUEST')
+    expect(run.calls).toEqual([])
+    // A registry version, range or tag is still a plain install.
+    for (const spec of ['plug@1.2.3', 'plug@^1.2 || >=2.0.0-beta.1 <3', 'plug@latest']) {
+      expect(await recordPluginRequest(context(fx), { action: 'install', spec })).toMatchObject({ kind: 'plugin-install', subject: { plugin: 'plug', spec } })
+    }
   })
 
   it('refuses a folder without a valid package name, and passes a path that is no folder to the operation', async () => {

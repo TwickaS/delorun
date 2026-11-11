@@ -4,10 +4,11 @@
  * @module @delo/changes/tests/support
  */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { open, type FileHandle } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, expect } from 'vitest'
+import { afterEach, expect, vi } from 'vitest'
 import { ChangesError, type ChangesCode } from '../src/errors.ts'
 
 const created: string[] = []
@@ -74,6 +75,58 @@ export function modeOf(path: string): number {
  */
 export function lockOut(path: string): void {
   chmodSync(path, 0o000)
+}
+
+/**
+ * The prototype every `FileHandle` of `node:fs/promises` shares, whose methods a spec replaces to watch or alter reads.
+ * @returns the prototype.
+ */
+async function fileHandlePrototype(): Promise<FileHandle> {
+  const handle = await open(import.meta.filename, 'r')
+  try {
+    return Object.getPrototypeOf(handle) as FileHandle
+  } finally {
+    await handle.close()
+  }
+}
+
+/**
+ * Make every open handle of one file report a smaller size than it holds, as a file that grows after its status was
+ * read does, until the returned function is called.
+ * @param path - the file.
+ * @param size - the size its handles report.
+ * @returns what puts the handles' status back.
+ */
+export async function understateSize(path: string, size: number): Promise<() => void> {
+  const { dev, ino } = statSync(path)
+  const prototype = await fileHandlePrototype()
+  const original = prototype.stat
+  const spy = vi.spyOn(prototype, 'stat').mockImplementation(async function (this: FileHandle) {
+    const stats = await original.call(this)
+    if (stats.dev === dev && stats.ino === ino) stats.size = size
+    return stats
+  })
+  return () => { spy.mockRestore() }
+}
+
+/**
+ * Count the bytes every open handle of one file reads, until the returned `restore` is called. The file is known by
+ * its device and inode now, which rewriting it in place keeps.
+ * @param path - the file.
+ * @returns the bytes read so far and what stops counting.
+ */
+export async function countReads(path: string): Promise<{ readonly read: () => number, readonly restore: () => void }> {
+  const { dev, ino } = statSync(path)
+  const prototype = await fileHandlePrototype()
+  const original = prototype.read as (this: FileHandle, buffer: Buffer, offset: number, length: number, position: number | null) => Promise<{ bytesRead: number, buffer: Buffer }>
+  let read = 0
+  const spy = vi.spyOn(prototype, 'read').mockImplementation(async function (this: FileHandle, buffer: Buffer, offset: number, length: number, position: number | null) {
+    const result = await original.call(this, buffer, offset, length, position)
+    const stats = await this.stat()
+    if (stats.dev === dev && stats.ino === ino) read += result.bytesRead
+    return result
+  } as FileHandle['read'])
+  return { read: () => read, restore: () => { spy.mockRestore() } }
 }
 
 /**

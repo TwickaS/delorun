@@ -3,8 +3,9 @@
  *
  * 1. the protection record is readable, or absent;
  * 2. no `link:` dependency other than the harness's own (into the runtime store `runtimes/`, or to the directory the
- *    running installation carries for the name) names a folder other than its plugin's active directory, and the
- *    profile's `node_modules/<name>` for a plugin under Changes resolves to that active directory when it exists;
+ *    running installation carries for the name) names anything other than its plugin's active directory, a missing
+ *    folder or a file included, and the profile's `node_modules/<name>` for a plugin under Changes resolves to that
+ *    active directory when it exists;
  * 3. each active directory holds what `active.json` records for it, or nothing when it records none, and outside a work
  *    session for the plugin under `block` that is the approved version, or, for `left-out` content, nothing or the
  *    content from before the plugin's change left out at start that stays out ([left out](./left-out.ts));
@@ -12,14 +13,14 @@
  *
  * {@link checkLoadedContent} checks 1 to 3, what a profile loads: a start checks them after it prepared the profile and
  * the running Host before every recomposition, and each refuses to load when one does not hold ([enforce](./enforce.ts)).
- * {@link checkChangesInvariants} adds 4 for `delorun verify` and `delorun doctor`. A link to anything but a directory
- * names nothing to load and breaks no invariant.
+ * {@link checkChangesInvariants} adds 4 for `delorun verify` and `delorun doctor`. A link to a missing folder breaks
+ * invariant 2 as any other folder does, because whatever is created there before the Loader imports it would load.
  *
  * @module @delo/changes/invariants
  */
 import { realpath } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { EMPTY_CONTENT_VERSION, isHarnessLink, namesDirectory, type EnforceRequest } from './enforce.ts'
+import { EMPTY_CONTENT_VERSION, isHarnessLink, type EnforceRequest } from './enforce.ts'
 import { isChangesError } from './errors.ts'
 import { readLinks, type ProfileLink } from './link.ts'
 import { activeDirectory } from './paths.ts'
@@ -83,9 +84,7 @@ async function checkLoaded(request: InvariantRequest): Promise<{ readonly broken
   for (const link of links) {
     const directory = activeDirectory(home, profile, link.name)
     if (resolve(link.target) !== resolve(directory)) {
-      if (!isHarnessLink(request, link.name, link.target) && await attempt(broken, `The folder of ${link.name} cannot be read`, () => namesDirectory(link.target)) === true) {
-        broken.push(`${link.name} is linked from ${link.target}, not from its active directory ${directory}.`)
-      }
+      if (!isHarnessLink(request, link.name, link.target)) broken.push(`${link.name} is linked from ${link.target}, not from its active directory ${directory}.`)
       continue
     }
     const installed = await attempt(broken, `The installed link of ${link.name} cannot be read`, () => resolvedOrMissing(join(profileDir, 'node_modules', link.name)))

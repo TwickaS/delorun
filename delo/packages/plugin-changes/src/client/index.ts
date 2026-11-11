@@ -81,6 +81,7 @@ export function apply(ctx: Context): void {
     reload: () => changes.refresh(),
     retry: () => changes.retry(),
     show: id => changes.show(id),
+    listPending: () => changes.listPending(),
     reviewWork: plugin => changes.reviewWork(plugin),
     apply: (id, confirmedRisk) => changes.apply(id, confirmedRisk),
     discard: id => changes.discard(id),

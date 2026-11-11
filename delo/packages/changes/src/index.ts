@@ -5,7 +5,7 @@
  * [store](./store.ts)), diffs and pending changes ([diff](./diff.ts), [pending](./pending.ts)), the risk summary
  * ([risk](./risk.ts), [review](./review.ts)), the record files ([records](./records.ts)), the profile's `link:`
  * dependencies ([link](./link.ts)), what a start loads ([enforce](./enforce.ts)) and the invariants a booted profile keeps
- * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), and the Host's side of a work
+ * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), what the studio's state reads of the records ([state](./state.ts)), and the Host's side of a work
  * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
  * ([install actions](./install-actions.ts), also the entry `@delo/changes/install`), and reloading the running Host
  * ([reload](./reload.ts)). Ending a work session because Delo
@@ -31,6 +31,7 @@ export * from './left-out.ts'
 export * from './collect.ts'
 export * from './boot-record.ts'
 export * from './status.ts'
+export * from './state.ts'
 export * from './actions.ts'
 export {
   loadWorkSession,

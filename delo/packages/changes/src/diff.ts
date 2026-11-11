@@ -228,7 +228,8 @@ async function packageManifest(home: string, cache: ObjectCache, entry: VersionE
   if (entry?.type !== 'file') return undefined
   const bytes = await cachedObject(home, cache, entry.digest)
   try {
-    return JSON.parse(bytes.toString('utf8')) as unknown
+    const parsed: unknown = JSON.parse(bytes.toString('utf8'))
+    return parsed
   } catch {
     // A SyntaxError: a package.json that is not JSON has no manifest for the checks to read.
     return undefined

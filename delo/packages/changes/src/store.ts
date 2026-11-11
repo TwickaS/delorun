@@ -24,10 +24,11 @@ import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type V
 const EXECUTABLE_FILE_MODE = 0o700
 
 /**
- * How an active directory is scanned: its links are recorded as Delo wrote them, so a version that keeps installed
- * packages as outside links (one stored with `dependencies: 'link'`) reads back as itself.
+ * How an active directory is scanned: its links are recorded as Delo wrote them and none is followed, so a version that
+ * keeps installed packages as outside links (one stored with `dependencies: 'link'`) reads back as itself, and a link
+ * planted there is never read through.
  */
-const ACTIVE_SCAN: ScanOptions = { dependencies: 'link' }
+const ACTIVE_SCAN: ScanOptions = { active: true }
 
 /** How long storing a folder waits for the store's lock, which a collection or another store holds. */
 export const STORE_LOCK_WAIT_MS = 120_000
@@ -61,7 +62,7 @@ export interface StoreOptions {
 export interface StoredFolder {
   readonly version: ContentVersion
   readonly manifest: VersionManifest
-  /** Sockets, FIFOs and devices the folder holds, which are not part of the content. */
+  /** Sockets, FIFOs, devices and links the scan does not follow, which are not part of the content ([tree](./tree.ts)). */
   readonly skipped: readonly string[]
 }
 
@@ -76,21 +77,22 @@ function temporaryPath(path: string): string {
 
 /**
  * Copy an open file's bytes to a new file at a path, hashing them while copying, and rename it over the path only when
- * the digest is the expected one.
- * @param source - the open source file, read from its start.
+ * the digest is the expected one. At most the expected size is read, so a copy never reads more than the scan counted.
+ * @param source - the open source file, read from its start, with its path and the size its entry records.
  * @param path - the file to write.
  * @param mode - the new file's mode.
  * @param expected - the digest the bytes must have.
  * @returns whether the bytes read have the digest `expected`; when they do not, nothing was written.
+ * @throws {ChangesError} `CHANGED_WHILE_READING` when the source holds more than the size, and nothing is written.
  */
-async function copyHashing(source: FileHandle, path: string, mode: number, expected: ObjectDigest): Promise<boolean> {
+async function copyHashing(source: { readonly handle: FileHandle, readonly path: string, readonly size: number }, path: string, mode: number, expected: ObjectDigest): Promise<boolean> {
   const temporary = temporaryPath(path)
   const target = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode)
   let matches = false
   try {
     try {
       const hash = createHash('sha256')
-      await readChunks(source, async (chunk) => {
+      await readChunks(source.handle, source, async (chunk) => {
         hash.update(chunk)
         await target.write(chunk)
       })
@@ -109,12 +111,13 @@ async function copyHashing(source: FileHandle, path: string, mode: number, expec
 /**
  * Store a folder's current content under the store's lock: copy each file into `objects/` unless the store holds its
  * digest, then write the version file.
- * @param home - the Delo home.
+ * @param home - the Delo home: the store is in it, and the scan never follows a link into it.
  * @param folder - the plugin folder.
  * @param options - the scan cache and the test hook.
  * @returns the version, its manifest and the skipped paths.
- * @throws {ChangesError} `CHANGED_WHILE_READING` when a file's bytes while copying differ from the scan, or the folder's
- * version after copying differs from before; `CONTENT_TOO_LARGE` when the folder passes a content limit of the scan.
+ * @throws {ChangesError} `CHANGED_WHILE_READING` when a file's bytes while copying differ from the scan or pass the size
+ * the scan counted, or the folder's version after copying differs from before; `CONTENT_TOO_LARGE` when the folder
+ * passes a content limit of the scan.
  * @throws the store lock's timeout when another process holds it longer than {@link STORE_LOCK_WAIT_MS}.
  */
 export async function storeFolder(home: string, folder: string, options: StoreOptions = {}): Promise<StoredFolder> {
@@ -122,7 +125,7 @@ export async function storeFolder(home: string, folder: string, options: StoreOp
   const versions = versionsDirectory(home)
   await mkdir(objects, { recursive: true, mode: PRIVATE_DIR_MODE })
   await mkdir(versions, { recursive: true, mode: PRIVATE_DIR_MODE })
-  const scanOptions = { ...options.scanCache === undefined ? {} : { cache: options.scanCache }, ...options.dependencies === undefined ? {} : { dependencies: options.dependencies } }
+  const scanOptions: ScanOptions = { home, ...options.scanCache === undefined ? {} : { cache: options.scanCache }, ...options.dependencies === undefined ? {} : { dependencies: options.dependencies } }
   return withStoreLock(home, () => storeScanned(home, folder, scanOptions, options.onCopied))
 }
 
@@ -143,7 +146,7 @@ async function storeScanned(home: string, folder: string, scanOptions: ScanOptio
     const { handle } = await openRegularFile(source)
     let copied: boolean
     try {
-      copied = await copyHashing(handle, join(objects, entry.digest), PROTECTED_FILE_MODE, entry.digest)
+      copied = await copyHashing({ handle, path: source, size: entry.size }, join(objects, entry.digest), PROTECTED_FILE_MODE, entry.digest)
     } finally {
       await handle.close()
     }
@@ -256,7 +259,8 @@ function parseEntry(value: unknown): VersionEntry | undefined {
 function parseEntries(value: unknown): VersionEntry[] | undefined {
   if (!Array.isArray(value)) return undefined
   const entries: VersionEntry[] = []
-  for (const item of value as unknown[]) {
+  const items: readonly unknown[] = value
+  for (const item of items) {
     const entry = parseEntry(item)
     const previous = entries.at(-1)
     if (entry === undefined || (previous !== undefined && compareCodeUnits(previous.path, entry.path) >= 0)) return undefined
@@ -363,7 +367,11 @@ async function writeEntry(home: string, target: string, entry: VersionEntry): Pr
   }
   let copied: boolean
   try {
-    copied = await copyHashing(opened.handle, path, entry.executable ? EXECUTABLE_FILE_MODE : PROTECTED_FILE_MODE, entry.digest)
+    copied = await copyHashing({ handle: opened.handle, path: objectPath, size: entry.size }, path, entry.executable ? EXECUTABLE_FILE_MODE : PROTECTED_FILE_MODE, entry.digest)
+  } catch (error) {
+    // An object longer than its entry says does not hold the bytes its name says either.
+    if (!(error instanceof ChangesError) || error.code !== 'CHANGED_WHILE_READING') throw error
+    copied = false
   } finally {
     await opened.handle.close()
   }

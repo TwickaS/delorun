@@ -204,9 +204,7 @@ describe('real Loader composition', () => {
       renderedFor.push(peer)
       rows.push({ kind: 'script-preload', src: 'plugins/boot.js' })
     })
-    // `/recovery` renders the index too, where the boot page shows a distribution's recovery screen, behind the same fence.
-    expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
-    for (const path of ['/', '/index.html', '/?view=test', '/recovery']) {
+    for (const path of ['/', '/index.html', '/?view=test']) {
       const got = await request(port, path, authenticated())
       expect(got.status).toBe(200)
       expect(got.type).toBe('text/html; charset=utf-8')
@@ -221,7 +219,7 @@ describe('real Loader composition', () => {
       expect(base).toBeLessThan(got.body.indexOf('<script>window.__T__=1</script>'))
     }
     // An authenticated browser renders for the owner's shared browser Peer.
-    expect(renderedFor).toEqual(Array.from({ length: 4 }, () => loaded.connection.browserPeer))
+    expect(renderedFor).toEqual(Array.from({ length: 3 }, () => loaded.connection.browserPeer))
     offRows()
     expect(await request(port, '/', authenticated({ method: 'HEAD' }))).toEqual({
       status: 200,
@@ -320,6 +318,28 @@ describe('real Loader composition', () => {
     await rm(join(dist, 'manifest.webmanifest'))
     expect(await status('/icon-512.png')).toBe(401)
     expect(await status('/favicon.svg')).toBe(200)
+  })
+
+  it('/recovery is not served when Delo\'s Changes service is not mounted', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const port = loaded.webServer.port
+    const { authenticated } = await signIn(loaded)
+    // Pins the recovery row check: without it `/recovery` renders the index for a composition that names no recovery
+    // routes, whose boot page then offers no recovery screen.
+    expect(await request(port, '/recovery', authenticated())).toEqual({ status: 404, type: null, body: '' })
+    expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
+    // A distribution that names its recovery routes, as `@delo/plugin-changes` does, gets the page behind the index fence.
+    const offRecovery = loaded.on('webserver/index-inject', (rows) => {
+      rows.push({ kind: 'global', name: FrontendStatic.RECOVERY_ROUTES_GLOBAL, value: '/delo/changes' })
+    })
+    expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
+    const page = await request(port, '/recovery', authenticated())
+    expect(page).toMatchObject({ status: 200, type: 'text/html; charset=utf-8' })
+    expect(page.body).toContain('shell')
+    expect(page.body).toContain('globalThis["dshRecoveryRoutes"] = "/delo/changes"')
+    expect(page.body.match(/<base\b/g)).toHaveLength(1)
+    offRecovery()
+    expect((await request(port, '/recovery', authenticated())).status).toBe(404)
   })
 
   it('answers in-process reads for the given Peer without browser authentication', { timeout: 60_000 }, async () => {

@@ -21,7 +21,7 @@ it('registers the Changes routes with the web server and names them to the boot 
         return () => { removed.push(route.path) }
       },
     } as never)
-    ctx.provide('connection', { admit: () => ({ rejection: 401 }) } as never)
+    ctx.provide('connection', { admit: () => ({ rejection: 401 }), isReachPeer: () => false } as never)
     const fiber = await ctx.plugin(plugin, { enabled, installationBundles: [] })
     const paths = [STATE_PATH, SHOW_PATH, ...Object.values(ACTION_PATHS)]
     expect(registered.map(route => [route.kind, route.path])).toEqual(paths.map(path => ['exact', path]))
@@ -39,7 +39,7 @@ it('gives the routes the profile the Host runs and its hot reload', async () => 
   ctx.provide('tools', { guard: () => () => {} } as never)
   const handlers = new Map<string, ChangesRoute['handler']>()
   ctx.provide('webServer', { register: (route: ChangesRoute) => { handlers.set(route.path, route.handler); return () => {} } } as never)
-  ctx.provide('connection', { admit: () => ({ peer: {} }) } as never)
+  ctx.provide('connection', { admit: () => ({ peer: {} }), isReachPeer: () => false } as never)
   ctx.provide('hmr', { runExclusive: <T>(operation: () => Promise<T>) => operation(), reconcileProfile: () => Promise.resolve({}) } as never)
   await ctx.plugin(plugin, { enabled: false, installationBundles: [] })
   // Without a profile the state route says so; with one, it reads that profile.
@@ -55,4 +55,17 @@ it('gives the routes the profile the Host runs and its hot reload', async () => 
   expect(await answer()).toMatchObject({ status: 503, body: { code: 'NO_PROFILE' } })
   ctx.provide('profileContext', { name: 'default', dir: '/nonexistent/profiles/default', home: '/nonexistent' } as never)
   expect(await answer()).toMatchObject({ status: 200, body: { profile: 'default', atComputer: true } })
+})
+
+it('registers no Changes route when Connection cannot name a remote session', async () => {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  ctx.provide('tools', { guard: () => () => {} } as never)
+  const registered: ChangesRoute[] = []
+  ctx.provide('webServer', { register: (route: ChangesRoute) => { registered.push(route); return () => {} } } as never)
+  // Without `isReachPeer` every admitted session would read as the person at their computer.
+  ctx.provide('connection', { admit: () => ({ peer: {} }) } as never)
+  await ctx.plugin(plugin, { enabled: false, installationBundles: [] })
+  expect(registered).toEqual([])
+  expect(() => plugin.routeConnection({ admit: () => ({ peer: {} }) } as never)).toThrow(/cannot tell a remote session/)
 })

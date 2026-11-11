@@ -7,7 +7,7 @@ import { objectsDirectory, versionsDirectory } from '../src/paths.ts'
 import { holdsVersion, materialize, readObject, readVersion, storeFolder } from '../src/store.ts'
 import { versionOf } from '../src/tree.ts'
 import { VERSION_MANIFEST_SCHEMA, type ContentVersion, type ObjectDigest, type VersionEntry } from '../src/types.ts'
-import { lockOut, makeFifo, modeOf, rejection, temporaryDirectory, writeFiles } from './support.ts'
+import { countReads, lockOut, makeFifo, modeOf, rejection, temporaryDirectory, writeFiles } from './support.ts'
 
 // The cases write real files and git histories; on a loaded host that takes longer than vitest's default.
 vi.setConfig({ testTimeout: 30_000 })
@@ -92,11 +92,51 @@ describe('storeFolder', () => {
   it('refuses a file whose bytes while copying differ from the scan, leaving no temporary file', async () => {
     const { home, folder } = setUp({ 'a.js': 'a', 'b.js': 'b' })
     const error = await rejection(storeFolder(home, folder, {
-      onCopied: (path) => { if (path === 'a.js') writeFileSync(join(folder, 'b.js'), 'changed') },
+      onCopied: (path) => { if (path === 'a.js') writeFileSync(join(folder, 'b.js'), 'c') },
     }), 'CHANGED_WHILE_READING')
     expect(error.subject).toBe(join(folder, 'b.js'))
     expect(readdirSync(objectsDirectory(home))).toEqual([sha('a')])
     expect(readdirSync(versionsDirectory(home))).toEqual([])
+  })
+
+  it('the byte limit counts the bytes actually read', async () => {
+    const { home, folder } = setUp({ 'a.js': 'a', 'b.js': 'b' })
+    const reads = await countReads(join(folder, 'b.js'))
+    try {
+      // b.js grows to 1 MiB after the scan counted its one byte against the limit; the copy reads no more than that.
+      const error = await rejection(storeFolder(home, folder, {
+        onCopied: (path) => { if (path === 'a.js') writeFileSync(join(folder, 'b.js'), Buffer.alloc(1024 * 1024, 1)) },
+      }), 'CHANGED_WHILE_READING')
+      // The scan reads its byte and one more to see that nothing remains; the copy, its byte and the one that remains.
+      expect(reads.read()).toBe(3)
+      expect(error.detail).toBe(`${join(folder, 'b.js')} grew while it was read`)
+    } finally {
+      reads.restore()
+    }
+    expect(readdirSync(objectsDirectory(home))).toEqual([sha('a')])
+  })
+
+  it('a link to a file under the Delo home is never copied into the store', async () => {
+    const home = temporaryDirectory('delo-changes-home-')
+    const workspace = temporaryDirectory('delo-changes-folder-')
+    const folder = join(workspace, 'plugin')
+    writeFiles(home, {
+      '.credentials.yaml': 'secret: home',
+      'package.json': '{"name":"home"}',
+      'runtimes/r/node_modules/dep/package.json': '{"name":"dep"}',
+      'runtimes/r/node_modules/dep/secret.js': 'secret: runtime',
+    })
+    writeFiles(folder, { 'index.js': 'p' })
+    mkdirSync(join(folder, 'node_modules'))
+    symlinkSync(join(home, '.credentials.yaml'), join(folder, 'cfg'))
+    symlinkSync(home, join(folder, 'node_modules', 'home'))
+    symlinkSync(join(home, 'runtimes', 'r', 'node_modules', 'dep'), join(folder, 'node_modules', 'dep'))
+    // The home named through a link of its own is the same home.
+    symlinkSync(home, join(workspace, 'alias'))
+    const { manifest, skipped } = await storeFolder(join(workspace, 'alias'), folder)
+    expect(manifest.entries.map((entry) => entry.path)).toEqual(['index.js'])
+    expect(skipped).toEqual(['cfg', 'node_modules/dep', 'node_modules/home'])
+    expect(readdirSync(objectsDirectory(home))).toEqual([sha('p')])
   })
 
   it('refuses a folder whose version after copying differs from before', async () => {
@@ -272,7 +312,7 @@ describe('materialize', () => {
   it('with dependencies kept as links, materializes a dereferenced package whose own dependencies stay links, and the copy holds the version', async () => {
     const home = temporaryDirectory('delo-changes-home-')
     const workspace = temporaryDirectory('delo-changes-workspace-')
-    writeFiles(workspace, { 'plugin/index.js': 'p', 'pkg/index.js': 'sibling', 'dep/index.js': 'dep' })
+    writeFiles(workspace, { 'plugin/index.js': 'p', 'pkg/index.js': 'sibling', 'pkg/package.json': '{}', 'dep/index.js': 'dep' })
     const folder = join(workspace, 'plugin')
     mkdirSync(join(folder, 'node_modules'))
     symlinkSync('../../pkg', join(folder, 'node_modules', 'pkg'))
@@ -331,7 +371,7 @@ describe('materialize', () => {
   it('copies a dereferenced sibling package\'s files into the active directory', async () => {
     const home = temporaryDirectory('delo-changes-home-')
     const workspace = temporaryDirectory('delo-changes-workspace-')
-    writeFiles(workspace, { 'pkg/index.js': 'sibling', 'plugin/index.js': 'plugin' })
+    writeFiles(workspace, { 'pkg/index.js': 'sibling', 'pkg/package.json': '{}', 'plugin/index.js': 'plugin' })
     const folder = join(workspace, 'plugin')
     mkdirSync(join(folder, 'node_modules'))
     symlinkSync('../../pkg', join(folder, 'node_modules', 'pkg'))
@@ -398,6 +438,15 @@ describe('materialize', () => {
     writeFiles(home, { elsewhere: 'a' })
     symlinkSync(join(home, 'elsewhere'), object)
     await rejection(materialize(home, version, join(home, 'two')), 'STORE_CORRUPT')
+  })
+
+  it('fails with the filesystem error when the directory cannot be written', async () => {
+    const { home, folder } = setUp({ 'a.js': 'a' })
+    const { version } = await storeFolder(home, folder)
+    const target = join(home, 'active', 'plugin')
+    mkdirSync(target, { recursive: true })
+    chmodSync(target, 0o500)
+    await expect(materialize(home, version, target)).rejects.toMatchObject({ code: 'EACCES' })
   })
 
   it('fails with the filesystem error for an object it cannot open', async () => {

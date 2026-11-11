@@ -211,7 +211,7 @@ export async function changesStatus(request: ChangesStatusRequest): Promise<Chan
       ...content === undefined ? {} : { active: content },
       ...lastApplied === undefined ? {} : { lastApplied },
     })
-    const folder = await orElse(async () => await namesDirectory(source) ? versionOf((await scanFolder(source)).entries) : undefined, undefined, detail => invariants.push(`The folder of ${plugin} cannot be read: ${detail}`))
+    const folder = await orElse(async () => await namesDirectory(source) ? versionOf((await scanFolder(source, { home })).entries) : undefined, undefined, detail => invariants.push(`The folder of ${plugin} cannot be read: ${detail}`))
     if (folder === undefined || folder === approvedVersion) continue
     const kind = approvedVersion === undefined ? 'plugin-install' : 'plugin-edit'
     const stored = await exists(join(versionsDirectory(home), `${folder}.json`))

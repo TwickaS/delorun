@@ -11,7 +11,10 @@ export const CHANGES_ROUTE_PREFIX = '/delo/changes'
 /** What failed, the recent changes and the actions the screen offers. */
 export const STATE_PATH = `${CHANGES_ROUTE_PREFIX}/state`
 
-/** One change by `?id=`, or the open work session's folder by `?work=<plugin>`. */
+/**
+ * One change by `?id=`, the open work session's folder by `?work=<plugin>`, or every change waiting for review in a
+ * plugin's folder by `?pending`: the reads that read folders and store their content.
+ */
 export const SHOW_PATH = `${CHANGES_ROUTE_PREFIX}/show`
 
 /** The actions, each a `POST` whose body names the change or the plugin. */
@@ -84,7 +87,7 @@ export interface EntryView {
   readonly undoable: boolean
 }
 
-/** A change computed from a folder that waits for review, as `state` lists it. */
+/** A change computed from a folder that waits for review, as `show?pending` lists it. */
 export interface PendingView {
   readonly id: string
   readonly kind: 'plugin-edit' | 'plugin-install'
@@ -95,6 +98,24 @@ export interface PendingView {
   readonly files: number
   readonly riskKinds: readonly RiskKindView[]
   readonly lastFailure?: FailureView
+}
+
+/**
+ * A plugin under Changes, as `state` names it from the records without reading its folder: whether an approved
+ * plugin's folder holds edits is known once `show?pending` read it.
+ */
+export interface FolderView {
+  readonly plugin: string
+  /** The plugin's folder. */
+  readonly source: string
+  /** `plugin-install` while nothing of it is approved, so its folder waits for review; `plugin-edit` once approved. */
+  readonly kind: 'plugin-edit' | 'plugin-install'
+}
+
+/** `GET show?pending`. */
+export interface PendingListView {
+  readonly kind: 'pending-list'
+  readonly pending: readonly PendingView[]
 }
 
 /** The open work session. */
@@ -127,7 +148,8 @@ export interface ChangesStateView {
   readonly lastStart?: { readonly at: string, readonly failure?: string, readonly plugins: readonly StartPluginView[] }
   /** Changes a failed start left out. */
   readonly leftOut: readonly EntryView[]
-  readonly pending: readonly PendingView[]
+  /** Every plugin under Changes; its folder's changes waiting for review are read by `show?pending`. */
+  readonly folders: readonly FolderView[]
   /** The agent's plugin requests that wait for review. */
   readonly requests: readonly EntryView[]
   /** The newest decided changes, newest first. */

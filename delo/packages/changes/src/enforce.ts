@@ -3,7 +3,8 @@
  * `link:` dependency names the plugin's active directory under `changes/`, never its folder, and the active directory
  * holds exactly one content version:
  *
- * 1. during a work session for the plugin, the folder's current content;
+ * 1. during a work session for the plugin that has not passed its end time, the folder's current content (a start ends a
+ *    session past its end time without the person first, approving nothing, as the Host's watcher does);
  * 2. otherwise, while a change a failed start left out stays out, the content from before that change, or nothing for an
  *    install or a plugin turned on, in every protection setting ([left out](./left-out.ts));
  * 3. otherwise, under protection `block`, the approved version, or nothing at all for a plugin with no approved version
@@ -13,9 +14,11 @@
  * A link into the runtime store `runtimes/`, as Delo's own bundles carried by an installed release are linked, is left
  * alone: the store's start check covers it, and an update replaces it. A link to the directory the running installation
  * itself carries for the package name is left alone too, because a source checkout runs the whole harness, upstream
- * packages included, from the checkout, so copying Delo's bundles would not stop edits to the code the Host runs. A
- * link to anything but a directory, `file:` specs and registry plugins are left alone as well; every other folder is a
- * linked plugin. The first start under Changes of a profile the home held when Changes first ran (`migratesAtUpgrade`) approves every linked plugin as it is, so
+ * packages included, from the checkout, so copying Delo's bundles would not stop edits to the code the Host runs.
+ * `file:` specs and registry plugins are left alone as well. Every other `link:` dependency is a linked plugin, whether
+ * or not its target exists or is a directory: one whose folder is missing, or names a file, is moved to its empty
+ * active directory and waits for review as a `plugin-install` from that folder, so a folder created there later loads
+ * nothing before the person reviews it. The first start under Changes of a profile the home held when Changes first ran (`migratesAtUpgrade`) approves every linked plugin as it is, so
  * nobody's working harness changes what it runs; a plugin linked from a folder at any later start waits for review. Every
  * profile write happens under upstream's profile write lock, and a start that changed the profile's files records one
  * profile history version.
@@ -39,6 +42,7 @@ import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApprove
 import { holdsVersion, materialize, storeEmptyVersion, storeFolder } from './store.ts'
 import { versionOf } from './tree.ts'
 import { ACTIVE_RECORD_SCHEMA, type ActiveContent, type ApprovedRecord, type ChangeEntry, type ChangeId, type ChangeLog, type ContentVersion, type ProtectionLevel } from './types.ts'
+import { endWorkWithoutPerson, workFinishedLine, workSessionExpired, type WorkFinished } from './work.ts'
 
 /** How long a start waits for the profile write lock: upstream plugin management's default, which a `pnpm` run can hold. */
 export const PROFILE_LOCK_WAIT_MS = 120_000
@@ -91,6 +95,8 @@ export interface StartChanges {
   readonly unapproved: readonly { readonly plugin: string }[]
   /** The plugin whose folder loads live, when a work session is open for a plugin of the profile. */
   readonly workSession?: { readonly plugin: string }
+  /** The work session this start ended without the person because its end time had passed. */
+  readonly workEnded?: WorkFinished
   /** The profile history version this start recorded, when it changed the profile's files. */
   readonly historyVersion?: string
   /** The changes a failed start left out whose content stays out ([left out](./left-out.ts)). */
@@ -281,7 +287,12 @@ async function storeContent(home: string, source: string, scanCache: string, pro
 async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'start' | 'reload'): Promise<StartChanges> {
   const { home, profile, profileDir } = request
   const protection = await readProtection(home)
-  const workSession = await readWorkSession(home, profile)
+  const recordedSession = await readWorkSession(home, profile)
+  // A session past its end loads nothing from the folder. A start ends it without the person, as the watcher does at
+  // the end time, before anything is loaded; a reload leaves ending it to the watcher.
+  const expired = recordedSession !== undefined && workSessionExpired(request, recordedSession)
+  const workEnded = expired && pass === 'start' ? await endWorkWithoutPerson(request, recordedSession, 'expired', undefined) : undefined
+  const workSession = expired ? undefined : recordedSession
   const scanCache = join(profileChangesDirectory(home, profile), CHANGES_ENTRIES.scanCache)
   const firstLog = await readChangeLog(home, profile)
   const migrating = pass === 'start' && await migratesAtUpgrade(home, profile, profileDir, firstLog, at)
@@ -299,8 +310,12 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
       if (pass === 'start') managed.push({ plugin: link.name, source: approvedOf(approved, link.name)?.source ?? pendingInstallSource(log, link.name) })
       continue
     }
-    if (isHarnessLink(request, link.name, link.target) || !await namesDirectory(link.target)) continue
-    const content = await storeContent(home, link.target, scanCache, protection)
+    if (isHarnessLink(request, link.name, link.target)) continue
+    // A missing folder, or a file where the folder was, is still brought under Changes: left alone, its link would load
+    // whatever is created there before the next start.
+    const content: FolderContent = await namesDirectory(link.target)
+      ? await storeContent(home, link.target, scanCache, protection)
+      : { kind: 'unreadable', detail: `${link.target} is not a folder` }
     stored.set(link.name, content)
     const subject = { plugin: link.name, source: link.target }
     // A folder that cannot be read waits for review with no content, so the next start reads it again.
@@ -420,6 +435,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
     pending,
     unapproved,
     ...session === undefined ? {} : { workSession: session },
+    ...workEnded === undefined ? {} : { workEnded },
     ...historyVersion === undefined ? {} : { historyVersion },
     ...failed.length === 0 ? {} : { failed },
     ...linkedDependencies.length === 0 ? {} : { linkedDependencies },
@@ -434,6 +450,7 @@ async function bringUnderChanges(request: EnforceRequest, at: string, pass: 'sta
  */
 export function startNotice(changes: StartChanges): string {
   const lines: string[] = []
+  if (changes.workEnded !== undefined) lines.push(`Your work session on ${changes.workEnded.plugin} ended at its time limit. ${workFinishedLine(changes.workEnded)}`)
   for (const fact of changes.leftOut ?? []) lines.push(leftOutWords(fact))
   for (const { plugin, source } of changes.approvedAtUpgrade) {
     lines.push(`Delo now runs the approved copy of ${plugin}, linked from ${source}. Edits in that folder wait for your review: delorun changes list.`)

@@ -1,6 +1,6 @@
 /**
  * A loopback HTTP server that serves the studio's Changes routes over a stand-in for Connection's admission, and a
- * raw-socket client that sets any `Host`, `Origin` or cookie and can leave a body unfinished, for the route specs.
+ * raw-socket client that sets any `Host`, `Origin` or cookie and can withhold a body, for the route specs.
  *
  * The stand-in admits a request whose cookie is `studio=valid` and refuses any other with 401, or with 403 when the
  * request carries `x-test-fence: refuse`, as Connection's Host/Origin fence does. `x-test-remote: 1` admits it as a
@@ -9,13 +9,13 @@
  * @module @delo/plugin-changes/tests/routes-fixture
  */
 import { once } from 'node:events'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import type { ChangesContext, ReloadOutcome } from '@delo/changes'
+import { dirname, join, relative } from 'node:path'
+import { enforceApprovedContent, type ChangesContext, type ReloadOutcome } from '@delo/changes'
 import { REQUEST_LISTENER } from '@delo/home'
 import { onTestFinished } from 'vitest'
 import { changesRoutes, type RouteDependencies } from '../src/routes.ts'
@@ -51,6 +51,30 @@ export function routeHome(): RouteHome {
   writeFileSync(join(profileDir, 'package.json'), `${JSON.stringify({ name: 'dsh-profile-default', private: true, dependencies: {}, dsh: { profile: { bundles: [] } } }, undefined, 2)}\n`)
   writeFileSync(join(profileDir, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n")
   return { root, ctx: { home, profile: PROFILE, profileDir, lockWaitMs: 5_000 } }
+}
+
+/**
+ * A home whose profile links the plugin `plug` from a folder, turned on in its bundle list and approved by the first
+ * start under Changes.
+ * @returns the profile and the folder.
+ */
+export async function approvedPlugin(): Promise<{ readonly ctx: ChangesContext, readonly source: string }> {
+  const { root, ctx } = routeHome()
+  const source = join(root, 'plug')
+  mkdirSync(source)
+  writeFileSync(join(source, 'package.json'), '{"name":"plug","version":"1.0.0"}\n')
+  writeFileSync(join(source, 'index.js'), 'export default "one"\n')
+  const manifestPath = join(ctx.profileDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies: Record<string, string>, dsh: { profile: { bundles: string[] } } }
+  manifest.dependencies.plug = `link:${source}`
+  manifest.dsh.profile.bundles = ['plug']
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+  writeFileSync(join(ctx.profileDir, 'pnpm-lock.yaml'), `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      plug:\n        specifier: link:${source}\n        version: link:${relative(ctx.profileDir, source)}\n`)
+  const link = join(ctx.profileDir, 'node_modules', 'plug')
+  mkdirSync(dirname(link), { recursive: true })
+  symlinkSync(relative(dirname(link), source), link)
+  await enforceApprovedContent({ home: ctx.home, profile: ctx.profile, profileDir: ctx.profileDir })
+  return { ctx, source }
 }
 
 /** A running server and what its routes reached. */
@@ -112,6 +136,12 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
   return { port: (server.address() as AddressInfo).port, profileReads: () => profileReads, reloads: () => reloads, warnings }
 }
 
+/**
+ * How long a request whose body is withheld waits for its answer, in milliseconds: a route that refuses before it reads
+ * the body answers at once, and one that waits for the body fails the spec after this instead of at the test timeout.
+ */
+export const ANSWER_BEFORE_BODY_MS = 2_000
+
 /** One reply. */
 export interface Reply {
   readonly status: number
@@ -122,13 +152,15 @@ export interface Reply {
 
 /**
  * Send one request on a socket and read the reply once its head and `Content-Length` bytes of body arrived, which lets
- * a spec set `Host` and leave the body unfinished: a reply to such a request proves the route did not wait for the body.
+ * a spec set `Host` and withhold the body: a reply to such a request proves the route did not wait for the body.
  * @param port - the server's port.
  * @param head - the request line and headers, each without its carriage return.
  * @param body - what to write after the headers, which may be shorter than `Content-Length` claims.
+ * @param answerWithinMs - how long to wait for the reply; unbounded when absent.
  * @returns the reply.
+ * @throws {Error} when no reply arrived within `answerWithinMs`.
  */
-export async function raw(port: number, head: readonly string[], body = ''): Promise<Reply> {
+export async function raw(port: number, head: readonly string[], body = '', answerWithinMs?: number): Promise<Reply> {
   const socket = connect(port, '127.0.0.1')
   socket.on('error', () => {})
   await once(socket, 'connect')
@@ -145,8 +177,18 @@ export async function raw(port: number, head: readonly string[], body = ''): Pro
     })
   })
   socket.write(`${head.join('\r\n')}\r\n\r\n${body}`)
-  await replied
-  socket.destroy()
+  let timer: NodeJS.Timeout | undefined
+  const deadline = answerWithinMs === undefined
+    ? new Promise<never>(() => {})
+    : new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => { reject(new Error(`no answer within ${String(answerWithinMs)} ms: the route waited for a body that was withheld`)) }, answerWithinMs)
+    })
+  try {
+    await Promise.race([replied, deadline])
+  } finally {
+    clearTimeout(timer)
+    socket.destroy()
+  }
   const split = received.indexOf('\r\n\r\n')
   return { status: Number(received.split('\r\n')[0]?.split(' ')[1] ?? 0), head: received.slice(0, split).toLowerCase(), body: received.slice(split + 4) }
 }
@@ -160,8 +202,11 @@ export interface Send {
   readonly headers?: readonly string[]
   /** The JSON body, or raw text. */
   readonly body?: unknown
-  /** How many bytes `Content-Length` claims beyond the body sent; the rest never arrives. */
-  readonly unfinished?: number
+  /**
+   * Send only the head: `Content-Length` claims the body, which never arrives, and the reply must come within
+   * {@link ANSWER_BEFORE_BODY_MS}.
+   */
+  readonly withholdBody?: boolean
 }
 
 /**
@@ -173,13 +218,14 @@ export interface Send {
  */
 export function send(port: number, path: string, send: Send = {}): Promise<Reply> {
   const body = send.body === undefined ? '' : typeof send.body === 'string' ? send.body : JSON.stringify(send.body)
+  const withheld = send.withholdBody === true
   return raw(port, [
     `${send.method ?? 'GET'} ${path} HTTP/1.1`,
     `Host: ${send.host ?? `127.0.0.1:${String(port)}`}`,
-    ...send.method === 'POST' ? ['Content-Type: application/json', `Content-Length: ${String(Buffer.byteLength(body) + (send.unfinished ?? 0))}`] : [],
+    ...send.method === 'POST' ? ['Content-Type: application/json', `Content-Length: ${String(Buffer.byteLength(body))}`] : [],
     ...send.headers ?? [],
     'Connection: close',
-  ], body)
+  ], withheld ? '' : body, withheld ? ANSWER_BEFORE_BODY_MS : undefined)
 }
 
 /**

@@ -7,6 +7,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { finishWork, listChanges, startWork, type ChangesContext, type ReloadHost, type ReloadOutcome } from '../src/actions.ts'
+import { enforceApprovedContent, startNotice } from '../src/enforce.ts'
 import { changeId } from '../src/ids.ts'
 import * as barrel from '../src/index.ts'
 import { activeDirectory, changesDirectory, profileChangesDirectory, versionsDirectory } from '../src/paths.ts'
@@ -437,6 +438,22 @@ describe('a work session ends at its bound', () => {
     expect(await loadWorkSession(late, host.reload)).toEqual({ kind: 'expired', plugin: 'plug', endsAt: session.endsAt })
     expect(host.calls()).toBe(0)
     expect((await active(fx)).index).toBe('export default "one"\n')
+  })
+
+  it('a start after a work session\'s end loads nothing from the folder', async () => {
+    const { fx, source, approved } = await migrated()
+    const ctx = contextOf(fx)
+    const { session } = await startWork(ctx, 'plug', terminal(), reloads(OK))
+    const two = await edit(fx, source, 'export default "two"\n')
+    // A start that does not end open sessions first, as `delorun headless` starts, at the session's end time.
+    const changes = await enforceApprovedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => new Date(session.endsAt) })
+    expect(await active(fx)).toEqual({ index: 'export default "one"\n', record: { version: approved, kind: 'approved' } })
+    expect(await readWorkSession(fx.home, PROFILE)).toBeUndefined()
+    expect((await readApproved(fx.profileDir)).plugins.plug?.version).toBe(approved)
+    expect(changes.workSession).toBeUndefined()
+    expect(changes.workEnded).toEqual({ kind: 'ended', plugin: 'plug', source, from: approved, ended: 'expired', approved })
+    expect(changes.pending).toEqual([{ id: changeId('plugin-edit', { plugin: 'plug', source }, approved, two), plugin: 'plug', kind: 'plugin-edit' }])
+    expect(startNotice(changes).split('\n')[0]).toBe(`Your work session on plug ended at its time limit. ${workFinishedLine(changes.workEnded!)}`)
   })
 
   it('refuses a length outside 1 to the maximum before anything is read or written', async () => {

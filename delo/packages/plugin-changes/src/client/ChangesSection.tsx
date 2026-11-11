@@ -1,6 +1,8 @@
 /**
  * The Changes section in Settings: the work session, the changes a start left out, the changes and the agent's
- * requests waiting for review, the recent changes and the protection setting. Review opens a change with its diff and
+ * requests waiting for review, the recent changes and the protection setting. The state, which the page reads every 15
+ * seconds, names the plugins under Changes; the section reads their folders for the changes waiting for review when it
+ * opens, after each action and when the person asks. Review opens a change with its diff and
  * risk summary; Apply, Discard, Undo, Apply again, Start working and Done act through the harness's Changes routes, and
  * a change the checks flagged asks a second confirmation that names what they found. A page that is not at the
  * computer shows everything with every action disabled.
@@ -8,7 +10,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button, CommandText, Modal, relativeTime, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ChangesStateView, EntryView, PendingView, RiskKindView, ShownView, WorkReviewView } from '../wire.ts'
+import type { ChangesStateView, EntryView, FolderView, PendingView, RiskKindView, ShownView, WorkReviewView } from '../wire.ts'
 import type { ActionOutcome, ChangesLoad } from './controller.ts'
 import { ChangeDetail } from './ChangeDetail.tsx'
 import css from './ChangesSection.module.css'
@@ -33,6 +35,11 @@ export interface ChangesSectionInjected {
    * @returns the change, or its log entry.
    */
   readonly show: (id: string) => Promise<ShownView>
+  /**
+   * Read the plugins' folders for the changes waiting for review.
+   * @returns the changes.
+   */
+  readonly listPending: () => Promise<readonly PendingView[]>
   /**
    * Read the open work session's folder.
    * @param plugin - the plugin.
@@ -127,6 +134,8 @@ export function ChangesSection(props: ChangesSectionProps) {
   const refusedRemote = props.useRefusedRemote(value => value)
   const [dialog, setDialog] = useState<Dialog | undefined>()
   const [busy, setBusy] = useState(false)
+  // Each value is one read of the folders; an action and Read the folders again move to the next.
+  const [folderRead, setFolderRead] = useState(0)
   useEffect(() => { void reload() }, [reload])
   const state = load.status === 'ready' ? load.state : undefined
   const canAct = state?.atComputer === true && !refusedRemote
@@ -136,7 +145,10 @@ export function ChangesSection(props: ChangesSectionProps) {
       setDialog(outcome.kind === 'confirm' && flagged !== undefined
         ? { kind: 'second', flagged, kinds: outcome.kinds, notShown: outcome.notShown }
         : undefined)
-    }).finally(() => { setBusy(false) })
+    }).finally(() => {
+      setBusy(false)
+      setFolderRead(read => read + 1)
+    })
   }
   const disabled = busy || !canAct
   return <div className={css.section} aria-busy={load.status === 'loading'}>
@@ -180,26 +192,10 @@ export function ChangesSection(props: ChangesSectionProps) {
           </div>
         </li>)}
       </Group>}
-      <Group heading={t('pending.heading')}>
-        {state.pending.length === 0 && state.requests.length === 0 ? <li className={css.empty}>{t('pending.empty')}</li> : null}
-        {state.pending.map(change => <li key={change.id} className={css.row} data-change-id={change.id}>
-          <div className={css.main}>
-            <div className={css.name}>{change.plugin}</div>
-            <div className={css.metaRow}>
-              <span>{t(`kind.${change.kind}`)}</span>
-              <span>{t(pluralKey('pending.files', change.files), { n: change.files })}</span>
-              <span className={css.path}>{change.source}</span>
-            </div>
-            {change.riskKinds.length === 0 ? null : <div className={css.tags}>
-              {change.riskKinds.map(kind => <Tag key={kind} tone="warning">{t(`risk.${kind}`)}</Tag>)}
-            </div>}
-            {change.lastFailure === undefined ? null : <p className={css.failureText}><StateDot state="error" />{t('pending.failed', { failure: change.lastFailure.failure })}</p>}
-          </div>
-          <div className={css.actions}>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => { setDialog({ kind: 'review', change }) }}>{t('pending.review')}</Button>
-          </div>
-        </li>)}
-      </Group>
+      <PendingGroup key={`${String(folderRead)} ${state.folders.map(folder => folder.plugin).join(' ')}`} folders={state.folders}
+        requests={state.requests.length} t={t} busy={busy} listPending={props.listPending}
+        onReview={(change) => { setDialog({ kind: 'review', change }) }}
+        onReadAgain={() => { setFolderRead(read => read + 1) }} />
       {state.requests.length === 0 ? null : <Group heading={t('requests.heading')}>
         {state.requests.map(entry => <li key={entry.id} className={css.row} data-change-id={entry.id}>
           <div className={css.main}>
@@ -260,6 +256,50 @@ function Group({ heading, children }: { readonly heading: string, readonly child
     <h3 className={css.groupHeading}>{heading}</h3>
     <ul className={css.rows}>{children}</ul>
   </section>
+}
+
+/**
+ * The changes waiting for review in the plugins' folders, read once per mount; the section mounts it again after each
+ * action, when the person asks, and when the plugins under Changes differ.
+ * @param props - the plugins under Changes, how many requests wait, the read and Review.
+ * @returns the group.
+ */
+function PendingGroup({ folders, requests, t, busy, listPending, onReview, onReadAgain }: {
+  readonly folders: readonly FolderView[]
+  readonly requests: number
+  readonly t: T
+  readonly busy: boolean
+  readonly listPending: () => Promise<readonly PendingView[]>
+  readonly onReview: (change: PendingView) => void
+  readonly onReadAgain: () => void
+}) {
+  const loaded = useLoaded(() => folders.length === 0 ? Promise.resolve([]) : listPending())
+  const pending = folders.length === 0 ? [] : loaded.status === 'ready' ? loaded.value : undefined
+  return <Group heading={t('pending.heading')}>
+    {pending === undefined && loaded.status === 'loading' ? <li className={css.empty} role="status">{t('pending.reading')}</li> : null}
+    {pending === undefined && loaded.status === 'error' ? <li className={css.empty}><p className={css.failureText} role="alert"><StateDot state="error" />{t('pending.unread')}</p></li> : null}
+    {pending?.length === 0 && requests === 0 ? <li className={css.empty}>{t('pending.empty')}</li> : null}
+    {(pending ?? []).map(change => <li key={change.id} className={css.row} data-change-id={change.id}>
+      <div className={css.main}>
+        <div className={css.name}>{change.plugin}</div>
+        <div className={css.metaRow}>
+          <span>{t(`kind.${change.kind}`)}</span>
+          <span>{t(pluralKey('pending.files', change.files), { n: change.files })}</span>
+          <span className={css.path}>{change.source}</span>
+        </div>
+        {change.riskKinds.length === 0 ? null : <div className={css.tags}>
+          {change.riskKinds.map(kind => <Tag key={kind} tone="warning">{t(`risk.${kind}`)}</Tag>)}
+        </div>}
+        {change.lastFailure === undefined ? null : <p className={css.failureText}><StateDot state="error" />{t('pending.failed', { failure: change.lastFailure.failure })}</p>}
+      </div>
+      <div className={css.actions}>
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => { onReview(change) }}>{t('pending.review')}</Button>
+      </div>
+    </li>)}
+    {folders.length === 0 || loaded.status === 'loading' ? null : <li className={css.empty}>
+      <Button variant="outline" size="sm" disabled={busy} onClick={onReadAgain}>{t('pending.check')}</Button>
+    </li>}
+  </Group>
 }
 
 /**
@@ -366,11 +406,11 @@ function Protection({ state, t }: { readonly state: ChangesStateView, readonly t
   </Group>
 }
 
-/** A read the dialogs wait for: loading, failed, or the answer. */
+/** A read the dialogs and the pending group wait for: loading, failed, or the answer. */
 type Loaded<V> = { readonly status: 'loading' } | { readonly status: 'error' } | { readonly status: 'ready', readonly value: V }
 
 /**
- * Read once when a dialog opens.
+ * Read once when a dialog or the pending group mounts.
  * @param read - the read.
  * @returns the read's progress.
  */
@@ -386,7 +426,8 @@ function useLoaded<V>(read: () => Promise<V>): Loaded<V> {
       },
     )
     return () => { live = false }
-    // A dialog reads once while it is open; the section keys each dialog by its change or plugin, so another reads again.
+    // One read per mount; the section keys each dialog by its change or plugin and the pending group by its read, so
+    // another reads again.
   }, [])
   return loaded
 }

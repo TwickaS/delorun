@@ -2,7 +2,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, sy
 import { join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { EMPTY_CONTENT_VERSION, enforceApprovedContent, isInRuntimeStore, startNotice } from '../src/enforce.ts'
+import { EMPTY_CONTENT_VERSION, enforceApprovedContent, isInRuntimeStore, prepareReload, startNotice } from '../src/enforce.ts'
+import { checkLoadedContent } from '../src/invariants.ts'
 import { activeDirectory } from '../src/paths.ts'
 import { pluginChange } from '../src/pending.ts'
 import { openWorkSession, readActiveRecord, readApproved, readChangeLog, setProtection, writeChangeLog } from '../src/records.ts'
@@ -113,11 +114,8 @@ describe('the first start under Changes', () => {
     expect(loaded.value).toBe('plug+sib+dep')
   })
 
-  it('leaves a link to anything but a directory, file: specs and registry plugins alone', async () => {
+  it('leaves file: specs and registry plugins alone', async () => {
     const fx = fixture()
-    writeFileSync(join(fx.root, 'a-file'), 'x\n')
-    linkAs(fx, 'to-file', join(fx.root, 'a-file'))
-    linkAs(fx, 'to-nothing', join(fx.root, 'missing'))
     const manifestPath = join(fx.profileDir, 'package.json')
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies: Record<string, string> }
     manifest.dependencies['from-file'] = `file:${folder(fx, 'packed')}`
@@ -126,6 +124,42 @@ describe('the first start under Changes', () => {
     expect(await start(fx)).toEqual({ protection: 'block', approvedAtUpgrade: [], pending: [], unapproved: [] })
     expect(readFileSync(manifestPath, 'utf8')).toBe(before)
     expect(await history(fx)).toEqual([])
+  })
+
+  it('a link to a missing folder is brought under Changes and loads nothing', async () => {
+    const { fx } = await migrated()
+    const gone = join(fx.root, 'gone')
+    const file = join(fx.root, 'a-file')
+    writeFileSync(file, 'x\n')
+    // As a restore or undo writes it back while the folder is deleted, and a link to a file where a folder was.
+    linkAs(fx, 'gone', gone)
+    linkAs(fx, 'to-file', file)
+    expect(await checkLoadedContent({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir })).toEqual([
+      `gone is linked from ${gone}, not from its active directory ${activeDirectory(fx.home, PROFILE, 'gone')}.`,
+      `to-file is linked from ${file}, not from its active directory ${activeDirectory(fx.home, PROFILE, 'to-file')}.`,
+    ])
+    const changes = await start(fx)
+    expect(changes.pending).toEqual([])
+    for (const [plugin, source] of [['gone', gone], ['to-file', file]] as const) {
+      expect(recorded(fx, plugin)).toEqual(namingActive(fx, plugin))
+      expect(readdirSync(activeDirectory(fx.home, PROFILE, plugin))).toEqual([])
+      expect((await readChangeLog(fx.home, PROFILE)).entries.find(entry => entry.subject.plugin === plugin)).toMatchObject({ kind: 'plugin-install', state: 'pending', subject: { plugin, source }, to: EMPTY_CONTENT_VERSION })
+    }
+    expect((await history(fx))[0]).toBe('Changes: gone, to-file wait for your review')
+
+    // A model that recreates the folder before the next start changes nothing that loads: it waits for review.
+    const recreated = folder(fx, 'gone')
+    const next = await start(fx)
+    expect(readdirSync(activeDirectory(fx.home, PROFILE, 'gone'))).toEqual([])
+    const pending = await pluginChange(fx.home, { plugin: 'gone', source: recreated })
+    expect(next.pending).toEqual([{ id: pending!.id, plugin: 'gone', kind: 'plugin-install' }])
+
+    // The check before a reload gives the same answer for a link a restore writes back while the folder is gone.
+    rmSync(recreated, { recursive: true })
+    linkAs(fx, 'gone', gone)
+    await prepareReload({ home: fx.home, profile: PROFILE, profileDir: fx.profileDir, now: () => NOW })
+    expect(recorded(fx, 'gone')).toEqual(namingActive(fx, 'gone'))
+    expect(readdirSync(activeDirectory(fx.home, PROFILE, 'gone'))).toEqual([])
   })
 
   it('fails the start when the profile history cannot record the change', async () => {

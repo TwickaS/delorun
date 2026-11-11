@@ -2,8 +2,10 @@
  * @deepseek-ai/dsh-host-frontend-static — SPA dist server over the webserver
  * fallback seat: a webserver resource serving the built frontend directory
  * with explicit index entry points. A readable index renders at the dist root,
- * the configured index path and `/recovery`, where the boot page shows a
- * distribution's recovery screen; missing paths return 404, traversal outside the
+ * the configured index path and, while an index injection row names a
+ * distribution's recovery routes (the `dshRecoveryRoutes` global), `/recovery`,
+ * where the boot page shows that distribution's recovery screen; without such a
+ * row `/recovery` is an ordinary missing path. Missing paths return 404, traversal outside the
  * dist root is 403, unknown extensions ship as octet-stream, and non-GET/HEAD
  * is 405. An HTTP index request first passes Connection's browser
  * authentication and renders for the browser Peer; an in-process read renders
@@ -65,8 +67,15 @@ const MIME: Record<string, string> = {
   '.gz': 'application/gzip',
 }
 
-/** Page paths besides the dist root that render the index: the boot page's recovery screen. */
-const INDEX_ALIASES: readonly string[] = ['/recovery']
+/** The page path of the boot page's recovery screen, which renders the index while a distribution names its routes. */
+const RECOVERY_PATH = '/recovery'
+
+/**
+ * The `global` index injection row name through which a distribution names its recovery routes; the boot page
+ * (`RECOVERY_ROUTES_GLOBAL` of `@deepseek-ai/dsh-client-web`) reads the same name and offers no recovery screen
+ * without it.
+ */
+export const RECOVERY_ROUTES_GLOBAL = 'dshRecoveryRoutes'
 
 const STATIC_MISS_CODES: ReadonlySet<string | undefined> = new Set([
   'ENOENT',
@@ -146,10 +155,12 @@ async function isPublicAsset(distRoot: string, target: string): Promise<boolean>
   return PUBLIC_ROOT_FILES.has(name) || (await manifestIcons(distRoot)).has(name)
 }
 
-/** The two fences {@link serveStatic} consults before it reads bytes. */
+/** The two fences {@link serveStatic} consults before it reads bytes, and whether the recovery page is offered. */
 interface StaticFences {
   /** Answers an index request; the response to send instead of the document, or undefined to serve it. */
   index: () => Response | undefined
+  /** Whether an index injection row names a distribution's recovery routes, so `/recovery` renders the index. */
+  recovery: () => boolean
   /** Answers a non-public file request; the response to send instead of the bytes, or undefined to serve them. */
   asset: () => Response | undefined
 }
@@ -172,7 +183,8 @@ function bytesBody(bytes: Uint8Array): ReadableStream<Uint8Array> {
  * @param distRoot - absolute dist root directory (resolved by the caller).
  * @param distIndex - absolute path of index.html inside distRoot.
  * @param fences - the answers {@link StaticFences} supplies for an index
- * request and for a file that is not public, each consulted before its bytes.
+ * request and for a file that is not public, each consulted before its bytes,
+ * and whether `/recovery` is an index entry.
  * @param renderIndex - turns the raw index.html body into the served document
  * for the dist root and configured index path.
  * @returns the dist response; a HEAD response carries the GET status and
@@ -193,7 +205,7 @@ async function serveStatic(
   let body: string | Uint8Array<ArrayBuffer>
   let headers: Record<string, string>
   try {
-    if (target === distRoot || target === distIndex || INDEX_ALIASES.some(alias => target === join(distRoot, alias))) {
+    if (target === distRoot || target === distIndex || (target === join(distRoot, RECOVERY_PATH) && fences.recovery())) {
       const refusal = fences.index()
       if (refusal !== undefined) return refusal
       body = renderIndex(await readFile(distIndex, 'utf8'))
@@ -263,6 +275,8 @@ export function apply(ctx: Context, config: Config): void {
       {
         index: () => peer === undefined ? authorizeIndex(request) : undefined,
         asset: () => peer === undefined ? fenceAsset(request) : undefined,
+        recovery: () => ctx.webServer.collectIndexInjections(peer ?? ctx.connection.browserPeer)
+          .some(row => row.kind === 'global' && row.name === RECOVERY_ROUTES_GLOBAL),
       },
       // The browser authentication admits the owner's shared browser Peer. The
       // base goes in after all index transforms, so it precedes every resource

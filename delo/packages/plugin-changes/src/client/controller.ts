@@ -15,6 +15,8 @@ import {
   type ChangesStateView,
   type DiscardView,
   type DoneView,
+  type PendingListView,
+  type PendingView,
   type RefusalView,
   type ReloadView,
   type RiskKindView,
@@ -155,6 +157,15 @@ export class ChangesController {
    */
   async show(id: string): Promise<ShownView> {
     return await request<ShownView>(`${SHOW_PATH}?${new URLSearchParams({ id }).toString()}`)
+  }
+
+  /**
+   * Read the plugins' folders and list the changes waiting for review in them; the read stores their content.
+   * @returns the changes.
+   * @throws {ChangesRequestError} when the route refuses; a network failure rejects with the fetch error.
+   */
+  async listPending(): Promise<readonly PendingView[]> {
+    return (await request<PendingListView>(`${SHOW_PATH}?pending`)).pending
   }
 
   /**
