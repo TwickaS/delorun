@@ -17,11 +17,10 @@ import { ensureHomeTree, resolveDeloHome } from '@delo/home'
 import { Downloader, LauncherChannel, writeChannelRecord, type ChannelOrigins, type LauncherChannelOptions } from '@delo/install'
 import type { ReleaseLogTransport } from '@delo/release-verify/online'
 import { checkAndRecord } from '@delo/release-verify/record'
-import type { StartCheckResult } from '@delo/release-verify/start'
 import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
 import { FULL_CHECK_DAYS_ENV, parseRuntimeVersion, resolveFullCheckDays, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
-import { runLauncher, launcherProfile, type LauncherOutput, type SpawnRuntime } from './launcher.ts'
+import { runLauncher, launcherProfile, type LauncherOutput, type LauncherStartCheck, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
 import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
@@ -44,9 +43,11 @@ export const TERMINATOR = '--'
  * and C library's (`LD_*`, `DYLD_*`, `GCONV_PATH`, `LOCPATH`). A process could use any of them to install code into the
  * runtime's Node before it starts or to stand between it and every HTTPS connection. The rest of the environment passes:
  * the runtime runs the person's commands and tools, which need `PATH`, credentials, agents and toolchain variables that
- * an allowlist would remove. None of the dropped variables is a launch protocol variable.
+ * an allowlist would remove. None of the dropped variables is a launch protocol variable, except `DELO_LAUNCHER_*`: an
+ * inherited value of those is dropped too, so the runtime sees only what this launcher sets, and a variable this
+ * launcher has no value for, such as `DELO_LAUNCHER_VERSION` when its own version does not read, is absent.
  */
-const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*)$/iu
+const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*|DELO_LAUNCHER_.*)$/iu
 
 /**
  * The environment a runtime starts with: this process's, without the variables that would load code into the
@@ -234,16 +235,17 @@ export async function launcherVersion(packageDirectory: string): Promise<string 
  * verified by the store's start check under the same root. A missing bundle stops the start: the store installed the
  * release with the bundle it verified.
  * @param request - the home, the platform, the release, the root, the transport and the clock.
- * @returns what the start does: go on, go on with the warning, or stop.
+ * @returns what the start does: go on, go on with the warning, or stop; with the bundle's path when none is stored.
  */
-export async function startCheck(request: StartCheckRequest): Promise<StartCheckResult> {
+export async function startCheck(request: StartCheckRequest): Promise<LauncherStartCheck> {
   const files = new StorePaths(request.home, request.platform).releaseFiles(request.version)
   const manifest = await readFile(files.manifest)
   const bundle = await readFile(files.bundle).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw error
   })
-  return checkAndRecord(request.home, { root: request.root, version: request.version, manifest, bundle, missingBundle: 'failed', now: request.now, transport: request.transport, mode: LAUNCHER_MODE })
+  const result = await checkAndRecord(request.home, { root: request.root, version: request.version, manifest, bundle, missingBundle: 'failed', now: request.now, transport: request.transport, mode: LAUNCHER_MODE })
+  return bundle === undefined ? { ...result, missingBundle: files.bundle } : result
 }
 
 /**

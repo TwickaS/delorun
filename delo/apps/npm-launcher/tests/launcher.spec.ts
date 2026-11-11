@@ -26,8 +26,7 @@ import {
   type RuntimeChannel,
   type VerifiedRuntime,
 } from '@delo/runtime-store'
-import { failedStartText, launcherProfile, ROLLBACK_ARGS, runLauncher, runtimeCommand, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
-import type { StartCheckResult } from '@delo/release-verify/start'
+import { failedStartText, launcherProfile, ROLLBACK_ARGS, runLauncher, runtimeCommand, type LauncherOptions, type LauncherStartCheck, type LauncherStore } from '../src/launcher.ts'
 import { LAUNCHER_EXIT, refusalFor } from '../src/refusals.ts'
 import { launchEnvironment, parseCommandLine, spawnRuntime, usage } from '../src/bin.ts'
 import { fixtureRelease, nextRoot, VERSION, type Fixture } from '../../install/tests/support.ts'
@@ -588,6 +587,12 @@ describe('a release named with --release when a runtime is installed', () => {
 })
 
 describe('the environment the runtime starts with', () => {
+  it('drops every inherited DELO_LAUNCHER_ variable, so the runtime sees only the launcher values this launcher sets', () => {
+    const inherited = { PATH: '/bin', DELO_LAUNCHER_VERSION: '9.9.9', DELO_LAUNCHER_ROOTS: '/tmp/forged-roots', delo_launcher_other: 'x' }
+    expect(launchEnvironment(inherited, { DELO_LAUNCHER_ROOTS: '/pkg/roots' })).toEqual({ PATH: '/bin', DELO_LAUNCHER_ROOTS: '/pkg/roots' })
+    expect(launchEnvironment(inherited, { DELO_LAUNCHER_ROOTS: '/pkg/roots', DELO_LAUNCHER_VERSION: '0.4.2' })).toEqual({ PATH: '/bin', DELO_LAUNCHER_ROOTS: '/pkg/roots', DELO_LAUNCHER_VERSION: '0.4.2' })
+  })
+
   it('drops the variables that load code into the runtime’s Node and its dynamic loader, and the ones that decide what its HTTPS connections trust', () => {
     const environment = launchEnvironment(
       {
@@ -853,7 +858,7 @@ describe('the release-log check at a start', () => {
    * @param args - the runtime's arguments.
    * @returns the exit status, what was printed and whether the runtime started.
    */
-  async function startWith(result: StartCheckResult, args: readonly string[] = []): Promise<{ readonly status: number, readonly printed: string, readonly started: boolean, readonly checked: RuntimeVersion[] }> {
+  async function startWith(result: LauncherStartCheck, args: readonly string[] = []): Promise<{ readonly status: number, readonly printed: string, readonly started: boolean, readonly checked: RuntimeVersion[] }> {
     const fixture = await fixtureRelease()
     const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
     const checked: RuntimeVersion[] = []
@@ -893,9 +898,58 @@ describe('the release-log check at a start', () => {
     const run = await startWith({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'the proof does not verify' })
     expect(run.status).toBe(LAUNCHER_EXIT.failed)
     expect(run.started).toBe(false)
-    expect(run.printed).toBe(failedStartText(version('0.1.0'), { state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'the proof does not verify' }))
+    expect(run.printed).toBe(failedStartText(version('0.1.0'), { state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'the proof does not verify' }, 'default'))
     expect(run.printed).toContain('Run delorun verify')
     expect(run.printed).toContain('Deleting files under the home\'s trust/ directory does not repair this')
+  })
+
+  it('names the missing bundle\'s path and offers the rollback and the restored file, not a reinstall', async () => {
+    const path = '/home/.delo/runtimes/delorun-0.1.0.manifest.log.json'
+    const run = await startWith({ state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'no release-log bundle is stored beside this release', missingBundle: path })
+    expect(run.status).toBe(LAUNCHER_EXIT.failed)
+    expect(run.started).toBe(false)
+    expect(run.printed).toContain('Delo did not start release 0.1.0: the release-log bundle stored beside it is missing.')
+    expect(run.printed).toContain(`no release-log bundle is stored at ${path}`)
+    expect(run.printed).toContain('delorun recover rollback --profile default')
+    expect(run.printed).toContain(`restore ${path}`)
+    expect(run.printed).not.toContain('reinstall')
+  })
+
+  it('starts previous for delorun recover rollback when current\'s bundle is missing, after checking previous\'s own release log', async () => {
+    const fixture = await fixtureRelease()
+    const current = version('0.2.0')
+    const previous = version('0.1.0')
+    const started: LaunchCommand[] = []
+    const checked: RuntimeVersion[] = []
+    let printed = ''
+    const store: LauncherStore = {
+      prepareLaunch: request => Promise.resolve({ command: `/home/.delo/runtimes/${current}/node/bin/node`, args: ['entry.js', ...request.args], env: {}, version: current }),
+      install: () => Promise.reject(new Error('the launcher must not install')),
+      retain: () => Promise.reject(new Error('the launcher must not retain')),
+      pointers: () => Promise.resolve({ current, previous }),
+      checkRuntime: checkedVersion => Promise.resolve({ version: checkedVersion, manifest: {} as VerifiedRuntime['manifest'], files: {} as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) }),
+      launchCommand: (launched, _profile, args) => ({ command: `/home/.delo/runtimes/${launched}/node/bin/node`, args: ['entry.js', ...args], env: {} }),
+    }
+    const status = await runLauncher(launch({
+      home: await home({ root: fixture.roots[0]! }),
+      store,
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+      args: ['recover', 'rollback'],
+      spawn: (command) => { started.push(command); return Promise.resolve(0) },
+      stderr: (text) => { printed += text },
+      startCheck: (release) => {
+        checked.push(release)
+        return Promise.resolve(release === current ? { state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'missing', missingBundle: '/b' } : { state: 'verified', stop: false })
+      },
+    }))
+    expect(status).toBe(0)
+    expect(checked).toEqual([current, previous])
+    expect(started.map(command => command.command)).toEqual([`/home/.delo/runtimes/${previous}/node/bin/node`])
+    expect(printed).toContain(`Starting release ${previous}, the version before the last update`)
+    // A plain start does not roll back on its own: it prints the refusal and starts nothing.
+    const plain = await startWith({ state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'missing', missingBundle: '/b' }, ['start'])
+    expect(plain.started).toBe(false)
   })
 
   it('redacts a secret the failed check\'s detail quotes before it prints it', async () => {

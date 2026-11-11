@@ -125,8 +125,9 @@ describe('the launcher’s main function', () => {
     await rm(files.bundle)
     world.stderr.length = 0
     expect(await main(['status'], world.context())).toBe(1)
-    expect(world.stderr.join('')).toContain(`Delo did not start release ${VERSION}: its release-log check failed.`)
-    expect(world.stderr.join('')).toContain('no release-log bundle is stored beside this release')
+    expect(world.stderr.join('')).toContain(`Delo did not start release ${VERSION}: the release-log bundle stored beside it is missing.`)
+    expect(world.stderr.join('')).toContain(`no release-log bundle is stored at ${files.bundle}`)
+    expect(world.stderr.join('')).toContain('delorun recover rollback')
     expect(world.started).toHaveLength(1)
     await mkdir(files.bundle)
     world.stderr.length = 0

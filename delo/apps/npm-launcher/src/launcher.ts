@@ -134,8 +134,14 @@ export interface LauncherOptions {
    * network, the online check, with the state recorded. A start of a runtime the launcher just installed runs none,
    * because the install checked the release. No check runs when this is absent.
    */
-  readonly startCheck?: (version: RuntimeVersion, root: RootMetadata) => Promise<StartCheckResult>
+  readonly startCheck?: (version: RuntimeVersion, root: RootMetadata) => Promise<LauncherStartCheck>
 }
+
+/**
+ * The result of {@link LauncherOptions.startCheck}: contract C18's start check, and the bundle's path when the release
+ * has no stored bundle, which every install through the store keeps, so the refusal can name the file to restore.
+ */
+export type LauncherStartCheck = StartCheckResult & { readonly missingBundle?: string }
 
 /**
  * Start the installed runtime, or install and then start it.
@@ -177,6 +183,17 @@ const FALLBACK_COMMANDS: readonly (readonly string[])[] = [[], ['start'], ROLLBA
  *   after `--`.
  */
 export function mayStartPrevious(args: readonly string[], passedThrough: readonly string[]): boolean {
+  return runsOneOf(args, passedThrough, FALLBACK_COMMANDS)
+}
+
+/**
+ * Whether the arguments are `--profile` options around exactly one of the commands, with nothing after `--`.
+ * @param args - the runtime's arguments.
+ * @param passedThrough - the arguments after `--`.
+ * @param commands - the commands, as their words.
+ * @returns `true` when the arguments run one of them.
+ */
+function runsOneOf(args: readonly string[], passedThrough: readonly string[], commands: readonly (readonly string[])[]): boolean {
   if (passedThrough.length > 0) return false
   const words: string[] = []
   for (let at = 0; at < args.length; at++) {
@@ -188,7 +205,7 @@ export function mayStartPrevious(args: readonly string[], passedThrough: readonl
       words.push(argument)
     }
   }
-  return FALLBACK_COMMANDS.some(command => command.length === words.length && command.every((word, at) => words[at] === word))
+  return commands.some(command => command.length === words.length && command.every((word, at) => words[at] === word))
 }
 
 /** A command to start, with the release and the root its start check verified it under. */
@@ -247,7 +264,16 @@ async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly
     // Contract C18 R5: a verifiable release-log failure stops the start in every mode; a check that did not complete
     // never does. `delorun verify` itself still runs, so the person can see every check.
     if (check.stop) {
-      options.output.stderr(failedStartText(plan.version, check))
+      // A release whose bundle is missing can be left by `delorun recover rollback`, which then starts `previous` as a
+      // failed start check of `current` does; the rollback checks `previous`'s own release log first.
+      if (check.missingBundle !== undefined && runsOneOf(args, options.passedThrough, [ROLLBACK_ARGS])) {
+        const rollback = await previousRollback(options)
+        if (rollback !== undefined && rollback.current === plan.version) {
+          options.output.stderr(`Delo did not start release ${String(plan.version)}: its release-log bundle is missing. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
+          return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root }, ROLLBACK_ARGS)
+        }
+      }
+      options.output.stderr(failedStartText(plan.version, check, options.profile))
       if (runtimeCommand(args) !== 'verify') return LAUNCHER_EXIT.failed
     }
   }
@@ -298,12 +324,25 @@ function rollbackRefusalText(options: Pick<LauncherOptions, 'args' | 'profile'>,
 
 /**
  * What a start stopped by a release-log failure prints: the refusal and how to proceed, in the launcher's refusal format
- * and through its redactor, since the check's detail can quote what a server or a file held.
+ * and through its redactor, since the check's detail can quote what a server or a file held. A missing bundle names its
+ * path and offers the rollback and the restored file; reinstalling does not apply, because the launcher installs only
+ * into an empty store.
  * @param version - the release.
  * @param check - the failed check.
+ * @param profile - the CLI profile, which the rollback remedy names.
  * @returns the redacted text, every line ending with a newline.
  */
-export function failedStartText(version: RuntimeVersion, check: StartCheckResult): string {
+export function failedStartText(version: RuntimeVersion, check: LauncherStartCheck, profile: string): string {
+  if (check.missingBundle !== undefined) {
+    return renderLauncherRefusal({
+      lead: `Delo did not start release ${String(version)}: the release-log bundle stored beside it is missing.`,
+      reason: codedReason(String(check.refusal), `no release-log bundle is stored at ${check.missingBundle}, and every install through the runtime store keeps the bundle it verified`),
+      remedies: [
+        `If an update installed release ${String(version)}, go back to the version before it: delorun ${ROLLBACK_ARGS.join(' ')}${profileOption({ profile })}`,
+        `Or put the bundle back: restore ${check.missingBundle} from a backup of this home, or download delorun-${String(version)}.manifest.log.json from the release page of v${String(version)} to that path; the next start checks it.`,
+      ],
+    })
+  }
   return renderLauncherRefusal({
     lead: `Delo did not start release ${String(version)}: its release-log check failed.`,
     reason: codedReason(String(check.refusal), check.detail),
