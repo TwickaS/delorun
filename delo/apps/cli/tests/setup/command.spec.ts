@@ -39,7 +39,7 @@ async function refusal(args: readonly string[]): Promise<CliError> {
 describe('delorun setup', { timeout: 60_000 }, () => {
   it('--list names every section without touching the home', async () => {
     expect(await setupCommand.run(['--list'], context)).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('  key         Model key (Quick and Full)')
+    expect(lines.join('')).toContain('  key         Model provider and key (Quick and Full)')
     expect(lines.join('')).toContain('  profile     Profile name and port (Full)')
     expect(lines.join('')).toContain('Sections (delorun setup <section> runs one again):')
   })
@@ -65,11 +65,43 @@ describe('delorun setup', { timeout: 60_000 }, () => {
   it('--check-key sends the environment key to the provider and refuses a key it does not accept', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response('{}', { status: 401 })))
     vi.stubGlobal('fetch', fetchMock)
-    const error = await refusal(['--yes', '--check-key'])
+    const error = await refusal(['--yes', '--provider', 'deepseek-official', '--check-key'])
     expect(error.message).toBe('delorun setup: the key in DEEPSEEK_API_KEY was not accepted: https://api.deepseek.com did not accept the key (HTTP 401).')
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(lines.join('')).not.toContain('command-spec-key')
     expect(error.message).not.toContain('command-spec-key')
+  })
+
+  it('--check-key without --provider is refused: --yes alone chooses no provider whose key it could check', async () => {
+    const error = await refusal(['--yes', '--check-key'])
+    expect(error.exit).toBe(EXIT.usage)
+    expect(error.message).toBe('delorun setup --yes: --check-key checks the chosen provider\'s key; name one with --provider')
+  })
+
+  it('takes --provider and its flags with --yes, reading the key from the provider\'s variable, which a typed key never replaces', async () => {
+    context = { ...context, env: { ...context.env, ANTHROPIC_API_KEY: 'command-spec-anthropic' } }
+    expect(await setupCommand.run(['--yes', '--provider', 'anthropic', '--model', 'claude-sonnet-5'], context)).toBe(EXIT.ok)
+    const patch = readFileSync(join(osHome, '.delo', 'profiles', 'default', 'cordis.patch.yml'), 'utf8')
+    expect(patch).toContain('apiKeyEnv: ANTHROPIC_API_KEY')
+    expect(patch).toContain('provider: anthropic\n    model: claude-sonnet-5\n')
+    expect(patch).not.toContain('command-spec-anthropic')
+  })
+
+  it('refuses provider flags outside --yes and delorun setup key, and without --provider', async () => {
+    expect((await refusal(['--provider', 'openai'])).message).toBe('delorun setup: --provider applies to --yes and to delorun setup key; a --config document names its provider in modelProvider')
+    expect((await refusal(['prompts', '--model', 'x', '--provider', 'openai'])).message).toContain('--provider, --model apply to --yes and to delorun setup key')
+    expect((await refusal(['--yes', '--model', 'x'])).message).toBe('delorun setup: --model needs --provider')
+    expect((await refusal(['--yes', '--provider', 'acme'])).exit).toBe(EXIT.usage)
+  })
+
+  it('sets the provider of a profile that is set up with delorun setup key and the flags, without a terminal', async () => {
+    expect(await setupCommand.run(['--yes'], context)).toBe(EXIT.ok)
+    context = { ...context, env: { ...context.env, LOCAL_KEY: 'command-spec-local' } }
+    expect(await setupCommand.run(['key', '--provider', 'openai-compatible', '--base-url', 'http://127.0.0.1:11434/v1', '--model', 'qwen3:8b', '--key-env', 'LOCAL_KEY'], context)).toBe(EXIT.ok)
+    const record = JSON.parse(readFileSync(join(osHome, '.delo', 'profiles', 'default', 'setup-answers.json'), 'utf8')) as { modelProvider: unknown }
+    expect(record.modelProvider).toEqual({ id: 'openai-compatible', credential: { source: 'environment', name: 'LOCAL_KEY' }, baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen3:8b' })
+    expect(readFileSync(join(osHome, '.delo', 'profiles', 'default', 'cordis.patch.yml'), 'utf8')).toContain('baseURL: http://127.0.0.1:11434/v1')
+    expect(lines.join('')).toContain('Updated the key section of the profile default.')
   })
 
   it('--no-update-check with --yes writes the release-check row off', async () => {

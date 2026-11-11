@@ -28,6 +28,11 @@ export interface StepIO {
   /** Whether an earlier step asks a question, so "go back" is offered. */
   readonly canGoBack: boolean
   /**
+   * The questions a step asks after its first one, which always offer "go back" to the step's earlier question.
+   * @returns the questions, with the way back.
+   */
+  followUp(): StepIO
+  /**
    * Ask a question with fixed choices.
    * @param message - the question.
    * @param options - the choices, in display order.
@@ -73,6 +78,7 @@ export interface StepIO {
 export function stepIO(prompter: Prompter, canGoBack: boolean): StepIO {
   return {
     canGoBack,
+    followUp: () => stepIO(prompter, true),
     async select<T extends string>(message: string, options: readonly PromptOption<T>[], initial: T): Promise<T | Back> {
       if (!canGoBack) return prompter.select(message, options, initial)
       const withBack: readonly PromptOption<string>[] = [...options, { value: BACK_CHOICE, label: BACK_LABEL }]

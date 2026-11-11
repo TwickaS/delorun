@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const clack = vi.hoisted(() => ({
   CANCEL_SYMBOL: Symbol('cancel'),
   select: vi.fn(),
+  autocomplete: vi.fn(),
   confirm: vi.fn(),
   password: vi.fn(),
   text: vi.fn(),
@@ -24,6 +25,16 @@ describe('the terminal prompter', () => {
     const chosen = await terminalPrompter().select('Pick', [{ value: 'a', label: 'A' }, { value: 'b', label: 'B', hint: 'hinted' }], 'a')
     expect(chosen).toBe('b')
     expect(clack.select).toHaveBeenCalledWith({ message: 'Pick', initialValue: 'a', options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B', hint: 'hinted' }] })
+  })
+
+  it('draws a select of more than 15 choices, such as a provider\'s models, as a list to search', async () => {
+    const options = Array.from({ length: 16 }, (_, index) => ({ value: `m${String(index)}`, label: `Model ${String(index)}` }))
+    clack.autocomplete.mockResolvedValueOnce('m9')
+    expect(await terminalPrompter().select('Model', options, 'm0')).toBe('m9')
+    expect(clack.autocomplete).toHaveBeenCalledWith({ message: 'Model', initialValue: 'm0', options, maxItems: 12, placeholder: 'Type to search' })
+    expect(clack.select).not.toHaveBeenCalled()
+    clack.autocomplete.mockResolvedValueOnce(clack.CANCEL_SYMBOL)
+    await expect(terminalPrompter().select('Model', options, 'm0')).rejects.toBeInstanceOf(SetupCancelled)
   })
 
   it('asks yes-or-no and shows notes', async () => {

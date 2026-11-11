@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { SETUP_DEFAULTS } from '@delo/contract-setup-answers'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { recorded, serializeCheckState } from '@delo/release-verify'
 import { closeServer, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX, ANSWERING_DOCKER, FAILING_DOCKER } from './fixtures.ts'
@@ -119,6 +120,16 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY, PATH: fakeBin })
     expect(result.status).toBe(0)
     expect(result.stderr).toContain('warn docker: Docker is installed, but its engine does not answer; start Docker, then run delorun doctor again.\n')
+  })
+
+  it('checks the key of the provider the profile\'s setup answers name, from its variable', async () => {
+    const directory = join(deloHome, 'profiles', 'default')
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    const answer = { id: 'anthropic', credential: { source: 'environment', name: 'WORK_ANTHROPIC_KEY' }, baseURL: null, model: 'claude-sonnet-5' }
+    writeFileSync(join(directory, 'setup-answers.json'), JSON.stringify({ version: 1, ...SETUP_DEFAULTS, modelProvider: answer }), { mode: 0o600 })
+    const port = await freePort()
+    expect(doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY }).stderr).toContain('warn key: no Anthropic API key is set; the model cannot answer. Set WORK_ANTHROPIC_KEY, or run delorun setup key to store one')
+    expect(doctor(['--port', String(port)], { WORK_ANTHROPIC_KEY: 'anthropic-fixture-0123456789' }).stdout).toContain('pass key: the Anthropic API key is set and has the expected format (format only; the key was not sent to Anthropic).\n')
   })
 
   it('warns when no DeepSeek key is set, and exits 0', async () => {

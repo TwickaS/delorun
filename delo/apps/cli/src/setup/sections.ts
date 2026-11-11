@@ -2,14 +2,13 @@
  * The sections of `delorun setup`. A section is one topic of the terminal flow with its question, its review line
  * and the writes it produces, and the registry lists them in order. Quick runs the sections marked `quick`; Full runs
  * every section. Each section is also `delorun setup <id>`. Later packages add their sections through
- * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, key, prompts, background
- * and profile. Privacy shows the note in both modes and asks about the release check in Full.
+ * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, the model provider and key
+ * ([provider section](./provider-section.ts)), prompts, background and profile. Privacy shows the note in both modes and asks about the release check in Full.
  *
  * @module @delo/cli/setup/sections
  */
 import { join } from 'node:path'
 import {
-  SETUP_DEFAULT_CREDENTIAL_VARIABLE,
   SETUP_DEFAULT_PORT,
   type PromptsAnswer,
   type SectionRecord,
@@ -22,10 +21,12 @@ import { profileNameProblem } from '@delo/contract-home-layout'
 import { importSection } from '../import-home/section.ts'
 import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
+import { providerSection } from './provider-section.ts'
+import { installedCatalog, type ProviderCatalog } from './providers.ts'
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
-import { readPatchRow, setPatchRow, storeCredential } from './writes.ts'
+import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 
@@ -66,7 +67,7 @@ export interface SectionEnvironment {
   readonly profileExists: boolean
   /** Whether a CLI profile of another name exists in the home. */
   readonly profileNameTaken: (name: string) => boolean
-  /** Checks a typed key with one live request. */
+  /** Checks a key with one live request. */
   readonly checkKey: KeyCheck
   /** Whether the key in the environment is checked too (`--check-key`). */
   readonly checkEnvironmentKey: boolean
@@ -245,75 +246,6 @@ export const privacySection: SetupSection = {
   },
 }
 
-/**
- * Ask the key, and on a failed check say why and let the person enter it again or continue.
- * @param io - the questions.
- * @param environment - what the section may look at.
- * @returns the key with the reason its check failed when the person continued anyway, or {@link BACK}.
- */
-async function askTypedKey(io: StepIO, environment: SectionEnvironment): Promise<{ readonly key: string, readonly failure?: string } | Back> {
-  for (;;) {
-    const key = await io.secret('DeepSeek API key')
-    if (key === BACK) return BACK
-    const result = await environment.checkKey(key)
-    if (result.ok) return { key }
-    io.note(`The key was not checked successfully: ${result.reason}\nA wrong key means the model cannot answer; you can change it later with delorun setup key.`, 'Key check')
-    const next = await io.select('What now?', [
-      { value: 'again', label: 'Enter the key again' },
-      { value: 'continue', label: 'Continue without a successful check' },
-    ], 'again')
-    if (next === BACK) return BACK
-    if (next === 'continue') return { key, failure: result.reason }
-  }
-}
-
-/** The key section: where the model key comes from and, for a typed key, one live check before it is stored. */
-export const keySection: SetupSection = {
-  id: 'key',
-  title: 'Model key',
-  mode: 'quick',
-  asks: asksWhenRun,
-  appliesTo: () => true,
-  async ask(io, draft, environment) {
-    const source = await io.select('Where does the DeepSeek API key come from?', [
-      { value: 'prompt', label: 'Enter the key now', hint: 'stored in the home\'s credentials document' },
-      { value: 'environment', label: `Read ${SETUP_DEFAULT_CREDENTIAL_VARIABLE} from the environment at each start` },
-    ], draft.answers.modelProvider.credential.source)
-    if (source === BACK) return BACK
-    if (source === 'environment') {
-      const value = environment.env[SETUP_DEFAULT_CREDENTIAL_VARIABLE] ?? ''
-      const answers = { modelProvider: { id: draft.answers.modelProvider.id, credential: { source: 'environment', name: SETUP_DEFAULT_CREDENTIAL_VARIABLE } } } as const
-      if (environment.checkEnvironmentKey && value !== '') {
-        const result = await environment.checkKey(value)
-        if (!result.ok) {
-          io.note(`The key in ${SETUP_DEFAULT_CREDENTIAL_VARIABLE} was not checked successfully: ${result.reason}`, 'Key check')
-          return { answers, keyCheckFailure: result.reason, status: 'answered' }
-        }
-      }
-      return { answers, status: 'answered' }
-    }
-    const typed = await askTypedKey(io, environment)
-    if (typed === BACK) return BACK
-    return {
-      answers: { modelProvider: { id: draft.answers.modelProvider.id, credential: { source: 'prompt' } } },
-      secret: typed.key,
-      ...typed.failure === undefined ? {} : { keyCheckFailure: typed.failure },
-      status: 'answered',
-    }
-  },
-  review(answers, draft) {
-    const source = answers.modelProvider.credential.source === 'prompt' ? 'key entered now' : `read from ${answers.modelProvider.credential.name} at each start`
-    return `DeepSeek API key: ${source}${draft?.keyCheckFailure === undefined ? '' : `, not verified: ${draft.keyCheckFailure}`}`
-  },
-  apply(context, answers) {
-    if (answers.modelProvider.credential.source === 'prompt') {
-      if (context.secret === undefined) throw new CliError(EXIT.failed, 'delorun setup: the model key was not entered; run delorun setup in a terminal to finish')
-      return storeCredential(context.home, SETUP_DEFAULT_CREDENTIAL_VARIABLE, context.secret).then(() => undefined)
-    }
-    return Promise.resolve(undefined)
-  },
-}
-
 const PROMPT_LABELS: Readonly<Record<PromptsAnswer, string>> = { safer: 'Safer prompts', stock: 'Same as stock' }
 
 /** The prompts section: Delo's consent and permission defaults, or upstream's. */
@@ -429,14 +361,25 @@ export const profileSection: SetupSection = {
 }
 
 /**
- * The registry of the sections this build ships. Later packages register theirs into it.
- * @returns a registry holding privacy, the stock-home import, key, prompts, background, remote access and profile.
+ * Load a catalog once, on first use.
+ * @param load - loads the catalog.
+ * @returns a loader that keeps the first load's promise.
  */
-export function defaultRegistry(): SectionRegistry {
+function once(load: () => Promise<ProviderCatalog>): () => Promise<ProviderCatalog> {
+  let loaded: Promise<ProviderCatalog> | undefined
+  return () => (loaded ??= load())
+}
+
+/**
+ * The registry of the sections this build ships. Later packages register theirs into it.
+ * @param catalog - the installed catalogs the provider section lists models from; the adapters' own by default.
+ * @returns a registry holding privacy, the stock-home import, the model provider and key, prompts, background, remote access and profile.
+ */
+export function defaultRegistry(catalog: () => Promise<ProviderCatalog> = installedCatalog): SectionRegistry {
   const registry = new SectionRegistry()
   registry.register(privacySection, { order: 10 })
   registry.register(importSection({ deloBundles: [LOCAL_BUNDLE] }), { order: 15 })
-  registry.register(keySection, { order: 20 })
+  registry.register(providerSection(once(catalog)), { order: 20 })
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
   registry.register(reachSection(systemTailscale()), { order: REACH_SECTION_ORDER })

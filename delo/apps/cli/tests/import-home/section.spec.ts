@@ -202,14 +202,14 @@ describe('setup\'s import section', () => {
       profile: 'default',
       output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
       env: { HOME: person, DEEPSEEK_API_KEY: 'env-key' },
-      form: { kind: 'interactive', prompter: scriptedPrompter(['quick', 'yes', 'environment', 'safer', 'save', false], recording) },
+      form: { kind: 'interactive', prompter: scriptedPrompter(['quick', 'yes', 'deepseek-official', 'environment', 'safer', 'save', false], recording) },
       registry: defaultRegistry(),
       keyCheck: async () => ({ ok: true }),
       portIsFree: async () => true,
       ending: fakeEnding(ending),
     })
     expect(code).toBe(EXIT.ok)
-    expect(recording.asked.slice(0, 3)).toEqual(['select: How do you want to set up Delorun?', QUESTION, 'select: Where does the DeepSeek API key come from?'])
+    expect(recording.asked.slice(0, 3)).toEqual(['select: How do you want to set up Delorun?', QUESTION, 'select: Which model provider should Delorun use?'])
     expect(readFileSync(join(home, 'sessions/_no-cwd/s2/session.v4.jsonl.zstd'))).toEqual(chatLog('s2', undefined))
     expect(existsSync(join(home, 'profiles/web/package.json'))).toBe(false)
     const record = JSON.parse(readFileSync(join(profileDirectory(home, 'default'), 'setup-answers.json'), 'utf8')) as SetupAnswers

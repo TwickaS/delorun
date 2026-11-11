@@ -3,7 +3,7 @@
  * sections of Quick or Full setup ([sections](./sections.ts)), or it reads `--yes` or `--config`; then it runs its
  * steps: create the CLI profile and make Delo's bundles importable in it ({@link linkDeloBundles}), with the plugin
  * operation's output in the profile's `home-<profile>` operational log and one progress line on the terminal, then each
- * section's writes in order (the release-check row, the model key, the prompts rows, the studio port), and record the
+ * section's writes in order (the release-check row, the model provider and its key, the prompts rows, the studio port), and record the
  * run. Every write lands before Delorun first starts, so a release check turned off here never runs. The three forms
  * produce the same answers and so the same writes. An interrupted run resumes at the first step that did not finish.
  * Setup never replaces an existing profile. A terminal run then offers to install the command, starts Delorun and
@@ -23,11 +23,13 @@ import { linkDeloBundles, type BundleLinking } from '../delo-bundles.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delo/home'
 import { Redactor, resolveSurface, SurfaceLog } from '@delo/logs'
-import { SETUP_DEFAULTS, type SetupAnswers } from '@delo/contract-setup-answers'
-import { parseAnswers, readAnswersDocument, yesAnswers } from './answers.ts'
+import { SETUP_DEFAULTS, type ModelProviderAnswer, type SetupAnswers } from '@delo/contract-setup-answers'
+import { checkCatalogModel, chosenProvider, parseAnswers, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
 import { computerEnding, finishSetup, type Ending } from './ending.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
+import { keyTarget } from './provider-section.ts'
+import { installedCatalog, SETUP_PROVIDERS, type ProviderCatalog } from './providers.ts'
 import { ANSWERS_FILENAME, PROFILE_STEP, readProgress, removeProgress, sectionStep, writeAnswersRecord, writeProgress, type SetupProgress, type SetupStep } from './progress.ts'
 import { defaultRegistry, statementLines, unattendedRecord, withRecord, type Draft, type SectionEnvironment, type SectionRegistry, type SetupSection } from './sections.ts'
 import { terminalPrompter, type Prompter } from './prompts.ts'
@@ -38,7 +40,7 @@ import { shippedPackageManager } from '../package-manager.ts'
 export type SetupForm =
   /** The questions. Tests pass a prompter; a terminal run leaves it to setup. */
   | { readonly kind: 'interactive'; readonly prompter?: Prompter }
-  /** Every default, with the model key from the environment. */
+  /** Every default, with the provider `--provider` names and its key from the environment, or no provider. */
   | { readonly kind: 'yes' }
   /** An answers document. */
   | { readonly kind: 'config'; readonly path: string }
@@ -70,6 +72,10 @@ export interface SetupRequest {
   readonly registry?: SectionRegistry
   /** The live key check; one request to the provider by default. */
   readonly keyCheck?: KeyCheck
+  /** The installed catalogs the provider answers are checked against; the adapters' own by default. */
+  readonly catalog?: () => Promise<ProviderCatalog>
+  /** The provider `--provider` and its flags name, for `--yes` and for `delorun setup key`. */
+  readonly providerChoice?: ProviderChoice
   /** Whether a key read from the environment is checked too (`--check-key`). */
   readonly checkEnvironmentKey?: boolean
   /** Whether the release check is turned off whatever the form says (`--no-update-check`); Full asks with No preselected. */
@@ -147,15 +153,28 @@ function sectionEnvironment(request: SetupRequest, profileExists: boolean): Sect
 }
 
 /**
- * Check the key an unattended run reads from the environment, when `--check-key` asks for it.
+ * Check a provider answer of an unattended form: its model against the installed catalog, and, when `--check-key`
+ * asks for it, the key it reads from the environment.
  * @param request - the run.
- * @param answers - the answers, whose credential names the variable.
- * @throws {CliError} `EXIT.failed` when the provider does not accept the key; the message never holds it.
+ * @param answer - the provider answer, or `null`.
+ * @param source - the form, which starts a refusal's message.
+ * @throws {CliError} `EXIT.usage` for `--check-key` without a provider; `EXIT.failed` for a model the catalog does not
+ *   list, an unset variable, or a key the provider does not accept; the message never holds the key.
  */
-async function checkUnattendedKey(request: SetupRequest, answers: SetupAnswers): Promise<void> {
-  if (request.checkEnvironmentKey !== true || answers.modelProvider.credential.source !== 'environment') return
-  const result = await (request.keyCheck ?? liveKeyCheck(request.env))(request.env[answers.modelProvider.credential.name] as string)
-  if (!result.ok) throw new CliError(EXIT.failed, `delorun setup: the key in ${answers.modelProvider.credential.name} was not accepted: ${result.reason}`)
+async function checkUnattendedProvider(request: SetupRequest, answer: ModelProviderAnswer | null, source: string): Promise<void> {
+  if (answer === null) {
+    if (request.checkEnvironmentKey === true) throw new CliError(EXIT.usage, `${source}: --check-key checks the chosen provider's key; name one with --provider`)
+    return
+  }
+  const catalog = await (request.catalog ?? installedCatalog)()
+  checkCatalogModel(answer, catalog, source)
+  if (answer.credential.source !== 'environment') return
+  const name = answer.credential.name
+  const key = request.env[name] ?? ''
+  if (key === '') throw new CliError(EXIT.failed, `${source}: ${name} is not set; set it to the ${SETUP_PROVIDERS[answer.id].label} key`)
+  if (request.checkEnvironmentKey !== true) return
+  const result = await (request.keyCheck ?? liveKeyCheck(request.env))(keyTarget(SETUP_PROVIDERS[answer.id], answer.baseURL, catalog), key)
+  if (!result.ok) throw new CliError(EXIT.failed, `delorun setup: the key in ${name} was not accepted: ${result.reason}`)
 }
 
 /**
@@ -168,18 +187,14 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry):
   const { form, env } = request
   const flags: Partial<SetupAnswers> = request.noUpdateCheck === true ? { updateCheck: false } : {}
   if (form.kind === 'yes') {
-    const answers = { ...yesAnswers(env), ...flags, sections: unattendedRecord(registry.all()) }
-    await checkUnattendedKey(request, answers)
+    const answers = { ...yesAnswers(env, request.providerChoice), ...flags, sections: unattendedRecord(registry.all()) }
+    await checkUnattendedProvider(request, answers.modelProvider, 'delorun setup --yes')
     return { answers, secret: undefined }
   }
   if (form.kind === 'config') {
     const document = readAnswersDocument(form.path)
-    const credential = document.modelProvider.credential
-    if (credential.source === 'environment' && (env[credential.name] ?? '') === '') {
-      throw new CliError(EXIT.failed, `delorun setup: ${credential.name} is not set; set it to the model key`)
-    }
     const answers = { ...document, ...flags, sections: unattendedRecord(registry.all()) }
-    await checkUnattendedKey(request, answers)
+    await checkUnattendedProvider(request, answers.modelProvider, 'delorun setup --config')
     return { answers, secret: undefined }
   }
   return askAnswers(prompterFor(form), registry, sectionEnvironment(request, false), { ...SETUP_DEFAULTS, ...flags })
@@ -259,7 +274,7 @@ function stepsOf(registry: SectionRegistry): SetupStep[] {
  * @throws {CliError} for a refused answer, a missing key or a failed step.
  */
 export async function runSetup(request: SetupRequest): Promise<ExitCode> {
-  const registry = request.registry ?? defaultRegistry()
+  const registry = request.registry ?? defaultRegistry(request.catalog)
   const runDir = runDirectory(request.home, request.profile)
   let progress = readProgress(runDir)
   if (progress === undefined && hasCliProfile(request.home, request.profile)) {
@@ -274,9 +289,10 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
     writeProgress(runDir, progress)
     secret = collected.secret
   } else {
-    if (progress.answers.modelProvider.credential.source === 'prompt' && !progress.completed.includes(sectionStep('key'))) {
+    const provider = progress.answers.modelProvider
+    if (provider?.credential.source === 'prompt' && !progress.completed.includes(sectionStep('key'))) {
       if (request.form.kind !== 'interactive') throw new CliError(EXIT.failed, `delorun setup: the setup run for ${request.profile} is unfinished and needs the model key; run delorun setup in a terminal to finish it`)
-      secret = await prompterFor(request.form).secret('DeepSeek API key')
+      secret = await prompterFor(request.form).secret(`${SETUP_PROVIDERS[provider.id].label} API key`)
     }
     request.output.stdout(`Resuming the setup of ${request.profile}.\n`)
   }
@@ -307,7 +323,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
  * @param directory - the profile's directory.
  * @returns the recorded answers, or the defaults when there is no usable record.
  */
-function recordedAnswers(directory: string): SetupAnswers {
+export function recordedAnswers(directory: string): SetupAnswers {
   const path = join(directory, ANSWERS_FILENAME)
   if (!existsSync(path)) return SETUP_DEFAULTS
   try {
@@ -329,7 +345,7 @@ function recordedAnswers(directory: string): SetupAnswers {
  * @throws {CliError} `EXIT.usage` for an unknown section, `EXIT.failed` for a section that does not apply or a profile that is not set up.
  */
 export async function runSection(request: SetupRequest, id: string): Promise<ExitCode> {
-  const registry = request.registry ?? defaultRegistry()
+  const registry = request.registry ?? defaultRegistry(request.catalog)
   const section = registry.find(id)
   if (section === undefined) throw new CliError(EXIT.usage, `delorun setup: there is no section ${JSON.stringify(id)}; delorun setup --list shows them`)
   if (!hasCliProfile(request.home, request.profile)) {
@@ -338,10 +354,17 @@ export async function runSection(request: SetupRequest, id: string): Promise<Exi
   const environment = sectionEnvironment(request, true)
   if (!section.appliesTo(environment)) throw new CliError(EXIT.failed, `delorun setup: the ${id} section does not apply on this computer`)
   if (request.form.kind !== 'interactive') throw new CliError(EXIT.usage, 'delorun setup: a section asks its question in a terminal; --yes and --config do not apply to it')
-  const prompter = prompterFor(request.form)
   const directory = profileDirectory(request.home, request.profile)
   const draft: Draft = { mode: 'full', answers: recordedAnswers(directory), secret: undefined, keyCheckFailure: undefined }
-  const given = await section.ask(stepIO(prompter, false), draft, environment) as Exclude<Awaited<ReturnType<SetupSection['ask']>>, typeof BACK>
+  let given: Exclude<Awaited<ReturnType<SetupSection['ask']>>, typeof BACK>
+  if (request.providerChoice === undefined) {
+    given = await section.ask(stepIO(prompterFor(request.form), false), draft, environment) as typeof given
+  } else {
+    // The flags answer the section's questions, so it runs without a terminal; the key is read from the environment.
+    const answer = chosenProvider(request.providerChoice)
+    await checkUnattendedProvider(request, answer, 'delorun setup key')
+    given = { answers: { modelProvider: answer }, status: 'answered' }
+  }
   const answers: SetupAnswers = { ...draft.answers, ...given.answers, sections: withRecord(draft.answers.sections, section.id, given.status) }
   const note = await section.apply({ home: request.home, env: request.env, directory, secret: given.secret }, answers)
   if (note !== undefined) request.output.stdout(`${note}\n`)
@@ -364,14 +387,37 @@ export function sectionList(registry: SectionRegistry): string {
   ].join('\n')}\n`
 }
 
-/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--check-key] [--no-update-check] [--list]`. */
+/** The flags that name a provider, which apply to `--yes` and to `delorun setup key`. */
+const PROVIDER_FLAGS = ['provider', 'model', 'base-url', 'key-env'] as const
+
+/**
+ * The provider a command line names.
+ * @param values - the parsed flags.
+ * @param section - the section the command line names, if any.
+ * @param yes - whether `--yes` was given.
+ * @returns the choice, or `undefined` when no provider flag was given.
+ * @throws {CliError} `EXIT.usage` for a provider flag without `--provider`, or outside `--yes` and `delorun setup key`.
+ */
+export function providerChoiceFromFlags(values: Readonly<Partial<Record<(typeof PROVIDER_FLAGS)[number], string>>>, section: string | undefined, yes: boolean): ProviderChoice | undefined {
+  const given = PROVIDER_FLAGS.filter(flag => values[flag] !== undefined)
+  if (given.length === 0) return undefined
+  if (!yes && section !== 'key') throw new CliError(EXIT.usage, `delorun setup: --${given.join(', --')} ${given.length === 1 ? 'applies' : 'apply'} to --yes and to delorun setup key; a --config document names its provider in modelProvider`)
+  if (values.provider === undefined) throw new CliError(EXIT.usage, `delorun setup: --${given.join(', --')} ${given.length === 1 ? 'needs' : 'need'} --provider`)
+  return { id: values.provider, model: values.model, baseURL: values['base-url'], keyEnv: values['key-env'] }
+}
+
+/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--check-key] [--no-update-check] [--list]`. */
 export const setupCommand: CliCommand = {
   name: 'setup',
   summary: 'Set up Delorun (Quick or Full), or run one section again: delorun setup <section>; --list lists them',
   async run(args, context) {
     const { values, positionals } = (() => {
       try {
-        return parseArgs({ args: [...args], options: { profile: { type: 'string' }, yes: { type: 'boolean', default: false }, config: { type: 'string' }, 'check-key': { type: 'boolean', default: false }, 'no-update-check': { type: 'boolean', default: false }, list: { type: 'boolean', default: false } }, strict: true, allowPositionals: true })
+        return parseArgs({ args: [...args], options: {
+          'profile': { type: 'string' }, 'yes': { type: 'boolean', default: false }, 'config': { type: 'string' }, 'check-key': { type: 'boolean', default: false },
+          'no-update-check': { type: 'boolean', default: false }, 'list': { type: 'boolean', default: false },
+          'provider': { type: 'string' }, 'model': { type: 'string' }, 'base-url': { type: 'string' }, 'key-env': { type: 'string' },
+        }, strict: true, allowPositionals: true })
       } catch (error) {
         // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
         throw new CliError(EXIT.usage, `delorun setup: ${String(Reflect.get(Object(error), 'message'))}`)
@@ -385,10 +431,14 @@ export const setupCommand: CliCommand = {
     if (positionals.length > 1) throw new CliError(EXIT.usage, 'delorun setup: give one section, or none')
     if (values.yes && values.config !== undefined) throw new CliError(EXIT.usage, 'delorun setup: --yes and --config are two forms of the same answers; give one')
     if (values['no-update-check'] && positionals.length > 0) throw new CliError(EXIT.usage, 'delorun setup: --no-update-check applies to a whole setup; delorun setup privacy asks about the release check')
+    const [section] = positionals
+    const providerChoice = providerChoiceFromFlags(values, section, values.yes)
     const { home, profile } = await prepareHome(context, values.profile)
     const form = formFromFlags(values.yes, values.config)
-    const request: SetupRequest = { home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'], noUpdateCheck: values['no-update-check'] }
-    const [section] = positionals
+    const request: SetupRequest = {
+      home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'], noUpdateCheck: values['no-update-check'],
+      ...providerChoice === undefined ? {} : { providerChoice },
+    }
     return section === undefined ? runSetup(request) : runSection(request, section)
   },
 }

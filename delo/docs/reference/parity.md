@@ -50,6 +50,12 @@ Each difference below is one that Delo's documents name or that C16 lists. The r
 | Home directory | `dsh-v0.2.2-rc.1`: the home is `~/.dsh`, named by `DSH_HOME_DIR_NAME` in `packages/util/home-paths/src/index.ts` at line 12. This tree: `delorun` resolves its home from `DELO_HOME` or `~/.delo` through [`@delo/home`](../../packages/home/README.md), refuses `~/.dsh` and paths inside it, and sets `DSH_HOME` to the Delo home for every runtime process it starts; upstream's own `dsh` command still uses `~/.dsh` | built: contract [C1](../contracts/c01-home-layout.md), no switch ID | `delo/packages/home/tests/home.integration.spec.ts` |
 | DeepSeek account and Platform | `dsh-v0.2.2-rc.1`: `packages/credentials/deepseek-account`, `packages/credentials/deepseek-account-platform` and `packages/llm/llm-deepseek-account` are in the tree. This tree's Delo CLI profiles compose `deepseek-account` disabled, where [`@delo/bundle-local`](../../packages/bundle-local/README.md) sets it as a C16 changed default, so no Platform sign-in, Usage or Top-up page is served and `llm-deepseek-account` stays inert; the parity composition keeps upstream's row, which the overlay leaves out | built: C16 changed default, no switch ID | `delo/packages/bundle-local/tests/composition.integration.spec.ts` (no enabled `deepseek-account` row) |
 
+### Setup and model providers
+
+| Item | Baseline and this tree | Status | Evidence |
+| --- | --- | --- | --- |
+| Model provider at first run | `dsh-v0.2.2-rc.1`: no terminal setup. The studio's Settings → Models page lists every provider the adapters serve, and while no provider can serve requests a first-run dialog asks for a DeepSeek key only (`packages/client/ui-settings-models/src/client/DeepSeekOnboardingDialog.tsx`). This tree: `delorun setup` asks which of eleven providers to use, listed by name, or none, and writes the rows the Models page and the model picker save ([C11](../contracts/c11-setup-answers.md#model-providers)); DeepSeek with `DEEPSEEK_API_KEY` and its default model writes no provider row, so the profile is composed as stock composes it, and `--yes` without `--provider` writes none. The prompts answer "Same as stock" covers the prompt switches only, not this question. The parity composition runs no setup | built: no switch; no ledger entry, as the change is under `delo/` | `delo/apps/cli/tests/setup/providers.spec.ts` |
+
 ### Permissions
 
 | Item | Baseline and this tree | Status | Evidence |

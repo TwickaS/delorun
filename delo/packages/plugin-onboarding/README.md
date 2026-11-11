@@ -67,7 +67,7 @@ The row `delo-onboarding` has four volatile fields ([`src/config.ts`](src/config
 - **Delegation consent.** Adding Claude Code or Codex asks for nothing beyond the press of Add, and Delo asks nothing before a delegated agent acts. The per-workspace consent for a first delegation is not built on this base, and the Agents step does not say it exists.
 - **Reach.** No plugin provides `ctx.deloReach` yet, so the Reach step never shows. The command it names, `delorun reach on tailscale`, belongs to the reach plugin.
 - **Folder chooser.** Onboarding's refusals cover only the folders it adds. Upstream's own add-workspace flow and `workspace.create` register any existing directory, the home directory included; under Delo, where the sandbox protects the Delo home, every shell command that runs with write access in a workspace that is, lies inside or contains the Delo home then fails with `HOME_IN_WRITABLE_ROOT`. The step's chooser has no path field and no way to show hidden folders.
-- **Section names.** The terminal setup writes a `sections` record (schema versions 2 and 3): one `{ id, status }` row per section it showed. The harness serves the ids whose status is `seen` or `answered`, and the flow leaves out a step whose id is among them; a `skipped` row covers nothing. Reach is decided by the reach answer and the `deloReach` service, not by this list.
+- **Section names.** The terminal setup writes a `sections` record (schema versions 2 to 4): one `{ id, status }` row per section it showed. The harness serves the ids whose status is `seen` or `answered`, and the flow leaves out a step whose id is among them; a `skipped` row covers nothing. Reach is decided by the reach answer and the `deloReach` service, not by this list.
 
 ## Tests
 

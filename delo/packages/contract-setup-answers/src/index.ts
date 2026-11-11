@@ -7,18 +7,43 @@
  */
 
 /** Schema version of the answers document that setup writes. */
-export const SETUP_ANSWERS_SCHEMA_VERSION = 3 as const
+export const SETUP_ANSWERS_SCHEMA_VERSION = 4 as const
 
 /**
- * Earlier schema versions setup still reads. A version-2 document has no `updateCheck` and reads as the check on;
- * setup refuses every version not listed here or in {@link SETUP_ANSWERS_SCHEMA_VERSION}.
+ * Earlier schema versions setup still reads. A version-2 document has no `updateCheck` and reads as the check on; a
+ * version-2 or version-3 document's model provider reads as DeepSeek with the profile's default model, which is what
+ * setup of those versions applied whatever id the document named. Setup refuses every version not listed here or in
+ * {@link SETUP_ANSWERS_SCHEMA_VERSION}.
  */
-export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2] as const
+export const SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS = [2, 3] as const
 
-/** Provider id applied when the person accepts the provider question's default. */
-export const SETUP_DEFAULT_PROVIDER_ID = 'deepseek-official' as const
+/**
+ * The model providers setup can set up, by the route id the profile selects them with: DeepSeek's own adapter
+ * (`deepseek-official`), the pi-ai catalog providers listed here, and `openai-compatible`, a route to any endpoint
+ * that speaks OpenAI's Chat Completions API. Every other provider the profile's adapters serve is set up in the
+ * studio's Settings → Models.
+ */
+export const SETUP_PROVIDER_IDS = [
+  'anthropic',
+  'deepseek-official',
+  'google',
+  'groq',
+  'mistral',
+  'moonshotai',
+  'openai',
+  'openai-compatible',
+  'openrouter',
+  'together',
+  'xai',
+] as const
 
-/** Environment variable that holds the model credential when the answers name the environment as its source. */
+/** One provider id of {@link SETUP_PROVIDER_IDS}. */
+export type SetupProviderId = (typeof SETUP_PROVIDER_IDS)[number]
+
+/** Provider the interactive provider question starts on. `--yes` chooses no provider unless `--provider` names one. */
+export const SETUP_DEFAULT_PROVIDER_ID = 'deepseek-official' as const satisfies SetupProviderId
+
+/** Environment variable that holds DeepSeek's key; each provider's own variable is in setup's provider table. */
 export const SETUP_DEFAULT_CREDENTIAL_VARIABLE = 'DEEPSEEK_API_KEY' as const
 
 /** Reach options that setup offers. The Delo relay is not among them. */
@@ -71,10 +96,23 @@ export interface SectionRecord {
   readonly status: SectionStatus
 }
 
+/**
+ * The model provider answer. `baseURL` is set for `openai-compatible` only and `null` for every other provider, whose
+ * endpoint is the one its adapter ships. `model` is `null` only for `deepseek-official`, where it keeps the profile's
+ * default model; every other provider names the model new chats start on.
+ */
+export interface ModelProviderAnswer {
+  readonly id: SetupProviderId
+  readonly credential: ModelCredential
+  readonly baseURL: string | null
+  readonly model: string | null
+}
+
 /** The answers document read by the interactive setup and by `--config`. */
 export interface SetupAnswers {
   readonly schemaVersion: typeof SETUP_ANSWERS_SCHEMA_VERSION
-  readonly modelProvider: { readonly id: string; readonly credential: ModelCredential }
+  /** The model provider, or `null` when none was chosen: the profile then keeps its bundles' provider rows unchanged. */
+  readonly modelProvider: ModelProviderAnswer | null
   readonly prompts: PromptsAnswer
   readonly background: boolean
   readonly profile: ProfileAnswer
@@ -89,8 +127,8 @@ export interface SetupAnswers {
 
 /** The value setup applies to each question the person does not answer. */
 export const SETUP_DEFAULTS = {
-  schemaVersion: 3,
-  modelProvider: { id: 'deepseek-official', credential: { source: 'prompt' } },
+  schemaVersion: 4,
+  modelProvider: { id: SETUP_DEFAULT_PROVIDER_ID, credential: { source: 'prompt' }, baseURL: null, model: null },
   prompts: 'safer',
   background: true,
   profile: { name: null, port: null },

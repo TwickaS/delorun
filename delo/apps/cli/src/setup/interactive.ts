@@ -92,7 +92,7 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
     asks: alwaysAsks,
     async run(io, draft) {
       const mode = await io.select<SetupMode>('How do you want to set up Delorun?', [
-        { value: 'quick', label: MODE_LABELS.quick, hint: 'the model key and how careful prompts are' },
+        { value: 'quick', label: MODE_LABELS.quick, hint: 'the model provider and its key, and how careful prompts are' },
         { value: 'full', label: MODE_LABELS.full, hint: 'also the release check, background running, the profile name and the port' },
       ], draft.mode)
       // The mode question is the first step, so it offers no back choice.

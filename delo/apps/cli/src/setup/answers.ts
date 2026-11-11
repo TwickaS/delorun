@@ -4,7 +4,9 @@
  * defaults, and the refusals that keep reach and credential forwarding off in
  * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, and
  * a document that carries a question setup no longer asks. A refusal names the field and never echoes a value.
- * A version-2 document, written before the release-check question, reads as the current version with the check on.
+ * A version-2 document, written before the release-check question, reads as the current version with the check on; a
+ * version-2 or version-3 document, written before the provider question, reads with DeepSeek and the profile's default
+ * model as its provider, which is what setup of those versions applied.
  *
  * @module @delo/cli/setup/answers
  */
@@ -17,12 +19,15 @@ import {
   SECTION_STATUSES,
   SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS,
   SETUP_ANSWERS_SCHEMA_VERSION,
-  SETUP_DEFAULT_CREDENTIAL_VARIABLE,
+  SETUP_DEFAULT_PROVIDER_ID,
   SETUP_DEFAULTS,
+  SETUP_PROVIDER_IDS,
+  type ModelProviderAnswer,
   type SetupAnswers,
 } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
 import { selectProfile } from '../profile.ts'
+import { isSetupProviderId, SETUP_PROVIDERS, type ProviderCatalog } from './providers.ts'
 
 /** An environment variable name. A credential value never matches it, so one passed as a name is refused. */
 const ENVIRONMENT_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/
@@ -36,14 +41,33 @@ const modelCredential = z.discriminatedUnion('source', [
   z.strictObject({ source: z.literal('environment'), name: z.string().regex(ENVIRONMENT_NAME) }),
 ])
 
+/**
+ * The provider answer: a provider setup offers; a base URL for `openai-compatible` alone; a model for every provider
+ * but DeepSeek, where `null` keeps the profile's default.
+ */
+const modelProvider = z.strictObject({
+  id: z.enum(SETUP_PROVIDER_IDS),
+  credential: modelCredential,
+  baseURL: z.string().min(1).nullable(),
+  model: z.string().trim().min(1).nullable(),
+}).superRefine((answer, context) => {
+  const custom = SETUP_PROVIDERS[answer.id].adapter === 'custom'
+  if (custom !== (answer.baseURL !== null)) context.addIssue({ code: 'custom', path: ['baseURL'], message: custom ? 'is needed for openai-compatible' : 'is set for openai-compatible only' })
+  else if (answer.baseURL !== null && baseURLProblem(answer.baseURL) !== undefined) context.addIssue({ code: 'custom', path: ['baseURL'], message: 'must be an http or https URL' })
+  if (answer.model === null && answer.id !== SETUP_DEFAULT_PROVIDER_ID) context.addIssue({ code: 'custom', path: ['model'], message: `is needed for ${answer.id}` })
+})
+
+/** The provider answer of a version-2 or version-3 document, which setup of those versions applied as DeepSeek's. */
+const earlierModelProvider = z.strictObject({ id: z.string().min(1), credential: modelCredential })
+  .transform(({ credential }): ModelProviderAnswer => ({ id: SETUP_DEFAULT_PROVIDER_ID, credential, baseURL: null, model: null }))
+
 const reach = z.strictObject({
   option: z.enum(['none', 'tailscale-private', 'tailscale-funnel', 'self-hosted-relay']),
   identityFactor: z.enum(IDENTITY_FACTORS).nullable(),
 })
 
-/** The fields every schema version carries, but `sections`, which comes last. */
+/** The fields every schema version carries, but the provider, which comes first, and `sections`, which comes last. */
 const answerFields = {
-  modelProvider: z.strictObject({ id: z.string().min(1), credential: modelCredential }),
   prompts: z.enum(PROMPTS_OPTIONS),
   background: z.boolean(),
   profile: z.strictObject({ name: z.string().min(1).nullable(), port: z.number().int().min(MIN_PORT).max(MAX_PORT).nullable() }),
@@ -59,22 +83,44 @@ const sections = z.array(z.strictObject({ id: z.string().min(1), status: z.enum(
  */
 const answersSchema = z.strictObject({
   schemaVersion: z.literal(SETUP_ANSWERS_SCHEMA_VERSION),
+  modelProvider: modelProvider.nullable(),
   ...answerFields,
   updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck),
   sections,
 })
 
-/** The version-2 document, which has no `updateCheck`, read as the current version with the check on. */
-const version2Schema = z.strictObject({ schemaVersion: z.literal(2), ...answerFields, sections })
-  .transform(({ sections: record, ...answers }) => ({ ...answers, schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
+/** The version-3 document, which has no provider question, read as the current version with DeepSeek as its provider. */
+const version3Schema = z.strictObject({ schemaVersion: z.literal(3), modelProvider: earlierModelProvider, ...answerFields, updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck), sections })
+  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, modelProvider: provider, ...answers, sections: record }))
+
+/** The version-2 document, which has no `updateCheck` either, read as the current version with the check on. */
+const version2Schema = z.strictObject({ schemaVersion: z.literal(2), modelProvider: earlierModelProvider, ...answerFields, sections })
+  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, modelProvider: provider, ...answers, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
 
 /**
  * The schema of a document's declared version.
  * @param document - a parsed JSON value.
- * @returns the version-2 schema for a document that declares version 2, otherwise the current one.
+ * @returns the schema of version 2 or 3 for a document that declares it, otherwise the current one.
  */
-function schemaFor(document: unknown): typeof answersSchema | typeof version2Schema {
-  return typeof document === 'object' && document !== null && Reflect.get(document, 'schemaVersion') === 2 ? version2Schema : answersSchema
+function schemaFor(document: unknown): typeof answersSchema | typeof version3Schema | typeof version2Schema {
+  const version = typeof document === 'object' && document !== null ? Reflect.get(document, 'schemaVersion') : undefined
+  if (version === 2) return version2Schema
+  return version === 3 ? version3Schema : answersSchema
+}
+
+/**
+ * The check of a base URL a person gives for an endpoint.
+ * @param value - the entry.
+ * @returns the message to show, or `undefined` for an `http` or `https` URL.
+ */
+export function baseURLProblem(value: string): string | undefined {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? undefined : 'Enter an http or https URL.'
+  } catch {
+    // `new URL` rejects text that is not a URL.
+    return 'Enter an http or https URL, such as http://127.0.0.1:11434/v1.'
+  }
 }
 
 /**
@@ -128,6 +174,9 @@ export function readAnswersDocument(path: string): SetupAnswers {
     const field = issue.path.map(String).join('.')
     // Only a version-2 document lacks the field at the top level.
     if (issue.code === 'unrecognized_keys' && field === '' && issue.keys.includes('updateCheck')) throw refusal('updateCheck', `needs schemaVersion ${String(SETUP_ANSWERS_SCHEMA_VERSION)}`)
+    if (issue.code === 'unrecognized_keys' && field === 'modelProvider' && (issue.keys.includes('baseURL') || issue.keys.includes('model'))) throw refusal('modelProvider', `needs schemaVersion ${String(SETUP_ANSWERS_SCHEMA_VERSION)} to name a base URL or a model`)
+    if (field === 'modelProvider.id') throw refusal(field, `must be one of ${SETUP_PROVIDER_IDS.join(', ')}`)
+    if (issue.code === 'custom') throw refusal(field, issue.message)
     if (issue.code === 'unrecognized_keys') throw refusal(field === '' ? 'the document' : field, 'holds a field the answers document does not define; a credential value is never accepted in it')
     if (field === 'modelProvider.credential.name') throw refusal(field, 'must be the name of an environment variable; a credential value is never accepted in it')
     if (field === 'schemaVersion') throw refusal(field, `must be ${String(SETUP_ANSWERS_SCHEMA_VERSION)}, or ${SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS.join(' or ')} for an earlier document; setup refuses any other version`)
@@ -136,7 +185,7 @@ export function readAnswersDocument(path: string): SetupAnswers {
   const answers = checked.data
   // Reach is switched on in the interactive form only, so a document cannot enable it.
   if (answers.reach.option !== 'none') throw refusal('reach.option', 'must be "none" in --config: reach is set up in the studio, not by a document')
-  if (answers.modelProvider.credential.source === 'prompt') throw refusal('modelProvider.credential.source', 'must be "environment" in --config: a document cannot take the key at a prompt')
+  if (answers.modelProvider?.credential.source === 'prompt') throw refusal('modelProvider.credential.source', 'must be "environment" in --config: a document cannot take the key at a prompt')
   if (answers.reach.identityFactor !== null) throw refusal('reach.identityFactor', 'must be null: reach is not set up by a document')
   if (answers.sections.length > 0) throw refusal('sections', 'is written by setup; remove it from the document')
   // The stock-home import shows its preview before anything changes, which no document can stand in for.
@@ -152,16 +201,69 @@ export function readAnswersDocument(path: string): SetupAnswers {
   return answers
 }
 
+/** The provider `--yes` sets up, from `--provider`, `--model`, `--base-url` and `--key-env`. */
+export interface ProviderChoice {
+  /** `--provider`. */
+  readonly id: string
+  /** `--model`, if given. */
+  readonly model: string | undefined
+  /** `--base-url`, if given. */
+  readonly baseURL: string | undefined
+  /** `--key-env`, if given; the provider's own variable otherwise. */
+  readonly keyEnv: string | undefined
+}
+
 /**
- * The answers `--yes` applies: every default, with the model key read from the environment variable the defaults name.
- * @param env - the environment `delorun` inherited.
- * @returns the answers.
- * @throws {CliError} `EXIT.failed` when the variable is unset; the message names it.
+ * The provider answer of a `--yes` command line. The key is read from the environment at each start, from the
+ * provider's own variable or the one `--key-env` names; a key is never taken from the command line.
+ * @param choice - the flags.
+ * @returns the provider answer.
+ * @throws {CliError} `EXIT.usage` for an unknown provider, a missing or misplaced base URL or model, or a malformed variable name.
  */
-export function yesAnswers(env: Readonly<Record<string, string | undefined>>): SetupAnswers {
-  const name = SETUP_DEFAULT_CREDENTIAL_VARIABLE
-  if (env[name] === undefined || env[name] === '') {
-    throw new CliError(EXIT.failed, `delorun setup --yes: ${name} is not set; set it to the model key, or run delorun setup in a terminal to enter it`)
+export function chosenProvider(choice: ProviderChoice): ModelProviderAnswer {
+  const usage = (text: string): CliError => new CliError(EXIT.usage, `delorun setup --provider: ${text}`)
+  if (!isSetupProviderId(choice.id)) throw usage(`there is no provider ${JSON.stringify(choice.id)}; choose one of ${SETUP_PROVIDER_IDS.join(', ')}`)
+  const provider = SETUP_PROVIDERS[choice.id]
+  const name = choice.keyEnv ?? provider.keyVariable
+  // A key passed where a variable name belongs is refused without being echoed.
+  if (!ENVIRONMENT_NAME.test(name)) throw usage('--key-env must be the name of an environment variable; a key is never accepted on the command line')
+  if (provider.adapter === 'custom' && choice.baseURL === undefined) throw usage(`${provider.id} needs --base-url, the endpoint's base URL`)
+  if (provider.adapter !== 'custom' && choice.baseURL !== undefined) throw usage(`--base-url applies to openai-compatible only; ${provider.id} uses the endpoint its adapter ships`)
+  if (choice.baseURL !== undefined && baseURLProblem(choice.baseURL) !== undefined) throw usage('--base-url must be an http or https URL')
+  const model = choice.model?.trim()
+  if ((model === undefined || model === '') && provider.adapter !== 'deepseek') throw usage(`${provider.id} needs --model, the model new chats start on`)
+  return { id: provider.id, credential: { source: 'environment', name }, baseURL: choice.baseURL ?? null, model: model === undefined || model === '' ? null : model }
+}
+
+/**
+ * Refuse a provider answer that names a model its adapter's installed catalog does not serve. The `openai-compatible`
+ * route serves the model the answer names, so any model is accepted there.
+ * @param answer - the provider answer, or `null`.
+ * @param catalog - the installed catalogs.
+ * @param source - the form the answer came from, which starts the message.
+ * @throws {CliError} `EXIT.failed` for a model the catalog does not list.
+ */
+export function checkCatalogModel(answer: ModelProviderAnswer | null, catalog: ProviderCatalog, source: string): void {
+  if (answer === null || answer.model === null || SETUP_PROVIDERS[answer.id].adapter === 'custom') return
+  if (!catalog.models(answer.id).some(model => model.id === answer.model)) {
+    throw new CliError(EXIT.failed, `${source}: ${answer.id} serves no model ${JSON.stringify(answer.model)}; delorun setup key lists the models it serves`)
   }
-  return { ...SETUP_DEFAULTS, modelProvider: { id: SETUP_DEFAULTS.modelProvider.id, credential: { source: 'environment', name } } }
+}
+
+/**
+ * The answers `--yes` applies: every default, with the provider `--provider` names and its key read from the
+ * environment, or no provider.
+ * @param env - the environment `delorun` inherited.
+ * @param choice - the `--provider` flags, if given.
+ * @returns the answers.
+ * @throws {CliError} `EXIT.failed` when the provider's variable is unset; the message names it.
+ */
+export function yesAnswers(env: Readonly<Record<string, string | undefined>>, choice?: ProviderChoice): SetupAnswers {
+  if (choice === undefined) return { ...SETUP_DEFAULTS, modelProvider: null }
+  const answer = chosenProvider(choice)
+  const name = answer.credential.source === 'environment' ? answer.credential.name : SETUP_PROVIDERS[answer.id].keyVariable
+  if (env[name] === undefined || env[name] === '') {
+    throw new CliError(EXIT.failed, `delorun setup --yes: ${name} is not set; set it to the ${SETUP_PROVIDERS[answer.id].label} key, or run delorun setup in a terminal to enter it`)
+  }
+  return { ...SETUP_DEFAULTS, modelProvider: answer }
 }

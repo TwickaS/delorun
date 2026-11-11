@@ -1,8 +1,9 @@
 /**
  * The terminal prompts of `delorun setup`, behind one interface so the answers
  * flow can run against a scripted prompter in tests. The production prompter
- * is `@clack/prompts`: it draws the questions, masks the key and lets the
- * person cancel, which is the only prompt behaviour setup relies on.
+ * is `@clack/prompts`: it draws the questions, masks the key, draws a long list
+ * of choices as one to search, and lets the person cancel, which is the only
+ * prompt behaviour setup relies on.
  *
  * @module @delo/cli/setup/prompts
  */
@@ -64,6 +65,12 @@ export interface Prompter {
   note(body: string, title: string): void
 }
 
+/** A select with more choices than this, such as a provider's model list, is drawn as a list the person can search. */
+const SEARCH_ABOVE = 15
+
+/** The choices a searchable list shows at once. */
+const SEARCH_ROWS = 12
+
 /** Thrown when the person cancels a prompt; setup then writes nothing further. */
 export class SetupCancelled extends Error {
   constructor() {
@@ -87,6 +94,9 @@ export function terminalPrompter(): Prompter {
       const choices = options.map(option => (option.hint === undefined
         ? { value: option.value, label: option.label }
         : { value: option.value, label: option.label, hint: option.hint }))
+      if (choices.length > SEARCH_ABOVE) {
+        return unwrap(await clack.autocomplete({ message, initialValue: initial, options: choices as ClackOption<T>[], maxItems: SEARCH_ROWS, placeholder: 'Type to search' }))
+      }
       return unwrap(await clack.select({ message, initialValue: initial, options: choices as ClackOption<T>[] }))
     },
     async confirm(message, initial) {

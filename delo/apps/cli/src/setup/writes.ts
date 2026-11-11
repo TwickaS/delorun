@@ -144,22 +144,22 @@ export interface InheritedRow {
 }
 
 /**
- * Set config fields of a bundle's row in a profile's patch list the way upstream's settings service saves a form
- * field: the profile row restates the row's whole config with its id and plugin name, because a patch row's config
- * replaces the inherited one, and a config equal to the inherited one leaves no config on the row and drops a row
- * left with only its id and name. Other rows keep their values; comments do not survive the rewrite.
+ * Replace the config of a bundle's row in a profile's patch list the way upstream's settings service saves a form: the
+ * profile row restates the row's whole config with its id and plugin name, because a patch row's config replaces the
+ * inherited one, and a config equal to the inherited one leaves no config on the row and drops a row left with only
+ * its id and name. Other rows keep their values; comments do not survive the rewrite.
  * @param path - the profile's `cordis.patch.yml`.
  * @param inherited - the row as the bundle inserts it.
- * @param fields - the config fields to set.
+ * @param update - the row's next config, from its current one: the profile's, or the inherited one when the profile sets none.
  * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list; it is left unchanged.
  */
-export function setRowFields(path: string, inherited: InheritedRow, fields: Readonly<Record<string, boolean | number | string>>): void {
+export function updateRowConfig(path: string, inherited: InheritedRow, update: (current: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>>): void {
   const rows = readPatchList(path, 'delorun setup', '; it was not changed')
   const targets = (entry: unknown): entry is Record<string, unknown> =>
     isRecord(entry) && entry['id'] === inherited.id && !('insert' in entry) && (!('name' in entry) || entry['name'] === inherited.name)
   const existing = rows.findLast(targets)
   const current = existing !== undefined && isRecord(existing['config']) ? existing['config'] : inherited.config
-  const next = { ...Object.fromEntries(Object.entries(current).filter(([key]) => !Object.hasOwn(fields, key))), ...fields }
+  const next = update(current)
   if (isDeepStrictEqual(next, inherited.config)) {
     for (const entry of rows.filter(targets)) Reflect.deleteProperty(entry, 'config')
     writePatchList(path, rows.filter(entry => !targets(entry) || Object.keys(entry).some(key => key !== 'id' && key !== 'name')))
@@ -168,4 +168,15 @@ export function setRowFields(path: string, inherited: InheritedRow, fields: Read
   if (existing === undefined) rows.push({ id: inherited.id, name: inherited.name, config: next })
   else existing['config'] = next
   writePatchList(path, rows)
+}
+
+/**
+ * Set config fields of a bundle's row in a profile's patch list, as {@link updateRowConfig} saves a form field.
+ * @param path - the profile's `cordis.patch.yml`.
+ * @param inherited - the row as the bundle inserts it.
+ * @param fields - the config fields to set.
+ * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list; it is left unchanged.
+ */
+export function setRowFields(path: string, inherited: InheritedRow, fields: Readonly<Record<string, boolean | number | string>>): void {
+  updateRowConfig(path, inherited, current => ({ ...Object.fromEntries(Object.entries(current).filter(([key]) => !Object.hasOwn(fields, key))), ...fields }))
 }

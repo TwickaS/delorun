@@ -31,7 +31,6 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delo/contract-setup-answers'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { HomeStatus } from '@delo/contract-home-process'
 import { processExists, readHomeLock, readProtectedFile, resolveDeloHome, runDirectory } from '@delo/home'
@@ -41,11 +40,13 @@ import { parseOptions, type CliCommand, type CommandContext } from '../command.t
 import { CliError, EXIT } from '../exit.ts'
 import { applyLaunchEnvironment, loadDeloEnvironment } from '../launch-environment.ts'
 import { profileDirectory, selectProfile } from '../profile.ts'
+import { recordedAnswers } from '../setup/index.ts'
+import { credentialReference, SETUP_PROVIDERS } from '../setup/providers.ts'
 import { profileStudioPort } from '../setup/sections.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { studioAddress } from '../status.ts'
 import { deloVersion } from '../version.ts'
-import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
+import { checkDocker, checkHome, checkKey, checkPort, DEEPSEEK_KEY_SUBJECT, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 import { checkUpdate } from './update.ts'
 import { runtimePlatformOf } from '../update/channel.ts'
@@ -82,15 +83,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * The DeepSeek key stored in the home's credentials document. The file is read
- * under C1's protected-file rule. A YAML error is reported by its code only,
- * because the parser's message quotes the source line, which holds the key.
+ * The model key stored in the home's credentials document under a reference. The
+ * file is read under C1's protected-file rule. A YAML error is reported by its
+ * code only, because the parser's message quotes the source line, which holds the key.
  * @param home - the resolved Delo home.
+ * @param variable - the credential reference.
  * @returns the stored value, or `undefined` when the file or its reference is absent or empty.
  * @throws {HomeLayoutError} `SECRET_FILE_MODE` when the file is laxer than 0600.
  * @throws {Error} when the file is not a YAML document.
  */
-async function storedKey(home: string): Promise<string | undefined> {
+async function storedKey(home: string, variable: string): Promise<string | undefined> {
   const path = join(home, CREDENTIALS_FILENAME)
   if (!existsSync(path)) return undefined
   const document = parseDocument((await readProtectedFile(path)).toString('utf8'), { uniqueKeys: true })
@@ -98,44 +100,60 @@ async function storedKey(home: string): Promise<string | undefined> {
   if (first !== undefined) throw new Error(`${path} is not a readable credentials document (${first.code})`)
   const data: unknown = document.toJS()
   const refs: unknown = isRecord(data) ? data['refs'] : undefined
-  const value: unknown = isRecord(refs) ? refs[SETUP_DEFAULT_CREDENTIAL_VARIABLE] : undefined
+  const value: unknown = isRecord(refs) ? refs[variable] : undefined
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 /**
- * The DeepSeek key the model would use. The stored reference wins; otherwise
+ * The model key the model would use. The stored reference wins; otherwise
  * the first non-empty value from the environment layers wins. The launch
  * variables are set first because upstream's `.env` loader resolves the Delo
  * home from `DSH_HOME`.
  * @param context - the command's environment and output.
  * @param home - the resolved Delo home.
  * @param profile - the CLI profile, for the launch variables.
+ * @param variable - the credential reference the provider reads.
  * @returns the key, or `undefined` when no source sets it.
  * @throws {Error} with the loader's message when a `.env` file sets a name only the launching environment may set, a
  *   `DELO_` name among them.
  * @throws {HomeLayoutError} `SECRET_FILE_MODE` when the credentials document is laxer than 0600.
  */
-async function resolveKey(context: CommandContext, home: string, profile: string): Promise<string | undefined> {
+async function resolveKey(context: CommandContext, home: string, profile: string, variable: string): Promise<string | undefined> {
   applyLaunchEnvironment(home, profile)
   const layered = loadDeloEnvironment(process.cwd(), line => { context.stderr(line) })
-  const stored = await storedKey(home)
+  const stored = await storedKey(home, variable)
   if (stored !== undefined) return stored
   for (const source of ENVIRONMENT_LAYERS) {
-    const value = layered.getFrom(SETUP_DEFAULT_CREDENTIAL_VARIABLE, [source])?.value
+    const value = layered.getFrom(variable, [source])?.value
     if (value !== undefined && value.length > 0) return value
   }
   return undefined
 }
 
 /**
- * The key check: resolve the home, then the key, then check its format.
+ * The provider whose key the profile's model uses: the one its setup answers name, or DeepSeek, the provider of the
+ * profile's default model, when they name none or the profile has no answers record.
+ * @param home - the resolved Delo home.
+ * @param profile - the CLI profile.
+ * @returns the key check's subject.
+ */
+function keySubject(home: string, profile: string): KeySubject {
+  const answer = recordedAnswers(profileDirectory(home, profile)).modelProvider
+  if (answer === null) return DEEPSEEK_KEY_SUBJECT
+  const provider = SETUP_PROVIDERS[answer.id]
+  return { label: provider.label, variable: credentialReference(answer), deepseek: provider.adapter === 'deepseek' }
+}
+
+/**
+ * The key check: resolve the home, the provider and its key, then check the key's format.
  * @param context - the command's environment and output.
  * @param profile - the CLI profile.
  * @returns the check's result.
  */
 async function keyCheck(context: CommandContext, profile: string): Promise<CheckResult> {
   const home = await resolveDeloHome(context.env)
-  return checkKey(await resolveKey(context, home.path, profile))
+  const subject = keySubject(home.path, profile)
+  return checkKey(await resolveKey(context, home.path, profile, subject.variable), subject)
 }
 
 /**

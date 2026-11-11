@@ -154,22 +154,36 @@ export async function checkDocker(runner: DockerRunner): Promise<CheckResult> {
   }
 }
 
+/** The provider whose key the key check looks at, as the profile's setup answers name it. */
+export interface KeySubject {
+  /** The provider's name. */
+  readonly label: string
+  /** The variable, or credential reference, its key is read from. */
+  readonly variable: string
+  /** Whether it is DeepSeek, whose keys start with `sk-`. */
+  readonly deepseek: boolean
+}
+
+/** DeepSeek, the provider of the profile's default model, which the key check looks at when setup chose no other. */
+export const DEEPSEEK_KEY_SUBJECT: KeySubject = { label: 'DeepSeek', variable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, deepseek: true }
+
 /**
- * Check the DeepSeek API key's format offline: it must be set, contain no
- * whitespace or control character, have at least 20 characters and start with
- * `sk-`. No message contains the key, and the key is never sent anywhere.
+ * Check the model key's format offline: it must be set, contain no whitespace or control character and have at least
+ * 20 characters; a DeepSeek key must also start with `sk-`. No message contains the key, and the key is never sent
+ * anywhere.
  * @param key - the key the model would use, as the caller resolved it; `undefined` or empty when none is set.
+ * @param subject - the provider; DeepSeek by default.
  * @returns the check's result.
  */
-export function checkKey(key: string | undefined): CheckResult {
-  const note = 'format only; the key was not sent to DeepSeek'
+export function checkKey(key: string | undefined, subject: KeySubject = DEEPSEEK_KEY_SUBJECT): CheckResult {
+  const note = `format only; the key was not sent to ${subject.label}`
   if (key === undefined || key.length === 0) {
-    return outcome('key', 'warn', `no DeepSeek API key is set; the model cannot answer. Set ${SETUP_DEFAULT_CREDENTIAL_VARIABLE}, or run delorun setup to store one (${note}).`)
+    return outcome('key', 'warn', `no ${subject.label} API key is set; the model cannot answer. Set ${subject.variable}, or run delorun setup key to store one (${note}).`)
   }
-  if (/[\s\p{Cc}]/u.test(key) || key.length < MIN_KEY_LENGTH || !key.startsWith('sk-')) {
-    return outcome('key', 'fail', `the DeepSeek API key is malformed; check it at the key page (${note}).`)
+  if (/[\s\p{Cc}]/u.test(key) || key.length < MIN_KEY_LENGTH || (subject.deepseek && !key.startsWith('sk-'))) {
+    return outcome('key', 'fail', `the ${subject.label} API key is malformed; check it at the key page (${note}).`)
   }
-  return outcome('key', 'pass', `the DeepSeek API key is set and has the expected format (${note}).`)
+  return outcome('key', 'pass', `the ${subject.label} API key is set and has the expected format (${note}).`)
 }
 
 /** Where the checked port came from: `--port`, the profile's studio row, or upstream's default because the profile sets none. */

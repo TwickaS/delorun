@@ -1,5 +1,5 @@
 ---
-description: "Contract C11: the questions setup asks, the answer schema, the profile writes each answer produces, the --yes and --config forms, and the statements setup makes."
+description: "Contract C11: the questions setup asks, the model providers it sets up, the answer schema, the profile writes each answer produces, the --yes and --config forms, and the statements setup makes."
 ---
 
 # Contract C11: setup answers
@@ -9,15 +9,15 @@ English | [中文](c11-setup-answers.zh.md)
 <a id="summary"></a>
 ## Summary
 
-Setup answers are what `delorun setup` asks, the schema that stores each answer, the profile writes each answer produces, and the `--yes` and `--config` forms that give the same answers without a terminal. Setup opens with Quick or Full. Quick asks the privacy note, the stock-home import when a stock home exists, the model key and the prompts question; Full also asks whether to check for new releases and adds the sections that change the computer. Every question takes effect or is not asked. Delo has no telemetry of its own, and the privacy note says that upstream's two opt-ins are off and are changed in Settings → Privacy, where the studio's consent screen owns them, and what the release check requests. A release check turned off in setup is off before Delorun first starts, so it makes no request.
+Setup answers are what `delorun setup` asks, the schema that stores each answer, the profile writes each answer produces, and the `--yes` and `--config` forms that give the same answers without a terminal. Setup opens with Quick or Full. Quick asks the privacy note, the stock-home import when a stock home exists, the model provider with its key and the prompts question; Full also asks whether to check for new releases and adds the sections that change the computer. Every question takes effect or is not asked. Delo has no telemetry of its own, and the privacy note says that upstream's two opt-ins are off and are changed in Settings → Privacy, where the studio's consent screen owns them, and what the release check requests. A release check turned off in setup is off before Delorun first starts, so it makes no request.
 
 <a id="status"></a>
 ## Status
 
 `delorun setup` with its Quick and Full flows, the `--yes` and `--config` forms and the profile writes below are built; the stock-home `import` section and the `reach` section for Tailscale on the person's own tailnet are built too; the other reach options, the passkey and OIDC identity factors and the runtime section are not, and the opt-ins stay off only in the CLI profile.
 
-- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`, where `reach` offers only `none` or `tailscale-private` with the factor `tailnet-membership`; the schema with its refusals of removed keys, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile; the `updateCheck` answer, which Full setup asks and `delorun setup privacy` changes, written as the `delo-update-check` row's switch before the first start.
-- **Not built:** the reach options `tailscale-funnel` and `self-hosted-relay`, the `passkey`, `oidc` and `tailnet` identity factors and the enrolment request; the runtime section; the check that `modelProvider.id` is a provider upstream ships, which accepts any non-empty id; the feedback dialog and its send, because the CLI profile disables upstream's feedback rows, while setup's privacy note still prints the feedback statement; the rule that a failed key check's reason is not printed, because setup prints it (the reason names the origin and the HTTP status and holds no part of the key).
+- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`, where `reach` offers only `none` or `tailscale-private` with the factor `tailnet-membership`; the eleven model providers of [Model providers](#model-providers), each with its live key check and its profile rows; the schema with its refusals of removed keys, of a provider setup does not offer, of a model the provider's installed catalog does not list, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile; the `updateCheck` answer, which Full setup asks and `delorun setup privacy` changes, written as the `delo-update-check` row's switch before the first start.
+- **Not built:** the reach options `tailscale-funnel` and `self-hosted-relay`, the `passkey`, `oidc` and `tailnet` identity factors and the enrolment request; the runtime section; the feedback dialog and its send, because the CLI profile disables upstream's feedback rows, while setup's privacy note still prints the feedback statement; the rule that a failed key check's reason is not printed, because setup prints it (the reason names the origin and the HTTP status and holds no part of the key).
 - **Not reached by Delo's writes:** `delorun headless` runs upstream's headless profile, which carries none of these writes, so DeepSeek's session-log upload is on there by upstream's default and the requirement that the opt-ins are off does not hold for it.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
@@ -30,6 +30,7 @@ The requirements and denial tests below that this list names as not built or rea
 - [Contract](#contract)
   - [Modes and sections](#modes-and-sections)
   - [Questions](#questions)
+  - [Model providers](#model-providers)
   - [Answer schema](#answer-schema)
   - [Profile writes](#profile-writes)
   - [The --yes and --config forms](#yes-and-config-forms)
@@ -51,7 +52,7 @@ The first screen asks for **Quick** (preselected) or **Full**. Each topic is a r
 | --- | --- | --- |
 | `privacy` | Quick | Shows the privacy note. In Full and in `delorun setup privacy` it asks whether to check for new releases; in Quick it asks nothing and says how to reach that question before Delorun first starts. |
 | `import` | Quick | Shown only when `~/.dsh` is a directory, not a link, and the Delo home holds no chat: shows the data part of the stock-home import's preview, then asks "Copy your DeepSeek Harness chats, attachments and workspace list?". |
-| `key` | Quick | Asks where the model key comes from. A typed key is checked with one live request before it is stored. |
+| `key` | Quick | Asks the model provider, where its key comes from and the model new chats start on ([Model providers](#model-providers)). A typed key is checked with one live request before it is stored. |
 | `prompts` | Quick | Safer prompts or Same as stock. |
 | `background` | Full | Whether Delorun keeps running after the terminal closes. |
 | `reach` | Full | Whether the studio is reachable from the person's phone over their own tailnet. A yes runs the Tailscale checks of `delorun reach on tailscale`, Funnel included, and shows the trust statement; a failed check leaves remote access off and names what to fix. Applying it writes the reach row with a fixed listener port. |
@@ -70,7 +71,10 @@ Setup asks these questions, in this order. The default applies when the person a
 | --- | --- | --- | --- |
 | Check for new releases | `privacy` | Yes or no. Asked in Full, with the note's facts as the hint. | Yes |
 | Copy your DeepSeek Harness chats, attachments and workspace list? | `import` | Yes or no, after the preview. | No. |
-| Model key | `key` | Typed at the prompt, or read from `DEEPSEEK_API_KEY` at each start. | Typed at the prompt. |
+| Model provider | `key` | One of the providers of [Model providers](#model-providers), or none for now. | DeepSeek in a terminal; none with `--yes`. |
+| Base URL and model id | `key` | Asked for an `openai-compatible` endpoint only, in both modes. | None. |
+| Model key | `key` | Typed at the prompt, or read from the provider's variable at each start. | Typed at the prompt. |
+| Model | `key` | One model of the provider's installed catalog. Asked in Full, and in Quick for every provider but DeepSeek, whose default is the profile's. | The catalog's first model; for DeepSeek, the profile's default. |
 | Prompts | `prompts` | Safer prompts, or Same as stock. | Safer prompts |
 | Keep running in the background | `background` | Yes or no. | Yes |
 | Reach this studio from your phone over your own tailnet (Tailscale)? | `reach` | Yes or no. | No |
@@ -78,7 +82,28 @@ Setup asks these questions, in this order. The default applies when the person a
 
 Reach beyond the person's tailnet, a passkey or OIDC identity factor and the runtime are not asked yet; their packages add them. Setup reads a stock home only to copy from it, and never modifies it. Setup's import copies the data alone: no profile, settings layer, instructions, skill or stored key, which can change what Delo runs or what the agent is told; `delorun import-home` copies each of those after its own yes.
 
-The live key check sends one authenticated model-listing request to the provider's origin, `https://api.deepseek.com` or the origin of `DEEPSEEK_BASE_URL`, and to no other; redirects fail. A failed check prints its reason, which names the origin and the HTTP status and never the key, and lets the person enter the key again or continue without a successful check. `--yes`, `--config` and a key read from the environment skip the check unless `--check-key` is given; with `--check-key` a key the provider does not accept stops an unattended run.
+The live key check sends one authenticated `GET` of a metadata endpoint to the provider's origin, and to no other; redirects fail, and the response body is never read. It never requests a completion. A failed check prints its reason, which names the origin and the HTTP status and never the key, and lets the person enter the key again or continue without a successful check. `--yes`, `--config` and a key read from the environment skip the check unless `--check-key` is given; with `--check-key` a key the provider does not accept stops an unattended run.
+
+<a id="model-providers"></a>
+### Model providers
+
+Setup offers the providers below, listed by name so that none is placed ahead of another. DeepSeek runs on upstream's DeepSeek adapter, the profile's `llm-deepseek` row, and needs no install. Every other provider is a route of upstream's pi-ai adapter, the `llm-pi-ai` row: a route of pi-ai's installed catalog, whose endpoint and models the catalog supplies, or the `openai-compatible` route, which setup declares with the base URL and model the person gives. Every provider the profile's adapters serve and setup does not offer, including the rest of pi-ai's catalog, is set up in the studio's Settings → Models.
+
+| Provider | Id | Key variable | Key check |
+| --- | --- | --- | --- |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `GET /v1/models?limit=1` with `x-api-key` and `anthropic-version` |
+| DeepSeek | `deepseek-official` | `DEEPSEEK_API_KEY` | `GET /models` at `https://api.deepseek.com` or the origin of `DEEPSEEK_BASE_URL`, with `x-api-key`, through upstream's model-listing client |
+| Google Gemini | `google` | `GEMINI_API_KEY` | `GET /models?pageSize=1` with `x-goog-api-key` |
+| Groq | `groq` | `GROQ_API_KEY` | `GET /models` with a bearer token |
+| Mistral | `mistral` | `MISTRAL_API_KEY` | `GET /v1/models` with a bearer token |
+| Moonshot AI | `moonshotai` | `MOONSHOT_API_KEY` | `GET /models` with a bearer token |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `GET /models` with a bearer token |
+| OpenAI-compatible endpoint | `openai-compatible` | `OPENAI_COMPATIBLE_API_KEY` | `GET /models` under the base URL the person gives, with a bearer token |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `GET /key` with a bearer token |
+| Together AI | `together` | `TOGETHER_API_KEY` | `GET /models` with a bearer token |
+| xAI | `xai` | `XAI_API_KEY` | `GET /models` with a bearer token |
+
+Each catalog provider's path is appended to the endpoint pi-ai's installed catalog ships for it. A typed key is stored under the key variable, which is the credential reference the adapter reads; a key read from the environment is read from the key variable, or from the variable `--key-env` or a document names. An endpoint that answers its model listing without any key also passes the `openai-compatible` check.
 
 <a id="answer-schema"></a>
 ### Answer schema
@@ -87,8 +112,8 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 ```json
 {
-  "schemaVersion": 3,
-  "modelProvider": { "id": "deepseek-official", "credential": { "source": "environment", "name": "DEEPSEEK_API_KEY" } },
+  "schemaVersion": 4,
+  "modelProvider": { "id": "anthropic", "credential": { "source": "environment", "name": "ANTHROPIC_API_KEY" }, "baseURL": null, "model": "claude-sonnet-5" },
   "prompts": "safer",
   "background": true,
   "profile": { "name": null, "port": null },
@@ -101,9 +126,12 @@ An answers document is a JSON object with the fields below. The same schema is u
 
 | Field | Type and values | Default | Rule |
 | --- | --- | --- | --- |
-| `schemaVersion` | Integer `3`, or `2` for a document written before the release-check question. | `3` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. |
-| `modelProvider.id` | A provider id. | `deepseek-official` | Any non-empty string is accepted; no check against the providers upstream ships runs. |
+| `schemaVersion` | Integer `4`, or `2` or `3` for a document written before the provider question. | `4` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, whatever id it names, because setup of those versions applied DeepSeek's key and no other provider. |
+| `modelProvider` | An object with the four fields below, or `null` for no provider. | The object with each field's default in a terminal; `null` with `--yes` unless `--provider` is given. | `null` writes no provider row. |
+| `modelProvider.id` | An id of [Model providers](#model-providers). | `deepseek-official` | Any other id is refused, naming the ids setup accepts. |
 | `modelProvider.credential` | `{ "source": "prompt" }` or `{ "source": "environment", "name": "<variable>" }`. | `{ "source": "prompt" }` | `prompt` is accepted only in the interactive form. |
+| `modelProvider.baseURL` | An `http` or `https` URL, or `null`. | `null` | Set for `openai-compatible` and `null` for every other provider. |
+| `modelProvider.model` | A model id, or `null`. | `null` | `null` only for `deepseek-official`, where it keeps the profile's default model. Every other provider names a model, which must be in the provider's installed catalog unless the provider is `openai-compatible`. |
 | `prompts` | `safer` or `stock`. | `safer` | Sets the prompt switches of the parity registry. |
 | `background` | Boolean. | `true` | Read back by the start commands. |
 | `profile.name` | A profile name, or `null` for the profile the command line selected. | `null` | Upstream's profile-name rules; `desktop` is refused. |
@@ -125,7 +153,8 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 
 | Answer | Write | Target |
 | --- | --- | --- |
-| `modelProvider` | A typed key goes to upstream's credential store, `.credentials.yaml` under the home, at mode 0600. A key read from the environment is stored nowhere. | The home. |
+| `modelProvider` | A typed key goes to upstream's credential store, `.credentials.yaml` under the home, at mode 0600, under the provider's key variable. A key read from the environment is stored nowhere. | The home. |
+| `modelProvider` | The rows in the form Settings → Models and the model picker save them: DeepSeek with `DEEPSEEK_API_KEY` and the profile's default model writes no row, as stock DeepSeek Harness composes the profile; another variable sets `apiKeyEnv` on `llm-deepseek`. A pi-ai provider sets its route under `llm-pi-ai`'s `providers`, keeping the routes already there: `apiKeyEnv` for a catalog route, and also `displayName`, `api: openai-completions`, `baseURL` and the model in `models` for `openai-compatible`. A named model sets `agent-default-model` to the provider and model without a reasoning effort. `null` writes none of these rows. | The profile's `cordis.patch.yml`. |
 | `prompts` | `config.enabled` of the rows `delo-permission-defaults`, `delo-instruction-consent`, `delo-mcp-consent` and `delo-schedule-consent`, set to each switch's Delo default (`safer`) or parity value (`stock`) in contract C16's registry. With `safer` the person allows a workspace's full access, and a new stdio MCP server, at the home's computer: in the studio's Settings, Permissions, or with `delorun workspace full-access` and `delorun mcp`; with `stock` neither consent is mounted and those surfaces say the profile does not ask. The fetch guard is a refusal, not a prompt, and no answer changes it. | The profile's `cordis.patch.yml`. |
 | `background` | Recorded in the answers record `setup-answers.json`; the start commands read it. | The profile directory. |
 | `profile.name` | The CLI profile is created under this name. | The home. |
@@ -141,9 +170,9 @@ Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In u
 <a id="yes-and-config-forms"></a>
 ### The --yes and --config forms
 
-`--yes` accepts every default. It applies no answer other than the defaults and `--no-update-check`, and it reads the model credential from the environment variable that `credential.name` names, which defaults to `DEEPSEEK_API_KEY`. When that variable is unset, setup stops with a typed error that names the variable.
+`--yes` accepts every default but the provider, and applies no answer other than the defaults, the provider flags and `--no-update-check`. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
 
-`--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`; `--no-update-check` turns the release check off whatever the document says. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` is `true`. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
+`--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`; its provider is the one `modelProvider` names, and the provider flags are refused beside it; `--no-update-check` turns the release check off whatever the document says. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` is `true`. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
 
 For identical answers, the interactive form and the `--yes` or `--config` form write identical profile files.
 
@@ -172,7 +201,7 @@ The statements about recovery and Docker belong to the sections that add those t
 <a id="compatibility"></a>
 ## Compatibility
 
-The answers schema is versioned by `schemaVersion`, which is `3`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Setup reads a version-2 document as version 3 with `updateCheck: true` and records it as version 3. Setup refuses an answers document whose version it does not know.
+The answers schema is versioned by `schemaVersion`, which is `4`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Setup reads a version-2 or version-3 document as version 4, as [Answer schema](#answer-schema) describes, and records it as version 4. Setup refuses an answers document whose version it does not know.
 
 A new upstream opt-in is added as a question with a default of off, in the same change that adds its profile row to the mapping.
 
@@ -185,7 +214,7 @@ Requirements:
 - Upstream's opt-ins are not asked by setup and are off by default. They take effect only when the person turns them on on the consent screen.
 - The live key check sends the key to the provider's origin only, and neither the key nor a check's reason is printed or logged.
 - Delo sends no telemetry of its own.
-- A credential value never appears in an answers document, a profile file, a process argument or a log.
+- A credential value never appears in an answers document, a profile file, a process argument or a log. The provider flags carry variable names only.
 - Setup writes no row that enables credential forwarding. Forwarding is set per workspace under the runtime contract.
 
 Denial tests:
@@ -197,7 +226,8 @@ Denial tests:
 | `refuses a document that asks for the stock-home import, which shows its preview in a terminal first` | A document whose `importStockHome` is `true` is refused with a typed error that names the field. |
 | `config file with a removed key is refused` | A document that carries a removed key is refused with a typed error that names the removed keys and no value. |
 | `config file carrying a credential value is refused` | A document with a credential value in any field is refused, and the value is not echoed. |
-| `live key check sends the key to the provider origin only` | The check's request goes to one origin, with redirects refused, and the key is in no URL, message or output. |
+| `live key check sends the key to the provider origin only` | For every provider, the check's request goes to one origin, with redirects refused, and the key is in no URL, message or output; a redirect to another origin fails, and that origin receives nothing. |
+| `--key-env carrying a key is refused` | A `--key-env` value that is not a variable name is refused with the usage code, and the value is not echoed. |
 | `typed key is never printed` | The recorded screen of a run holds no part of the typed key. |
 | `default-profile run sends no analytics or upload` | A network fixture records no request to an analytics destination and no session-log upload in a default profile. |
 | `default-profile model request carries no dsh_session_log` | A model request from a default profile has no `dsh_session_log` field. |
@@ -218,8 +248,9 @@ Acceptance tests:
 <a id="decided-values"></a>
 ## Decided values
 
-- The answers schema version is `3`; setup also reads version 2.
-- The defaults are `deepseek-official` for the provider, safer prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
-- The default credential variable is `DEEPSEEK_API_KEY`.
+- The answers schema version is `4`; setup also reads versions 2 and 3.
+- The provider question starts on `deepseek-official` in a terminal, and `--yes` sets up no provider unless `--provider` names one.
+- The defaults are safer prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
+- Each provider's key variable is the one [Model providers](#model-providers) lists; DeepSeek's is `DEEPSEEK_API_KEY`.
 - The reach options of setup are `none`, `tailscale-private`, `tailscale-funnel` and `self-hosted-relay`.
 - The feedback send is not an answer, and setup states it.

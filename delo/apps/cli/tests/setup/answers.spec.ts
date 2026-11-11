@@ -2,13 +2,16 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { REMOVED_ANSWER_KEYS } from '@delo/contract-setup-answers'
-import { readAnswersDocument, yesAnswers } from '../../src/setup/answers.ts'
+import { REMOVED_ANSWER_KEYS, SETUP_DEFAULTS } from '@delo/contract-setup-answers'
+import { checkCatalogModel, chosenProvider, readAnswersDocument, yesAnswers, type ProviderChoice } from '../../src/setup/answers.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
+import { installedCatalog } from '../../src/setup/providers.ts'
+
+const DEEPSEEK = { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null }
 
 const BASE = {
-  schemaVersion: 3,
-  modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } },
+  schemaVersion: 4,
+  modelProvider: DEEPSEEK,
   prompts: 'safer',
   background: true,
   profile: { name: null, port: null },
@@ -66,11 +69,30 @@ describe('the answers document', () => {
     expect(refusal(write('text.json', { ...BASE, updateCheck: 'no' }))).toContain('updateCheck is not a value the answers document accepts')
   })
 
-  it('reads a version-2 document as version 3 with the check on, and refuses the release-check answer in one', () => {
-    const version2 = { ...BASE, schemaVersion: 2 }
-    expect(readAnswersDocument(write('version-2.json', version2))).toMatchObject({ schemaVersion: 3, updateCheck: true, prompts: 'safer' })
-    expect(refusal(write('version-2-off.json', { ...version2, updateCheck: false }))).toBe('delorun setup --config: updateCheck needs schemaVersion 3')
+  it('reads a version-2 document as version 4 with the check on, and refuses the release-check answer in one', () => {
+    const version2 = { ...BASE, schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: DEEPSEEK.credential } }
+    expect(readAnswersDocument(write('version-2.json', version2))).toMatchObject({ schemaVersion: 4, updateCheck: true, prompts: 'safer', modelProvider: DEEPSEEK })
+    expect(refusal(write('version-2-off.json', { ...version2, updateCheck: false }))).toBe('delorun setup --config: updateCheck needs schemaVersion 4')
     expect(refusal(write('version-2-unknown.json', { ...version2, apiKey: 'sk-SECRET-VALUE-81' }))).toContain('the document holds a field the answers document does not define')
+  })
+
+  it('reads a version-3 document\'s provider as DeepSeek with the profile\'s default model, whatever id it named, as setup of that version applied it', () => {
+    const version3 = { ...BASE, schemaVersion: 3, updateCheck: false, modelProvider: { id: 'anything', credential: { source: 'environment', name: 'OTHER_KEY' } } }
+    expect(readAnswersDocument(write('version-3.json', version3))).toMatchObject({ schemaVersion: 4, updateCheck: false, modelProvider: { ...DEEPSEEK, credential: { source: 'environment', name: 'OTHER_KEY' } } })
+    expect(refusal(write('version-3-model.json', { ...version3, modelProvider: { ...version3.modelProvider, model: 'x' } }))).toBe('delorun setup --config: modelProvider needs schemaVersion 4 to name a base URL or a model')
+  })
+
+  it('reads every provider setup offers, with the fields each needs, and refuses one it does not offer', () => {
+    const anthropic = { id: 'anthropic', credential: { source: 'environment', name: 'ANTHROPIC_API_KEY' }, baseURL: null, model: 'claude-sonnet-5' }
+    expect(readAnswersDocument(write('anthropic.json', { ...BASE, modelProvider: anthropic })).modelProvider).toEqual(anthropic)
+    const custom = { id: 'openai-compatible', credential: { source: 'environment', name: 'LOCAL_KEY' }, baseURL: 'http://127.0.0.1:8000/v1', model: 'local' }
+    expect(readAnswersDocument(write('custom.json', { ...BASE, modelProvider: custom })).modelProvider).toEqual(custom)
+    expect(readAnswersDocument(write('none.json', { ...BASE, modelProvider: null })).modelProvider).toBeNull()
+    expect(refusal(write('unknown.json', { ...BASE, modelProvider: { ...anthropic, id: 'acme' } }))).toContain('modelProvider.id must be one of anthropic, deepseek-official, google')
+    expect(refusal(write('no-model.json', { ...BASE, modelProvider: { ...anthropic, model: null } }))).toBe('delorun setup --config: modelProvider.model is needed for anthropic')
+    expect(refusal(write('no-url.json', { ...BASE, modelProvider: { ...custom, baseURL: null } }))).toBe('delorun setup --config: modelProvider.baseURL is needed for openai-compatible')
+    expect(refusal(write('stray-url.json', { ...BASE, modelProvider: { ...anthropic, baseURL: 'https://x.example' } }))).toBe('delorun setup --config: modelProvider.baseURL is set for openai-compatible only')
+    expect(refusal(write('bad-url.json', { ...BASE, modelProvider: { ...custom, baseURL: 'ftp://x.example' } }))).toBe('delorun setup --config: modelProvider.baseURL must be an http or https URL')
   })
 
   it('refuses a document that carries a removed question, naming the removed keys and no value', () => {
@@ -93,14 +115,14 @@ describe('the answers document', () => {
     const unknown = refusal(write('unknown.json', { ...BASE, apiKey: 'sk-SECRET-VALUE-78' }))
     expect(unknown).toContain('holds a field the answers document does not define')
     expect(unknown).not.toContain('sk-SECRET-VALUE-78')
-    expect(refusal(write('version.json', { ...BASE, schemaVersion: 1 }))).toContain('schemaVersion must be 3, or 2 for an earlier document; setup refuses any other version')
-    expect(refusal(write('future.json', { ...BASE, schemaVersion: 4 }))).toContain('schemaVersion must be 3')
+    expect(refusal(write('version.json', { ...BASE, schemaVersion: 1 }))).toContain('schemaVersion must be 4, or 2 or 3 for an earlier document; setup refuses any other version')
+    expect(refusal(write('future.json', { ...BASE, schemaVersion: 5 }))).toContain('schemaVersion must be 4')
   })
 
   it('refuses reach, a prompted key, a sections record, a bad profile name and a port out of range', () => {
     expect(refusal(write('reach.json', { ...BASE, reach: { option: 'tailscale-private', identityFactor: 'passkey' } }))).toContain('reach.option must be "none"')
     expect(refusal(write('factor.json', { ...BASE, reach: { option: 'none', identityFactor: 'passkey' } }))).toContain('reach.identityFactor must be null')
-    expect(refusal(write('prompt.json', { ...BASE, modelProvider: { id: 'deepseek-official', credential: { source: 'prompt' } } }))).toContain('modelProvider.credential.source must be "environment"')
+    expect(refusal(write('prompt.json', { ...BASE, modelProvider: { ...DEEPSEEK, credential: { source: 'prompt' } } }))).toContain('modelProvider.credential.source must be "environment"')
     expect(refusal(write('sections.json', { ...BASE, sections: [{ id: 'key', status: 'answered' }] }))).toContain('sections is written by setup')
     expect(refusal(write('name.json', { ...BASE, profile: { name: 'desktop', port: null } }))).toContain('profile.name is not a profile name setup accepts')
     expect(refusal(write('port.json', { ...BASE, profile: { name: null, port: 80 } }))).toContain('profile.port is not a value')
@@ -113,7 +135,7 @@ describe('the answers document', () => {
 
   it('refuses a credential value given as a name, a file that is not JSON and a file that is missing', () => {
     const secret = 'sk-SECRET-VALUE-79'
-    const named = refusal(write('named.json', { ...BASE, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: secret } } }))
+    const named = refusal(write('named.json', { ...BASE, modelProvider: { ...DEEPSEEK, credential: { source: 'environment', name: secret } } }))
     expect(named).toContain('credential')
     expect(named).not.toContain(secret)
     expect(refusal(write('text.json', 'not json'))).toContain('is not a JSON document')
@@ -122,10 +144,48 @@ describe('the answers document', () => {
     expect(refusal(write('null.json', 'null'))).toContain('is not a value the answers document accepts')
   })
 
-  it('--yes answers take every default and the key from the environment, and stop naming the variable when it is unset', () => {
-    expect(yesAnswers({ DEEPSEEK_API_KEY: 'k' }).prompts).toBe('safer')
-    expect(yesAnswers({ DEEPSEEK_API_KEY: 'k' }).reach).toEqual({ option: 'none', identityFactor: null })
-    expect(() => yesAnswers({})).toThrow('DEEPSEEK_API_KEY is not set')
-    expect(() => yesAnswers({ DEEPSEEK_API_KEY: '' })).toThrow('DEEPSEEK_API_KEY is not set')
+  it('--yes answers take every default and no provider unless --provider names one, whatever keys the environment holds', () => {
+    expect(yesAnswers({ DEEPSEEK_API_KEY: 'k', OPENAI_API_KEY: 'k' })).toEqual({ ...SETUP_DEFAULTS, modelProvider: null })
+    expect(yesAnswers({}).reach).toEqual({ option: 'none', identityFactor: null })
+  })
+
+  it('--yes --provider reads the provider\'s key from its variable or --key-env, and stops naming the variable when it is unset', () => {
+    const choice: ProviderChoice = { id: 'anthropic', model: 'claude-sonnet-5', baseURL: undefined, keyEnv: undefined }
+    expect(yesAnswers({ ANTHROPIC_API_KEY: 'k' }, choice).modelProvider).toEqual({ id: 'anthropic', credential: { source: 'environment', name: 'ANTHROPIC_API_KEY' }, baseURL: null, model: 'claude-sonnet-5' })
+    expect(yesAnswers({ WORK_KEY: 'k' }, { ...choice, keyEnv: 'WORK_KEY' }).modelProvider?.credential).toEqual({ source: 'environment', name: 'WORK_KEY' })
+    expect(() => yesAnswers({}, choice)).toThrow('delorun setup --yes: ANTHROPIC_API_KEY is not set; set it to the Anthropic key')
+    expect(() => yesAnswers({ DEEPSEEK_API_KEY: '' }, { id: 'deepseek-official', model: undefined, baseURL: undefined, keyEnv: undefined })).toThrow('DEEPSEEK_API_KEY is not set')
+    expect(yesAnswers({ DEEPSEEK_API_KEY: 'k' }, { id: 'deepseek-official', model: undefined, baseURL: undefined, keyEnv: undefined }).modelProvider).toEqual(DEEPSEEK)
+  })
+
+  it('refuses a --provider command line that names no provider setup offers, misses a field it needs or carries a key', () => {
+    const usage = (choice: ProviderChoice): string => {
+      try {
+        chosenProvider(choice)
+      } catch (error) {
+        expect((error as CliError).exit).toBe(EXIT.usage)
+        return (error as Error).message
+      }
+      return ''
+    }
+    const none = { model: undefined, baseURL: undefined, keyEnv: undefined }
+    expect(usage({ ...none, id: 'acme' })).toContain('there is no provider "acme"; choose one of anthropic, deepseek-official')
+    expect(usage({ ...none, id: 'openai' })).toBe('delorun setup --provider: openai needs --model, the model new chats start on')
+    expect(usage({ ...none, id: 'openai-compatible', model: 'm' })).toBe('delorun setup --provider: openai-compatible needs --base-url, the endpoint\'s base URL')
+    expect(usage({ ...none, id: 'openai', model: 'm', baseURL: 'https://x.example' })).toContain('--base-url applies to openai-compatible only')
+    expect(usage({ ...none, id: 'openai-compatible', model: 'm', baseURL: 'not a url' })).toBe('delorun setup --provider: --base-url must be an http or https URL')
+    const carried = usage({ ...none, id: 'openai', model: 'm', keyEnv: 'sk-SECRET-VALUE-90' })
+    expect(carried).toContain('--key-env must be the name of an environment variable')
+    expect(carried).not.toContain('sk-SECRET-VALUE-90')
+  })
+
+  it('refuses a model the provider\'s installed catalog does not list, and accepts any model of the custom endpoint', async () => {
+    const catalog = await installedCatalog()
+    const [first] = catalog.models('openai')
+    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: first?.id ?? '' }, catalog, 'here') }).not.toThrow()
+    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here') }).toThrow('here: openai serves no model "no-such-model"')
+    expect(() => { checkCatalogModel({ id: 'deepseek-official', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here') }).toThrow('deepseek-official serves no model')
+    expect(() => { checkCatalogModel({ id: 'openai-compatible', credential: { source: 'prompt' }, baseURL: 'http://x.example', model: 'anything' }, catalog, 'here') }).not.toThrow()
+    expect(() => { checkCatalogModel(null, catalog, 'here') }).not.toThrow()
   })
 })
