@@ -131,15 +131,26 @@ export interface RetentionResult {
 }
 
 /**
- * Wait until every staged identity is settled: until the clock is {@link RACY_WINDOW_NS} past the newest change time,
- * at most that long, so a capture taken next vouches for every file the fill wrote.
+ * Wait until every staged identity is settled and return the capture time: the clock reading, from the same clock the
+ * capture records, at which every reported change time lies at least {@link RACY_WINDOW_NS} behind. The clock is read
+ * again after each wait, because a timer can fire before the clock it was set against has moved that far, and the
+ * wait ends at most {@link RACY_WINDOW_NS} after it began; a change time later than that, such as one written under a
+ * clock since set back, stays unsettled, and the start hashes its file.
  * @param staged - the identities a fill reported, or `null` where it reported none.
+ * @returns the capture time in nanoseconds.
  */
-async function settle(staged: readonly (string | null)[]): Promise<void> {
+async function settle(staged: readonly (string | null)[]): Promise<bigint> {
   let newest = 0n
   for (const identity of staged) if (identity !== null && changeTimeOf(identity) > newest) newest = changeTimeOf(identity)
-  const wait = newest + RACY_WINDOW_NS - nowNs()
-  if (wait > 0n) await sleep(Number((wait < RACY_WINDOW_NS ? wait : RACY_WINDOW_NS) / NS_PER_MS) + 1)
+  const ready = newest + RACY_WINDOW_NS
+  let now = nowNs()
+  const deadline = now + RACY_WINDOW_NS
+  while (now < ready && now < deadline) {
+    const until = ready < deadline ? ready : deadline
+    await sleep(Number((until - now) / NS_PER_MS) + 1)
+    now = nowNs()
+  }
+  return now
 }
 
 /** C1's runtime store of one home. */
@@ -317,8 +328,7 @@ export class RuntimeStore {
           // bytes nobody could change, so no writable window may sit between the check and the mode that closes it.
           await setInstalledModes(staging, release.files)
           const staged = fileSystem === undefined ? undefined : this.stagedIdentities(release, bytes.staged)
-          if (staged !== undefined) await settle(staged)
-          capturedAt = nowNs()
+          capturedAt = staged === undefined ? nowNs() : await settle(staged)
           examined = await examineTree(staging, release.files, staged === undefined ? undefined : { identities: staged, capturedAt })
         } catch (error) {
           throw new RuntimeStoreError('INSTALL_VERIFY_FAILED', staging, `release ${request.version} does not verify: ${(error as Error).message}`, [], { cause: error })

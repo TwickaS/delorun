@@ -62,9 +62,9 @@ function file(path: string): string {
   return join(installation(), ...path.split('/'))
 }
 
-/** Move `Date` forward, as time passing would; timers stay real. */
+/** Move `Date` by an offset, which then keeps advancing with real time, as a clock does; timers stay real. */
 function advance(ms: number): void {
-  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
   vi.setSystemTime(Date.now() + ms)
 }
 
