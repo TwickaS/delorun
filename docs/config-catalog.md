@@ -203,7 +203,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-gateway`
 
 - `inject`: `typert` · `remoteAccess`
-- `source`: [`packages/api/gateway/src/index.ts:158`](../packages/api/gateway/src/index.ts)
+- `source`: [`packages/api/gateway/src/index.ts:165`](../packages/api/gateway/src/index.ts)
 
 ```ts config-catalog
 /** Gateway transport configuration. */
@@ -483,6 +483,15 @@ export interface ConnectionConfig {
   cookieMaxAgeDays?: number
   /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
   maxRequestBodyBytes?: number
+  /**
+   * C16 switch `one_time_launch_tokens`. When true, no reusable process launch token exists: each
+   * `authenticatedUrl` call mints a token that expires after 60 seconds, at most 5 wait at once with the oldest
+   * dropped, its first presentation consumes it, and an exchange from another site or with another `Host` than the
+   * URL's is refused. Default: false, upstream's reusable process token.
+   */
+  oneTimeLaunchTokens?: boolean
+  /** The instruction a refused index or `/connect` request is given for signing in again. Default: `reopen the URL printed by dsh web`. */
+  reopenHint?: string
 }
 
 /** Timing for generation readiness and automatic reconnection. */
@@ -1868,7 +1877,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-host-webserver`
 
-- `source`: [`packages/host/webserver/src/index.ts:189`](../packages/host/webserver/src/index.ts)
+- `source`: [`packages/host/webserver/src/index.ts:197`](../packages/host/webserver/src/index.ts)
 
 ```ts config-catalog
 /** Web server listen, TLS, and response-compression config. */
@@ -2649,7 +2658,7 @@ export interface PlanModeConfig {
 
 - `inject`: `loader` · `profileContext`
 - `refs`: [`NpmFileSource`](subsystems/boot.md)
-- `source`: [`packages/boot/plugin-manager/src/index.ts:60`](../packages/boot/plugin-manager/src/index.ts)
+- `source`: [`packages/boot/plugin-manager/src/index.ts:61`](../packages/boot/plugin-manager/src/index.ts)
 
 ```ts config-catalog
 /** The pnpm executable, registries, and limits for diagnostics, lookups and connection checks. */
@@ -2692,6 +2701,15 @@ export interface Config {
   detailFetchTimeoutMs?: number
   /** npm file CDNs that offered bundles are read from, in order; a read's `npmFileSources` moves the CDNs it names first. */
   detailNpmFileSources?: NpmFileSource[]
+  /**
+   * Plugin module names the manager protects as it protects `PROTECTED_PLUGINS`, refusing with `management-required`
+   * any change that would disable, reconfigure, replace or drop a row of one of them, or add one, in the composed
+   * profile: a plugin toggle, a bundle selection or installation, an undo or a restore. A bundle with a row of one, or
+   * a package that provides one, can be neither deselected nor removed, and no package that provides one is installed
+   * or changed. These names add to `PROTECTED_PLUGINS` and cannot take any away; a refusal that names one of them
+   * carries a `diagnostic` listing those names.
+   */
+  protectedPlugins?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-plugin-manager -->
@@ -2901,7 +2919,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-sandbox-local`
 
-- `source`: [`packages/sandbox/sandbox-local/src/index.ts:72`](../packages/sandbox/sandbox-local/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-local/src/index.ts:73`](../packages/sandbox/sandbox-local/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config. All optional — `static Config` supplies the defaults. */
@@ -2952,6 +2970,16 @@ export interface Config {
    * Never name a directory that also holds sockets commands need, such as `$XDG_RUNTIME_DIR`.
    */
   deniedSocketDirectories?: string[]
+  /**
+   * Absolute paths of directories whose sockets start programs outside every confinement, such as WSL's interop
+   * directory `/run/WSL`, whose sockets start Windows programs. Each is denied like a {@link deniedSocketDirectories}
+   * entry, and a wrap on a runner that cannot deny socket connects ({@link RUNNER_PROTECTION}), such as Landlock,
+   * refuses with `SANDBOX_UNSUPPORTED_POLICY` while one of them exists, instead of running a command that could leave
+   * the sandbox through it. While one exists, bwrap also installs the seccomp filter it installs wherever the kernel
+   * offers virtual-machine sockets, which refuses `socket(AF_VSOCK, …)` and `io_uring_setup`. An entry that does not
+   * exist at a wrap denies and refuses nothing.
+   */
+  escapeSocketDirectories?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-local -->
@@ -4649,7 +4677,7 @@ export interface WebRuntimeConfig {
 ## `@deepseek-ai/dsh-web-app`
 
 - `inject`: `webServer`
-- `source`: [`packages/bundle/web-app/src/index.ts:55`](../packages/bundle/web-app/src/index.ts)
+- `source`: [`packages/bundle/web-app/src/index.ts:56`](../packages/bundle/web-app/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: composed deployment settings plus per-invocation command-line values. */
@@ -4877,7 +4905,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-workspace-changes`
 
 - `inject`: `subprocess` · `fs`
-- `source`: [`packages/deliverables/workspace-changes/src/index.ts:34`](../packages/deliverables/workspace-changes/src/index.ts)
+- `source`: [`packages/deliverables/workspace-changes/src/index.ts:43`](../packages/deliverables/workspace-changes/src/index.ts)
 
 ```ts config-catalog
 /** Snapshot, capture, and comparison bounds. Invalid values fail plugin load. */
@@ -4895,6 +4923,12 @@ export interface Config {
   maxFileBytes: number
   /** Milliseconds a line comparison may run before it degrades to whole-file replacement. */
   diffTimeoutMs: number
+  /**
+   * Absolute directory that holds each Session's private directory of snapshot objects, scratch indexes, and captured
+   * copies. It must lie outside every directory the Sessions' confined commands can write and outside the sandbox's
+   * protected home. Absent: this package's directory in the per-user cache directory ({@link defaultScratchRoot}).
+   */
+  scratchRoot?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-workspace-changes -->
