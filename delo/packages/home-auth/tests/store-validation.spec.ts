@@ -25,7 +25,7 @@ const ADDRESS = brandString<StudioAddress>('http://127.0.0.1:3080')
 const HOUR = 60 * 60 * 1000
 
 /** What the mocked protected-file read throws while armed; a spec arms it with the failure it needs. */
-const failure = vi.hoisted(() => ({ armed: false, thrown: undefined as unknown }))
+const failure = vi.hoisted(() => ({ armed: false, thrown: undefined } as { armed: boolean, thrown: Error | string | undefined }))
 
 vi.mock('@delo/home', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@delo/home')>()
@@ -205,7 +205,7 @@ describe('the owner code store', () => {
       const file = join(home.directory, 'owner-code.json')
       await mkdir(file)
       // Pins the ENOENT-only tolerance: a failure to remove the code must not read as a cleared home.
-      await expect(new OwnerCodeStore({ file }).clear()).rejects.toMatchObject({ code: expect.stringMatching(/^(EISDIR|EPERM)$/) as unknown })
+      await expect(new OwnerCodeStore({ file }).clear()).rejects.toMatchObject({ code: expect.stringMatching(/^(EISDIR|EPERM)$/) as string })
       await rmdir(file)
       await expect(new OwnerCodeStore({ file }).clear()).resolves.toBeUndefined()
     } finally {
