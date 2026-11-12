@@ -52,6 +52,7 @@ export { formatMatchCode, matchCode, typedCodeMatches, type MatchCodeInputs } fr
 export { Challenges, signInMessage, signInVerifies } from './sign-in.ts'
 export { loadHomeKey, type HomeKey } from './home-key.ts'
 export { REACH_PATHS, REACH_PRE_LOGIN_ROUTES, SIGN_IN_ASSETS, sessionCookie } from './reach-routes.ts'
+export { ELEVATION_PATHS } from './elevation-routes.ts'
 export { REACH_DEVICE_PATHS, plainPathname, reachesDevicePath, type ReachDevicePath, type ReachDevicePathMatch } from './reach-paths.ts'
 export { HomeAuthService, Config as HomeAuthConfig, type Config } from './service.ts'
 export {

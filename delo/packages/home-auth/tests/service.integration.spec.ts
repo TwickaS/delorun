@@ -35,7 +35,14 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', REACH_PATHS.pending],
   ['exact', REACH_PATHS.approve],
   ['exact', REACH_PATHS.cancel],
+  ['exact', ELEVATION_PATHS.state],
+  ['exact', ELEVATION_PATHS.request],
+  ['exact', ELEVATION_PATHS.lock],
+  ['exact', ELEVATION_PATHS.pending],
+  ['exact', ELEVATION_PATHS.approve],
+  ['exact', ELEVATION_PATHS.revoke],
 ]
+import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
 

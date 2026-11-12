@@ -31,6 +31,15 @@ import {
   windowHandler,
 } from './reach-routes.ts'
 import { HomeAuthAuthenticator } from './authenticator.ts'
+import {
+  ELEVATION_PATHS,
+  elevationApproveHandler,
+  elevationLockHandler,
+  elevationPendingHandler,
+  elevationRequestHandler,
+  elevationRevokeHandler,
+  elevationStateHandler,
+} from './elevation-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -115,6 +124,12 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: REACH_PATHS.pending, handler: pendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: REACH_PATHS.approve, handler: approveHandler(core, credential) }),
         server.register({ kind: 'exact', path: REACH_PATHS.cancel, handler: cancelHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.state, handler: elevationStateHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.request, handler: elevationRequestHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.lock, handler: elevationLockHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()

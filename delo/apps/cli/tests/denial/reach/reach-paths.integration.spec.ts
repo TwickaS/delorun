@@ -61,6 +61,12 @@ const REACHED: Readonly<Record<string, string>> = {
   'exact /auth/devices/approve': HOME_AUTH,
   'exact /auth/devices/cancel': HOME_AUTH,
   'prefix /auth/assets': HOME_AUTH,
+  'exact /auth/elevation': HOME_AUTH,
+  'exact /auth/elevation/request': HOME_AUTH,
+  'exact /auth/elevation/lock': HOME_AUTH,
+  'exact /auth/elevation/pending': HOME_AUTH,
+  'exact /auth/elevation/approve': HOME_AUTH,
+  'exact /auth/elevation/revoke': HOME_AUTH,
 }
 
 /**

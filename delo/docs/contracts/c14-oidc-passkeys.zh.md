@@ -187,6 +187,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 提权（“sudo 模式”）让一台设备在几分钟内执行提权操作，由本人在 home 自己的电脑上批准。`@delo/home-auth` 在 [`elevation.ts`](../../packages/home-auth/src/elevation.ts) 中把它保存在内存里，限制为 `@delo/contract-oidc-passkeys` 的 `ELEVATION_LIMITS`。
 
+- **路由。** 设备在 `GET /auth/elevation` 读取状态，在 `POST /auth/elevation/request` 发起请求，在 `POST /auth/elevation/lock` 锁定，每个路由都要求请求到达的远程访问监听器上的有效会话，`POST` 只接受 studio 自己的源。电脑在 `GET /auth/elevation/pending` 列出，在 `POST /auth/elevation/approve` 批准，在 `POST /auth/elevation/revoke` 撤销；设备访问这些路由会以 `LOOPBACK_REQUIRED` 被拒绝。
 - **请求。** 已登录的设备从自己的 studio 发起请求。home 把请求记在该设备、监听器和请求到达的会话名下，设备显示一个 8 位数字代码。请求等待 5 分钟，一个 home 最多保留 5 个，同一设备在同一监听器上的新请求会替换它正在等待的请求。
 - **批准。** 只有在 home 电脑前的本人能批准，方法是输入设备上的代码；第三次输错会取消请求。批准和撤销是 `LOOPBACK_REQUIRED_ACTIONS` 中的 `elevation-approve` 和 `elevation-revoke`，设备会被拒绝。
 - **时长。** 提权持续远程访问行的 `elevationMinutes`，默认 15 分钟，最多 60 分钟；更大的值会在监听器开始服务时被拒绝。没有任何操作能延长提权：新的批准会替换它。
