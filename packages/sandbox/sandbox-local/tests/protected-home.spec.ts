@@ -28,8 +28,12 @@ function settingsOf(fields: Partial<ProtectionSettings>): ProtectionSettings {
 const NO_MOUNTS: readonly MountEntry[] = []
 const NO_DATA_VOLUME = '/nonexistent-data-volume'
 
-function resolveIsolated(settings: ProtectionSettings, mounts: readonly MountEntry[] = NO_MOUNTS): Protection {
-  return resolveProtection(settings, mounts, NO_DATA_VOLUME)
+function resolveIsolated(
+  settings: ProtectionSettings,
+  mounts: readonly MountEntry[] = NO_MOUNTS,
+  platform: string = process.platform,
+): Protection {
+  return resolveProtection(settings, mounts, NO_DATA_VOLUME, platform)
 }
 
 /**
@@ -304,33 +308,55 @@ describe('alias coverage', () => {
 })
 
 describe('denied socket directories', () => {
-  it('hides each existing directory and its mount aliases, and denies each entry present now by its spellings', () => {
+  it('hides each existing directory and its mount aliases, and on macOS denies each entry present now by its spellings', () => {
     const { root, home } = fixture()
     const sockets = join(root, 'shared-sockets')
     mkdirSync(sockets)
     writeFileSync(join(sockets, 'backend.sock'), '')
     const bind = join(root, 'bind')
     symlinkSync(root, bind, 'dir')
-    const protection = resolveIsolated(
-      { home, readable: [], deniedSockets: [], deniedSocketDirectories: [sockets, join(root, 'missing')], privateTmp: false },
-      aliasMount(sockets, bind),
-    )
-    expect(protection.hiddenDirectories).toEqual([sockets, join(bind, 'shared-sockets')])
-    expect(protection.socketSpellings).toEqual([join(sockets, 'backend.sock')])
-    expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)).toEqual(expect.arrayContaining(['--tmpfs', sockets, '--remount-ro', sockets]))
-    expect(seatbeltProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, protection)[1]).toContain(`(path-literal "${join(sockets, 'backend.sock')}")`)
+    const settings: ProtectionSettings = { home, readable: [], deniedSockets: [], deniedSocketDirectories: [sockets, join(root, 'missing')], privateTmp: false }
+    const linux = resolveIsolated(settings, aliasMount(sockets, bind), 'linux')
+    expect(linux.hiddenDirectories).toEqual([sockets, join(bind, 'shared-sockets')])
+    expect(linux.socketSpellings).toEqual([])
+    expect(bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, linux)).toEqual(expect.arrayContaining(['--tmpfs', sockets, '--remount-ro', sockets]))
+    const darwin = resolveIsolated(settings, NO_MOUNTS, 'darwin')
+    expect(darwin.socketSpellings).toEqual([join(sockets, 'backend.sock')])
+    expect(seatbeltProfileArgs({ mode: 'read-only', workspaceRoot: '/w' }, darwin)[1]).toContain(`(path-literal "${join(sockets, 'backend.sock')}")`)
   })
 
-  it('leaves a directory inside the home to the home\'s tmpfs, and fails closed on one it cannot list', () => {
+  it('leaves a directory inside the home to the home\'s tmpfs, hides one it cannot list, and on macOS fails closed on it', () => {
     const { root, home } = fixture()
     const inside = join(home, 'run')
     mkdirSync(inside)
     expect(resolveIsolated(settingsOf({ home, deniedSocketDirectories: [inside] })).hiddenDirectories).toEqual([])
+    // Another local user can create such a directory, such as /tmp/tmux-<uid>, before the person does.
     const locked = join(root, 'locked')
     mkdirSync(locked)
     chmodSync(locked, 0o100)
-    expect(() => resolveIsolated(settingsOf({ deniedSocketDirectories: [locked] }))).toThrow(/cannot list the denied socket directory/)
+    expect(resolveIsolated(settingsOf({ deniedSocketDirectories: [locked] }), NO_MOUNTS, 'linux').hiddenDirectories).toEqual([locked])
+    expect(() => resolveIsolated(settingsOf({ deniedSocketDirectories: [locked] }), NO_MOUNTS, 'darwin')).toThrow(/cannot list the denied socket directory/)
     chmodSync(locked, 0o700)
+  })
+
+  it('hides the runtime directory itself on plain Linux, where no other mount reaches it', () => {
+    // A plain Linux mount table: the root filesystem, and the runtime directory as logind mounts it, its own tmpfs.
+    const { root } = fixture()
+    const runtime = join(root, 'run', 'user', '4242')
+    mkdirSync(runtime, { recursive: true })
+    writeFileSync(join(runtime, 'bus'), '')
+    const mounts: MountEntry[] = [
+      { device: '0:1', root: '/', mountPoint: '/', fsType: 'ext4' },
+      { device: deviceName(statSync(runtime, { bigint: true }).dev), root: '/', mountPoint: runtime, fsType: 'tmpfs' },
+    ]
+    const protection = resolveIsolated(settingsOf({ deniedSocketDirectories: [join(root, 'run', 'WSL'), runtime, join(root, 'mnt', 'wslg')] }), mounts, 'linux')
+    expect(protection.hiddenDirectories).toEqual([runtime])
+    expect(protection.aliasCoverage).toBe('complete')
+    for (const mode of ['read-only', 'workspace-write'] as const) {
+      const args = bwrapProfileArgs({ mode, workspaceRoot: '/w' }, protection)
+      const at = args.indexOf(runtime)
+      expect(args.slice(at - 1, at + 3), mode).toEqual(['--tmpfs', runtime, '--remount-ro', runtime])
+    }
   })
 })
 

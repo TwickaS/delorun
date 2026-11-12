@@ -134,9 +134,11 @@ function touches(path: string, protectedPaths: readonly string[]): boolean {
  * @param settings - the provider's validated protection settings.
  * @param mounts - the mount table; read from this process when omitted.
  * @param dataVolume - where macOS mounts the Data volume that firmlinks point into.
- * @param platform - the operating system, which decides whether alias coverage is checked.
+ * @param platform - the operating system, which decides whether alias coverage is checked and whether the entries of
+ *   each denied socket directory are listed for Seatbelt's path rules.
  * @returns the protection the profile builders apply.
- * @throws {SandboxUnsupportedPolicyError} when the Linux mount table or a denied socket directory cannot be read.
+ * @throws {SandboxUnsupportedPolicyError} when the Linux mount table, or on macOS a denied socket directory, cannot be
+ *   read.
  */
 export function resolveProtection(
   settings: ProtectionSettings,
@@ -187,7 +189,9 @@ export function resolveProtection(
     for (const path of [real, ...aliasesOf(real)]) {
       if (!protectedPaths.some(entry => pathWithin(path, entry))) hiddenDirectories.add(path)
     }
-    // Seatbelt has no directory rule for socket connects, so each entry present now is denied by its path.
+    // Seatbelt has no directory rule for socket connects, so on macOS each entry present now is denied by its path.
+    // Elsewhere the directory is hidden or refused whole, and another user's unlistable directory cannot block a wrap.
+    if (platform !== 'darwin') continue
     let entries: string[]
     try {
       entries = readdirSync(real)
