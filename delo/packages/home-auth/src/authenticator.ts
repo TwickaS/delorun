@@ -176,6 +176,8 @@ export class HomeAuthAuthenticator extends Authenticator {
           return access.get('workspaceRegistry')?.list().find(workspace => workspace.sessionIds.includes(sessionId))?.path
         },
         deloHome: ctx.homeAuth.deloHome,
+        elevationOf: deviceId => ctx.homeAuth.elevationOfDevice(deviceId),
+        logElevated: (line) => { ctx.logger.info(line) },
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {
@@ -186,6 +188,10 @@ export class HomeAuthAuthenticator extends Authenticator {
       access.on('session/created', invalidate)
       access.on('session/disposed', invalidate)
       access.on('domain/changed', (change) => { if (change.domain === 'workspace') invalidate() })
+      // A device's snapshot lists its elevated actions while it holds an elevation, so it is recomputed when one starts or ends.
+      access.effect(() => ctx.homeAuth.onElevationChange((change) => {
+        access.remoteAccess.invalidate(reachDevicePrincipal(change.elevation.deviceId))
+      }), 'home-auth elevation snapshots')
     })
   }
 

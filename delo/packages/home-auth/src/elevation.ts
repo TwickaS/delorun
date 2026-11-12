@@ -25,14 +25,12 @@ import { ELEVATION_LIMITS, type ElevationEndReason, type ElevationState } from '
 import { HomeAuthError } from './errors.ts'
 import { newSecret, type RandomBytes } from './secret.ts'
 
-/** Who asked for an elevation: the device, the listener and the session its request arrived on. */
+/** Who asked for an elevation: the device, the listener and the session its request arrived on. The computer names the device from its device list. */
 export interface ElevationAsker {
   readonly deviceId: DeviceId
   readonly listener: ReachListenerId
   /** The session that asked; the elevation ends with it. */
   readonly sessionId: string
-  /** The device's name, so a person reading the log or the computer's list knows which device it was. */
-  readonly label: string
 }
 
 /** One running elevation. */
@@ -72,15 +70,15 @@ export interface ElevationsOptions {
   readonly changed: (change: ElevationChange) => void
 }
 
-/** A pending request and the wrong codes typed for it. */
+/** A pending request and the wrong codes typed for it; the request changes only when its session rolls. */
 interface Pending {
-  readonly request: ElevationRequest
+  request: ElevationRequest
   wrongCodes: number
 }
 
-/** A running elevation and its expiry timer. */
+/** A running elevation and its expiry timer; the record changes only when its session rolls. */
 interface Running {
-  readonly record: ElevationRecord
+  record: ElevationRecord
   readonly timer: NodeJS.Timeout
 }
 
@@ -108,7 +106,7 @@ export class Elevations {
 
   /**
    * Record a device's request to elevate, replacing any request it already has on that listener.
-   * @param asker - the device, the listener, the session and the device's label.
+   * @param asker - the device, the listener, and the session.
    * @returns the request, with the code the device shows.
    * @throws {HomeAuthError} `APPROVAL_PENDING_LIMIT` when the home holds its limit of requests from other devices.
    */
@@ -186,7 +184,6 @@ export class Elevations {
       deviceId: request.deviceId,
       listener: request.listener,
       sessionId: request.sessionId,
-      label: request.label,
       startedAt: at,
       endsAt: at + minutes * 60_000,
     }
@@ -296,6 +293,20 @@ export class Elevations {
   endListener(listener: ReachListenerId, reason: ElevationEndReason): void {
     this.dropRequests(request => request.listener === listener)
     this.endWhere(record => record.listener === listener, reason)
+  }
+
+  /**
+   * Move the elevations and requests of a session to the session that continues it, when its token rolls.
+   * @param from - the rolled session.
+   * @param to - the session that continues it.
+   */
+  moveSession(from: string, to: string): void {
+    for (const running of this.running.values()) {
+      if (running.record.sessionId === from) running.record = { ...running.record, sessionId: to }
+    }
+    for (const pending of this.requests.values()) {
+      if (pending.request.sessionId === from) pending.request = { ...pending.request, sessionId: to }
+    }
   }
 
   /**

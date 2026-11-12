@@ -301,7 +301,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere' })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {} })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -332,6 +332,32 @@ describe('the authenticator provider', () => {
         { kind: 'global' }, { kind: 'workspace', id: 'w-1' }, { kind: 'session', id: 's-1' }, { kind: 'session', id: 's-live' },
       ])
       expect(access.policy().bindings(reachDevicePrincipal('another-device'))).toEqual([])
+    })
+
+    it('decides an elevated action from the device\'s elevation, and recomputes its snapshot when one starts or ends', async () => {
+      const access = await fakeRemoteAccess()
+      const logged: string[] = []
+      ctx.logger.info = (line: string) => { logged.push(line) }
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      const token = await session(2)
+      const admitted = ctx.homeAuth.admitToken(token, 'reach-tailscale-private')
+      if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${token}` } }), 'reach-tailscale-private')
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      const [binding] = access.policy().bindings(device)
+      const create = () => binding?.condition?.({ action: 'goals/create', resource: { kind: 'global' }, args: {} } as never)
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: goals/create' })
+      const before = access.invalidated.length
+      const state = ctx.homeAuth.requestElevation(admitted.sessionId, admitted.session)
+      if (state.kind !== 'pending') throw new Error('no request is waiting')
+      const record = ctx.homeAuth.approveElevation(state.requestId, state.code)
+      // Pins the facts the authenticator gives the policy: the home's elevation for the device, and the log.
+      expect(create()).toEqual({ kind: 'allow' })
+      expect(logged).toContain(`home-auth: elevated action: device=${device.deviceId} listener=reach-tailscale-private action=goals/create elevation=${record.id}`)
+      ctx.homeAuth.lockElevation(device.deviceId, 'reach-tailscale-private')
+      // Pins the invalidation: the device's snapshot is recomputed when its elevation starts and when it ends.
+      expect(access.invalidated.slice(before)).toEqual([device, device])
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: goals/create' })
     })
 
     it('names a Session\'s workspace root from its live header, else from its Workspace, for the file reads', async () => {

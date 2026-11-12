@@ -39,6 +39,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
   - [tailnet 身份](#tailnet-identity)
   - [tailnet 成员身份](#tailnet-membership)
   - [设备可以调用什么](#what-a-device-may-call)
+  - [提权](#elevation)
   - [上限](#limits)
   - [错误](#errors)
   - [Delo Run 签发方](#delo-run-issuer)
@@ -146,15 +147,16 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 `tailnet-membership` 因子不携带任何证明：它表明一个请求经由声明了该因子的远程访问提供方的 serve 目标到达。只有 `reach-tailscale-private` 提供方可以声明它（[C7](c07-reach-providers.zh.md#provider-service-definition)），对于任何其他监听器以及任何不是 `ts.net` 地址的地址，home 以 `TAILNET_IDENTITY_UNAVAILABLE` 拒绝该声明。在该监听器上，已批准设备的一个新鲜设备密钥签名本身即可创建完整会话（[C5](c05-device-approval.zh.md#sign-in)），会话记录携带该因子（[C4](c04-admission.zh.md#sessions)）。
 
-对于每一项只在 home 自己的电脑上授予的操作，home 以 `403 LOOPBACK_REQUIRED` 拒绝因子为 `tailnet-membership` 的会话：授予完全访问，无论是升级到 `danger-full-access`（包括 `plugin_manager` 的升级）还是某个工作区的完全访问同意；授予标记为 `workspace-management` 的提示（主对话的工作区工具及其其他询问，以及指令层写入）；允许、拒绝或撤销某个 stdio MCP 服务器的启动，设备只能读取等待中服务器的名称以及每个服务器发生了什么变化；打开批准窗口以及批准或移除设备；重置；恢复套件；注册身份因子；以及更改远程访问设置。拒绝发生在授予操作的地方，而不是客户端：授予完全访问的批准提示携带 `grants: "full-access"`，以该因子准入的 Peer 的答复不会被应用，因此该提示保持打开，留给 home 自己电脑上的工作室。远程工作室会提示在电脑上批准该操作。观看、回复、开始对话、答复其他所有提示以及停止运行都是允许的，因此无法从手机安装插件。同一规则适用于工作室调用的每个 Remote 方法：设备的 Peer 代表其 `reach-device` 主体，该主体的远程访问策略允许[设备可以调用什么](#what-a-device-may-call)一节列出的方法和转发事件，并以 `remote-access/denied` 和原因 `loopback-required: <action>` 拒绝其他所有方法；该策略及其两张表格位于 [`@delo/home-auth`](../../packages/home-auth/README.zh.md)。
+对于每一项只在 home 自己的电脑上授予的操作，home 以 `403 LOOPBACK_REQUIRED` 拒绝因子为 `tailnet-membership` 的会话：授予完全访问，无论是升级到 `danger-full-access`（包括 `plugin_manager` 的升级）还是某个工作区的完全访问同意；授予标记为 `workspace-management` 的提示（主对话的工作区工具及其其他询问，以及指令层写入）；允许、拒绝或撤销某个 stdio MCP 服务器的启动，设备只能读取等待中服务器的名称以及每个服务器发生了什么变化；打开批准窗口以及批准或移除设备；重置；恢复套件；注册身份因子；以及更改远程访问设置。拒绝发生在授予操作的地方，而不是客户端：授予完全访问的批准提示携带 `grants: "full-access"`，以该因子准入的 Peer 的答复不会被应用，因此该提示保持打开，留给 home 自己电脑上的工作室。远程工作室会提示在电脑上批准该操作。观看、回复、开始对话、答复其他所有提示以及停止运行都是允许的，因此无法从手机安装插件。同一规则适用于工作室调用的每个 Remote 方法：设备的 Peer 代表其 `reach-device` 主体，该主体的远程访问策略允许[设备可以调用什么](#what-a-device-may-call)一节列出的方法和转发事件，并以 `remote-access/denied` 和原因 `loopback-required: <action>` 拒绝其他所有方法；该策略及其三张表格位于 [`@delo/home-auth`](../../packages/home-auth/README.zh.md)。
 
 <a id="what-a-device-may-call"></a>
 ### 设备可以调用什么
 
-所有者对设备的规则是：人在手机上能做的，就是在电脑上能做的，只有需要由电脑在场做出决定的操作除外。`@delo/home-auth` 把 Delo 默认配置的每个 Remote 方法和每个转发事件归入三类之一，reach 访问拒绝测试套件在某个操作不被任何表格列出、或某个表格条目没有对应操作时失败。
+所有者对设备的规则是：人在手机上能做的，就是在电脑上能做的，只有需要由电脑在场做出决定的操作除外。`@delo/home-auth` 把 Delo 默认配置的每个 Remote 方法和每个转发事件归入四类之一，reach 访问拒绝测试套件在某个操作不被任何表格列出、某个表格条目没有对应操作或某个操作被两个表格列出时失败。
 
 - **允许**：设备做人在电脑上做的事。各项操作及其原因见 [`reach-access.ts`](../../packages/home-auth/src/reach-access.ts) 中的 `REACH_ALLOWED_ACTIONS`。
-- **保留给 home 自己的电脑**：以 `403 LOOPBACK_REQUIRED` 和原因 `loopback-required: <action>` 拒绝。各项操作及其原因见同一文件中的 `REACH_DENIED_ACTIONS`。
+- **提权**：除非设备持有本人在电脑上批准的[提权](#elevation)，否则以 `403` 和原因 `elevation-required: <action>` 拒绝。各项操作及其用途见同一文件中的 `REACH_ELEVATED_ACTIONS`；只有列在其中的操作才可提权。
+- **保留给 home 自己的电脑**：无论是否提权，都以 `403 LOOPBACK_REQUIRED` 和原因 `loopback-required: <action>` 拒绝。各项操作及其原因见同一文件中的 `REACH_DENIED_ACTIONS`。
 - **只能由电脑授予的授权**：在授予之处而不是调用之处被拒绝（[tailnet 成员身份](#tailnet-membership)）。
 
 | 类别 | 操作 | 分类 | 原因 |
@@ -168,14 +170,30 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 | 转发事件，读取 | `event:api-session/*`、`event:commands/change`、`event:goal/*`、`event:llm/*`、`event:permission-presets/*`、`event:settings/document-updated`、`event:schedule/changed`、`event:agent-preset/selected`、`event:plugin-manager/changed`、`event:plugin-market/changed` | 允许 | 设备本就可读的界面所需的刷新信号。 |
 | 批准提示 | `event:approval/request` | 允许，授予除外 | 答复守卫会拒绝授予完全访问或工作区管理的答复（[tailnet 成员身份](#tailnet-membership)）。 |
 | 插件与配置历史，写入 | `pluginManager/installBundle`、`updateBundle`、`removeBundle`、`setBundleEnabled`、`setPluginEnabled`、`setVersionExemption`、`cancelInstall`、`undo`、`restore` | 保留 | 插件管理会安装或启用任何沙箱之外在 Host 中运行的代码，而配置历史可以关掉守卫插件。 |
-| 设置，写入 | `settings/mutate`、`settings/replace`、`settings/update`、`settings/openSettingsDocument`、`session/selectModel`、`session/initializeDefaultModel` | 保留 | 设置写入会改变 Host 的配置，且任何设置命名空间都不能从设备写入。 |
+| 设置，写入 | `settings/mutate`、`settings/replace`、`settings/update`、`settings/openSettingsDocument` | 保留 | 设置写入可能改变模型提供方的地址或沙箱，设备不能写入任何设置命名空间。 |
+| 默认模型 | `session/selectModel`、`session/initializeDefaultModel` | 提权 | 选择对话使用的模型是电脑上的日常操作，不触及任何密钥。 |
 | 密钥与账户 | `credentials/*`、`llm/discoverModels`、`account/*`、`event:credentials/*`、`event:deepseek-account/*` | 从不 | 密钥是 home 的秘密，账户登录属于本人。 |
 | 终端、目录与电脑 | `terminal/*`、`directoryPicker/*`、`session/openWorkspacePath`、`session/workspacePathApplications` | 保留 | 终端是沙箱之外的 shell，目录选择器浏览电脑，其余会在电脑上打开应用。 |
-| 工作区与对话列表 | `workspace/create`、`workspace/delete`、`workspace/initializeDefault`、`workspace/insertBefore`、`workspace/rename`、`workspace/archiveSession`、`workspace/unarchiveSession`、`workspace/insertSessionBefore`、`workspaceFiles/changes` | 保留 | 注册或移除文件夹以及 Changes 界面的工作树属于电脑，归档或重排对话不在设备规则内。 |
-| 斜杠命令、目标与计划，写入 | `commands/execute`、`goals/create`、`goals/edit`、`goals/pause`、`goals/resume`、`goals/complete`、`goals/clear`、`schedule/create`、`schedule/edit`、`schedule/run`、`schedule/deleteInactive` | 保留 | 斜杠命令可以改变设置、插件或配置，而计划任务会在无人值守时运行提示。 |
+| 注册文件夹 | `workspace/create` | 保留 | 文件夹决定对话的命令可以写入哪里，因此新文件夹由电脑选择。 |
+| 工作区与对话列表 | `workspace/delete`、`workspace/initializeDefault`、`workspace/insertBefore`、`workspace/rename`、`workspace/archiveSession`、`workspace/unarchiveSession`、`workspace/insertSessionBefore`、`workspaceFiles/changes` | 提权 | 重命名、重排和归档，可从回收站恢复的删除，以及按工作区文件规则在对话工作区内读取的 Changes 界面。 |
+| 斜杠命令 | `commands/execute` | 保留 | 斜杠命令可以更改设置、插件或配置。 |
+| 目标与计划，写入 | `goals/create`、`goals/edit`、`goals/pause`、`goals/resume`、`goals/complete`、`goals/clear`、`schedule/create`、`schedule/edit`、`schedule/run`、`schedule/deleteInactive` | 提权 | 目标引导对话，计划的跟进稍后以该对话自己的权限运行其提示；两者都不授予访问。 |
 | 动态插件代码 | `dynamicCordisRunner/*`、`event:cordis/*` | 保留 | 它会在 Host 中运行模型编写的插件代码。 |
 | 反馈 | `sessionFeedback/record`、`messageFeedback/*` | 保留 | 反馈会离开 home，Delo 已将其关闭。 |
 | 授权 | 完全访问升级、工作区的完全访问同意、`workspace-management` 提示 | 从不 | 工作区的同意和升级都是本人在电脑上给出的答复，无论设备被允许调用什么。 |
+
+<a id="elevation"></a>
+### 提权
+
+提权（“sudo 模式”）让一台设备在几分钟内执行提权操作，由本人在 home 自己的电脑上批准。`@delo/home-auth` 在 [`elevation.ts`](../../packages/home-auth/src/elevation.ts) 中把它保存在内存里，限制为 `@delo/contract-oidc-passkeys` 的 `ELEVATION_LIMITS`。
+
+- **请求。** 已登录的设备从自己的 studio 发起请求。home 把请求记在该设备、监听器和请求到达的会话名下，设备显示一个 8 位数字代码。请求等待 5 分钟，一个 home 最多保留 5 个，同一设备在同一监听器上的新请求会替换它正在等待的请求。
+- **批准。** 只有在 home 电脑前的本人能批准，方法是输入设备上的代码；第三次输错会取消请求。批准和撤销是 `LOOPBACK_REQUIRED_ACTIONS` 中的 `elevation-approve` 和 `elevation-revoke`，设备会被拒绝。
+- **时长。** 提权持续远程访问行的 `elevationMinutes`，默认 15 分钟，最多 60 分钟；更大的值会在监听器开始服务时被拒绝。没有任何操作能延长提权：新的批准会替换它。
+- **范围。** `reach-device` 主体只指明设备，因此策略查询该设备在 home 服务的任一监听器上的提权；目前只有 Tailscale 私有监听器为设备服务。每个配置的 Host 保留自己的提权，重启会结束它们。
+- **检查。** 设备绑定的条件在每个提权操作之前读取提权，调用与事件、快照或列表筛选一视同仁，并且即使计时器尚未触发，也会拒绝已过期的提权。每次提权调用都会连同设备、监听器、操作和提权 id 记入日志。
+- **结束。** 提权在到期时、本人在电脑上撤销时、设备锁定时、新的批准替换时、发起请求的会话结束时（其期限或轮换；滚动会延续它）、设备被移除时、监听器停止时以及 Host 停止时结束。每次开始和结束都会连同设备、监听器、提权 id 和原因（`ELEVATION_END_REASONS`）记入日志。
+- **从不。** 提权只解除 `REACH_ELEVATED_ACTIONS`。密钥、账户、设备批准与移除、插件、设置写入、终端、斜杠命令、动态插件代码、新文件夹、在指定文件夹或以指定预设开始的对话，以及 [tailnet 成员身份](#tailnet-membership)的每项授权，仍属于电脑。
 
 <a id="limits"></a>
 ### 上限

@@ -15,6 +15,7 @@ import {
   REACH_ALLOWED_ACTIONS,
   REACH_DENIED_ACTIONS,
   REACH_DEVICE,
+  REACH_ELEVATED_ACTIONS,
   assertDisjoint,
   createCondition,
   createReachAccessPolicy,
@@ -38,6 +39,8 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     liveSessions: () => [session('s-2'), session('s-live')],
     workspaceRootOf: () => undefined,
     deloHome: '/nowhere',
+    elevationOf: () => undefined,
+    logElevated: () => {},
     ...overrides,
   }
 }
@@ -63,10 +66,11 @@ describe('the reach-device policy', () => {
     ])
   })
 
-  it('binds only the allowed actions, on every role', () => {
+  it('binds only the allowed and the elevated actions, on every role', () => {
     for (const binding of createReachAccessPolicy(facts()).bindings(DEVICE)) {
-      // Pins the roles: a role listing a denied action would allow it on every bound resource.
-      expect(binding.role.actions).toEqual(Object.keys(REACH_ALLOWED_ACTIONS))
+      // Pins the roles: a role listing a never action would allow it on every bound resource, and the condition alone
+      // keeps an elevated one to a device that holds an elevation.
+      expect(binding.role.actions).toEqual([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS)])
       expect(binding.role.resource).toBe(binding.resource.kind)
       // Pins where the condition sits: on every role, because `session/create` names a global or Workspace resource
       // and a workspace-file read names a Session one.
@@ -76,7 +80,7 @@ describe('the reach-device policy', () => {
 
   it('refuses a session/create naming a folder or a preset, and nothing else', () => {
     const allow = { kind: 'allow' }
-    const condition = createCondition(facts())
+    const condition = createCondition(facts(), 'device-1')
     expect(condition({ resource: GLOBAL, action: 'session/create' })).toEqual(allow)
     expect(condition({ resource: GLOBAL, action: 'session/create', args: { request: { workspaceId: 'w' }, flag: 1, nothing: null } })).toEqual(allow)
     expect(condition({ resource: GLOBAL, action: 'session/prompt', args: { request: { cwd: '/' } } })).toEqual(allow)
@@ -129,7 +133,7 @@ describe('a device\'s workspace-file call', () => {
   afterAll(async () => { await rm(directory, { recursive: true, force: true }) })
 
   const conditionOf = (overrides: Partial<ReachAccessFacts> = {}) =>
-    createCondition(facts({ workspaceRootOf: id => (id === 's-1' ? root : undefined), deloHome, ...overrides }))
+    createCondition(facts({ workspaceRootOf: id => (id === 's-1' ? root : undefined), deloHome, ...overrides }), 'device-1')
   const refusal = (action: RemoteAccessAction) => ({ kind: 'deny', reason: `loopback-required: ${action} with a path outside the chat's workspace` })
 
   it('reaches a file or folder whose real path lies inside the chat\'s workspace', () => {
@@ -219,25 +223,72 @@ describe('a device\'s workspace-file call', () => {
   })
 })
 
+describe('an elevated action', () => {
+  const ELEVATION = { id: 'elevation-1', listener: 'reach-tailscale-private' }
+
+  it('is refused without an elevation, for a call and for an event, a snapshot or a list filter', () => {
+    const condition = createCondition(facts(), 'device-1')
+    // Pins the elevation check, and that it runs before a question without arguments is allowed.
+    for (const action of Object.keys(REACH_ELEVATED_ACTIONS) as RemoteAccessAction[]) {
+      expect(condition({ action, resource: GLOBAL })).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(condition({ action, resource: GLOBAL, args: {} })).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+    }
+  })
+
+  it('is allowed while this device holds an elevation, and logged with it', () => {
+    const lines: string[] = []
+    const asked: string[] = []
+    const condition = createCondition(facts({
+      elevationOf: (deviceId) => { asked.push(deviceId); return deviceId === 'device-1' ? ELEVATION : undefined },
+      logElevated: (line) => { lines.push(line) },
+    }), 'device-1')
+    expect(condition({ action: 'goals/create', resource: GLOBAL, args: { goal: 'x' } })).toEqual({ kind: 'allow' })
+    expect(condition({ action: 'goals/create', resource: GLOBAL })).toEqual({ kind: 'allow' })
+    // Pins the device the condition asks for: device B's condition does not borrow device A's elevation.
+    expect(createCondition(facts({ elevationOf: deviceId => (deviceId === 'device-1' ? ELEVATION : undefined) }), 'device-2')({ action: 'goals/create', resource: GLOBAL, args: {} }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: goals/create' })
+    expect(asked).toEqual(['device-1', 'device-1'])
+    // Only a call is logged; an event or a snapshot question is not one.
+    expect(lines).toEqual(['home-auth: elevated action: device=device-1 listener=reach-tailscale-private action=goals/create elevation=elevation-1'])
+  })
+
+  it('keeps every other rule under an elevation', () => {
+    const condition = createCondition(facts({ elevationOf: () => ELEVATION }), 'device-1')
+    // Pins that an elevation lifts only the elevated table: never actions and the folder rule stay refused.
+    expect(condition({ action: 'session/create', resource: GLOBAL, args: { request: { cwd: '/' } } })).toEqual({ kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' })
+    expect(condition({ action: 'workspaceFiles/changes', resource: GLOBAL, args: { path: '.' } }))
+      .toEqual({ kind: 'deny', reason: 'loopback-required: workspaceFiles/changes with a path outside the chat\'s workspace' })
+  })
+})
+
 describe('the refusal reasons', () => {
   it('require the home\'s own computer for every action not allowed, classified or not', () => {
     expect(reachRefusal('settings/mutate')).toBe('loopback-required: settings/mutate')
     expect(reachRefusal('unclassified/method' as RemoteAccessAction)).toBe('loopback-required: unclassified/method')
     expect(reachRefusal('event:plugin-manager/install-log')).toBe('loopback-required: event:plugin-manager/install-log')
     expect(reachRefusal('session/list')).toBe('resource-unlisted: session/list')
+    expect(reachRefusal('goals/create')).toBe('resource-unlisted: goals/create')
   })
 })
 
 describe('the tables', () => {
-  it('list no action as both allowed and denied', () => {
-    expect(() => { assertDisjoint(REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS) }).not.toThrow()
+  it('list no action in two of the three tables', () => {
+    expect(() => { assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS }) }).not.toThrow()
     // Pins the check the module runs at load.
-    expect(() => { assertDisjoint({ 'b/x': 'x', 'a/y': 'y', 'c/z': 'z' }, { 'a/y': 'y', 'b/x': 'x' }) })
-      .toThrow('reach access lists ["a/y","b/x"] as both allowed and denied')
+    expect(() => { assertDisjoint({ allowed: { 'b/x': 'x', 'a/y': 'y' }, elevated: { 'a/y': 'y' }, never: { 'b/x': 'x', 'c/z': 'z' } }) })
+      .toThrow('reach access lists ["a/y (allowed, elevated)","b/x (allowed, never)"] in two tables')
+  })
+
+  it('never elevate an action that reaches credentials, the account, devices or code outside the sandbox', () => {
+    // Pins the never table: an elevation never lets a device near these, whatever a later table edit does.
+    for (const action of ['credentials/set', 'credentials/describe', 'llm/discoverModels', 'account/getProfile', 'terminal/create', 'pluginManager/installBundle', 'pluginManager/undo', 'settings/mutate', 'commands/execute', 'dynamicCordisRunner/invoke', 'directoryPicker/pick', 'workspace/create', 'session/openWorkspacePath']) {
+      expect(Object.hasOwn(REACH_ELEVATED_ACTIONS, action), action).toBe(false)
+      expect(Object.hasOwn(REACH_DENIED_ACTIONS, action), action).toBe(true)
+    }
   })
 
   it('give every entry a one-line reason', () => {
-    for (const reason of [...Object.values(REACH_ALLOWED_ACTIONS), ...Object.values(REACH_DENIED_ACTIONS)]) {
+    for (const reason of [...Object.values(REACH_ALLOWED_ACTIONS), ...Object.values(REACH_ELEVATED_ACTIONS), ...Object.values(REACH_DENIED_ACTIONS)]) {
       expect(reason).toMatch(/^[^\n]{8,}$/)
     }
   })

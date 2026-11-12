@@ -22,6 +22,8 @@ import {
   HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
+import type { ElevationChange, ElevationRecord } from './elevation.ts'
+import type { ElevationState } from '@delo/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
 import {
@@ -89,6 +91,13 @@ export class HomeAuthService extends Service {
     await core.start()
     this.core = core
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
+    // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
+    // stays out, being the person's own text.
+    this.ctx.effect(() => core.onElevationChange((change) => {
+      const { deviceId, listener, id } = change.elevation
+      const ending = change.kind === 'ended' ? `ended (${change.reason})` : `started until ${new Date(change.elevation.endsAt).toISOString()}`
+      this.ctx.logger.info(`home-auth: elevation ${ending}: device=${deviceId} listener=${listener} elevation=${id}`)
+    }), 'home-auth elevation log')
     const credential = loopbackCredentialOf(this.ctx)
     this.ctx.effect(() => {
       const server = this.ctx.webServer
@@ -172,6 +181,91 @@ export class HomeAuthService extends Service {
    */
   onDeviceRemoved(listener: (deviceId: DeviceId) => void): () => void {
     return this.state().onDeviceRemoved(listener)
+  }
+
+  /**
+   * Call a listener for each elevation that starts or ends (C14, "Elevation").
+   * @param listener - called with the change.
+   * @returns the disposer.
+   */
+  onElevationChange(listener: (change: ElevationChange) => void): () => void {
+    return this.state().onElevationChange(listener)
+  }
+
+  /**
+   * The running elevation of one device on one listener.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the elevation, or undefined, also before the service started.
+   */
+  elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
+    return this.core?.elevationOf(deviceId, listener)
+  }
+
+  /**
+   * The running elevation of one device on any listener this home serves: the reach-device principal names the device
+   * alone, and only one listener serves devices, so the policy asks for the device.
+   * @param deviceId - the device.
+   * @returns the elevation, or undefined, also before the service started.
+   */
+  elevationOfDevice(deviceId: string): ElevationRecord | undefined {
+    return this.core?.elevationOfDevice(deviceId)
+  }
+
+  /**
+   * Record a signed-in device's request to elevate.
+   * @param sessionId - the admitted session.
+   * @param session - its record.
+   * @returns the device's state, with the code it shows.
+   */
+  requestElevation(sessionId: string, session: SessionRecord): ElevationState {
+    return this.state().requestElevation(sessionId, session)
+  }
+
+  /**
+   * What one device's own studio shows about elevation.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the state.
+   */
+  elevationState(deviceId: string, listener: ReachListenerId): ElevationState {
+    return this.state().elevationState(deviceId, listener)
+  }
+
+  /**
+   * End a device's elevation and its waiting request, from the device's own studio.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  lockElevation(deviceId: string, listener: ReachListenerId): void {
+    this.state().lockElevation(deviceId, listener)
+  }
+
+  /**
+   * The waiting requests and the running elevations, for the home's own computer only.
+   * @returns both, without any code.
+   */
+  elevationsAtComputer(): ReturnType<HomeAuth['elevationsAtComputer']> {
+    return this.state().elevationsAtComputer()
+  }
+
+  /**
+   * Approve a request to elevate with the code the person typed; the home's own computer only.
+   * @param requestId - the request.
+   * @param typedCode - the code.
+   * @returns the elevation that started.
+   */
+  approveElevation(requestId: string, typedCode: string): ElevationRecord {
+    return this.state().approveElevation(requestId, typedCode)
+  }
+
+  /**
+   * Decline a request or end an elevation; the home's own computer only.
+   * @param id - the request id or the elevation id.
+   * @returns whether either was found.
+   */
+  revokeElevation(id: string): boolean {
+    return this.state().revokeElevation(id)
   }
 
   /**

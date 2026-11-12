@@ -25,7 +25,7 @@ function random(size: number): Uint8Array {
 }
 
 function asker(device: string, overrides: Partial<ElevationAsker> = {}): ElevationAsker {
-  return { deviceId: brandString<DeviceId>(device), listener: LISTENER, sessionId: `session-${device}`, label: `Phone ${device}`, ...overrides }
+  return { deviceId: brandString<DeviceId>(device), listener: LISTENER, sessionId: `session-${device}`, ...overrides }
 }
 
 function elevations(): Elevations {
@@ -193,6 +193,25 @@ describe('Elevations', () => {
     // An ended elevation's timer no longer fires.
     vi.advanceTimersByTime(60 * MINUTE)
     expect(changes.filter(change => change.kind === 'ended')).toHaveLength(6)
+  })
+
+  it('moves the elevation and the waiting request of a session that rolls to the session that continues it', () => {
+    const home = elevations()
+    const first = home.request(asker('a'))
+    home.approve(first.requestId, first.code, 15)
+    home.request(asker('a'))
+    const other = home.request(asker('b'))
+    home.approve(other.requestId, other.code, 15)
+    home.request(asker('c'))
+    home.moveSession('session-a', 'rolled-a')
+    // Pins the move: ending the old session no longer reaches them, and ending the new one does.
+    home.endSession('session-a', 'session-ended')
+    expect(home.of('a', LISTENER)).toMatchObject({ sessionId: 'rolled-a' })
+    expect(home.requestOf('a', LISTENER)).toMatchObject({ sessionId: 'rolled-a' })
+    home.endSession('rolled-a', 'session-ended')
+    expect(home.stateOf('a', LISTENER)).toEqual({ kind: 'none' })
+    expect(home.of('b', LISTENER)).toMatchObject({ sessionId: 'session-b' })
+    expect(home.requestOf('c', LISTENER)).toMatchObject({ sessionId: 'session-c' })
   })
 
   it('draws every code uniformly, retrying a value above the largest multiple', () => {

@@ -31,7 +31,7 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
-import { DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
+import { DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
 
@@ -49,6 +49,7 @@ let directory: string
 let peer: PeerScope
 let workspaceId: WorkspaceId
 let deviceId: ReturnType<typeof recordOf>['id']
+let deviceToken: string
 let rpc = 0
 
 /**
@@ -57,13 +58,13 @@ let rpc = 0
  * @param args - its named wire arguments.
  * @returns the call's result.
  */
-async function call(endpoint: string, args: Record<string, unknown>): Promise<Result> {
+async function call(endpoint: string, args: Record<string, unknown>, as: PeerScope = peer): Promise<Result> {
   rpc += 1
   const response = await studio.ctx.connection.createSharedFetchHandler('/api').fetch(new Request(`http://127.0.0.1/api/${endpoint}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ type: 'client-request', rpcId: `reach-${String(rpc)}`, method: endpoint, payload: { args } }),
-  }), peer)
+  }), as)
   const body = await response.json() as { readonly result: Result }
   return body.result
 }
@@ -77,6 +78,19 @@ async function expectRefused(endpoint: string, args: Record<string, unknown>): P
   expect(await call(endpoint, args), endpoint).toMatchObject({
     ok: false,
     error: { code: 'remote-access/denied', details: { action: endpoint, reason: `loopback-required: ${endpoint}` } },
+  })
+}
+
+/**
+ * Assert that one call is refused by remote access until the device holds an elevation, naming its action.
+ * @param endpoint - the endpoint.
+ * @param args - its named wire arguments.
+ * @param as - the Peer that calls.
+ */
+async function expectElevationRequired(endpoint: string, args: Record<string, unknown>, as: PeerScope = peer): Promise<void> {
+  expect(await call(endpoint, args, as), endpoint).toMatchObject({
+    ok: false,
+    error: { code: 'remote-access/denied', details: { action: endpoint, reason: `elevation-required: ${endpoint}` } },
   })
 }
 
@@ -104,6 +118,7 @@ beforeAll(async () => {
   deviceId = record.id
   await new DeviceStore({ file: join(directory, 'home', 'secrets', 'home-auth', 'devices.json') }).add(record)
   const opened = await ctx.homeAuth.openSession({ deviceId, listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
+  deviceToken = opened.token
   const admitted = ctx.authenticator.admit({ headers: { cookie: `__Host-delo-session=${opened.token}` }, method: 'GET', url: '/' }, LISTENER)
   if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
   peer = admitted.peer
@@ -251,7 +266,7 @@ describe('a reach device through the Gateway', () => {
       await expectRefused('settings/replace', { ns, section: {} })
     }
     await expectRefused('settings/openSettingsDocument', {})
-    await expectRefused('session/initializeDefaultModel', {})
+    await expectElevationRequired('session/initializeDefaultModel', {})
   })
 
   it('refuses credentials, account sign-in and model discovery with the stored credentials', async () => {
@@ -265,7 +280,7 @@ describe('a reach device through the Gateway', () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     await expectRefused('terminal/list', { sessionId: created.sessionId })
     await expectRefused('terminal/shells', { agentId: created.sessionId })
-    await expectRefused('workspaceFiles/changes', { workspaceFileScopeId: created.sessionId, path: '.' })
+    await expectElevationRequired('workspaceFiles/changes', { workspaceFileScopeId: created.sessionId, path: '.' })
     await expectRefused('directoryPicker/pick', {})
   })
 
@@ -284,13 +299,77 @@ describe('a reach device through the Gateway', () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     const other = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     await expectRefused('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
-    await expectRefused('schedule/deleteInactive', {})
     await expectRefused('dynamicCordisRunner/inventory', {})
     await expectRefused('workspace/create', { request: { path: directory } })
-    await expectRefused('workspace/initializeDefault', {})
-    await expectRefused('workspace/archiveSession', { request: { sessionId: created.sessionId } })
-    await expectRefused('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })
-    await expectRefused('workspace/insertSessionBefore', { request: { workspaceId, sessionId: created.sessionId, beforeSessionId: other.sessionId } })
+    // Pins the elevated table: without an elevation each is refused naming the elevation it needs.
+    await expectElevationRequired('schedule/deleteInactive', {})
+    await expectElevationRequired('workspace/initializeDefault', {})
+    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+    await expectElevationRequired('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })
+    await expectElevationRequired('workspace/insertSessionBefore', { request: { workspaceId, sessionId: created.sessionId, beforeSessionId: other.sessionId } })
+  })
+})
+
+describe('an elevated reach device through the Gateway', () => {
+  /**
+   * Ask for an elevation as the device's session and approve it with the code, as the person at the computer does.
+   * @returns the elevation's id.
+   */
+  function elevate(): string {
+    const admitted = studio.ctx.homeAuth.admitToken(deviceToken, LISTENER)
+    if (admitted.kind !== 'admitted') throw new Error('the device is not signed in')
+    const state = studio.ctx.homeAuth.requestElevation(admitted.sessionId, admitted.session)
+    if (state.kind !== 'pending') throw new Error('no request is waiting')
+    return studio.ctx.homeAuth.approveElevation(state.requestId, state.code).id
+  }
+
+  it('takes the elevated actions while the elevation runs, and never a never action', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+    const id = elevate()
+    try {
+      // Pins the elevation check through the Gateway: the same call succeeds once the person approved it.
+      await expect(expectAllowed('workspace/archiveSession', { request: { sessionId: created.sessionId } })).resolves.toBeDefined()
+      await expect(expectAllowed('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })).resolves.toBeDefined()
+      // Pins the never table under an elevation: credentials, the account, terminals, plugins, folders and shell code.
+      await expectRefused('credentials/set', { ref: 'deepseek', value: 'not-a-key' })
+      await expectRefused('account/getState', {})
+      await expectRefused('terminal/list', { sessionId: created.sessionId })
+      await expectRefused('pluginManager/installBundle', { spec: '@example/bundle' })
+      await expectRefused('workspace/create', { request: { path: directory } })
+      await expectRefused('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
+      await expectRefused('settings/mutate', { ns: 'delo', ops: [{ op: 'unset', path: ['delo'] }] })
+      // A folder for a new chat stays the computer's.
+      expect(await call('session/create', { request: { cwd: directory } })).toMatchObject({ ok: false, error: { details: { reason: 'loopback-required: session/create with a folder or a preset' } } })
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(id)
+    }
+    // Pins the revoke at the computer: the device's next elevated call is refused again.
+    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+  })
+
+  it('stops when the device locks it', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    elevate()
+    studio.ctx.homeAuth.lockElevation(deviceId, LISTENER)
+    // Pins the device's lock; the end of an elevation's minutes is pinned in the package's own specs, on their clock.
+    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+  })
+
+  it('lifts nothing for another device', async () => {
+    const other = recordOf(3, ADDRESS)
+    await new DeviceStore({ file: join(directory, 'home', 'secrets', 'home-auth', 'devices.json') }).add(other)
+    const opened = await studio.ctx.homeAuth.openSession({ deviceId: other.id, listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
+    const admitted = studio.ctx.authenticator.admit({ headers: { cookie: `__Host-delo-session=${opened.token}` }, method: 'GET', url: '/' }, LISTENER)
+    if (admitted.kind !== 'admitted') throw new Error('the second device was not admitted')
+    const id = elevate()
+    try {
+      // Pins the device binding: device A's elevation admits nothing device B asks for.
+      await expectElevationRequired('schedule/deleteInactive', {}, admitted.peer)
+      await expect(expectAllowed('schedule/deleteInactive', {})).resolves.toBeDefined()
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(id)
+    }
   })
 })
 
@@ -401,7 +480,7 @@ describe('the reach access tables', () => {
     return endpoints
   }
 
-  const classified = (): Set<string> => new Set([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS)])
+  const classified = (): Set<string> => new Set([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DENIED_ACTIONS)])
   const forwarded = (): Set<string> => new Set(API_REMOTE_FORWARDED_EVENTS.map(entry => `event:${entry.event}`))
 
   it('classify every Remote method and forwarded event of the composition', () => {
@@ -416,7 +495,7 @@ describe('the reach access tables', () => {
     expect([...classified()].filter(action => !known.has(action)).sort()).toEqual([])
   })
 
-  it('decide through remote access: allowed actions on the global resource, every other refused naming it', () => {
+  it('decide through remote access: allowed actions on the global resource, elevated ones needing an elevation, every other refused naming it', () => {
     const principal = reachDevicePrincipal(deviceId)
     const decisions = [...registeredEndpoints(), ...forwarded()].sort().map((action) => {
       const decision = studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] })
@@ -424,7 +503,10 @@ describe('the reach access tables', () => {
     })
     // Pins the policy registration and its roles: without a policy every decision reads `no-allow`.
     expect(decisions).toEqual(decisions.map(({ action }) => ({
-      action, decision: Object.hasOwn(REACH_ALLOWED_ACTIONS, action) ? 'allow' : `loopback-required: ${action}`,
+      action,
+      decision: Object.hasOwn(REACH_ALLOWED_ACTIONS, action)
+        ? 'allow'
+        : Object.hasOwn(REACH_ELEVATED_ACTIONS, action) ? `elevation-required: ${action}` : `loopback-required: ${action}`,
     })))
   })
 })

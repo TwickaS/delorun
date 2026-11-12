@@ -78,6 +78,8 @@ async function mount(extra: { readonly connection?: unknown } = {}): Promise<Mou
   return { ctx, fiber, registered, unregistered, directory }
 }
 
+const TAILNET = brandString<StudioAddress>('https://home.example.ts.net')
+
 describe('the homeAuth service', () => {
   it('mounts under its name and registers the claim, device and reach routes', async () => {
     const mounted = await mount()
@@ -99,6 +101,46 @@ describe('the homeAuth service', () => {
       expect(mounted.unregistered).toEqual(ROUTES.map(([, path]) => path))
       expect(mounted.ctx.get('homeAuth')).toBeUndefined()
     } finally {
+      await rm(mounted.directory, { recursive: true, force: true })
+    }
+  })
+
+  it('serves elevation to a device and to the computer, and logs each start and ending', async () => {
+    const mounted = await mount()
+    const lines: string[] = []
+    try {
+      const service = mounted.ctx.get('homeAuth') as HomeAuthService
+      mounted.ctx.logger.info = (line: string) => { lines.push(line) }
+      expect(service.elevationOfDevice('nobody')).toBeUndefined()
+      service.serve({ listener: 'reach-tailscale-private', address: TAILNET, factor: 'tailnet-membership' })
+      const issued = await service.issueOwnerCode()
+      await service.claim(claimOf(issued.code, { address: TAILNET }))
+      const deviceId = deviceIdOf(keyOf(1))
+      const opened = await service.openSession({ deviceId, listener: 'reach-tailscale-private', address: TAILNET, factor: 'tailnet-membership', lifetimeMs: HOUR })
+      const admitted = service.admitToken(opened.token, 'reach-tailscale-private')
+      if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
+      const changes: string[] = []
+      const off = service.onElevationChange((change) => { changes.push(change.kind) })
+      const state = service.requestElevation(admitted.sessionId, admitted.session)
+      if (state.kind !== 'pending') throw new Error('no request is waiting')
+      expect(service.elevationState(deviceId, 'reach-tailscale-private')).toEqual(state)
+      expect(service.elevationsAtComputer().pending).toHaveLength(1)
+      const record = service.approveElevation(state.requestId, state.code)
+      expect(service.elevationOf(deviceId, 'reach-tailscale-private')).toEqual(record)
+      expect(service.elevationOfDevice(deviceId)).toEqual(record)
+      service.lockElevation(deviceId, 'reach-tailscale-private')
+      const again = service.requestElevation(admitted.sessionId, admitted.session)
+      if (again.kind !== 'pending') throw new Error('no request is waiting')
+      expect(service.revokeElevation(again.requestId)).toBe(true)
+      off()
+      expect(changes).toEqual(['started', 'ended'])
+      // Pins the log line: the device, the listener and the elevation, and who ended it.
+      expect(lines).toEqual([
+        `home-auth: elevation started until ${new Date(record.endsAt).toISOString()}: device=${deviceId} listener=reach-tailscale-private elevation=${record.id}`,
+        `home-auth: elevation ended (locked-from-device): device=${deviceId} listener=reach-tailscale-private elevation=${record.id}`,
+      ])
+    } finally {
+      await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })
     }
   })

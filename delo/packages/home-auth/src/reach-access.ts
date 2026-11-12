@@ -159,19 +159,15 @@ const CREDENTIALS = 'credentials are secrets of the home'
 const ACCOUNT = 'account sign-in is off in Delo, and an account change belongs to the home\'s own computer'
 const TERMINAL = 'a terminal is a shell on the home\'s computer outside the sandbox'
 const DIRECTORY_PICKER = 'the directory picker browses and creates folders on the home\'s computer'
-const CHANGES = 'the Changes surface reads the working tree of the home\'s computer'
 const WORKSPACE_MANAGEMENT = 'workspace management registers or removes folders of the home\'s computer'
-const CHAT_ORGANIZATION = 'archiving or reordering chats is not in the device rule; renaming and pinning are'
-const DEFAULT_MODEL = 'saves the default model, a settings write'
 const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer'
-const GOAL_CHANGE = 'changing a chat\'s standing goal is not in the device rule'
-const SCHEDULE_CHANGE = 'a scheduled follow-up runs prompts later with no person present'
 const DYNAMIC_PLUGIN = 'runs model-authored plugin code in the Host'
 const FEEDBACK = 'feedback leaves the home, and Delo turns it off'
 
 /**
- * Every action a device may not take over a reach listener, with why it belongs to the home's own computer. The
- * refusal names the action; this table tells a deliberate refusal from an action nobody classified.
+ * Every action a device never takes over a reach listener, elevated or not, with why it belongs to the home's own
+ * computer: each reaches the home's credentials or account, its device list, or code that runs outside the sandbox.
+ * The refusal names the action; this table tells a deliberate refusal from an action nobody classified.
  */
 export const REACH_DENIED_ACTIONS = {
   'pluginManager/cancelInstall': PLUGIN_MANAGEMENT,
@@ -220,30 +216,10 @@ export const REACH_DENIED_ACTIONS = {
   'directoryPicker/createDirectory': DIRECTORY_PICKER,
   'directoryPicker/list': DIRECTORY_PICKER,
   'directoryPicker/pick': DIRECTORY_PICKER,
-  'workspaceFiles/changes': CHANGES,
   'workspace/create': WORKSPACE_MANAGEMENT,
-  'workspace/delete': WORKSPACE_MANAGEMENT,
-  'workspace/initializeDefault': WORKSPACE_MANAGEMENT,
-  'workspace/insertBefore': WORKSPACE_MANAGEMENT,
-  'workspace/rename': WORKSPACE_MANAGEMENT,
-  'workspace/archiveSession': CHAT_ORGANIZATION,
-  'workspace/unarchiveSession': CHAT_ORGANIZATION,
-  'workspace/insertSessionBefore': CHAT_ORGANIZATION,
-  'session/selectModel': DEFAULT_MODEL,
-  'session/initializeDefaultModel': DEFAULT_MODEL,
   'session/openWorkspacePath': OPEN_ON_COMPUTER,
   'session/workspacePathApplications': OPEN_ON_COMPUTER,
   'commands/execute': 'a slash command can change settings, plugins or the profile',
-  'goals/clear': GOAL_CHANGE,
-  'goals/complete': GOAL_CHANGE,
-  'goals/create': GOAL_CHANGE,
-  'goals/edit': GOAL_CHANGE,
-  'goals/pause': GOAL_CHANGE,
-  'goals/resume': GOAL_CHANGE,
-  'schedule/create': SCHEDULE_CHANGE,
-  'schedule/edit': SCHEDULE_CHANGE,
-  'schedule/run': SCHEDULE_CHANGE,
-  'schedule/deleteInactive': 'deletes scheduled follow-ups',
   'dynamicCordisRunner/getClientCode': DYNAMIC_PLUGIN,
   'dynamicCordisRunner/inventory': DYNAMIC_PLUGIN,
   'dynamicCordisRunner/invoke': DYNAMIC_PLUGIN,
@@ -269,29 +245,68 @@ export const REACH_DENIED_ACTIONS = {
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
- * Assert that no action is both allowed and refused.
- * @param allowed - the allowed actions.
- * @param denied - the refused actions.
- * @throws {TypeError} naming every action both tables list.
+ * Every action a device takes only while it holds an elevation the person approved at the home's own computer (C14,
+ * "Elevation"), with what it lets the person do. Each is ordinary work at the computer that reaches no credential, no
+ * device approval and no code outside the sandbox; without an elevation it is refused with
+ * `elevation-required: <action>`. An action is elevated only by being listed here: a new refused action is never.
  */
-export function assertDisjoint(allowed: Readonly<Record<string, string>>, denied: Readonly<Record<string, string>>): void {
-  const both = Object.keys(allowed).filter(action => Object.hasOwn(denied, action)).sort()
-  if (both.length > 0) throw new TypeError(`@delo/home-auth: reach access lists ${JSON.stringify(both)} as both allowed and denied`)
+export const REACH_ELEVATED_ACTIONS = {
+  'workspaceFiles/changes': 'read the Changes surface, the working tree of a chat\'s workspace',
+  'workspace/delete': 'move a workspace to the trash, from which the computer restores it',
+  'workspace/initializeDefault': 'create the default workspace in its configured folder',
+  'workspace/insertBefore': 'reorder the workspaces',
+  'workspace/rename': 'rename a workspace',
+  'workspace/archiveSession': 'archive a chat',
+  'workspace/unarchiveSession': 'restore an archived chat',
+  'workspace/insertSessionBefore': 'reorder the chats',
+  'session/selectModel': 'choose a chat\'s model and save it as the default',
+  'session/initializeDefaultModel': 'save the default model',
+  'goals/clear': 'clear a chat\'s goal',
+  'goals/complete': 'mark a chat\'s goal done',
+  'goals/create': 'set a chat\'s goal',
+  'goals/edit': 'edit a chat\'s goal',
+  'goals/pause': 'pause a chat\'s goal',
+  'goals/resume': 'resume a chat\'s goal',
+  'schedule/create': 'schedule a follow-up, which runs its prompt later with the chat\'s own permissions',
+  'schedule/edit': 'edit a scheduled follow-up',
+  'schedule/run': 'run a scheduled follow-up now',
+  'schedule/deleteInactive': 'delete the scheduled follow-ups that no longer run',
+} as const satisfies Readonly<Record<RemoteAccessAction, string>>
+
+/**
+ * Assert that no action is in two of the tables.
+ * @param tables - the allowed, the elevated and the never tables, by name.
+ * @throws {TypeError} naming every action two tables list.
+ */
+export function assertDisjoint(tables: Readonly<Record<string, Readonly<Record<string, string>>>>): void {
+  const seen = new Map<string, string>()
+  const both: string[] = []
+  for (const [name, table] of Object.entries(tables)) {
+    for (const action of Object.keys(table)) {
+      const first = seen.get(action)
+      if (first === undefined) seen.set(action, name)
+      else both.push(`${action} (${first}, ${name})`)
+    }
+  }
+  if (both.length > 0) throw new TypeError(`@delo/home-auth: reach access lists ${JSON.stringify(both.sort())} in two tables`)
 }
 
-assertDisjoint(REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS)
+assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTIONS, never: REACH_DENIED_ACTIONS })
 
 /** The allowed actions, which every role of the policy lists. */
 const ALLOWED: readonly RemoteAccessAction[] = Object.freeze(Object.keys(REACH_ALLOWED_ACTIONS) as (keyof typeof REACH_ALLOWED_ACTIONS)[])
 const ALLOWED_SET: ReadonlySet<string> = new Set(ALLOWED)
+const ELEVATED_SET: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACTIONS))
+/** The actions every role lists: the allowed ones, and the elevated ones, which the condition refuses without one. */
+const ROLE_ACTIONS: readonly RemoteAccessAction[] = Object.freeze([...ALLOWED, ...(Object.keys(REACH_ELEVATED_ACTIONS) as (keyof typeof REACH_ELEVATED_ACTIONS)[])])
 
 /**
  * The role over one resource kind.
  * @param resource - the kind.
- * @returns the role listing every allowed action.
+ * @returns the role listing every allowed and every elevated action.
  */
 function role<K extends RemoteAccessResourceKind>(resource: K): RemoteAccessRole<K> {
-  return { name: `delo:reach-device-${resource}`, resource, actions: ALLOWED }
+  return { name: `delo:reach-device-${resource}`, resource, actions: ROLE_ACTIONS }
 }
 
 const ALLOW: RemoteAccessDecision = { kind: 'allow' }
@@ -304,6 +319,7 @@ const ALLOW: RemoteAccessDecision = { kind: 'allow' }
  */
 const WORKSPACE_PATH_ACTIONS: ReadonlySet<string> = new Set([
   'workspaceFiles/list', 'workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeToPdf/render',
+  'workspaceFiles/changes',
 ])
 
 /**
@@ -416,16 +432,25 @@ type ReachCondition = (request: {
 }) => RemoteAccessDecision
 
 /**
- * The condition of a device's bindings. It refuses a `session/create` that names a folder or a preset: a device starts a
- * chat only in a Workspace the person registered at the computer, with the configured preset, because a folder decides
- * where the chat's commands may write and a preset decides its tools. It refuses a workspace-file call unless every path
- * it names is one a device may reach (see {@link WORKSPACE_PATH_ACTIONS}). Every other action is allowed as its role
- * lists it, and so is every question asked without a call's arguments: an event, a snapshot or a list filter.
+ * The condition of one device's bindings, the single place an elevated action is decided. It refuses an action of
+ * {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running elevation, for a
+ * call and for an event, a snapshot or a list filter alike, and logs each elevated call with the elevation that admits
+ * it. It refuses a `session/create` that names a folder or a preset, elevated or not: a device starts a chat only in a
+ * Workspace the person registered at the computer, with the configured preset, because a folder decides where the
+ * chat's commands may write and a preset decides its tools. It refuses a workspace-file call unless every path it names
+ * is one a device may reach (see {@link WORKSPACE_PATH_ACTIONS}). Every other action is allowed as its role lists it,
+ * and so is every other question asked without a call's arguments.
  * @param facts - the Host state the policy reads.
+ * @param deviceId - the device whose bindings carry the condition.
  * @returns the condition.
  */
-export function createCondition(facts: Pick<ReachAccessFacts, 'workspaceRootOf' | 'deloHome'>): ReachCondition {
+export function createCondition(facts: Pick<ReachAccessFacts, 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated'>, deviceId: string): ReachCondition {
   return ({ action, resource, args }) => {
+    if (ELEVATED_SET.has(action)) {
+      const elevation = facts.elevationOf(deviceId)
+      if (elevation === undefined) return { kind: 'deny', reason: `elevation-required: ${action}` }
+      if (args !== undefined) facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${elevation.listener} action=${action} elevation=${elevation.id}`)
+    }
     if (args === undefined) return ALLOW
     if (action === 'session/create') {
       for (const value of Object.values(args)) {
@@ -475,16 +500,27 @@ export interface ReachAccessFacts {
   readonly workspaceRootOf: (sessionId: SessionId) => string | undefined
   /** The Delo home, which holds the home's secrets and tokens; no device read reaches a path inside it. */
   readonly deloHome: string
+  /**
+   * The running elevation of one device on a listener the home serves, read before each elevated action.
+   * @param deviceId - the device.
+   * @returns its id and listener, or undefined.
+   */
+  readonly elevationOf: (deviceId: string) => { readonly id: string; readonly listener: string } | undefined
+  /**
+   * Record one line in the operational log, for each call an elevation admits.
+   * @param line - the line.
+   */
+  readonly logElevated: (line: string) => void
 }
 
 /**
- * The reason an allowed action was refused on a resource the policy could not name, or the refusal of every other
- * action.
+ * The reason an allowed or elevated action was refused on a resource the policy could not name, or the refusal of
+ * every other action. An elevated action on a resource the policy names is decided by the condition instead.
  * @param action - the refused action.
- * @returns `resource-unlisted: <action>` for an allowed action, otherwise `loopback-required: <action>`.
+ * @returns `resource-unlisted: <action>` for an allowed or elevated action, otherwise `loopback-required: <action>`.
  */
 export function reachRefusal(action: RemoteAccessAction): string {
-  return ALLOWED_SET.has(action) ? `resource-unlisted: ${action}` : `loopback-required: ${action}`
+  return ALLOWED_SET.has(action) || ELEVATED_SET.has(action) ? `resource-unlisted: ${action}` : `loopback-required: ${action}`
 }
 
 /**
@@ -498,7 +534,7 @@ export function createReachAccessPolicy(facts: ReachAccessFacts): RemoteAccessPo
   return {
     bindings(device): readonly RemoteAccessBinding[] {
       if (!facts.admitted(device.deviceId)) return []
-      const condition = createCondition(facts)
+      const condition = createCondition(facts, device.deviceId)
       const bindings: RemoteAccessBinding[] = [{ role: GLOBAL_ROLE, resource: { kind: 'global' }, condition }]
       const sessions = new Set<SessionId>()
       for (const workspace of facts.workspaces()) {

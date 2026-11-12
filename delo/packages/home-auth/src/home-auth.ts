@@ -29,7 +29,8 @@ import {
   DEVICE_APPROVAL_LIMITS, DEVICE_APPROVAL_VERSION, HOME_AUTH_FILES, LOCAL_APPROVER, type ApprovalRequestAccepted,
   type ApprovalRequestState, type DevicePublicKeyJwk,
 } from '@delo/contract-device-approval'
-import { TAILNET_MEMBERSHIP_OPTIONS, type IdentityFactor } from '@delo/contract-oidc-passkeys'
+import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type IdentityFactor } from '@delo/contract-oidc-passkeys'
+import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delo/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
 import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from './arrival.ts'
@@ -139,6 +140,8 @@ export interface ServedListener {
   readonly address: StudioAddress
   /** The factor a session created on this listener records. */
   readonly factor: IdentityFactor
+  /** The minutes one elevation approved for a device on this listener lasts; C14's default when absent. */
+  readonly elevationMinutes?: number
 }
 
 /** What `admit` reads for one session token: the admitted session, or the refusal C4 names. */
@@ -228,6 +231,9 @@ export class HomeAuth {
    */
   private readonly expiries = new Map<string, ArmedExpiry>()
   private readonly removalListeners = new Set<(deviceId: DeviceId) => void>()
+  private readonly elevationListeners = new Set<(change: ElevationChange) => void>()
+  /** The elevations of this home and the requests waiting for the person at the computer (C14, "Elevation"). */
+  private readonly elevations: Elevations
   /** The tail of the queue that serialises a claim and a revocation against each other. */
   private queue: Promise<unknown> = Promise.resolve()
 
@@ -242,6 +248,11 @@ export class HomeAuth {
     this.random = options.random ?? systemRandom
     this.challenges = new Challenges(this.now, this.random)
     this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key() })
+    this.elevations = new Elevations({
+      now: this.now,
+      random: this.random,
+      changed: (change) => { for (const listener of this.elevationListeners) listener(change) },
+    })
     const path = (name: string): string => join(options.directory, name)
     this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), ...timed(options) })
     this.deviceStore = new DeviceStore({ file: path(HOME_AUTH_FILES.devices) })
@@ -269,6 +280,7 @@ export class HomeAuth {
    * listeners stop with the provider, which closes their connections.
    */
   async stop(): Promise<void> {
+    this.elevations.endAll('home-stopped')
     clearTimeout(this.persistTimer)
     this.persistTimer = undefined
     for (const armed of this.expiries.values()) clearTimeout(armed.timer)
@@ -384,6 +396,7 @@ export class HomeAuth {
       await this.assertOwner()
       const removed = await this.deviceStore.remove(deviceId)
       const sessions = await this.sessions.revokeDevice(deviceId)
+      this.elevations.endDevice(deviceId, 'device-removed')
       this.forget(deviceId)
       for (const listener of this.removalListeners) listener(deviceId)
       const connections = this.closeReachConnections?.({ deviceId }) ?? 0
@@ -487,10 +500,113 @@ export class HomeAuth {
       throw new HomeAuthError('TAILNET_IDENTITY_UNAVAILABLE', 'Tailnet membership signs a device in only on the Tailscale private address; a Funnel or own-domain address needs a passkey or OpenID Connect sign-in')
     }
     if (this.served.has(served.listener)) throw new HomeAuthError('BAD_REQUEST', `${served.listener} is served already`)
+    if (served.elevationMinutes !== undefined && !isElevationMinutes(served.elevationMinutes)) {
+      throw new HomeAuthError('BAD_REQUEST', `an elevation lasts a whole number of minutes from 1 to ${String(ELEVATION_LIMITS.maxMinutes)}, got ${String(served.elevationMinutes)}`)
+    }
     this.served.set(served.listener, served)
     return () => {
-      if (this.served.get(served.listener) === served) this.served.delete(served.listener)
+      if (this.served.get(served.listener) !== served) return
+      this.served.delete(served.listener)
+      this.elevations.endListener(served.listener, 'listener-stopped')
     }
+  }
+
+  /**
+   * Call a listener for each elevation that starts or ends, after the change; the provider logs it and recomputes the
+   * device's access.
+   * @param listener - called with the change.
+   * @returns the disposer.
+   */
+  onElevationChange(listener: (change: ElevationChange) => void): () => void {
+    this.elevationListeners.add(listener)
+    return () => { this.elevationListeners.delete(listener) }
+  }
+
+  /**
+   * Record a signed-in device's request to elevate on the listener its session lives on, replacing its waiting one.
+   * @param sessionId - the admitted session that asks.
+   * @param session - its record.
+   * @returns the device's state, with the code it shows.
+   * @throws {HomeAuthError} `APPROVAL_PENDING_LIMIT` when the home holds its limit of requests.
+   */
+  requestElevation(sessionId: string, session: SessionRecord): ElevationState {
+    this.elevations.request({ deviceId: session.deviceId, listener: session.listener, sessionId })
+    return this.elevations.stateOf(session.deviceId, session.listener)
+  }
+
+  /**
+   * What one device's own studio shows about elevation on one listener.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the state.
+   */
+  elevationState(deviceId: string, listener: ReachListenerId): ElevationState {
+    return this.elevations.stateOf(deviceId, listener)
+  }
+
+  /**
+   * The running elevation of one device on one listener, which the reach-device policy reads before each elevated action.
+   * @param deviceId - the device.
+   * @param listener - the listener its Peer sits on.
+   * @returns the elevation, or undefined.
+   */
+  elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
+    return this.elevations.of(deviceId, listener)
+  }
+
+  /**
+   * The running elevation of one device on any listener this home serves.
+   * @param deviceId - the device.
+   * @returns the elevation, or undefined.
+   */
+  elevationOfDevice(deviceId: string): ElevationRecord | undefined {
+    for (const listener of this.served.keys()) {
+      const elevation = this.elevations.of(deviceId, listener)
+      if (elevation !== undefined) return elevation
+    }
+    return undefined
+  }
+
+  /**
+   * End a device's elevation on one listener and cancel its waiting request, from the device's own studio.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  lockElevation(deviceId: string, listener: ReachListenerId): void {
+    this.elevations.endFor(deviceId, listener, 'locked-from-device')
+  }
+
+  /**
+   * The requests to elevate waiting for the person and the running elevations, for the home's own computer.
+   * @returns both, oldest first, without any code.
+   */
+  elevationsAtComputer(): { readonly pending: readonly PendingElevation[]; readonly running: readonly ElevationRecord[] } {
+    return { pending: this.elevations.pending(), running: this.elevations.list() }
+  }
+
+  /**
+   * Approve a request to elevate at the home's own computer with the code the person typed from the device. The
+   * elevation lasts the minutes of the listener the request arrived on.
+   * @param requestId - the request.
+   * @param typedCode - the code.
+   * @returns the elevation that started.
+   * @throws {HomeAuthError} `APPROVAL_EXPIRED` for an unknown or expired request, or one whose listener is no longer
+   *   served; `APPROVAL_CODE_MISMATCH` for a wrong code.
+   */
+  approveElevation(requestId: string, typedCode: string): ElevationRecord {
+    const request = this.elevations.pending().find(pending => pending.requestId === requestId)
+    const served = request === undefined ? undefined : this.served.get(request.listener)
+    if (served === undefined) throw new HomeAuthError('APPROVAL_EXPIRED', 'That request to unlock expired or was answered. Ask again from the device')
+    return this.elevations.approve(requestId, typedCode, served.elevationMinutes ?? ELEVATION_LIMITS.defaultMinutes)
+  }
+
+  /**
+   * Decline a waiting request, or end a running elevation, at the home's own computer.
+   * @param id - the request id or the elevation id.
+   * @returns whether either was found.
+   */
+  revokeElevation(id: string): boolean {
+    return this.elevations.decline(id) || this.elevations.endById(id, 'revoked-at-computer')
   }
 
   /**
@@ -650,12 +766,14 @@ export class HomeAuth {
     const at = this.now()
     if (at >= session.expiresAt || at - session.lastUsedAt >= SESSION_LIMITS.reach.idleMs) {
       view.sessions.delete(sessionId)
+      this.elevations.endSession(sessionId, 'session-ended')
       void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
       return { kind: 'refused', code: 'SESSION_EXPIRED' }
     }
     if (session.rotated) return { kind: 'refused', code: 'ROTATION_REQUIRED' }
     if (session.graceUntil !== undefined && at >= session.graceUntil) {
       view.sessions.delete(sessionId)
+      this.elevations.endSession(sessionId, 'session-ended')
       void this.serial(() => this.sessions.remove([sessionId])).catch(() => undefined)
       return { kind: 'refused', code: 'NOT_SIGNED_IN' }
     }
@@ -687,6 +805,8 @@ export class HomeAuth {
     const graced: SessionRecord = { ...used, graceUntil }
     view.sessions.set(oldId, graced)
     view.sessions.set(newId, record)
+    // The new token continues the session, so its elevation and its waiting request follow it.
+    this.elevations.moveSession(oldId, newId)
     // The old token's connections close when its grace ends; the new token's at its own limits.
     this.arm(oldId, deadlineOf(graced))
     this.arm(newId, deadlineOf(record))
@@ -751,6 +871,7 @@ export class HomeAuth {
       this.arm(sessionId, deadlineOf(session))
       return
     }
+    this.elevations.endSession(sessionId, 'session-ended')
     this.closeReachConnections?.({ sessionId })
   }
 
@@ -761,6 +882,7 @@ export class HomeAuth {
    * them closed.
    */
   private async rotateAll(): Promise<void> {
+    this.elevations.endAll('session-ended')
     const view = this.view
     if (view !== undefined) {
       for (const [sessionId, session] of view.sessions) view.sessions.set(sessionId, { ...session, rotated: true })

@@ -8,7 +8,8 @@
  * - {@link HomeAuthAuthenticator} — the provider of upstream's `authenticator`, which also refuses a full-access grant
  *   answered from a `tailnet-membership` session.
  * - The `reach-device` principal of an approved device's Peers, and the remote access policy that allows it only the
- *   actions of {@link REACH_ALLOWED_ACTIONS} and refuses every other with `loopback-required: <action>`.
+ *   actions of {@link REACH_ALLOWED_ACTIONS}, those of {@link REACH_ELEVATED_ACTIONS} while the device holds an
+ *   elevation the person approved at the computer, and refuses every other with `loopback-required: <action>`.
  * - {@link HomeAuthService} — the same behind Cordis as the `homeAuth` service, with the routes registered.
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
  *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
@@ -37,6 +38,7 @@ export { HomeAuthAuthenticator, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSA
 export {
   REACH_ALLOWED_ACTIONS,
   REACH_DENIED_ACTIONS,
+  REACH_ELEVATED_ACTIONS,
   REACH_DEVICE,
   assertDisjoint,
   createReachAccessPolicy,
