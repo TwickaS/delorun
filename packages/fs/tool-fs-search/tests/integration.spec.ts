@@ -476,6 +476,12 @@ describe('search tools and the sandbox provider\'s protected home', () => {
     expect(text(result)).toContain('cannot search "."')
   })
 
+  it('runs ripgrep under the session\'s network', async () => {
+    ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write', workspaceRoot: dir, network: { mode: 'off' } }) } as never)
+    await call('glob', { pattern: '**/*.txt', path: 'sub' }, agent())
+    expect(ProtectingProvider.wraps.map(wrap => wrap.policy)).toEqual([{ mode: 'read-only', workspaceRoot: dir, network: { mode: 'off' } }])
+  })
+
   it('searches under the home in a session under danger-full-access', async () => {
     const modes: string[] = []
     ctx.provide('sandboxPolicy', { resolve: () => { modes.push('resolved'); return { mode: 'danger-full-access' } } } as never)

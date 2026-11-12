@@ -41,6 +41,15 @@ describe('gitPolicy', () => {
     })
   })
 
+  it('keeps the Session\'s network in every policy it builds', () => {
+    const network = { mode: 'off' } as const
+    for (const mode of ['read-only', 'workspace-write'] as const) {
+      for (const writes of [[], ['/scratch'], ['/scratch', '/more']]) {
+        expect(gitPolicy({ ...base, mode, network }, writes).network, `${mode} ${writes.join(',')}`).toEqual(network)
+      }
+    }
+  })
+
   it('lets a read-only Session\'s command write the private directory and nothing in the repository', () => {
     expect(gitPolicy({ ...base, mode: 'read-only' }, ['/scratch'])).toEqual({ mode: 'workspace-write', workspaceRoot: '/scratch', sessionId: SessionId('s') })
     expect(gitPolicy({ mode: 'read-only', workspaceRoot: '/w' }, ['/scratch', '/more'])).toEqual({

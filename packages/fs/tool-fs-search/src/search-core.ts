@@ -244,12 +244,16 @@ interface SearchTarget {
   verify: () => void
 }
 
-/** The read-only confinement for a search run on behalf of `exec`: the session's workspace root, or the workdir. */
+/**
+ * The read-only confinement for a search run on behalf of `exec`: the session's workspace root, or the workdir, with the
+ * session's network.
+ */
 function searchPolicy(ctx: Context, exec: ToolExecution, workdir: string): SandboxPolicy {
   const resolved = ctx.get('sandboxPolicy')?.resolve(exec.agent === undefined ? {} : { session: exec.agent.session })
   return {
     mode: 'read-only',
     workspaceRoot: resolved?.workspaceRoot ?? workdir,
+    ...resolved?.network === undefined ? {} : { network: resolved.network },
     ...resolved?.sessionId === undefined ? {} : { sessionId: resolved.sessionId },
   }
 }
