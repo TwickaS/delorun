@@ -71,6 +71,8 @@ The wait-time benchmark's first record, on the same machine on the same day, mea
 
 Check now in the studio runs `delorun verify` through the launcher, so it pays for every file twice: the launcher's start check with an interval of 0, then the command's own full check, then the online release-log check. The same probe's run of 2026-11-11 at 13:17 UTC on the same machine (load average 5 to 20, warm page cache) measured the parts on a 35,287-file, 769 MiB synthetic runtime: a start check that hashes every file takes 9.5 s in a fresh process with module loading, and the full check alone 8.8 s in process; with about 0.4 s to start the runtime's command, Check now takes about 19 s before the online check, whose time depends on the network. The whole path was not timed on a real closure, because the trunk's release recipe cannot build one yet.
 
+A repeat of 2026-11-12, finishing at 18:30 UTC, on the same machine (load average 17 to 22 from other runs, I/O pressure under 1%), with the start check as it stands, measured a settled start check at 452 ms in process and 749 ms in a fresh process, against 6.9 s and 7.3 s with every file hashed.
+
 Of the remaining 0.6 s, about half is the signature check of the 5 MB file list, which every start keeps: `@delo/release`'s strict JSON parser and its canonical re-serialisation of the list for the signature. The other half is the listing and `lstat` of 35,287 files.
 
 An update's checks before and after the update ran start checks instead of full hashes are recorded with the update suite's other steps in [update timings](../performance/update-timings.md#start-checks-and-parallel-unpacking).
