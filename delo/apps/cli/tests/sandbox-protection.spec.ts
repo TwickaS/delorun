@@ -1,11 +1,23 @@
 /**
- * The post-boot check of the sandbox row's escape directories: a booted row must name every directory the start set,
- * and may name more; and the row's protection and other settings as C3's H3 compares them across an update.
+ * The escape directories the start names; the post-boot check of the sandbox row's escape directories: a booted row
+ * must name every directory the start set, and may name more; and the row's protection and other settings as C3's H3
+ * compares them across an update.
  */
 import { describe, expect, it } from 'vitest'
-import { hostProtectionOf, missingEscapeSocketDirectories, protectionWeakenings, settingsBeyondProtection, WSL_INTEROP_DIRECTORIES } from '../src/sandbox-protection.ts'
+import { escapeDirectories, hostProtectionOf, missingEscapeSocketDirectories, protectionWeakenings, settingsBeyondProtection, WSL_INTEROP_DIRECTORIES } from '../src/sandbox-protection.ts'
 
 const START = { escapeSocketDirectories: [...WSL_INTEROP_DIRECTORIES, '/run/other'] }
+
+describe('the escape directories the start names', () => {
+  it('include the person\'s runtime directory and tmux directory by user id, and Docker Desktop\'s control directories', () => {
+    expect(escapeDirectories(1000, '/home/p')).toEqual(expect.arrayContaining(['/run/user/1000', '/tmp/tmux-1000', '/mnt/wsl/docker-desktop/shared-sockets', '/home/p/.docker/desktop']))
+    expect(escapeDirectories(0, '/root')).toContain('/run/user/0')
+  })
+
+  it('leave out what a user id names, and Docker Desktop\'s, where the platform has none', () => {
+    expect(escapeDirectories(undefined, '/home/p')).toEqual(['/run/WSL', '/run/dbus', '/run/screen', '/tmp/.X11-unix', '/mnt/wslg'])
+  })
+})
 
 describe('the escape directories a booted sandbox row must name', () => {
   it('are all present when the row names each one the start set, with more of its own', () => {

@@ -1,16 +1,16 @@
 /**
  * `user-manager-denied`, `system-bus-denied`, `terminal-server-denied`, `ssh-agent-denied`, `display-denied`,
- * `private-tmp` and `session-escape-landlock-refused`: a command confined by the sandbox Delo's start configures, on
- * bwrap, in `read-only` and in `workspace-write`, cannot reach the person's session services through their sockets,
- * which would run a program outside the sandbox or act with the person's authority: the user manager and session bus
- * (`systemd-run --user`, `busctl --user`), the system bus, a tmux server, an ssh-agent and the display server, by their
- * own paths and by every other mount that reaches them, such as WSLg's. Each case first shows that the same command
- * unconfined reaches the service, and skips by name with its reason where this machine has no such service or no
- * bwrap. Under Landlock, which cannot hide them, the provider refuses the wrap. The commands only list, ask an agent
- * for its key list or start `true`.
+ * `docker-desktop-denied`, `private-tmp` and `session-escape-landlock-refused`: a command confined by the sandbox Delo's
+ * start configures, on bwrap, in `read-only` and in `workspace-write`, cannot reach the person's session services
+ * through their sockets, which would run a program outside the sandbox or act with the person's authority: the user
+ * manager and session bus (`systemd-run --user`, `busctl --user`), the system bus, a tmux server, an ssh-agent, the
+ * display server and Docker Desktop's control sockets, by their own paths and by every other mount that reaches them,
+ * such as WSLg's. Each case first shows that the same command unconfined reaches the service, and skips by name with
+ * its reason where this machine has no such service or no bwrap. Under Landlock, which cannot hide them, the provider
+ * refuses the wrap. The commands only list, connect, ask an agent for its key list or start `true`.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, type TestContext } from 'vitest'
@@ -225,6 +225,42 @@ describe('display-denied: the display server and WSLg', { timeout: 120_000 }, ()
   })
 })
 
+describe('docker-desktop-denied: Docker Desktop\'s control sockets under WSL and on Linux', { timeout: 120_000 }, () => {
+  /**
+   * The sockets in Docker Desktop's control directories, and its WSL socket, that this process connects to now.
+   * @returns the socket paths, at most one level below each directory.
+   */
+  function reachable(): string[] {
+    const sockets = ['/run/docker-cli.sock']
+    for (const root of ['/mnt/wsl/docker-desktop/shared-sockets', join(homedir(), '.docker', 'desktop')]) {
+      const entries = (path: string): string[] => {
+        try {
+          return readdirSync(path).map(entry => join(path, entry))
+        } catch (_unlistable) {
+          // Absent or not listable by this user: the case connects to nothing in it.
+          return []
+        }
+      }
+      for (const entry of entries(root)) sockets.push(entry, ...entries(entry))
+    }
+    return sockets.filter(path => {
+      try {
+        return statSync(path).isSocket() && unconfined(`${CONNECT} ${path}`).status === 0
+      } catch (_absent) {
+        // Gone since it was listed.
+        return false
+      }
+    })
+  }
+
+  it('cannot connect to the backend\'s sockets nor to /run/docker-cli.sock, which it connects to unconfined', async (test) => {
+    const sockets = reachable()
+    requireService(test, sockets.length === 0 ? 'Docker Desktop has no socket here this user connects to' : undefined)
+    const sandbox = await provider()
+    for (const socket of sockets) await deniedEach(sandbox, `${CONNECT} ${socket}`)
+  })
+})
+
 describe('private-tmp: the host\'s /tmp under bwrap', { timeout: 120_000 }, () => {
   it('shows a read-only command its workspace under /tmp and nothing else of /tmp, and lets it write nothing there', async (test) => {
     requireService(test, undefined)
@@ -242,7 +278,7 @@ describe('private-tmp: the host\'s /tmp under bwrap', { timeout: 120_000 }, () =
 
 describe('session-escape-landlock-refused: the Landlock sandbox where an escape directory exists', () => {
   it('refuses to confine a command, naming the first escape directory that exists', async (test) => {
-    const present = UID === undefined ? undefined : escapeDirectories(UID).find(path => existsSync(path))
+    const present = UID === undefined ? undefined : escapeDirectories(UID, homedir()).find(path => existsSync(path))
     if (present === undefined) test.skip('no escape directory exists on this machine')
     const sandbox = await provider()
     // Landlock is the rung the Linux chain takes where bwrap cannot run.

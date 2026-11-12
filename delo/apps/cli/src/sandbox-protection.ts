@@ -2,9 +2,10 @@
  * C1's confinement of the CLI profile's commands, which the home process sets when it starts the profile: upstream's
  * local sandbox provider (row `sandbox`, `@deepseek-ai/dsh-sandbox-local`) receives the canonical Delo home as
  * `protectedHome`, C1's read exemptions as `protectedHomeReadable`, `privateTmp` on, and as `deniedSockets` the update
- * channel's and the supervisor's sockets under `run/<profile>/`, the active Docker context's socket with its real path,
- * Docker Desktop's macOS sockets under `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present,
- * and the ssh-agent socket `SSH_AUTH_SOCK` names with its real path, and as `escapeSocketDirectories` the directories
+ * channel's and the supervisor's sockets under `run/<profile>/`, the daemon sockets of {@link DAEMON_SOCKETS}, the
+ * active Docker context's socket with its real path, Docker Desktop's macOS sockets under
+ * `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present, and the ssh-agent socket
+ * `SSH_AUTH_SOCK` names with its real path, and as `escapeSocketDirectories` the directories
  * of {@link escapeDirectories}, whose sockets let a command start programs outside the sandbox or act with the
  * person's authority: the provider hides each under bwrap and refuses confined commands on a runner that cannot,
  * whenever one exists at a wrap. The settings travel as an overlay patch the start writes to `run/<profile>/sandbox.patch.yml` and hands to upstream's
@@ -44,7 +45,7 @@ export interface SandboxProtection {
   readonly protectedHome: string
   /** C1's read exemptions, relative to the home. */
   readonly protectedHomeReadable: readonly string[]
-  /** The sockets confined commands cannot connect to: the home's own and those in {@link observedSockets}. */
+  /** The sockets confined commands cannot connect to: the home's own, {@link DAEMON_SOCKETS} and those in {@link observedSockets}. */
   readonly deniedSockets: readonly string[]
   /**
    * The entries of {@link deniedSockets} the start found on this computer: the Docker context's socket with its real
@@ -78,17 +79,31 @@ export const WSL_INTEROP_DIRECTORIES = ['/run/WSL'] as const
  * - `/run/dbus`, the system bus, which acts with the polkit authorizations of the person's session;
  * - `/tmp/tmux-<uid>` and `/run/screen`, whose servers run commands in the person's terminal sessions;
  * - `/tmp/.X11-unix`, the X server, which takes input for the person's other windows;
- * - `/mnt/wslg`, WSLg's display and audio sockets and its second mounts of the runtime directory and of `/`.
+ * - `/mnt/wslg`, WSLg's display and audio sockets and its second mounts of the runtime directory and of `/`;
+ * - `/mnt/wsl/docker-desktop/shared-sockets` and `~/.docker/desktop`, Docker Desktop's control sockets under WSL and on
+ *   Linux, among them its backend's API, whose routes include its settings, the engine's `daemon.json` and container
+ *   actions.
  * A runtime directory elsewhere, which `XDG_RUNTIME_DIR` or `TMUX_TMPDIR` may name, is not listed, so that the list
- * depends only on the user id and the next start compares it whatever its environment.
+ * depends only on the user id and the OS home, and the next start compares it whatever its environment. Where the
+ * platform has no user id, as on Windows, the directories named by the user id and Docker Desktop's are left out.
  * @param uid - the person's user id, or `undefined` where the platform has none.
+ * @param osHome - the OS home directory, under which Docker Desktop for Linux keeps its control sockets.
  * @returns the absolute directories, in this order.
  */
-export function escapeDirectories(uid: number | undefined): string[] {
+export function escapeDirectories(uid: number | undefined, osHome: string): string[] {
   const own = uid === undefined ? [] : [`/run/user/${String(uid)}`]
   const tmux = uid === undefined ? [] : [`/tmp/tmux-${String(uid)}`]
-  return [...WSL_INTEROP_DIRECTORIES, ...own, '/run/dbus', ...tmux, '/run/screen', '/tmp/.X11-unix', '/mnt/wslg']
+  const dockerDesktop = uid === undefined ? [] : ['/mnt/wsl/docker-desktop/shared-sockets', join(osHome, '.docker', 'desktop')]
+  return [...WSL_INTEROP_DIRECTORIES, ...own, '/run/dbus', ...tmux, '/run/screen', '/tmp/.X11-unix', '/mnt/wslg', ...dockerDesktop]
 }
+
+/**
+ * The daemon sockets C1 denies on every machine with a user id, whether or not they exist at start: Docker Desktop's
+ * `/run/docker-cli.sock` under WSL, which serves its backend's API to the `docker` group, and tailscaled's LocalAPI
+ * socket on Linux and macOS, through which its operator changes the node's settings. The runner shadows those that
+ * exist at each wrap.
+ */
+export const DAEMON_SOCKETS = ['/run/docker-cli.sock', '/run/tailscale/tailscaled.sock', '/var/run/tailscaled.socket'] as const
 
 /**
  * The ssh-agent socket the launch environment names, and its real path, for `deniedSockets`: an agent signs with the
@@ -167,7 +182,7 @@ async function dockerDesktopSockets(osHome: string): Promise<string[]> {
  */
 export async function sandboxProtection(home: string, profile: string, env: Readonly<Record<string, string | undefined>>, osHome: string, uid: number | undefined): Promise<SandboxProtection> {
   const canonical = realpathSync.native(home)
-  const fixed = [updateSocketPath(canonical, profile), supervisorSocketPath(canonical, profile)]
+  const fixed = [updateSocketPath(canonical, profile), supervisorSocketPath(canonical, profile), ...uid === undefined ? [] : DAEMON_SOCKETS]
   const found = [...await dockerSockets(env), ...await dockerDesktopSockets(osHome), ...await agentSockets(env)]
   const observed = [...new Set(found)].filter(socket => !fixed.includes(socket))
   return {
@@ -175,7 +190,7 @@ export async function sandboxProtection(home: string, profile: string, env: Read
     protectedHomeReadable: [...READ_EXEMPTIONS],
     deniedSockets: [...new Set([...fixed, ...observed])],
     observedSockets: observed,
-    escapeSocketDirectories: escapeDirectories(uid),
+    escapeSocketDirectories: escapeDirectories(uid, osHome),
     privateTmp: true,
   }
 }

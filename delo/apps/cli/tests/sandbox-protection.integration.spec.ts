@@ -17,7 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { applyLaunchEnvironment } from '../src/launch-environment.ts'
 import { homePatchFile } from '../src/patch-layers.ts'
-import { DOCKER_DESKTOP_SOCKETS, escapeDirectories, removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, startOnlySockets, WSL_INTEROP_DIRECTORIES, writeSandboxOverlay, type SandboxProtection } from '../src/sandbox-protection.ts'
+import { DAEMON_SOCKETS, DOCKER_DESKTOP_SOCKETS, escapeDirectories, removeSandboxOverlay, sandboxOverlayPath, sandboxProtection, startOnlySockets, WSL_INTEROP_DIRECTORIES, writeSandboxOverlay, type SandboxProtection } from '../src/sandbox-protection.ts'
 
 /** A user id no fixture depends on. */
 const UID = 4242
@@ -60,27 +60,33 @@ describe('the CLI profile\'s sandbox protection', () => {
     expect(protection).toEqual({
       protectedHome: home,
       protectedHomeReadable: [...READ_EXEMPTIONS],
-      deniedSockets: [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock'), link, engine],
+      deniedSockets: [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock'), ...DAEMON_SOCKETS, link, engine],
       observedSockets: [link, engine],
-      escapeSocketDirectories: escapeDirectories(UID),
+      escapeSocketDirectories: escapeDirectories(UID, osHome),
       privateTmp: true,
     })
   })
 
-  it('names the escape directories on every machine, by the user id alone, for the provider to check at each wrap', async () => {
+  it('names the escape directories and daemon sockets on every machine, by the user id and the OS home, for the provider to check at each wrap', async () => {
     const { home, osHome } = setUp()
     const env = { DOCKER_CONFIG: join(base ?? '', 'no-config'), DOCKER_HOST: 'tcp://127.0.0.1:2375', XDG_RUNTIME_DIR: '/elsewhere/runtime', TMUX_TMPDIR: '/elsewhere' }
     expect(WSL_INTEROP_DIRECTORIES).toEqual(['/run/WSL'])
-    const named = ['/run/WSL', '/run/user/4242', '/run/dbus', '/tmp/tmux-4242', '/run/screen', '/tmp/.X11-unix', '/mnt/wslg']
-    expect(escapeDirectories(UID)).toEqual(named)
-    expect((await sandboxProtection(home, 'default', env, osHome, UID)).escapeSocketDirectories).toEqual(named)
-    expect((await sandboxProtection(home, 'default', env, osHome, undefined)).escapeSocketDirectories).toEqual(['/run/WSL', '/run/dbus', '/run/screen', '/tmp/.X11-unix', '/mnt/wslg'])
+    const named = ['/run/WSL', '/run/user/4242', '/run/dbus', '/tmp/tmux-4242', '/run/screen', '/tmp/.X11-unix', '/mnt/wslg', '/mnt/wsl/docker-desktop/shared-sockets', join(osHome, '.docker', 'desktop')]
+    expect(escapeDirectories(UID, osHome)).toEqual(named)
+    const protection = await sandboxProtection(home, 'default', env, osHome, UID)
+    expect(protection.escapeSocketDirectories).toEqual(named)
+    expect(DAEMON_SOCKETS).toEqual(['/run/docker-cli.sock', '/run/tailscale/tailscaled.sock', '/var/run/tailscaled.socket'])
+    expect(protection.deniedSockets).toEqual(expect.arrayContaining([...DAEMON_SOCKETS]))
+    expect(protection.observedSockets).toEqual([])
+    const windows = await sandboxProtection(home, 'default', env, osHome, undefined)
+    expect(windows.escapeSocketDirectories).toEqual(['/run/WSL', '/run/dbus', '/run/screen', '/tmp/.X11-unix', '/mnt/wslg'])
+    expect(windows.deniedSockets).toEqual([join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock')])
   })
 
   it('denies the ssh-agent socket SSH_AUTH_SOCK names with its real path, by its path while absent, and nothing for a relative value', async () => {
     const { home, osHome } = setUp()
     const env = { DOCKER_CONFIG: join(base ?? '', 'no-config'), DOCKER_HOST: 'tcp://127.0.0.1:2375' }
-    const channels = [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock')]
+    const channels = [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock'), ...DAEMON_SOCKETS]
     const agent = join(base ?? '', 'agent', 'agent.sock')
     await listen(agent)
     const link = join(base ?? '', 'agent.sock')
@@ -104,6 +110,7 @@ describe('the CLI profile\'s sandbox protection', () => {
     expect(deniedSockets).toEqual([
       join(home, 'run', 'default', 'update.sock'),
       join(home, 'run', 'default', 'supervisor.sock'),
+      ...DAEMON_SOCKETS,
       join(osHome, raw),
       join(osHome, run),
       join(base ?? '', 'vm', 'docker.sock'),
@@ -114,7 +121,7 @@ describe('the CLI profile\'s sandbox protection', () => {
   it('denies a configured Docker socket that does not exist yet by its path, and none without a usable context', async () => {
     const { home, osHome } = setUp()
     const absent = join(base ?? '', 'absent', 'docker.sock')
-    const channels = [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock')]
+    const channels = [join(home, 'run', 'default', 'update.sock'), join(home, 'run', 'default', 'supervisor.sock'), ...DAEMON_SOCKETS]
     expect((await sandboxProtection(home, 'default', { DOCKER_HOST: `unix://${absent}` }, osHome, UID)).deniedSockets).toEqual([...channels, absent])
     const noContext = { DOCKER_CONTEXT: 'missing', DOCKER_CONFIG: join(base ?? '', 'no-config') }
     expect((await sandboxProtection(home, 'default', noContext, osHome, UID)).deniedSockets).toEqual(channels)
