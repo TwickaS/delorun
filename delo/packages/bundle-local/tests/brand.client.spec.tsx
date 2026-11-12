@@ -2,7 +2,7 @@
 /** The sidebar's brand occupants: the hex jack mark at the size the sidebar asks for, and the product name. */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DeloBrandMark, DeloBrandName, PRODUCT_NAME } from '../src/client/brand.tsx'
+import { BRAND_NAME, DeloBrandMark, DeloBrandName } from '../src/client/brand.tsx'
 
 afterEach(cleanup)
 
@@ -20,8 +20,8 @@ describe('the sidebar brand', () => {
     }
   })
 
-  it('names the product beside it', () => {
+  it('names the brand beside it', () => {
     const { container } = render(<DeloBrandName />)
-    expect(container.textContent).toBe(PRODUCT_NAME)
+    expect(container.textContent).toBe(BRAND_NAME)
   })
 })

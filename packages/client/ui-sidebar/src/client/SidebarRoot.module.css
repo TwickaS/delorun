@@ -51,7 +51,7 @@
 .root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .topStrip {
   color: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-00);
-  --dsw-alias-label-secondary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 82%, transparent);
+  --dsw-alias-label-secondary: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-tertiary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 72%, transparent);
 }
 

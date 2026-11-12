@@ -359,13 +359,13 @@ export const INK_EDGE_TOKEN = '--dsw-static-neutral-bluish-1000'
 /**
  * The edge's opacity, in percent, around each part of upstream's brand row over the art: `brand` around the title and
  * its mark, `control` around the toggle's icon. The filter fills the ink's grown shape, so the edge takes the share of
- * the ink's own opacity: the toggle's ink, white at 82%, gets 82% of its share. Upstream's sidebar draws the row in that
- * white over art, and the filter draws the ink over its own edge; against that edge composited over every colour any
+ * the ink's own opacity; the toggle's ink is the title's opaque white, so each edge takes its own share whole. Upstream's
+ * sidebar draws the row in that white over art, and the filter draws the ink over its own edge; against that edge composited over every colour any
  * scene draws in, in every art palette, strength, theme palette and colour scheme, and over the sidebar's fill the art
  * fades into, the title reads at 4.5:1 or more and the toggle at 3:1 or more. Each share sits within four points of the
  * smallest that does, so the edge stays as light as legibility allows; `title-contrast.client.spec.tsx` checks both.
  */
-export const INK_EDGE_OPACITY = { brand: 60, control: 64 } as const
+export const INK_EDGE_OPACITY = { brand: 60, control: 45 } as const
 
 /** One part of the brand row the edge is drawn around. */
 export type InkEdgePart = keyof typeof INK_EDGE_OPACITY

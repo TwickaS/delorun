@@ -108,16 +108,16 @@ function artColours(values: SchemeValues, scheme: Scheme): Rgb[] {
 }
 
 /**
- * The white ink upstream's sidebar gives the brand row over art, read from its rule: the title and mark in one static
- * token, the toggle in a share of it.
+ * The white ink upstream's sidebar gives the brand row over art, read from its rule: the title, the mark and the toggle
+ * in one static token, opaque.
  * @param values - the theme's resolved tokens.
- * @returns the title's and the toggle's ink, the toggle's translucent.
+ * @returns the title's and the toggle's ink.
  */
 function lightInk(values: SchemeValues): Record<InkEdgePart, Rgb> {
   const title = /--dsw-alias-label-primary:\s*var\((--[\w-]+)\)/.exec(LIGHT_RULE)
-  const toggle = /--dsw-alias-label-secondary:\s*color-mix\(in srgb, var\((--[\w-]+)\) (\d+)%, transparent\)/.exec(LIGHT_RULE)
-  if (title?.[1] === undefined || toggle?.[1] === undefined || toggle[2] === undefined) throw new Error('upstream\'s light brand row rule changed')
-  return { brand: requireResolved(values, title[1]), control: { ...requireResolved(values, toggle[1]), alpha: Number(toggle[2]) / 100 } }
+  const toggle = /--dsw-alias-label-secondary:\s*var\((--[\w-]+)\)/.exec(LIGHT_RULE)
+  if (title?.[1] === undefined || toggle?.[1] === undefined) throw new Error('upstream\'s light brand row rule changed')
+  return { brand: requireResolved(values, title[1]), control: requireResolved(values, toggle[1]) }
 }
 
 /**
@@ -178,10 +178,10 @@ describe('the sidebar title over the header art', () => {
     }
   })
 
-  it('fails without an edge, or with the toggle at the title\'s share, so the check reaches colours that need each', () => {
+  it('fails without an edge, so the check reaches colours that need each', () => {
     expect(worstContrast(PALETTES[0], 'light', 'brand', 0)).toBeLessThan(4.5)
     expect(worstContrast(PALETTES[0], 'dark', 'brand', 0)).toBeLessThan(4.5)
-    expect(Math.min(...PALETTES.flatMap(palette => SCHEMES.map(scheme => worstContrast(palette, scheme, 'control', INK_EDGE_OPACITY.brand))))).toBeLessThan(3)
+    expect(Math.min(...PALETTES.flatMap(palette => SCHEMES.map(scheme => worstContrast(palette, scheme, 'control', 0))))).toBeLessThan(3)
   })
 
   it('reads the ink from upstream\'s light rule, which draws the brand and the toggle\'s icon through the edge\'s ids', () => {
