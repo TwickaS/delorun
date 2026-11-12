@@ -77,6 +77,7 @@ interface FetchDecision {
 const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
 const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate'
 const MCP_ANSWER = 'accepting or revoking a stdio MCP server decides whether its command runs outside the sandbox, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
+const EXTERNAL_AGENT = 'allowing or revoking an external agent for a workspace decides whether a program outside the sandbox starts without asking, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
 /**
@@ -105,6 +106,9 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloMcpConsent.accept': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.decline': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.revoke': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloDelegationConsent.grants': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloDelegationConsent.allow': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloDelegationConsent.revoke': { device: 'refused', reason: EXTERNAL_AGENT, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.waiting': { device: 'admitted', reason: 'the names of the servers waiting for the person\'s OK, without their commands, so a phone says to approve them at the computer' },
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
   '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
