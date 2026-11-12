@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Cost meter",
+    "description": "Shows the chat's estimated cost under the composer, including its subagents and teammates, with a breakdown by agent, model and token type"
+  }
+}

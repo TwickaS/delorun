@@ -1,0 +1,16 @@
+<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="9" width="24" height="18" rx="4" fill="url(#cost-card)" />
+  <path d="M18 12.5V23.5M21.5 14.8C21.5 13.5 20 12.8 18 12.8C16 12.8 14.8 13.6 14.8 15C14.8 17.6 21.5 16.6 21.5 19.3C21.5 20.7 20.2 21.5 18 21.5C15.8 21.5 14.5 20.7 14.5 19.4" stroke="#FFFFFF" stroke-width="1.9" stroke-linecap="round" />
+  <path d="M24 30A12 12 0 0 0 30 21" stroke="url(#cost-meter)" stroke-width="2.6" stroke-linecap="round" />
+  <circle cx="30" cy="21" r="2.2" fill="#45D9E7" />
+  <defs>
+    <linearGradient id="cost-card" x1="6" y1="9" x2="30" y2="27" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6DB9FB" />
+      <stop offset="1" stop-color="#3650DE" />
+    </linearGradient>
+    <linearGradient id="cost-meter" x1="23" y1="30" x2="31" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#45D9E7" />
+      <stop offset="1" stop-color="#67C7FE" />
+    </linearGradient>
+  </defs>
+</svg>

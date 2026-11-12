@@ -28,3 +28,12 @@
 
     - id: delo-onboarding
       name: '@delo/plugin-onboarding'
+
+# Optional studio plugins: each row is inserted disabled, so a new profile
+# mounts nothing of it until the person turns it on in Settings → Plugins,
+# which writes `disabled: false` for the row in the profile's own patch. Like
+# the rows above, the browser half requires `deloStudio`.
+- insert:
+    - id: delo-cost-meter
+      name: '@delo/plugin-cost-meter'
+      disabled: true
