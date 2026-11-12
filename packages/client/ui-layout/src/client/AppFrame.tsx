@@ -270,6 +270,15 @@ export function AppFrame({
   const sidebarWidth = drawer
     ? Math.min(layoutInfo.sidebar || layoutInfo.sidebarWidths.default, Math.max(0, viewport - 48))
     : cols.sidebar
+  // The width the column takes once it opens, in both states: the collapsed
+  // shell renders its transient hover-peek overlay at it, so the swap from the
+  // rail to the open column never changes the column's own geometry. The solve
+  // is the open track's, with the rail width left out.
+  const expandedSidebarWidth = drawer
+    ? sidebarWidth
+    : computeColumns(
+      viewport, layoutInfo.sidebar === 0 ? layoutInfo.sidebarWidths.default : layoutInfo.sidebar, 0, collapsedWidth, centeredSidebar,
+    ).sidebar
   const sidebar = useMemo(() => renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
     width: sidebarWidth,
@@ -292,6 +301,9 @@ export function AppFrame({
       style={{
         ...(windowsTitlebar
           ? { '--dsh-windows-sidebar-width': `${cols.sidebar}px` } : {}),
+        // The collapsed shell's hover peek opens at the column's open width
+        // rather than beside it (ui-sidebar .peeking).
+        ...{ '--dsh-sidebar-expanded-width': `${expandedSidebarWidth}px` },
         gridTemplateColumns:
           `${cols.sidebar}px minmax(${cols.rightbar === 0 ? 0 : CENTER_MIN}px, 1fr) minmax(0px, ${rightbarMax}px)`,
       }}

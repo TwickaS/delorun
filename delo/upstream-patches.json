@@ -672,7 +672,7 @@
       "path": "packages/client/ui-layout/src/client/AppFrame.tsx",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Reads the sidebar default width from the layout store, so a width set through ctx.layout.setSidebarWidths applies to the opened sidebar and to the drawer fallback."
+      "reason": "Reads the sidebar default width from the layout store, so a width set through ctx.layout.setSidebarWidths applies to the opened sidebar and to the drawer fallback. The frame hands the sidebar its expanded width so the peek matches the open column."
     },
     {
       "path": "packages/client/ui-layout/src/client/columns.ts",
@@ -930,13 +930,13 @@
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot."
+      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot. The peek sits fixed at the frame expanded width over the rail, with a short fade that prefers-reduced-motion turns off."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.tsx",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot and the backdrop slot."
+      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot and the backdrop slot. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/contract/slots.ts",
