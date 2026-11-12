@@ -299,8 +299,8 @@
     {
       "path": "packages/boot/config-editor/src/index.ts",
       "class": "delo-feature",
-      "feature": "config-editor-events",
-      "reason": "Settings by chat (C4): `ConfigEditor.edit()` emits `config-editor/edited` with the entry's patch id after a saved edit, once the profile's lock is released and in the caller's asynchronous context, so the plugin manager can save the edit as a profile version named by whoever made it. Who may edit a configuration, and when an edit asks, are unchanged. Secret fields (C1): before the profile patch is written, `edit()` asks `config-editor/before-save` with the entry and the complete config the patch would hold, and a listener's reason refuses the edit with `ConfigEditRefusedError`, leaving the file unchanged. Without a listener every edit is saved as upstream saves it; `delorun` refuses a value for a secret-role field there."
+      "feature": "settings-by-chat",
+      "reason": "Settings by chat (C4): `ConfigEditor.edit()` emits `config-editor/edited` with the entry's patch id after a saved edit, once the profile's lock is released and in the caller's asynchronous context, so the plugin manager can save the edit as a profile version named by whoever made it. Who may edit a configuration, and when an edit asks, are unchanged."
     },
     {
       "path": "packages/boot/doctor/cordis.patch.yml",
@@ -354,12 +354,12 @@
       "path": "packages/boot/plugin-manager/src/history.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the profile's history, a git repository whose git directory is `.plugin-manager/history` and whose work tree is the profile, run with no system or global configuration, no hooks and no signing, writing files at mode 0600. Opening a history that exists adds to its exclusions every managed file they do not admit, so a history that upstream's five-file manager created also holds Delo's files from the next version on; exclusions only widen, are replaced atomically, and regain their first line that excludes the rest of the profile when it is missing. `trackedBy` says whether any version up to one held a file, so Delo's restore tells a file the history did not track yet from one that was removed. Secret fields (C1): the optional `admit` argument receives a copy of the text of every file a version would hold, the managed files, those the exclusions admit and those already tracked, each read once; the history stages exactly that text as regular files with `hash-object` and `update-index`, and a returned reason, or an admission that throws, refuses the version as `VersionRefusedError`, a `HistoryUnavailableError`, before anything is staged. The plugin manager always passes an admission, which asks `plugin-manager/before-record`, so stock, with no listener, now saves every version this way: each file read once and saved as a regular file (mode 100644), where `git add --all` saved what the work tree held when git read it. A caller that passes no admission keeps `git add --all`."
+      "reason": "Profile history and safe mode: the profile's history, a git repository whose git directory is `.plugin-manager/history` and whose work tree is the profile, run with no system or global configuration, no hooks and no signing, writing files at mode 0600. Opening a history that exists adds to its exclusions every managed file they do not admit, so a history that upstream's five-file manager created also holds Delo's files from the next version on; exclusions only widen, are replaced atomically, and regain their first line that excludes the rest of the profile when it is missing. `trackedBy` says whether any version up to one held a file, so Delo's restore tells a file the history did not track yet from one that was removed."
     },
     {
       "path": "packages/boot/plugin-manager/src/index.ts",
       "class": "security",
-      "reason": "Profile history and safe mode: every change saves a version of the profile's managed files in a git history, and the manager gains `undo`, `restore` and `history` Remotes, the in-process `listHistory`, `previewUndo` and `previewRestore` reads that save no version, the `config-editor/edited` version, and the optional `pluginAudit` service asked at every installation and before a bundle is enabled. `undo` and `restore` audit every package they bring back before any of its scripts or code run: an unchanged lockfile is audited before any file is written; otherwise the version is installed with `--ignore-scripts`, audited, and only then built with `pnpm rebuild --pending`, and a refusal puts the files back. The lockedIncludes wiring (C1) is left out. Lead verdict: kept; undo and restore escalate through the tool like the other writes, are person-only as Remotes and owner-only under LiveShare, and A118 adds the plugin audit over what they bring back; the audit refusals are stricter than stock, and leaving out the lockedIncludes wiring under A75 returns stock's reasons. Protected plugins: the validated `protectedPlugins` setting adds module names to PROTECTED_PLUGINS (never removes one); `@delo/bundle-local` sets Delo's consent and guard plugins, the update gate, dsh-sandbox-local and dsh-sandbox-policy. Before and after every change the manager composes the profile's rows (home patch and overlays included) and refuses with `management-required` a change that drops, replaces, reconfigures, disables, enables or duplicates a protected row, gives another row its id, or adds a row of a protected module, and refuses to install, select, deselect, remove, undo to or restore a package or version that does so or that provides a protected module; with no protected name configured, behaviour and text are upstream's. A revocation, undo or restore that would take away a version exemption of a package that provides a protected module or is a management bundle is refused with `management-required`. Lead verdict on the protected-plugin checks: approved, after two independent reviews and their fixes (2026-11-10). Secret fields (C1): the history asks `plugin-manager/before-record` before every version, so a listener's reason keeps that version out of the history; a change carries the reason as a warning, `history` still lists the versions with the reason as `unsaved`, `undo` takes an unsaved edit back by restoring the latest version, and `restore` restores without saving it. With no listener every version is saved as before.",
+      "reason": "Profile history and safe mode: every change saves a version of the profile's managed files in a git history, and the manager gains `undo`, `restore` and `history` Remotes, the in-process `listHistory`, `previewUndo` and `previewRestore` reads that save no version, the `config-editor/edited` version, and the optional `pluginAudit` service asked at every installation and before a bundle is enabled. `undo` and `restore` audit every package they bring back before any of its scripts or code run: an unchanged lockfile is audited before any file is written; otherwise the version is installed with `--ignore-scripts`, audited, and only then built with `pnpm rebuild --pending`, and a refusal puts the files back. The lockedIncludes wiring (C1) is left out. Lead verdict: kept; undo and restore escalate through the tool like the other writes, are person-only as Remotes and owner-only under LiveShare, and A118 adds the plugin audit over what they bring back; the audit refusals are stricter than stock, and leaving out the lockedIncludes wiring under A75 returns stock's reasons. Protected plugins: the validated `protectedPlugins` setting adds module names to PROTECTED_PLUGINS (never removes one); `@delo/bundle-local` sets Delo's consent and guard plugins, the update gate, dsh-sandbox-local and dsh-sandbox-policy. Before and after every change the manager composes the profile's rows (home patch and overlays included) and refuses with `management-required` a change that drops, replaces, reconfigures, disables, enables or duplicates a protected row, gives another row its id, or adds a row of a protected module, and refuses to install, select, deselect, remove, undo to or restore a package or version that does so or that provides a protected module; with no protected name configured, behaviour and text are upstream's. A revocation, undo or restore that would take away a version exemption of a package that provides a protected module or is a management bundle is refused with `management-required`. Lead verdict on the protected-plugin checks: approved, after two independent reviews and their fixes (2026-11-10).",
       "sha256": "982bdb7e8a28738d2d1517285427bbbb5b35168305c2ca263f4f52bf23b5112c"
     },
     {
@@ -372,7 +372,7 @@
       "path": "packages/boot/plugin-manager/src/types.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: adds the audit, undo, restore, history, version-change and preview types and the new refusal codes and stages. The lockedIncludes `locked` reason (C1) is left out. Secret fields (C1): declares the `plugin-manager/before-record` bail event and `ProfileHistoryInfo.unsaved`, why an edit made outside plugin management was not saved."
+      "reason": "Profile history and safe mode: adds the audit, undo, restore, history, version-change and preview types and the new refusal codes and stages. The lockedIncludes `locked` reason (C1) is left out."
     },
     {
       "path": "packages/boot/plugin-manager/src/version-changes.ts",
@@ -714,7 +714,7 @@
       "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the History view and the audit findings on the install screens. The read-only note style and the distribution-layer listing (C1) are left out; the History introduction has its own style. Secret fields (C1): the History view names why the latest change was not saved, above the versions."
+      "reason": "Profile history and safe mode: the History view and the audit findings on the install screens. The read-only note style and the distribution-layer listing (C1) are left out; the History introduction has its own style."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/index.ts",
@@ -726,13 +726,13 @@
       "path": "packages/client/ui-plugin-manager/src/client/locales.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the History view, restore, audit and install-terminal labels in every locale. The lockedIncludes `reasonLocked` labels (C1) are left out. Secret fields (C1): the `historyUnsaved` label in every locale."
+      "reason": "Profile history and safe mode: the History view, restore, audit and install-terminal labels in every locale. The lockedIncludes `reasonLocked` labels (C1) are left out."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/manager-store.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history and safe mode: the History view's state, one restore at a time, and the audit acceptance the person gives on the failed install screen, re-placed onto upstream's log-path and failure-stage changes. Secret fields (C1): a ready history keeps the Host's `unsaved` reason."
+      "reason": "Profile history and safe mode: the History view's state, one restore at a time, and the audit acceptance the person gives on the failed install screen, re-placed onto upstream's log-path and failure-stage changes."
     },
     {
       "path": "packages/client/ui-plugin-manager/src/client/navigation-store.ts",
@@ -1566,13 +1566,13 @@
       "path": "scripts/gen-cordis-catalog.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. The late session projection keys add the `ProjectionRegistrationListener` row. Upstream's rows are unchanged. The Settings layout and Sidebar layout services (`settingsLayout`, `settingsShell`, `sidebarLayout`) are named in SERVICE_WALK_EXEMPTIONS with their README owners, because the rendering projection does not reach them. Admission seam (C4): maps `ctx.authenticator` and the `authenticator` event scope to web-server.md, links `WebListener` and `WebListenerOptions` there, and names the owners of `Admission`, `ListenerPolicy`, `ReachListener`, `ReachListenerOptions` and `MintedCredential`. Consent and guard seams: maps `mcpAddConsent`, `writeConsent`, `scheduleConsent`, `sandboxModeGuard` and `remoteAnswerGuard` to the MCP, filesystem, Schedule, sandbox and Typert pages, links the types their signatures use there, and names the Gateway README as the owner of the client-face `remote/answer-refused` event. Secret fields (C1): links `ConfigSave` to boot.md."
+      "reason": "Profile history, plugin audit and settings by chat: the catalog rows for `pluginAudit`, the `config-editor` event scope and the `ProfileVersionId`, `ProfileHistoryInfo`, `ProfileVersionPreview`, `ConfigEdit`, `PluginAuditResult` and `PluginAuditTarget` types. The late session projection keys add the `ProjectionRegistrationListener` row. Upstream's rows are unchanged. The Settings layout and Sidebar layout services (`settingsLayout`, `settingsShell`, `sidebarLayout`) are named in SERVICE_WALK_EXEMPTIONS with their README owners, because the rendering projection does not reach them. Admission seam (C4): maps `ctx.authenticator` and the `authenticator` event scope to web-server.md, links `WebListener` and `WebListenerOptions` there, and names the owners of `Admission`, `ListenerPolicy`, `ReachListener`, `ReachListenerOptions` and `MintedCredential`. Consent and guard seams: maps `mcpAddConsent`, `writeConsent`, `scheduleConsent`, `sandboxModeGuard` and `remoteAnswerGuard` to the MCP, filesystem, Schedule, sandbox and Typert pages, links the types their signatures use there, and names the Gateway README as the owner of the client-face `remote/answer-refused` event."
     },
     {
       "path": "scripts/gen-doc-graphs.ts",
       "class": "delo-feature",
       "feature": "profile-history",
-      "reason": "Plugin audit on install: the `pluginAudit` row of the capability-seam table, a Service Definition the plugin manager consumes and a distribution provides. Upstream's rows are unchanged. Admission, consent and guard seams: the `authenticator`, `mcpAddConsent`, `remoteAnswerGuard`, `scheduleConsent`, `sandboxModeGuard` and `writeConsent` rows, optional Service Definitions whose consumers read them with `ctx.get`. Secret fields (C1): the event matrix reads `bail` dispatches, the form of `config-editor/before-save` and `plugin-manager/before-record`."
+      "reason": "Plugin audit on install: the `pluginAudit` row of the capability-seam table, a Service Definition the plugin manager consumes and a distribution provides. Upstream's rows are unchanged. Admission, consent and guard seams: the `authenticator`, `mcpAddConsent`, `remoteAnswerGuard`, `scheduleConsent`, `sandboxModeGuard` and `writeConsent` rows, optional Service Definitions whose consumers read them with `ctx.get`."
     },
     {
       "path": "scripts/gen-third-party-notices.ts",
@@ -1890,7 +1890,7 @@
       "path": "apps/cli/src/profile-boot.ts",
       "class": "delo-feature",
       "feature": "home-process-signals",
-      "reason": "runProfile's optional signals and failLoud flags, both true by default, let a caller that owns the process's termination signals and its last-resort error handler boot a profile without the per-run SIGTERM and SIGINT handlers and fail-loud listeners, so one handler of each serves the process across several Host boots in it. The optional `prepare` callback receives the root context before the first config-tree entry mounts, so a caller's listeners, such as Delo's refusal of a secret-role value (C1), also see the edits plugins save while the profile boots; without it boot is unchanged."
+      "reason": "runProfile's optional signals and failLoud flags, both true by default, let a caller that owns the process's termination signals and its last-resort error handler boot a profile without the per-run SIGTERM and SIGINT handlers and fail-loud listeners, so one handler of each serves the process across several Host boots in it."
     },
     {
       "path": "packages/sandbox/sandbox-local/src/seccomp.ts",
