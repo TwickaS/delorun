@@ -28,3 +28,12 @@
 
     - id: delo-onboarding
       name: '@delo/plugin-onboarding'
+      config:
+        # The curated plugins the guide offers. Each package may say in its own
+        # package.json which connections it is for ("delo": { "connections": [...] });
+        # the guide puts those that fit the person's connections first.
+        plugins:
+          - '@deepseek-ai/dsh-experimental-session-search'
+          - '@deepseek-ai/dsh-experimental-terminal-bundle'
+          - '@deepseek-ai/dsh-experimental-tool-worktree'
+          - '@deepseek-ai/dsh-experimental-session-titles-bundle'

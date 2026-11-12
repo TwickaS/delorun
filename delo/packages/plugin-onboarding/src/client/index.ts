@@ -1,11 +1,11 @@
 /**
  * Delo's onboarding, studio half: the first minute of the studio as one flow ending in a chat. It is one step of
  * upstream's `settings.onboarding` flow, placed before every other step, so upstream's coordinator decides when it may
- * show. The steps are the preview notice, language and look, agents, recommended plugins and, where `ctx.deloReach`
- * says reach is available and not set up, reach; the last button opens a new chat in the default workspace, whose empty
- * state offers starter prompts that write into the message box. Where no default workspace resolves, the button
- * chooses a folder first: the host's native chooser where it has one, otherwise a chooser in the Start step, and the
- * folder is added through the harness's route ({@link addWorkspaceFolder}), which refuses the folders Delo never adds.
+ * show. The steps are Welcome (language, the preview notice and the model providers with their key test), Look, Agents,
+ * Recommended plugins, Phone access while reach is not set up, Workspace and Ready; Ready's button opens a new chat in
+ * the chosen workspace, whose empty state offers starter prompts that fit the folder and write into the message box.
+ * A folder is added through the harness's route ({@link addWorkspaceFolder}), which refuses the folders Delo never adds,
+ * or cloned from Git through the harness's clone route.
  * It loads only while the Delo look is on (the `deloStudio` service exists), so the stock look keeps the preview
  * notice's own step. `ctx.deloOnboarding` lets other Delo plugins add steps.
  * @module @delo/plugin-onboarding/client
@@ -38,14 +38,15 @@ import type {} from '@delo/bundle-local/client'
 import type {} from '@delo/plugin-theme/client'
 import type { ThemeSettings } from '@delo/plugin-theme'
 import { ONBOARDING_ROW_ID, THEME_ROW_ID, type OnboardingSettings } from '../config.ts'
-import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest } from '../wire.ts'
+import { ADD_WORKSPACE_PATH, AddWorkspaceAnswer, NO_RECORD, SETUP_RECORD_PATH, SetupRecord, type AddWorkspaceRequest, type FolderKind } from '../wire.ts'
 import { createBundleInstaller } from './bundles.ts'
+import { hostApi } from './host-api.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
-  AddOutcome, DeloOnboarding, DeloReach, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, ReachFace, ReachState, SchemePreference, StartFace, StartTarget,
+  AddOutcome, DeloOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
   StaticServices,
 } from './types.ts'
 
@@ -55,17 +56,16 @@ export type { OnboardingStepEntryProps } from './Onboarding.tsx'
 export type { OnboardingLocaleKey } from './locales.ts'
 export type { ShowAgainInjected, ShowAgainRowProps } from './ShowAgainRow.tsx'
 export type { StarterInjected, StarterPromptsProps } from './StarterPrompts.tsx'
+export { hostApi, readReach, REACH_STATUS_PATH } from './host-api.ts'
 export type {
-  AddOutcome, AppearanceTranslate, DeloOnboarding, DeloReach, FolderBrowse, FolderChoice, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep, OnboardingStepProps, ReachFace, ReachState,
-  SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
+  AddedFolder, AddOutcome, AppearanceTranslate, CloneStartOutcome, DeloOnboarding, FolderBrowse, FolderChoice, HostFace, LanguageFace, LookFace, NoticeFace, OnboardingInjected, OnboardingStep,
+  OnboardingStepProps, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Delo's onboarding, for other Delo plugins' setup steps. */
     deloOnboarding: DeloOnboarding
-    /** Reach, where this installation can turn it on; provided by the reach plugin, absent otherwise. */
-    deloReach: DeloReach
   }
 }
 
@@ -139,7 +139,7 @@ export async function addWorkspaceFolder(path: string): Promise<AddOutcome> {
   }
   switch (answer.result) {
     // The route's JSON validation is where the id is trusted; the brand names it.
-    case 'added': return { kind: 'chosen', workspaceId: answer.workspaceId as WorkspaceId }
+    case 'added': return { kind: 'chosen', workspaceId: answer.workspaceId as WorkspaceId, path, folder: answer.kind }
     case 'refused': return { kind: 'refused', problem: answer.problem }
     case 'failed': return FAILED
     /* v8 ignore next 2 -- closed-union default only defends a future widening of AddWorkspaceAnswer */
@@ -197,14 +197,6 @@ export function applyStudio(ctx: Context): void {
       acknowledge: () => { service.acknowledge() },
     }
   }
-  const reach: ReachFace = {
-    getSnapshot: (): ReachState => {
-      const service = ctx.get('deloReach')
-      if (service === undefined) return 'unavailable'
-      return service.setUp() ? 'set-up' : 'available'
-    },
-    subscribe: listener => ctx.on('internal/service', (name: string) => { if (name === 'deloReach') listener() }),
-  }
   const services = (): StaticServices => ({
     notice: notice(),
     language: {
@@ -223,7 +215,7 @@ export function applyStudio(ctx: Context): void {
     },
     appearance: ctx.locale.bind('settings.deloAppearance'),
     bundles: createBundleInstaller(ctx),
-    reach,
+    host: hostApi,
     start,
     resolveText: text => ctx.locale.resolveText(text),
   })
@@ -240,7 +232,7 @@ export function applyStudio(ctx: Context): void {
     if (workspaces === undefined) return OTHER
     try {
       const view = await workspaces.initializeDefault()
-      if (view !== undefined) return { kind: 'default', workspaceId: view.workspaceId }
+      if (view !== undefined) return { kind: 'default', workspaceId: view.workspaceId, path: view.path }
     } catch (error) {
       console.warn('delo onboarding: the default workspace was not resolved', error)
     }
@@ -265,12 +257,12 @@ export function applyStudio(ctx: Context): void {
     try {
       path = await workspace.pickDirectory()
     } catch (error) {
-      // A host that picks folders in a page dialog has no native chooser; the Start step shows its own.
+      // A host that picks folders in a page dialog has no native chooser; the Workspace step shows its own.
       console.warn('delo onboarding: the native folder chooser did not open', error)
       return IN_STEP
     }
     if (path === null) return CANCELLED
-    return addWorkspaceFolder(path)
+    return await addWorkspaceFolder(path)
   }
   const browse: FolderBrowse = {
     list: async (path, signal) => uiWorkspace().listDirectory(path, signal),
@@ -286,7 +278,7 @@ export function applyStudio(ctx: Context): void {
    * Open a new chat and keep it as the one whose empty state offers starter prompts. Without a workspace the person
    * chose or a default one, the workspace UI's own New Session choice applies and no prompts follow.
    */
-  const startChat = async (chosen?: WorkspaceId): Promise<void> => {
+  const startChat = async (chosen?: WorkspaceId, folder?: FolderKind): Promise<void> => {
     const workspace = ctx.get('uiWorkspace')
     if (workspace === undefined) return
     let target = chosen
@@ -298,6 +290,7 @@ export function applyStudio(ctx: Context): void {
       workspace.startSession()
       return
     }
+    writeProgress('starterKind', folder ?? '')
     try {
       await workspace.openWorkspace(target, (sessionId) => { writeProgress('starterSession', sessionId) })
     } catch (error) {
@@ -317,6 +310,7 @@ export function applyStudio(ctx: Context): void {
   }
   const starters: StarterInjected = {
     starter: { getSnapshot: () => progress.getSnapshot().value?.starterSession ?? '', subscribe: listener => progress.subscribe(listener) },
+    folder: () => progress.getSnapshot().value?.starterKind ?? '',
     prefill: (sessionId, text) => {
       const scope = ctx.get('sessions')?.scope(sessionId)
       const input = scope?.get('conversation')?.input.for(scope)

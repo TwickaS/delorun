@@ -1,11 +1,13 @@
 /**
  * Onboarding's row configuration, kept by the host half and read and written by the studio half: whether the person
- * finished or skipped onboarding, the step they reached, the chat whose empty state still offers starter prompts, and
- * the packages the recommended-plugins step offers.
+ * finished or skipped onboarding, the step they reached, the chat whose empty state still offers starter prompts and
+ * what its folder holds, the packages the recommended-plugins step offers, and the limits of the routes that reach the
+ * network or run Git.
  * @module @delo/plugin-onboarding/config
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { FOLDER_KINDS } from './wire.ts'
 
 /** The Loader row id, which names the settings namespace the studio edits. */
 export const ONBOARDING_ROW_ID = 'delo-onboarding'
@@ -38,10 +40,12 @@ export interface OnboardingSettings {
   starterSession: string
   /** Packages the recommended-plugins step offers; the step is left out when the list is empty. */
   plugins: string[]
+  /** What the first chat's folder holds, which picks its starting prompts; empty for the general prompts. */
+  starterKind: string
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [] }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', starterSession: '', plugins: [], starterKind: '' }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -49,6 +53,11 @@ export interface Config {
   step: Volatile<string>
   starterSession: Volatile<string>
   plugins: Volatile<string[]>
+  starterKind: Volatile<string>
+  registry: string
+  registryTimeoutMs: number
+  keyTestTimeoutMs: number
+  cloneTimeoutMs: number
 }
 
 /** The configuration schema: each field validated, defaulted, and changeable while the studio runs. */
@@ -59,4 +68,11 @@ export const Config = z.object({
   plugins: z.array(z.string().pattern(PACKAGE_NAME).max(214)).max(RECOMMENDED_LIMIT)
     .description('Packages the recommended-plugins step offers, by npm package name. With none, the step is left out.')
     .default([...DEFAULT_SETTINGS.plugins]).volatile(),
+  starterKind: z.union(['', ...FOLDER_KINDS] as const).default('').volatile(),
+  registry: z.string().pattern(/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/u)
+    .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')
+    .default('https://registry.npmjs.org'),
+  registryTimeoutMs: z.natural().min(1000).max(60_000).description('The most time the registry requests may take together, in milliseconds.').default(10_000),
+  keyTestTimeoutMs: z.natural().min(1000).max(60_000).description('The most time one provider\'s key test may take, in milliseconds.').default(15_000),
+  cloneTimeoutMs: z.natural().min(10_000).max(3_600_000).description('The most time a clone from Git may take, in milliseconds.').default(600_000),
 })

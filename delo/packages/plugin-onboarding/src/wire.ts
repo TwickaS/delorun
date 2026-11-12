@@ -62,12 +62,170 @@ export const AddWorkspaceRequest = z.strictObject({ path: z.string().min(1).max(
 /** {@link AddWorkspaceRequest}'s parsed value. */
 export type AddWorkspaceRequest = z.output<typeof AddWorkspaceRequest>
 
-/** What adding a folder came to: the workspace's id, the reason the folder is refused, or a failure of the registry. */
+/**
+ * What a folder holds, from its entries' names only, which picks the first chat's starting prompts: `empty` has no
+ * visible entry, `code` is a Git repository or holds a project manifest, `files` is anything else.
+ */
+export const FOLDER_KINDS = ['empty', 'code', 'files'] as const
+
+/** One of {@link FOLDER_KINDS}. */
+export type FolderKind = typeof FOLDER_KINDS[number]
+
+/** What adding a folder came to: the workspace's id and what the folder holds, the reason the folder is refused, or a failure of the registry. */
 export const AddWorkspaceAnswer = z.discriminatedUnion('result', [
-  z.strictObject({ result: z.literal('added'), workspaceId: z.string().min(1).max(200) }),
+  z.strictObject({ result: z.literal('added'), workspaceId: z.string().min(1).max(200), kind: z.enum(FOLDER_KINDS) }),
   z.strictObject({ result: z.literal('refused'), problem: z.enum(LOCATION_PROBLEMS) }),
   z.strictObject({ result: z.literal('failed') }),
 ])
 
 /** {@link AddWorkspaceAnswer}'s parsed value. */
 export type AddWorkspaceAnswer = z.output<typeof AddWorkspaceAnswer>
+
+/** The harness's route that reports this computer's readiness. `GET` answers {@link Readiness}. */
+export const READINESS_PATH = '/api/deloOnboarding.readiness'
+
+/** Whether a coding agent has a sign-in on this computer: `unknown` where the probe cannot see it, as Claude Code's Keychain on macOS. */
+export const AGENT_SIGN_INS = ['found', 'missing', 'unknown'] as const
+
+/** One of {@link AGENT_SIGN_INS}. */
+export type AgentSignIn = typeof AGENT_SIGN_INS[number]
+
+/** How far Tailscale is from serving the studio, by the first thing missing; `unknown` when the probe cannot tell. */
+export const TailscaleReadiness = z.discriminatedUnion('state', [
+  z.strictObject({ state: z.literal('ready'), dnsName: z.string().min(1).max(253) }),
+  z.strictObject({ state: z.enum(['not-installed', 'signed-out', 'https-off', 'needs-operator', 'unknown']) }),
+])
+
+/** {@link TailscaleReadiness}'s parsed value. */
+export type TailscaleReadiness = z.output<typeof TailscaleReadiness>
+
+/** This computer's readiness for the agents and reach steps. */
+export const Readiness = z.strictObject({
+  agents: z.strictObject({ 'claude-code': z.enum(AGENT_SIGN_INS), 'codex': z.enum(AGENT_SIGN_INS) }),
+  tailscale: TailscaleReadiness,
+})
+
+/** {@link Readiness}'s parsed value. */
+export type Readiness = z.output<typeof Readiness>
+
+/** The harness's route that tests each model provider's key with its free model listing. `POST` with no body answers {@link KeyTestAnswer}. */
+export const KEY_TEST_PATH = '/api/deloOnboarding.keyTest'
+
+/**
+ * What one provider's test came to: `works` the listing answered; `rejected` the provider refused the key;
+ * `unreachable` the provider did not answer; `failed` the test failed without saying which; `no-key` no key is stored
+ * or set for it; `untested` this provider offers no listing to test with.
+ */
+export const KEY_RESULTS = ['works', 'rejected', 'unreachable', 'failed', 'no-key', 'untested'] as const
+
+/** One of {@link KEY_RESULTS}. */
+export type KeyResult = typeof KEY_RESULTS[number]
+
+/** The most providers one test reports. */
+export const MAX_PROVIDERS = 32
+
+/** Each usable provider route with its name and the test's result, in the order the harness lists them. */
+export const KeyTestAnswer = z.strictObject({
+  providers: z.array(z.strictObject({ provider: z.string().min(1).max(200), name: z.string().min(1).max(200), result: z.enum(KEY_RESULTS) })).max(MAX_PROVIDERS),
+})
+
+/** {@link KeyTestAnswer}'s parsed value. */
+export type KeyTestAnswer = z.output<typeof KeyTestAnswer>
+
+/** The harness's route that starts cloning a Git repository into a new folder. `POST` takes {@link CloneRequest} and answers {@link CloneStart}. */
+export const CLONE_PATH = '/api/deloOnboarding.clone'
+
+/** The harness's route that reports a clone. `POST` takes {@link CloneStatusRequest} and answers {@link CloneStatus}. */
+export const CLONE_STATUS_PATH = '/api/deloOnboarding.cloneStatus'
+
+/** The longest repository address the clone route takes. */
+export const MAX_URL_LENGTH = 2048
+
+/** The longest folder name the clone route takes. */
+export const MAX_NAME_LENGTH = 255
+
+/** The largest request body the clone routes read, in bytes. */
+export const MAX_CLONE_BODY_BYTES = 6 * (MAX_PATH_LENGTH + MAX_URL_LENGTH + MAX_NAME_LENGTH) + 64
+
+/** A clone to start: the repository's address, the existing folder to clone into, and the new folder's name inside it. */
+export const CloneRequest = z.strictObject({
+  url: z.string().min(1).max(MAX_URL_LENGTH),
+  parent: z.string().min(1).max(MAX_PATH_LENGTH),
+  name: z.string().min(1).max(MAX_NAME_LENGTH),
+})
+
+/** {@link CloneRequest}'s parsed value. */
+export type CloneRequest = z.output<typeof CloneRequest>
+
+/**
+ * Why a clone is refused before it starts: `url-form` is not an `https://`, `ssh://` or `user@host:path` address (a
+ * local path, `file://`, `ext::` and any value led by `-` are refused); `name-form` is not one plain folder name;
+ * `not-empty` the folder exists and holds something; `busy` another clone runs; or a {@link LocationProblem}.
+ */
+export const CLONE_PROBLEMS = ['url-form', 'name-form', 'not-empty', 'busy', ...LOCATION_PROBLEMS] as const
+
+/** One of {@link CLONE_PROBLEMS}. */
+export type CloneProblem = typeof CLONE_PROBLEMS[number]
+
+/** A started clone's id, or why it did not start. */
+export const CloneStart = z.discriminatedUnion('result', [
+  z.strictObject({ result: z.literal('started'), job: z.string().min(1).max(64) }),
+  z.strictObject({ result: z.literal('refused'), problem: z.enum(CLONE_PROBLEMS) }),
+])
+
+/** {@link CloneStart}'s parsed value. */
+export type CloneStart = z.output<typeof CloneStart>
+
+/** The clone to report. */
+export const CloneStatusRequest = z.strictObject({ job: z.string().min(1).max(64) })
+
+/**
+ * Why a started clone failed: `sign-in` the repository needs a sign-in the studio never asks for; `not-found` the
+ * repository does not exist or is private; `network` the host could not be reached; `timeout` it took too long;
+ * `no-git` Git is not installed; `failed` any other failure; `add-failed` the clone finished but the folder could not be
+ * added as a workspace.
+ */
+export const CLONE_FAILURES = ['sign-in', 'not-found', 'network', 'timeout', 'no-git', 'failed', 'add-failed'] as const
+
+/** One of {@link CLONE_FAILURES}. */
+export type CloneFailure = typeof CLONE_FAILURES[number]
+
+/** Where a clone stands: running with the percent received when Git reported one, added as a workspace with its folder, failed, or unknown to the harness. */
+export const CloneStatus = z.discriminatedUnion('state', [
+  z.strictObject({ state: z.literal('running'), percent: z.number().int().min(0).max(100).optional() }),
+  z.strictObject({ state: z.literal('done'), workspaceId: z.string().min(1).max(200), path: z.string().min(1).max(MAX_PATH_LENGTH), kind: z.enum(FOLDER_KINDS) }),
+  z.strictObject({ state: z.literal('failed'), failure: z.enum(CLONE_FAILURES) }),
+  z.strictObject({ state: z.literal('unknown') }),
+])
+
+/** {@link CloneStatus}'s parsed value. */
+export type CloneStatus = z.output<typeof CloneStatus>
+
+/** The harness's route that reads which connections each recommended plugin is for. `POST` takes {@link RecommendRequest} and answers {@link RecommendAnswer}. */
+export const RECOMMEND_PATH = '/api/deloOnboarding.recommend'
+
+/**
+ * A connection id: `provider:<route>` for a model provider, `agent:<id>` for a coding agent with a sign-in on this
+ * computer (`agent:claude-code`, `agent:codex`), `tool:<id>` for a tool on this computer (`tool:tailscale`).
+ */
+export const CONNECTION_ID = /^(?:provider|agent|tool):[a-z0-9][a-z0-9._-]{0,99}$/
+
+/** Whether the person asked to look the plugins up in the npm registry, which is the only network request this route makes. */
+export const RecommendRequest = z.strictObject({ registry: z.boolean() })
+
+/**
+ * Each configured plugin with the connections its package declares (`delo.connections` in its `package.json`): read
+ * from the installed package, from the registry when asked, or `unknown` when neither could be read. `registry` says
+ * whether the registry was asked and answered.
+ */
+export const RecommendAnswer = z.strictObject({
+  plugins: z.array(z.strictObject({
+    name: z.string().min(1).max(214),
+    connections: z.array(z.string().regex(CONNECTION_ID)).max(16),
+    source: z.enum(['installed', 'registry', 'unknown']),
+  })).max(16),
+  registry: z.enum(['not-asked', 'reached', 'unreachable']),
+})
+
+/** {@link RecommendAnswer}'s parsed value. */
+export type RecommendAnswer = z.output<typeof RecommendAnswer>

@@ -31,7 +31,7 @@ kind: "package-bundle"
 | `delo-settings-layout` | [`@delo/plugin-settings-layout`](../plugin-settings-layout/README.md) | Settings grouped by topic, with search |
 | `delo-chat-states` | [`@delo/plugin-chat-states`](../plugin-chat-states/README.md) | Snooze and settle chats, with their shelves |
 | `delo-sidebar` | [`@delo/plugin-sidebar`](../plugin-sidebar/README.md) | The chat list as cards, workspace icons and header art |
-| `delo-onboarding` | [`@delo/plugin-onboarding`](../plugin-onboarding/README.md) | The first-run flow that ends in a new chat |
+| `delo-onboarding` | [`@delo/plugin-onboarding`](../plugin-onboarding/README.md) | The first-run guide that ends in a new chat; this bundle sets its `plugins` to four experimental plugins that ship with DeepSeek Harness: session search, the terminal bundle, the worktree tool and session titles |
 
 ## The stock look
 

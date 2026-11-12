@@ -2492,9 +2492,18 @@ importers:
 
   delo/packages/plugin-onboarding:
     dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-llm-deepseek':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm-deepseek
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delo/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../contract-reach-providers
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
@@ -2504,6 +2513,9 @@ importers:
       '@delo/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delo/reach':
+        specifier: workspace:*
+        version: link:../reach
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -2565,6 +2577,12 @@ importers:
       '@deepseek-ai/dsh-client-ui-workspace':
         specifier: workspace:*
         version: link:../../../packages/client/ui-workspace
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../../packages/credentials/credentials
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
       '@deepseek-ai/dsh-package-manifest':
         specifier: workspace:*
         version: link:../../../packages/util/package-manifest
@@ -12380,7 +12398,7 @@ importers:
         version: 11.0.4
       serve-static:
         specifier: ^2.2.1
-        version: 2.2.1(supports-color@9.4.0)
+        version: 2.2.1(supports-color@10.2.2)
       ws:
         specifier: ^8.21.3
         version: 8.21.3
@@ -35867,22 +35885,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  send@1.2.1(supports-color@9.4.0):
-    dependencies:
-      debug: 4.4.3(supports-color@9.4.0)
-      encodeurl: 2.0.0
-      escape-html: 1.0.3
-      etag: 1.8.1
-      fresh: 2.0.0
-      http-errors: 2.0.1
-      mime-types: 3.0.2
-      ms: 2.1.3
-      on-finished: 2.4.1
-      range-parser: 1.3.0
-      statuses: 2.0.2
-    transitivePeerDependencies:
-      - supports-color
-
   serialize-error@7.0.1:
     dependencies:
       type-fest: 0.13.1
@@ -35894,15 +35896,6 @@ snapshots:
       escape-html: 1.0.3
       parseurl: 1.3.3
       send: 1.2.1(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  serve-static@2.2.1(supports-color@9.4.0):
-    dependencies:
-      encodeurl: 2.0.0
-      escape-html: 1.0.3
-      parseurl: 1.3.3
-      send: 1.2.1(supports-color@9.4.0)
     transitivePeerDependencies:
       - supports-color
 

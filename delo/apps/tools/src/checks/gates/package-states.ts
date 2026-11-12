@@ -45,6 +45,8 @@ export const ROOT_DIRS = [
 const stateField = z.strictObject({
   state: z.enum(PACKAGE_STATES),
   unreached: z.string().min(1).optional(),
+  // The connections a plugin is recommended for; `@delo/plugin-onboarding`'s `declaredConnections` owns their form.
+  connections: z.array(z.string()).optional(),
 })
 
 const manifestFields = z.looseObject({

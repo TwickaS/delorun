@@ -1,35 +1,34 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_BUNDLES, AgentsStep, LookStep, NoticeStep, PluginsStep, ReachStep, StartStep } from '../src/client/steps.tsx'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { AGENT_BUNDLES, AgentsStep, APPROVE_COMMAND, Command, connectionName, LookStep, PluginsStep, REACH_COMMAND, ReachStep, ReadyStep, WelcomeStep } from '../src/client/steps.tsx'
+import { createGuide, type Guide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { LOCATION_PROBLEMS } from '../src/wire.ts'
-import { DEFAULT_WORKSPACE, HOME, installerFake, languageFace, liveForm, LOCALES, noticeFace, schemeFace, startFace, stepServices, THEME } from './fixtures.client.ts'
-import type { StartTarget } from '../src/client/types.ts'
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import { TAILSCALE_OPERATOR_COMMAND } from '@delo/contract-reach-providers'
+import type { KeyTestAnswer, Readiness, TailscaleReadiness } from '../src/wire.ts'
+import { DEFAULT_PATH, DEFAULT_WORKSPACE, hostFake, installerFake, KEYS, languageFace, liveForm, LOCALES, noticeFace, READY, schemeFace, stepServices, THEME } from './fixtures.client.ts'
+import type { HostFace, StartTarget, StepServices } from '../src/client/types.ts'
 import type { ThemeSettings } from '@delo/plugin-theme'
 
 afterEach(cleanup)
 
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
 const radio = (name: string | RegExp) => screen.getByRole('radio', { name })
-const IDLE_FOLDER = { view: { kind: 'idle' }, added: vi.fn() } as const
+const settle = async () => { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
+
+/** A guide over a faked harness, its reads settled once the component renders. */
+const guideOf = (host: HostFace = hostFake().host): Guide => createGuide(host)
+
+/** Render the look step, whose guide is unused. */
+const look = (services: StepServices) => render(<LookStep services={services} guide={guideOf()} />)
 
 describe('the look step', () => {
-  it('lists the languages as chips and switches the interface language when one is chosen', async () => {
-    const { face, setLocale } = languageFace()
-    render(<LookStep services={stepServices({ language: face })} />)
-    const group = screen.getByRole('radiogroup', { name: en['look.language'] })
-    expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['English', 'true'], ['中文', 'false']])
-    await click(radio('中文'))
-    expect(setLocale).toHaveBeenCalledWith('zh')
-    expect(radio('中文').getAttribute('aria-checked')).toBe('true')
-  })
-
   it('offers light, dark and system and sets the colour scheme', async () => {
     const { face, set } = schemeFace('system')
-    render(<LookStep services={stepServices({ scheme: face })} />)
+    look(stepServices({ scheme: face }))
     const group = screen.getByRole('radiogroup', { name: 'Mode' })
     expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['Light', 'false'], ['Dark', 'false'], ['System', 'true']])
     await click(radio('Dark'))
@@ -38,7 +37,7 @@ describe('the look step', () => {
 
   it('shows every palette the theme has as a chip with its preview and writes the one chosen', async () => {
     const services = stepServices()
-    render(<LookStep services={services} />)
+    look(services)
     const group = screen.getByRole('radiogroup', { name: 'Theme' })
     const chips = within(group).getAllByRole('radio')
     expect(chips.map(each => each.textContent)).toEqual(['Soft', 'T3 Code', 'T3 Chat', 'Grove', 'Ocean', 'Ember', 'Iris'])
@@ -54,7 +53,7 @@ describe('the look step', () => {
 
   it('offers the accent presets with the Soft palette, writes the one chosen, and replaces them with a note for a theme that brings its own', async () => {
     const services = stepServices()
-    render(<LookStep services={services} />)
+    look(services)
     const group = screen.getByRole('radiogroup', { name: 'Accent' })
     expect(within(group).getAllByRole('radio').map(each => each.textContent)).toEqual(['Peach', 'Cobalt', 'Moss', 'Mono'])
     expect(ACCENT_PRESETS).toHaveLength(4)
@@ -68,16 +67,16 @@ describe('the look step', () => {
 
   it('starts from Soft and Peach until the theme settings arrive, and disables the choices it cannot save', () => {
     const waiting = liveForm<ThemeSettings>(undefined, { writable: false })
-    render(<LookStep services={stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } })} />)
+    look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
     expect(radio('Soft').getAttribute('aria-checked')).toBe('true')
     expect(radio('Peach').getAttribute('aria-checked')).toBe('true')
     expect([radio('Iris'), radio('Cobalt'), radio('Stock')].every(each => (each as HTMLButtonElement).disabled)).toBe(true)
-    expect((radio('English') as HTMLButtonElement).disabled).toBe(false)
+    expect((radio('Dark') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('says, before the choice, that the stock look turns Delo\'s additions and this guide off, and switches only when it is chosen', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
-    render(<LookStep services={stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } })} />)
+    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
     const group = screen.getByRole('radiogroup', { name: en['look.studio'] })
     expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['Delo', 'true'], ['Stock', 'false']])
     expect(screen.getByText(/turns Delo's studio additions off and closes this guide/)).toBeTruthy()
@@ -91,11 +90,19 @@ describe('the look step', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('shows a small chat drawn in the chosen look beside the choices', () => {
+    look(stepServices())
+    const preview = screen.getByRole('img', { name: en['look.preview'] })
+    expect(preview.textContent).toContain(en['look.preview.ask'])
+    expect(preview.textContent).toContain(en['look.preview.tool'])
+    expect(preview.textContent).toContain(en['look.preview.box'])
+  })
+
   it.each<readonly [string, () => Promise<boolean>]>([
     ['refuses the write', () => Promise.resolve(false)],
     ['cannot be reached', () => Promise.reject(new Error('transport'))],
   ])('shows a failure and keeps the choice open when the host %s', async (_, write) => {
-    render(<LookStep services={stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: write } })} />)
+    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook: write } }))
     await click(radio('Stock'))
     expect(screen.getByRole('alert').textContent).toBe(en.saveFailed)
   })
@@ -107,14 +114,14 @@ describe('the look step', () => {
     ['cannot be reached for an accent', 'reject', 'Cobalt'],
   ])('shows a failure when the host %s', async (_, result, choice) => {
     const form = liveForm<ThemeSettings>(THEME, { result })
-    render(<LookStep services={stepServices({ look: { settings: form.form, useStockLook: () => Promise.resolve(true) } })} />)
+    look(stepServices({ look: { settings: form.form, useStockLook: () => Promise.resolve(true) } }))
     await click(radio(choice))
     expect(screen.getByRole('alert').textContent).toBe(en.saveFailed)
   })
 
   it('clears a failure on the next attempt', async () => {
     const form = liveForm<ThemeSettings>(THEME, { result: false })
-    render(<LookStep services={stepServices({ look: { settings: form.form, useStockLook: () => Promise.resolve(true) } })} />)
+    look(stepServices({ look: { settings: form.form, useStockLook: () => Promise.resolve(true) } }))
     await click(radio('Cobalt'))
     expect(screen.getByRole('alert')).toBeTruthy()
     form.set.mockImplementationOnce(() => Promise.resolve(true))
@@ -123,45 +130,133 @@ describe('the look step', () => {
   })
 })
 
-describe('the preview notice step', () => {
-  it('shows the notice paragraphs unchanged, and nothing without a notice', () => {
+describe('the welcome step', () => {
+  it('lists the languages as chips and switches the interface language when one is chosen', async () => {
+    const { face, setLocale } = languageFace()
+    render(<WelcomeStep services={stepServices({ language: face })} guide={guideOf()} notice={undefined} />)
+    const group = screen.getByRole('radiogroup', { name: en['welcome.language'] })
+    expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['English', 'true'], ['中文', 'false']])
+    await click(radio('中文'))
+    expect(setLocale).toHaveBeenCalledWith('zh')
+    expect(radio('中文').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('shows the preview notice\'s title and paragraphs while it is owed, and nothing of it otherwise', () => {
     const { face } = noticeFace()
-    render(<NoticeStep services={stepServices({ notice: face })} />)
+    render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={face} />)
+    expect(screen.getByRole('heading', { level: 3, name: 'Preview' })).toBeTruthy()
     expect(screen.getAllByText(/Delo is a pre-release|no telemetry/)).toHaveLength(2)
     cleanup()
-    const { container } = render(<NoticeStep services={stepServices()} />)
-    expect(container.textContent).toBe('')
+    render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
+    expect(screen.queryByText(/Delo is a pre-release/)).toBeNull()
+  })
+
+  it('says it is testing the keys, then each provider\'s result, worded for a person', async () => {
+    const keys: KeyTestAnswer = { providers: [
+      { provider: 'deepseek-official', name: 'DeepSeek', result: 'works' },
+      { provider: 'openai', name: 'OpenAI', result: 'rejected' },
+      { provider: 'local', name: 'Local', result: 'untested' },
+    ] }
+    render(<WelcomeStep services={stepServices()} guide={guideOf(hostFake({ keys }).host)} notice={undefined} />)
+    expect(screen.getByText(en['key.testing'])).toBeTruthy()
+    await settle()
+    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([`DeepSeek${en['key.works']}`, `OpenAI${en['key.rejected']}`, `Local${en['key.untested']}`])
+    expect(screen.getByText(en['key.works']).getAttribute('data-tone')).toBe('done')
+    expect(screen.getByText(en['key.rejected']).getAttribute('data-tone')).toBe('attention')
+    expect(screen.getByText(en['key.untested']).getAttribute('data-tone')).toBeNull()
+    expect(document.body.textContent).toContain('nothing is spent')
+  })
+
+  it.each<readonly [string, KeyTestAnswer | undefined, string]>([
+    ['no provider is set up', { providers: [] }, en['key.none']],
+    ['the keys could not be tested', undefined, en['key.unread']],
+  ])('says so when %s', async (_, keys, text) => {
+    render(<WelcomeStep services={stepServices()} guide={guideOf(hostFake({ keys }).host)} notice={undefined} />)
+    await settle()
+    expect(screen.getByText(text).getAttribute('data-tone')).toBe('attention')
+  })
+
+  it('opens the Models section of Settings in place, and tests the keys again when it closes or when asked', async () => {
+    const fake = hostFake()
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    onTestFinished(() => { Reflect.deleteProperty(Element.prototype, 'scrollIntoView') })
+    render(<WelcomeStep services={stepServices()} guide={guideOf(fake.host)} notice={undefined} />)
+    await settle()
+    expect(screen.queryByText('section models')).toBeNull()
+    const toggle = screen.getByRole('button', { name: en['welcome.models.open'] })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    await click(toggle)
+    expect(screen.getByText('section models')).toBeTruthy()
+    expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(fake.keyTest).toHaveBeenCalledOnce()
+    await click(screen.getByRole('button', { name: en['welcome.models.close'] }))
+    expect(screen.queryByText('section models')).toBeNull()
+    expect(fake.keyTest).toHaveBeenCalledTimes(2)
+    await settle()
+    await click(screen.getByRole('button', { name: en['key.again'] }))
+    expect(fake.keyTest).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('a command', () => {
+  it('copies itself and says so, or says to copy it by hand when the clipboard refuses', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    render(<Command command="tailscale up" t={stepServices().t} />)
+    expect(screen.getByText('tailscale up').tagName).toBe('CODE')
+    await click(screen.getByRole('button', { name: 'Copy tailscale up' }))
+    expect(writeText).toHaveBeenCalledWith('tailscale up')
+    expect(screen.getByText(en['copy.done'])).toBeTruthy()
+    writeText.mockImplementationOnce(() => Promise.reject(new Error('denied')))
+    await click(screen.getByRole('button', { name: 'Copy tailscale up' }))
+    expect(screen.getByText(en['copy.failed'])).toBeTruthy()
   })
 })
 
 describe('the agents step', () => {
-  it('names Claude Code and Codex as programs with their own permissions outside Delo\'s prompts, and claims no consent', () => {
-    const services = stepServices()
-    render(<AgentsStep services={services} />)
-    const note = screen.getByRole('note').textContent ?? ''
-    expect(note).toContain('Claude Code and Codex run as their own programs, with their own permissions, outside Delo\'s permission prompts')
-    expect(document.body.textContent).not.toMatch(/consent|ask you first/i)
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Claude Code', 'Codex'])
-  })
-
   it('reads where the two bundles stand when it opens and installs nothing', () => {
     const services = stepServices()
-    render(<AgentsStep services={services} />)
+    render(<AgentsStep services={services} guide={guideOf()} />)
     expect(services.spies.refresh).toHaveBeenCalledWith(AGENT_BUNDLES.map(each => each.name))
     expect(services.spies.install).not.toHaveBeenCalled()
     expect(AGENT_BUNDLES.map(each => each.name)).toEqual(['@deepseek-ai/dsh-subagent-claude-code', '@deepseek-ai/dsh-subagent-codex'])
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Claude Code', 'Codex'])
   })
 
-  it('names each Add button after what it adds, and installs only the bundle whose button is pressed', async () => {
+  it.each<readonly [string, Readiness | undefined, readonly [string, string]]>([
+    ['both signed in', READY, [en['agents.claude.signIn.found'], en['agents.codex.signIn.found']]],
+    ['neither signed in', { ...READY, agents: { 'claude-code': 'missing', 'codex': 'missing' } }, [en['agents.claude.signIn.missing'], en['agents.codex.signIn.missing']]],
+    ['sign-ins Delo cannot see', { ...READY, agents: { 'claude-code': 'unknown', 'codex': 'unknown' } }, [en['agents.claude.signIn.unknown'], en['agents.codex.signIn.unknown']]],
+    ['a computer that could not be read', undefined, [en['agents.signIn.unread'], en['agents.signIn.unread']]],
+  ])('says where each sign-in stands for %s', async (_, readiness, lines) => {
+    render(<AgentsStep services={stepServices()} guide={guideOf(hostFake({ readiness }).host)} />)
+    expect(screen.getAllByText(en['agents.signIn.checking'])).toHaveLength(2)
+    await settle()
+    for (const line of lines) expect(screen.getAllByText(line).length).toBeGreaterThan(0)
+  })
+
+  it('shows what adding an agent means after Add, and installs only on the confirming press', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'available' }, [codex.name]: { state: 'available' } })
-    render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     const adds = screen.getAllByRole('button', { name: /^Add / })
-    expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.add']], ['Add Codex', en['bundle.add']]])
+    expect(adds.map(each => [each.getAttribute('aria-label'), each.textContent])).toEqual([['Add Claude Code', en['bundle.addConfirm']], ['Add Codex', en['bundle.addConfirm']]])
+    await click(screen.getByRole('button', { name: 'Add Codex' }))
+    expect(fake.install).not.toHaveBeenCalled()
+    const confirm = screen.getByRole('group', { name: 'What adding Codex means' })
+    expect(within(confirm).getAllByRole('listitem').map(each => each.textContent)).toEqual([
+      en['agents.confirm.handoff'], en['agents.confirm.outside'], en['agents.confirm.files'], en['agents.confirm.billing'],
+    ])
+    expect(confirm.textContent).toContain('does not ask you before each run')
+    await click(within(confirm).getByRole('button', { name: en['chooser.cancel'] }))
+    expect(screen.queryByRole('group')).toBeNull()
     expect(fake.install).not.toHaveBeenCalled()
     await click(screen.getByRole('button', { name: 'Add Codex' }))
-    expect(fake.install).toHaveBeenCalledOnce()
-    expect(fake.install).toHaveBeenCalledWith(codex.name)
+    await click(within(screen.getByRole('group')).getByRole('button', { name: 'Add Codex' }))
+    expect(fake.install).toHaveBeenCalledExactlyOnceWith(codex.name)
+    expect(screen.queryByRole('group')).toBeNull()
   })
 
   it.each<readonly [string, 'checking' | 'installing' | 'installed' | 'restart' | 'unavailable' | 'failed', string]>([
@@ -174,7 +269,7 @@ describe('the agents step', () => {
   ])('shows the state of a bundle that %s and no Add button', (_, state, text) => {
     const [claude] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state } })
-    render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     expect(screen.getAllByText(text).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /^Add/ })).toBeNull()
   })
@@ -182,9 +277,8 @@ describe('the agents step', () => {
   it('shows a bundle the installation does not include as a normal state with a way to Plugins, never as an error', async () => {
     const [claude, codex] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'unavailable' }, [codex.name]: { state: 'unavailable' } })
-    render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     expect(screen.getAllByText('Not included in this installation')).toHaveLength(2)
-    expect(document.body.textContent).not.toContain(en['bundle.failed'])
     expect(document.querySelector('[data-tone="failed"]')).toBeNull()
     const opens = screen.getAllByRole('button', { name: 'Open Plugins' })
     expect(opens).toHaveLength(2)
@@ -195,98 +289,190 @@ describe('the agents step', () => {
   it('shows a bundle that failed to be added as an error that Plugins can finish', async () => {
     const [claude] = AGENT_BUNDLES
     const fake = installerFake({ [claude.name]: { state: 'failed' } })
-    render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
+    render(<AgentsStep services={stepServices({ bundles: fake.installer })} guide={guideOf()} />)
     expect(document.querySelector('[data-tone="failed"]')?.textContent).toBe(en['bundle.failed'])
     await click(screen.getByRole('button', { name: 'Open Plugins' }))
-    expect(fake.openPlugins).toHaveBeenCalledOnce()
-  })
-
-  it('shows Checking until a bundle is first read, and opens Plugins for a bundle that could not be added', async () => {
-    const [claude, codex] = AGENT_BUNDLES
-    const fake = installerFake({ [codex.name]: { state: 'failed' } })
-    render(<AgentsStep services={stepServices({ bundles: fake.installer })} />)
-    expect(screen.getAllByText(en['bundle.checking'])).toHaveLength(1)
-    expect(claude.name).toBeTruthy()
-    await click(screen.getByRole('button', { name: en['bundle.open'] }))
     expect(fake.openPlugins).toHaveBeenCalledOnce()
   })
 })
 
 describe('the recommended plugins step', () => {
-  it('lists the configured packages with the title and description the plugin manager gives, and the package name without them', async () => {
-    const fake = installerFake({
-      '@scope/with-meta': { state: 'available', title: { en: 'With meta', zh: '带元数据' }, description: 'Does a thing.' },
-      '@scope/plain': { state: 'installed' },
+  const plugins = ['@scope/codex-quota', '@scope/any', '@scope/claude-only', '@scope/unread']
+
+  it('reads the connections once, lists the plugins that fit first with what they fit, and leaves out one for a connection the person lacks', async () => {
+    const fake = installerFake({ '@scope/any': { state: 'available', title: { en: 'Any', zh: '任意' }, description: 'Fits any setup.' } })
+    const host = hostFake({
+      readiness: { ...READY, agents: { 'claude-code': 'missing', 'codex': 'found' } },
+      recommend: { plugins: [
+        { name: '@scope/codex-quota', connections: ['agent:codex', 'provider:deepseek-official'], source: 'installed' },
+        { name: '@scope/any', connections: [], source: 'installed' },
+        { name: '@scope/claude-only', connections: ['agent:claude-code'], source: 'installed' },
+        { name: '@scope/unread', connections: [], source: 'unknown' },
+      ], registry: 'not-asked' },
     })
-    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: ['@scope/with-meta', '@scope/plain', '@scope/unread'] })} />)
-    expect(fake.refresh).toHaveBeenCalledWith(['@scope/with-meta', '@scope/plain', '@scope/unread'])
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['With meta', '@scope/plain', '@scope/unread'])
-    expect(screen.getByText('Does a thing.')).toBeTruthy()
-    expect(fake.install).not.toHaveBeenCalled()
-    expect(screen.getAllByRole('button', { name: /^Add/ }).map(each => each.getAttribute('aria-label'))).toEqual(['Add With meta'])
-    await click(screen.getByRole('button', { name: 'Add With meta' }))
-    expect(fake.install).toHaveBeenCalledWith('@scope/with-meta')
+    const guide = guideOf(host.host)
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guide} />)
+    expect(screen.getByText(en['plugins.reading'])).toBeTruthy()
+    await settle()
+    expect(host.recommend).toHaveBeenCalledExactlyOnceWith(false)
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['@scope/codex-quota', 'Any', '@scope/unread'])
+    expect(screen.getByText('Fits Codex, DeepSeek')).toBeTruthy()
+    expect(screen.getByText('Fits any setup.')).toBeTruthy()
+    expect(fake.refresh).toHaveBeenLastCalledWith(['@scope/codex-quota', '@scope/any', '@scope/unread'])
+    await click(screen.getByRole('button', { name: 'Add Any' }))
+    expect(fake.install).toHaveBeenCalledWith('@scope/any')
+    cleanup()
+    render(<PluginsStep services={stepServices({ plugins })} guide={guide} />)
+    expect(host.recommend).toHaveBeenCalledOnce()
+  })
+
+  it('reads plugins that are not installed from the registry only when asked, and says when it could not be reached', async () => {
+    const host = hostFake({ recommend: { plugins: [{ name: '@scope/unread', connections: [], source: 'unknown' }], registry: 'not-asked' } })
+    render(<PluginsStep services={stepServices({ plugins: ['@scope/unread'] })} guide={guideOf(host.host)} />)
+    await settle()
+    host.recommend.mockImplementationOnce(() => Promise.resolve({ plugins: [{ name: '@scope/unread', connections: [], source: 'unknown' }], registry: 'unreachable' }))
+    await click(screen.getByRole('button', { name: en['plugins.registry'] }))
+    await settle()
+    expect(host.recommend).toHaveBeenLastCalledWith(true)
+    expect(screen.getByText(en['plugins.registry.unreachable'])).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en['plugins.registry'] })).toBeNull()
+  })
+
+  it('says so when no recommended plugin fits the person\'s connections', async () => {
+    const fake = installerFake({})
+    const host = hostFake({
+      readiness: { ...READY, agents: { 'claude-code': 'missing', 'codex': 'found' } },
+      recommend: { plugins: [{ name: '@scope/claude-only', connections: ['agent:claude-code'], source: 'installed' }], registry: 'not-asked' },
+    })
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: ['@scope/claude-only'] })} guide={guideOf(host.host)} />)
+    await settle()
+    expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([])
+    expect(screen.getByText(en['plugins.none'])).toBeTruthy()
+    expect(fake.refresh).not.toHaveBeenCalledWith([])
+  })
+
+  it('shows every configured plugin in order when their connections cannot be read', async () => {
+    render(<PluginsStep services={stepServices({ plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
+    await settle()
+    expect(screen.getByText(en['plugins.unread'])).toBeTruthy()
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(plugins)
+  })
+
+  it('names a connection as the person knows it', () => {
+    const { t } = stepServices()
+    const providers = new Map([['deepseek-official', 'DeepSeek']])
+    expect(['agent:claude-code', 'agent:codex', 'tool:tailscale', 'provider:deepseek-official', 'provider:other', 'tool:other'].map(id => connectionName(id, t, providers)))
+      .toEqual(['Claude Code', 'Codex', 'Tailscale', 'DeepSeek', 'other', 'other'])
   })
 })
 
-describe('the reach step', () => {
-  it('says what reach does for a phone, the command that turns it on at the computer, and what a phone session cannot do', () => {
-    render(<ReachStep services={stepServices()} />)
-    expect(document.body.textContent).toContain('open this studio from your phone')
-    expect(document.body.textContent).toContain('Turn it on at the computer that runs Delo, in a terminal, never from this window:')
-    expect(screen.getByText('delorun reach on tailscale').tagName).toBe('CODE')
-    expect(document.body.textContent).toContain('A phone session cannot grant full access or approve devices.')
-    expect(document.body.textContent).toContain('You can skip this')
-    expect(screen.queryByRole('button')).toBeNull()
+describe('the phone access step', () => {
+  const reachWith = (tailscale: TailscaleReadiness | undefined) => hostFake({ readiness: tailscale === undefined ? undefined : { ...READY, tailscale } }).host
+  const states = () => screen.getAllByRole('listitem').map(each => each.getAttribute('data-state'))
+
+  it.each<readonly [TailscaleReadiness['state'], readonly string[], string | undefined]>([
+    ['not-installed', ['todo', 'waiting', 'waiting', 'waiting'], undefined],
+    ['signed-out', ['done', 'todo', 'waiting', 'waiting'], 'tailscale up'],
+    ['https-off', ['done', 'done', 'todo', 'waiting'], undefined],
+    ['needs-operator', ['done', 'done', 'done', 'todo'], TAILSCALE_OPERATOR_COMMAND],
+  ])('marks the checks up to %s done, says how to fix that one, and keeps the rest waiting', async (state, marks, fix) => {
+    render(<ReachStep services={stepServices()} guide={guideOf(reachWith({ state } as TailscaleReadiness))} />)
+    expect(screen.getByText(en['reach.checking'])).toBeTruthy()
+    await settle()
+    expect(states()).toEqual(marks)
+    const todo = document.querySelector('[data-state="todo"]') as HTMLElement
+    expect(todo.textContent).toContain(en['reach.state.todo'])
+    if (fix !== undefined) expect(within(todo).getByText(fix).tagName).toBe('CODE')
+    expect(screen.queryByText(/Your phone opens/)).toBeNull()
   })
 
-  it('names no relay, no Tailscale option list and no other way to reach', () => {
-    render(<ReachStep services={stepServices()} />)
-    expect(document.body.textContent).not.toMatch(/relay|domain|public/i)
+  it('marks every check done and names the address the phone opens once Tailscale is ready', async () => {
+    render(<ReachStep services={stepServices()} guide={guideOf(reachWith(READY.tailscale))} />)
+    await settle()
+    expect(states()).toEqual(['done', 'done', 'done', 'done'])
+    expect(screen.getByText('Your phone opens https://box.example.ts.net.')).toBeTruthy()
+  })
+
+  it.each<readonly [string, TailscaleReadiness | undefined]>([
+    ['the computer could not be read', undefined],
+    ['Tailscale could not be read', { state: 'unknown' }],
+  ])('says so when %s and still gives the commands', async (_, tailscale) => {
+    render(<ReachStep services={stepServices()} guide={guideOf(reachWith(tailscale))} />)
+    await settle()
+    expect(screen.getByText(en['reach.unread'])).toBeTruthy()
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+    expect(screen.getByText(REACH_COMMAND).tagName).toBe('CODE')
+    expect(screen.getByText(APPROVE_COMMAND).tagName).toBe('CODE')
+  })
+
+  it('names the commands run at this computer, what a phone session cannot do, and no relay', async () => {
+    render(<ReachStep services={stepServices()} guide={guideOf()} />)
+    await settle()
+    expect([REACH_COMMAND, APPROVE_COMMAND]).toEqual(['delorun reach on tailscale', 'delorun devices approve'])
+    expect(document.body.textContent).toContain('A phone session cannot grant full access or approve devices.')
     for (const [key, text] of Object.entries(en)) if (key.startsWith('reach.')) expect(text).not.toMatch(/relay|中继/i)
   })
 })
 
-describe('the start step', () => {
-  it.each<readonly [string, StartTarget, readonly string[], readonly string[]]>([
-    ['is looking for the default workspace', { kind: 'checking' }, [en['start.lead.checking']], [en['start.point.default'], en['start.point.none']]],
-    ['has the default workspace', { kind: 'default', workspaceId: DEFAULT_WORKSPACE }, [en['start.lead.default'], 'you read it, change it if you like, and send it yourself'], [en['start.point.none']]],
-    ['finds no default workspace but others', { kind: 'other' }, [en['start.lead.other']], [en['start.point.default'], en['start.point.none']]],
-    ['finds no workspace', { kind: 'none' }, ['Delo could not set up a default workspace on this computer.', 'Choose a folder to work in.'], [en['start.point.default']]],
-  ])('says what the chat is when it %s', (_, target, shown, absent) => {
-    render(<StartStep services={stepServices({ start: startFace(target).face })} folder={IDLE_FOLDER} />)
-    for (const text of shown) expect(document.body.textContent).toContain(text)
-    for (const text of absent) expect(document.body.textContent).not.toContain(text)
-    expect(document.body.textContent).toContain(en['start.later'])
+describe('the ready step', () => {
+  const ready = (guide: Guide, options: { readonly target?: StartTarget; readonly reach?: 'absent' | 'set-up' | 'off'; readonly services?: StepServices } = {}) =>
+    render(<ReadyStep services={options.services ?? stepServices()} guide={guide} reach={options.reach ?? 'off'} target={options.target ?? { kind: 'checking' }} />)
+  const rows = () => [...document.querySelectorAll('dt')].map(each => [each.textContent, each.nextElementSibling?.textContent, each.nextElementSibling?.getAttribute('data-tone') ?? undefined])
+
+  it('lists what the guide set and the starting prompts that fit the chosen folder', async () => {
+    const [claude] = AGENT_BUNDLES
+    const fake = installerFake({ [claude.name]: { state: 'installed' }, '@scope/a': { state: 'restart' }, '@scope/b': { state: 'available' } })
+    const guide = guideOf()
+    guide.chooseWorkspace({ kind: 'added', workspaceId: 'workspace-2' as WorkspaceId, path: '/home/person/app', folder: 'code' })
+    ready(guide, { reach: 'set-up', services: stepServices({ bundles: fake.installer, plugins: ['@scope/a', '@scope/b'] }) })
+    await settle()
+    expect(rows()).toEqual([
+      ['Model', 'DeepSeek', 'done'],
+      ['Look', 'Soft · Peach', 'done'],
+      ['Agents', 'Claude Code', 'done'],
+      ['Plugins', '1 added', 'done'],
+      ['Phone access', 'On', 'done'],
+      ['Workspace', '/home/person/app', 'done'],
+    ])
+    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.code.1.label'], en['starter.code.2.label'], en['starter.code.3.label']])
   })
 
-  it('changes its words when the lookup settles', async () => {
-    const start = startFace({ kind: 'checking' })
-    render(<StartStep services={stepServices({ start: start.face })} folder={IDLE_FOLDER} />)
-    await act(async () => { start.set({ kind: 'none' }) })
-    expect(document.body.textContent).toContain(en['start.lead.none'])
+  it('says what is missing: no working key, no workspace, and leaves phone access out where the home has no reach', async () => {
+    const theme = liveForm<ThemeSettings>({ ...THEME, palette: 'grove' })
+    ready(guideOf(hostFake({ keys: { providers: [{ provider: 'deepseek-official', name: 'DeepSeek', result: 'rejected' }] } }).host), {
+      reach: 'absent', target: { kind: 'none' }, services: stepServices({ look: { settings: theme.form, useStockLook: () => Promise.resolve(true) } }),
+    })
+    await settle()
+    expect(rows()).toEqual([
+      ['Model', en['ready.model.none'], 'attention'],
+      ['Look', 'Grove', 'done'],
+      ['Agents', en['ready.none'], undefined],
+      ['Plugins', en['ready.none'], undefined],
+      ['Workspace', en['ready.workspace.none'], 'attention'],
+    ])
+    expect(screen.queryByText(en['ready.starters'])).toBeNull()
   })
 
-  it.each(LOCATION_PROBLEMS.map(problem => [problem] as const))('says why a folder refused as %s was not added, and what to do instead', (problem) => {
-    render(<StartStep services={stepServices({ start: startFace({ kind: 'none' }).face })} folder={{ view: { kind: 'problem', problem }, added: vi.fn() }} />)
-    expect(screen.getByRole('alert').textContent).toBe(en[`problem.${problem}`])
-    expect(screen.queryByRole('listbox')).toBeNull()
+  it('names the last-used workspace with the general prompts, and phone access as off', async () => {
+    ready(guideOf(hostFake({ keys: undefined }).host), { target: { kind: 'other' } })
+    await settle()
+    expect(rows().slice(-2)).toEqual([['Phone access', 'Off', undefined], ['Workspace', en['ready.workspace.last'], undefined]])
+    expect(screen.getAllByRole('listitem').map(each => each.textContent)).toEqual([en['starter.general.1.label'], en['starter.general.2.label'], en['starter.general.3.label']])
   })
 
-  it('says a folder that could not be added was not added', () => {
-    render(<StartStep services={stepServices({ start: startFace({ kind: 'none' }).face })} folder={{ view: { kind: 'problem', problem: 'failed' }, added: vi.fn() }} />)
-    expect(screen.getByRole('alert').textContent).toBe(en['problem.failed'])
+  it('names the default look while the theme settings are still loading', async () => {
+    ready(guideOf(), { services: stepServices({ look: { settings: liveForm<ThemeSettings>(undefined).form, useStockLook: () => Promise.resolve(true) } }) })
+    await settle()
+    expect(rows()[1]).toEqual(['Look', 'Soft · Peach', 'done'])
   })
 
-  it('shows its own chooser when asked, and passes the added workspace on', async () => {
-    const start = startFace({ kind: 'none' })
-    const added = vi.fn()
-    render(<StartStep services={stepServices({ start: start.face })} folder={{ view: { kind: 'browse' }, added }} />)
-    await act(async () => { await Promise.resolve() })
-    await click(screen.getByRole('option', { name: 'projects' }))
-    await click(screen.getByRole('button', { name: en['chooser.add'] }))
-    expect(start.addFolder).toHaveBeenCalledExactlyOnceWith(`${HOME}/projects`)
-    expect(added).toHaveBeenCalledExactlyOnceWith(DEFAULT_WORKSPACE)
+  it('shows the default workspace once the dialog chose it', async () => {
+    const guide = guideOf()
+    guide.chooseWorkspace({ kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH })
+    ready(guide, { target: { kind: 'default', workspaceId: DEFAULT_WORKSPACE, path: DEFAULT_PATH } })
+    await settle()
+    expect(rows().at(-1)).toEqual(['Workspace', DEFAULT_PATH, 'done'])
+    expect(KEYS.providers).toHaveLength(1)
   })
 })
 
@@ -296,8 +482,8 @@ describe('a set of chips', () => {
   const key = async (element: HTMLElement, name: string) => { await act(async () => { fireEvent.keyDown(element, { key: name }) }) }
 
   it('is one tab stop, on the chosen chip', () => {
-    render(<LookStep services={stepServices()} />)
-    for (const name of [en['look.language'], 'Mode', 'Theme', 'Accent', en['look.studio']]) {
+    look(stepServices())
+    for (const name of ['Mode', 'Theme', 'Accent', en['look.studio']]) {
       const stops = radios(name).filter(each => each.tabIndex === 0)
       expect(stops).toHaveLength(1)
       expect(stops[0]?.getAttribute('aria-checked')).toBe('true')
@@ -306,13 +492,13 @@ describe('a set of chips', () => {
 
   it('puts the tab stop on the first chip when none is chosen', () => {
     const store = createSnapshotStore({ ...LOCALES, active: 'fr' })
-    render(<LookStep services={stepServices({ language: { getSnapshot: store.getSnapshot, subscribe: store.subscribe, setLocale: vi.fn() } })} />)
-    expect(radios(en['look.language']).map(each => each.tabIndex)).toEqual([0, -1])
+    render(<WelcomeStep services={stepServices({ language: { getSnapshot: store.getSnapshot, subscribe: store.subscribe, setLocale: vi.fn() } })} guide={guideOf()} notice={undefined} />)
+    expect(radios(en['welcome.language']).map(each => each.tabIndex)).toEqual([0, -1])
   })
 
   it('moves to the next and previous chip with the arrow keys, wrapping, and chooses it', async () => {
     const { face, set } = schemeFace('light')
-    render(<LookStep services={stepServices({ scheme: face })} />)
+    look(stepServices({ scheme: face }))
     const [light, dark, system] = radios('Mode') as [HTMLElement, HTMLElement, HTMLElement]
     light.focus()
     await key(light, 'ArrowRight')
@@ -333,7 +519,7 @@ describe('a set of chips', () => {
 
   it('moves to the first and last chip with Home and End, and leaves a chosen chip as it is', async () => {
     const { face, set } = schemeFace('light')
-    render(<LookStep services={stepServices({ scheme: face })} />)
+    look(stepServices({ scheme: face }))
     const [light, , system] = radios('Mode') as [HTMLElement, HTMLElement, HTMLElement]
     await key(light, 'End')
     expect(document.activeElement).toBe(system)
@@ -348,7 +534,7 @@ describe('a set of chips', () => {
 
   it('only moves focus in the studio look set, so an arrow key never leaves Delo\'s look', async () => {
     const useStockLook = vi.fn(() => Promise.resolve(true))
-    render(<LookStep services={stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } })} />)
+    look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
     const [delo, stock] = radios(en['look.studio']) as [HTMLElement, HTMLElement]
     delo.focus()
     await key(delo, 'ArrowRight')
@@ -360,14 +546,14 @@ describe('a set of chips', () => {
 
   it('gives a set whose chips cannot be chosen no tab stop', () => {
     const waiting = liveForm<ThemeSettings>(undefined, { writable: false })
-    render(<LookStep services={stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } })} />)
+    look(stepServices({ look: { settings: waiting.form, useStockLook: () => Promise.resolve(true) } }))
     for (const name of ['Theme', 'Accent', en['look.studio']]) expect(radios(name).every(each => each.tabIndex === -1)).toBe(true)
-    expect(radios(en['look.language']).map(each => each.tabIndex)).toEqual([0, -1])
+    expect(radios('Mode').map(each => each.tabIndex)).toEqual([-1, -1, 0])
   })
 
   it('ignores other keys, and keys that do not come from a chip', async () => {
     const { face, set } = schemeFace('light')
-    render(<LookStep services={stepServices({ scheme: face })} />)
+    look(stepServices({ scheme: face }))
     const [light] = radios('Mode') as [HTMLElement]
     await key(light, 'a')
     await key(group('Mode'), 'ArrowRight')

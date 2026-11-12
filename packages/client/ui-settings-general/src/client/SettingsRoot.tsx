@@ -52,6 +52,9 @@ type PanelProps = {
   onClose: () => void
 }
 
+/** A section drawn inside an onboarding step has no panel to close. */
+const noSectionClose = (): void => {}
+
 /**
  * Body-portaled modal layer: full-viewport mask + centered panel. Close paths: the
  * header button, a mask click, and document-level Escape (mounted only while
@@ -400,6 +403,8 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
         explicit: requestedOnboarding !== undefined,
         complete: () => { completeOnboardingStep(onboardingStep.id) },
         openSection,
+        renderSection: id => renderSlot('settings.section', { close: noSectionClose }, { only: id }),
+        completeStep: completeOnboardingStep,
       }, { only: onboardingStep.id })}
     </>
   )
