@@ -12,7 +12,7 @@ import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID,
-  NETWORK_SECTION_ORDER,   PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID,
+  NETWORK_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
