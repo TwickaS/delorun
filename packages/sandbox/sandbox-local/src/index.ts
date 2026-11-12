@@ -22,9 +22,9 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { accessSync, constants as fsConstants, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
+import { basename, delimiter, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   LAUNCHER_BIN,
@@ -143,6 +143,33 @@ export interface Config {
   privateTmp?: boolean
 }
 
+/**
+ * Whether an executable `bwrap` is on `PATH`.
+ * @returns true when a `PATH` entry holds a `bwrap` this process may execute.
+ */
+function bwrapOnPath(): boolean {
+  return (process.env.PATH ?? '').split(delimiter).filter(isAbsolute).some((directory) => {
+    try {
+      accessSync(join(directory, 'bwrap'), fsConstants.X_OK)
+      return true
+    } catch (_absent) {
+      // Not in this PATH entry, or not executable there: the next entry decides.
+      return false
+    }
+  })
+}
+
+/**
+ * The fix the escape refusal names, by why the Linux chain fell to Landlock.
+ * @param installed - whether an executable `bwrap` is on `PATH`, so its functional probe failed rather than found nothing.
+ * @returns the refusal's closing advice.
+ */
+function bubblewrapAdvice(installed: boolean): string {
+  return installed
+    ? 'bubblewrap (bwrap) is installed but could not create a sandbox here, which usually means this system blocks unprivileged user namespaces, as Ubuntu\'s AppArmor setting kernel.apparmor_restrict_unprivileged_userns does for a program no AppArmor profile allows; run `bwrap --ro-bind / / true` to see its error, let bwrap create user namespaces, then start again'
+    : 'install bubblewrap (the bwrap command, packaged as bubblewrap), then start again'
+}
+
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
 function defaultProbeBwrap(timeoutMs: number): boolean {
   const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], {
@@ -200,6 +227,8 @@ export interface SandboxInternals {
   vsockOffered?: () => boolean
   /** Replaces the functional `bwrap` probe (the Linux chain's first rung). */
   probeBwrap?: () => boolean
+  /** Replaces the check whether an executable `bwrap` is on `PATH`, which chooses the escape refusal's advice. */
+  bwrapInstalled?: () => boolean
   /** Replaces the functional Landlock launcher probe (the Linux chain's second rung). */
   probeLandlock?: (launcher: string) => SandboxEnforcement | 'unusable'
   /** Replaces the functional Seatbelt probe (the darwin chain's sole rung — only consulted if that chain ever grows). */
@@ -547,7 +576,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     const selected = this.selectRunner(policy.mode)
     const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
     if (escape !== undefined && !RUNNER_PROTECTION[selected.runner].socketConnect) {
-      throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them`)
+      throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; ${bubblewrapAdvice((this.internals.bwrapInstalled ?? bwrapOnPath)())}`)
     }
     const profileArgv = this.runnerArgv(selected.runner, policy, protection)
     // No mount rule hides virtual-machine sockets, the transport between a VM such as WSL and its host.

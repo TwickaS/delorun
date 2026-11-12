@@ -10,7 +10,7 @@
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { LAUNCHER_FAILURE_EXIT } from '@deepseek-ai/node-addon-system/landlock-run'
@@ -622,6 +622,40 @@ describe('escape socket directories', () => {
     await expect(sandbox.confine(['true'], WW)).rejects.toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY', message: expect.stringContaining(JSON.stringify(dir)) })
     rmSync(dir, { recursive: true, force: true })
     expect((await sandbox.confine(['true'], WW)).argv[0]).toBe(launcher)
+  })
+
+  it('names the fix for why bubblewrap was not used: install it when PATH has none, else let it create user namespaces', async () => {
+    const dir = escapeDirectory()
+    const launcher = fakeLauncher()
+    for (const [installed, fix, not] of [[false, 'install bubblewrap', 'user namespaces'], [true, 'run `bwrap --ro-bind / / true`', 'install bubblewrap']] as const) {
+      const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'full', landlockLauncher: launcher, bwrapInstalled: () => installed })
+      const refusal = await sandbox.confine(['true'], WW).then(() => undefined, (error: unknown) => error)
+      expect(refusal).toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY', message: expect.stringContaining(fix) as string })
+      expect((refusal as Error).message).not.toContain(not)
+    }
+  })
+
+  it('looks for an executable bwrap on PATH when no test hook decides', async () => {
+    const dir = escapeDirectory()
+    const bin = escapeDirectory()
+    const launcher = fakeLauncher()
+    const path = process.env.PATH
+    try {
+      for (const [entries, fix] of [[[bin], 'install bubblewrap'], [['relative', bin], 'install bubblewrap']] as const) {
+        process.env.PATH = entries.join(delimiter)
+        const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'full', landlockLauncher: launcher })
+        await expect(sandbox.confine(['true'], WW)).rejects.toThrow(fix)
+      }
+      delete process.env.PATH
+      const { sandbox: noPath } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'full', landlockLauncher: launcher })
+      await expect(noPath.confine(['true'], WW)).rejects.toThrow('install bubblewrap')
+      writeFileSync(join(bin, 'bwrap'), '#!/bin/sh\n', { mode: 0o755 })
+      process.env.PATH = bin
+      const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'full', landlockLauncher: launcher })
+      await expect(sandbox.confine(['true'], WW)).rejects.toThrow('could not create a sandbox here')
+    } finally {
+      process.env.PATH = path
+    }
   })
 
   it('leaves a denied socket directory to the runner without refusing, as before', async () => {

@@ -100,7 +100,7 @@ The two socket directories are Docker Desktop's under WSL; `host-services/backen
 <a id="escape-socket-directories-and-the-vsock-filter"></a>
 ### Escape socket directories and the vsock filter
 
-An `escapeSocketDirectories` entry names a directory whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. At each wrap the provider checks whether one exists. While one does, bwrap hides it like a denied socket directory, and Landlock and the Windows ACL runner refuse the wrap with `SANDBOX_UNSUPPORTED_POLICY`.
+An `escapeSocketDirectories` entry names a directory whose sockets start programs outside every confinement, such as WSL's interop directory `/run/WSL`. At each wrap the provider checks whether one exists. While one does, bwrap hides it like a denied socket directory, and Landlock and the Windows ACL runner refuse the wrap with `SANDBOX_UNSUPPORTED_POLICY`. On Linux the refusal names the fix: installing bubblewrap when no executable `bwrap` is on `PATH`, otherwise letting `bwrap` create user namespaces, which a system such as Ubuntu with its AppArmor user-namespace restriction blocks.
 
 The host's `/tmp` holds sockets of the person's programs under names no list can predict, such as an ssh-agent's `/tmp/ssh-*/agent.*`. `privateTmp` hides it from every bwrap command, and a consumer names the predictable escape directories under it, such as a tmux server's `/tmp/tmux-<uid>`, in `escapeSocketDirectories` too, so that Landlock, which shows the host's `/tmp`, refuses while one exists. A directory hidden inside another hidden directory, and a socket or an alias of the home inside one, gets no mount of its own.
 
