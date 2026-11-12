@@ -123,6 +123,13 @@
       disabled: true
 
 - insert:
+    - id: delo-trust
+      name: '@delo/bundle-local/trust'
+      config:
+        enabled: true
+      disabled: true
+
+- insert:
     - id: delo-trash
       name: '@delo/plugin-trash'
       config:

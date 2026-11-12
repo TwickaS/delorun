@@ -128,9 +128,9 @@ home 报告不带签名。机器报告带有该机器密钥对报告的规范 JS
 <a id="consumers"></a>
 ## 消费方
 
-- `delo/packages/integrity/`：检查注册表、各项检查、结果与模式的处理、报告以及徽章规则。
-- `delo/apps/cli`：`delorun verify`（含其 `--json` 与 `--mode` 选项），以及 `delorun status`，后者显示模式与最近的结果。
-- studio 的验证面板与徽章。
+- `delo/apps/cli`：`delorun verify`（含其 `--release`、`--offline` 与 `--json` 选项），运行两项已构建的检查、报告、徽章规则与物料清单（`src/verify/bill.ts` 中的 `startBill` 与 `runVerifyStage`）。`delorun status` 不显示验证结果。
+- `delo/apps/npm-launcher` 与 `delo/packages/runtime-store`：启动器的启动检查，位于注册表之外。
+- `@delo/integrity` 包、studio 的验证面板与徽章，以及 `delorun verify --mode` 尚未构建。
 - `delo/packages/contract-verification-checks/`：注册表条目、结果、模式、阶段与报告的类型。
 
 <a id="compatibility"></a>

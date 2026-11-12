@@ -95,6 +95,10 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   'delo.release-log-state': null,
   // A cache of the start check under trust/: a release that cannot read it, or reads another schema, hashes every file.
   'delo.runtime-identity': null,
+  // What the start check did, handed to the runtime in its environment by the launcher that starts it; never a file.
+  'delo.start-check': null,
+  // The bill `delorun verify --json` prints and the Host serves to the studio; produced on request, never stored.
+  'delo.trust-bill': null,
 }
 
 describe('c03-previous-release-reads-delorun-records', () => {

@@ -15,11 +15,16 @@
  * which answer only the home's own computer, but for the waiting servers' names, and are absent while the plugin's
  * switch is off.
  *
+ * It registers the trust badge at the sidebar's foot (`sidebar.footer.action`), which opens the trust panel: what this
+ * Delo runs and how much of it was checked, from the `delo-trust` row's bill, with Check now on the home's own computer.
+ *
  * Other surfaces open the sections with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)` or
  * `ctx.settingsShell.openSection(DEVICES_SECTION_ID)`.
  * @module @delo/bundle-local/client
  */
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the 'connection/reset' event merge and the connection service's type.
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
@@ -41,6 +46,9 @@ import { PrivacySection, type OptInId, type PrivacySectionInjected } from './Pri
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
+import { trustApi, TrustStore, type TrustApi } from './trust-api.ts'
+import { TrustBadge, type TrustBadgeInjected } from './TrustBadge.tsx'
+import { en as trustEn, zh as trustZh, type TrustLocaleKey } from './trust-locales.ts'
 // Type-only: the ctx.permissionSwitchConsent merge.
 import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 // Type-only: the 'conversation.approval.action' SlotMap entry.
@@ -55,6 +63,13 @@ import { PermissionsSection, type PermissionsSectionInjected } from './Permissio
 
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
+export type { TrustLocaleKey } from './trust-locales.ts'
+export type { TrustBadgeInjected, TrustBadgeProps } from './TrustBadge.tsx'
+export { badgeLabel, formatTime, rowStateLabel, TrustBadge, VERIFY_COMMAND } from './TrustBadge.tsx'
+export {
+  fetchTrustBill, postTrustCheck, trustApi, TrustBillSchema, TrustStore,
+  type TrustApi, type TrustCheckOutcome, type TrustCheckState,
+} from './trust-api.ts'
 export type { ConsentsLocaleKey } from './consents-locales.ts'
 export type { PermissionsSectionInjected, PermissionsSectionProps } from './PermissionsSection.tsx'
 export type { FullAccessConsentProps, FullAccessConsentSource, FullAccessConsentState } from './FullAccessConsent.tsx'
@@ -96,6 +111,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'deloPrivacy': PrivacyLocaleKey
     /** The Devices section's copy and the remote studio's refused-answer notice. */
     'deloDevices': DevicesLocaleKey
+    /** The trust badge's and the trust panel's copy. */
+    'deloTrust': TrustLocaleKey
     /** The full-access consent, the approval card's action, the MCP server review and notice, and the Permissions section. */
     'deloConsents': ConsentsLocaleKey
   }
@@ -138,6 +155,11 @@ export const DEVICES_SECTION_ORDER = 21
 /** The `shell.overlay` id of the remote studio's refused-answer notice. */
 export const REMOTE_NOTICE_ID = 'delo-remote-full-access'
 
+/** Dictionary namespace of the trust badge and its panel. */
+export const TRUST_NS = 'deloTrust'
+
+/** The `sidebar.footer.action` id and order of the trust badge: after the foot's other actions, ending its row. */
+export const TRUST_BADGE = { id: 'delo-trust', order: 10 } as const
 /** Dictionary namespace of the consent surfaces. */
 export const CONSENTS_NS = 'deloConsents'
 
@@ -236,7 +258,32 @@ export function apply(ctx: Context): void {
     inject: devicesFace,
   }, DevicesSection))
   applyRemoteNotice(ctx)
+  applyTrustBadge(ctx, trustApi(browserFetch))
   applyConsents(ctx, browserFetch)
+}
+
+/**
+ * Register the trust badge at the sidebar's foot and read its bill while the plugin lives. A page a reach listener
+ * served, a remote session, shows the bill without Check now, which the Host refuses to any Peer but the owner.
+ * @param ctx - the browser plugin context.
+ * @param api - the Host's trust routes.
+ */
+export function applyTrustBadge(ctx: Context, api: TrustApi): void {
+  ctx.effect(() => ctx.locale.register(TRUST_NS, { en: trustEn, zh: trustZh }), 'delo-trust: badge dictionaries')
+  const store = new TrustStore(api)
+  ctx.effect(() => store.start(listener => ctx.on('connection/reset', listener)), 'delo-trust: bill reads')
+  const remote = (ctx.get('connection') as ConnectionHandle | undefined)?.remoteMedia === 'placeholder'
+  const face: TrustBadgeInjected = {
+    hooks: { bill: store.bill, checking: store.checking },
+    check: remote ? null : () => { void store.check() },
+  }
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action',
+    id: TRUST_BADGE.id,
+    order: TRUST_BADGE.order,
+    locale: TRUST_NS,
+    inject: () => face,
+  }, TrustBadge))
 }
 
 /**

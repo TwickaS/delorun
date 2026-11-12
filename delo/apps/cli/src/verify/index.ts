@@ -9,19 +9,24 @@
  * and the run names the root it anchored on; a root it could hold to its own signatures only is not a pass. The exit
  * code is 0 when no check failed and `release-signature` passed or fell short only of its online check, which contract
  * C18 makes no failure: the command then prints the warning that the release was not checked against the log, since
- * when, and why. It is 1 otherwise. A summary line states what was and was not checked.
+ * when, and why. It is 1 otherwise. After the check lines it prints the bill of materials of this Delo
+ * ([bill text](./bill-text.ts)) and the statement that the checks run with the person's access, which a program running
+ * with that access can change. A summary line states what was and was not checked, and the bill's badge state.
  *
  * @module @delo/cli/verify
  */
+import type { TrustBill } from '@delo/bundle-local/trust-bill'
 import { DELO_LAUNCHER_ROOTS_ENV } from '@delo/contract-home-layout'
-import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationMode, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
+import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
 import type { DeloLogger } from '@delo/logs'
 import type { Fetch, RecordedCheck } from '@delo/release-verify'
 import { parseRuntimeVersion } from '@delo/runtime-store'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput } from '../command.ts'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { deloVersion } from '../version.ts'
-import { checkRelease, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
+import { runVerifyStage, type ChangesReader, type PluginInstallCheck } from './bill.ts'
+import { ACCESS_LINE, billLines, billSuffix } from './bill-text.ts'
+import { VERIFY_MODE, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
 
 /** The `delorun verify --help` text. */
 const VERIFY_USAGE = [
@@ -29,22 +34,19 @@ const VERIFY_USAGE = [
   '',
   'Checks the running release, or an installed one, against its signed manifest, the stored timestamp\'s',
   'freshness and its release-log entry, and proves the release log consistent online unless --offline.',
-  'Prints one line per check: passed, failed or not run, with the reason.',
+  'Prints one line per check: passed, failed or not run, with the reason, then the bill of materials of',
+  'this Delo and how much of it was checked.',
   'Exit codes: 0 when no check failed and release-signature passed or could not reach the release log,',
   '1 otherwise, 2 for a wrong command line. A release log that cannot be reached leaves the release not checked',
   'against it, with a warning, and does not fail.',
   '',
   '  --release <version>  the installed release to check (default: the running one)',
   '  --offline            run no online check',
-  '  --json               print the report as JSON',
+  '  --json               print the report as JSON, with the bill of materials under "bill"',
   '',
 ].join('\n')
 
-/**
- * The mode a run reports. `delorun verify` runs every check on request in every mode (contract C15), and nothing reads
- * `integrity.mode` yet, so a run reports the contract's default.
- */
-export const VERIFY_MODE: Exclude<VerificationMode, 'off'> = 'warn'
+export { VERIFY_MODE } from './checks.ts'
 
 /** How a result reads on a line. */
 const LABELS: Readonly<Record<VerificationResult, string>> = { 'pass': 'passed', 'fail': 'failed', 'not-enforced': 'not enforced', 'unknown': 'not run' }
@@ -65,6 +67,10 @@ export interface VerifyEnvironment {
    * @returns the version.
    */
   readonly running: () => string
+  /** The plugin install check; absent leaves the bill's plugins `unknown`. */
+  readonly plugins?: PluginInstallCheck
+  /** Changes; absent leaves the bill's changes `unknown`. */
+  readonly changes?: ChangesReader
 }
 
 /** This process's fetch, clock, platform and version. */
@@ -115,27 +121,30 @@ export function originsLine(origins: ReleaseOrigins | undefined): string {
 }
 
 /**
- * The summary line: what was and was not checked, which no reader should take for more.
+ * The summary line: what was and was not checked, which no reader should take for more, and the bill's badge state.
  * @param results - one result per registered check.
+ * @param bill - the run's bill, when it built one.
  * @returns the line, ending with a newline.
  */
-export function summaryLine(results: readonly VerificationCheckResult[]): string {
+export function summaryLine(results: readonly VerificationCheckResult[], bill?: TrustBill): string {
   const count = (result: VerificationResult): number => results.filter(entry => entry.result === result).length
   const parts = [`${String(count('pass'))} checks passed`, `${String(count('fail'))} failed`, `${String(count('unknown'))} not run`]
   if (count('not-enforced') > 0) parts.push(`${String(count('not-enforced'))} not enforced`)
-  return `${parts.join(', ')}; this is not a full verification of this Delo.\n`
+  return `${parts.join(', ')}${billSuffix(bill)}; this is not a full verification of this Delo.\n`
 }
 
 /**
  * The report's lines.
  * @param release - the release checked.
  * @param outcome - what the run found.
- * @returns the text: a heading, the root line, one line per check and the summary.
+ * @param bill - the run's bill, when it built one.
+ * @returns the text: a heading, the root line, one line per check, the bill of materials, the access statement and the
+ *   summary.
  */
-export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins'>): string {
+export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins'>, bill?: TrustBill): string {
   const width = Math.max(...outcome.results.map(result => result.id.length))
   const lines = outcome.results.map(result => `${LABELS[result.result].padEnd(7)}  ${result.id.padEnd(width)}  ${result.detail}`)
-  return `Release ${release}, verification mode ${VERIFY_MODE}; ${VERIFICATION_NOTICE}.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${lines.join('\n')}\n${summaryLine(outcome.results)}`
+  return `Release ${release}, verification mode ${VERIFY_MODE}; ${VERIFICATION_NOTICE}.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${lines.join('\n')}\n${bill === undefined ? '' : billLines(bill)}${ACCESS_LINE}${summaryLine(outcome.results, bill)}`
 }
 
 /**
@@ -193,20 +202,14 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
       const named = values.release ?? environment.running()
       const release = parseRuntimeVersion(named)
       if (release === undefined) throw new CliError(EXIT.usage, `delorun verify: ${JSON.stringify(named)} is not a Delo release version`)
-      const { home } = await prepareHome(context, undefined)
+      const { home, profile } = await prepareHome(context, undefined)
       const now = environment.now()
-      const outcome = await checkRelease({
-        home: home.path,
-        release,
-        platform: environment.platform,
-        now,
-        fetch: values.offline ? undefined : environment.fetch,
-        mode: VERIFY_MODE,
-        launcherRoots: context.env[DELO_LAUNCHER_ROOTS_ENV],
-        logger: stderrLogger(context),
-      })
-      if (values.json) context.stdout(`${JSON.stringify(report(release, outcome, now))}\n`)
-      else context.stdout(reportLines(release, outcome))
+      const { bill, outcome } = await runVerifyStage(
+        { home: home.path, profile, platform: environment.platform, running: environment.running(), env: context.env, now, ...environment.plugins === undefined ? {} : { plugins: environment.plugins }, ...environment.changes === undefined ? {} : { changes: environment.changes } },
+        { release, fetch: values.offline ? undefined : environment.fetch, logger: stderrLogger(context) },
+      )
+      if (values.json) context.stdout(`${JSON.stringify({ ...report(release, outcome, now), bill })}\n`)
+      else context.stdout(reportLines(release, outcome, bill))
       for (const notice of outcome.notices) context.stderr(`notice: ${notice}\n`)
       for (const warning of outcome.warnings) context.stderr(`warning: ${warning}\n`)
       return exitOf(outcome)

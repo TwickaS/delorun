@@ -37,6 +37,12 @@ import { checkAndStore, recordResult, uncheckedWarning, type Fetch, type Recorde
 import { recordedLogTransport } from '../update/channel.ts'
 import { RuntimeStore, StorePaths } from '@delo/runtime-store'
 
+/**
+ * The mode a run reports. `delorun verify` runs every check on request in every mode (contract C15), and nothing reads
+ * `integrity.mode` yet, so a run reports the contract's default.
+ */
+export const VERIFY_MODE: Exclude<VerificationMode, 'off'> = 'warn'
+
 /** What one run of the checks reads. */
 export interface ReleaseCheckOptions {
   /** The resolved Delo home, whose tree exists. */
@@ -98,7 +104,7 @@ export interface ReleaseCheckOutcome {
 }
 
 /** One part of the `release-signature` check. */
-interface Part {
+export interface Part {
   /** `pass`, `fail` or `unknown`. */
   readonly result: Exclude<VerificationResult, 'not-enforced'>
   /** What the part found, in one clause. */
@@ -184,16 +190,16 @@ async function shippedRoots(directory: string): Promise<readonly Uint8Array[]> {
 }
 
 /** The anchored root, or the part that refused it. */
-type RootStep = { readonly root: TrustedRoot, readonly anchor: RootAnchor, readonly expiry: Part } | { readonly refused: Part }
+export type RootStep = { readonly root: TrustedRoot, readonly anchor: RootAnchor, readonly expiry: Part } | { readonly refused: Part }
 
 /**
  * Read the home's trusted root, `trust/root.json`, and anchor it as the launcher's start does: on the roots the launcher
  * ships, through the chain an install walked to a newer root (`trust/roots/`). Without the launcher's roots the root
  * is held to its own signatures only, which the anchor records. The root must not have expired.
- * @param options - the run's options.
+ * @param options - the home, the launcher's shipped-roots directory and the clock.
  * @returns the root with its anchor and expiry part, or the part that refused it.
  */
-async function anchoredRoot(options: ReleaseCheckOptions): Promise<RootStep> {
+export async function anchoredRoot(options: Pick<ReleaseCheckOptions, 'home' | 'launcherRoots' | 'now'>): Promise<RootStep> {
   const path = join(options.home, DELO_HOME_ENTRIES.trust, TRUST_FILES.root)
   let stored: Buffer
   let own: TrustedRoot

@@ -6,14 +6,15 @@
  * The release fixture is the install path's own (`../../install/tests/support.ts`), because a launcher's flow is the
  * install path plus the store, and a release is what both are about.
  */
-import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
-import { TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DELO_START_CHECK_ENV, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { InstallError, installRemedies, type InstallErrorCode } from '@delo/install'
 import {
   parseRuntimeVersion,
+  parseStartCheckHandoff,
   RuntimeStore,
   RuntimeStoreError,
   type ChannelRelease,
@@ -26,7 +27,7 @@ import {
   type RuntimeChannel,
   type VerifiedRuntime,
 } from '@delo/runtime-store'
-import { failedStartText, launcherProfile, ROLLBACK_ARGS, runLauncher, runtimeCommand, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
+import { failedStartText, fullCheckDaysFor, launcherProfile, ROLLBACK_ARGS, runLauncher, runtimeCommand, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
 import type { StartCheckResult } from '@delo/release-verify/start'
 import { LAUNCHER_EXIT, refusalFor } from '../src/refusals.ts'
 import { launchEnvironment, parseCommandLine, spawnRuntime, usage } from '../src/bin.ts'
@@ -101,6 +102,7 @@ function recordingStore(recorded: Recorded, options: { readonly installed?: bool
         args: ['the-entry.js', ...request.args],
         env: { DELO_HOME: '/home/.delo' },
         version: version('0.1.0'),
+        check: { full: request.fullCheckDays === 0, hashed: request.fullCheckDays === 0 ? 40 : 6, files: 40, fullCheckAt: 1_700_000_000_000 },
       })
     },
     install: async (request: InstallRequest): Promise<VerifiedRuntime> => {
@@ -237,6 +239,7 @@ function launch(options: {
     logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined },
     spawn: options.spawn ?? (() => Promise.resolve(0)),
     output: { stdout: () => undefined, stderr: options.stderr ?? (() => undefined) },
+    identity: { version: '0.3.0', path: '/launcher', now: () => 1_800_000_000_000 },
     ...options.target === undefined ? {} : { target: options.target },
     ...options.startCheck === undefined ? {} : { startCheck: options.startCheck },
   }
@@ -268,6 +271,39 @@ describe('a run with a runtime installed', () => {
     expect(recorded.launches[0]?.fullCheckDays).toBe(7)
     expect(recorded.installs).toHaveLength(0)
     expect(asked).toBe(0)
+  })
+
+  it('hands the runtime the record of its start check, naming the launcher and the time the check began', async () => {
+    const fixture = await fixtureRelease()
+    let started: LaunchCommand | undefined
+    await runLauncher(launch({
+      home: await home({ root: fixture.roots[0]! }),
+      store: recordingStore({ launches: [], installs: [], retentions: 0 }, { installed: true }),
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+      spawn: (command) => { started = command; return Promise.resolve(0) },
+    }))
+    expect(started?.env['DELO_HOME']).toBe('/home/.delo')
+    expect(parseStartCheckHandoff(started?.env[DELO_START_CHECK_ENV])).toEqual({
+      schema: 'delo.start-check/1', release: '0.1.0', at: 1_800_000_000_000, full: false, hashed: 6, files: 40,
+      fullCheckAt: 1_700_000_000_000, launcher: { version: '0.3.0', path: '/launcher' },
+    })
+  })
+
+  it('hashes every runtime file before delorun verify runs, whatever the interval, and keeps the interval for other commands', async () => {
+    const fixture = await fixtureRelease()
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const options = {
+      home: await home({ root: fixture.roots[0]! }),
+      store: recordingStore(recorded, { installed: true }),
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+    }
+    await runLauncher(launch({ ...options, args: ['--profile', 'default', 'verify', '--json'] }))
+    await runLauncher(launch({ ...options, args: ['status'] }))
+    expect(recorded.launches.map(launched => launched.fullCheckDays)).toEqual([0, 7])
+    expect(fullCheckDaysFor({ args: ['verify'], fullCheckDays: 30 })).toBe(0)
+    expect(fullCheckDaysFor({ args: ['start'], fullCheckDays: 30 })).toBe(30)
   })
 })
 
@@ -721,6 +757,68 @@ describe('a runtime a real runtime store installed', () => {
   })
 })
 
+describe('a real runtime store whose identity record a program running as the person forged', () => {
+  it('c15-verify-sees-past-forged-record: delorun verify is refused, naming the changed file, though the record vouches for it and sets its last full pass to now', async () => {
+    const fixture = await fixtureRelease()
+    const directory = await home({ root: fixture.roots[0]! })
+    // A runtime file, which ordinary starts take on the record's word.
+    const changed = 'app/package.json'
+    try {
+      const store = new RuntimeStore({ home: directory, platform: fixture.platform, logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined } })
+      await store.install({ version: version(VERSION), root: fixture.rootMetadata, fill: staging => fillFromFixture(fixture, staging) })
+      // A record vouches only for change times 2 s behind its capture: move `Date` past that window and record again.
+      const recordPath = join(directory, 'trust', 'runtime-files', `delorun-${VERSION}-${fixture.platform}.json`)
+      await rm(recordPath, { force: true })
+      vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+      vi.setSystemTime(Date.now() + 3_000)
+      await store.checkRuntime(version(VERSION), fixture.rootMetadata)
+      const recorded = await readFile(recordPath, 'utf8').catch(() => undefined)
+      // One byte changed in place, with the mode and times restored, and the record rewritten to vouch for it.
+      const target = join(directory, 'runtimes', VERSION, ...changed.split('/'))
+      const before = await stat(target)
+      await chmod(target, 0o755)
+      const handle = await open(target, 'r+')
+      try {
+        await handle.write(Buffer.from('X'), 0, 1, 0)
+      } finally {
+        await handle.close()
+      }
+      await chmod(target, before.mode & 0o777)
+      await utimes(target, before.atime, before.mtime)
+      if (recorded !== undefined) {
+        const record = JSON.parse(recorded) as { files: (string | null)[], fullCheckAt: number }
+        const list = fixture.entries.map(entry => entry.path)
+        const after = await lstat(target, { bigint: true })
+        record.files[list.indexOf(changed)] = `${String(after.ino)}:${String(after.mode)}:${String(after.size)}:${String(after.mtimeNs)}:${String(after.ctimeNs)}`
+        record.fullCheckAt = Date.now()
+        await rm(recordPath)
+        await writeFile(recordPath, `${JSON.stringify(record)}\n`, { mode: 0o600 })
+      }
+      const started: string[] = []
+      let printed = ''
+      const options = {
+        home: directory,
+        store,
+        channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+        roots: fixture.roots,
+        spawn: (command: LaunchCommand) => { started.push(command.args.at(-1) ?? ''); return Promise.resolve(0) },
+        stderr: (text: string) => { printed += text },
+      }
+      if (recorded !== undefined) {
+        // The documented limit: where change times are trusted, the forged record lets another command start.
+        expect(await runLauncher(launch({ ...options, args: ['status'] }))).toBe(0)
+        expect(started).toEqual(['status'])
+      }
+      expect(await runLauncher(launch({ ...options, args: ['verify'] }))).toBe(LAUNCHER_EXIT.failed)
+      expect(printed).toContain(`${changed} (sha256)`)
+      expect(started).not.toContain('verify')
+    } finally {
+      vi.useRealTimers()
+      await unlock(directory)
+    }
+  })
+})
+
 describe('a real runtime store whose current fails its start check after an update', () => {
   it('refuses delorun verify without running either release, leaving both pointers and every file as they were, and starts previous with delorun recover rollback for delorun start', async () => {
     const fixture = await fixtureRelease()
@@ -909,7 +1007,7 @@ describe('a current runtime that fails its start check', () => {
       checkRuntime: (checked, root) => {
         asked.checked.push(`${checked}@${String(root.version)}`)
         if (previous === 'fails') return Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', `/home/.delo/runtimes/${checked}`, 'differs'))
-        return Promise.resolve({ version: checked, manifest: {} as VerifiedRuntime['manifest'], files: {} as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) })
+        return Promise.resolve({ version: checked, manifest: {} as VerifiedRuntime['manifest'], files: { files: [] } as Partial<VerifiedRuntime['files']> as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) })
       },
       launchCommand: (launched, profile, args) => {
         asked.commands.push(`${launched} ${args.join(' ')}`)
@@ -1015,7 +1113,9 @@ describe('a current runtime that fails its start check', () => {
     const result = await run('passes')
     expect(result.status).toBe(7)
     expect(result.asked).toEqual({ checked: [`${PREVIOUS}@1`], commands: [`${PREVIOUS} recover rollback`] })
-    expect(result.started).toEqual([{ command: `/home/.delo/runtimes/${PREVIOUS}/node/bin/node`, args: ['entry.js', ...ROLLBACK_ARGS], env: { DELO_PROFILE: 'default' }, version: PREVIOUS, root: expect.objectContaining({ version: 1 }) }])
+    expect(result.started).toEqual([{ command: `/home/.delo/runtimes/${PREVIOUS}/node/bin/node`, args: ['entry.js', ...ROLLBACK_ARGS], env: { DELO_PROFILE: 'default', [DELO_START_CHECK_ENV]: expect.any(String) } }])
+    // `previous` passed the full check, which the record the runtime gets names.
+    expect(parseStartCheckHandoff(result.started[0]?.env[DELO_START_CHECK_ENV])).toMatchObject({ release: PREVIOUS, full: true, hashed: 0, files: 0 })
     expect(result.printed).toBe(`Delo did not start release ${CURRENT}: it failed its start check. Starting release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback\n`)
   })
 

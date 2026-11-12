@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, type RuntimeVersion } from '@delo/contract-home-layout'
+import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, inheritableEnvironment, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { ensureHomeTree, resolveDeloHome } from '@delo/home'
@@ -37,30 +37,14 @@ export const RELEASE_FLAG = '--release'
 export const TERMINATOR = '--'
 
 /**
- * The variables a launch never inherits, matched without regard to case because a Windows environment is case
- * insensitive: Node's own module hooks and caches (`NODE_OPTIONS`, `NODE_PATH`, `NODE_COMPILE_CACHE`, `NODE_V8_COVERAGE`,
- * `NODE_ICU_DATA`), its trust settings (`NODE_EXTRA_CA_CERTS`, `NODE_TLS_REJECT_UNAUTHORIZED`), OpenSSL's configuration
- * and module directories (`OPENSSL_CONF`, `OPENSSL_MODULES`, `OPENSSL_ENGINES`, which load code), and the dynamic loader's
- * and C library's (`LD_*`, `DYLD_*`, `GCONV_PATH`, `LOCPATH`). A process could use any of them to install code into the
- * runtime's Node before it starts or to stand between it and every HTTPS connection. The rest of the environment passes:
- * the runtime runs the person's commands and tools, which need `PATH`, credentials, agents and toolchain variables that
- * an allowlist would remove. None of the dropped variables is a launch protocol variable.
- */
-const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*)$/iu
-
-/**
  * The environment a runtime starts with: this process's, without the variables that would load code into the
- * runtime's Node or its dynamic loader, and with the launch protocol's own variables in place of any inherited value.
+ * runtime's Node or its dynamic loader (`DROPPED_LAUNCH_ENV`), and with the launch protocol's own variables in place of any inherited value.
  * @param inherited - the environment this process was given.
  * @param set - the variables launch protocol 1 sets.
  * @returns the variables to start the runtime with, each a string.
  */
 export function launchEnvironment(inherited: NodeJS.ProcessEnv, set: Readonly<Record<string, string>>): Record<string, string> {
-  const environment: Record<string, string> = {}
-  for (const [name, value] of Object.entries(inherited)) {
-    if (value !== undefined && !DROPPED_ENV.test(name)) environment[name] = value
-  }
-  return { ...environment, ...set }
+  return { ...inheritableEnvironment(inherited), ...set }
 }
 
 /** The version check the launcher runs until the person's `integrity.mode` is read here; the check stops a start in every mode. */
@@ -145,8 +129,9 @@ export function usage(): string {
     '',
     'Every other argument is passed to delorun unchanged.',
     '',
-    'Every start checks the installed runtime against its signed file list, and hashes every file at least',
-    `every 7 days; ${FULL_CHECK_DAYS_ENV} sets that interval from 0 (every start) to 30 days.`,
+    'Every start checks the installed runtime against its signed file list. It hashes every file before',
+    'delorun verify runs, and otherwise once the last full check its record names is 7 days old;',
+    `${FULL_CHECK_DAYS_ENV} sets that interval from 0 (every start) to 30 days.`,
     '',
   ].join('\n')
 }
@@ -255,6 +240,35 @@ class RecordingChannel extends LauncherChannel {
   }
 }
 
+/** The largest launcher `package.json` read for its version. */
+const LAUNCHER_MANIFEST_LIMIT = 65_536
+
+/**
+ * The launcher package's version, which the start-check record names.
+ * @param packageDirectory - the launcher package's directory.
+ * @returns the `version` of its `package.json`, or `null` when the file does not read, is larger than its limit, or
+ *   names no version: the record then says the version is unknown, and the start goes on.
+ */
+export async function launcherVersion(packageDirectory: string): Promise<string | null> {
+  let text: string
+  try {
+    text = await readFile(join(packageDirectory, 'package.json'), 'utf8')
+  } catch {
+    // An unreadable manifest leaves the version unknown; the start does not depend on it.
+    return null
+  }
+  if (text.length > LAUNCHER_MANIFEST_LIMIT) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    // Not JSON: the version is unknown.
+    return null
+  }
+  const version: unknown = typeof parsed === 'object' && parsed !== null ? Reflect.get(parsed, 'version') : undefined
+  return typeof version === 'string' && version.length <= 64 ? version : null
+}
+
 /**
  * Run one launcher invocation.
  * @param argv - the arguments after the script.
@@ -334,6 +348,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       // The runtime anchors `delorun verify` on the roots this launcher ships, as this launcher's start does.
       spawn: command => spawn({ ...command, env: { ...command.env, [DELO_LAUNCHER_ROOTS_ENV]: join(packageDirectory, ROOTS_DIRECTORY) } }),
       startCheck: (version, root) => startCheck({ home: home.path, platform, version, root, transport: transportFor(root), now: Math.floor((context.now ?? Date.now)() / 1000) }),
+      identity: { version: await launcherVersion(packageDirectory), path: packageDirectory, now: context.now ?? Date.now },
       output: context.output,
       report,
       ...target === undefined ? {} : { target },

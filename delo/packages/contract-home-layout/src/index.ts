@@ -3,8 +3,9 @@
  * (`delo/docs/contracts/c01-home-layout.md`): the Delo home tree, the modes of
  * its directories and protected files, the per-start token, the home lock, the
  * runtime store's pointer files, the launcher's download limits and the
- * confinement rules `delorun verify` reports. Its one function is the pure
- * profile-name check; the contract page is the authority for every value here.
+ * confinement rules `delorun verify` reports. Its functions are the pure
+ * profile-name check and the environment a runtime start inherits; the contract page is the authority for every value
+ * here.
  *
  * @module @delo/contract-home-layout
  */
@@ -29,6 +30,41 @@ export const DSH_HOME_ENV = 'DSH_HOME'
  * roots, as the launcher's own start does; a runtime that finds it unset anchors on the stored root only, and says so.
  */
 export const DELO_LAUNCHER_ROOTS_ENV = 'DELO_LAUNCHER_ROOTS'
+
+/**
+ * Environment variable through which the launcher tells the runtime it starts what its start check of the runtime's
+ * files did: one JSON object, `delo.start-check/1`, which `@delo/runtime-store`'s `parseStartCheckHandoff` reads. The
+ * runtime reports it and never re-hashes to show it; a runtime that finds it unset or unreadable reports the start
+ * check as unknown. Any program running as the person can set it, so it informs a report and decides nothing.
+ */
+export const DELO_START_CHECK_ENV = 'DELO_START_CHECK'
+
+/**
+ * The variables no Delo process passes to a runtime it starts (the launcher's start, the update's successor, the
+ * studio's Check now), matched without regard to case because a Windows environment is case insensitive: Node's own
+ * module hooks and caches (`NODE_OPTIONS`, `NODE_PATH`, `NODE_COMPILE_CACHE`, `NODE_V8_COVERAGE`, `NODE_ICU_DATA`), its
+ * trust settings (`NODE_EXTRA_CA_CERTS`, `NODE_TLS_REJECT_UNAUTHORIZED`), OpenSSL's configuration and module directories
+ * (`OPENSSL_CONF`, `OPENSSL_MODULES`, `OPENSSL_ENGINES`, which load code), and the dynamic loader's and C library's
+ * (`LD_*`, `DYLD_*`, `GCONV_PATH`, `LOCPATH`). A process could use any of them to load code into the runtime's Node
+ * before it starts or to stand between it and every HTTPS connection. The rest of the environment passes: the runtime
+ * runs the person's commands and tools, which need `PATH`, credentials, agents and toolchain variables that an
+ * allowlist would remove. None of them is a launch protocol variable.
+ */
+export const DROPPED_LAUNCH_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*)$/iu
+
+/**
+ * The environment a Delo process passes to a runtime it starts: the given one, without {@link DROPPED_LAUNCH_ENV}'s
+ * variables and without unset values.
+ * @param inherited - the environment to pass on.
+ * @returns the variables, each a string.
+ */
+export function inheritableEnvironment(inherited: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  const environment: Record<string, string> = {}
+  for (const [name, value] of Object.entries(inherited)) {
+    if (value !== undefined && !DROPPED_LAUNCH_ENV.test(name)) environment[name] = value
+  }
+  return environment
+}
 
 /** Upstream's default harness-home directory name; Delo never reads or writes `~/.dsh`. */
 export const UPSTREAM_HOME_DIR_NAME = '.dsh'

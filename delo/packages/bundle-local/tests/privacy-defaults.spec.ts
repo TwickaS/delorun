@@ -170,6 +170,7 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-fetch-guard',
       `${LOCAL_BUNDLE}/update-gate`,
       `${LOCAL_BUNDLE}/update-check`,
+      `${LOCAL_BUNDLE}/trust`,
       '@delo/plugin-trash',
       '@delo/home-auth',
       '@delo/reach',
