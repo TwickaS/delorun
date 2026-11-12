@@ -220,6 +220,8 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
       open: ['open', '--print'],
       reach: ['reach', 'status'],
       devices: ['devices', 'list'],
+      mcp: ['mcp', 'list'],
+      workspace: ['workspace', 'full-access'],
     }
     const help = run(['--help']).output
     const listed = help.slice(help.indexOf('Commands:')).split('\n').slice(1).map(line => /^ {2}(\S+)/u.exec(line)?.[1]).filter(name => name !== undefined)
