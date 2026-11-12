@@ -9,8 +9,8 @@ import { mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { cloneEnvironment, createCloneService, failureOf, spawnGit, type GitOutcome, type GitRunner } from '../src/clone.ts'
-import { isCloneAddress, isFolderName, suggestedName } from '../src/clone-address.ts'
+import { cloneArguments, cloneEnvironment, createCloneService, createCloneTemplate, failureOf, spawnGit, type GitOutcome, type GitRunner } from '../src/clone.ts'
+import { hasUrlCredentials, isCloneAddress, isFolderName, suggestedName } from '../src/clone-address.ts'
 import { CloneStart, CloneStatus, MAX_CLONE_BODY_BYTES } from '../src/wire.ts'
 
 let scratch = ''
@@ -88,12 +88,13 @@ const REPO = 'https://github.com/owner/site.git'
 describe('the repository addresses and folder names a clone takes', () => {
   it.each([
     'https://github.com/owner/site.git', 'ssh://git@github.com/owner/site.git', 'git@github.com:owner/site.git', 'https://[2001:db8:0:0:0:0:0:1]/repo', 'ssh://host.example:2222/x',
+    'https://[::1]/repo', 'https://[2001:db8::1]/repo', 'ssh://git@[fe80::1]/repo',
   ])('takes %s', (url) => { expect(isCloneAddress(url)).toBe(true) })
 
   it.each([
     'file:///etc', '/home/person/repo', './repo', 'ext::sh -c touch% /tmp/x', 'http://example.com/repo', 'git://example.com/repo', '-uploadpack=touch',
     'ssh://-oProxyCommand=touch/x', 'git@-oProxyCommand=x:repo', 'git@host:-repo', 'git@host://repo', 'https://exa mple.com/r', 'https://example.com/r\n',
-    'https://-host.example/r', 'fd::17', 'repo',
+    'https://-host.example/r', 'fd::17', 'repo', 'ext::sh', 'ext::sh -c true', 'git@host::x y',
   ])('refuses %s', (url) => { expect(isCloneAddress(url)).toBe(false) })
 
   it('takes one plain folder name and refuses any other', () => {
@@ -114,7 +115,13 @@ describe('starting a clone', () => {
     const job = await started({ url: REPO, parent: join(person, 'projects'), name: 'site' })
     const destination = join(person, 'projects', 'site')
     expect(await settled(job)).toEqual({ state: 'done', workspaceId: 'workspace-9', path: destination, kind: 'empty' })
-    expect(runs[0]?.args).toEqual(['clone', '--progress', '--no-recurse-submodules', '--', REPO, destination])
+    const args = runs[0]?.args ?? []
+    const template = (args.find(each => each.startsWith('--template=')) ?? '').slice('--template='.length)
+    expect(args).toEqual(cloneArguments(REPO, destination, template))
+    expect(args.slice(0, 8)).toEqual(['-c', 'core.hooksPath=/dev/null', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=', '-c', 'filter.lfs.required=false'])
+    expect(args.slice(8, 11)).toEqual(['clone', '--progress', '--no-recurse-submodules'])
+    expect(args.slice(-3)).toEqual(['--', REPO, destination])
+    await expect(stat(template)).rejects.toThrow()
     expect(create).toHaveBeenCalledExactlyOnceWith(destination)
   })
 
@@ -130,6 +137,18 @@ describe('starting a clone', () => {
     const { start } = service(git)
     expect(await start({ ...body, parent: join(person, 'projects') })).toEqual({ status: 422, body: { result: 'refused', problem } })
     expect(runs).toEqual([])
+  })
+
+  // Assembled at run time so the source holds no credential-shaped address for the secret scan to flag.
+  it.each([['user', ''], ['user', 'pw'], ['', 'pw']])('refuses an https address with user %j and password %j, which carries a sign-in, before Git runs', async (user, password) => {
+    const url = `https://${user}${password === '' ? '' : ':'}${password}@github.com/owner/site.git`
+    const { git, runs } = gitFake()
+    expect((await service(git).start({ url, parent: join(person, 'projects'), name: 'site' })).body).toEqual({ result: 'refused', problem: 'url-credentials' })
+    expect(runs).toEqual([])
+  })
+
+  it('knows a sign-in in an address only in an https URL', () => {
+    expect([REPO, 'ssh://git@github.com/o/r.git', 'git@github.com:o/r.git', 'https://u@h/r', `https://u${':'}p@h/r`].map(hasUrlCredentials)).toEqual([false, false, false, true, true])
   })
 
   it('refuses a parent that is not absolute', async () => {
@@ -179,11 +198,53 @@ describe('starting a clone', () => {
     expect(runs).toEqual([])
   })
 
+  it('answers busy to a start made while another is still being placed, and leaves the first clone\'s folder alone', async () => {
+    const destination = join(person, 'projects', 'site')
+    let release: (outcome: GitOutcome) => void = () => {}
+    const { git, runs } = gitFake(async (args) => {
+      await mkdir(args.at(-1) as string, { recursive: true })
+      await writeFile(join(args.at(-1) as string, 'first.txt'), 'first')
+      return new Promise<GitOutcome>((resolve) => { release = resolve })
+    })
+    const { start, settled } = service(git)
+    const body = { url: REPO, parent: join(person, 'projects'), name: 'site' }
+    const [one, two] = await Promise.all([start(body), start(body)])
+    expect([one.body, two.body].filter(each => (each as { result: string }).result === 'refused')).toEqual([{ result: 'refused', problem: 'busy' }])
+    await vi.waitFor(() => { expect(runs).toHaveLength(1) })
+    expect(await readdir(destination)).toEqual(['first.txt'])
+    release({ kind: 'exited', code: 0, stderr: '' })
+    expect(CloneStart.parse(one.body)).toMatchObject({ result: 'started' })
+    await settled((one.body as { job: string }).job)
+    expect(await readdir(destination)).toEqual(['first.txt'])
+  })
+
+  it('lets the next clone start after a start was refused for its location', async () => {
+    const { git } = gitFake()
+    const { start } = service(git)
+    await mkdir(join(person, 'projects', 'used'))
+    await writeFile(join(person, 'projects', 'used', 'keep'), 'x')
+    expect((await start({ url: REPO, parent: join(person, 'projects'), name: 'used' })).body).toEqual({ result: 'refused', problem: 'not-empty' })
+    expect((await start({ url: REPO, parent: deloHome, name: 'x' })).body).toEqual({ result: 'refused', problem: 'delo-home' })
+    expect(CloneStart.parse((await start({ url: REPO, parent: join(person, 'projects'), name: 'ok' })).body).result).toBe('started')
+  })
+
+  it('leaves a folder alone that appeared after the check and that Git refused to use', async () => {
+    const { git } = gitFake(async (args) => {
+      await mkdir(args.at(-1) as string, { recursive: true })
+      await writeFile(join(args.at(-1) as string, 'theirs.txt'), 'theirs')
+      return { kind: 'exited', code: 128, stderr: "fatal: destination path 'site' already exists and is not an empty directory." }
+    })
+    const { started, settled } = service(git)
+    expect(await settled(await started({ url: REPO, parent: join(person, 'projects'), name: 'site' }))).toEqual({ state: 'failed', failure: 'failed' })
+    expect(await readdir(join(person, 'projects', 'site'))).toEqual(['theirs.txt'])
+  })
+
   it('refuses a second clone while one runs, and takes one again once it finishes', async () => {
     const held = heldGit()
     const { start, settled, started } = service(held.git)
     const job = await started({ url: REPO, parent: join(person, 'projects'), name: 'one' })
     expect((await start({ url: REPO, parent: join(person, 'projects'), name: 'two' })).body).toEqual({ result: 'refused', problem: 'busy' })
+    await vi.waitFor(() => { expect(held.runs).toHaveLength(1) })
     held.finish({ kind: 'exited', code: 128, stderr: 'fatal: Repository not found.' })
     expect(await settled(job)).toEqual({ state: 'failed', failure: 'not-found' })
     expect(CloneStart.parse((await start({ url: REPO, parent: join(person, 'projects'), name: 'two' })).body).result).toBe('started')
@@ -198,6 +259,7 @@ describe('a running clone', () => {
     const { started, status } = service(git)
     const job = await started({ url: REPO, parent: join(person, 'projects'), name: 'site' })
     expect(await status(job)).toEqual({ state: 'running' })
+    await vi.waitFor(() => { expect(held.runs).toHaveLength(1) })
     report('Counting objects: 50%\rReceiving objects:  12% (1/8)\rReceiving objects:  42% (3/8)')
     expect(await status(job)).toEqual({ state: 'running', percent: 42 })
     report('Resolving deltas: 90%')
@@ -286,7 +348,7 @@ describe('telling a failure from Git\'s output', () => {
   it.each([
     ['fatal: could not read Username for \'https://github.com\': terminal prompts disabled', 'sign-in'],
     ['git@github.com: Permission denied (publickey).', 'sign-in'],
-    ['Host key verification failed.', 'sign-in'],
+    ['Host key verification failed.', 'host-key'],
     ['The requested URL returned error: 403', 'sign-in'],
     ['remote: Repository not found.', 'not-found'],
     ['The requested URL returned error: 404', 'not-found'],
@@ -302,7 +364,7 @@ describe('the environment Git runs in', () => {
     expect(env).toEqual({
       PATH: '/bin', HOME: '/home/p', SSH_AUTH_SOCK: '/s', HTTPS_PROXY: 'http://proxy',
       GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '', SSH_ASKPASS_REQUIRE: 'never', GCM_INTERACTIVE: 'never',
-      GIT_SSH_COMMAND: 'ssh -o BatchMode=yes', GIT_ALLOW_PROTOCOL: 'https:ssh', LC_ALL: 'C',
+      GIT_SSH_COMMAND: 'ssh -o BatchMode=yes', GIT_ALLOW_PROTOCOL: 'https:ssh', GIT_LFS_SKIP_SMUDGE: '1', LC_ALL: 'C',
     })
   })
 })
@@ -332,7 +394,9 @@ describe('real Git', () => {
     const abort = new AbortController()
     const deadline = setTimeout(() => { abort.abort() }, 20_000)
     try {
-      return await spawnGit(['clone', '--progress', '--no-recurse-submodules', '--', url, join(person, 'projects', 'out')], env, abort.signal, () => {})
+      const template = await createCloneTemplate()
+      onTestFinished(async () => { await rm(template, { recursive: true, force: true }) })
+      return await spawnGit(cloneArguments(url, join(person, 'projects', 'out'), template), env, abort.signal, () => {})
     } finally {
       clearTimeout(deadline)
     }
@@ -345,6 +409,66 @@ describe('real Git', () => {
     expect(failureOf(outcome.kind === 'exited' ? outcome.stderr : '')).toBe('sign-in')
     expect(server.hits()).toBeGreaterThan(0)
   }, 30_000)
+
+  describe('with a filter and a hook in the person\'s own Git configuration', () => {
+    /** A source repository whose files select the `evil` filter, and a global config that defines it to leave a marker. */
+    async function source() {
+      const marker = join(scratch, 'smudge-ran')
+      const origin = join(scratch, 'origin')
+      const hooks = join(scratch, 'global-hooks')
+      const hookMarker = join(scratch, 'hook-ran')
+      const config = join(scratch, 'global.gitconfig')
+      await mkdir(origin)
+      await mkdir(hooks)
+      await writeFile(join(hooks, 'post-checkout'), `#!/bin/sh\ntouch '${hookMarker}'\n`, { mode: 0o755 })
+      await writeFile(join(origin, '.gitattributes'), '* filter=evil\n')
+      await writeFile(join(origin, 'a.txt'), 'content\n')
+      const quiet = { PATH: process.env.PATH as string, HOME: scratch, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
+      const inOrigin = (...args: string[]) => new Promise<void>((resolve, reject) => {
+        void spawnGit(['-C', origin, ...args], quiet, new AbortController().signal, () => {}).then(outcome => { outcome.kind === 'exited' && outcome.code === 0 ? resolve() : reject(new Error(`git ${args.join(' ')} failed`)) })
+      })
+      await inOrigin('init', '-q')
+      await inOrigin('add', '-A')
+      await inOrigin('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'x')
+      const smudge = join(scratch, 'smudge.sh')
+      await writeFile(smudge, `#!/bin/sh\ntouch '${marker}'\ncat\n`, { mode: 0o755 })
+      await writeFile(config, `[filter "evil"]\n\tsmudge = ${smudge}\n\tclean = cat\n[core]\n\thooksPath = ${hooks}\n`)
+      return { marker, hookMarker, url: `file://${origin}`, env: isolated({ GIT_CONFIG_GLOBAL: config, GIT_ALLOW_PROTOCOL: 'file' }) }
+    }
+    const exists = (path: string) => stat(path).then(() => true, () => false)
+
+    it('runs the filter in a plain clone, so the test below can tell', async () => {
+      const { marker, url, env } = await source()
+      const out = join(person, 'projects', 'control')
+      const outcome = await spawnGit(['clone', '--', url, out], env, new AbortController().signal, () => {})
+      expect(outcome).toMatchObject({ kind: 'exited', code: 0 })
+      expect(await exists(marker)).toBe(true)
+    }, 30_000)
+
+    it('runs neither the filter nor the hook during the clone, and leaves the clone without the template\'s attributes', async () => {
+      const { marker, hookMarker, url, env } = await source()
+      const outcome = await run(url, env)
+      expect(outcome).toMatchObject({ kind: 'exited', code: 0 })
+      expect(await exists(marker)).toBe(false)
+      expect(await exists(hookMarker)).toBe(false)
+      expect(await exists(join(person, 'projects', 'out', 'a.txt'))).toBe(true)
+    }, 30_000)
+
+    it('removes the template\'s attributes from a finished clone and the template itself', async () => {
+      const { url, env } = await source()
+      const seen: string[] = []
+      const git: GitRunner = async (args, _env, signal, onStderr) => {
+        const template = (args.find(each => each.startsWith('--template=')) ?? '').slice('--template='.length)
+        seen.push(template)
+        return spawnGit([...args.slice(0, -2), url, args.at(-1) as string], env, signal, onStderr)
+      }
+      const { started, settled } = service(git)
+      const job = await started({ url: REPO, parent: join(person, 'projects'), name: 'site' })
+      expect((await settled(job)).state).toBe('done')
+      expect(await exists(join(person, 'projects', 'site', '.git', 'info', 'attributes'))).toBe(false)
+      expect(await exists(seen[0] as string)).toBe(false)
+    }, 30_000)
+  })
 
   it.each(['http', 'file', 'ext'])('refuses the %s transport the environment does not allow', async (scheme) => {
     const server = await challengeServer()

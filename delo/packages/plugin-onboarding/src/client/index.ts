@@ -44,6 +44,7 @@ import { hostApi } from './host-api.ts'
 import { en, zh, type OnboardingLocaleKey } from './locales.ts'
 import { OnboardingStepEntry } from './Onboarding.tsx'
 import { ShowAgainRow, type ShowAgainInjected } from './ShowAgainRow.tsx'
+import { KeyBanner, type KeyBannerInjected } from './KeyBanner.tsx'
 import { StarterPrompts, type StarterInjected } from './StarterPrompts.tsx'
 import type {
   AddOutcome, DeloOnboarding, FolderBrowse, FolderChoice, NoticeFace, OnboardingInjected, OnboardingStep, SchemePreference, StartFace, StartTarget,
@@ -55,6 +56,7 @@ export type { BundleInstaller, BundleState, BundleView } from './bundles.ts'
 export type { OnboardingStepEntryProps } from './Onboarding.tsx'
 export type { OnboardingLocaleKey } from './locales.ts'
 export type { ShowAgainInjected, ShowAgainRowProps } from './ShowAgainRow.tsx'
+export type { KeyBannerInjected, KeyBannerProps } from './KeyBanner.tsx'
 export type { StarterInjected, StarterPromptsProps } from './StarterPrompts.tsx'
 export { hostApi, readReach, REACH_STATUS_PATH } from './host-api.ts'
 export type {
@@ -84,6 +86,9 @@ export const ONBOARDING_STEP = { id: ONBOARDING_ROW_ID, order: -200 } as const
 
 /** The General row that opens onboarding again, by the id Delo's Settings layout places it under. */
 export const SHOW_AGAIN_ROW = { id: ONBOARDING_ROW_ID, order: 50 } as const
+
+/** The no-key banner's place in the input dock: above the starter prompts. */
+export const KEY_BANNER_ENTRY = { id: 'delo-onboarding.key-banner', order: 5 } as const
 
 /** The starter prompts' place in the input dock: just above the message box. */
 export const STARTER_ENTRY = { id: 'delo-onboarding.starters', order: 10 } as const
@@ -322,6 +327,10 @@ export function applyStudio(ctx: Context): void {
     bind: (sessionId) => { writeProgress('starterSession', sessionId) },
     dismiss: () => { writeProgress('starterSession', '') },
   }
+  const keyBanner: KeyBannerInjected = {
+    keyTest: () => hostApi.keyTest(),
+    openModels: () => { ctx.settingsShell.openSection('models') },
+  }
   ctx.effect(() => ctx.configForms.whileServed([ONBOARDING_ROW_ID], () => {
     const disposers = [
       ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
@@ -333,6 +342,9 @@ export function applyStudio(ctx: Context): void {
       ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock', id: STARTER_ENTRY.id, order: STARTER_ENTRY.order, locale: NS, inject: () => starters,
       }, StarterPrompts)),
+      ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+        name: 'conversation.input.dock', id: KEY_BANNER_ENTRY.id, order: KEY_BANNER_ENTRY.order, locale: NS, inject: () => keyBanner,
+      }, KeyBanner)),
     ]
     return () => { for (const dispose of disposers) dispose() }
   }), 'delo-onboarding: registrations')

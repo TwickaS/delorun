@@ -24,7 +24,7 @@ function useStore<T>(store: Store<T>): T {
 }
 
 /** The location problems a clone shares with adding a folder; the rest have their own copy. */
-const CLONE_ONLY: ReadonlySet<CloneProblem> = new Set(['url-form', 'name-form', 'not-empty', 'busy'])
+const CLONE_ONLY: ReadonlySet<CloneProblem> = new Set(['url-form', 'url-credentials', 'name-form', 'not-empty', 'busy'])
 
 /**
  * The sentence that says why a clone did not start.
@@ -33,7 +33,7 @@ const CLONE_ONLY: ReadonlySet<CloneProblem> = new Set(['url-form', 'name-form', 
  * @returns the sentence.
  */
 export function cloneProblemText(t: StepServices['t'], problem: CloneProblem): string {
-  return CLONE_ONLY.has(problem) ? t(`clone.problem.${problem as 'url-form' | 'name-form' | 'not-empty' | 'busy'}`) : problemText(t, problem as FolderProblem)
+  return CLONE_ONLY.has(problem) ? t(`clone.problem.${problem as 'url-form' | 'url-credentials' | 'name-form' | 'not-empty' | 'busy'}`) : problemText(t, problem as FolderProblem)
 }
 
 /**

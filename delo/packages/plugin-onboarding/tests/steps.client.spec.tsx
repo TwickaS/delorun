@@ -247,9 +247,9 @@ describe('the agents step', () => {
     expect(fake.install).not.toHaveBeenCalled()
     const confirm = screen.getByRole('group', { name: 'What adding Codex means' })
     expect(within(confirm).getAllByRole('listitem').map(each => each.textContent)).toEqual([
-      en['agents.confirm.handoff'], en['agents.confirm.outside'], en['agents.confirm.files'], en['agents.confirm.billing'],
+      en['agents.confirm.handoff'], en['agents.confirm.limits'], en['agents.confirm.outside'], en['agents.confirm.files'], en['agents.confirm.billing'],
     ])
-    expect(confirm.textContent).toContain('does not ask you before each run')
+    expect(confirm.textContent).toContain('Delo asks here on this computer first')
     await click(within(confirm).getByRole('button', { name: en['chooser.cancel'] }))
     expect(screen.queryByRole('group')).toBeNull()
     expect(fake.install).not.toHaveBeenCalled()

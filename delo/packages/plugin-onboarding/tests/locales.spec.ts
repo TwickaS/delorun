@@ -23,7 +23,9 @@ describe('the copy', () => {
 
   it('says plainly what adding an agent means and claims no consent that is not built', () => {
     expect(en['agents.confirm.outside']).toBe('It runs outside Delo\'s sandbox and permission prompts.')
-    expect(en['agents.confirm.handoff']).toContain('does not ask you before each run')
+    expect(en['agents.confirm.handoff']).toContain('Delo asks here on this computer first')
+    expect(en['agents.confirm.handoff']).not.toContain('does not ask')
+    expect(en['agents.confirm.limits']).toContain('stop after 30 minutes')
     for (const text of Object.values(en)) expect(text).not.toMatch(/consent|each workspace/i)
   })
 

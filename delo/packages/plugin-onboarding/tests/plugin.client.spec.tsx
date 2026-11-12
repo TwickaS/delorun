@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore, type ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  addWorkspaceFolder, apply, hostApi, inject, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
+  addWorkspaceFolder, apply, hostApi, inject, KEY_BANNER_ENTRY, loadSetupRecord, NS, ONBOARDING_STEP, SHOW_AGAIN_ROW, STARTER_ENTRY, type KeyBannerInjected, type OnboardingInjected, type OnboardingStep, type OnboardingStepEntryProps, type ShowAgainRowProps,
   type StarterInjected, type ShowAgainInjected,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -92,6 +92,7 @@ const face = <T,>(entries: Map<string, Registered>, key: string): T => {
 const STEP_KEY = `settings.onboarding#${ONBOARDING_STEP.id}`
 const ROW_KEY = `settings.general.item#${SHOW_AGAIN_ROW.id}`
 const DOCK_KEY = `conversation.input.dock#${STARTER_ENTRY.id}`
+const BANNER_KEY = `conversation.input.dock#${KEY_BANNER_ENTRY.id}`
 
 describe('the stock look', () => {
   it('registers nothing until the Delo look provides deloStudio, and everything leaves with it', async () => {
@@ -104,7 +105,7 @@ describe('the stock look', () => {
     expect(dictionaries.has(NS)).toBe(true)
     expect(served.ids).toEqual([ONBOARDING_ROW_ID])
     served.on()
-    expect(entries.size).toBe(3)
+    expect(entries.size).toBe(4)
     await studio.dispose()
     expect([dictionaries.size, entries.size, ctx.get('deloOnboarding')]).toEqual([0, 0, undefined])
     await fiber.dispose()
@@ -129,7 +130,7 @@ describe('the registrations', () => {
     const { entries, served } = await harness()
     expect([...entries.keys()]).toEqual([])
     served.on()
-    expect([...entries.keys()].toSorted()).toEqual([DOCK_KEY, ROW_KEY, STEP_KEY].toSorted())
+    expect([...entries.keys()].toSorted()).toEqual([BANNER_KEY, DOCK_KEY, ROW_KEY, STEP_KEY].toSorted())
     expect(entries.get(STEP_KEY)?.options).toMatchObject({ name: 'settings.onboarding', id: 'delo-onboarding', order: -200, locale: NS })
     // bundle-local's step registers at -100, so this one is mounted first.
     expect(ONBOARDING_STEP.order).toBeLessThan(-100)
@@ -558,6 +559,21 @@ describe('Show again', () => {
     await flush()
     expect(requested.getSnapshot()).toBe(ONBOARDING_STEP.id)
     expect(warn).toHaveBeenCalledWith('delo onboarding: progress was not saved', expect.any(Error))
+  })
+})
+
+describe('the no-key banner\'s services', () => {
+  it('ask the key test through the page and open Settings at Models', async () => {
+    const openSection = vi.fn()
+    const keyTest = vi.spyOn(hostApi, 'keyTest').mockResolvedValue({ providers: [] })
+    const { entries, served } = await harness({ provide: { settingsShell: { openSection, openOnboarding: vi.fn() } } })
+    served.on()
+    expect(entries.get(BANNER_KEY)?.options).toMatchObject({ name: 'conversation.input.dock', order: 5, locale: NS })
+    const services = face<KeyBannerInjected>(entries, BANNER_KEY)
+    expect(await services.keyTest()).toEqual({ providers: [] })
+    expect(keyTest).toHaveBeenCalledOnce()
+    services.openModels()
+    expect(openSection).toHaveBeenCalledExactlyOnceWith('models')
   })
 })
 

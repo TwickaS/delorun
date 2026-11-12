@@ -159,10 +159,10 @@ export type CloneRequest = z.output<typeof CloneRequest>
 
 /**
  * Why a clone is refused before it starts: `url-form` is not an `https://`, `ssh://` or `user@host:path` address (a
- * local path, `file://`, `ext::` and any value led by `-` are refused); `name-form` is not one plain folder name;
+ * local path, `file://`, `ext::` and any value led by `-` are refused); `url-credentials` an `https://` address has a user name or password in it; `name-form` is not one plain folder name;
  * `not-empty` the folder exists and holds something; `busy` another clone runs; or a {@link LocationProblem}.
  */
-export const CLONE_PROBLEMS = ['url-form', 'name-form', 'not-empty', 'busy', ...LOCATION_PROBLEMS] as const
+export const CLONE_PROBLEMS = ['url-form', 'url-credentials', 'name-form', 'not-empty', 'busy', ...LOCATION_PROBLEMS] as const
 
 /** One of {@link CLONE_PROBLEMS}. */
 export type CloneProblem = typeof CLONE_PROBLEMS[number]
@@ -180,12 +180,12 @@ export type CloneStart = z.output<typeof CloneStart>
 export const CloneStatusRequest = z.strictObject({ job: z.string().min(1).max(64) })
 
 /**
- * Why a started clone failed: `sign-in` the repository needs a sign-in the studio never asks for; `not-found` the
+ * Why a started clone failed: `sign-in` the repository needs a sign-in the studio never asks for; `host-key` SSH could not verify the host's key; `not-found` the
  * repository does not exist or is private; `network` the host could not be reached; `timeout` it took too long;
  * `no-git` Git is not installed; `failed` any other failure; `add-failed` the clone finished but the folder could not be
  * added as a workspace.
  */
-export const CLONE_FAILURES = ['sign-in', 'not-found', 'network', 'timeout', 'no-git', 'failed', 'add-failed'] as const
+export const CLONE_FAILURES = ['sign-in', 'host-key', 'not-found', 'network', 'timeout', 'no-git', 'failed', 'add-failed'] as const
 
 /** One of {@link CLONE_FAILURES}. */
 export type CloneFailure = typeof CLONE_FAILURES[number]

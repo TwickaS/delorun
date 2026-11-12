@@ -50,13 +50,15 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
- * Whether Claude Code has a sign-in on this computer. Claude Code keeps it in `~/.claude/.credentials.json`, except on
+ * Whether Claude Code has a sign-in on this computer. Claude Code keeps it in `.credentials.json` in `CLAUDE_CONFIG_DIR`, or in `~/.claude`, except on
  * macOS, where it uses the Keychain, which this probe does not read: there a found settings file means it cannot tell.
  * @param environment - where to look.
  * @returns the sign-in state.
  */
 export async function claudeSignIn(environment: ReadinessEnvironment): Promise<AgentSignIn> {
-  if (await fileExists(join(environment.home, '.claude', '.credentials.json'))) return 'found'
+  const configured = environment.env['CLAUDE_CONFIG_DIR']
+  const claudeHome = configured !== undefined && configured !== '' ? configured : join(environment.home, '.claude')
+  if (await fileExists(join(claudeHome, '.credentials.json'))) return 'found'
   if (environment.platform === 'darwin' && await fileExists(join(environment.home, '.claude.json'))) return 'unknown'
   return 'missing'
 }

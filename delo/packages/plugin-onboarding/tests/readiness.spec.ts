@@ -57,6 +57,15 @@ describe('the sign-in probes', () => {
     expect(await claudeSignIn(environment({ platform: 'darwin', home: join(home, 'elsewhere') }))).toBe('missing')
   })
 
+  it('follow CLAUDE_CONFIG_DIR, and ignore it when it is empty', async () => {
+    await place('claude-elsewhere/.credentials.json')
+    expect(await claudeSignIn(environment({ env: { CLAUDE_CONFIG_DIR: join(home, 'claude-elsewhere') } }))).toBe('found')
+    expect(await claudeSignIn(environment({ env: { CLAUDE_CONFIG_DIR: join(home, 'nowhere') } }))).toBe('missing')
+    await place('.claude/.credentials.json')
+    expect(await claudeSignIn(environment({ env: { CLAUDE_CONFIG_DIR: '' } }))).toBe('found')
+    expect(await claudeSignIn(environment({ env: { CLAUDE_CONFIG_DIR: join(home, 'nowhere') } }))).toBe('missing')
+  })
+
   it('follow CODEX_HOME, and ignore it when it is empty', async () => {
     await place('codex-elsewhere/auth.json')
     expect(await codexSignIn(environment({ env: { CODEX_HOME: join(home, 'codex-elsewhere') } }))).toBe('found')

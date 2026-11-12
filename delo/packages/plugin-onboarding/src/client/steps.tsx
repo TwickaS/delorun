@@ -339,6 +339,7 @@ function AgentCard({ agent, services, guide }: { readonly agent: typeof AGENT_BU
         <div className={css.confirm} role="group" aria-label={t('agents.confirm.label', { name: title })}>
           <ul className={css.facts}>
             <li>{t('agents.confirm.handoff')}</li>
+            <li>{t('agents.confirm.limits')}</li>
             <li>{t('agents.confirm.outside')}</li>
             <li>{t('agents.confirm.files')}</li>
             <li>{t('agents.confirm.billing')}</li>

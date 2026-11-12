@@ -5,7 +5,8 @@
  * Each browser context opens its own one-time studio link (`delorun open --print`), so each starts on the preview
  * notice. The walk presses Continue, and opens the states behind a press that changes nothing (the Models section, an
  * agent's confirmation, the clone form); it never adds a bundle, and only the last run presses the final button, to
- * show the first chat. A development aid, not a test.
+ * show the first chat. Then each scheme and width opens the studio again and shows the no-key banner above the
+ * message box; `SCREENS_SKIP_WALK=1` runs only that part, on a home whose guide is finished. A development aid, not a test.
  */
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -68,7 +69,8 @@ async function extraStates(page: import('playwright').Page, dialog: import('play
 
 const browser = await chromium.launch()
 const combos = Object.entries(VIEWPORTS).flatMap(([width, viewport]) => SCHEMES.map(scheme => ({ width, viewport, scheme })))
-for (const [index, { width, viewport, scheme }] of combos.entries()) {
+const WALK = process.env.SCREENS_SKIP_WALK === undefined
+for (const [index, { width, viewport, scheme }] of WALK ? combos.entries() : []) {
   const context = await browser.newContext({ viewport, colorScheme: scheme, deviceScaleFactor: width === 'phone' ? 2 : 1 })
   const page = await context.newPage()
   await page.goto(studioLink())
@@ -85,16 +87,32 @@ for (const [index, { width, viewport, scheme }] of combos.entries()) {
       await forward.first().click()
       continue
     }
-    // The last step: only the last run presses its button, to show the first chat and its starter prompts.
+    // The last step: only the last run presses its button, to show the first chat, its starter prompts and, while no
+    // model key works, the no-key banner above its message box.
     if (index === combos.length - 1) {
       await dialog.getByRole('button', { name: /^Start a chat$/u }).click()
       // The chat opens once the harness created it; the prompts show when its message box mounts.
       await page.getByText('Try one').waitFor({ timeout: 15_000 })
+      await page.getByText('Add a model key to start chatting').waitFor({ timeout: 15_000 })
       await page.waitForTimeout(500)
       await page.screenshot({ path: join(out, `${prefix}-${width}-${scheme}-${String(step + 1).padStart(2, '0')}-first-chat.png`) })
     }
     break
   }
+  await context.close()
+}
+// The guide is finished by now, so the studio opens straight into a chat: the no-key banner above its message box, for
+// every scheme and width, while the scratch home has no model key.
+for (const { width, viewport, scheme } of combos) {
+  const context = await browser.newContext({ viewport, colorScheme: scheme, deviceScaleFactor: width === 'phone' ? 2 : 1 })
+  const page = await context.newPage()
+  await page.goto(studioLink())
+  await page.getByText('Add a model key to start chatting').waitFor({ timeout: 30_000 })
+  // Each new browser still shows the preview notice once.
+  const notice = page.getByRole('dialog').getByRole('button', { name: /^(Continue|I understand|Got it)$/u })
+  if (await notice.count() > 0) await notice.first().click()
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: join(out, `${prefix}-${width}-${scheme}-no-key-banner.png`) })
   await context.close()
 }
 await browser.close()

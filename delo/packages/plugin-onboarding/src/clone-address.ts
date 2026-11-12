@@ -17,7 +17,7 @@ const SCP_FORM = /^([A-Za-z0-9._-]{1,64})@([^:/\s]{1,253}):(?!\/\/)([^\s-][^\s]{
  * `file://`, `ext::`, another scheme or a value led by `-` or holding whitespace or a control character.
  */
 export function isCloneAddress(url: string): boolean {
-  if (url.startsWith('-') || /[\s\u0000-\u001f\u007f]/u.test(url) || url.includes('::')) return false
+  if (url.startsWith('-') || /[\s\u0000-\u001f\u007f]/u.test(url)) return false
   const scp = SCP_FORM.exec(url)
   if (scp !== null) return HOST.test(scp[2] as string)
   let parsed: URL
@@ -29,6 +29,22 @@ export function isCloneAddress(url: string): boolean {
   }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'ssh:') return false
   return HOST.test(parsed.hostname) || /^\[[0-9a-fA-F:.]+\]$/u.test(parsed.hostname)
+}
+
+/**
+ * Whether an `https://` address carries a user name or password in front of its host.
+ * @param url - an address {@link isCloneAddress} takes.
+ * @returns true for `https://user@host/…` and `https://user:token@host/…`; false for SSH and `user@host:path` addresses,
+ * whose user name is not a secret.
+ */
+export function hasUrlCredentials(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' && (parsed.username !== '' || parsed.password !== '')
+  } catch (_notUrl) {
+    // An `user@host:path` address is not a URL and carries no sign-in.
+    return false
+  }
 }
 
 /**

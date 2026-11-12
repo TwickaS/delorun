@@ -68,7 +68,7 @@ describe('the key test', () => {
   })
 
   it.each<readonly [string, string]>([
-    ['INVALID_RESPONSE', 'works'], ['HTTP_401', 'rejected'], ['HTTP_403', 'rejected'], ['TRANSPORT', 'unreachable'], ['TIMEOUT', 'unreachable'],
+    ['INVALID_RESPONSE', 'untested'], ['HTTP_401', 'rejected'], ['HTTP_403', 'rejected'], ['TRANSPORT', 'unreachable'], ['TIMEOUT', 'unreachable'],
     ['ABORTED', 'unreachable'], ['MISSING_CREDENTIAL', 'no-key'], ['HTTP_500', 'failed'],
   ])('reads a DeepSeek listing failure coded %s as %s', (code, result) => {
     expect(listingResult(coded(code))).toBe(result)

@@ -71,8 +71,8 @@ export function discoveryResult(error: unknown): KeyResult {
  */
 export function listingResult(error: unknown): KeyResult {
   const code = codeOf(error)
-  // The listing client reports INVALID_RESPONSE only for an answer with a success status, so the key was accepted.
-  if (code === 'INVALID_RESPONSE') return 'works'
+  // INVALID_RESPONSE is a success status with a body that is not a model list, such as a captive portal's page: the key was not tested.
+  if (code === 'INVALID_RESPONSE') return 'untested'
   if (code === 'HTTP_401' || code === 'HTTP_403') return 'rejected'
   if (code === 'TRANSPORT' || code === 'TIMEOUT' || code === 'ABORTED') return 'unreachable'
   if (code === 'MISSING_CREDENTIAL') return 'no-key'

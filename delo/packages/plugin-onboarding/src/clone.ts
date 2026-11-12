@@ -5,15 +5,18 @@
  * closed, so a repository that needs a sign-in fails at once with `sign-in` instead of waiting. Only `https://`,
  * `ssh://` and `user@host:path` addresses are taken, and Git may speak only HTTPS and SSH, so a redirect cannot switch it
  * to another transport. The new folder must not exist or be empty, and it is held against the locations Delo never adds
- * before Git runs; a failed clone removes only what it created. Submodules are not cloned. No log line names the
+ * before Git runs; a failed clone removes only what its own Git created. One clone runs at a time, claimed before any wait.
+ * Git runs with `core.hooksPath` off, the LFS filters off, `GIT_LFS_SKIP_SMUDGE` and a template that unsets every
+ * `filter` attribute for the checkout, so no hook or filter from the person's Git configuration runs during it. An address with a sign-in in it is refused. Submodules are not cloned. No log line names the
  * address or Git's output, which can carry a token.
  * @module @delo/plugin-onboarding/clone
  */
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { readdir, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
-import { isCloneAddress, isFolderName } from './clone-address.ts'
+import { hasUrlCredentials, isCloneAddress, isFolderName } from './clone-address.ts'
 import { locationProblem, registerFolder, type AddWorkspaceDeps } from './workspace-route.ts'
 import { CloneRequest, CloneStatusRequest, MAX_CLONE_BODY_BYTES, type CloneFailure, type CloneProblem, type CloneStart, type CloneStatus } from './wire.ts'
 
@@ -93,8 +96,36 @@ export function cloneEnvironment(env: Readonly<Record<string, string | undefined
     GCM_INTERACTIVE: 'never',
     GIT_SSH_COMMAND: 'ssh -o BatchMode=yes',
     GIT_ALLOW_PROTOCOL: 'https:ssh',
+    GIT_LFS_SKIP_SMUDGE: '1',
     LC_ALL: 'C',
   }
+}
+
+/**
+ * Make the Git template directory whose `info/attributes` unsets the `filter` attribute for every path. It outranks the
+ * repository's own `.gitattributes`, so no clean, smudge or process filter defined in the person's Git configuration
+ * (Git offers no switch that turns all of them off) runs during checkout.
+ * @returns the template directory; the caller removes it.
+ */
+export async function createCloneTemplate(): Promise<string> {
+  const template = await mkdtemp(join(tmpdir(), 'delo-clone-template-'))
+  await mkdir(join(template, 'info'))
+  await writeFile(join(template, 'info', 'attributes'), '* -filter\n')
+  return template
+}
+
+/**
+ * The arguments of the clone: hooks off, the LFS filters off, filters unset by the template, no submodules.
+ * @param url - the repository address.
+ * @param destination - the new folder.
+ * @param template - the directory {@link createCloneTemplate} made.
+ * @returns the arguments after `git`.
+ */
+export function cloneArguments(url: string, destination: string, template: string): string[] {
+  return [
+    '-c', 'core.hooksPath=/dev/null', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=', '-c', 'filter.lfs.required=false',
+    'clone', '--progress', '--no-recurse-submodules', `--template=${template}`, '--', url, destination,
+  ]
 }
 
 /**
@@ -103,7 +134,8 @@ export function cloneEnvironment(env: Readonly<Record<string, string | undefined
  * @returns the failure.
  */
 export function failureOf(stderr: string): CloneFailure {
-  if (/terminal prompts disabled|could not read (?:Username|Password)|Authentication failed|Permission denied \(|Host key verification failed|returned error: 40[13]|Invalid username or password/iu.test(stderr)) return 'sign-in'
+  if (/Host key verification failed/iu.test(stderr)) return 'host-key'
+  if (/terminal prompts disabled|could not read (?:Username|Password)|Authentication failed|Permission denied \(|returned error: 40[13]|Invalid username or password/iu.test(stderr)) return 'sign-in'
   if (/Repository not found|returned error: 404|does not appear to be a git repository|not found/iu.test(stderr)) return 'not-found'
   if (/Could not resolve host|Connection refused|Connection timed out|Network is unreachable|Could not connect|unable to access|Operation timed out/iu.test(stderr)) return 'network'
   return 'failed'
@@ -135,6 +167,8 @@ export interface CloneDeps extends AddWorkspaceDeps {
 interface Job {
   status: CloneStatus
   readonly abort: AbortController
+  /** Whether the destination folder existed, empty, before this job's Git ran; a job removes only what its own Git created. */
+  existed: boolean
 }
 
 /** The most finished clones whose outcome is kept for the studio to read. */
@@ -204,26 +238,31 @@ export function createCloneService(deps: CloneDeps): CloneService {
       jobs.delete(id)
     }
   }
-  const run = async (job: Job, url: string, destination: string, existed: boolean): Promise<void> => {
+  const run = async (job: Job, url: string, destination: string): Promise<void> => {
     const timer = setTimeout(() => { job.abort.abort('timeout') }, deps.timeoutMs)
     let outcome: GitOutcome
+    const template = await createCloneTemplate()
     try {
-      outcome = await deps.git(['clone', '--progress', '--no-recurse-submodules', '--', url, destination], cloneEnvironment(deps.env), job.abort.signal, (text) => {
+      outcome = await deps.git(cloneArguments(url, destination, template), cloneEnvironment(deps.env), job.abort.signal, (text) => {
         const percents = [...text.matchAll(/Receiving objects:\s+(\d{1,3})%/gu)]
         const last = percents.at(-1)
         if (last !== undefined) job.status = { state: 'running', percent: Math.min(100, Number(last[1])) }
       })
     } finally {
       clearTimeout(timer)
+      await rm(template, { recursive: true, force: true })
     }
     if (outcome.kind === 'exited' && outcome.code === 0) {
+      // The template's attributes were for the checkout only; filters the person sets up later must apply.
+      await rm(join(destination, '.git', 'info', 'attributes'), { force: true })
       const added = await registerFolder(destination, deps)
       finish(job, added.result === 'added' ? { state: 'done', workspaceId: added.workspaceId, path: destination, kind: added.kind } : { state: 'failed', failure: 'add-failed' })
       return
     }
     const failure: CloneFailure = outcome.kind === 'missing' ? 'no-git' : job.abort.signal.aborted ? 'timeout' : failureOf(outcome.stderr)
     deps.warn(`a clone failed: ${failure}`)
-    await removeCreated(destination, existed)
+    // Git leaves a folder it refused to use alone; it is not this job's.
+    if (!/already exists and is not an empty directory/u.test(outcome.kind === 'exited' ? outcome.stderr : '')) await removeCreated(destination, job.existed)
     finish(job, { state: 'failed', failure })
   }
   return {
@@ -233,20 +272,33 @@ export function createCloneService(deps: CloneDeps): CloneService {
       const { url, parent, name } = parsed.data
       const refuse = (problem: CloneProblem): Response => reply(422, { result: 'refused', problem })
       if (!isCloneAddress(url)) return refuse('url-form')
+      if (hasUrlCredentials(url)) return refuse('url-credentials')
       if (!isFolderName(name)) return refuse('name-form')
       if (!isAbsolute(parent)) return refuse('not-absolute')
       if (running !== undefined) return refuse('busy')
-      const destination = join(parent, name)
-      const problem = await locationProblem(destination, deps)
-      if (problem === 'unresolved') return reply(500, { error: 'the Delo home could not be resolved, so nothing is cloned' })
-      if (problem !== undefined) return refuse(problem)
-      const state = await destinationState(destination)
-      if (state === 'used') return refuse('not-empty')
-      const id = randomUUID()
-      const job: Job = { status: { state: 'running' }, abort: new AbortController() }
-      jobs.set(id, job)
+      // The claim comes before the first await, so a second start sees it.
+      const job: Job = { status: { state: 'running' }, abort: new AbortController(), existed: false }
       running = job
-      void run(job, url, destination, state === 'empty').catch((error: unknown) => {
+      const destination = join(parent, name)
+      const release = (): void => { running = undefined }
+      const problem = await locationProblem(destination, deps)
+      if (problem === 'unresolved') {
+        release()
+        return reply(500, { error: 'the Delo home could not be resolved, so nothing is cloned' })
+      }
+      if (problem !== undefined) {
+        release()
+        return refuse(problem)
+      }
+      const state = await destinationState(destination)
+      if (state === 'used') {
+        release()
+        return refuse('not-empty')
+      }
+      job.existed = state === 'empty'
+      const id = randomUUID()
+      jobs.set(id, job)
+      void run(job, url, destination).catch((error: unknown) => {
         deps.warn(`a clone stopped unexpectedly: ${error instanceof Error ? error.name : 'unexpected failure'}`)
         finish(job, { state: 'failed', failure: 'failed' })
       })
