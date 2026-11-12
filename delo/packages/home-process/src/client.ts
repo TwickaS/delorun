@@ -1,6 +1,5 @@
 /**
- * The update channel's client side (contract C19, "The update channel"), for `delorun`, for a Host that asks the other
- * running profiles to read the permission store again (`./permission-peers.ts`), and for specs: it reads the
+ * The update channel's client side (contract C19, "The update channel"), for `delorun` and specs: it reads the
  * token file when it sends a request, sends one request line and reads every response line until the home process
  * closes the connection. A `BUSY` answer is retried, because under Landlock a confined command can hold
  * connections up to the channel's limit.

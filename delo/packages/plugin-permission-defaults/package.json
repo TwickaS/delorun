@@ -16,7 +16,6 @@
     "@delo/contract-home-layout": "workspace:*",
     "@delo/home": "workspace:*",
     "@delo/home-auth": "workspace:*",
-    "@delo/home-process": "workspace:*",
     "zod": "4.4.3"
   },
   "peerDependencies": {

@@ -6,9 +6,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./client": "./src/client.ts",
-    "./permission-peers": "./src/permission-peers.ts"
+    ".": "./src/index.ts"
   },
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",

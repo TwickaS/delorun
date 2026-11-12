@@ -147,7 +147,7 @@ describe('the full-access consent', () => {
   })
 
   it('switches the chat it was asked from along with the grant', async () => {
-    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1, unread: [] } } })
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } } })
     const source = createFullAccessConsentSource(host.fetch)
     const answered = source.ask(OFF, 'chat-1')
     source.confirm()
@@ -156,7 +156,7 @@ describe('the full-access consent', () => {
   })
 
   it('records the grant with the review it showed and the person\'s answer, then closes', async () => {
-    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 0, unread: [] } } })
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 0 } } })
     const source = createFullAccessConsentSource(host.fetch)
     const answered = source.ask(OFF)
     source.confirm()
@@ -166,7 +166,7 @@ describe('the full-access consent', () => {
   })
 
   it('records nothing when the approval card it was asked from can no longer be answered at the confirm', async () => {
-    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1, unread: [] } } })
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } } })
     const source = createFullAccessConsentSource(host.fetch)
     let answerable = true
     const answered = source.ask(OFF, 'chat-1', () => answerable)
@@ -233,7 +233,7 @@ describe('the full-access consent', () => {
   })
 
   it('keeps a consent asked again while the first answer was recorded open, whatever that answer brought', async () => {
-    for (const answer of [{ status: 200, body: { access: ON, chats: 0, unread: [] } }, refusal(409, 'STALE_REVIEW')]) {
+    for (const answer of [{ status: 200, body: { access: ON, chats: 0 } }, refusal(409, 'STALE_REVIEW')]) {
       let release: () => void = () => {}
       const held = new Promise<void>((resolve) => { release = resolve })
       const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: answer })
@@ -342,7 +342,7 @@ describe('the approval card\'s full-access action', () => {
   it('records nothing and reads nothing when the card no longer accepts an answer at the click', async () => {
     const host = fakeHost({
       [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1, unread: [] } },
+      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
     })
     let answerable = true
     const props = actionProps(host, { canAnswer: () => answerable })
@@ -361,7 +361,7 @@ describe('the approval card\'s full-access action', () => {
     for (const access of [ON, OFF]) {
       const host = fakeHost({
         [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access } },
-        [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1, unread: [] } },
+        [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
       })
       let answerable = true
       let clicked = false
@@ -397,7 +397,7 @@ describe('the approval card\'s full-access action', () => {
   it('does not ask again in a workspace that holds a grant: it switches the chat and answers the card', async () => {
     const host = fakeHost({
       [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1, unread: [] } },
+      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
     })
     const props = actionProps(host)
     render(<FullAccessAction {...props} />)
@@ -413,7 +413,7 @@ describe('the approval card\'s full-access action', () => {
   it('answers the workspace\'s full access as the home holds it at the click, not as it was shown', async () => {
     const host = fakeHost({
       [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1, unread: [] } },
+      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
     })
     const props = actionProps(host)
     render(<FullAccessAction {...props} />)
@@ -745,7 +745,7 @@ describe('the Permissions section', () => {
   it('revokes full access in one click, and says how many chats went back', async () => {
     const host = fakeHost({
       [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON] } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: { ...OFF, reviewId: 'c'.repeat(32) }, chats: 2, unread: [] } },
+      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: { ...OFF, reviewId: 'c'.repeat(32) }, chats: 2 } },
     })
     renderPermissions(host)
     await settle()
@@ -755,18 +755,6 @@ describe('the Permissions section', () => {
       .toEqual({ workspace: ON.workspace, reviewId: ON.reviewId, on: false, confirmed: true })
     // The outcome belongs to the section, not to the row the list's refresh removes.
     expect(screen.getByRole('status').textContent).toBe('site is back on the safer preset. Chats switched back: 2.')
-  })
-
-  it('names each running profile whose studio did not read a revoke', async () => {
-    const host = fakeHost({
-      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON] } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: { ...OFF, reviewId: 'c'.repeat(32) }, chats: 0, unread: ['work', 'spare'] } },
-    })
-    renderPermissions(host)
-    await settle()
-    fireEvent.click(within(rowOf('site')).getByRole('button', { name: en['access.revoke'] }))
-    await settle()
-    expect(screen.getByRole('status').textContent).toBe('site is back on the safer preset. Chats switched back: 0. Running profiles that did not read the change: work, spare. Their open chats keep their permission until you restart each with delorun stop and delorun start.')
   })
 
   it('lists a waiting server with what changed, opens its review, and declines it in place', async () => {
