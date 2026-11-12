@@ -56,9 +56,10 @@ export function reachDevicePrincipal(deviceId: string): ReachDevicePrincipal {
 
 /**
  * Every action a device may take over a reach listener, with what it lets the person do from it. The owner's rule
- * for a phone: read chats, workspaces and the redacted settings, start chats, send messages, stop runs, answer
- * ordinary prompts, and rename, pin and unpin chats, which organize the list reversibly and change no run. An
- * endpoint whose name ends in a read is listed here only when it reads no secret and no file by path.
+ * for a phone: read chats, workspaces, the redacted settings, the plugins and the files of a chat's own workspace,
+ * start chats, send messages, stop runs, answer ordinary prompts, choose the preset a chat runs with, and rename,
+ * pin and unpin chats, which organize the list reversibly and change no run. A read is listed here only when it
+ * reaches no secret and no path outside a chat's workspace.
  */
 export const REACH_ALLOWED_ACTIONS = {
   'remoteAccess/follow': 'read its own access snapshot, which remote access allows every Peer before any policy',
@@ -95,7 +96,26 @@ export const REACH_ALLOWED_ACTIONS = {
   'subagents/interruptByParent': 'stop a subagent\'s run',
   'agentPresets/list': 'read the agent presets a chat can start with',
   'agentPresets/read': 'read one agent preset',
+  'agentPresets/select': 'choose which of the presets you defined at your computer a chat that has not started runs with, which decides its plugins and tools; choosing one grants no access by itself, so the workspace\'s full-access consent and every approval prompt still decide what that chat may do',
   'permissionPresets/catalog': 'read the permission presets; changing one is refused',
+  'workspaceFiles/list': 'list one folder inside a chat\'s workspace, which the service confines to that workspace and caps at 2000 entries',
+  'workspaceFiles/read': 'read one page of a text file inside a chat\'s workspace; an absolute path or one that leaves the workspace is refused',
+  'workspaceFiles/readBytes': 'read a file\'s bytes inside a chat\'s workspace within the service\'s window and size caps; an absolute path or one that leaves the workspace is refused',
+  'workspaceFiles/stat': 'read a file\'s identity, version and size inside a chat\'s workspace; an absolute path or one that leaves the workspace is refused',
+  'officeToPdf/render': 'render a document inside a chat\'s workspace as a PDF preview, which reads it through the same workspace-file rule',
+  'officeToPdf/generation': 'read which rendering configuration the PDF previews are cached against',
+  'fileReferences/list': 'search the file names of a chat\'s workspace for the composer\'s mention list',
+  'pluginManager/history': 'read the profile changes that can be undone; undoing or restoring one is refused',
+  'pluginManager/inspect': 'read what a plugin package contains before it is installed; installing it is refused',
+  'pluginManager/listBundles': 'read the installed bundles; changing one is refused',
+  'pluginManager/listPlugins': 'read the installed plugins; enabling, disabling or removing one is refused',
+  'pluginManager/listVersionExemptions': 'read the pinned plugin versions; changing one is refused',
+  'pluginManager/listVersions': 'read a plugin package\'s published versions; installing one is refused',
+  'pluginManager/readBundleDetail': 'read an installed bundle\'s files; changing it is refused',
+  'pluginManager/registries': 'read which plugin registries are configured',
+  'pluginManager/waitForInstall': 'wait on an install your computer started; starting one is refused',
+  'pluginInventory/list': 'read the plugins and presets the Host composed',
+  'pluginRegistryProbe/fastest': 'measure which configured plugin registry answers fastest',
   'llm/listProviders': 'read the model providers; their credentials are refused',
   'llm/listConfigurableProviders': 'read the model providers; their credentials are refused',
   'job/list': 'read a chat\'s background jobs',
@@ -123,6 +143,8 @@ export const REACH_ALLOWED_ACTIONS = {
   'event:llm/adapters-updated': 'refresh the model providers',
   'event:llm/models-updated': 'refresh the models',
   'event:permission-presets/catalog-changed': 'refresh the permission presets',
+  'event:plugin-manager/changed': 'refresh the plugin list after a change made at the computer',
+  'event:plugin-market/changed': 'refresh the plugin market after a change made at the computer',
   'event:settings/document-updated': 'refresh the redacted settings',
   'event:schedule/changed': 'refresh the scheduled follow-ups',
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
@@ -134,7 +156,6 @@ const CREDENTIALS = 'credentials are secrets of the home'
 const ACCOUNT = 'account sign-in is off in Delo, and an account change belongs to the home\'s own computer'
 const TERMINAL = 'a terminal is a shell on the home\'s computer outside the sandbox'
 const DIRECTORY_PICKER = 'the directory picker browses and creates folders on the home\'s computer'
-const FILE_BY_PATH = 'reads a file by path on the home\'s computer, outside the sandbox\'s protected-home rule'
 const CHANGES = 'the Changes surface reads the working tree of the home\'s computer'
 const WORKSPACE_MANAGEMENT = 'workspace management registers or removes folders of the home\'s computer'
 const CHAT_ORGANIZATION = 'archiving or reordering chats is not in the device rule; renaming and pinning are'
@@ -144,24 +165,14 @@ const GOAL_CHANGE = 'changing a chat\'s standing goal is not in the device rule'
 const SCHEDULE_CHANGE = 'a scheduled follow-up runs prompts later with no person present'
 const DYNAMIC_PLUGIN = 'runs model-authored plugin code in the Host'
 const FEEDBACK = 'feedback leaves the home, and Delo turns it off'
-const PRESET_CHOICE = 'an agent preset decides the tools and access a chat runs with, which is chosen at the home\'s own computer'
 
 /**
  * Every action a device may not take over a reach listener, with why it belongs to the home's own computer. The
  * refusal names the action; this table tells a deliberate refusal from an action nobody classified.
  */
 export const REACH_DENIED_ACTIONS = {
-  'agentPresets/select': PRESET_CHOICE,
   'pluginManager/cancelInstall': PLUGIN_MANAGEMENT,
-  'pluginManager/history': PROFILE_HISTORY,
-  'pluginManager/inspect': PLUGIN_MANAGEMENT,
   'pluginManager/installBundle': PLUGIN_MANAGEMENT,
-  'pluginManager/listBundles': PLUGIN_MANAGEMENT,
-  'pluginManager/listPlugins': PLUGIN_MANAGEMENT,
-  'pluginManager/listVersionExemptions': PLUGIN_MANAGEMENT,
-  'pluginManager/listVersions': PLUGIN_MANAGEMENT,
-  'pluginManager/readBundleDetail': PLUGIN_MANAGEMENT,
-  'pluginManager/registries': PLUGIN_MANAGEMENT,
   'pluginManager/removeBundle': PLUGIN_MANAGEMENT,
   'pluginManager/restore': PROFILE_HISTORY,
   'pluginManager/setBundleEnabled': PLUGIN_MANAGEMENT,
@@ -169,14 +180,9 @@ export const REACH_DENIED_ACTIONS = {
   'pluginManager/setVersionExemption': PLUGIN_MANAGEMENT,
   'pluginManager/undo': PROFILE_HISTORY,
   'pluginManager/updateBundle': PLUGIN_MANAGEMENT,
-  'pluginManager/waitForInstall': PLUGIN_MANAGEMENT,
-  'pluginInventory/list': PLUGIN_MANAGEMENT,
-  'pluginRegistryProbe/fastest': PLUGIN_MANAGEMENT,
-  'event:plugin-manager/changed': PLUGIN_MANAGEMENT,
   'event:plugin-manager/install-log': PLUGIN_MANAGEMENT,
   'event:plugin-manager/install-state': PLUGIN_MANAGEMENT,
   'event:plugin-manager/update-state': PLUGIN_MANAGEMENT,
-  'event:plugin-market/changed': PLUGIN_MANAGEMENT,
   'settings/mutate': SETTINGS_WRITE,
   'settings/replace': SETTINGS_WRITE,
   'settings/update': SETTINGS_WRITE,
@@ -211,14 +217,7 @@ export const REACH_DENIED_ACTIONS = {
   'directoryPicker/createDirectory': DIRECTORY_PICKER,
   'directoryPicker/list': DIRECTORY_PICKER,
   'directoryPicker/pick': DIRECTORY_PICKER,
-  'workspaceFiles/list': FILE_BY_PATH,
-  'workspaceFiles/read': FILE_BY_PATH,
-  'workspaceFiles/readBytes': FILE_BY_PATH,
-  'workspaceFiles/stat': FILE_BY_PATH,
   'workspaceFiles/changes': CHANGES,
-  'officeToPdf/render': FILE_BY_PATH,
-  'officeToPdf/generation': FILE_BY_PATH,
-  'fileReferences/list': 'lists paths by query on the home\'s computer, outside the sandbox\'s protected-home rule',
   'workspace/create': WORKSPACE_MANAGEMENT,
   'workspace/delete': WORKSPACE_MANAGEMENT,
   'workspace/initializeDefault': WORKSPACE_MANAGEMENT,
@@ -295,20 +294,65 @@ function role<K extends RemoteAccessResourceKind>(resource: K): RemoteAccessRole
 const ALLOW: RemoteAccessDecision = { kind: 'allow' }
 
 /**
+ * The actions that read one file of a chat's workspace. The workspace-file service resolves a relative path against
+ * the Session's workspace root but reads an absolute one wherever it points, so the policy keeps a device to the
+ * relative form. `workspaceFiles/list` needs no entry: the service confines a listed directory to the workspace
+ * itself.
+ */
+const WORKSPACE_FILE_ACTIONS: ReadonlySet<string> = new Set([
+  'workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeToPdf/render',
+])
+
+/** A path that names a place by itself, on POSIX or Windows, rather than a place inside the workspace. */
+const ABSOLUTE_PATH = /^(?:[/\\]|[A-Za-z]:[/\\])/
+
+/**
+ * Whether a named path argument names a file inside the chat's workspace: a relative path, without a segment that
+ * walks out of it. A path the policy cannot read as text is refused with it.
+ * @param path - the argument's value.
+ * @returns whether the workspace-file service resolves it inside the workspace root.
+ */
+function insideWorkspace(path: unknown): boolean {
+  if (typeof path !== 'string') return false
+  if (ABSOLUTE_PATH.test(path)) return false
+  return !path.split(/[/\\]/).includes('..')
+}
+
+/**
+ * Whether every path a workspace-file call names stays inside the chat's workspace: its own path argument, and the
+ * base file a byte read resolves it from, which the service accepts absolute.
+ * @param args - the call's named arguments.
+ * @returns whether the service resolves each path inside the workspace root.
+ */
+function workspacePathsInside(args: Readonly<Record<string, unknown>>): boolean {
+  if (!insideWorkspace(args.path)) return false
+  const options = args.options
+  if (typeof options !== 'object' || options === null || !Object.hasOwn(options, 'baseFile')) return true
+  return insideWorkspace(Reflect.get(options, 'baseFile'))
+}
+
+/**
  * Refuse a `session/create` that names a folder or a preset: a device starts a chat only in a Workspace the person
  * registered at the computer, with the configured preset, because a folder decides where the chat's commands may write
- * and a preset decides its tools. Every other action is allowed as its role lists it.
+ * and a preset decides its tools. Refuse a workspace-file read whose `path` is absolute or walks out of the workspace.
+ * Every other action is allowed as its role lists it.
  * @param request - the action and a call's named arguments.
  * @param request.action - the action.
  * @param request.args - the call's named arguments, absent outside a concrete call.
  * @returns allow, or the refusal naming the action.
  */
 export function createCondition(request: { readonly action: RemoteAccessAction; readonly args?: Readonly<Record<string, unknown>> }): RemoteAccessDecision {
-  if (request.action !== 'session/create' || request.args === undefined) return ALLOW
-  for (const value of Object.values(request.args)) {
-    if (typeof value === 'object' && value !== null && (Reflect.get(value, 'cwd') !== undefined || Reflect.get(value, 'agentPreset') !== undefined)) {
-      return { kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' }
+  if (request.args === undefined) return ALLOW
+  if (request.action === 'session/create') {
+    for (const value of Object.values(request.args)) {
+      if (typeof value === 'object' && value !== null && (Reflect.get(value, 'cwd') !== undefined || Reflect.get(value, 'agentPreset') !== undefined)) {
+        return { kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' }
+      }
     }
+    return ALLOW
+  }
+  if (WORKSPACE_FILE_ACTIONS.has(request.action) && !workspacePathsInside(request.args)) {
+    return { kind: 'deny', reason: `loopback-required: ${request.action} with a path outside the chat's workspace` }
   }
   return ALLOW
 }
@@ -366,7 +410,8 @@ export function createReachAccessPolicy(facts: ReachAccessFacts): RemoteAccessPo
         for (const id of workspace.sessionIds) sessions.add(id)
       }
       for (const id of facts.liveSessions()) sessions.add(id)
-      for (const id of sessions) bindings.push({ role: SESSION_ROLE, resource: { kind: 'session', id } })
+      // The condition sits on every role: a workspace-file read names a Session, and the reads are bound there.
+      for (const id of sessions) bindings.push({ role: SESSION_ROLE, resource: { kind: 'session', id }, condition: createCondition })
       return bindings
     },
     explain: request => reachRefusal(request.action),

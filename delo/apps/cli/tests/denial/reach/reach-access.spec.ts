@@ -4,13 +4,16 @@
  * goes through upstream's Gateway and remote access exactly as a request on the reach listener does, through the
  * shared `/api` channel with the Peer the authenticator returned.
  *
- * - Each family C14 reserves for the home's own computer is refused, naming the action: plugin management, profile
- *   history undo and restore, a settings write in every settings namespace, credentials, terminals, file reads by path,
- *   slash commands, schedule changes, dynamic plugin code, workspace management, archiving and reordering chats,
- *   account and the directory picker.
- * - Reading the chat list and the redacted settings, starting a chat, sending a message, stopping the run, and renaming,
- *   pinning and unpinning a chat succeed, and the device's event stream carries the chat events and no plugin
- *   management event.
+ * - Each family C14 reserves for the home's own computer is refused, naming the action: plugin installation and
+ *   enabling, profile history undo and restore, a settings write in every settings namespace, credentials, terminals,
+ *   the Changes surface, slash commands, schedule changes, dynamic plugin code, workspace management, archiving and
+ *   reordering chats, account and the directory picker.
+ * - The reads a device needs to work the way it works at the computer succeed: the installed plugins and their profile
+ *   history, the files of a chat's own workspace, the office previews of those files, and the composer's file names.
+ *   A workspace-file read of an absolute path, or one that walks out of the workspace, is refused.
+ * - Reading the chat list and the redacted settings, starting a chat, sending a message, stopping the run, choosing the
+ *   preset a chat runs with, and renaming, pinning and unpinning a chat succeed, and the device's event stream carries
+ *   the chat events and no plugin management event.
  * - Every Remote method the composition registers and every event it forwards is on the allow list or the deny table,
  *   and every entry of either names one that exists.
  *
@@ -139,7 +142,7 @@ describe('a reach device through the Gateway', () => {
     try {
       await expect(events.next()).resolves.toMatchObject({ value: { type: 'ready' } })
       // The plugin manager declares this event's type; this package does not compile against it.
-      ctx.emit('plugin-manager/changed' as never, { reason: 'plugin' } as never)
+      ctx.emit('plugin-manager/install-state' as never, { requestId: 'reach-install' } as never)
       const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
       const seen: string[] = []
       for (;;) {
@@ -148,7 +151,7 @@ describe('a reach device through the Gateway', () => {
         if (frame.event === 'api-session/added' && frame.args[0]?.sessionId === created.sessionId) break
       }
       // Pins the event roles: a forwarded event reaches the device only when an allowed action names it.
-      expect(seen).not.toContain('plugin-manager/changed')
+      expect(seen).not.toContain('plugin-manager/install-state')
     } finally {
       abort.abort()
       await events.return?.()
@@ -170,20 +173,53 @@ describe('a reach device through the Gateway', () => {
         error: { code: 'remote-access/denied', details: { action: 'session/create', reason: 'loopback-required: session/create with a folder or a preset' } },
       })
     }
-    // `agentPresets/select` is in the deny table, which the decision test below holds against remote access.
   })
 
-  it('refuses plugin management and profile history', async () => {
+  it('chooses the preset a chat that has not started runs with', async () => {
+    // Pins the allow list's preset entry: without it `agentPresets/select` is refused as `loopback-required`.
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const roster = await expectAllowed('agentPresets/list', {}) as { readonly presets: readonly { readonly id: string; readonly isDefault: boolean }[] }
+    const chosen = roster.presets.find(preset => !preset.isDefault)
+    if (chosen === undefined) throw new Error('the composition defines no preset besides the default')
+    await expect(expectAllowed('agentPresets/select', { agentId: created.sessionId, agentPreset: chosen.id })).resolves.toBe(chosen.id)
+  })
+
+  it('refuses plugin installation, enabling and profile history undo', async () => {
     // Pins the deny-by-default roles: an owner principal, or a role listing these, would dispatch each call.
     await expectRefused('pluginManager/installBundle', { spec: '@example/bundle' })
     await expectRefused('pluginManager/setPluginEnabled', { id: 'delo-permission-defaults', enabled: false })
     await expectRefused('pluginManager/setBundleEnabled', { name: '@delo/bundle-local', enabled: false })
     await expectRefused('pluginManager/removeBundle', { name: '@delo/bundle-local' })
-    await expectRefused('pluginManager/listPlugins', {})
     await expectRefused('pluginManager/undo', {})
-    await expectRefused('pluginManager/history', { limit: 5 })
-    await expectRefused('pluginInventory/list', {})
-    await expectRefused('pluginRegistryProbe/fastest', {})
+    await expectRefused('pluginManager/restore', { version: 'v0' })
+  })
+
+  it('reads the plugins and the profile history it can no longer change', async () => {
+    // Pins the allow list's plugin reads: each was refused as `loopback-required` while it sat in the deny table.
+    expect(await expectAllowed('pluginManager/listPlugins', {})).toEqual(expect.any(Array))
+    expect(await expectAllowed('pluginManager/listBundles', {})).toEqual(expect.any(Array))
+    expect(await expectAllowed('pluginManager/registries', {})).toEqual(expect.any(Object))
+    await expect(expectAllowed('pluginManager/history', { limit: 5 })).resolves.toEqual(expect.any(Object))
+    await expect(expectAllowed('pluginInventory/list', {})).resolves.toEqual(expect.any(Object))
+    expect(await expectAllowed('pluginRegistryProbe/fastest', {})).toEqual(expect.anything())
+  })
+
+  it('reads the files of a chat\'s own workspace, and refuses a path outside it', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    // Pins the workspace-file allow entries: the studio's file preview and the composer's mention list need them. Each
+    // call reaches its service, which answers for the workspace, instead of the policy refusing it as `loopback-required`.
+    expect(await expectAllowed('workspaceFiles/list', { workspaceFileScopeId: created.sessionId, path: '.' })).toEqual(expect.any(Object))
+    expect(await call('workspaceFiles/stat', { workspaceFileScopeId: created.sessionId, path: 'missing.txt' }))
+      .toMatchObject({ ok: false, error: { code: 'workspace-file/not-found' } })
+    expect(await expectAllowed('fileReferences/list', { agentId: created.sessionId, query: 'index' })).toEqual(expect.any(Array))
+    // Pins the workspace-file condition: the service reads an absolute path wherever it points, so the policy keeps a
+    // device to a relative one inside the workspace.
+    for (const path of ['/etc/hostname', '../../etc/hostname']) {
+      expect(await call('workspaceFiles/read', { workspaceFileScopeId: created.sessionId, path, range: {} }), path).toMatchObject({
+        ok: false,
+        error: { code: 'remote-access/denied', details: { action: 'workspaceFiles/read', reason: 'loopback-required: workspaceFiles/read with a path outside the chat\'s workspace' } },
+      })
+    }
   })
 
   it('refuses a settings write in every settings namespace, and the settings document', async () => {
@@ -207,13 +243,12 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('account/getState', {})
   })
 
-  it('refuses terminals, file reads by path, the directory picker and opening applications on the computer', async () => {
+  it('refuses terminals, the Changes surface, the directory picker and opening applications on the computer', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     await expectRefused('terminal/list', { sessionId: created.sessionId })
     await expectRefused('terminal/shells', { agentId: created.sessionId })
-    await expectRefused('workspaceFiles/stat', { workspaceFileScopeId: created.sessionId, path: '/etc/hostname' })
+    await expectRefused('workspaceFiles/changes', { workspaceFileScopeId: created.sessionId, path: '.' })
     await expectRefused('directoryPicker/pick', {})
-    await expectRefused('officeToPdf/generation', {})
   })
 
   it('renames, pins and unpins a chat', async () => {

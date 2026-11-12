@@ -57,13 +57,37 @@ describe('the reach-device policy', () => {
     ])
   })
 
+  it('keeps a workspace-file read inside the chat\'s workspace', () => {
+    const allow = { kind: 'allow' }
+    // Pins the workspace-file condition: the service reads an absolute path wherever it points, so the policy keeps a
+    // device to a relative one that does not walk out of the workspace.
+    for (const path of ['src/index.ts', 'a/b/c.txt', '.']) {
+      expect(createCondition({ action: 'workspaceFiles/read', args: { workspaceFileScopeId: 's-1', path } })).toEqual(allow)
+    }
+    // A `..` segment is refused even where it would resolve back inside: the rule is the path's text, not a resolution
+    // the policy would have to redo.
+    for (const path of ['/etc/hostname', 'C:\\Windows\\win.ini', '\\\\server\\share', '..', '../outside.txt', 'a/b/../c.txt', 7, undefined]) {
+      expect(createCondition({ action: 'workspaceFiles/read', args: { path } }))
+        .toEqual({ kind: 'deny', reason: 'loopback-required: workspaceFiles/read with a path outside the chat\'s workspace' })
+    }
+    // The condition belongs to the reads that take a path, and leaves every other action alone.
+    expect(createCondition({ action: 'workspaceFiles/readBytes', args: { path: '/etc/hostname' } })).toMatchObject({ kind: 'deny' })
+    expect(createCondition({ action: 'workspaceFiles/stat', args: { path: '/etc/hostname' } })).toMatchObject({ kind: 'deny' })
+    expect(createCondition({ action: 'officeToPdf/render', args: { path: '/etc/hostname', priority: 'foreground' } })).toMatchObject({ kind: 'deny' })
+    // `list` is confined by the service itself, which refuses a folder outside the workspace.
+    expect(createCondition({ action: 'workspaceFiles/list', args: { path: '/etc' } })).toEqual(allow)
+    // A workspace-file read names a path; one that names none is refused like an absolute one.
+    expect(createCondition({ action: 'workspaceFiles/read', args: { workspaceFileScopeId: 's-1' } })).toMatchObject({ kind: 'deny' })
+  })
+
   it('binds only the allowed actions, on every role', () => {
     for (const binding of createReachAccessPolicy(facts()).bindings(DEVICE)) {
       // Pins the roles: a role listing a denied action would allow it on every bound resource.
       expect(binding.role.actions).toEqual(Object.keys(REACH_ALLOWED_ACTIONS))
       expect(binding.role.resource).toBe(binding.resource.kind)
-      // Pins where the create condition sits: on every resource `session/create` can name.
-      expect(binding.condition).toBe(binding.resource.kind === 'session' ? undefined : createCondition)
+      // Pins where the condition sits: on every role, because `session/create` names a global or Workspace resource
+      // and a workspace-file read names a Session one.
+      expect(binding.condition).toBe(createCondition)
     }
   })
 
@@ -96,7 +120,7 @@ describe('the refusal reasons', () => {
   it('require the home\'s own computer for every action not allowed, classified or not', () => {
     expect(reachRefusal('settings/mutate')).toBe('loopback-required: settings/mutate')
     expect(reachRefusal('unclassified/method' as RemoteAccessAction)).toBe('loopback-required: unclassified/method')
-    expect(reachRefusal('event:plugin-manager/changed')).toBe('loopback-required: event:plugin-manager/changed')
+    expect(reachRefusal('event:plugin-manager/install-log')).toBe('loopback-required: event:plugin-manager/install-log')
     expect(reachRefusal('session/list')).toBe('resource-unlisted: session/list')
   })
 })

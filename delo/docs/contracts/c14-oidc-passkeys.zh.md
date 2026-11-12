@@ -38,6 +38,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
   - [签名密钥](#signing-keys)
   - [tailnet 身份](#tailnet-identity)
   - [tailnet 成员身份](#tailnet-membership)
+  - [设备可以调用什么](#what-a-device-may-call)
   - [上限](#limits)
   - [错误](#errors)
   - [Delo Run 签发方](#delo-run-issuer)
@@ -58,11 +59,11 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 | 地址 | 通行密钥 | 通行密钥依赖方 ID | OpenID Connect 重定向 URI |
 | --- | --- | --- | --- |
 | 回环 | 不使用：回环监听器不需要身份因子 | — | — |
-| Tailscale 私有网络，`https://<machine>.<tailnet>.ts.net[:<port>]` | 当前约定：不可用 | — | `https://<address>/auth/oidc/callback` |
+| Tailscale 私有网络，`https://<machine>.<tailnet>.ts.net[:<port>]` | 当前约定：不可用；该地址以 [tailnet 成员身份](#tailnet-membership)登录 | — | `0.1.0` 中未构建 |
 | Tailscale Funnel，`https://<machine>.<tailnet>.ts.net[:<port>]` | 当前约定：不可用 | — | `https://<address>/auth/oidc/callback` |
 | 自有域名，`https://<name>` | 可用 | `<name>`，与该地址的主机名完全一致 | `https://<name>/auth/oidc/callback` |
 
-`<address>` 是该地址的主机名，端口不是 443 时附带其端口。在当前约定下的 `ts.net` 地址上，本人的 OpenID Connect 提供方就是身份因子，setup 与远程访问屏幕会说明该地址上不提供通行密钥。
+`<address>` 是该地址的主机名，端口不是 443 时附带其端口。在 Tailscale 私有网络地址上，身份因子是 [tailnet 成员身份](#tailnet-membership)，且没有为它构建 OpenID Connect 登录，因为从手机注册会把所有者身份固定在较弱的会话上。在当前约定下的 Funnel 地址上，本人的 OpenID Connect 提供方就是身份因子，setup 与远程访问屏幕会说明该地址上不提供通行密钥。
 
 - **ts.net 规则，当前约定。** `ts.net` 地址上不提供通行密钥。在[兼容性](#compatibility)下记录的 spike 结果表明情况并非如此之前，这一点一直成立。
 - **ts.net 规则，由通过的 spike 采纳。** `ts.net` 地址的依赖方 ID 是其主机名 `<machine>.<tailnet>.ts.net`。同一台机器的 Tailscale 私有网络地址与 Funnel 地址共用该主机名，因此共用一个依赖方 ID；所以 home 把每个通行密钥绑定到注册它时所在的地址，并拒绝 `clientDataJSON.origin` 不是该地址的断言。
@@ -145,7 +146,36 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 `tailnet-membership` 因子不携带任何证明：它表明一个请求经由声明了该因子的远程访问提供方的 serve 目标到达。只有 `reach-tailscale-private` 提供方可以声明它（[C7](c07-reach-providers.zh.md#provider-service-definition)），对于任何其他监听器以及任何不是 `ts.net` 地址的地址，home 以 `TAILNET_IDENTITY_UNAVAILABLE` 拒绝该声明。在该监听器上，已批准设备的一个新鲜设备密钥签名本身即可创建完整会话（[C5](c05-device-approval.zh.md#sign-in)），会话记录携带该因子（[C4](c04-admission.zh.md#sessions)）。
 
-对于每一项只在 home 自己的电脑上授予的操作，home 以 `403 LOOPBACK_REQUIRED` 拒绝因子为 `tailnet-membership` 的会话：授予完全访问，无论是升级到 `danger-full-access`（包括 `plugin_manager` 的升级）还是某个工作区的完全访问同意；授予标记为 `workspace-management` 的提示（主对话的工作区工具及其其他询问，以及指令层写入）；允许、拒绝或撤销某个 stdio MCP 服务器的启动，设备只能读取等待中服务器的名称以及每个服务器发生了什么变化；打开批准窗口以及批准或移除设备；重置；恢复套件；注册身份因子；以及更改远程访问设置。拒绝发生在授予操作的地方，而不是客户端：授予完全访问的批准提示携带 `grants: "full-access"`，以该因子准入的 Peer 的答复不会被应用，因此该提示保持打开，留给 home 自己电脑上的工作室。远程工作室会提示在电脑上批准该操作。观看、回复、开始对话、答复其他所有提示以及停止运行都是允许的，因此无法从手机安装插件。同一规则适用于工作室调用的每个 Remote 方法：设备的 Peer 代表其 `reach-device` 主体，该主体的远程访问策略允许读取对话、工作区和已脱敏设置、开始对话、发送消息、停止运行以及答复提示的方法和转发事件，并以 `remote-access/denied` 和原因 `loopback-required: <action>` 拒绝其他所有方法；该策略及其表格位于 [`@delo/home-auth`](../../packages/home-auth/README.zh.md)。
+对于每一项只在 home 自己的电脑上授予的操作，home 以 `403 LOOPBACK_REQUIRED` 拒绝因子为 `tailnet-membership` 的会话：授予完全访问，无论是升级到 `danger-full-access`（包括 `plugin_manager` 的升级）还是某个工作区的完全访问同意；授予标记为 `workspace-management` 的提示（主对话的工作区工具及其其他询问，以及指令层写入）；允许、拒绝或撤销某个 stdio MCP 服务器的启动，设备只能读取等待中服务器的名称以及每个服务器发生了什么变化；打开批准窗口以及批准或移除设备；重置；恢复套件；注册身份因子；以及更改远程访问设置。拒绝发生在授予操作的地方，而不是客户端：授予完全访问的批准提示携带 `grants: "full-access"`，以该因子准入的 Peer 的答复不会被应用，因此该提示保持打开，留给 home 自己电脑上的工作室。远程工作室会提示在电脑上批准该操作。观看、回复、开始对话、答复其他所有提示以及停止运行都是允许的，因此无法从手机安装插件。同一规则适用于工作室调用的每个 Remote 方法：设备的 Peer 代表其 `reach-device` 主体，该主体的远程访问策略允许[设备可以调用什么](#what-a-device-may-call)一节列出的方法和转发事件，并以 `remote-access/denied` 和原因 `loopback-required: <action>` 拒绝其他所有方法；该策略及其两张表格位于 [`@delo/home-auth`](../../packages/home-auth/README.zh.md)。
+
+<a id="what-a-device-may-call"></a>
+### 设备可以调用什么
+
+所有者对设备的规则是：人在手机上能做的，就是在电脑上能做的，只有需要由电脑在场做出决定的操作除外。`@delo/home-auth` 把 Delo 默认配置的每个 Remote 方法和每个转发事件归入三类之一，reach 访问拒绝测试套件在某个操作不被任何表格列出、或某个表格条目没有对应操作时失败。
+
+- **允许**：设备做人在电脑上做的事。各项操作及其原因见 [`reach-access.ts`](../../packages/home-auth/src/reach-access.ts) 中的 `REACH_ALLOWED_ACTIONS`。
+- **保留给 home 自己的电脑**：以 `403 LOOPBACK_REQUIRED` 和原因 `loopback-required: <action>` 拒绝。各项操作及其原因见同一文件中的 `REACH_DENIED_ACTIONS`。
+- **只能由电脑授予的授权**：在授予之处而不是调用之处被拒绝（[tailnet 成员身份](#tailnet-membership)）。
+
+| 类别 | 操作 | 分类 | 原因 |
+| --- | --- | --- | --- |
+| 对话、工作区、后台任务、目标与计划，读取 | `session/*` 的读取、`workspace/follow`、`job/*`、`goals/get`、`schedule/*` 的读取 | 允许 | 读取对话、工作区或计划既触不到任何密钥，也不改变任何运行。 |
+| 对话，写入 | `session/create`、`session/fork`、`session/prompt`、`session/updateQueue`、`session/cancel`、`session/rename`、`workspace/pinSession`、`workspace/unpinSession`、`fileUploads/upload`、`userQuestions/answer`、`subagents/*` | 允许 | 回复、停止运行、答复提问以及整理对话列表，正是人在电脑上做的事。 |
+| 代理预设 | `agentPresets/list`、`agentPresets/read`、`agentPresets/select` | 允许 | 预设决定尚未开始的对话以哪些插件和工具运行。选择预设本身不授予任何访问：工作区的完全访问同意仍然是电脑上的答复，每个批准提示也仍然适用。 |
+| 对话自己工作区的文件 | `workspaceFiles/list`、`workspaceFiles/read`、`workspaceFiles/readBytes`、`workspaceFiles/stat`、`officeToPdf/render`、`officeToPdf/generation`、`fileReferences/list` | 允许，仅限相对路径 | 工作区文件服务只读，对每一页、每个字节窗口、完整文件和列表都设有上限，检查文件类型并拒绝最终符号链接。它把列出的目录限制在工作区根目录内，只有调用给出不走出工作区的相对路径时才准入文件读取。 |
+| 设置与模型，读取 | `settings/describe`、`permissionPresets/catalog`、`llm/listProviders`、`llm/listConfigurableProviders`、`session/modelCatalog` | 允许 | 已脱敏的设置和提供方名称不携带任何密钥。 |
+| 插件与配置历史，读取 | `pluginManager/listPlugins`、`listBundles`、`listVersionExemptions`、`listVersions`、`readBundleDetail`、`inspect`、`registries`、`history`、`waitForInstall`、`pluginInventory/list`、`pluginRegistryProbe/fastest` | 允许 | 设备展示已安装的插件和发生过什么变化；每一项安装、启用、移除或回退操作仍然保留。 |
+| 转发事件，读取 | `event:api-session/*`、`event:commands/change`、`event:goal/*`、`event:llm/*`、`event:permission-presets/*`、`event:settings/document-updated`、`event:schedule/changed`、`event:agent-preset/selected`、`event:plugin-manager/changed`、`event:plugin-market/changed` | 允许 | 设备本就可读的界面所需的刷新信号。 |
+| 批准提示 | `event:approval/request` | 允许，授予除外 | 答复守卫会拒绝授予完全访问或工作区管理的答复（[tailnet 成员身份](#tailnet-membership)）。 |
+| 插件与配置历史，写入 | `pluginManager/installBundle`、`updateBundle`、`removeBundle`、`setBundleEnabled`、`setPluginEnabled`、`setVersionExemption`、`cancelInstall`、`undo`、`restore` | 保留 | 插件管理会安装或启用任何沙箱之外在 Host 中运行的代码，而配置历史可以关掉守卫插件。 |
+| 设置，写入 | `settings/mutate`、`settings/replace`、`settings/update`、`settings/openSettingsDocument`、`session/selectModel`、`session/initializeDefaultModel` | 保留 | 设置写入会改变 Host 的配置，且任何设置命名空间都不能从设备写入。 |
+| 密钥与账户 | `credentials/*`、`llm/discoverModels`、`account/*`、`event:credentials/*`、`event:deepseek-account/*` | 从不 | 密钥是 home 的秘密，账户登录属于本人。 |
+| 终端、目录与电脑 | `terminal/*`、`directoryPicker/*`、`session/openWorkspacePath`、`session/workspacePathApplications` | 保留 | 终端是沙箱之外的 shell，目录选择器浏览电脑，其余会在电脑上打开应用。 |
+| 工作区与对话列表 | `workspace/create`、`workspace/delete`、`workspace/initializeDefault`、`workspace/insertBefore`、`workspace/rename`、`workspace/archiveSession`、`workspace/unarchiveSession`、`workspace/insertSessionBefore`、`workspaceFiles/changes` | 保留 | 注册或移除文件夹以及 Changes 界面的工作树属于电脑，归档或重排对话不在设备规则内。 |
+| 斜杠命令、目标与计划，写入 | `commands/execute`、`goals/create`、`goals/edit`、`goals/pause`、`goals/resume`、`goals/complete`、`goals/clear`、`schedule/create`、`schedule/edit`、`schedule/run`、`schedule/deleteInactive` | 保留 | 斜杠命令可以改变设置、插件或配置，而计划任务会在无人值守时运行提示。 |
+| 动态插件代码 | `dynamicCordisRunner/*`、`event:cordis/*` | 保留 | 它会在 Host 中运行模型编写的插件代码。 |
+| 反馈 | `sessionFeedback/record`、`messageFeedback/*` | 保留 | 反馈会离开 home，Delo 已将其关闭。 |
+| 授权 | 完全访问升级、工作区的完全访问同意、`workspace-management` 提示 | 从不 | 工作区的同意和升级都是本人在电脑上给出的答复，无论设备被允许调用什么。 |
 
 <a id="limits"></a>
 ### 上限
@@ -237,6 +267,7 @@ Delo Run 签发方让本人可以用 Delo Run 账户登录，它是一项后续�
 - ID 令牌以非对称算法签名，并使用签发方密钥集中的某个 `kid`；home 按固定间隔以及在遇到未知密钥时刷新该密钥集。
 - 只有当提供方公布支持动态注册且本人选择使用时，才使用动态注册。
 - 客户端密钥保存在密钥文件中，永远不放在配置行中。
+- `tailnet-membership` 只为 Tailscale 私有地址声明，携带该因子的会话在授予之处被拒绝每一项属于 home 自己电脑的操作。
 
 拒绝测试：
 
@@ -253,6 +284,12 @@ Delo Run 签发方让本人可以用 Delo Run 账户登录，它是一项后续�
 | `a passkey without user verification is refused` | 没有用户已验证标志的断言被拒绝。 |
 | `a regressed counter is refused` | 计数器不大于非零已存储计数器的断言被拒绝。 |
 | `a passkey on a ts.net address is refused under the current contract` | `ts.net` 地址上的通行密钥注册选项与断言选项返回 `PASSKEY_UNAVAILABLE`。 |
+| `tailnet-membership is refused on a Funnel or own-domain address` | 为 Funnel 监听器或自有域名地址声明 `tailnet-membership` 的提供方以 `TAILNET_IDENTITY_UNAVAILABLE` 被拒绝。 |
+| `a tailnet-route session cannot grant full access by the escalation prompt or the workspace consent` | 来自 `tailnet-membership` 会话、对授予完全访问的提示给出的 `allowed-once` 答复以 `LOOPBACK_REQUIRED` 被拒绝；被升级的调用不会运行，工作区也不记录同意，而同一提示在 loopback 工作室上答复则授予。 |
+| `a tailnet-route session cannot remove a device, reset, enrol a factor or change reach` | 来自 `tailnet-membership` 会话的每一个此类请求都被拒绝，且 home 的设备与 reach 状态保持不变。 |
+| `a device chooses the preset a chat that has not started runs with` | 来自 `reach-device` Peer 的 `agentPresets/select` 返回所选的预设，且该对话记录 `agent-preset/selected`；请求完全访问的预设仍然会遇到工作区同意的拒绝，而该同意只在电脑上授予。 |
+| `a device reads the files of its chat's workspace and no path outside it` | `workspaceFiles/list`、`read`、`readBytes` 和 `stat` 对 Session 工作区内的相对路径成功，对绝对路径和走出工作区的相对路径以 `loopback-required: <action> with a path outside the chat's workspace` 拒绝；`workspaceFiles/changes` 保持拒绝。 |
+| `a device reads the installed plugins and cannot change them` | `pluginManager/listPlugins`、`listBundles`、`registries`、`history` 和 `pluginInventory/list` 成功，而 `installBundle`、`setPluginEnabled`、`setBundleEnabled`、`removeBundle` 和 `undo` 以 `loopback-required: <action>` 拒绝。 |
 | `a stale re-authentication is refused` | `auth_time` 距今超过 120 秒，或 `nonce` 不是批准哈希的 `reauth` 令牌，不会批准。 |
 
 <a id="what-this-does-not-prove"></a>
@@ -260,6 +297,8 @@ Delo Run 签发方让本人可以用 Delo Run 账户登录，它是一项后续�
 
 - **`attestation: "none"` 下的用户验证。** home 读取认证器设置的用户已验证标志，但不验证认证器本身，因此该标志的可信程度只取决于作出断言的认证器。
 - **本人的提供方。** OpenID Connect 提供方可以为被固定的主体签发有效令牌，控制本人在该处账户的攻击者也可以用它登录；此时仍然起作用的控制是设备批准。
+- **一部已批准且已解锁的手机。** 在 Tailscale 私有地址上，已批准设备仅凭其密钥即可登录。持有该已解锁设备的人拥有对话，并可以在已被授予的范围内驱动 agent：在电脑上被设为完全访问的工作区仍然可以从它驱动，其中的命令可以做本人用户能做的任何事，包括写入设备记录。防护手段是手机自身的锁、在电脑上移除该设备，以及远程会话 12 小时的空闲上限。
+
 - **共享的依赖方 ID。** 在 spike 结果使 `ts.net` 上可以使用通行密钥的情况下，同一台机器的私有地址与 Funnel 地址共享一个依赖方 ID；把它们的通行密钥区分开的是 home 中按地址的绑定，而不是浏览器。
 
 <a id="decided-values"></a>

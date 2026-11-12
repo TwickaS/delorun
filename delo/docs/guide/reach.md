@@ -52,7 +52,10 @@ An approved phone speaks for a device, not for you at your computer. Delorun all
 It can:
 
 - read your chats and workspaces, and follow a chat while it runs;
-- reply, attach files, edit or withdraw a queued message, start a chat in a workspace you already have, with your configured preset, and fork a chat;
+- reply, attach files, edit or withdraw a queued message, start a chat in a workspace you already have, and fork a chat;
+- choose which of your presets a chat that has not started runs with. A preset decides the plugins and tools a chat runs with, and choosing one grants nothing by itself: the workspace's full access and every approval prompt still decide what that chat may do;
+- read the files of a chat's own workspace, which is what the studio's file preview and the composer's file names use. A path outside the workspace is refused, as is an absolute path;
+- read the installed plugins and the profile changes you can undo;
 - rename and pin chats;
 - answer ordinary prompts and questions the agent asks, and stop a run or a background job.
 
@@ -60,8 +63,10 @@ It cannot:
 
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
 - accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Permissions on the phone says the same;
-- install, enable or remove plugins, undo profile changes, or change any setting, the model a chat saves as default, or a chat's preset;
-- run slash commands, open a terminal, browse folders, read files on your computer by path, or apply, discard or undo changes;
+- install, enable, update or remove a plugin, or undo or restore a profile change;
+- change any setting, or the model a chat saves as default;
+- run slash commands, open a terminal, browse folders with the folder picker, or read a file of your computer by a path outside the workspace;
+- apply, discard or undo changes, which is the Changes surface;
 - answer a prompt that would let the agent manage workspaces and their instructions, change a chat's goals, or record feedback;
 - start a chat in a folder of its choosing, create, rename or delete workspaces, archive or reorder chats, or create or edit scheduled follow-ups;
 - approve or remove devices, change remote access, or reset the home.
