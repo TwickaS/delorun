@@ -387,7 +387,7 @@ async function elevate(where: Where): Promise<ExitCode> {
     const unlocks = unlocksOf(listed)
     if (unlocks === undefined) return failed(context, 'the home answered with a list of unlocks this command cannot read')
     if (unlocks.length === 0) {
-      context.stdout('No device asks to unlock sensitive actions, and none holds an unlock. A device asks from its studio\'s Unlock sensitive actions.\n')
+      context.stdout('No device asks to unlock sensitive actions, and none holds an unlock.\n')
       return EXIT.ok
     }
     context.stdout(`Sensitive actions:\n${unlocks.map((unlock, index) => `  ${String(index + 1)}. ${unlockLine(unlock)}`).join('\n')}\n`)
@@ -466,7 +466,7 @@ function unlockRound(unlock: Unlock): CodeRound {
     accepted: (answer) => {
       const endsAt: unknown = typeof answer.elevation === 'object' && answer.elevation !== null ? Reflect.get(answer.elevation, 'endsAt') : undefined
       const until = typeof endsAt === 'number' && !Number.isNaN(new Date(endsAt).getTime()) ? ` until ${new Date(endsAt).toISOString()}` : ''
-      return `Unlocked sensitive actions on ${printable(unlock.label)}${until}. End it sooner with delorun devices elevate, or Lock now on the device.\n`
+      return `Unlocked sensitive actions on ${printable(unlock.label)}${until}. End it sooner with delorun devices elevate.\n`
     },
     unchanged: 'nothing was unlocked',
   }

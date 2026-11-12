@@ -14,6 +14,7 @@ Remote access lets you open the studio of the Delorun running on your computer f
 - [Turn remote access on](#turn-remote-access-on)
 - [Approve a device](#approve-a-device)
 - [What an approved phone can and cannot do](#what-an-approved-phone-can-and-cannot-do)
+- [Unlock sensitive actions for a while](#unlock-sensitive-actions-for-a-while)
 - [Remove a device](#remove-a-device)
 - [Turn remote access off](#turn-remote-access-off)
 - [What Tailscale sees](#what-tailscale-sees)
@@ -64,11 +65,12 @@ It cannot:
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
 - accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Permissions on the phone says the same;
 - install, enable, update or remove a plugin, or undo or restore a profile change;
-- change any setting, or the model a chat saves as default;
+- change any setting;
 - run slash commands, open a terminal, browse folders with the folder picker, or read a file of your computer by a path outside the workspace;
-- apply, discard or undo changes, which is the Changes surface;
+- apply, discard or undo changes;
 - answer a prompt that would let the agent manage workspaces and their instructions, change a chat's goals, or record feedback;
-- start a chat in a folder of its choosing, create, rename or delete workspaces, archive or reorder chats, or create or edit scheduled follow-ups;
+- start a chat in a folder of its choosing, or create a workspace;
+- without an unlock, take the sensitive actions in the next section;
 - approve or remove devices, change remote access, or reset the home.
 
 Other refused actions show the studio's error message. Images that a reply shows as files on your computer, and file previews, do not show on the phone yet; images attached to messages do.
@@ -76,6 +78,22 @@ Other refused actions show the studio's error message. Images that a reply shows
 The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock and removing the device when you lose it. A phone's session ends after 12 hours in which the phone sent nothing, and 14 days after sign-in; its open connections close at that moment. Approving or removing a device closes every phone's open connections; each phone then signs in again from the sign-in page, with its own key.
 
 No outside security review of remote access has happened. Its tests fake `tailscale`, and no real tailnet or phone has exercised it; the [reach design](../design/reach.md#never-run-on-a-real-tailnet-or-phone) lists what stays untried.
+
+## Unlock sensitive actions for a while
+
+Some actions are refused to a phone unless you unlock them for it at your computer for a short time:
+
+- see the changes in a chat's workspace;
+- rename, reorder or delete workspaces, and archive, restore or reorder chats;
+- choose a chat's model, which also saves it as the default for new chats;
+- create, edit, pause, resume, complete or clear a chat's goals;
+- create, edit or run scheduled follow-ups, and delete the ones that no longer run.
+
+An unlock never lets a phone grant full access, approve or remove devices, change settings or remote access, or do anything else in the list above.
+
+The phone asks, and shows an 8-digit code. On your computer, run `delorun devices elevate`: it lists the phones that ask and the unlocks that run. Choose the phone and type the code it shows; three wrong codes cancel its request. The unlock lasts 15 minutes; `elevationMinutes` in the profile's reach row sets 1 to 60. Nothing extends it: the phone asks again. `delorun devices elevate` also declines a request or ends an unlock early, and an unlock ends when the phone's session ends, when you remove the phone, and when Delorun stops or turns remote access off. Delorun logs each start and end, and each action taken under an unlock.
+
+The studio on the phone does not offer the request yet, so no unlock can start in this version.
 
 ## Remove a device
 
