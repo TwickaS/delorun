@@ -8,9 +8,9 @@ import { useCallback, useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Modal, SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { failureSentence, isRefused, type HostFetch, type Loaded } from './host-api.ts'
+import { failureSentence, isRefused, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import {
-  addedHosts, COMMON_HOSTS, comparableHosts, hostLines, NETWORK_LOOPBACK_ONLY, NETWORK_UNCONFIRMED, readNetworks,
+  addedHosts, COMMON_HOSTS, comparableHosts, hostLines, NETWORK_UNCONFIRMED, readNetworks,
   sameNetwork, setNetwork,
   type CommonHostGroup, type NetworkAccess, type NetworkList, type NetworkWorkspace, type WorkspaceNetwork,
 } from './network-api.ts'
@@ -34,12 +34,12 @@ type Translate = NetworkSectionProps['t']
  * The sentence for a failed request.
  * @param t - the section's copy.
  * @param error - the caught error.
- * @returns the localized `LOOPBACK_ONLY` sentence, the Host's own sentence for another refusal, or the localized
+ * @returns the localized `LOOPBACK_REQUIRED` sentence, the Host's own sentence for another refusal, or the localized
  *   sentence for an unreachable Host or an unreadable answer.
  */
 export function networkFailureText(t: Translate, error: unknown): string {
   return failureSentence(error, {
-    refused: (code, message) => code === NETWORK_LOOPBACK_ONLY ? t('loopback') : message,
+    refused: (code, message) => code === LOOPBACK_REQUIRED ? t('loopback') : message,
     unreachable: t('failed.unreachable'),
     unreadable: t('failed.unreadable'),
   })

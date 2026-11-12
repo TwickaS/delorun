@@ -18,12 +18,15 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   apply,
+  Config,
   FULL_ACCESS_PRESET,
   FullAccessChangeError,
   fullAccessReviewId,
   permissionEntriesDigest,
   permissionStorePath,
   MAX_PERMISSION_REQUEST_BYTES,
+  NETWORK_LIST_PATH,
+  NETWORK_SET_PATH,
   PERMISSION_ROUTES,
   PermissionDefaults,
   readPermissionStore,
@@ -76,7 +79,7 @@ async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>): 
   } as never)
   ctx.provide('approval', { config: { policy: 'ask' }, request: async () => 'rejected', setPolicy() {} } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
-  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { enabled: true }) })
+  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true }) })
   return { ctx, harness, defaults: ctx.get('permissionDefaults') as PermissionDefaults, home, workspace, other }
 }
 
@@ -500,11 +503,11 @@ describe('the service around its decisions', () => {
     }
   })
 
-  it('registers its routes where a Connection serves the studio', async () => {
+  it('registers its routes and the network\'s where a Connection serves the studio', async () => {
     const { ctx } = await mounted()
     const register = vi.fn<(route: { readonly path: string }) => void>()
     ctx.provide('connection', { fetch: { register } } as never)
     await new Promise(resolve => setImmediate(resolve))
-    expect(register.mock.calls.map(([route]) => route.path).sort()).toEqual(Object.values(PERMISSION_ROUTES).sort())
+    expect(register.mock.calls.map(([route]) => route.path).sort()).toEqual([...Object.values(PERMISSION_ROUTES), NETWORK_LIST_PATH, NETWORK_SET_PATH].sort())
   })
 })

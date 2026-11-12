@@ -103,7 +103,7 @@ export {
   type WorkspaceAccess, type WorkspacesAnswer,
 } from './wire.ts'
 export {
-  arrivedAtComputer, CommandNetwork, listKey, MAX_NETWORK_BODY_BYTES, NETWORK_LIST_PATH, NETWORK_LOOPBACK_ONLY, NETWORK_SET_PATH,
+  CommandNetwork, listKey, MAX_NETWORK_BODY_BYTES, NETWORK_LIST_PATH, NETWORK_SET_PATH,
   NetworkChangeError, webFetchRefusal,
 } from './command-network.ts'
 export type { CommandNetworkSettings, NetworkListAnswer, NetworkListEntry } from './command-network.ts'

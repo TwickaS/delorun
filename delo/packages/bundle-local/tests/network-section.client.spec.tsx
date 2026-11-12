@@ -228,14 +228,14 @@ describe('the Network section', () => {
 
   it('says that only the home\'s own computer reads and changes the setting', async () => {
     const message = 'A workspace\'s network is read and changed only in the studio on the home\'s own computer'
-    renderSection(fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: refusal(403, 'LOOPBACK_ONLY', message) }))
+    renderSection(fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: refusal(403, 'LOOPBACK_REQUIRED', message) }))
     expect((await screen.findByRole('alert')).textContent).toBe(en.loopback)
     expect(screen.queryByText(message)).toBeNull()
     expect(screen.queryByRole('listitem')).toBeNull()
   })
 
   it('says so in the row for a change refused away from the home\'s computer', async () => {
-    const host = fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: LIST, [`POST ${NETWORK_ROUTES.set}`]: refusal(403, 'LOOPBACK_ONLY') })
+    const host = fakeHost({ [`GET ${NETWORK_ROUTES.list}`]: LIST, [`POST ${NETWORK_ROUTES.set}`]: refusal(403, 'LOOPBACK_REQUIRED') })
     renderSection(host)
     const alpha = await rowOf('Alpha')
     fireEvent.click(within(alpha).getByRole('tab', { name: en['access.off'] }))

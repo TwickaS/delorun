@@ -55,9 +55,6 @@ export const NETWORK_ROUTES = {
   set: '/api/deloNetwork.set',
 } as const
 
-/** The Host error code of a request that did not arrive on the home's loopback listener. */
-export const NETWORK_LOOPBACK_ONLY = 'LOOPBACK_ONLY'
-
 /** The Host error code of a change that loosens the network and was sent without `confirmed`. */
 export const NETWORK_UNCONFIRMED = 'NETWORK_UNCONFIRMED'
 
@@ -88,7 +85,7 @@ const isNetworkAnswer: Check = fields({ network: isWorkspaceNetwork })
  * Read the default network and each workspace's.
  * @param fetch - the request function, such as the browser's `fetch`.
  * @returns the list, or undefined when this profile does not serve the network setting (the route answers 404).
- * @throws {HostRequestError} for any other refusal (`LOOPBACK_ONLY` away from the home's computer), an unreachable Host
+ * @throws {HostRequestError} for any other refusal (`LOOPBACK_REQUIRED` away from the home's computer), an unreachable Host
  *   or an unreadable answer.
  */
 export function readNetworks(fetch: HostFetch): Promise<NetworkList | undefined> {
@@ -102,7 +99,7 @@ export function readNetworks(fetch: HostFetch): Promise<NetworkList | undefined>
  * @param change - the workspace, the new setting and whether the person confirmed a loosening.
  * @returns the setting now in effect.
  * @throws {HostRequestError} for a refusal (`NETWORK_UNCONFIRMED`, `NETWORK_INVALID`, `NETWORK_STORE`, `NETWORK_PROXY`,
- *   `BAD_REQUEST` or `LOOPBACK_ONLY`), an unreachable Host or an unreadable answer.
+ *   `BAD_REQUEST` or `LOOPBACK_REQUIRED`), an unreachable Host or an unreadable answer.
  */
 export async function setNetwork(fetch: HostFetch, change: NetworkChange): Promise<WorkspaceNetwork> {
   const body = {

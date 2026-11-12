@@ -14,7 +14,7 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { apply, Config } from '../src/index.ts'
 import {
-  arrivedAtComputer, CommandNetwork, listKey, NETWORK_LIST_PATH, NETWORK_LOOPBACK_ONLY, NETWORK_SET_PATH, NetworkChangeError, routedPath,
+  CommandNetwork, listKey, NETWORK_LIST_PATH, NETWORK_SET_PATH, NetworkChangeError,
   webFetchRefusal, type CommandNetworkSettings,
 } from '../src/command-network.ts'
 import { networkStorePath, serializeNetworkStore } from '../src/network-store.ts'
@@ -222,20 +222,6 @@ describe('the routes', () => {
       expect((await set.fetch(post(bad))).status).toBe(400)
     }
   })
-
-  it('lets only a request on the loopback listener under a loopback Host through', () => {
-    const answered: { status?: number, body?: string } = {}
-    const response: ServerResponse = { writeHead: (status: number) => { answered.status = status }, end: (body: string) => { answered.body = body } } as never
-    const request = (host: string): IncomingMessage => ({ headers: { host } }) as never
-    const loopback = { arrivalOf: () => ({ listener: 'loopback' as const, host: undefined, source: 'unknown' as const }) }
-    const reach = { arrivalOf: () => ({ listener: 'reach' as never, host: undefined, source: 'unknown' as const }) }
-    expect(arrivedAtComputer(request('127.0.0.1:3080'), response, loopback as never)).toBe(true)
-    expect(answered.status).toBeUndefined()
-    expect(arrivedAtComputer(request('evil.example'), response, loopback as never)).toBe(false)
-    expect(arrivedAtComputer(request('127.0.0.1:3080'), response, reach as never)).toBe(false)
-    expect(arrivedAtComputer(request('127.0.0.1:3080'), response, undefined)).toBe(false)
-    expect(answered).toEqual({ status: 403, body: expect.stringContaining(NETWORK_LOOPBACK_ONLY) as string })
-  })
 })
 
 describe('the route hook', () => {
@@ -257,16 +243,34 @@ describe('the route hook', () => {
     return ctx
   }
 
-  it('refuses a device\'s request for either route with LOOPBACK_ONLY, however its path is spelled', async () => {
-    const ctx = await withListener('reach-tailscale-private')
-    const spellings = [NETWORK_LIST_PATH, `${NETWORK_SET_PATH}?confirmed=1`, '/x/../api/deloNetwork.list', '/api/x/%2e%2e/deloNetwork.set', '/api\\deloNetwork.list', 'http://127.0.0.1:3080/api/deloNetwork.list', 'http://[bad']
-    for (const url of spellings) {
-      const { request, response, writeHead, end } = arrival(url, '127.0.0.1:3080')
-      const next = vi.fn(async () => {})
-      await ctx.waterfall('connection/request', request, response, next)
-      expect([url, next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([url, 0, 403])
-      expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: NETWORK_LOOPBACK_ONLY })
+  it('refuses a device\'s request and one under another Host for either route with LOOPBACK_REQUIRED, however its path is spelled', async () => {
+    const spellings = [NETWORK_LIST_PATH, `${NETWORK_SET_PATH}?confirmed=1`, '/x/../api/deloNetwork.list', '/api/x/%2e%2e/deloNetwork.set', '/api\\deloNetwork.list', 'http://127.0.0.1:3080/api/deloNetwork.list']
+    for (const [listener, host] of [['reach-tailscale-private', '127.0.0.1:3080'], ['loopback', 'evil.example']] as const) {
+      const ctx = await withListener(listener)
+      for (const url of spellings) {
+        const { request, response, writeHead, end } = arrival(url, host)
+        const next = vi.fn(async () => {})
+        await ctx.waterfall('connection/request', request, response, next)
+        expect([url, next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([url, 0, 403])
+        expect(JSON.parse(end.mock.calls[0]?.[0] as string)).toMatchObject({ error: 'LOOPBACK_REQUIRED', message: expect.stringContaining('Reading or changing a workspace\'s network') as string })
+      }
     }
+  })
+
+  it('refuses either route while no homeAuth places the request', async () => {
+    const { ctx } = await mounted()
+    const { request, response, writeHead } = arrival(NETWORK_SET_PATH, '127.0.0.1:3080')
+    const next = vi.fn(async () => {})
+    await ctx.waterfall('connection/request', request, response, next)
+    expect([next.mock.calls.length, writeHead.mock.calls[0]?.[0]]).toEqual([0, 403])
+  })
+
+  it('passes no target the router cannot read on to a route', async () => {
+    const ctx = await withListener('reach-tailscale-private')
+    const { request, response } = arrival('http://[bad', '127.0.0.1:3080')
+    const next = vi.fn(async () => {})
+    await expect(ctx.waterfall('connection/request', request, response, next)).rejects.toThrow()
+    expect(next).not.toHaveBeenCalled()
   })
 
   it('lets the home\'s own computer through, and leaves a device\'s request for another path alone', async () => {
@@ -277,12 +281,6 @@ describe('the route hook', () => {
       await ctx.waterfall('connection/request', request, response, next)
       expect([next.mock.calls.length, writeHead.mock.calls.length]).toEqual([1, 0])
     }
-  })
-
-  it('reads a target as the router does, and names no path for one that does not parse', () => {
-    expect(routedPath('/x/../api/deloNetwork.list?y')).toBe(NETWORK_LIST_PATH)
-    expect(routedPath(undefined)).toBe('/')
-    expect(routedPath('http://[bad')).toBeUndefined()
   })
 })
 

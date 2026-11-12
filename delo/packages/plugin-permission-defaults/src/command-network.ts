@@ -14,7 +14,6 @@
  */
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, rm } from 'node:fs/promises'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
@@ -24,7 +23,7 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: the ctx.workspaceRegistry merge.
 import type {} from '@deepseek-ai/dsh-workspace'
-import { isLoopbackHost, type HomeAuthService } from '@delo/home-auth'
+import { requireComputer, routedPathname } from '@delo/home-auth'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
 import { resolveDeloHome } from '@delo/home'
 import { EgressProxy, type EgressProxyOptions, type EgressRefusal } from './egress-proxy.ts'
@@ -45,11 +44,11 @@ export const NETWORK_LIST_PATH = '/api/deloNetwork.list'
 /** The route that changes one workspace's network. */
 export const NETWORK_SET_PATH = '/api/deloNetwork.set'
 
+/** The action {@link requireComputer}'s refusal names for both routes. */
+const NETWORK_ACTION = 'Reading or changing a workspace\'s network'
+
 /** The largest request body {@link NETWORK_SET_PATH} reads. */
 export const MAX_NETWORK_BODY_BYTES = 64 * 1024
-
-/** The code of the refusal a request that did not arrive on the loopback listener gets. */
-export const NETWORK_LOOPBACK_ONLY = 'LOOPBACK_ONLY'
 
 /** The longest Unix socket path Linux accepts, in bytes. */
 const MAX_SOCKET_PATH_BYTES = 107
@@ -280,8 +279,8 @@ export class CommandNetwork extends Service {
    */
   private mountRoutes(ctx: Context): void {
     ctx.on('connection/request', async (request, response, next) => {
-      const path = routedPath(request.url)
-      if ((path === undefined || path === NETWORK_LIST_PATH || path === NETWORK_SET_PATH) && !arrivedAtComputer(request, response, ctx.get('homeAuth'))) return
+      const path = routedPathname(request.url)
+      if ((path === NETWORK_LIST_PATH || path === NETWORK_SET_PATH) && !requireComputer(request, response, ctx.get('homeAuth'), NETWORK_ACTION)) return
       await next()
     })
     ctx.connection.fetch.register({ path: NETWORK_LIST_PATH, methods: ['GET'], requestBody: 'buffered', fetch: () => Promise.resolve(json(200, this.list())) })
@@ -442,36 +441,6 @@ function processRuns(pid: number): boolean {
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
-}
-
-/**
- * The path a request target routes to, read as the Connection's router reads it: through WHATWG URL parsing, which
- * removes dot segments (`/x/../api`, `/x/%2e%2e/api`) and reads `\` as `/`, so no spelling reaches a network route
- * while the route hook reads another path.
- * @param url - the request target, or `undefined` when the carrier reports none.
- * @returns the path, or `undefined` when the target does not parse, which the hook refuses like a network route.
- */
-export function routedPath(url: string | undefined): string | undefined {
-  try {
-    return new URL(url ?? '/', 'http://dsh.invalid').pathname
-  } catch (_unparsable) {
-    // The router fails such a target too; until it does, the hook gives it the stricter rule.
-    return undefined
-  }
-}
-
-/**
- * Refuse a request that did not arrive at the home's own computer: on the loopback listener, under a loopback `Host`.
- * @param request - the request the Connection received.
- * @param response - answered 403 with {@link NETWORK_LOOPBACK_ONLY} when the arrival is not loopback.
- * @param homeAuth - the mounted `homeAuth` service, or `undefined`, which refuses.
- * @returns whether the request may go on to the route.
- */
-export function arrivedAtComputer(request: IncomingMessage, response: ServerResponse, homeAuth: Pick<HomeAuthService, 'arrivalOf'> | undefined): boolean {
-  if (homeAuth?.arrivalOf(request).listener === 'loopback' && isLoopbackHost(request.headers.host)) return true
-  response.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-  response.end(JSON.stringify({ error: NETWORK_LOOPBACK_ONLY, message: 'A workspace\'s network is read and changed only in the studio on the home\'s own computer' }))
-  return false
 }
 
 /**
