@@ -96,7 +96,7 @@ export function FullAccessAction({ grants, toolName, allow, answered, canAnswer,
     }
   }
   return <div className={css.action} data-full-access-action="allow">
-    <Button variant="outline" size="sm" disabled={busy || answered} onClick={() => { void run() }}>{t('action.allowFullAccess')}</Button>
+    <Button variant="outline" size="sm" disabled={busy || answered || !canAnswer()} onClick={() => { void run() }}>{t('action.allowFullAccess')}</Button>
     {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
   </div>
 }

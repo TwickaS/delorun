@@ -28,7 +28,7 @@ function home(): string {
 }
 
 describe('the running profiles', () => {
-  it('lists each profile whose home lock a live process holds, sorted, and none without a run directory', () => {
+  it('lists each profile whose home lock a live process holds or is damaged, sorted, and none without a run directory', () => {
     const deloHome = home()
     expect(runningProfiles(join(deloHome, 'no-home'))).toEqual([])
     for (const profile of ['work', 'cli', 'stopped']) mkdirSync(join(deloHome, 'run', profile), { recursive: true })
@@ -39,6 +39,9 @@ describe('the running profiles', () => {
     }
     expect(runningProfiles(deloHome)).toEqual(['cli', 'work'])
     expect(profileRuns(deloHome, 'stopped')).toBe(false)
+    // A damaged home lock is listed, so the caller asks that profile and names it when it does not answer.
+    writeFileSync(join(deloHome, 'run', 'stopped', 'home.lock'), '{ not a record', { mode: 0o600 })
+    expect(runningProfiles(deloHome)).toEqual(['cli', 'stopped', 'work'])
   })
 })
 

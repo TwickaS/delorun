@@ -52,7 +52,8 @@ export function profileRuns(home: string, profile: string): boolean {
 }
 
 /**
- * The profiles whose home process runs: each directory under the home's `run/` whose home lock a live process holds.
+ * The profiles whose home process may run: each directory under the home's `run/` whose home lock a live process
+ * holds, or whose home lock is not a lock record, so a caller asks that profile and names it when it does not answer.
  * @param home - the Delo home.
  * @returns the profiles, sorted; none while `run/` cannot be listed.
  */
@@ -64,7 +65,22 @@ export function runningProfiles(home: string): readonly string[] {
     // A home whose run directory is missing or unreadable has no home process to ask.
     return []
   }
-  return names.filter(profile => profileRuns(home, profile)).sort()
+  return names.filter(profile => mayRun(home, profile)).sort()
+}
+
+/**
+ * Whether a profile's home process may run.
+ * @param home - the Delo home.
+ * @param profile - the CLI profile.
+ * @returns {@link profileRuns}, or true when the home lock is not a lock record.
+ */
+function mayRun(home: string, profile: string): boolean {
+  try {
+    return profileRuns(home, profile)
+  } catch (_unreadable) {
+    // A damaged lock says nothing about its holder; asking the profile names it when no home process answers.
+    return true
+  }
 }
 
 /**
