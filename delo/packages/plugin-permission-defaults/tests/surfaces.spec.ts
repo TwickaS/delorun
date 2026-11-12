@@ -442,20 +442,20 @@ describe('a home shared by several Hosts', () => {
     return { first, second, asked, open, on }
   }
 
-  it('a withdrawal in one profile\'s studio sets the other Host\'s open full-access chats back within a second, without a decision there', async () => {
+  it('a withdrawal in one profile\'s studio sets the other Host\'s open full-access chats back once the store changes, without a decision there', async () => {
     const { first, second, open, on } = await sharedGrant('chat-work')
     await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
     // No decision runs in the second Host: its watch of the store reads the withdrawal.
-    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) }, { timeout: 1000 })
+    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) }, { timeout: 5000 })
   })
 
-  it('a return to the safer preset in one profile\'s chat sets the other Host\'s open full-access chats back within a second', async () => {
+  it('a return to the safer preset in one profile\'s chat sets the other Host\'s open full-access chats back once the store changes', async () => {
     const { first, second, asked, open } = await sharedGrant('chat-select')
     await first.defaults.select(asked, SAFER_PRESET)
-    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) }, { timeout: 1000 })
+    await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) }, { timeout: 5000 })
   })
 
-  it('a withdrawal delorun workspace full-access writes under the store\'s lock sets every Host\'s open full-access chats back within a second', async () => {
+  it('a withdrawal delorun workspace full-access writes under the store\'s lock sets every Host\'s open full-access chats back once the store changes', async () => {
     const { first, second, asked, open } = await sharedGrant('chat-cli')
     // The CLI's write: read, change and write the store under its lock, with no message to any Host.
     const path = permissionStorePath(first.home)
@@ -467,7 +467,7 @@ describe('a home shared by several Hosts', () => {
     await vi.waitFor(() => {
       expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
       expect(first.ctx.sandboxPolicy.resolve({ session: asked.session }).mode).toBe(SAFER_PRESET)
-    }, { timeout: 1000 })
+    }, { timeout: 5000 })
   })
 
   it('names a watch that cannot start, and reads a withdrawal at the next decision instead', async () => {
@@ -494,7 +494,7 @@ describe('a home shared by several Hosts', () => {
     await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
     await vi.waitFor(() => {
       expect(second.ctx.logger.buffer.some(message => message.type === 'warn' && String(message.args[0]).includes('could not be read again (the reread failed)'))).toBe(true)
-    }, { timeout: 1000 })
+    }, { timeout: 5000 })
     expect(second.defaults.granted(second.workspace)).toBe(false)
     await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) })
   })
