@@ -9,10 +9,11 @@
  * and stops that server's rows only; a stale or unconfirmed revoke changes nothing. The suite's starts name a real
  * executable and real directories under a private temporary root, because an acceptance resolves its start again.
  */
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { McpConsentRefusedError, type McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -70,6 +71,25 @@ afterEach(async () => {
 })
 
 /**
+ * The id of the review of a start, its files pinned as the review pins them: the executable and each argument that
+ * names a regular file, by canonical path and SHA-256; no file when the executable cannot be read.
+ * @param start - the start.
+ * @returns the review id.
+ */
+function reviewIdOf(start: McpServerCommand): string {
+  const pin = (path: string) => {
+    const canonical = realpathSync(path)
+    return { path: canonical, sha256: `sha256:${createHash('sha256').update(readFileSync(canonical)).digest('hex')}` }
+  }
+  if (!isAbsolute(start.resolvedCommand) || !existsSync(start.resolvedCommand)) return mcpReviewId({ ...start, files: [] })
+  const files = [pin(start.resolvedCommand), ...start.args.flatMap((argument, index) => {
+    const path = resolve(start.resolvedCwd, argument)
+    return argument !== '' && existsSync(path) && statSync(path).isFile() ? [{ argument: index, ...pin(path) }] : []
+  })]
+  return mcpReviewId({ ...start, files })
+}
+
+/**
  * The acceptance store's text, or undefined while none exists.
  * @returns the text.
  */
@@ -83,8 +103,9 @@ describe('a refused start', () => {
     await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
     const [pending] = consent.pending()
     expect(pending).toEqual({
-      serverName: 'files', reviewId: mcpReviewId(START), command: START.command, args: START.args, cwd: START.cwd,
+      serverName: 'files', reviewId: reviewIdOf(START), command: START.command, args: START.args, cwd: START.cwd,
       resolvedCommand: START.resolvedCommand, resolvedCwd: START.resolvedCwd, env: [{ name: 'API_TOKEN' }],
+      files: [{ path: START.resolvedCommand, sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/) }],
       reason: 'no server is accepted yet (the acceptance store does not exist)', change: 'new', changedVariables: [], state: 'waiting',
       reviewedAt: expect.any(Number),
     })
@@ -93,7 +114,8 @@ describe('a refused start', () => {
 
   it('names the part of an accepted start that changed', async () => {
     await consent.review(START)
-    await consent.acceptReview('files', mcpReviewId(START), true)
+    await consent.acceptReview('files', reviewIdOf(START), true)
+    executable(join(root, 'elsewhere', 'npx'))
     for (const [changed, change, changedVariables] of [
       [{ ...START, command: 'uvx' }, 'command', []],
       [{ ...START, args: [...START.args, '/home'] }, 'arguments', []],
@@ -137,7 +159,7 @@ describe('a refused start', () => {
 
   it('leaves the list once a review allows the server', async () => {
     await consent.review(START)
-    await consent.acceptReview('files', mcpReviewId(START), true)
+    await consent.acceptReview('files', reviewIdOf(START), true)
     await expect(consent.review(START)).resolves.toEqual({ allow: true })
     expect(consent.pending()).toEqual([])
   })
@@ -146,21 +168,21 @@ describe('a refused start', () => {
 describe('an answer to a pending review', () => {
   it('records exactly the start shown once the person confirmed it, and later reviews allow it', async () => {
     await consent.review(START)
-    await expect(consent.acceptReview('files', mcpReviewId(START), true)).resolves.toEqual({ started: 0 })
+    await expect(consent.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 0 })
     expect(storeText()).not.toContain(SECRET)
     await expect(consent.review(START)).resolves.toEqual({ allow: true })
   })
 
   it('records nothing without the person\'s confirmation', async () => {
     await consent.review(START)
-    await expect(consent.acceptReview('files', mcpReviewId(START), false)).rejects.toThrow(expect.objectContaining({ code: 'UNCONFIRMED' }))
+    await expect(consent.acceptReview('files', reviewIdOf(START), false)).rejects.toThrow(expect.objectContaining({ code: 'UNCONFIRMED' }))
     expect(storeText()).toBeUndefined()
     expect(consent.pending()).toHaveLength(1)
   })
 
   it('records nothing for a stale review: the start changed after it was shown', async () => {
     await consent.review(START)
-    const shown = mcpReviewId(START)
+    const shown = reviewIdOf(START)
     const changed = { ...START, args: [...START.args, '/home'] }
     await consent.review(changed)
     await expect(consent.acceptReview('files', shown, true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
@@ -176,12 +198,12 @@ describe('an answer to a pending review', () => {
     const shown = { ...START, command: 'tool', resolvedCommand: join(root, 'first', 'tool') }
     await consent.review(shown)
     executable(join(root, 'ahead', 'tool'))
-    const failure: unknown = await consent.acceptReview('files', mcpReviewId(shown), true).catch((error: unknown) => error)
-    expect(failure).toMatchObject({ code: 'STALE_REVIEW', message: expect.stringContaining('now resolves to other paths than this review showed') })
+    const failure: unknown = await consent.acceptReview('files', reviewIdOf(shown), true).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ code: 'STALE_REVIEW', message: expect.stringContaining('now resolves to other paths or runs other file contents than this review showed') })
     expect(storeText()).toBeUndefined()
     const [again] = consent.pending()
     expect(again).toMatchObject({ resolvedCommand: join(root, 'ahead', 'tool'), state: 'waiting' })
-    expect(again?.reviewId).not.toBe(mcpReviewId(shown))
+    expect(again?.reviewId).not.toBe(reviewIdOf(shown))
     await expect(consent.acceptReview('files', again?.reviewId ?? '', true)).resolves.toEqual({ started: 0 })
     await expect(consent.review({ ...shown, resolvedCommand: join(root, 'ahead', 'tool') })).resolves.toEqual({ allow: true })
     await expect(consent.review(shown)).resolves.toMatchObject({ allow: false })
@@ -195,38 +217,39 @@ describe('an answer to a pending review', () => {
     await consent.review(shown)
     rmSync(link)
     symlinkSync(OTHER, link)
-    await expect(consent.acceptReview('files', mcpReviewId(shown), true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    await expect(consent.acceptReview('files', reviewIdOf(shown), true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
     expect(storeText()).toBeUndefined()
     expect(consent.pending()[0]).toMatchObject({ cwd: link, resolvedCwd: OTHER })
   })
 
   it('records nothing when the shown start no longer resolves, and keeps its review', async () => {
     await consent.review(START)
+    const shown = reviewIdOf(START)
     rmSync(START.resolvedCommand)
-    const failure: unknown = await consent.acceptReview('files', mcpReviewId(START), true).catch((error: unknown) => error)
-    expect(failure).toMatchObject({ code: 'STALE_REVIEW', message: expect.stringContaining('no longer resolves as it was shown') })
+    const failure: unknown = await consent.acceptReview('files', shown, true).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ code: 'STALE_REVIEW', message: expect.stringContaining('no longer resolves or reads as it was shown') })
     expect(storeText()).toBeUndefined()
-    expect(consent.pending()[0]?.reviewId).toBe(mcpReviewId(START))
+    expect(consent.pending()[0]?.reviewId).toBe(shown)
   })
 
   it('refuses a shown start whose resolved paths are not absolute, recording nothing', async () => {
     for (const shown of [{ ...START, resolvedCommand: 'npx' }, { ...START, resolvedCwd: 'srv/mcp' }, { ...START, resolvedShell: 'cmd.exe' }]) {
       await consent.review(shown)
-      const failure: unknown = await consent.acceptReview('files', mcpReviewId(shown), true).catch((error: unknown) => error)
+      const failure: unknown = await consent.acceptReview('files', reviewIdOf(shown), true).catch((error: unknown) => error)
       expect(failure).toMatchObject({ code: 'STORE_REFUSED', message: 'the start to accept holds a resolved path that is not absolute' })
     }
     expect(storeText()).toBeUndefined()
   })
 
   it('records nothing for a server with no pending review', async () => {
-    await expect(consent.acceptReview('files', mcpReviewId(START), true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
-    await expect(consent.declineReview('files', mcpReviewId(START))).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    await expect(consent.acceptReview('files', reviewIdOf(START), true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
+    await expect(consent.declineReview('files', reviewIdOf(START))).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
     expect(storeText()).toBeUndefined()
   })
 
   it('declines a review: it stays listed as declined, the server stopped, and no acceptance is recorded', async () => {
     await consent.review(START)
-    await consent.declineReview('files', mcpReviewId(START))
+    await consent.declineReview('files', reviewIdOf(START))
     expect(consent.pending()).toEqual([expect.objectContaining({ serverName: 'files', state: 'declined', change: 'new' })])
     expect(storeText()).not.toContain(SECRET)
     await expect(consent.review(START)).resolves.toMatchObject({ allow: false, reason: expect.stringContaining('the person declined this start') })
@@ -235,7 +258,7 @@ describe('an answer to a pending review', () => {
 
   it('keeps a declined start declined across a new service instance, until the start changes', async () => {
     await consent.review(START)
-    await consent.declineReview('files', mcpReviewId(START))
+    await consent.declineReview('files', reviewIdOf(START))
     const restarted = new DeloMcpConsent(new Context())
     await restarted.review(START)
     expect(restarted.pending()[0]?.state).toBe('declined')
@@ -252,21 +275,22 @@ describe('an answer to a pending review', () => {
     mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
     writeFileSync(path, '{ not json', { mode: 0o600 })
     await consent.review(START)
-    await consent.declineReview('files', mcpReviewId(START))
+    await consent.declineReview('files', reviewIdOf(START))
     expect(consent.pending()[0]?.state).toBe('declined')
     expect(storeText()).toBe('{ not json')
   })
 
   it('accepts a declined review like a waiting one', async () => {
     await consent.review(START)
-    await consent.declineReview('files', mcpReviewId(START))
-    await expect(consent.acceptReview('files', mcpReviewId(START), true)).resolves.toEqual({ started: 0 })
+    await consent.declineReview('files', reviewIdOf(START))
+    await expect(consent.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 0 })
     await expect(consent.review(START)).resolves.toEqual({ allow: true })
     expect(storeText()).not.toContain('declined')
   })
 
-  it('starts again each Loader row this consent refused for the server, and no other row', async () => {
+  it('starts again each Loader row of the server this consent refused at its boot or held at a reconnect, and no other row', async () => {
     const update = vi.fn(async () => {})
+    const held = vi.fn(async () => {})
     const unrelated = vi.fn(async () => {})
     const refusedRow = (serverName: string, onUpdate: () => Promise<void>) => ({
       id: `mcp-${serverName}`,
@@ -280,15 +304,17 @@ describe('an answer to a pending review', () => {
       entries: () => [
         refusedRow('files', update),
         refusedRow('other', unrelated),
-        { id: 'active', fiber: { config: { serverName: 'files' }, await: () => Promise.resolve(), update: unrelated } },
+        { id: 'held-at-reconnect', fiber: { config: { serverName: 'files' }, await: () => Promise.resolve(), update: held } },
+        { id: 'active-other', fiber: { config: { serverName: 'other' }, await: () => Promise.resolve(), update: unrelated } },
         { id: 'failed-otherwise', fiber: { config: { serverName: 'files' }, await: () => Promise.reject(new Error('another failure')), update: unrelated } },
         { id: 'not-a-server', fiber: { config: 'files', await: () => Promise.reject(new Error('never awaited')), update: unrelated } },
         { id: 'not-loaded' },
       ],
     } as never)
     await consent.review(START)
-    await expect(consent.acceptReview('files', mcpReviewId(START), true)).resolves.toEqual({ started: 1 })
+    await expect(consent.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 2 })
     expect(update).toHaveBeenCalledWith({ serverName: 'files' }, true)
+    expect(held).toHaveBeenCalledWith({ serverName: 'files' }, true)
     expect(unrelated).not.toHaveBeenCalled()
   })
 })
@@ -352,7 +378,7 @@ describe('an accepted start', () => {
    */
   async function accepted(start: McpServerCommand): Promise<McpServerCommand> {
     await consent.review(start)
-    await consent.acceptReview(start.serverName, mcpReviewId(start), true)
+    await consent.acceptReview(start.serverName, reviewIdOf(start), true)
     return start
   }
 
@@ -361,7 +387,8 @@ describe('an accepted start', () => {
     await accepted({ ...START, env: { ...START.env, PATH: '/opt/bin' } })
     await expect(consent.accepted()).resolves.toEqual([{
       acceptanceId: expect.stringMatching(/^[0-9a-f]{32}$/), serverName: 'files', command: START.command, args: START.args, cwd: START.cwd,
-      resolvedCommand: START.resolvedCommand, resolvedCwd: START.resolvedCwd, env: [{ name: 'API_TOKEN' }, { name: 'PATH' }], acceptedAt: expect.any(Number), configured: true,
+      resolvedCommand: START.resolvedCommand, resolvedCwd: START.resolvedCwd, env: [{ name: 'API_TOKEN' }, { name: 'PATH' }],
+      files: [{ path: START.resolvedCommand, sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/) }], acceptedAt: expect.any(Number), configured: true,
     }])
     expect(JSON.stringify(await consent.accepted())).not.toContain(SECRET)
   })
@@ -409,7 +436,7 @@ describe('an accepted start', () => {
     const restarted = new DeloMcpConsent(new Context())
     await restarted.review(START)
     expect(restarted.pending()[0]?.state).toBe('revoked')
-    await expect(restarted.acceptReview('files', mcpReviewId(START), true)).resolves.toEqual({ started: 0 })
+    await expect(restarted.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 0 })
     await expect(restarted.review(START)).resolves.toEqual({ allow: true })
     await restarted.revokeAcceptance((await restarted.accepted())[0]?.acceptanceId ?? '', true)
     await restarted.review({ ...START, cwd: OTHER, resolvedCwd: OTHER })
@@ -454,7 +481,7 @@ describe('the routes', () => {
     expect(remote.admits(MCP_CONSENT_ROUTES.pending, { kind: 'reach-device', deviceId: 'phone' })).toBe(false)
     await consent.review(START)
     await consent.review({ ...START, serverName: 'declined' })
-    await consent.declineReview('declined', mcpReviewId({ ...START, serverName: 'declined' }))
+    await consent.declineReview('declined', reviewIdOf({ ...START, serverName: 'declined' }))
     const answered = await (await remote.get(MCP_CONSENT_ROUTES.waiting)).text()
     expect(JSON.parse(answered)).toEqual({ servers: [{ serverName: 'files', change: 'new' }] })
     expect(answered).not.toContain('npx')
@@ -464,7 +491,7 @@ describe('the routes', () => {
   it('revoke a confirmed, current acceptance, and refuse an unconfirmed, stale or malformed revoke with its code', async () => {
     const routes = routesOver('loopback')
     await consent.review(START)
-    await consent.acceptReview('files', mcpReviewId(START), true)
+    await consent.acceptReview('files', reviewIdOf(START), true)
     const listed = await (await routes.get(MCP_CONSENT_ROUTES.pending)).json() as { accepted: { acceptanceId: string }[] }
     const acceptanceId = listed.accepted[0]?.acceptanceId ?? ''
     const unconfirmed = await routes.post(MCP_CONSENT_ROUTES.revoke, { acceptanceId, confirmed: false })
@@ -578,7 +605,7 @@ describe('the service when something fails', () => {
     mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
     writeFileSync(path, '{ not json', { mode: 0o600 })
     await consent.review(START)
-    await expect(consent.acceptReview('files', mcpReviewId(START), true)).rejects.toThrow(expect.objectContaining({ code: 'STORE_REFUSED' }))
+    await expect(consent.acceptReview('files', reviewIdOf(START), true)).rejects.toThrow(expect.objectContaining({ code: 'STORE_REFUSED' }))
     expect(storeText()).toBe('{ not json')
     expect(consent.pending()).toHaveLength(1)
   })
@@ -591,8 +618,8 @@ describe('the service when something fails', () => {
       return accept(start)
     })
     await consent.review(START)
-    await consent.acceptReview('files', mcpReviewId(START), true)
-    expect(consent.pending()).toEqual([expect.objectContaining({ reviewId: mcpReviewId(changed) })])
+    await consent.acceptReview('files', reviewIdOf(START), true)
+    expect(consent.pending()).toEqual([expect.objectContaining({ reviewId: reviewIdOf(changed) })])
   })
 
   it('keeps an accepted server stopped when its refused row does not start again', async () => {
@@ -607,12 +634,12 @@ describe('the service when something fails', () => {
       }],
     } as never)
     await consent.review(START)
-    await expect(consent.acceptReview('files', mcpReviewId(START), true)).resolves.toEqual({ started: 0 })
+    await expect(consent.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 0 })
   })
 
   it('keeps a set-aside start when it cannot be dropped, and drops it once only when two reviews race', async () => {
     await consent.review(START)
-    await consent.declineReview('files', mcpReviewId(START))
+    await consent.declineReview('files', reviewIdOf(START))
     await withReadOnlyStoreDirectory(async () => {
       await expect(consent.review({ ...START, args: [] })).resolves.toMatchObject({ allow: false })
     })
@@ -623,7 +650,7 @@ describe('the service when something fails', () => {
 
   it('keeps a set-aside start when the store cannot be read by the time it would be dropped', async () => {
     await consent.review(START)
-    await consent.declineReview('files', mcpReviewId(START))
+    await consent.declineReview('files', reviewIdOf(START))
     const path = acceptanceStorePath(join(root, 'home'))
     const serial: unknown = Reflect.get(consent, 'serial')
     if (typeof serial !== 'function') throw new Error('no serial queue')
@@ -647,7 +674,7 @@ describe('the routes when a request is not the message', () => {
     expect(notJson.status).toBe(400)
     const decline = await routes.post(MCP_CONSENT_ROUTES.decline, { serverName: 'files' })
     expect([decline.status, await decline.json()]).toEqual([400, expect.objectContaining({ error: 'INVALID_REQUEST' })])
-    const declined = await routes.post(MCP_CONSENT_ROUTES.decline, { serverName: 'files', reviewId: mcpReviewId(START) })
+    const declined = await routes.post(MCP_CONSENT_ROUTES.decline, { serverName: 'files', reviewId: reviewIdOf(START) })
     expect([declined.status, await declined.json()]).toEqual([200, { declined: true }])
     expect(storeText()).toContain('declined')
   })

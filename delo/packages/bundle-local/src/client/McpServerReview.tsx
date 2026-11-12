@@ -112,6 +112,7 @@ export function serverChangeText(t: Translate, server: Pick<PendingServer, 'chan
     case 'directory': return t('mcp.change.directory')
     case 'environment': return t('mcp.change.environment', { names: server.changedVariables.join(', ') })
     case 'resolved': return t('mcp.change.resolved')
+    case 'contents': return t('mcp.change.contents')
     case 'unreadable': return t('mcp.change.unreadable')
     case 'upgraded': return t('mcp.change.upgraded')
     /* v8 ignore next 2 -- ServerChange is a closed union. */
@@ -141,6 +142,10 @@ export function ServerStart({ t, start }: { t: Translate; start: PendingServer |
     </>}
     <dt>{t('mcp.resolvedCwd')}</dt>
     <dd><code className={css.command}>{start.resolvedCwd}</code></dd>
+    {start.files.length === 0 ? null : <>
+      <dt>{t('mcp.files')}</dt>
+      <dd><code className={css.command}>{start.files.map(file => file.path).join('\n')}</code></dd>
+    </>}
     <dt>{t('mcp.env')}</dt>
     <dd>{start.env.length === 0 ? t('mcp.envNone') : <>
       <code className={css.command}>{start.env.map(variable => variable.value === undefined ? variable.name : `${variable.name}=${variable.value}`).join('\n')}</code>

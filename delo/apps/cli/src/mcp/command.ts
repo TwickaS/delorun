@@ -6,7 +6,7 @@
  * - `list` shows each pending server: what changed since the person allowed it (for an environment change, which
  *   variables), whether the person declined it or revoked it, its command, arguments, working directory and configured
  *   environment variables, the absolute executable that runs, on Windows the command shell that runs a batch file, and
- *   the directory it runs in, and why it waits; then each allowed server with the same start fields, whether a
+ *   the directory it runs in, the files it runs, which the acceptance pins by their contents, and why it waits; then each allowed server with the same start fields, whether a
  *   configured server has its name, and when it was allowed. A variable's value is
  *   printed only for a variable that changes what runs (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`,
  *   `PYTHONPATH`, `DYLD_*`).
@@ -72,6 +72,7 @@ const CHANGE_WORDS = {
   directory: 'its working directory changed',
   environment: 'its environment variables changed',
   resolved: 'its command or working directory now resolves to another place on this computer',
+  contents: 'a file it runs changed since you accepted it',
   unreadable: 'the acceptance list could not be read',
   upgraded: 'Delorun now remembers each server separately; review it once',
 } as const
@@ -108,6 +109,8 @@ interface ServerStart {
   /** On Windows, the command shell that runs a batch file. */
   readonly resolvedShell?: string
   readonly env: readonly EnvVariable[]
+  /** The canonical paths of the files the start runs: the executable, then each file an argument names. */
+  readonly files: readonly string[]
 }
 
 /** One pending server as `mcp.list` answers it. */
@@ -241,9 +244,20 @@ function startOf(entry: object): ServerStart | undefined {
   const [serverName, command, args, cwd, resolvedCommand, resolvedCwd, resolvedShell] = ['serverName', 'command', 'args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'resolvedShell']
     .map((key): unknown => Reflect.get(entry, key))
   const env = entriesOf(Reflect.get(entry, 'env'), variableOf)
-  if (typeof serverName !== 'string' || typeof command !== 'string' || typeof cwd !== 'string' || !isStrings(args) || env === undefined) return undefined
+  const files = entriesOf(Reflect.get(entry, 'files'), fileOf)
+  if (typeof serverName !== 'string' || typeof command !== 'string' || typeof cwd !== 'string' || !isStrings(args) || env === undefined || files === undefined) return undefined
   if (typeof resolvedCommand !== 'string' || typeof resolvedCwd !== 'string' || (resolvedShell !== undefined && typeof resolvedShell !== 'string')) return undefined
-  return { serverName, command, args, cwd, resolvedCommand, resolvedCwd, ...resolvedShell === undefined ? {} : { resolvedShell }, env }
+  return { serverName, command, args, cwd, resolvedCommand, resolvedCwd, ...resolvedShell === undefined ? {} : { resolvedShell }, env, files }
+}
+
+/**
+ * Read the path of one pinned file of an `mcp.list` entry.
+ * @param entry - the file's entry.
+ * @returns its canonical path, or undefined when the path is not a string.
+ */
+function fileOf(entry: object): string | undefined {
+  const path: unknown = Reflect.get(entry, 'path')
+  return typeof path === 'string' ? path : undefined
 }
 
 /**
@@ -298,6 +312,7 @@ function startFieldLines(start: ServerStart): string[] {
     `    working directory: ${start.cwd === '' ? 'the studio\'s own' : printable(start.cwd)}`,
     `    runs: ${printable(start.resolvedCommand)}${start.resolvedShell === undefined ? '' : ` through the command shell ${printable(start.resolvedShell)}`}`,
     `    runs in: ${printable(start.resolvedCwd)}`,
+    ...(start.files.length === 0 ? [] : [`    files it runs: ${printable(start.files.join(', '))}`]),
     `    environment variables${hidden ? ' (values not shown)' : ''}: ${env.length === 0 ? 'none' : env.join(', ')}`,
   ]
 }

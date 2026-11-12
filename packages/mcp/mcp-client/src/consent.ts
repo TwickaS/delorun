@@ -19,7 +19,7 @@
  * depend on the order of the loader's rows: when the service is not yet
  * registered, it waits until every row's module is imported and every row that
  * declares a provider has settled. The service sees the configured start at
- * every boot, so a provider that remembers an accepted start lets the same
+ * every boot and before every reconnect, so a provider that remembers an accepted start lets the same
  * grant start without asking again, and a changed start reaches the provider
  * as a new review.
  *
@@ -220,7 +220,11 @@ export abstract class McpAddConsent extends Service {
   /**
    * Review one configured server start before the mcp-client plugin starts
    * that server. The review runs at every boot of the server row, before any
-   * child process starts, so the provider can let an accepted start through
+   * child process starts, and again before every reconnect spawns the server
+   * after its connection dropped, where a refusal ends the reconnect loop and
+   * leaves the server stopped until its row starts again. The provider can
+   * therefore compare what the start names, such as the contents of its
+   * executable, with what it accepted each time, and let an accepted start through
    * at once and ask again when the command, arguments, working directory,
    * environment, resolved executable path, resolved command shell or resolved
    * working directory it is shown differ from the ones it accepted before.

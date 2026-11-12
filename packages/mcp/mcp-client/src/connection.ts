@@ -99,6 +99,19 @@ export interface ConnectionOutcome {
   error?: unknown
 }
 
+/** Options of {@link startConnection} beyond the config and the reconnect policy. */
+export interface ConnectionOptions {
+  /**
+   * Runs before every reconnect attempt creates its transport, and returns the
+   * config that attempt and the later ones connect with. A rejection ends the
+   * reconnect loop for good, as an exhausted attempt budget does: the server's
+   * tools are unregistered, the rejection's message is logged, and disposal is
+   * the only way back. Absent, every attempt connects with the config the
+   * connection started with.
+   */
+  readonly beforeReconnect?: () => Promise<Config>
+}
+
 /** Handle for one plugin instance's supervised connection. */
 export interface ConnectionHandle extends ServerContext {
   /**
@@ -122,9 +135,12 @@ export interface ConnectionHandle extends ServerContext {
  * @param ctx - Cordis context providing the `tools` registry and logger.
  * @param config - Resolved plugin config selecting the transport and server identity.
  * @param policy - Resolved reconnect policy from {@link resolveReconnectPolicy}.
+ * @param options - The hook that runs before each reconnect attempt; omission connects every attempt with `config`.
  * @returns Handle with a `ready` promise for startup-await and a `dispose` for teardown.
  */
-export function startConnection(ctx: Context, config: Config, policy: ResolvedReconnectPolicy): ConnectionHandle {
+export function startConnection(
+  ctx: Context, config: Config, policy: ResolvedReconnectPolicy, options: ConnectionOptions = {},
+): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
   const incompleteDisposalMessage = `${label}: transport closure could not be confirmed during disposal — server shutdown may be incomplete`
   const opts: ToolBridgeOptions = {
@@ -140,6 +156,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     : opts
 
   let disposed = false
+  /** The config the next attempt connects with; {@link ConnectionOptions.beforeReconnect} replaces it. */
+  let current: Config = config
   const maxInstructionBytes = config.maxInstructionBytes ?? DEFAULT_MAX_INSTRUCTION_BYTES
   let serverInstructions = ''
   /** Current generation: the connecting or connected client; undefined during backoff waits and after final failure. */
@@ -208,6 +226,39 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     })
   }
 
+  /**
+   * Stop reconnecting for good and unregister the server's tools.
+   * @param why - the words naming why, logged after the label.
+   */
+  function giveUp(why: string): void {
+    // Enqueue the give-up disposal so it cannot race an in-flight sync's
+    // phase-2 swap (which checks isCurrent inside the queue).
+    syncChain = syncChain.then(() => {
+      for (const dispose of disposers.values()) dispose()
+      disposers = new Map()
+      serverInstructions = ''
+    })
+    ctx.logger.error(`${label}: ${why} — tools unregistered; reload the plugin or restart the Host to reconnect`)
+  }
+
+  /**
+   * One reconnect attempt: the {@link ConnectionOptions.beforeReconnect} hook,
+   * then the connection. A rejected hook stops reconnecting; disposal during
+   * the hook leaves the attempt unstarted. Never rejects.
+   */
+  async function reconnect(): Promise<void> {
+    if (options.beforeReconnect !== undefined) {
+      try {
+        current = await options.beforeReconnect()
+      } catch (error) {
+        if (!disposed) giveUp(`reconnect stopped before the attempt: ${error instanceof Error ? error.message : String(error)}`)
+        return
+      }
+      if (disposed) return
+    }
+    await connectGeneration(false)
+  }
+
   function scheduleReconnect(): void {
     const lostEstablishedConnection = connectedAt !== undefined
     if (!policy.enabled) {
@@ -223,14 +274,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     connectedAt = undefined
     failedAttempts += 1
     if (failedAttempts > policy.maxAttempts) {
-      // Enqueue the give-up disposal so it cannot race an in-flight sync's
-      // phase-2 swap (which checks isCurrent inside the queue).
-      syncChain = syncChain.then(() => {
-        for (const dispose of disposers.values()) dispose()
-        disposers = new Map()
-        serverInstructions = ''
-      })
-      ctx.logger.error(`${label}: giving up after ${policy.maxAttempts} consecutive failed reconnect attempts — tools unregistered; reload the plugin or restart the Host to reconnect`)
+      giveUp(`giving up after ${policy.maxAttempts} consecutive failed reconnect attempts`)
       return
     }
     const delayMs = Math.min(policy.maxDelayMs, policy.initialDelayMs * 2 ** (failedAttempts - 1))
@@ -238,7 +282,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     ctx.logger.warn(`${label}: ${action} in ${delayMs}ms (attempt ${failedAttempts}/${policy.maxAttempts})`)
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined
-      settling = connectGeneration(false)
+      settling = reconnect()
     }, delayMs)
     // An armed reconnect timer must never hold the process open on its own.
     reconnectTimer.unref()
@@ -304,7 +348,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     }
     let instructions: string
     try {
-      transport = createTransport(config)
+      transport = createTransport(current)
       await generation.connect(transport)
       if (hasClosed()) {
         attemptSettled = true

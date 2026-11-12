@@ -20,11 +20,12 @@ import { HomeProcessError } from './errors.ts'
 /**
  * What a pending review asks about: a server never accepted (`new`), a start whose command, arguments, working
  * directory or environment differ from the server's acceptance, a start configured as accepted whose command or
- * working directory now resolves to another executable, directory or command shell (`resolved`), an acceptance store
+ * working directory now resolves to another executable, directory or command shell (`resolved`), a start whose
+ * executable or a file an argument names changed since the acceptance or cannot be read (`contents`), an acceptance store
  * that cannot be read (`unreadable`), or a start accepted before Delo kept one acceptance per server, which is reviewed
  * once (`upgraded`).
  */
-export type McpServerChange = 'new' | 'command' | 'arguments' | 'directory' | 'environment' | 'resolved' | 'unreadable' | 'upgraded'
+export type McpServerChange = 'new' | 'command' | 'arguments' | 'directory' | 'environment' | 'resolved' | 'contents' | 'unreadable' | 'upgraded'
 
 /** Where a pending review stands: waiting for an answer, or set aside by a decline or a revoke until its start changes. */
 export type McpServerState = 'waiting' | 'declined' | 'revoked'
@@ -36,6 +37,15 @@ export type McpServerState = 'waiting' | 'declined' | 'revoked'
 export interface McpEnvVariable {
   readonly name: string
   readonly value?: string
+}
+
+/** One file a server start runs, by its canonical path and the digest of its contents. */
+export interface McpPinnedFile {
+  /** The index of the argument that names the file; absent for the executable. */
+  readonly argument?: number
+  readonly path: string
+  /** `sha256:` and the hexadecimal digest. */
+  readonly sha256: string
 }
 
 /** One pending stdio MCP server review, as `delorun mcp` shows it. */
@@ -53,6 +63,8 @@ export interface PendingMcpServer {
   readonly resolvedShell?: string
   /** The configured environment variables, sorted by name. */
   readonly env: readonly McpEnvVariable[]
+  /** The files the start runs as the review pinned them; empty when one could not be read. */
+  readonly files: readonly McpPinnedFile[]
   readonly reason: string
   /** What changed since the person's acceptance. */
   readonly change: McpServerChange
@@ -80,6 +92,8 @@ export interface AcceptedMcpServer {
   readonly resolvedShell?: string
   /** The accepted environment variables, sorted by name. */
   readonly env: readonly McpEnvVariable[]
+  /** The files the accepted start runs, pinned when it was accepted. */
+  readonly files: readonly McpPinnedFile[]
   /** When the person accepted it, in milliseconds since the epoch. */
   readonly acceptedAt: number
   /** Whether a configured server row has the server name. */

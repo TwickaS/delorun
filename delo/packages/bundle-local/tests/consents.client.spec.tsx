@@ -202,12 +202,13 @@ describe('the full-access consent', () => {
 const SERVER = {
   serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
   resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person',
-  env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], changedVariables: [] as string[], state: 'waiting' as const,
+  env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], files: [] as { argument?: number, path: string, sha256: string }[],
+  changedVariables: [] as string[], state: 'waiting' as const,
   reason: 'the acceptance store holds no acceptance for this command', change: 'new' as const, reviewedAt: NOW - 60_000,
 }
 const ACCEPTED = {
   acceptanceId: 'e'.repeat(32), serverName: 'git', command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/git',
-  resolvedCommand: '/opt/uv/uvx.cmd', resolvedCwd: '/srv/git', resolvedShell: '/Windows/System32/cmd.exe', env: [], acceptedAt: NOW - 86_400_000, configured: true,
+  resolvedCommand: '/opt/uv/uvx.cmd', resolvedCwd: '/srv/git', resolvedShell: '/Windows/System32/cmd.exe', env: [], files: [], acceptedAt: NOW - 86_400_000, configured: true,
 }
 const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): Answer => ({ status: 200, body: { servers, accepted } })
 
@@ -348,6 +349,17 @@ describe('the MCP server review', () => {
     expect(within(details).queryByText(en['mcp.resolvedShell'])).toBeNull()
   })
 
+  it('says a file it runs changed, and lists the files it runs under Details', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    const files = [{ path: '/opt/node/bin/node', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 0, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    void source.ask({ ...SERVER, change: 'contents', files })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText(en['mcp.change.contents'])).toBeTruthy()
+    expect(within(dialog).getByText(en['mcp.files'])).toBeTruthy()
+    expect(within(dialog).getByText((_content, element) => element?.tagName === 'CODE' && element.textContent === '/opt/node/bin/node\n/work/server.js')).toBeTruthy()
+  })
+
   it('names the command shell that runs a batch file', () => {
     const source = createMcpReviewSource(fakeHost().fetch)
     void source.ask({ ...SERVER, resolvedCommand: '/nodejs/npx.cmd', resolvedShell: '/Windows/System32/cmd.exe' })
@@ -367,7 +379,7 @@ describe('the MCP server review', () => {
 
   it('says in its own words what each review asks about', () => {
     const t = makeTranslate(en)
-    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'unreadable', 'upgraded'] as const) {
+    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'contents', 'unreadable', 'upgraded'] as const) {
       expect(serverChangeText(t, { change, changedVariables: [] })).toBe(en[`mcp.change.${change}`])
     }
   })
