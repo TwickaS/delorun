@@ -170,6 +170,12 @@ export class HomeAuthAuthenticator extends Authenticator {
         admitted: deviceId => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId),
         workspaces: () => access.get('workspaceRegistry')?.list() ?? [],
         liveSessions: () => (access.get('sessions')?.list() ?? []).map(session => session.id),
+        workspaceRootOf: (sessionId) => {
+          const live = access.get('sessions')?.get(sessionId)?.header
+          if (live !== undefined) return live.cwd
+          return access.get('workspaceRegistry')?.list().find(workspace => workspace.sessionIds.includes(sessionId))?.path
+        },
+        deloHome: ctx.homeAuth.deloHome,
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {

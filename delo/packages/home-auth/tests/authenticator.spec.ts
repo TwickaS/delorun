@@ -6,14 +6,15 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import type { Admission, ConnectionIndexRequest } from '@deepseek-ai/dsh-client-connection'
 import type { PeerId, PeerScope, Principal } from '@deepseek-ai/dsh-typert-protocol'
-import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
+import type { RemoteAccessBinding, RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
@@ -72,7 +73,7 @@ beforeEach(async () => {
     },
     closeReachConnections: () => 0,
   } as never)
-  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
   await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
 })
 
@@ -83,7 +84,7 @@ afterEach(async () => {
 
 /** A session for a device recorded at the served address. */
 async function session(fill: number, lifetimeMs = HOUR): Promise<string> {
-  const store = new DeviceStore({ file: join(directory, 'home-auth', 'devices.json') })
+  const store = new DeviceStore({ file: join(directory, 'secrets', 'home-auth', 'devices.json') })
   if (await ctx.homeAuth.owner() === undefined) {
     await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   }
@@ -219,7 +220,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const token = await session(2, SESSION_LIMITS.reach.absoluteMs)
@@ -248,7 +249,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const cookie = { cookie: `__Host-delo-session=${await session(2, SESSION_LIMITS.reach.absoluteMs)}` }
@@ -300,7 +301,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [] })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere' })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -331,6 +332,33 @@ describe('the authenticator provider', () => {
         { kind: 'global' }, { kind: 'workspace', id: 'w-1' }, { kind: 'session', id: 's-1' }, { kind: 'session', id: 's-live' },
       ])
       expect(access.policy().bindings(reachDevicePrincipal('another-device'))).toEqual([])
+    })
+
+    it('names a Session\'s workspace root from its live header, else from its Workspace, for the file reads', async () => {
+      const access = await fakeRemoteAccess()
+      const outside = await mkdtemp(join(tmpdir(), 'delo-home-auth-roots-'))
+      try {
+        const live = join(outside, 'live')
+        const stored = join(outside, 'stored')
+        await mkdir(live)
+        await mkdir(stored)
+        await writeFile(join(live, 'a.txt'), 'a')
+        await writeFile(join(stored, 'b.txt'), 'b')
+        ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+        provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+        ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', path: stored, sessionIds: ['s-stored'] }] } as never)
+        ctx.provide('sessions', { list: () => [{ id: 's-live' }], get: (id: string) => (id === 's-live' ? { header: { cwd: live } } : undefined) } as never)
+        const binding = access.policy().bindings(reachDevicePrincipal(recordOf(2, ADDRESS).id))
+          .find((candidate): candidate is Extract<RemoteAccessBinding, { readonly resource: { readonly kind: 'session' } }> => candidate.resource.kind === 'session')
+        const read = (id: string, path: string) => binding?.condition?.({ action: 'workspaceFiles/read', resource: { kind: 'session', id: id as SessionId }, args: { path } })
+        // Pins the root facts: a live Session reads from its working directory, a stored one from its Workspace's path.
+        expect(read('s-live', 'a.txt')).toEqual({ kind: 'allow' })
+        expect(read('s-live', 'b.txt')).toMatchObject({ kind: 'deny' })
+        expect(read('s-stored', 'b.txt')).toEqual({ kind: 'allow' })
+        expect(read('s-unknown', 'b.txt')).toMatchObject({ kind: 'deny' })
+      } finally {
+        await rm(outside, { recursive: true, force: true })
+      }
     })
 
     it('recomputes each admitted device\'s snapshot when a Session or a Workspace changes', async () => {

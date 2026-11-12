@@ -4,7 +4,10 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
-import { describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { RemoteAccessAction } from '@deepseek-ai/dsh-api-remote-access/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
@@ -23,6 +26,7 @@ import {
 const session = (id: string): SessionId => id as SessionId
 const workspace = (id: string): WorkspaceId => id as WorkspaceId
 const DEVICE = reachDevicePrincipal('device-1')
+const GLOBAL = { kind: 'global' } as const
 
 function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
   return {
@@ -32,6 +36,8 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
       { id: workspace('w-2'), sessionIds: [session('s-2')] },
     ],
     liveSessions: () => [session('s-2'), session('s-live')],
+    workspaceRootOf: () => undefined,
+    deloHome: '/nowhere',
     ...overrides,
   }
 }
@@ -57,29 +63,6 @@ describe('the reach-device policy', () => {
     ])
   })
 
-  it('keeps a workspace-file read inside the chat\'s workspace', () => {
-    const allow = { kind: 'allow' }
-    // Pins the workspace-file condition: the service reads an absolute path wherever it points, so the policy keeps a
-    // device to a relative one that does not walk out of the workspace.
-    for (const path of ['src/index.ts', 'a/b/c.txt', '.']) {
-      expect(createCondition({ action: 'workspaceFiles/read', args: { workspaceFileScopeId: 's-1', path } })).toEqual(allow)
-    }
-    // A `..` segment is refused even where it would resolve back inside: the rule is the path's text, not a resolution
-    // the policy would have to redo.
-    for (const path of ['/etc/hostname', 'C:\\Windows\\win.ini', '\\\\server\\share', '..', '../outside.txt', 'a/b/../c.txt', 7, undefined]) {
-      expect(createCondition({ action: 'workspaceFiles/read', args: { path } }))
-        .toEqual({ kind: 'deny', reason: 'loopback-required: workspaceFiles/read with a path outside the chat\'s workspace' })
-    }
-    // The condition belongs to the reads that take a path, and leaves every other action alone.
-    expect(createCondition({ action: 'workspaceFiles/readBytes', args: { path: '/etc/hostname' } })).toMatchObject({ kind: 'deny' })
-    expect(createCondition({ action: 'workspaceFiles/stat', args: { path: '/etc/hostname' } })).toMatchObject({ kind: 'deny' })
-    expect(createCondition({ action: 'officeToPdf/render', args: { path: '/etc/hostname', priority: 'foreground' } })).toMatchObject({ kind: 'deny' })
-    // `list` is confined by the service itself, which refuses a folder outside the workspace.
-    expect(createCondition({ action: 'workspaceFiles/list', args: { path: '/etc' } })).toEqual(allow)
-    // A workspace-file read names a path; one that names none is refused like an absolute one.
-    expect(createCondition({ action: 'workspaceFiles/read', args: { workspaceFileScopeId: 's-1' } })).toMatchObject({ kind: 'deny' })
-  })
-
   it('binds only the allowed actions, on every role', () => {
     for (const binding of createReachAccessPolicy(facts()).bindings(DEVICE)) {
       // Pins the roles: a role listing a denied action would allow it on every bound resource.
@@ -87,17 +70,18 @@ describe('the reach-device policy', () => {
       expect(binding.role.resource).toBe(binding.resource.kind)
       // Pins where the condition sits: on every role, because `session/create` names a global or Workspace resource
       // and a workspace-file read names a Session one.
-      expect(binding.condition).toBe(createCondition)
+      expect(binding.condition).toBeTypeOf('function')
     }
   })
 
   it('refuses a session/create naming a folder or a preset, and nothing else', () => {
     const allow = { kind: 'allow' }
-    expect(createCondition({ action: 'session/create' })).toEqual(allow)
-    expect(createCondition({ action: 'session/create', args: { request: { workspaceId: 'w' }, flag: 1, nothing: null } })).toEqual(allow)
-    expect(createCondition({ action: 'session/prompt', args: { request: { cwd: '/' } } })).toEqual(allow)
+    const condition = createCondition(facts())
+    expect(condition({ resource: GLOBAL, action: 'session/create' })).toEqual(allow)
+    expect(condition({ resource: GLOBAL, action: 'session/create', args: { request: { workspaceId: 'w' }, flag: 1, nothing: null } })).toEqual(allow)
+    expect(condition({ resource: GLOBAL, action: 'session/prompt', args: { request: { cwd: '/' } } })).toEqual(allow)
     for (const request of [{ cwd: '/' }, { agentPreset: 'any' }]) {
-      expect(createCondition({ action: 'session/create', args: { request } })).toEqual({ kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' })
+      expect(condition({ resource: GLOBAL, action: 'session/create', args: { request } })).toEqual({ kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' })
     }
   })
 
@@ -113,6 +97,125 @@ describe('the reach-device policy', () => {
       .toBe('loopback-required: pluginManager/installBundle')
     expect(policy.explain?.({ principal: DEVICE, action: 'session/cancel', resources: [{ kind: 'session', id: session('cold') }] }))
       .toBe('resource-unlisted: session/cancel')
+  })
+})
+
+describe('a device\'s workspace-file call', () => {
+  const ALLOW = { kind: 'allow' }
+  let directory = ''
+  let root = ''
+  let deloHome = ''
+  const chat = { kind: 'session', id: session('s-1') } as const
+
+  beforeAll(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'delo-reach-paths-'))
+    root = join(directory, 'workspace')
+    // A workspace that holds the Delo home, as a live chat whose folder is the person's home directory does.
+    deloHome = join(root, '.delo')
+    await mkdir(join(root, 'src'), { recursive: true })
+    await mkdir(join(deloHome, 'secrets'), { recursive: true })
+    await mkdir(join(directory, 'outside'))
+    await writeFile(join(root, 'src', 'index.ts'), 'inside')
+    await writeFile(join(root, 'notes.md'), 'inside')
+    await writeFile(join(deloHome, 'secrets', 'key'), 'secret')
+    // Another folder whose name differs from the Delo home's only in case, which a case-folding filesystem would not hold.
+    await mkdir(join(root, '.DELO'))
+    await writeFile(join(root, '.DELO', 'key'), 'other')
+    await writeFile(join(directory, 'outside', 'secret.txt'), 'outside')
+    await symlink(join(directory, 'outside'), join(root, 'linked-dir'))
+    await symlink(join(directory, 'outside', 'secret.txt'), join(root, 'linked-file'))
+    await symlink(join(root, 'src'), join(root, 'src-link'))
+  })
+  afterAll(async () => { await rm(directory, { recursive: true, force: true }) })
+
+  const conditionOf = (overrides: Partial<ReachAccessFacts> = {}) =>
+    createCondition(facts({ workspaceRootOf: id => (id === 's-1' ? root : undefined), deloHome, ...overrides }))
+  const refusal = (action: RemoteAccessAction) => ({ kind: 'deny', reason: `loopback-required: ${action} with a path outside the chat's workspace` })
+
+  it('reaches a file or folder whose real path lies inside the chat\'s workspace', () => {
+    const condition = conditionOf()
+    // The files tree names absolute paths, which the service reads as they are.
+    for (const path of ['src/index.ts', 'notes.md', '.', 'src', 'src-link/index.ts', join(root, 'notes.md'), root]) {
+      expect(condition({ action: 'workspaceFiles/read', resource: chat, args: { workspaceFileScopeId: 's-1', path } })).toEqual(ALLOW)
+    }
+    expect(condition({ action: 'workspaceFiles/list', resource: chat, args: { path: 'src' } })).toEqual(ALLOW)
+  })
+
+  it('refuses a path outside the workspace, and one the policy would not resolve as the service does', () => {
+    const condition = conditionOf()
+    // Pins the containment and the text checks: `~` is the person's home directory to the service, and a `..` segment
+    // is walked physically through a link, so both are refused even where they would land inside.
+    for (const path of ['/etc/hostname', join(directory, 'outside', 'secret.txt'), '~', '~/notes.md', '..', '../outside/secret.txt', 'src/../notes.md', 'src\\..\\notes.md', 'notes.md\0', 7, undefined]) {
+      expect(condition({ action: 'workspaceFiles/read', resource: chat, args: { path } })).toEqual(refusal('workspaceFiles/read'))
+    }
+  })
+
+  it('refuses a symbolic link in any directory of the path that leads outside the workspace', () => {
+    const condition = conditionOf()
+    // Pins the real-path check: the service follows a link in a parent directory, so `linked-dir/secret.txt` would
+    // read a file outside the workspace through a link the chat's agent can create.
+    for (const action of ['workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeToPdf/render', 'workspaceFiles/list'] as const) {
+      expect(condition({ action, resource: chat, args: { path: 'linked-dir/secret.txt' } })).toEqual(refusal(action))
+      expect(condition({ action, resource: chat, args: { path: 'linked-file' } })).toEqual(refusal(action))
+    }
+    expect(condition({ action: 'workspaceFiles/list', resource: chat, args: { path: 'linked-dir' } })).toEqual(refusal('workspaceFiles/list'))
+  })
+
+  it('refuses the Delo home even inside the workspace', () => {
+    // Pins the Delo home check: its secrets and tokens are never a device's to read, wherever a chat's folder lies.
+    for (const path of ['.delo', '.delo/secrets/key']) {
+      expect(conditionOf()({ action: 'workspaceFiles/read', resource: chat, args: { path } })).toEqual(refusal('workspaceFiles/read'))
+    }
+  })
+
+  it('compares the Delo home without case where the platform\'s filesystem does', () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    if (platform === undefined) throw new Error('process.platform has no descriptor')
+    const read = () => conditionOf()({ action: 'workspaceFiles/read', resource: chat, args: { path: '.DELO/key' } })
+    try {
+      expect(read()).toEqual(ALLOW)
+      // Pins the folding: on macOS or Windows `.DELO` is the Delo home itself, spelled another way.
+      for (const value of ['darwin', 'win32']) {
+        Object.defineProperty(process, 'platform', { value })
+        expect(read()).toEqual(refusal('workspaceFiles/read'))
+      }
+    } finally {
+      Object.defineProperty(process, 'platform', platform)
+    }
+  })
+
+  it('refuses a path that does not exist, and a chat whose workspace the home cannot name', () => {
+    expect(conditionOf({ deloHome: join(directory, 'gone') })({ action: 'workspaceFiles/read', resource: chat, args: { path: 'notes.md' } }))
+      .toEqual(refusal('workspaceFiles/read'))
+    expect(conditionOf()({ action: 'workspaceFiles/stat', resource: chat, args: { path: 'missing.txt' } })).toEqual(refusal('workspaceFiles/stat'))
+    expect(conditionOf()({ action: 'workspaceFiles/read', resource: { kind: 'session', id: session('other') }, args: { path: 'notes.md' } }))
+      .toEqual(refusal('workspaceFiles/read'))
+    expect(conditionOf({ workspaceRootOf: () => join(directory, 'gone') })({ action: 'workspaceFiles/read', resource: chat, args: { path: 'notes.md' } }))
+      .toEqual(refusal('workspaceFiles/read'))
+    expect(conditionOf()({ action: 'workspaceFiles/read', resource: GLOBAL, args: { path: 'notes.md' } })).toEqual(refusal('workspaceFiles/read'))
+  })
+
+  it('resolves a byte read from its base file, which must itself be reachable', () => {
+    const condition = conditionOf()
+    const read = (path: string, baseFile: unknown) => condition({ action: 'workspaceFiles/readBytes', resource: chat, args: { path, options: { baseFile } } })
+    expect(read('index.ts', 'src/index.ts')).toEqual(ALLOW)
+    // Pins the base-file check: a base file outside the workspace would move where the relative path starts.
+    expect(read('secret.txt', 'linked-dir/secret.txt')).toEqual(refusal('workspaceFiles/readBytes'))
+    expect(read('secret.txt', '/etc/hostname')).toEqual(refusal('workspaceFiles/readBytes'))
+    expect(read('notes.md', 'src/index.ts')).toEqual(refusal('workspaceFiles/readBytes'))
+    // The path resolves from the base file's real directory, with `..` and `\\` as the service reads them.
+    expect(read('../notes.md', 'src-link/index.ts')).toEqual(ALLOW)
+    expect(read('..\\notes.md', 'src/index.ts')).toEqual(ALLOW)
+    expect(read('../../outside/secret.txt', 'src/index.ts')).toEqual(refusal('workspaceFiles/readBytes'))
+    expect(read('notes.md\0', 'src/index.ts')).toEqual(refusal('workspaceFiles/readBytes'))
+    expect(condition({ action: 'workspaceFiles/readBytes', resource: chat, args: { path: 7, options: { baseFile: 'src/index.ts' } } })).toEqual(refusal('workspaceFiles/readBytes'))
+    expect(condition({ action: 'workspaceFiles/readBytes', resource: chat, args: { path: 'notes.md', options: {} } })).toEqual(ALLOW)
+  })
+
+  it('leaves a call without arguments and every other action alone', () => {
+    const condition = conditionOf()
+    expect(condition({ action: 'workspaceFiles/read', resource: chat })).toEqual(ALLOW)
+    expect(condition({ action: 'session/prompt', resource: chat, args: { path: '/etc/hostname' } })).toEqual(ALLOW)
   })
 })
 

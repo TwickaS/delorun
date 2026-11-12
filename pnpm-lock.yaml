@@ -2116,6 +2116,9 @@ importers:
       '@delo/contract-device-approval':
         specifier: workspace:*
         version: link:../contract-device-approval
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
       '@delo/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../contract-oidc-passkeys

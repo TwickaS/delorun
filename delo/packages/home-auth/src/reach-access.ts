@@ -14,11 +14,14 @@
  *
  * @module @delo/home-auth/reach-access
  */
+import { realpathSync } from 'node:fs'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type {
   RemoteAccessAction,
   RemoteAccessBinding,
   RemoteAccessDecision,
   RemoteAccessPolicy,
+  RemoteAccessResource,
   RemoteAccessResourceKind,
   RemoteAccessRole,
 } from '@deepseek-ai/dsh-api-remote-access/types'
@@ -294,69 +297,153 @@ function role<K extends RemoteAccessResourceKind>(resource: K): RemoteAccessRole
 const ALLOW: RemoteAccessDecision = { kind: 'allow' }
 
 /**
- * The actions that read one file of a chat's workspace. The workspace-file service resolves a relative path against
- * the Session's workspace root but reads an absolute one wherever it points, so the policy keeps a device to the
- * relative form. `workspaceFiles/list` needs no entry: the service confines a listed directory to the workspace
- * itself.
+ * The actions that read a chat's workspace by a path the device names. The workspace-file service reads an absolute
+ * path wherever it points and follows a symbolic link in any directory of a read's path, so the policy resolves each
+ * path itself before the service runs: a device reaches a file or folder only when its real path lies inside the real
+ * path of the chat's workspace and outside the Delo home.
  */
-const WORKSPACE_FILE_ACTIONS: ReadonlySet<string> = new Set([
-  'workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeToPdf/render',
+const WORKSPACE_PATH_ACTIONS: ReadonlySet<string> = new Set([
+  'workspaceFiles/list', 'workspaceFiles/read', 'workspaceFiles/readBytes', 'workspaceFiles/stat', 'officeToPdf/render',
 ])
 
-/** A path that names a place by itself, on POSIX or Windows, rather than a place inside the workspace. */
-const ABSOLUTE_PATH = /^(?:[/\\]|[A-Za-z]:[/\\])/
+/**
+ * A path the policy does not resolve the way the filesystem service does, so it is refused: a NUL, a `~` the service
+ * expands to the person's home directory, and a `..` segment, which the service walks physically through a link.
+ */
+const UNRESOLVED_PATH = /\0|^~|(?:^|[/\\])\.\.(?:[/\\]|$)/u
 
 /**
- * Whether a named path argument names a file inside the chat's workspace: a relative path, without a segment that
- * walks out of it. A path the policy cannot read as text is refused with it.
- * @param path - the argument's value.
- * @returns whether the workspace-file service resolves it inside the workspace root.
+ * The real path of a path, or undefined when it does not exist or cannot be read; a device is refused either way.
+ * @param path - the absolute path.
+ * @returns the real path.
  */
-function insideWorkspace(path: unknown): boolean {
-  if (typeof path !== 'string') return false
-  if (ABSOLUTE_PATH.test(path)) return false
-  return !path.split(/[/\\]/).includes('..')
+function realPathOf(path: string): string | undefined {
+  try {
+    // The native call spells each component as the filesystem stores it, which `within` relies on where names fold case.
+    return realpathSync.native(path)
+  } catch (_unresolvable: unknown) {
+    // A path that does not resolve names no file the device may read; the refusal says so instead of the service.
+    return undefined
+  }
 }
 
 /**
- * Whether every path a workspace-file call names stays inside the chat's workspace: its own path argument, and the
- * base file a byte read resolves it from, which the service accepts absolute.
+ * A real path as the platform's default filesystem compares it: without case on Windows and macOS.
+ * @param path - the real path.
+ * @returns the comparison key.
+ */
+function comparable(path: string): string {
+  return process.platform === 'win32' || process.platform === 'darwin' ? path.toLowerCase() : path
+}
+
+/**
+ * Whether one real path lies inside another, or is it.
+ * @param parent - the real path of the directory.
+ * @param child - the real path.
+ * @returns whether it does.
+ */
+function within(parent: string, child: string): boolean {
+  const path = relative(comparable(parent), comparable(child))
+  return path === '' || (!isAbsolute(path) && path.split(sep)[0] !== '..')
+}
+
+/** Where a device's workspace-file call may reach: the chat's real workspace root, and the Delo home it never reaches. */
+interface WorkspaceBounds {
+  readonly root: string
+  readonly deloHome: string
+}
+
+/**
+ * The real path of an absolute path when it lies inside the chat's workspace and outside the Delo home.
+ * @param bounds - the real workspace root and the real Delo home.
+ * @param path - the absolute path.
+ * @returns the real path, or undefined when it does not resolve or resolves outside.
+ */
+function reachableReal(bounds: WorkspaceBounds, path: string): string | undefined {
+  const real = realPathOf(path)
+  if (real === undefined || !within(bounds.root, real) || within(bounds.deloHome, real)) return undefined
+  return real
+}
+
+/**
+ * The real path a device's path names, resolved as the workspace-file service resolves it: an absolute path as it is,
+ * a relative one from the workspace root.
+ * @param bounds - the real workspace root and the real Delo home.
+ * @param path - the path as the device sent it.
+ * @returns the real path, or undefined when the device may not reach it.
+ */
+function reachablePath(bounds: WorkspaceBounds, path: unknown): string | undefined {
+  if (typeof path !== 'string' || UNRESOLVED_PATH.test(path)) return undefined
+  return reachableReal(bounds, resolve(bounds.root, path))
+}
+
+/**
+ * Whether every path a workspace-file call names is one a device may reach. A byte read with a base file names two:
+ * the base file, and the path the service resolves from the base file's real directory with `/` separators.
+ * @param bounds - the real workspace root and the real Delo home.
  * @param args - the call's named arguments.
- * @returns whether the service resolves each path inside the workspace root.
+ * @returns whether the call reaches only the chat's workspace.
  */
-function workspacePathsInside(args: Readonly<Record<string, unknown>>): boolean {
-  if (!insideWorkspace(args.path)) return false
+function workspacePathsReachable(bounds: WorkspaceBounds, args: Readonly<Record<string, unknown>>): boolean {
   const options = args.options
-  if (typeof options !== 'object' || options === null || !Object.hasOwn(options, 'baseFile')) return true
-  return insideWorkspace(Reflect.get(options, 'baseFile'))
+  const baseFile: unknown = typeof options === 'object' && options !== null ? Reflect.get(options, 'baseFile') : undefined
+  if (baseFile === undefined) return reachablePath(bounds, args.path) !== undefined
+  const base = reachablePath(bounds, baseFile)
+  if (base === undefined || typeof args.path !== 'string' || args.path.includes('\0')) return false
+  return reachableReal(bounds, resolve(dirname(base), args.path.replace(/\\/g, '/'))) !== undefined
 }
 
 /**
- * Refuse a `session/create` that names a folder or a preset: a device starts a chat only in a Workspace the person
- * registered at the computer, with the configured preset, because a folder decides where the chat's commands may write
- * and a preset decides its tools. Refuse a workspace-file read whose `path` is absolute or walks out of the workspace.
- * Every other action is allowed as its role lists it.
- * @param request - the action and a call's named arguments.
- * @param request.action - the action.
- * @param request.args - the call's named arguments, absent outside a concrete call.
- * @returns allow, or the refusal naming the action.
+ * The real bounds of the chat a workspace-file call names.
+ * @param facts - the Host state the policy reads.
+ * @param resource - the resource the call is decided on, a Session for every workspace-file call.
+ * @returns the bounds, or undefined when the Host cannot name the chat's workspace, or it or the Delo home does not resolve.
  */
-export function createCondition(request: { readonly action: RemoteAccessAction; readonly args?: Readonly<Record<string, unknown>> }): RemoteAccessDecision {
-  if (request.args === undefined) return ALLOW
-  if (request.action === 'session/create') {
-    for (const value of Object.values(request.args)) {
-      if (typeof value === 'object' && value !== null && (Reflect.get(value, 'cwd') !== undefined || Reflect.get(value, 'agentPreset') !== undefined)) {
-        return { kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' }
+function boundsOf(facts: Pick<ReachAccessFacts, 'workspaceRootOf' | 'deloHome'>, resource: RemoteAccessResource): WorkspaceBounds | undefined {
+  if (resource.kind !== 'session') return undefined
+  const workspace = facts.workspaceRootOf(resource.id)
+  const root = workspace === undefined ? undefined : realPathOf(workspace)
+  const deloHome = realPathOf(facts.deloHome)
+  if (root === undefined || deloHome === undefined) return undefined
+  return { root, deloHome }
+}
+
+/** The condition every binding of a device carries: one call's action, the resource it is decided on and its arguments. */
+type ReachCondition = (request: {
+  readonly action: RemoteAccessAction
+  readonly resource: RemoteAccessResource
+  readonly args?: Readonly<Record<string, unknown>>
+}) => RemoteAccessDecision
+
+/**
+ * The condition of a device's bindings. It refuses a `session/create` that names a folder or a preset: a device starts a
+ * chat only in a Workspace the person registered at the computer, with the configured preset, because a folder decides
+ * where the chat's commands may write and a preset decides its tools. It refuses a workspace-file call unless every path
+ * it names is one a device may reach (see {@link WORKSPACE_PATH_ACTIONS}). Every other action is allowed as its role
+ * lists it, and so is every question asked without a call's arguments: an event, a snapshot or a list filter.
+ * @param facts - the Host state the policy reads.
+ * @returns the condition.
+ */
+export function createCondition(facts: Pick<ReachAccessFacts, 'workspaceRootOf' | 'deloHome'>): ReachCondition {
+  return ({ action, resource, args }) => {
+    if (args === undefined) return ALLOW
+    if (action === 'session/create') {
+      for (const value of Object.values(args)) {
+        if (typeof value === 'object' && value !== null && (Reflect.get(value, 'cwd') !== undefined || Reflect.get(value, 'agentPreset') !== undefined)) {
+          return { kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' }
+        }
+      }
+      return ALLOW
+    }
+    if (WORKSPACE_PATH_ACTIONS.has(action)) {
+      const bounds = boundsOf(facts, resource)
+      if (bounds === undefined || !workspacePathsReachable(bounds, args)) {
+        return { kind: 'deny', reason: `loopback-required: ${action} with a path outside the chat's workspace` }
       }
     }
     return ALLOW
   }
-  if (WORKSPACE_FILE_ACTIONS.has(request.action) && !workspacePathsInside(request.args)) {
-    return { kind: 'deny', reason: `loopback-required: ${request.action} with a path outside the chat's workspace` }
-  }
-  return ALLOW
 }
-
 
 const GLOBAL_ROLE = role('global')
 const WORKSPACE_ROLE = role('workspace')
@@ -380,6 +467,14 @@ export interface ReachAccessFacts {
    * @returns their ids.
    */
   readonly liveSessions: () => readonly SessionId[]
+  /**
+   * The workspace root of one Session: its Workspace's path, or a live Session's working directory.
+   * @param sessionId - the Session.
+   * @returns the root, or undefined when the Host cannot name it synchronously.
+   */
+  readonly workspaceRootOf: (sessionId: SessionId) => string | undefined
+  /** The Delo home, which holds the home's secrets and tokens; no device read reaches a path inside it. */
+  readonly deloHome: string
 }
 
 /**
@@ -403,15 +498,16 @@ export function createReachAccessPolicy(facts: ReachAccessFacts): RemoteAccessPo
   return {
     bindings(device): readonly RemoteAccessBinding[] {
       if (!facts.admitted(device.deviceId)) return []
-      const bindings: RemoteAccessBinding[] = [{ role: GLOBAL_ROLE, resource: { kind: 'global' }, condition: createCondition }]
+      const condition = createCondition(facts)
+      const bindings: RemoteAccessBinding[] = [{ role: GLOBAL_ROLE, resource: { kind: 'global' }, condition }]
       const sessions = new Set<SessionId>()
       for (const workspace of facts.workspaces()) {
-        bindings.push({ role: WORKSPACE_ROLE, resource: { kind: 'workspace', id: workspace.id }, condition: createCondition })
+        bindings.push({ role: WORKSPACE_ROLE, resource: { kind: 'workspace', id: workspace.id }, condition })
         for (const id of workspace.sessionIds) sessions.add(id)
       }
       for (const id of facts.liveSessions()) sessions.add(id)
       // The condition sits on every role: a workspace-file read names a Session, and the reads are bound there.
-      for (const id of sessions) bindings.push({ role: SESSION_ROLE, resource: { kind: 'session', id }, condition: createCondition })
+      for (const id of sessions) bindings.push({ role: SESSION_ROLE, resource: { kind: 'session', id }, condition })
       return bindings
     },
     explain: request => reachRefusal(request.action),

@@ -74,7 +74,7 @@ async function mount(extra: { readonly connection?: unknown } = {}): Promise<Mou
     },
   } as never)
   if (extra.connection !== undefined) ctx.provide('connection', extra.connection as never)
-  const fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+  const fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
   return { ctx, fiber, registered, unregistered, directory }
 }
 
@@ -225,5 +225,14 @@ describe('the homeAuth service', () => {
     // Pins the path check: a relative directory would create the store where the process happens to run.
     await expect(ctx.plugin(HomeAuthService, { secretsDirectory: 'secrets/home-auth' })).rejects.toThrow(/absolute path/)
     await ctx.fiber.dispose()
+  })
+
+  it('refuses a secrets directory outside a Delo home, and names the home it lies in', async () => {
+    const ctx = new Context()
+    ctx.provide('webServer', { register: () => () => {} } as never)
+    // Pins the layout check: the home a device's workspace-file read never reaches is derived from this directory.
+    await expect(ctx.plugin(HomeAuthService, { secretsDirectory: '/elsewhere/home-auth' })).rejects.toThrow(/Delo home's secrets directory/)
+    await ctx.fiber.dispose()
+    expect(new HomeAuthService(new Context(), { secretsDirectory: '/home/someone/.delo/secrets/home-auth' }).deloHome).toBe('/home/someone/.delo')
   })
 })

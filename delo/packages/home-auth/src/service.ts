@@ -11,9 +11,11 @@
  *
  * @module @delo/home-auth/service
  */
+import { basename, dirname } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import schema from '@deepseek-ai/schemastery'
 import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
+import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import type { DeviceRecord } from './records.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
@@ -76,6 +78,9 @@ export class HomeAuthService extends Service {
     if (!this.config.secretsDirectory.startsWith('/')) {
       throw new Error(`home-auth: the secrets directory must be an absolute path, got ${JSON.stringify(this.config.secretsDirectory)}`)
     }
+    if (basename(dirname(this.config.secretsDirectory)) !== DELO_HOME_ENTRIES.secrets) {
+      throw new Error(`home-auth: the secrets directory must lie in the Delo home's ${DELO_HOME_ENTRIES.secrets} directory, got ${JSON.stringify(this.config.secretsDirectory)}`)
+    }
     const core = new HomeAuth({
       directory: this.config.secretsDirectory,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
@@ -107,6 +112,14 @@ export class HomeAuthService extends Service {
       }
     }, 'home-auth routes')
     this.ctx.plugin(HomeAuthAuthenticator)
+  }
+
+  /**
+   * The Delo home the secrets directory lies in, which no device's workspace-file read reaches.
+   * @returns its absolute path.
+   */
+  get deloHome(): string {
+    return dirname(dirname(this.config.secretsDirectory))
   }
 
   /**

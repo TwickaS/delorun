@@ -10,7 +10,8 @@
  *   reordering chats, account and the directory picker.
  * - The reads a device needs to work the way it works at the computer succeed: the installed plugins and their profile
  *   history, the files of a chat's own workspace, the office previews of those files, and the composer's file names.
- *   A workspace-file read of an absolute path, or one that walks out of the workspace, is refused.
+ *   A workspace-file call whose real path lies outside the workspace or in the Delo home, a link's target included,
+ *   is refused.
  * - Reading the chat list and the redacted settings, starting a chat, sending a message, stopping the run, choosing the
  *   preset a chat runs with, and renaming, pinning and unpinning a chat succeed, and the device's event stream carries
  *   the chat events and no plugin management event.
@@ -19,7 +20,7 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -95,19 +96,22 @@ beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'delo-reach-access-'))
   studio = await bootStudio()
   const ctx = studio.ctx
-  await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+  await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home', 'secrets', 'home-auth') })
   await new Promise<void>((resolve) => { ctx.inject(['authenticator', 'workspaceRegistry'], () => { resolve() }) })
   ctx.homeAuth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   const record = recordOf(2, ADDRESS)
   deviceId = record.id
-  await new DeviceStore({ file: join(directory, 'home-auth', 'devices.json') }).add(record)
+  await new DeviceStore({ file: join(directory, 'home', 'secrets', 'home-auth', 'devices.json') }).add(record)
   const opened = await ctx.homeAuth.openSession({ deviceId, listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
   const admitted = ctx.authenticator.admit({ headers: { cookie: `__Host-delo-session=${opened.token}` }, method: 'GET', url: '/' }, LISTENER)
   if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
   peer = admitted.peer
   const folder = join(directory, 'workspace')
   await mkdir(folder)
+  await writeFile(join(folder, 'notes.md'), 'inside')
+  // A link the chat's agent could create, to the folder that holds the Delo home.
+  await symlink(directory, join(folder, 'linked'))
   workspaceId = (await ctx.workspaceRegistry.create(folder)).id
 }, 120_000)
 
@@ -209,17 +213,31 @@ describe('a reach device through the Gateway', () => {
     // Pins the workspace-file allow entries: the studio's file preview and the composer's mention list need them. Each
     // call reaches its service, which answers for the workspace, instead of the policy refusing it as `loopback-required`.
     expect(await expectAllowed('workspaceFiles/list', { workspaceFileScopeId: created.sessionId, path: '.' })).toEqual(expect.any(Object))
-    expect(await call('workspaceFiles/stat', { workspaceFileScopeId: created.sessionId, path: 'missing.txt' }))
-      .toMatchObject({ ok: false, error: { code: 'workspace-file/not-found' } })
+    expect(await expectAllowed('workspaceFiles/stat', { workspaceFileScopeId: created.sessionId, path: 'notes.md' })).toMatchObject({ bytes: 6 })
+    expect(await expectAllowed('workspaceFiles/read', { workspaceFileScopeId: created.sessionId, path: join(directory, 'workspace', 'notes.md'), range: {} }))
+      .toEqual(expect.any(Object))
     expect(await expectAllowed('fileReferences/list', { agentId: created.sessionId, query: 'index' })).toEqual(expect.any(Array))
-    // Pins the workspace-file condition: the service reads an absolute path wherever it points, so the policy keeps a
-    // device to a relative one inside the workspace.
-    for (const path of ['/etc/hostname', '../../etc/hostname']) {
-      expect(await call('workspaceFiles/read', { workspaceFileScopeId: created.sessionId, path, range: {} }), path).toMatchObject({
-        ok: false,
-        error: { code: 'remote-access/denied', details: { action: 'workspaceFiles/read', reason: 'loopback-required: workspaceFiles/read with a path outside the chat\'s workspace' } },
-      })
+    // Pins the workspace-file condition: the service reads an absolute path wherever it points and follows a link in
+    // any directory of the path, so the policy keeps a device to a real path inside the workspace and outside the Delo
+    // home; `linked/home/secrets/home-auth/devices.json` would read the home's device list.
+    const outside = ['/etc/hostname', '../../etc/hostname', 'linked/home/secrets/home-auth/devices.json', join(directory, 'home', 'secrets', 'home-auth', 'devices.json'), 'missing.txt']
+    for (const action of ['workspaceFiles/read', 'workspaceFiles/stat'] as const) {
+      for (const path of outside) {
+        expect(await call(action, { workspaceFileScopeId: created.sessionId, path, ...(action === 'workspaceFiles/read' ? { range: {} } : {}) }), path).toMatchObject({
+          ok: false,
+          error: { code: 'remote-access/denied', details: { action, reason: `loopback-required: ${action} with a path outside the chat's workspace` } },
+        })
+      }
     }
+    expect(await call('workspaceFiles/list', { workspaceFileScopeId: created.sessionId, path: 'linked/home' }))
+      .toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+    // Pins the wire names the condition reads: a byte read's base file under `options`, and a render's path.
+    expect(await call('workspaceFiles/readBytes', { workspaceFileScopeId: created.sessionId, path: 'notes.md', options: { baseFile: 'linked/home/secrets/home-auth/devices.json' } }))
+      .toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+    expect(await call('workspaceFiles/readBytes', { workspaceFileScopeId: created.sessionId, path: 'linked/home/secrets/home-auth/devices.json', options: {} }))
+      .toMatchObject({ ok: false, error: { code: 'remote-access/denied' } })
+    expect(await call('officeToPdf/render', { workspaceFileScopeId: created.sessionId, path: 'linked/home/secrets/home-auth/devices.json', priority: 'foreground' }))
+      .toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { reason: 'loopback-required: officeToPdf/render with a path outside the chat\'s workspace' } } })
   })
 
   it('refuses a settings write in every settings namespace, and the settings document', async () => {

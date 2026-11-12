@@ -54,7 +54,7 @@ It can:
 - read your chats and workspaces, and follow a chat while it runs;
 - reply, attach files, edit or withdraw a queued message, start a chat in a workspace you already have, and fork a chat;
 - choose which of your presets a chat that has not started runs with. A preset decides the plugins and tools a chat runs with, and choosing one grants nothing by itself: the workspace's full access and every approval prompt still decide what that chat may do;
-- read the files of a chat's own workspace, which is what the studio's file preview and the composer's file names use. A path outside the workspace is refused, as is an absolute path;
+- read the files of a chat's own workspace, which is what the studio's file preview and the composer's file names use. A file outside the workspace is refused, including one reached through a link, and so is anything in Delo's own folder;
 - read the installed plugins and the profile changes you can undo;
 - rename and pin chats;
 - answer ordinary prompts and questions the agent asks, and stop a run or a background job.
