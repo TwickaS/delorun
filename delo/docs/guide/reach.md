@@ -6,7 +6,7 @@ description: "Reach the Delorun studio from your phone over your own tailnet: wh
 
 ## Summary
 
-Remote access lets you open the studio of the Delorun running on your computer from your phone or another device, over your own Tailscale tailnet. It uses no Delorun service: Tailscale carries the traffic, and your computer decides who may sign in. Any device on your tailnet can open the sign-in page, but only a device you approve at your computer, by typing the code it shows, can open your chats. Remote access is off until you turn it on.
+Remote access lets you open the studio of the Delorun running on your computer from your phone or another device, over your own Tailscale tailnet. It uses no Delorun service: Tailscale carries the traffic, and your computer decides who may sign in. Any device on your tailnet can open the sign-in page, but only a device you approve at your computer, by typing the code it shows, can open your chats. Opening the address, or any page of it, on a device that is not signed in takes you to the sign-in page, and back to the page you opened once you are signed in. Remote access is off until you turn it on.
 
 ## Contents
 

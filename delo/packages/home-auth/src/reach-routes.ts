@@ -32,6 +32,7 @@ import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError } from './errors.ts'
 import { claimLabelOf, deviceIdOf, devicePublicKeyOf, platformOf } from './records.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
+import { plainPathname } from './reach-paths.ts'
 
 /** The pre-login routes this package answers on every reach listener it serves, which is each listener's allowlist. */
 export const REACH_PRE_LOGIN_ROUTES: readonly PreLoginRoute[] = [
@@ -142,14 +143,55 @@ function method(request: IncomingMessage, response: ServerResponse, method: 'GET
   return false
 }
 
+/** The query parameter of the sign-in page that names where a device lands once it is signed in. */
+export const NEXT_PARAMETER = 'next'
+
+/** The longest landing target the sign-in page carries; a longer one lands on the studio's page instead. */
+const MAX_NEXT_LENGTH = 2048
+
 /**
- * Build the sign-in page route.
+ * Where a signed-in device may land after the sign-in page: a request target on the reach address's own origin that names
+ * exactly one plain path ({@link plainPathname}) outside `/auth`, so the page can send the device back where it aimed and
+ * nowhere else. An absolute or scheme-relative URL, a backslash, a dot segment, an escaped separator, a control
+ * character or a space has no landing.
+ * @param target - the candidate, origin-form, with its query.
+ * @returns the target, or undefined when it may not be a landing.
+ */
+export function landingOf(target: string): string | undefined {
+  if (target.length > MAX_NEXT_LENGTH || /[\\\u0000-\u0020\u007f]/u.test(target)) return undefined
+  const pathname = plainPathname(target)
+  if (pathname === undefined || pathname === '/' || pathname === '/auth' || pathname.startsWith('/auth/')) return undefined
+  return target
+}
+
+/**
+ * The sign-in page's address for a browser that opened `target` without a session: the page alone, or with the target
+ * as its landing when {@link landingOf} accepts it.
+ * @param target - the request target the browser opened, origin-form.
+ * @returns the same-origin path the authenticator redirects the browser to.
+ */
+export function signInLocation(target: string): string {
+  const landing = landingOf(target)
+  return landing === undefined ? REACH_PATHS.signIn : `${REACH_PATHS.signIn}?${NEXT_PARAMETER}=${encodeURIComponent(landing)}`
+}
+
+/**
+ * Build the sign-in page route. A `next` the page may not land on is answered with `303` to the page without it, so the
+ * page's script reads only a landing this route accepted.
  * @param auth - the home-auth instance.
  * @returns the handler.
  */
 export function signInPageHandler(auth: HomeAuth): RouteHandler {
   return async (request, response) => {
     if (reachArrival(auth, request, response) === undefined || !method(request, response, 'GET')) return
+    const next = new URL(targetOf(request), 'http://route.invalid').searchParams.getAll(NEXT_PARAMETER)
+    if (next.length > 1 || (next.length === 1 && landingOf(next[0] ?? '') === undefined)) {
+      response.statusCode = 303
+      response.setHeader('location', REACH_PATHS.signIn)
+      response.setHeader('cache-control', 'no-store')
+      response.end()
+      return
+    }
     response.statusCode = 200
     response.setHeader('content-type', 'text/html; charset=utf-8')
     response.end(SIGN_IN_PAGE)
@@ -371,7 +413,16 @@ export function sessionCookie(token: string, expiresAt: number, now: number): st
  * @returns the path, without the query.
  */
 export function pathnameOf(request: { readonly url?: string | undefined }): string {
-  return new URL(request.url ?? '/', 'http://route.invalid').pathname
+  return new URL(targetOf(request), 'http://route.invalid').pathname
+}
+
+/**
+ * A request's target, origin-form with its query.
+ * @param request - the request, whose target node:http always sets.
+ * @returns the target, `/` without one.
+ */
+export function targetOf(request: { readonly url?: string | undefined }): string {
+  return request.url ?? '/'
 }
 
 /**

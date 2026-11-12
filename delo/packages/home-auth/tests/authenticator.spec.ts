@@ -134,6 +134,39 @@ describe('the authenticator provider', () => {
     ]).toEqual([false, false, false])
   })
 
+  it('sends a browser that opens any page without a session to the sign-in page, and keeps JSON for everything else', async () => {
+    const reach = 'reach-tailscale-private'
+    const page = { 'sec-fetch-mode': 'navigate', accept: 'text/html,application/xhtml+xml' }
+    // Pins the loopback rule: the loopback listener keeps upstream's admission, which redirects nothing.
+    expect(provider().admit(request({ url: '/', headers: page }), 'loopback')).toEqual({ kind: 'refused', status: 401, code: 'NOT_SIGNED_IN' })
+    ctx.homeAuth.serve({ listener: reach, address: ADDRESS, factor: 'tailnet-membership' })
+    const signIn = (url: string): Admission => provider().admit(request({ url, headers: page }), reach)
+    expect(signIn('/')).toEqual({ kind: 'refused', status: 401, code: 'NOT_SIGNED_IN', location: '/auth/sign-in' })
+    // The address with a trailing slash, another case and a deep link all land on the sign-in page, the deep link kept.
+    expect(signIn('/Auth/Sign-In')).toMatchObject({ location: '/auth/sign-in?next=%2FAuth%2FSign-In' })
+    expect(signIn('/auth/sign-in/')).toMatchObject({ location: '/auth/sign-in' })
+    expect(signIn('/settings/devices?tab=1')).toMatchObject({ location: '/auth/sign-in?next=%2Fsettings%2Fdevices%3Ftab%3D1' })
+    // Pins the landing rule: a target the sign-in page may not send a device back to is dropped, never carried.
+    for (const url of ['/a/../b', '/a//b', '/a%2fb', '/a\\b', '/auth/devices', '/']) {
+      expect(signIn(url)).toMatchObject({ location: '/auth/sign-in' })
+    }
+    // A browser without fetch metadata that accepts HTML is a navigation too.
+    expect(provider().admit(request({ url: '/x', headers: { accept: 'text/html' } }), reach)).toMatchObject({ location: '/auth/sign-in?next=%2Fx' })
+    // Pins the navigation rule: a script's request, a state change and a request that accepts no HTML keep the JSON code.
+    for (const fields of [
+      { url: '/api/session.list', headers: { 'sec-fetch-mode': 'cors', accept: 'text/html' } },
+      { url: '/', method: 'POST', headers: page },
+      { url: '/', headers: { accept: 'application/json' } },
+      { url: '/', headers: {} },
+    ]) {
+      expect(provider().admit(request(fields), reach)).toEqual({ kind: 'refused', status: 401, code: 'NOT_SIGNED_IN' })
+    }
+    // An expired session is sent to sign in again.
+    const cookie = { cookie: `__Host-delo-session=${await session(2, 1)}` }
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(provider().admit(request({ url: '/x', headers: { ...page, ...cookie } }), reach)).toEqual({ kind: 'refused', status: 401, code: 'SESSION_EXPIRED', location: '/auth/sign-in?next=%2Fx' })
+  })
+
   it('admits a live session as one Peer per device, from either header carrier, and disposes it with the device', async () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
     const first = await session(2)
