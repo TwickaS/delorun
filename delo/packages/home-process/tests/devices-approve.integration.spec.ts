@@ -1,14 +1,14 @@
 /**
  * The update channel's `devices.approve` (contracts C5 and C19): the person's own command opens the approval window and
  * approves with the match code, and the Host's channel token, which acts for studio sessions on every listener, is
- * refused before anything opens.
+ * refused before anything opens. `devices.remove` and `devices.elevate` (C14, "Elevation") keep the same caller rule.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { newStartToken } from '@delo/home'
-import { approveDevices, ChannelTokenCheck, removeDevice, sendHomeRequest, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
-import type { DevicesApproveRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
+import { approveDevices, ChannelTokenCheck, elevateDevices, removeDevice, sendHomeRequest, type ElevationsAtComputer, type LocalDeviceApproval, type PendingDevice, type ResponseLine } from '../src/index.ts'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
 import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type InProcessHome, type TempHome } from './support.ts'
 
 /** A fake of home-auth's half that records every call. */
@@ -48,6 +48,28 @@ class FakeDevices implements LocalDeviceApproval {
     if (this.refusal !== undefined) throw this.refusal
     return Promise.resolve({ removed: true, sessions: 2, connections: 1 })
   }
+
+  async elevations(): Promise<ElevationsAtComputer> {
+    this.calls.push('elevations')
+    if (this.refusal !== undefined) throw this.refusal
+    return Promise.resolve(UNLOCKS)
+  }
+
+  approveElevation(requestId: string, typedCode: string): { readonly id: string; readonly deviceId: string; readonly endsAt: number } {
+    this.calls.push(`elevate ${requestId} ${typedCode}`)
+    if (this.refusal !== undefined) throw this.refusal
+    return { id: 'elevation', deviceId: 'device', endsAt: 900_000 }
+  }
+
+  revokeElevation(id: string): boolean {
+    this.calls.push(`revoke ${id}`)
+    return true
+  }
+}
+
+const UNLOCKS: ElevationsAtComputer = {
+  pending: [{ requestId: 'BBBBBBBBBBBBBBBBBBBBBB', deviceId: 'device', label: 'Phone', platform: 'iOS', requestedAt: 0, expiresAt: 1 }],
+  running: [],
 }
 
 const PENDING: PendingDevice = { requestId: 'AAAAAAAAAAAAAAAAAAAAAA', label: 'Phone', platform: 'iOS', address: 'https://home.example.ts.net', createdAt: 0, expiresAt: 1 }
@@ -152,6 +174,39 @@ describe('devices.remove', () => {
   })
 })
 
+function elevation(args: DevicesElevateRequest['args'] = {}): DevicesElevateRequest {
+  return { v: 1, token: newStartToken(), op: 'devices.elevate', args }
+}
+
+describe('devices.elevate', () => {
+  it('the channel token can neither list, approve nor end an unlock', async () => {
+    const devices = new FakeDevices()
+    // Pins the caller rule: without it the Host's token, which acts for reach sessions, lets a device approve its own unlock.
+    for (const args of [{}, { requestId: 'B'.repeat(22), typedCode: '12345678' }, { revokeId: 'B'.repeat(22) }]) {
+      await expect(elevateDevices(elevation(args), 'host', devices)).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+    }
+    expect(devices.calls).toEqual([])
+  })
+
+  it('lists, approves with the typed code and ends, for the person, and names home-auth\'s refusal', async () => {
+    const devices = new FakeDevices()
+    await expect(elevateDevices(elevation(), 'person', devices)).resolves.toEqual(UNLOCKS)
+    await expect(elevateDevices(elevation({ requestId: 'B'.repeat(22), typedCode: '1234 5678' }), 'person', devices))
+      .resolves.toEqual({ elevation: { id: 'elevation', deviceId: 'device', endsAt: 900_000 } })
+    await expect(elevateDevices(elevation({ revokeId: 'elevation' }), 'person', devices)).resolves.toEqual({ revoked: true })
+    // Pins the exclusive arguments: a revoke that also names an approval does neither.
+    await expect(elevateDevices(elevation({ revokeId: 'x', requestId: 'y', typedCode: '12345678' }), 'person', devices)).rejects.toMatchObject({ code: 'SCHEMA_VIOLATION' })
+    await expect(elevateDevices(elevation({ requestId: 'y' }), 'person', devices)).rejects.toMatchObject({ code: 'SCHEMA_VIOLATION' })
+    await expect(elevateDevices(elevation(), 'person', undefined)).rejects.toMatchObject({ code: 'APPROVALS_UNAVAILABLE' })
+    devices.refusal = Object.assign(new Error('wrong'), { code: 'APPROVAL_CODE_MISMATCH', detail: 'Type it again' })
+    await expect(elevateDevices(elevation({ requestId: 'y', typedCode: '00000000' }), 'person', devices))
+      .rejects.toMatchObject({ code: 'ELEVATION_FAILED', detail: 'APPROVAL_CODE_MISMATCH: Type it again' })
+    devices.refusal = new Error('broken')
+    await expect(elevateDevices(elevation(), 'person', devices)).rejects.toMatchObject({ code: 'ELEVATION_FAILED', detail: 'INTERNAL_ERROR: the unlock did not change' })
+    expect(devices.calls).toEqual(['elevations', 'elevate BBBBBBBBBBBBBBBBBBBBBB 1234 5678', 'revoke elevation', 'elevate y 00000000', 'elevations'])
+  })
+})
+
 describe('devices.approve on a running home process', () => {
   let temp: TempHome | undefined
   let running: InProcessHome | undefined
@@ -191,6 +246,10 @@ describe('devices.approve on a running home process', () => {
     expect(final(await access.send({ op: 'devices.remove', args: { deviceId: 'device' } }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.remove', args: { deviceId: 'device' } }))).toMatchObject({ ok: true, removed: true, sessions: 2 })
     expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.remove', args: { deviceId: '../x' } }))).toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
-    expect(devices.calls).toEqual(['open', `approve ${PENDING.requestId} 1234 5678`, `cancel ${PENDING.requestId}`, 'remove device'])
+    expect(final(await access.send({ op: 'devices.elevate', args: {} }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
+    expect(final(await access.send({ op: 'devices.elevate', args: { requestId: 'B'.repeat(22), typedCode: '12345678' } }))).toMatchObject({ ok: false, error: 'LOOPBACK_REQUIRED' })
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.elevate', args: {} }))).toMatchObject({ ok: true, ...UNLOCKS })
+    expect(final(await sendHomeRequest(temp.home, PROFILE, { op: 'devices.elevate', args: { revokeId: '../x' } }))).toMatchObject({ ok: false, error: 'SCHEMA_VIOLATION' })
+    expect(devices.calls).toEqual(['open', `approve ${PENDING.requestId} 1234 5678`, `cancel ${PENDING.requestId}`, 'remove device', 'elevations'])
   })
 })

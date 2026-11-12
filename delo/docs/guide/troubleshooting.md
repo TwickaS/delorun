@@ -153,6 +153,7 @@ Its remedies come from this list: do not take this update; keep the item and wai
 | `LOOPBACK_REQUIRED` | A device request did not come from your own `delorun` on this computer. | Approve devices at this computer with `delorun devices approve`. |
 | `APPROVAL_FAILED` | The approval or cancellation did not happen. | Run `delorun devices approve` and ask from the device again. |
 | `REMOVAL_FAILED` | The device was not removed. | Check `delorun devices list`. |
+| `ELEVATION_FAILED` | Sensitive actions were not unlocked on the device, or the unlock did not end. | Run `delorun devices elevate` and look at the list again. |
 
 "Delo could not read or change what Tailscale serves for remote access" comes with Tailscale's own code and message. [Reach the studio from your phone](reach.md) explains what remote access needs.
 

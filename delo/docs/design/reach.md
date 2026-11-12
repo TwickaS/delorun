@@ -79,7 +79,7 @@ Rules 10 to 12 are not built: upstream's connection emits `authenticator/minted`
 
 ### Commands
 
-13. `delorun reach status | on tailscale | off` and `delorun devices list | approve | remove | code`. `delorun reach on tailscale` checks that `tailscale` is installed and running, that the tailnet has HTTPS certificates on, and that the person may run `tailscale serve`; for the last it prints the one command the person runs themselves, and Delo never runs `sudo`. A home with no owner is claimed through the home socket as the local person.
+13. `delorun reach status | on tailscale | off` and `delorun devices list | approve | elevate | remove | code`; `elevate` answers a device's request to unlock sensitive actions ([C14](../contracts/c14-oidc-passkeys.md#elevation)). `delorun reach on tailscale` checks that `tailscale` is installed and running, that the tailnet has HTTPS certificates on, and that the person may run `tailscale serve`; for the last it prints the one command the person runs themselves, and Delo never runs `sudo`. A home with no owner is claimed through the home socket as the local person.
 
 ## What this does not protect against
 

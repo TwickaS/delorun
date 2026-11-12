@@ -189,7 +189,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 
 - **路由。** 设备在 `GET /auth/elevation` 读取状态，在 `POST /auth/elevation/request` 发起请求，在 `POST /auth/elevation/lock` 锁定，每个路由都要求请求到达的远程访问监听器上的有效会话，`POST` 只接受 studio 自己的源。电脑在 `GET /auth/elevation/pending` 列出，在 `POST /auth/elevation/approve` 批准，在 `POST /auth/elevation/revoke` 撤销；设备访问这些路由会以 `LOOPBACK_REQUIRED` 被拒绝。
 - **请求。** 已登录的设备从自己的 studio 发起请求。home 把请求记在该设备、监听器和请求到达的会话名下，设备显示一个 8 位数字代码。请求等待 5 分钟，一个 home 最多保留 5 个，同一设备在同一监听器上的新请求会替换它正在等待的请求。
-- **批准。** 只有在 home 电脑前的本人能批准，方法是输入设备上的代码；第三次输错会取消请求。批准和撤销是 `LOOPBACK_REQUIRED_ACTIONS` 中的 `elevation-approve` 和 `elevation-revoke`，设备会被拒绝。
+- **批准。** 只有在 home 电脑前的本人能批准，方法是在 `delorun devices elevate` 中输入设备上的代码（它调用 [C19](c19-home-process.zh.md) 的 `devices.elevate`），或通过电脑路由；第三次输错会取消请求。批准和撤销是 `LOOPBACK_REQUIRED_ACTIONS` 中的 `elevation-approve` 和 `elevation-revoke`，设备会被拒绝。
 - **时长。** 提权持续远程访问行的 `elevationMinutes`，默认 15 分钟，最多 60 分钟；更大的值会在监听器开始服务时被拒绝。没有任何操作能延长提权：新的批准会替换它。
 - **范围。** `reach-device` 主体只指明设备，因此策略查询该设备在 home 服务的任一监听器上的提权；目前只有 Tailscale 私有监听器为设备服务。每个配置的 Host 保留自己的提权，重启会结束它们。
 - **检查。** 设备绑定的条件在每个提权操作之前读取提权，调用与事件、快照或列表筛选一视同仁，并且即使计时器尚未触发，也会拒绝已过期的提权。每次提权调用都会连同设备、监听器、操作和提权 id 记入日志。
