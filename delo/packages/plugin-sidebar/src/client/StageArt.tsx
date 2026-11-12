@@ -9,7 +9,7 @@ import { useId, type CSSProperties } from 'react'
 import './art-palettes.css'
 import css from './StageArt.module.css'
 import { GENERATIVE_SCENES, GenerativeArt } from './GenerativeArt.tsx'
-import type { ArtStrength } from '../config.ts'
+import type { ArtFade, ArtStrength } from '../config.ts'
 
 const STAGE_BACKDROP_VIEW_BOX = '0 0 8192 96'
 
@@ -424,10 +424,10 @@ export type StagePalette = typeof STAGE_PALETTES[number]
 
 /**
  * The art in its fading box, filling the nearest positioned ancestor.
- * @param props - the scene, the palette, the generated scenes' seed, its strength, `compact` for a small preview, and whether it fades.
+ * @param props - the scene, the palette, the generated scenes' seed, its strength, `compact` for a small preview, and how it fades.
  * @returns the backdrop, hidden from assistive technology.
  */
-export function StageBackdrop({ scene, palette, seed = 1, strength = 'standard', compact = false, fade = true }: {
+export function StageBackdrop({ scene, palette, seed = 1, strength = 'standard', compact = false, fade = 'soft' }: {
   readonly scene: StageScene
   /** The seed a generated scene is drawn from. */
   readonly seed?: number
@@ -435,11 +435,11 @@ export function StageBackdrop({ scene, palette, seed = 1, strength = 'standard',
   /** How strongly the art shows. */
   readonly strength?: ArtStrength
   readonly compact?: boolean
-  /** Whether the art fades into the sidebar below it; a swatch shows it whole. */
-  readonly fade?: boolean
+  /** How the art's bottom edge meets the sidebar below it; `false` shows the art whole, as a swatch does. */
+  readonly fade?: ArtFade | false
 }) {
   return (
-    <div className={css.backdrop} data-palette={palette} data-scene={scene} data-fade={fade} data-strength={strength} aria-hidden="true">
+    <div className={css.backdrop} data-palette={palette} data-scene={scene} data-fade={String(fade)} data-strength={strength} aria-hidden="true">
       {scene === 'night' ? <NightSkyArt compact={compact} /> : scene === 'blueprint' ? <BlueprintArt compact={compact} /> : <GenerativeArt scene={scene} seed={seed} />}
     </div>
   )

@@ -1,6 +1,6 @@
 /**
  * Settings → Sidebar: the header art as preview tiles drawn in the chosen
- * palette, the palette swatches, the art's strength and style, the chat
+ * palette, the palette swatches, the art's strength, fade and style, the chat
  * list's view, sort order and Working shelf, Ask before unpinning, the
  * sidebar's width on a notched slider.
  * @module @delo/plugin-sidebar/client/SettingsSection
@@ -10,7 +10,7 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { useCallback, useId, useLayoutEffect, useState, useSyncExternalStore, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import {
-  ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, SIDEBAR_WIDTH, SORT_ORDERS,
+  ART_FADES, ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, SIDEBAR_WIDTH, SORT_ORDERS,
   type ArtPalette, type SidebarSettings,
 } from '../config.ts'
 import { InkEdgeFilters, StageBackdrop } from './StageArt.tsx'
@@ -243,6 +243,33 @@ export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
           options={ART_STRENGTHS.map(strength => ({ value: strength, label: t(`settings.strength.${strength}`) }))}
           onChange={(strength) => { save('artStrength', strength) }} />
       </SettingRow>
+
+      <section className={css.block} aria-labelledby="delo-sidebar-fade" data-muted={current.headerArt === 'none'}>
+        <div className={css.row}>
+          <div className={css.heading}>
+            <h3 id="delo-sidebar-fade" className={css.title}>{t('settings.fade')}</h3>
+            <p className={css.lead}>{t('settings.fade.lead')}</p>
+          </div>
+        </div>
+        <SwipeStrip label={t('settings.fade')}>
+          {ART_FADES.map(fade => (
+            <button key={fade} type="button" role="radio" aria-checked={current.artFade === fade} aria-label={t(`settings.fade.${fade}`)}
+              className={css.tile} disabled={disabled}
+              onClick={() => { if (current.artFade !== fade) save('artFade', fade) }}>
+              <span className={css.preview}>
+                <StageBackdrop scene={current.headerArt === 'none' ? 'blueprint' : current.headerArt} palette={current.artPalette} seed={current.artSeed}
+                  strength={current.artStrength} compact fade={fade} />
+                <span className={css.previewBrand} style={edgedBrand}>{t('settings.preview.brand')}</span>
+                <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
+              </span>
+              <span className={css.tileFoot}>
+                <span className={css.tileLabel}>{t(`settings.fade.${fade}`)}</span>
+                <span className={css.radio} aria-hidden="true" />
+              </span>
+            </button>
+          ))}
+        </SwipeStrip>
+      </section>
 
       <SettingRow id="delo-sidebar-style" title={t('settings.style')} lead={t('settings.style.lead')} muted={current.headerArt === 'none'}>
         <SegmentedControl id="delo-sidebar-style-control" label={t('settings.style')} value={current.artStyle} disabled={disabled}
