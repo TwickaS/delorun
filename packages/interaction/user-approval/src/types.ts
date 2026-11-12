@@ -63,9 +63,11 @@ declare module '@deepseek-ai/dsh-session/types' {
  * What an `allowed-once` answer to an approval request grants, which a Host may reserve for some Peers:
  * - `full-access`: an escalation to `danger-full-access`, or a workspace's full-access consent;
  * - `workspace-management`: a change to which workspaces exist (create, clone, trash, restore), to an instruction-layer
- *   file (an `AGENTS.md`, a skill or a preset), or a command or write that runs where every workspace is reachable.
+ *   file (an `AGENTS.md`, a skill or a preset), or a command or write that runs where every workspace is reachable;
+ * - `external-agent`: the start of an external agent program (a subagent provider without a local child session),
+ *   which runs outside the sandbox and the approval prompts.
  */
-export type ApprovalGrant = 'full-access' | 'workspace-management'
+export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent'
 
 /** Client-safe payload declared for the approval answerer waterfall. */
 export interface ApprovalRequestEvent {

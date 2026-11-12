@@ -1,7 +1,8 @@
 /**
  * Model-facing delegation through one configured `ctx.subagents` provider.
  * Provider lifecycle controls tool registration and context-sensitive schema
- * wording. Every delegation starts a managed activation and returns its child
+ * wording; an external provider's description comes from the optional
+ * `delegationConsent` service when one is composed. Every delegation starts a managed activation and returns its child
  * id; the subagent runtime owns result delivery and resource cleanup.
  * @module @deepseek-ai/dsh-tool-subagent
  */
@@ -201,13 +202,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const mount = (subagentProvider: SubagentProvider): void => {
     assertSubagentProviderConfiguration(subagentProvider)
     const wording = providerWording(subagentProvider.inheritsParentContext)
+    // An external provider's own description comes from the optional consent seam, which names the program it runs.
+    const consentDescription = subagentProvider.prepareContinuable === undefined
+      ? ctx.get('delegationConsent')?.describe?.(subagentProvider.name)
+      : undefined
     const providerRouteDefaults = subagentProvider.agentRouteDefaults
     const selectionDescription = providerRouteDefaults !== undefined
       ? ' Supply `provider` and `model` together. Omitted values use child defaults, falling back to this backend\'s route defaults. When the effective route changes, an omitted `reasoning_effort` uses the model\'s default.'
       : ' Supply `provider` and `model` together. Omitted values use child defaults, falling back to compatible parent values. When the effective route changes, an omitted `reasoning_effort` uses the model\'s default.'
     const definition = defineTool({
       name: toolName,
-      description: wording.description
+      description: (consentDescription ?? wording.description)
         + ' This tool starts an independently managed subagent and immediately returns its id. The runtime notifies you when it finishes.'
         + (subagentProvider.prepareContinuable !== undefined
           ? ' The child reports results with `send_message`; use `send_message` to steer it while running or continue its conversation after it finishes.'
@@ -351,6 +356,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     if (name !== config.provider || mounted === undefined) return
     mounted.disposeTool()
     mounted = undefined
+  })
+  // The consent seam's description is read at mount, so a consent service that appears or leaves remounts the tool.
+  ctx.on('internal/service', (serviceName: string) => {
+    if (serviceName !== 'delegationConsent' || mounted === undefined) return
+    const { subagentProvider } = mounted
+    mounted.disposeTool()
+    mounted = undefined
+    mount(subagentProvider)
   })
   const present = ctx.subagents.getProvider(config.provider)
   if (present !== undefined) {

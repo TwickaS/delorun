@@ -65,7 +65,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
  * What an `allowed-once` answer grants beyond an ordinary tool call; the values of `ApprovalGrant` in
  * `@deepseek-ai/dsh-user-approval`, which the `approval/request` consumer passes through unchanged.
  */
-export type ApprovalGrant = 'full-access' | 'workspace-management'
+export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent'
 
 /** Stable identity handed to an optional approval-detail renderer. */
 export interface ApprovalDetailOwnerProps {
