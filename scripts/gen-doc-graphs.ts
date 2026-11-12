@@ -896,6 +896,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'The basic backend consumes post-step pressure and request-error recovery events; there is no model-facing compact tool.',
   },
   {
+    key: 'delegationConsent',
+    pkg: 'subagent',
+    title: 'External delegation consent',
+    mode: 'seam',
+    implementations: [],
+    consumers: ['subagent', 'tool-subagent'],
+    note: 'Optional review of each external provider start before it runs, with the run time limit, and the model-facing description of an external delegation tool.',
+  },
+  {
     key: 'subagents',
     pkg: 'subagent',
     title: 'Subagent provider and continuation service',

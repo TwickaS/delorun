@@ -36,9 +36,13 @@ import type {
 
 /** A surface call that recorded nothing, with the code its route answers. */
 export class DelegationConsentError extends Error {
-  constructor(readonly code: DelegationRefusalCode, message: string) {
+  /** The code the route answers. */
+  readonly code: DelegationRefusalCode
+
+  constructor(code: DelegationRefusalCode, message: string) {
     super(message)
     this.name = 'DelegationConsentError'
+    this.code = code
   }
 }
 
@@ -74,8 +78,11 @@ function viewOf(grant: ExternalAgentGrant): GrantView {
 
 /** The `delegationConsent` service of Delo's external-agent consent. */
 export class DeloDelegationConsent extends Service implements DelegationConsentService {
-  constructor(ctx: Context, private readonly options: ConsentOptions) {
+  private readonly options: ConsentOptions
+
+  constructor(ctx: Context, options: ConsentOptions) {
     super(ctx, 'delegationConsent')
+    this.options = options
   }
 
   describe(provider: string): string {

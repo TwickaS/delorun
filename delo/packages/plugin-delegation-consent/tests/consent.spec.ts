@@ -309,6 +309,21 @@ describe('mounting', () => {
     expect(guards[0]?.({ name: 'plugin_manager', arguments: { action: 'set_plugin', target: 'e1', enabled: true } })).toBe(PLUGIN_MANAGER_REFUSAL)
   })
 
+  it('gives each allowed start the configured run time limit in milliseconds', async () => {
+    const paths = folders()
+    vi.stubEnv('DELO_HOME', paths.home)
+    try {
+      await grant(paths.home, paths.workspace)
+      const ctx = new Context()
+      apply(ctx, { enabled: true, runTimeoutMinutes: 5 })
+      await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
+      await expect(ctx.delegationConsent.review(review(chat(paths.workspace), paths.workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 300_000 })
+      await ctx.fiber.dispose()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('reads no rows without a Loader', async () => {
     const ctx = new Context()
     const guards: ((exec: object) => string | undefined)[] = []

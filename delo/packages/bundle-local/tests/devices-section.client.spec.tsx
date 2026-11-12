@@ -495,7 +495,7 @@ describe('the plugin', () => {
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'session' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const sections = slots.entries('settings.section').map(entry => entry.options)

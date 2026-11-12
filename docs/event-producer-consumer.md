@@ -29,7 +29,7 @@ Application listeners are outside this package matrix. Desktop Host subscribes t
 | `api-session/removed` | `emit` | [`packages/api/session-controller/src/types.ts:696`](../packages/api/session-controller/src/types.ts) | `session-controller` (`emit`) | `remotes` |
 | `api-session/status` | `emit` | [`packages/api/session-controller/src/types.ts:703`](../packages/api/session-controller/src/types.ts) | `session-controller` (`emit`) | `remotes` |
 | `app-boot/config-reload` | `emit` | [`packages/boot/app-boot/src/index.ts:59`](../packages/boot/app-boot/src/index.ts) | [`app-boot`](../packages/boot/app-boot) (`emit`) | [`settings`](../packages/settings/settings) |
-| `approval/request` | `waterfall` | [`packages/interaction/user-approval/src/types.ts:100`](../packages/interaction/user-approval/src/types.ts) | [`user-approval`](../packages/interaction/user-approval) (`waterfall`) | [`acp`](../packages/acp/acp), `remotes`, `server` |
+| `approval/request` | `waterfall` | [`packages/interaction/user-approval/src/types.ts:102`](../packages/interaction/user-approval/src/types.ts) | [`user-approval`](../packages/interaction/user-approval) (`waterfall`) | [`acp`](../packages/acp/acp), `remotes`, `server` |
 | `authenticator/minted` | `emit` | [`packages/client/connection/src/authenticator.ts:33`](../packages/client/connection/src/authenticator.ts) | `connection` (`emit`) | - |
 | `authenticator/policy` | `emit` | [`packages/client/connection/src/authenticator.ts:25`](../packages/client/connection/src/authenticator.ts) | - | `connection` |
 | `authorization/settled` | `emit` | [`packages/credentials/authorization/src/index.ts:57`](../packages/credentials/authorization/src/index.ts) | [`authorization`](../packages/credentials/authorization) (`events.dispatch`) | - |
@@ -79,10 +79,10 @@ Application listeners are outside this package matrix. Desktop Host subscribes t
 | `session/flush` | `parallel` | [`packages/core/session/src/index.ts:84`](../packages/core/session/src/index.ts) | [`session`](../packages/core/session) (`events.dispatch`) | [`session-persistence-jsonl`](../packages/session/session-persistence-jsonl), [`session-telemetry`](../packages/session/session-telemetry) |
 | `settings/document-updated` | `emit` | [`packages/settings/settings/src/types.ts:75`](../packages/settings/settings/src/types.ts) | [`settings`](../packages/settings/settings) (`emit`) | `remotes` |
 | `skills/change` | `emit` | [`packages/skill/skill/src/index.ts:304`](../packages/skill/skill/src/index.ts) | [`skill`](../packages/skill/skill) (`events.dispatch`) | - |
-| `subagent/end` | `emit` | [`packages/subagent/subagent/src/index.ts:166`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`events.dispatch`) | [`hooks-claude-code`](../packages/experimental/hooks-claude-code), `server` |
-| `subagent/provider-added` | `emit` | [`packages/subagent/subagent/src/index.ts:142`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`emit`) | [`tool-subagent`](../packages/subagent/tool-subagent) |
-| `subagent/provider-removed` | `emit` | [`packages/subagent/subagent/src/index.ts:148`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`events.dispatch`) | [`tool-subagent`](../packages/subagent/tool-subagent) |
-| `subagent/start` | `emit` | [`packages/subagent/subagent/src/index.ts:158`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`events.dispatch`) | [`hooks-claude-code`](../packages/experimental/hooks-claude-code) |
+| `subagent/end` | `emit` | [`packages/subagent/subagent/src/index.ts:172`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`events.dispatch`) | [`hooks-claude-code`](../packages/experimental/hooks-claude-code), `server` |
+| `subagent/provider-added` | `emit` | [`packages/subagent/subagent/src/index.ts:148`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`emit`) | [`tool-subagent`](../packages/subagent/tool-subagent) |
+| `subagent/provider-removed` | `emit` | [`packages/subagent/subagent/src/index.ts:154`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`events.dispatch`) | [`tool-subagent`](../packages/subagent/tool-subagent) |
+| `subagent/start` | `emit` | [`packages/subagent/subagent/src/index.ts:164`](../packages/subagent/subagent/src/index.ts) | [`subagent`](../packages/subagent/subagent) (`events.dispatch`) | [`hooks-claude-code`](../packages/experimental/hooks-claude-code) |
 | `system-prompt/assemble` | `waterfall` | [`packages/core/system-prompt/src/index.ts:31`](../packages/core/system-prompt/src/index.ts) | [`system-prompt`](../packages/core/system-prompt) (`waterfall`) | `browser-use-runtime`, [`working-directory`](../packages/session/working-directory) |
 | `system-prompt/change` | `emit` | [`packages/core/system-prompt/src/index.ts:37`](../packages/core/system-prompt/src/index.ts) | [`system-prompt`](../packages/core/system-prompt) (`emit`) | - |
 | `tools/change` | `emit` | [`packages/core/tools/src/events.ts:56`](../packages/core/tools/src/events.ts) | [`agent-preset-registry`](../packages/preset/agent-preset-registry) (`emit`), [`tools`](../packages/core/tools) (`emit`) | `browser-use-runtime` |
@@ -114,7 +114,7 @@ Application listeners are outside this package matrix. Desktop Host subscribes t
 | `internal/config` | - | [`llm-pi-ai`](../packages/llm/llm-pi-ai) |
 | `internal/dispatch` | - | [`terminal-bash`](../packages/terminal/terminal-bash) |
 | `internal/plugin` | - | `computer-use-cua-driver-native`, `inspector`, `loader`, [`lsp-stdio`](../packages/lsp/lsp-stdio), [`mcp-client`](../packages/mcp/mcp-client), `modules` |
-| `internal/service` | - | `client-ui-forge`, `gateway` |
+| `internal/service` | - | `client-ui-forge`, `gateway`, [`tool-subagent`](../packages/subagent/tool-subagent) |
 | `internal/status` | - | [`agent`](../packages/core/agent), `claude-code-mods`, `inspector`, `translator`, [`web`](../packages/web/web) |
 | `loader/volatile-update` | - | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`plugin-market`](../packages/boot/plugin-market), `product-analytics`, `speech-to-text` |
 | `locale/change` | `locale` (`emit`) | `locale` |
