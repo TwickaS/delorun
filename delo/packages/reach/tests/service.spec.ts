@@ -28,7 +28,7 @@ const ADDRESS = `https://${HOST}`
  * @returns the configuration.
  */
 function on(listenerPort: number, serveCheckIntervalMs = 60_000): Config {
-  return { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs } }
+  return { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs, elevationMinutes: 20 } }
 }
 
 /** A world of fakes and what they recorded, in order. */
@@ -70,8 +70,8 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
       host: request.headers.host,
       source: '127.0.0.1',
     }),
-    serve: (served: { readonly listener: string; readonly factor: string }) => {
-      events.push(`serve ${served.listener} ${served.factor}`)
+    serve: (served: { readonly listener: string; readonly factor: string; readonly elevationMinutes?: number }) => {
+      events.push(`serve ${served.listener} ${served.factor}${served.elevationMinutes === 20 ? '' : ` minutes=${String(served.elevationMinutes)}`}`)
       return () => { events.push('unserve') }
     },
   } as never)
@@ -141,7 +141,7 @@ describe('the reach service', () => {
 
   it('starts nothing while the row is off, which is the default', async () => {
     const w = world()
-    const fiber = await mount(w, { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443, listenerPort: 0, serveCheckIntervalMs: 60_000 } })
+    const fiber = await mount(w, { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443, listenerPort: 0, serveCheckIntervalMs: 60_000, elevationMinutes: 15 } })
     expect(w.events).toEqual([])
     expect(w.ctx.reach.status()).toEqual([{ option: 'tailscale-private', state: 'off' }])
     expect(() => w.ctx.reach.register(new TailscalePrivateProvider(w.run))).toThrow(/has a provider already/)

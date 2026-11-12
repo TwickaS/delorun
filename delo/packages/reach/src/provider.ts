@@ -17,7 +17,8 @@
  */
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReachListenerId, StudioAddress } from '@delo/contract-admission'
-import type { IdentityFactor } from '@delo/contract-oidc-passkeys'
+import { ELEVATION_LIMITS, type IdentityFactor } from '@delo/contract-oidc-passkeys'
+import { isElevationMinutes } from '@delo/home-auth'
 import { REACH_OPTION_LISTENERS, type ReachConfigRows, type ReachOptionId } from '@delo/contract-reach-providers'
 import { ReachError, readServeRules, readTailscale, removeServe, serve, serveTarget, type TailscaleRunner } from './tailscale.ts'
 
@@ -31,6 +32,8 @@ export interface ReachSpec {
   readonly listenerPort: number
   /** How often the service runs {@link ReachProvider.check} while the option is ready. */
   readonly checkIntervalMs: number
+  /** How many minutes an elevation approved for a device on the option's listener lasts. */
+  readonly elevationMinutes: number
 }
 
 /**
@@ -121,11 +124,14 @@ export class TailscalePrivateProvider implements ReachProvider {
     if (!Number.isInteger(listenerPort) || listenerPort < 1 || listenerPort > 65_535) {
       throw new ReachError('PORT_CONFLICT', `tailscalePrivate.listenerPort must be a port from 1 to 65535, got ${String(listenerPort)}. Run delorun reach on tailscale again to choose one`)
     }
+    if (!isElevationMinutes(row.elevationMinutes)) {
+      throw new ReachError('ELEVATION_MINUTES_INVALID', `tailscalePrivate.elevationMinutes must be a whole number of minutes from 1 to ${String(ELEVATION_LIMITS.maxMinutes)}, got ${String(row.elevationMinutes)}`)
+    }
     const address = URL.parse(row.address)
     if (address?.protocol !== 'https:' || !address.hostname.endsWith('.ts.net') || address.origin !== row.address) {
       throw new ReachError('TAILSCALE_ADDRESS_MISMATCH', `tailscalePrivate.address must be this machine's https ts.net address, got ${JSON.stringify(row.address)}`)
     }
-    return { option: this.option, listener: REACH_OPTION_LISTENERS[this.option], address: row.address, servePort, listenerPort, checkIntervalMs: row.serveCheckIntervalMs }
+    return { option: this.option, listener: REACH_OPTION_LISTENERS[this.option], address: row.address, servePort, listenerPort, checkIntervalMs: row.serveCheckIntervalMs, elevationMinutes: row.elevationMinutes }
   }
 
   /** @inheritdoc */

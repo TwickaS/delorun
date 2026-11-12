@@ -38,8 +38,8 @@ function fake(answers: Partial<Record<string, TailscaleResult>> = {}): { readonl
 
 const LISTENER_PORT = 24_680
 const TARGET = `http://127.0.0.1:${String(LISTENER_PORT)}`
-const rows = (row: object): Parameters<TailscalePrivateProvider['resolve']>[0] => ({ tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, serveCheckIntervalMs: 60_000, ...row } })
-const SPEC: ReachSpec = { option: 'tailscale-private', listener: 'reach-tailscale-private', address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, checkIntervalMs: 60_000 }
+const rows = (row: object): Parameters<TailscalePrivateProvider['resolve']>[0] => ({ tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, serveCheckIntervalMs: 60_000, elevationMinutes: 15, ...row } })
+const SPEC: ReachSpec = { option: 'tailscale-private', listener: 'reach-tailscale-private', address: ADDRESS, servePort: 443, listenerPort: LISTENER_PORT, checkIntervalMs: 60_000, elevationMinutes: 15 }
 
 describe('the Tailscale private provider', () => {
   it('declares tailnet-membership and resolves only an https ts.net address', () => {
@@ -54,6 +54,9 @@ describe('the Tailscale private provider', () => {
     expect(() => provider.resolve(rows({ address: 'https://studio.example.org' }))).toThrow(expect.objectContaining({ code: 'TAILSCALE_ADDRESS_MISMATCH' }))
     expect(() => provider.resolve(rows({ address: `http://${HOST}` }))).toThrow(expect.objectContaining({ code: 'TAILSCALE_ADDRESS_MISMATCH' }))
     expect(() => provider.resolve(rows({ servePort: 0 }))).toThrow(expect.objectContaining({ code: 'PORT_CONFLICT' }))
+    // Pins the minutes check: a row the person edited to more than an hour, or that reach.apply reads unvalidated, is refused.
+    for (const elevationMinutes of [0, 61, 2.5]) expect(() => provider.resolve(rows({ elevationMinutes }))).toThrow(expect.objectContaining({ code: 'ELEVATION_MINUTES_INVALID' }))
+    expect(provider.resolve(rows({ elevationMinutes: 60 }))).toEqual({ ...SPEC, elevationMinutes: 60 })
     expect(tailscaleAddress(HOST, 8443)).toBe(`https://${HOST}:8443`)
   })
 

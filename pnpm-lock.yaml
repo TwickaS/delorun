@@ -1333,6 +1333,9 @@ importers:
       '@delo/contract-home-process':
         specifier: workspace:*
         version: link:../../packages/contract-home-process
+      '@delo/contract-oidc-passkeys':
+        specifier: workspace:*
+        version: link:../../packages/contract-oidc-passkeys
       '@delo/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs

@@ -80,7 +80,7 @@ describe('delorun reach', () => {
     const calls: string[][] = []
     await expect(reach({ tailscale: tailscale({}, calls) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
     const row = readReachRow(deloHome, 'default')
-    expect(patchRows()).toEqual([{ id: 'delo-reach', config: { enabled: true, tailscalePrivate: { enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: row.listenerPort, serveCheckIntervalMs: 60_000 } } }])
+    expect(patchRows()).toEqual([{ id: 'delo-reach', config: { enabled: true, tailscalePrivate: { enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: row.listenerPort, serveCheckIntervalMs: 60_000, elevationMinutes: 15 } } }])
     expect(row.listenerPort).toBeGreaterThanOrEqual(LISTENER_PORT_RANGE.min)
     expect(row.listenerPort).toBeLessThanOrEqual(LISTENER_PORT_RANGE.max)
     for (const line of TRUST_STATEMENT) expect(out.stdout).toContain(line)
@@ -701,7 +701,7 @@ describe('setup\'s reach section', () => {
     expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale')
     await expect(section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('delorun devices approve')
     const row = readReachRow(deloHome, 'default')
-    expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000 })
+    expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000, elevationMinutes: 15 })
     // Applying again keeps the port chosen once.
     await section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)
     expect(readReachRow(deloHome, 'default').listenerPort).toBe(row.listenerPort)

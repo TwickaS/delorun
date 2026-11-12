@@ -53,6 +53,11 @@ export interface ReachConfigRows {
     readonly listenerPort: number
     /** How often a ready option rereads `tailscale serve status --json` for Funnel; default {@link DEFAULT_SERVE_CHECK_INTERVAL_MS}. */
     readonly serveCheckIntervalMs: number
+    /**
+     * How many minutes an elevation the person approves for a device on this option lasts: whole minutes from 1 to
+     * `ELEVATION_LIMITS.maxMinutes` of `@delo/contract-oidc-passkeys`, default its `defaultMinutes`.
+     */
+    readonly elevationMinutes: number
   }
   readonly tailscaleFunnel?: {
     readonly enabled: boolean
@@ -168,6 +173,7 @@ export const REACH_ERROR_CODES = [
   'TAILSCALE_FUNNEL_ON',
   'FUNNEL_NOT_PERMITTED',
   'PORT_CONFLICT',
+  'ELEVATION_MINUTES_INVALID',
   'NO_OWNER',
   'NO_IDENTITY_FACTOR',
   'TAILNET_IDENTITY_UNAVAILABLE',
