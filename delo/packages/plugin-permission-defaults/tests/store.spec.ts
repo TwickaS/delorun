@@ -1,12 +1,15 @@
 /**
  * Specs of the permission store and the workspace key: the file's protected
  * path, its format's round trip, the refusals that make a store count for
- * nothing, and the canonical key that makes one directory one workspace.
+ * nothing, the synchronous read and the file identity a Host compares before a
+ * decision, the lock that keeps two processes' changes from overwriting each
+ * other, and the canonical key that makes one directory one workspace.
  */
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { currentHolder, randomLockId } from '@delo/home'
 import {
   defaultPresetOf,
   fullAccessGranted,
@@ -18,6 +21,9 @@ import {
   SAFER_PRESET,
   writePermissionStore,
   PermissionStoreError,
+  permissionStoreIdentity,
+  readPermissionStoreSync,
+  withPermissionStoreLock,
 } from '../src/store.ts'
 import { NO_WORKSPACE, workspaceKey } from '../src/workspace.ts'
 
@@ -163,5 +169,64 @@ describe('the workspace key', () => {
     expect(workspaceKey('')).toBe(NO_WORKSPACE)
     expect(workspaceKey('   ')).toBe(NO_WORKSPACE)
     expect(workspaceKey(join(homedir(), 'gone-workspace'))).toBe(join(homedir(), 'gone-workspace'))
+  })
+})
+
+describe('the store read again by a decision that cannot wait', () => {
+  it('names a changed file by a new identity, and reads it synchronously as the asynchronous read does', async () => {
+    const path = permissionStorePath(temporary())
+    expect(permissionStoreIdentity(path)).toBe('absent')
+    expect(readPermissionStoreSync(path)).toEqual({ kind: 'absent' })
+    await writePermissionStore(path, new Map([['/work', { preset: SAFER_PRESET, fullAccessGrantedAt: null }]]))
+    const first = permissionStoreIdentity(path)
+    expect(readPermissionStoreSync(path)).toEqual(await readPermissionStore(path))
+    await writePermissionStore(path, new Map([['/work', { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1 }]]))
+    expect(permissionStoreIdentity(path)).not.toBe(first)
+    expect(readPermissionStoreSync(path)).toMatchObject({ kind: 'readable', entries: new Map([['/work', { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1 }]]) })
+  })
+
+  it('refuses synchronously what the protected-file rule refuses, and another format', async () => {
+    const root = temporary()
+    const path = permissionStorePath(root)
+    await writePermissionStore(path, new Map())
+    chmodSync(path, 0o644)
+    expect(readPermissionStoreSync(path)).toMatchObject({ kind: 'refused', problem: expect.stringContaining('0644') })
+    chmodSync(path, 0o600)
+    writeFileSync(path, '{ not json', { mode: 0o600 })
+    expect(readPermissionStoreSync(path)).toEqual({ kind: 'refused', problem: 'the store holds no JSON document' })
+    rmSync(path)
+    symlinkSync(join(root, 'elsewhere.json'), path)
+    expect(readPermissionStoreSync(path)).toMatchObject({ kind: 'refused' })
+    // A path below a regular file cannot be examined, and has an identity of its own.
+    writeFileSync(join(root, 'file'), '')
+    expect(permissionStoreIdentity(join(root, 'file', 'below'))).toBe('unexaminable:ENOTDIR')
+  })
+})
+
+describe('the store lock', () => {
+  it('keeps two concurrent read-check-write changes from overwriting each other', async () => {
+    const path = permissionStorePath(temporary())
+    const addOne = (workspace: string) => withPermissionStoreLock(path, async () => {
+      const read = await readPermissionStore(path)
+      const entries = new Map(read.kind === 'readable' ? read.entries : [])
+      // Without the lock the other change would read the same file here and one write would be lost.
+      await new Promise(resolve => setTimeout(resolve, 20))
+      entries.set(workspace, { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1 })
+      await writePermissionStore(path, entries)
+    })
+    await Promise.all([addOne('/a'), addOne('/b')])
+    const read = await readPermissionStore(path)
+    expect(read.kind === 'readable' ? [...read.entries.keys()].sort() : []).toEqual(['/a', '/b'])
+    expect(() => statSync(`${path}.lock`)).toThrow()
+  })
+
+  it('refuses a change while a live process holds the lock past the wait, and replaces a dead holder\'s lock', async () => {
+    const path = permissionStorePath(temporary())
+    mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(`${path}.lock`, JSON.stringify({ v: 1, ...currentHolder(), id: randomLockId() }), { mode: 0o600 })
+    await expect(withPermissionStoreLock(path, async () => 'changed', 30)).rejects.toThrow(`process ${String(process.pid)} has been changing the permission store`)
+    // A process id that no running process has.
+    writeFileSync(`${path}.lock`, JSON.stringify({ v: 1, pid: 2 ** 22 + 7, id: randomLockId() }), { mode: 0o600 })
+    await expect(withPermissionStoreLock(path, async () => 'changed', 1000)).resolves.toBe('changed')
   })
 })

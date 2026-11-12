@@ -44,12 +44,15 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxModeGuard } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
-import { resolveDeloHome, shellQuote } from '@delo/home'
+import { resolveDeloHome, shellQuote, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delo/home'
 import z from '@deepseek-ai/schemastery'
 import {
   defaultPresetOf,
   fullAccessGranted,
+  permissionStoreIdentity,
   readPermissionStore,
+  readPermissionStoreSync,
+  withPermissionStoreLock,
   writePermissionStore,
   permissionStorePath,
   FULL_ACCESS_PRESET,
@@ -68,8 +71,12 @@ export {
   fullAccessGranted,
   isPermissionPreset,
   parsePermissionStore,
+  permissionStoreIdentity,
   permissionStorePath,
   readPermissionStore,
+  readPermissionStoreSync,
+  withPermissionStoreLock,
+  PERMISSION_STORE_LOCK_WAIT_MS,
   serializePermissionStore,
   writePermissionStore,
   FULL_ACCESS_PRESET,
@@ -158,11 +165,26 @@ export function fullAccessRefusal(workspace: string, problem?: string): string {
   return `full access for ${where} needs one consent for that workspace first: the person allows it at the home's own computer, with the approval card's "Allow full access for this workspace", in the studio's Settings, Permissions, or with \`${command}\`; until then keep the safer preset "${SAFER_PRESET}".${unreadable}`
 }
 
+/** What reading the store again changed: the workspaces that gained a grant and those that lost one. */
+export interface GrantChanges {
+  /** The workspaces whose grant the store now holds and this service did not, sorted. */
+  readonly added: readonly string[]
+  /** The workspaces whose grant this service held and the store no longer does, sorted. */
+  readonly lost: readonly string[]
+}
+
 /**
  * The `permissionDefaults` service: the per-workspace default preset, the
- * full-access consent and the mode-switch guard. It reads the store once at
- * mount and keeps the entries in memory, so the guard answers synchronously;
- * a granted consent is written through the store before it is remembered.
+ * full-access consent and the mode-switch guard. It keeps the store's entries
+ * in memory, so the guard answers synchronously, and before every decision —
+ * a mode switch to full access, the preset of a new or restored chat, a
+ * surface's listing — it compares the store file's identity with the one it
+ * read and reads the file again when another process changed it, so a grant
+ * withdrawn by another profile's Host, `delorun workspace full-access` or
+ * `delorun headless` stops counting at this service's next decision. The open
+ * chats of a workspace that lost its grant are set back to the safer preset
+ * right after. A change is read, checked and written under the store's lock
+ * file before it is remembered.
  */
 export class PermissionDefaults extends Service {
   /** The permission-preset owner upstream's composition mounts, which seeds and applies presets, and the sandbox policy, which reads a chat's logged mode. */
@@ -174,6 +196,15 @@ export class PermissionDefaults extends Service {
   private problem: string | undefined
   /** The writes to the store, chained so a consent and a concurrent selection never interleave. */
   private queue: Promise<unknown> = Promise.resolve()
+  /** The store's path, once the home was resolved; undefined while it cannot be. */
+  private path: string | undefined
+  /** {@link permissionStoreIdentity} of the file the entries were read from. */
+  private identity: string | undefined
+  /**
+   * The grants the open chats may rely on: the entries they were last set by, with every grant a decision read since. A
+   * workspace granted here and not in {@link entries} lost its grant.
+   */
+  private applied: ReadonlyMap<string, WorkspacePermission> = new Map()
 
   /**
    * @param ctx - the plugin context.
@@ -190,6 +221,7 @@ export class PermissionDefaults extends Service {
    */
   protected async [Service.init](): Promise<void> {
     await this.load()
+    this.applied = this.entries
     this.ctx.provide('sandboxModeGuard', this.guard())
     // Prepend: the seed must land before upstream's pin, which fills every
     // still-unset knob with the deployment default on the same event.
@@ -198,6 +230,7 @@ export class PermissionDefaults extends Service {
 
   /** Why the store could not be read, or undefined while it reads as this version's format. */
   get storeProblem(): string | undefined {
+    this.refresh()
     return this.problem
   }
 
@@ -207,6 +240,7 @@ export class PermissionDefaults extends Service {
    * @returns the recorded preset, or the safer preset for a workspace with no entry.
    */
   defaultPreset(cwd: string): PermissionPresetName {
+    this.refresh()
     return defaultPresetOf(this.entries, workspaceKey(cwd))
   }
 
@@ -216,6 +250,7 @@ export class PermissionDefaults extends Service {
    * @returns true when the store holds a grant for it.
    */
   granted(cwd: string): boolean {
+    this.refresh()
     return fullAccessGranted(this.entries, workspaceKey(cwd))
   }
 
@@ -230,7 +265,8 @@ export class PermissionDefaults extends Service {
    */
   review(session: Session, mode: SandboxMode): string | undefined {
     if (mode !== FULL_ACCESS_PRESET) return undefined
-    const workspace = workspaceKey(session.header.cwd ?? '')
+    this.refresh()
+    const workspace = workspaceOf(session)
     if (fullAccessGranted(this.entries, workspace)) return undefined
     return fullAccessRefusal(workspace, this.problem)
   }
@@ -241,10 +277,11 @@ export class PermissionDefaults extends Service {
    * @returns the workspaces sorted by key, and the store's problem when it cannot be read.
    */
   workspaces(): WorkspacesAnswer {
+    this.refresh()
     const titles = new Map<string, string>()
     for (const workspace of this.ctx.get('workspaceRegistry')?.list() ?? []) titles.set(workspaceKey(workspace.path), workspace.title)
     const keys = new Set<string>([...titles.keys(), ...this.entries.keys()])
-    for (const agent of this.ctx.get('agents')?.list() ?? []) keys.add(workspaceKey(agent.session.header.cwd ?? ''))
+    for (const agent of this.ctx.get('agents')?.list() ?? []) keys.add(workspaceOf(agent.session))
     keys.delete(NO_WORKSPACE)
     const workspaces = [...keys].sort().map(key => workspaceAccessOf(this.entries, key, titles.get(key)))
     return this.problem === undefined ? { workspaces } : { workspaces, storeProblem: this.problem }
@@ -260,10 +297,11 @@ export class PermissionDefaults extends Service {
   reviewChat(sessionId: string): WorkspaceAccess {
     const agent = this.ctx.get('agents')?.get(SessionId(sessionId))
     if (agent === undefined) throw new FullAccessChangeError('UNKNOWN_CHAT', 'no open chat has this id')
-    const workspace = workspaceKey(agent.session.header.cwd ?? '')
+    const workspace = workspaceOf(agent.session)
     if (workspace === NO_WORKSPACE) {
       throw new FullAccessChangeError('NO_WORKSPACE', 'this chat has no workspace folder, so it has no per-workspace permission')
     }
+    this.refresh()
     return workspaceAccessOf(this.entries, workspace, this.titleOf(workspace))
   }
 
@@ -278,7 +316,8 @@ export class PermissionDefaults extends Service {
    * @param request - the workspace the consent named, the review id it was shown with, on or off, and the answer.
    * @returns the workspace's full access after the change, and how many open chats were set back.
    * @throws {FullAccessChangeError} `UNCONFIRMED` without the person's answer, `UNKNOWN_WORKSPACE` for a folder no
-   *   surface shows, `UNKNOWN_CHAT` for a `chat` that is not open in the workspace, `STALE_REVIEW` when the
+   *   surface shows or, when turning full access on, a folder Delo never adds as a workspace (a filesystem root, the
+   *   home folder, the Delo home, the stock home, or a folder containing one), `UNKNOWN_CHAT` for a `chat` that is not open in the workspace, `STALE_REVIEW` when the
    *   workspace's full access changed after the consent was shown, and `STORE_REFUSED` when the store cannot be read or
    *   written; each records nothing.
    */
@@ -288,16 +327,19 @@ export class PermissionDefaults extends Service {
     if (workspace === NO_WORKSPACE || !this.workspaces().workspaces.some(access => access.workspace === workspace)) {
       throw new FullAccessChangeError('UNKNOWN_WORKSPACE', 'the studio does not know this workspace')
     }
+    if (request.on) await this.refuseLocation(workspace)
     const chat = request.chat === undefined ? undefined : this.ctx.get('agents')?.get(SessionId(request.chat))?.session
-    if (request.chat !== undefined && (chat === undefined || workspaceKey(chat.header.cwd ?? '') !== workspace)) {
+    if (request.chat !== undefined && (chat === undefined || workspaceOf(chat) !== workspace)) {
       throw new FullAccessChangeError('UNKNOWN_CHAT', 'no open chat in this workspace has this id')
     }
     return this.serial(async () => {
-      const entries = await this.readForChange()
-      if (workspaceAccessOf(entries, workspace).reviewId !== request.reviewId) {
-        throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
-      }
-      await this.write(entries, workspace, request.on ? FULL_ACCESS_PRESET : SAFER_PRESET)
+      await this.locked(async () => {
+        const entries = await this.readForChange()
+        if (workspaceAccessOf(entries, workspace).reviewId !== request.reviewId) {
+          throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
+        }
+        await this.write(entries, workspace, request.on ? FULL_ACCESS_PRESET : SAFER_PRESET)
+      })
       const chats = request.on ? this.switchChat(chat) : this.withdrawOpenChats(workspace)
       const grants = [...this.entries.values()].filter(entry => entry.fullAccessGrantedAt !== null).length
       this.ctx.logger.info(`permission-defaults: full access turned ${request.on ? 'on' : 'off'} for one workspace at the home's computer; ${String(grants)} workspace(s) hold a grant`)
@@ -307,20 +349,89 @@ export class PermissionDefaults extends Service {
 
   /**
    * Read the store again, after another process at the home's computer — `delorun workspace full-access` — changed it,
-   * and set the open chats of every workspace that lost its grant back to the safer preset.
+   * and set the open chats of every workspace that lost its grant back to the safer preset. The Host's log names how
+   * many workspaces gained and lost a grant.
    * @returns the digest of the entries now in memory ({@link permissionEntriesDigest}), which the writer compares with
-   *   what it wrote, and the store's problem when it cannot be read.
+   *   what it wrote, how many workspaces gained (`added`) and lost (`lost`) a grant since the open chats were last
+   *   set, and the store's problem when it cannot be read.
    */
-  reload(): Promise<{ readonly digest: string, readonly storeProblem?: string }> {
+  reload(): Promise<{ readonly digest: string, readonly added: number, readonly lost: number, readonly storeProblem?: string }> {
     return this.serial(async () => {
-      const before = this.entries
       await this.load()
-      for (const [workspace, entry] of before) {
-        if (entry.fullAccessGrantedAt !== null && !fullAccessGranted(this.entries, workspace)) this.withdrawOpenChats(workspace)
-      }
+      const { added, lost } = this.reconcile()
       const digest = permissionEntriesDigest(this.entries)
-      return this.problem === undefined ? { digest } : { digest, storeProblem: this.problem }
+      const counts = { digest, added: added.length, lost: lost.length }
+      return this.problem === undefined ? counts : { ...counts, storeProblem: this.problem }
     })
+  }
+
+  /**
+   * Set the open chats of every workspace that lost its grant since they were last set back to the safer preset, and
+   * remember the entries they are now set by.
+   * @returns the workspaces that gained and lost a grant.
+   */
+  private reconcile(): GrantChanges {
+    const changes = grantChanges(this.applied, this.entries)
+    for (const workspace of changes.lost) this.withdrawOpenChats(workspace)
+    this.applied = this.entries
+    if (changes.added.length > 0 || changes.lost.length > 0) {
+      this.ctx.logger.info(`permission-defaults: the permission store changed in another process: ${String(changes.added.length)} workspace(s) gained a grant and ${String(changes.lost.length)} lost one`)
+    }
+    return changes
+  }
+
+  /**
+   * Read the store again when its file is not the one the entries were read from, for a decision that cannot wait:
+   * another process changed it. When a workspace lost its grant, its open chats are set back to the safer preset
+   * after the change queued before, once the decision has been made.
+   */
+  private refresh(): void {
+    if (this.path === undefined) return
+    const identity = permissionStoreIdentity(this.path)
+    if (identity === this.identity) return
+    this.identity = identity
+    // A grant read since the open chats were last set may have let a chat switch, so it counts as one to withdraw.
+    this.applied = new Map([...this.applied, ...[...this.entries].filter(([, entry]) => entry.fullAccessGrantedAt !== null)])
+    this.take(readPermissionStoreSync(this.path))
+    if (grantChanges(this.applied, this.entries).lost.length > 0) void this.serial(async () => { this.reconcile() })
+  }
+
+  /**
+   * Refuse full access for a folder Delo never adds as a workspace.
+   * @param workspace - the workspace key.
+   * @throws {FullAccessChangeError} `UNKNOWN_WORKSPACE` naming why, or `STORE_REFUSED` when the home cannot be resolved.
+   */
+  private async refuseLocation(workspace: string): Promise<void> {
+    let home: string
+    try {
+      home = (await resolveDeloHome(process.env)).path
+    } catch (error) {
+      throw new FullAccessChangeError('STORE_REFUSED', `the Delo home could not be resolved, so no permission is recorded (${reasonOf(error)})`, { cause: error })
+    }
+    const problem = await workspaceLocationProblem(workspace, workspaceLocationHomes(home))
+    if (problem !== undefined) throw new FullAccessChangeError('UNKNOWN_WORKSPACE', `${workspaceLocationMessage(problem)} Nothing was changed.`)
+  }
+
+  /**
+   * Run a read-check-write of the store under its lock file.
+   * @param change - the change.
+   * @returns when the change is written.
+   * @throws {FullAccessChangeError} `STORE_REFUSED` when the home cannot be resolved or the lock is not free in time,
+   *   and whatever the change throws.
+   */
+  private async locked(change: () => Promise<void>): Promise<void> {
+    let path: string
+    try {
+      path = permissionStorePath((await resolveDeloHome(process.env)).path)
+    } catch (error) {
+      throw new FullAccessChangeError('STORE_REFUSED', `the Delo home could not be resolved, so no permission is recorded (${reasonOf(error)})`, { cause: error })
+    }
+    try {
+      await withPermissionStoreLock(path, change)
+    } catch (error) {
+      if (error instanceof FullAccessChangeError) throw error
+      throw new FullAccessChangeError('STORE_REFUSED', `no permission is recorded: ${reasonOf(error)}`, { cause: error })
+    }
   }
 
   /**
@@ -341,11 +452,12 @@ export class PermissionDefaults extends Service {
    *   read or written.
    */
   async select(agent: Agent, preset: PermissionPresetName): Promise<void> {
-    const workspace = workspaceKey(agent.session.header.cwd ?? '')
+    const workspace = workspaceOf(agent.session)
     if (workspace === NO_WORKSPACE) {
       throw new FullAccessConsentRefusedError('this chat has no workspace folder, so it has no per-workspace permission to select')
     }
     if (preset === FULL_ACCESS_PRESET && !fullAccessGranted(this.entries, workspace)) {
+      await this.refuseLocation(workspace)
       await this.ask(agent, workspace)
     }
     await this.record(workspace, preset)
@@ -398,13 +510,16 @@ export class PermissionDefaults extends Service {
    * @throws when the store cannot be read or written.
    */
   private record(workspace: string, preset: PermissionPresetName): Promise<void> {
-    return this.serial(async () => { await this.write(await this.readForChange(), workspace, preset) })
+    return this.serial(async () => {
+      await this.locked(async () => { await this.write(await this.readForChange(), workspace, preset) })
+    })
   }
 
   /**
    * The store's entries as the file holds them now, for a change: another process at the home's computer may have
    * written the file since this service read it, and a change made over the entries in memory would undo that write.
-   * The entries in memory follow the read.
+   * The entries in memory follow the read, and the open chats of a workspace that lost its grant meanwhile are set back
+   * to the safer preset.
    * @returns the entries.
    * @throws {FullAccessChangeError} `STORE_REFUSED` when the home cannot be resolved or the store is refused; no
    *   change is made over a store that cannot be read.
@@ -414,6 +529,7 @@ export class PermissionDefaults extends Service {
     if (this.problem !== undefined) {
       throw new FullAccessChangeError('STORE_REFUSED', `the permission store is refused, so no permission is recorded: ${this.problem}`)
     }
+    this.reconcile()
     return this.entries
   }
 
@@ -430,12 +546,17 @@ export class PermissionDefaults extends Service {
       preset,
       fullAccessGrantedAt: preset === FULL_ACCESS_PRESET ? entries.get(workspace)?.fullAccessGrantedAt ?? Date.now() : null,
     })
+    let path: string
     try {
-      await writePermissionStore(permissionStorePath((await resolveDeloHome(process.env)).path), next)
+      path = permissionStorePath((await resolveDeloHome(process.env)).path)
+      await writePermissionStore(path, next)
     } catch (error) {
       throw new FullAccessChangeError('STORE_REFUSED', `the permission store could not be written, so no permission is recorded (${reasonOf(error)})`, { cause: error })
     }
     this.entries = next
+    this.applied = next
+    this.path = path
+    this.identity = permissionStoreIdentity(path)
   }
 
   /**
@@ -449,7 +570,7 @@ export class PermissionDefaults extends Service {
     let chats = 0
     for (const agent of this.ctx.get('agents')?.list() ?? []) {
       const session = agent.session
-      if (workspaceKey(session.header.cwd ?? '') !== workspace || this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET) continue
+      if (workspaceOf(session) !== workspace || this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET) continue
       try {
         this.ctx.permissionPresets.set(session, SAFER_PRESET)
         chats++
@@ -497,11 +618,12 @@ export class PermissionDefaults extends Service {
    * @throws Error when such a chat cannot be set to the safer preset, so the chat does not open with full access.
    */
   private seed(session: Session): void {
+    this.refresh()
     if (!this.ctx.permissionPresets.unset(session)) {
       this.withdrawUngranted(session)
       return
     }
-    const workspace = workspaceKey(session.header.cwd ?? '')
+    const workspace = workspaceOf(session)
     const preset = defaultPresetOf(this.entries, workspace)
     try {
       this.ctx.permissionPresets.set(session, preset)
@@ -531,7 +653,7 @@ export class PermissionDefaults extends Service {
    */
   private withdrawUngranted(session: Session): void {
     if (this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET) return
-    const workspace = workspaceKey(session.header.cwd ?? '')
+    const workspace = workspaceOf(session)
     if (fullAccessGranted(this.entries, workspace)) return
     try {
       this.ctx.permissionPresets.set(session, SAFER_PRESET)
@@ -545,14 +667,25 @@ export class PermissionDefaults extends Service {
    * @returns when the entries are in memory.
    */
   private async load(): Promise<void> {
-    let read: PermissionStoreRead
     try {
-      read = await readPermissionStore(permissionStorePath((await resolveDeloHome(process.env)).path))
+      this.path = permissionStorePath((await resolveDeloHome(process.env)).path)
     } catch (error) {
+      this.path = undefined
+      this.identity = undefined
       this.entries = new Map()
       this.problem = `the Delo home could not be resolved (${reasonOf(error)})`
       return
     }
+    // The identity is taken before the read, so a write that lands during the read is read again at the next decision.
+    this.identity = permissionStoreIdentity(this.path)
+    this.take(await readPermissionStore(this.path))
+  }
+
+  /**
+   * Keep what a read of the store found.
+   * @param read - the read.
+   */
+  private take(read: PermissionStoreRead): void {
     this.entries = read.kind === 'readable' ? read.entries : new Map()
     this.problem = read.kind === 'refused' ? read.problem : undefined
   }
@@ -576,6 +709,29 @@ export class PermissionDefaults extends Service {
     this.queue = next
     return next
   }
+}
+
+/**
+ * The store's key for a chat's workspace.
+ * @param session - the chat.
+ * @returns the key of its folder, or {@link NO_WORKSPACE} for a chat with none.
+ */
+function workspaceOf(session: Session): string {
+  return workspaceKey(session.header.cwd ?? '')
+}
+
+/**
+ * The workspaces whose grant one set of entries holds and another does not.
+ * @param before - the earlier entries.
+ * @param after - the later entries.
+ * @returns the workspaces granted only after (`added`) and only before (`lost`), each sorted.
+ */
+export function grantChanges(before: ReadonlyMap<string, WorkspacePermission>, after: ReadonlyMap<string, WorkspacePermission>): GrantChanges {
+  const granted = (entries: ReadonlyMap<string, WorkspacePermission>): Set<string> =>
+    new Set([...entries].filter(([, entry]) => entry.fullAccessGrantedAt !== null).map(([workspace]) => workspace))
+  const was = granted(before)
+  const is = granted(after)
+  return { added: [...is].filter(workspace => !was.has(workspace)).sort(), lost: [...was].filter(workspace => !is.has(workspace)).sort() }
 }
 
 declare module '@deepseek-ai/cordis' {

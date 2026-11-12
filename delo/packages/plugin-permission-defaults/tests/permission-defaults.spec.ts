@@ -17,7 +17,7 @@ import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-j
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   apply,
   Config,
@@ -27,6 +27,7 @@ import {
   permissionStorePath,
   PermissionDefaults,
   SAFER_PRESET,
+  fullAccessRefusal,
 } from '../src/index.ts'
 import { workspaceKey } from '../src/workspace.ts'
 import { serializePermissionStore } from '../src/store.ts'
@@ -437,5 +438,33 @@ describe('a chat reopened from its saved log', () => {
     expect(ctx.sandboxPolicy.resolve({ session: handle.agent.session }).mode).toBe(FULL_ACCESS_PRESET)
     expect(asks).toHaveLength(0)
     await ctx.fiber.dispose()
+  })
+})
+
+describe('a full-access consent that is not granted', () => {
+  it('records nothing when the ask is cancelled, unavailable or fails, or no approval service is composed', async () => {
+    for (const [answer, words] of [
+      [() => 'cancelled' as const, 'was cancelled'],
+      [() => 'unavailable' as const, 'no approval channel is available'],
+      [() => { throw 'the channel closed' }, 'the consent could not be asked (no reason was given)'],
+    ] as const) {
+      const { ctx, harness, workspace, home } = await mounted({ answer })
+      const agent = await harness.create(SessionId('chat-ask'), {}, { cwd: workspace })
+      await expect((ctx.get('permissionDefaults') as PermissionDefaults).select(agent, FULL_ACCESS_PRESET)).rejects.toThrow(words)
+      expect(() => readFileSync(permissionStorePath(home))).toThrow()
+    }
+    const { ctx, harness, workspace } = await mounted()
+    const agent = await harness.create(SessionId('chat-no-approval'), {}, { cwd: workspace })
+    const defaults = ctx.get('permissionDefaults') as PermissionDefaults
+    // The approval service leaves the composition after the chat opened.
+    const get = ctx.get.bind(ctx)
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'approval' ? undefined : get(name as never))) as typeof ctx.get)
+    await expect(defaults.select(agent, FULL_ACCESS_PRESET)).rejects.toThrow('no approval service is composed')
+  })
+
+  it('words the refusal for a chat with no folder and for a store that cannot be read', () => {
+    expect(fullAccessRefusal('')).toContain('a chat with no workspace folder')
+    expect(fullAccessRefusal('')).toContain('delorun workspace full-access <folder> on')
+    expect(fullAccessRefusal('/work', 'mode 0644')).toContain('The permission store could not be read, so no consent counts (mode 0644).')
   })
 })

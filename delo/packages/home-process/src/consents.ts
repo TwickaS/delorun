@@ -93,10 +93,10 @@ export interface AcceptedMcpServer {
 export interface LocalConsents {
   /**
    * Read the per-workspace permission store again.
-   * @returns the digest of the entries the Host now holds and the store's problem, or undefined when the profile
-   *   mounts no per-workspace permission defaults.
+   * @returns the digest of the entries the Host now holds, how many workspaces gained and lost a grant, and the store's
+   *   problem, or undefined when the profile mounts no per-workspace permission defaults.
    */
-  reloadPermissions(): Promise<{ readonly digest: string, readonly storeProblem?: string } | undefined>
+  reloadPermissions(): Promise<{ readonly digest: string, readonly added?: number, readonly lost?: number, readonly storeProblem?: string } | undefined>
   /**
    * The pending MCP server reviews.
    * @returns the reviews, or undefined when the profile mounts no MCP add-time consent.

@@ -26,7 +26,9 @@ export const MAX_PERMISSION_REQUEST_BYTES = 6 * 4096 + 256
  * The refusal codes of the routes besides `LOOPBACK_REQUIRED`:
  *
  * - `INVALID_REQUEST`: the body is not the route's JSON message (400).
- * - `UNCONFIRMED`: a change without `confirmed: true`, which the person's answer in the consent sets (400).
+ * - `UNCONFIRMED`: a change without `confirmed: true`, the field the studio's consent sets when the person confirms it
+ *   (400). The Host cannot tell who set the field; what it enforces is where the request came from (see
+ *   {@link SetFullAccessRequest.confirmed}).
  * - `UNKNOWN_CHAT`: no open chat has the session id (404).
  * - `NO_WORKSPACE`: the chat has no workspace folder, so it has no per-workspace permission (422).
  * - `UNKNOWN_WORKSPACE`: the workspace is neither registered, recorded nor the folder of an open chat (404).
@@ -81,7 +83,13 @@ export interface SetFullAccessRequest {
   readonly reviewId: string
   /** Turn full access on, which records the grant, or off, which withdraws it. */
   readonly on: boolean
-  /** The person's answer: true only after the person confirmed in the consent. */
+  /**
+   * `true` when the studio's consent sends the person's confirmation. The Host cannot verify that a person set it: a
+   * change is accepted only from a request on the loopback listener under a loopback `Host` (`@delo/home-auth`'s
+   * `requireComputer`), which upstream's Connection admitted as the studio's owner session and passed through its
+   * `Origin` and `Sec-Fetch-Site` check of a cross-site browser request. Any program running as the person on the home's
+   * computer can make that request, as it can run `delorun workspace full-access`.
+   */
   readonly confirmed: boolean
   /**
    * The open chat the consent was asked from, which turning on also switches to full access; it must be in the

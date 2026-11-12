@@ -3,7 +3,9 @@
  * section shows, the review of one chat's workspace the consent shows when the person picks full access, and the
  * change the person's answer makes. Every route answers only a request that arrived on the loopback listener: a reach
  * device, or a request the home cannot place, is answered `403 LOOPBACK_REQUIRED` before its body is read, so full
- * access is turned on and off only at the home's own computer.
+ * access is turned on and off only at the home's own computer. A request there is one upstream's Connection admitted
+ * as the studio's owner session after its `Origin` and `Sec-Fetch-Site` check; the routes cannot tell whether the
+ * person or another program running as the person at that computer sent `confirmed: true`.
  *
  * @module @delo/plugin-permission-defaults/routes
  */

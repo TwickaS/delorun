@@ -9,7 +9,9 @@
  * `sandbox/mode` event is appended, and a synchronous verdict cannot await a
  * filesystem call. A directory that has gone away keeps its recorded spelling,
  * resolved absolute, so a workspace the person moved away and back again keeps
- * the permission it had.
+ * the permission it had. That fallback keeps the spelling's case: on a file system that ignores case, a missing
+ * folder spelled in another case gets a key of its own until the folder exists again, and no test host here has such
+ * a file system, so no case is folded.
  *
  * Free of Cordis, so the key is testable without a mounted plugin.
  *

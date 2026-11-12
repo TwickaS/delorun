@@ -58,4 +58,22 @@ describe('routedPathname', () => {
     }
     expect(routedPathname(undefined)).toBe('/')
   })
+
+  it('parses a doubled slash, an encoded slash and an uppercase prefix as the Connection\'s bridge does, none to the route', () => {
+    const route = '/api/deloPermission.setFullAccess'
+    const spellings = {
+      // A leading `//` starts an authority, so its path drops the first segment.
+      '//api/deloPermission.setFullAccess': '/deloPermission.setFullAccess',
+      '/api//deloPermission.setFullAccess': '/api//deloPermission.setFullAccess',
+      '/api%2FdeloPermission.setFullAccess': '/api%2FdeloPermission.setFullAccess',
+      '/api/x%2F..%2FdeloPermission.setFullAccess': '/api/x%2F..%2FdeloPermission.setFullAccess',
+      '/API/deloPermission.setFullAccess': '/API/deloPermission.setFullAccess',
+    }
+    for (const [target, path] of Object.entries(spellings)) {
+      // The Connection's HTTP bridge routes by the same parse against its own base.
+      expect({ target, path: routedPathname(target) }).toEqual({ target, path: new URL(target, 'http://dsh.internal').pathname })
+      expect({ target, path: routedPathname(target) }).toEqual({ target, path })
+      expect(routedPathname(target)).not.toBe(route)
+    }
+  })
 })

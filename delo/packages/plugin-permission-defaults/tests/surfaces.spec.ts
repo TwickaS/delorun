@@ -5,9 +5,9 @@
  * it — and the routes over them, whose denial cases prove that a remote device, an unconfirmed answer and a stale
  * review record nothing.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness, type AgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -15,7 +15,7 @@ import PermissionPresetService from '@deepseek-ai/dsh-permission-presets'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   apply,
   FULL_ACCESS_PRESET,
@@ -23,6 +23,7 @@ import {
   fullAccessReviewId,
   permissionEntriesDigest,
   permissionStorePath,
+  MAX_PERMISSION_REQUEST_BYTES,
   PERMISSION_ROUTES,
   PermissionDefaults,
   readPermissionStore,
@@ -52,15 +53,15 @@ interface Mounted {
 }
 
 /**
- * Mount the permission presets and this plugin over a fresh home.
+ * Mount the permission presets and this plugin over a fresh home, or over the home and folders of another mount, as a
+ * second profile's Host shares the home.
+ * @param shared - the home and folders of another mount.
  * @returns the composition.
  */
-async function mounted(): Promise<Mounted> {
+async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>): Promise<Mounted> {
   const root = mkdtempSync(join(tmpdir(), 'delo-permission-surfaces-'))
   roots.push(root)
-  const home = join(root, 'home')
-  const workspace = join(root, 'work')
-  const other = join(root, 'other')
+  const { home, workspace, other } = shared ?? { home: join(root, 'home'), workspace: join(root, 'work'), other: join(root, 'other') }
   for (const directory of [home, workspace, other]) mkdirSync(directory, { recursive: true })
   process.env['DELO_HOME'] = home
   const ctx = new Context()
@@ -212,8 +213,9 @@ describe('reading the store again', () => {
     const entries = new Map([[workspaceKey(workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1_700_000_000_000 }]] as const)
     mkdirSync(join(permissionStorePath(home), '..'), { recursive: true, mode: 0o700 })
     writeFileSync(permissionStorePath(home), serializePermissionStore(entries), { mode: 0o600 })
-    expect(defaults.granted(workspace)).toBe(false)
-    expect(await defaults.reload()).toEqual({ digest: permissionEntriesDigest(entries) })
+    // The next decision reads the changed file; the reload answers the digest and the grant it counted as added.
+    expect(defaults.granted(workspace)).toBe(true)
+    expect(await defaults.reload()).toEqual({ digest: permissionEntriesDigest(entries), added: 1, lost: 0 })
     expect(defaults.granted(workspace)).toBe(true)
   })
 
@@ -297,6 +299,29 @@ describe('the routes', () => {
     }
   })
 
+  it('leave a doubled slash, an encoded slash and an uppercase prefix to the next hook, as no route serves them', async () => {
+    const { defaults } = await mounted()
+    const routes = routesOver(defaults, 'tailscale-private')
+    const route = PERMISSION_ROUTES.setFullAccess
+    for (const path of [`/${route}`, route.replace('/api/', '/api//'), route.replace('/api/', '/api%2F'), route.replace('/api/', '/API/')]) {
+      let reached = false
+      await routes.hook({ url: path, headers: { host: 'home.example.ts.net' } }, recordingResponse().response, async () => { reached = true })
+      expect({ path, reached }).toEqual({ path, reached: true })
+      expect(Object.values(PERMISSION_ROUTES)).not.toContain(new URL(path, 'http://dsh.internal').pathname)
+    }
+  })
+
+  it('refuse a body over the limit or not JSON, and pass on a failure that is not a refusal', async () => {
+    const { defaults } = await mounted()
+    const routes = routesOver(defaults, 'loopback')
+    const oversized = await routes.fetch(PERMISSION_ROUTES.review, { method: 'POST', body: JSON.stringify({ sessionId: 'x'.repeat(MAX_PERMISSION_REQUEST_BYTES) }) })
+    expect([oversized.status, await oversized.json()]).toEqual([400, expect.objectContaining({ error: 'INVALID_REQUEST' })])
+    const notJson = await routes.fetch(PERMISSION_ROUTES.review, { method: 'POST', body: '{' })
+    expect(notJson.status).toBe(400)
+    vi.spyOn(defaults, 'workspaces').mockImplementation(() => { throw new Error('broken') })
+    await expect(routes.fetch(PERMISSION_ROUTES.workspaces)).rejects.toThrow('broken')
+  })
+
   it('let a loopback request through, and leave every other path to the next hook', async () => {
     const { defaults } = await mounted()
     const loopback = routesOver(defaults, 'loopback')
@@ -327,5 +352,159 @@ describe('the routes', () => {
     expect(await malformed.json()).toMatchObject({ error: 'INVALID_REQUEST' })
     const listed = await (await routes.fetch(PERMISSION_ROUTES.workspaces)).json() as { workspaces: { grantedAt: number | null }[] }
     expect(listed.workspaces.map(entry => entry.grantedAt !== null)).toEqual([true])
+  })
+})
+
+describe('a home shared by several Hosts', () => {
+  it('a withdrawal in one Host stops counting at the other Host\'s next decision, and its new chats start on the safer preset', async () => {
+    const first = await mounted()
+    const second = await mounted(first)
+    await first.harness.create(SessionId('chat-first'), {}, { cwd: first.workspace })
+    const shown = first.defaults.reviewChat('chat-first')
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    // The second Host counts the grant at its next decision: a chat there switches, and a new chat starts with it.
+    const open = await second.harness.create(SessionId('chat-second'), {}, { cwd: second.workspace })
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
+
+    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+
+    const fresh = await second.harness.create(SessionId('chat-second-new'), {}, { cwd: second.workspace })
+    expect(second.ctx.sandboxPolicy.resolve({ session: fresh.session }).mode).toBe(SAFER_PRESET)
+    expect(() => { second.ctx.permissionPresets.set(fresh.session, FULL_ACCESS_PRESET) }).toThrow('needs one consent for that workspace first')
+    // The open chat that ran with full access is set back once the decision that saw the withdrawal has been made.
+    await second.defaults.reload()
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
+  })
+
+  it('sets the open full-access chats back after a decision saw the withdrawal, without a reload', async () => {
+    const first = await mounted()
+    const second = await mounted(first)
+    await first.harness.create(SessionId('chat-a'), {}, { cwd: first.workspace })
+    const shown = first.defaults.reviewChat('chat-a')
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const open = await second.harness.create(SessionId('chat-b'), {}, { cwd: second.workspace })
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
+    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    expect(second.defaults.granted(second.workspace)).toBe(false)
+    await new Promise(resolve => setImmediate(resolve))
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
+  })
+
+  it('refuses full access for a folder Delo never adds as a workspace, through the surfaces and the chat picker', async () => {
+    const { harness, defaults, home } = await mounted()
+    // The folder holding the Delo home is one Delo never adds.
+    const container = join(home, '..')
+    const agent = await harness.create(SessionId('chat-container'), {}, { cwd: container })
+    const shown = defaults.reviewChat('chat-container')
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+      .rejects.toMatchObject({ code: 'UNKNOWN_WORKSPACE', message: expect.stringContaining('Nothing was changed.') })
+    await expect(defaults.select(agent, FULL_ACCESS_PRESET)).rejects.toMatchObject({ code: 'UNKNOWN_WORKSPACE' })
+    expect(await storedGrants(home)).toEqual({})
+    // Turning full access off only takes access away, so it is not refused there.
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true })).resolves.toMatchObject({ chats: 0 })
+  })
+})
+
+describe('a change that cannot be recorded', () => {
+  it('records nothing while the home cannot be resolved, and counts no grant', async () => {
+    const { harness, defaults, workspace } = await mounted()
+    await harness.create(SessionId('chat-nohome'), {}, { cwd: workspace })
+    const shown = defaults.reviewChat('chat-nohome')
+    // Upstream's ~/.dsh under the real OS home is a home resolveDeloHome refuses.
+    process.env['DELO_HOME'] = join(homedir(), '.dsh')
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+      .rejects.toMatchObject({ code: 'STORE_REFUSED', message: expect.stringContaining('the Delo home could not be resolved') })
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true }))
+      .rejects.toMatchObject({ code: 'STORE_REFUSED' })
+    await expect(defaults.reload()).resolves.toMatchObject({ storeProblem: expect.stringContaining('could not be resolved') })
+    expect(defaults.granted(workspace)).toBe(false)
+  })
+
+  it('records nothing while the store\'s lock file is not a lock record', async () => {
+    const { harness, defaults, home, workspace } = await mounted()
+    await harness.create(SessionId('chat-lock'), {}, { cwd: workspace })
+    const shown = defaults.reviewChat('chat-lock')
+    mkdirSync(join(permissionStorePath(home), '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(`${permissionStorePath(home)}.lock`, JSON.stringify({ v: 2 }), { mode: 0o600 })
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+      .rejects.toMatchObject({ code: 'STORE_REFUSED', message: expect.stringContaining('is not a permission store lock record') })
+    expect(await storedGrants(home)).toEqual({})
+  })
+})
+
+describe('the service around its decisions', () => {
+  it('titles a registered workspace, names a store problem in the list, and refuses a chat without a folder', async () => {
+    const { ctx, harness, defaults, home, workspace } = await mounted()
+    ctx.provide('workspaceRegistry', { list: () => [{ path: workspace, title: 'Site' }] } as never)
+    const chat = await harness.create(SessionId('chat-titled'), {}, { cwd: workspace })
+    expect(defaults.reviewChat('chat-titled').title).toBe('Site')
+    const shown = defaults.reviewChat('chat-titled')
+    expect((await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })).access.title).toBe('Site')
+    const bare = await harness.create(SessionId('chat-bare'))
+    expect(defaults.review(bare.session, FULL_ACCESS_PRESET)).toContain('a chat with no workspace folder')
+    writeFileSync(permissionStorePath(home), '{ not json', { mode: 0o600 })
+    expect(defaults.workspaces().storeProblem).toBe('the store holds no JSON document')
+    expect(chat).toBeDefined()
+  })
+
+  it('records nothing when the store cannot be written', async () => {
+    const { harness, defaults, home, workspace } = await mounted()
+    await harness.create(SessionId('chat-readonly'), {}, { cwd: workspace })
+    const shown = defaults.reviewChat('chat-readonly')
+    const directory = join(permissionStorePath(home), '..')
+    // The store's directory turns read-only after the lock was taken and the store read, so only the write fails.
+    Reflect.set(defaults, 'readForChange', async () => {
+      chmodSync(directory, 0o500)
+      return new Map()
+    })
+    try {
+      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+        .rejects.toMatchObject({ code: 'STORE_REFUSED' })
+    } finally {
+      chmodSync(directory, 0o700)
+    }
+    expect(defaults.granted(workspace)).toBe(false)
+  })
+
+  it('names a chat it could not set, and opens a new chat whose seed failed with the deployment default', async () => {
+    const { ctx, harness, defaults, workspace } = await mounted()
+    const open = await harness.create(SessionId('chat-stuck'), {}, { cwd: workspace })
+    const shown = defaults.reviewChat('chat-stuck')
+    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: 'chat-stuck' })
+    expect(on.chats).toBe(1)
+    const set = vi.spyOn(ctx.permissionPresets, 'set').mockImplementation(() => { throw 'refused by another layer' })
+    try {
+      const off = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+      expect(off.chats).toBe(0)
+      const again = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: off.access.reviewId, on: true, confirmed: true, chat: 'chat-stuck' })
+      expect(again.chats).toBe(0)
+      await expect(harness.create(SessionId('chat-seed-fails'), {}, { cwd: workspace })).resolves.toBeDefined()
+    } finally {
+      set.mockRestore()
+    }
+    expect(open).toBeDefined()
+  })
+
+  it('lists and withdraws without the agents service, which a profile without chats does not mount', async () => {
+    const { ctx, harness, defaults, workspace } = await mounted()
+    await harness.create(SessionId('chat-agents'), {}, { cwd: workspace })
+    const shown = defaults.reviewChat('chat-agents')
+    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const get = ctx.get.bind(ctx)
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'agents' ? undefined : get(name as never))) as typeof ctx.get)
+    try {
+      expect(defaults.workspaces().workspaces.map(access => access.workspace)).toEqual([shown.workspace])
+      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })).resolves.toMatchObject({ chats: 0 })
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('registers its routes where a Connection serves the studio', async () => {
+    const { ctx } = await mounted()
+    const register = vi.fn<(route: { readonly path: string }) => void>()
+    ctx.provide('connection', { fetch: { register } } as never)
+    await new Promise(resolve => setImmediate(resolve))
+    expect(register.mock.calls.map(([route]) => route.path).sort()).toEqual(Object.values(PERMISSION_ROUTES).sort())
   })
 })

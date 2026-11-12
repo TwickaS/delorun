@@ -11,15 +11,29 @@
  * start with, and when the person granted full access for it, or null while
  * full access was never granted.
  *
+ * The store is one file for the whole home, which several processes change: the
+ * Host of each running profile, `delorun workspace full-access` and
+ * `delorun headless`. Every change reads the file, checks it and writes it while
+ * holding the store's lock file ({@link withPermissionStoreLock}), so a change
+ * never overwrites another process's change it did not read; and a reader on a
+ * synchronous path compares the file's identity
+ * ({@link permissionStoreIdentity}) with the one it read and reads the file
+ * again ({@link readPermissionStoreSync}) when it differs.
+ *
  * The module is free of Cordis, so the store's format, its refusals and its
  * file handling are testable without a mounted plugin.
  *
  * @module @delo/plugin-permission-defaults/store
  */
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
-import { readProtectedFile, writeProtectedFile } from '@delo/home'
+import {
+  checkProtectedFileSync, currentHolder, holderAlive, holderIdentity, isLockId, LockFile, parseHolder, randomLockId,
+  readProtectedFile, writeProtectedFile, type ProcessHolder,
+} from '@delo/home'
 
 /** Format version of the permission store. */
 export const PERMISSION_STORE_VERSION = 1 as const
@@ -152,9 +166,8 @@ export function parsePermissionStore(text: string): ReadonlyMap<string, Workspac
  */
 export function serializePermissionStore(entries: ReadonlyMap<string, WorkspacePermission>): string {
   const workspaces: Record<string, WorkspacePermission> = {}
-  for (const workspace of [...entries.keys()].sort()) {
-    const entry = entries.get(workspace)
-    if (entry !== undefined) workspaces[workspace] = { preset: entry.preset, fullAccessGrantedAt: entry.fullAccessGrantedAt }
+  for (const [workspace, entry] of [...entries].sort(([left], [right]) => Number(left > right) - Number(left < right))) {
+    workspaces[workspace] = { preset: entry.preset, fullAccessGrantedAt: entry.fullAccessGrantedAt }
   }
   return `${JSON.stringify({ v: PERMISSION_STORE_VERSION, workspaces }, null, 2)}\n`
 }
@@ -182,6 +195,7 @@ function isMissing(error: unknown): boolean {
  * @returns the failure's message, or a plain one when it has none.
  */
 function problemOf(error: unknown): string {
+  /* v8 ignore next -- the reads and the parser throw only Error instances; the words cover any other value. */
   return error instanceof Error ? error.message : 'the file could not be read'
 }
 
@@ -240,4 +254,113 @@ export function defaultPresetOf(entries: ReadonlyMap<string, WorkspacePermission
  */
 export function fullAccessGranted(entries: ReadonlyMap<string, WorkspacePermission>, workspace: string): boolean {
   return (entries.get(workspace)?.fullAccessGrantedAt ?? null) !== null
+}
+
+/**
+ * The identity of the store file as a synchronous reader compares it: device, inode, size and modification time, or
+ * `absent` while no file exists. Every write renames a new file over the path, so a write changes the inode.
+ * @param path - the store's absolute path.
+ * @returns the identity's text; for a path that cannot be examined, the failure's code, which differs from every
+ *   identity of a readable file.
+ */
+export function permissionStoreIdentity(path: string): string {
+  try {
+    const stats = lstatSync(path)
+    return `${String(stats.dev)}:${String(stats.ino)}:${String(stats.size)}:${String(stats.mtimeMs)}`
+  } catch (error) {
+    return isMissing(error) ? 'absent' : `unexaminable:${String((error as NodeJS.ErrnoException).code)}`
+  }
+}
+
+/**
+ * Read the store synchronously, for a reader that must answer before it can await: contract C1's protected-file rule
+ * is checked on the path, the file is opened without following a symbolic link, and the opened file must be the one
+ * that was checked.
+ * @param path - the store's absolute path.
+ * @returns what {@link readPermissionStore} returns for the same file.
+ */
+export function readPermissionStoreSync(path: string): PermissionStoreRead {
+  let text: string
+  try {
+    const checked = checkProtectedFileSync(path)
+    const fd = openSync(path, READ_FLAGS)
+    try {
+      const opened = fstatSync(fd)
+      /* v8 ignore next -- a file renamed over the path between the check and the open; no test can order that. */
+      if (opened.dev !== checked.dev || opened.ino !== checked.ino) throw new PermissionStoreError(`${path} was replaced while it was being read`)
+      text = readFileSync(fd, 'utf8')
+    } finally {
+      closeSync(fd)
+    }
+  } catch (error) {
+    if (isMissing(error)) return { kind: 'absent' }
+    return { kind: 'refused', problem: problemOf(error) }
+  }
+  try {
+    return { kind: 'readable', entries: parsePermissionStore(text) }
+  } catch (error) {
+    return { kind: 'refused', problem: problemOf(error) }
+  }
+}
+
+/** The open flags of the synchronous read: never follow a symbolic link where the platform can refuse one. */
+/* v8 ignore next -- the platform decides which side runs; the suite runs on Linux and macOS. */
+const READ_FLAGS = constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW)
+
+/** How long a change waits for another process's change to the store, in milliseconds. */
+export const PERMISSION_STORE_LOCK_WAIT_MS = 10_000
+
+/** The record of the store's lock file. */
+interface StoreLockRecord extends ProcessHolder {
+  /** Record version. */
+  readonly v: 1
+  /** A random id, never reused, naming the guard that may remove this record. */
+  readonly id: string
+}
+
+/**
+ * Parse a lock record.
+ * @param record - the lock file's JSON object.
+ * @returns the record, or `undefined` when the object is not one.
+ */
+function parseLockRecord(record: Readonly<Record<string, unknown>>): StoreLockRecord | undefined {
+  const holder = parseHolder(record)
+  if (holder === undefined || record['v'] !== 1 || !isLockId(record['id'])) return undefined
+  return { v: 1, pid: holder.pid, id: record['id'], ...holderIdentity(holder) }
+}
+
+/**
+ * Run one change to the store while holding its lock file, `<store>.lock`, `@delo/home`'s lock file shared by Delo's
+ * locks: created whole, and a record whose holder process is dead removed under a takeover guard. A live holder is
+ * waited for. The change reads, checks and writes the store inside the lock, so a concurrent change of another
+ * process is either read by it or waits for it.
+ * @param path - the store's absolute path; its directory is created at the private directory mode when missing.
+ * @param change - the change.
+ * @param waitMs - how long to wait for a live holder.
+ * @returns the change's result.
+ * @throws {PermissionStoreError} naming the holder's process when the lock is not free in time; nothing is changed.
+ */
+export async function withPermissionStoreLock<T>(path: string, change: () => Promise<T>, waitMs: number = PERMISSION_STORE_LOCK_WAIT_MS): Promise<T> {
+  await mkdir(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
+  const file = new LockFile<StoreLockRecord>(`${path}.lock`, {
+    label: 'permission store lock', remedy: 'once no delorun process changes full access', parse: parseLockRecord, id: record => record.id,
+  })
+  const holder = currentHolder()
+  const record: StoreLockRecord = { v: 1, pid: holder.pid, id: randomLockId(), ...holderIdentity(holder) }
+  const deadline = Date.now() + waitMs
+  while (!file.create(record)) {
+    const found = file.read()
+    /* v8 ignore next -- the holder released the lock between this create and this read; the loop tries again. */
+    if (found === undefined) continue
+    if (!holderAlive(found) && await file.removeDead(found.id) === 'done') continue
+    if (Date.now() >= deadline) {
+      throw new PermissionStoreError(`process ${String(found.pid)} has been changing the permission store for longer than ${String(waitMs / 1000)} seconds, so nothing was changed; try again once it finishes`)
+    }
+    await sleep(Math.min(10 + Math.floor(Math.random() * 40), Math.max(1, deadline - Date.now())))
+  }
+  try {
+    return await change()
+  } finally {
+    file.release(record.id)
+  }
 }
