@@ -581,7 +581,7 @@ describe('through the approval service', () => {
     const { ctx, consent, parent, answerer, home, workspace } = await approving('never')
     const refused = await consent.review(review(parent, workspace))
     expect(refused).toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
-    expect(notApprovedRefusal('claude-code', 'never', workspace)).toContain('this chat does not ask for approvals')
+    expect(notApprovedRefusal('claude-code', 'never', workspace)).toContain('approval policy is never')
     expect(answerer).not.toHaveBeenCalled()
     await grant(home, workspace)
     await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 60_000 })

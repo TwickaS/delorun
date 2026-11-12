@@ -128,7 +128,7 @@ export function outsideRefusal(provider: string, workspace: string, cwd: string)
 
 /**
  * Why an ask did not allow a start: the approval's outcome, `never` for a `rejected` answer that the chat's approval
- * policy gave without asking anyone (the full-access preset), or `no-approval` without an approval service.
+ * policy `never` gave without asking anyone, or `no-approval` without an approval service.
  */
 export type NotApprovedOutcome = 'rejected' | 'never' | 'cancelled' | 'unavailable' | 'no-approval'
 
@@ -146,7 +146,7 @@ export function notApprovedRefusal(provider: string, outcome: NotApprovedOutcome
     case 'rejected':
       return `${name} was not started: the person declined. Do not retry unless the person asks for ${name} again.${allow}`
     case 'never':
-      return `${name} was not started: this chat does not ask for approvals (its full-access preset refuses each one without asking anyone), so ${name} starts here only once the person allows it for this workspace.${allow}`
+      return `${name} was not started: this chat's approval policy is never, which refuses every approval without asking anyone (the full-access preset sets it), so ${name} starts here only once the person allows it for this workspace.${allow}`
     case 'cancelled':
       return `${name} was not started: the approval was withdrawn before anyone answered.`
     case 'unavailable':
