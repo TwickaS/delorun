@@ -9,10 +9,11 @@ import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID,
-  PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID,
+  PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -20,45 +21,13 @@ import {
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
+import { AWAY, fakeHost, staticUnlock } from './fake-host.ts'
 
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
-
-/** One scripted Host answer: a JSON body, a raw text body, or a request that never completes. */
-type Answer = { status: number; body?: unknown; text?: string } | 'unreachable' | Promise<{ status: number; body: unknown }>
-
-/** A route key: the method and the path. */
-type RouteKey = `${'GET' | 'POST'} ${string}`
-
-/** One request the fake Host received. */
-interface Received {
-  readonly key: RouteKey
-  readonly init: RequestInit | undefined
-  readonly body: unknown
-}
-
-/**
- * A fake home answering each route with the latest scripted answer; an unscripted route answers 404 as the Host's
- * router does.
- * @param script - the answers by route.
- * @returns the fake `fetch`, the received requests and the script, which a test changes between steps.
- */
-function fakeHost(script: Partial<Record<RouteKey, Answer>> = {}) {
-  const received: Received[] = []
-  const fetch: HostFetch = async (input, init) => {
-    const key: RouteKey = `${init?.method === 'POST' ? 'POST' : 'GET'} ${input}`
-    received.push({ key, init, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined })
-    const scripted = script[key] ?? { status: 404, body: { error: 'NOT_FOUND', message: 'No such route' } }
-    if (scripted === 'unreachable') throw new TypeError('Failed to fetch')
-    const answer = await scripted
-    return new Response('text' in answer && answer.text !== undefined ? answer.text : JSON.stringify(answer.body), { status: answer.status })
-  }
-  const count = (key: RouteKey): number => received.filter(request => request.key === key).length
-  return { fetch, received, script, count }
-}
 
 const NOW = Date.UTC(2026, 10, 10, 12, 0, 0)
 
@@ -90,7 +59,7 @@ const loopbackRefusal = refusal(403, 'LOOPBACK_REQUIRED', 'Adding a device needs
  */
 function renderSection(host: ReturnType<typeof fakeHost>) {
   // The renderer's standard props are absent: the section reads none of them.
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch } as DevicesSectionProps
+  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(AWAY) } as DevicesSectionProps
   return render(<DevicesSection {...props} />)
 }
 
@@ -485,6 +454,8 @@ describe('the device requests', () => {
   })
 })
 
+const SESSION = 'session-1' as Parameters<PermissionSwitchConsent['confirm']>[0]
+
 describe('the plugin', () => {
   it('registers the Devices section right after Privacy, with the browser\'s fetch, and the refused-answer notice', async () => {
     const ctx = new Context()
@@ -495,7 +466,7 @@ describe('the plugin', () => {
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'session' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const sections = slots.entries('settings.section').map(entry => entry.options)
@@ -508,7 +479,13 @@ describe('the plugin', () => {
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      // Each overlay, each section and the approval card's action read their store's view and actions.
+      for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section')]) expect(entry.inject?.()).toBeTypeOf('object')
+      // A session-scoped entry's inject takes the Session id, which the list's entry type does not carry.
+      const action = slots.entries('conversation.approval.action')[0]?.inject as ((sessionId: typeof SESSION) => object) | undefined
+      expect(action?.(SESSION)).toMatchObject({ sessionId: SESSION })
+      await expect(ctx.get('permissionSwitchConsent')?.confirm(SESSION, 'ask')).resolves.toBe(true)
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
       const devicesEntry = slots.entries('settings.section')[1]

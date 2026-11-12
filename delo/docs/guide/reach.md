@@ -48,32 +48,39 @@ Delorun cannot verify where a request comes from: any device on your tailnet can
 
 ## What an approved phone can and cannot do
 
-An approved phone speaks for a device, not for you at your computer. Delorun allows it a fixed list of actions and refuses everything else.
+An approved phone is you: it can already ask the agent to do things, so it can do everything that is no riskier than a message. A few sensitive actions need a short unlock that you approve at your computer, and a few things never work from a phone.
 
-It can:
+Without an unlock, the phone can:
 
 - read your chats and workspaces, and follow a chat while it runs;
-- reply, attach files, edit or withdraw a queued message, start a chat in a workspace you already have, and fork a chat;
-- choose which of your presets a chat that has not started runs with. A preset decides the plugins and tools a chat runs with, and choosing one grants nothing by itself: the workspace's full access and every approval prompt still decide what that chat may do;
-- read the files of a chat's own workspace, which is what the studio's file preview and the composer's file names use. A file outside the workspace is refused, including one reached through a link, and so is anything in Delo's own folder;
+- reply, attach files, edit or withdraw a queued message, fork a chat, and start a chat in a workspace you already have, with any of your presets. A preset decides the plugins and tools a chat runs with, and choosing one grants nothing by itself: the workspace's full access and every approval prompt still decide what that chat may do;
+- read the files of a chat's own workspace and see its changes. A file outside the workspace is refused, including one reached through a link, and so is anything in Delo's own folder;
+- rename, pin, archive, restore and reorder chats, rename and reorder workspaces, and move a workspace to the trash;
+- set, edit, pause and clear a chat's goal, and create, edit, run and delete scheduled follow-ups;
+- choose a chat's model, which also saves it as the default for new chats;
 - read the installed plugins and the profile changes you can undo;
-- rename and pin chats;
+- give feedback on a chat or a message;
 - answer ordinary prompts and questions the agent asks, and stop a run or a background job.
 
-It cannot:
+With an unlock, the phone can also:
+
+- change settings;
+- run slash commands;
+- install, enable, update or remove plugins, and undo or restore a profile change. Delo's own guard plugins and remote access cannot be turned off or changed this way;
+- open a terminal;
+- browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
+- run plugin code the agent wrote.
+
+Never, even unlocked:
 
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
 - accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Permissions on the phone says the same;
-- install, enable, update or remove a plugin, or undo or restore a profile change;
-- change any setting;
-- run slash commands, open a terminal, browse folders with the folder picker, or read a file of your computer by a path outside the workspace;
-- apply, discard or undo changes;
-- answer a prompt that would let the agent manage workspaces and their instructions, change a chat's goals, or record feedback;
-- start a chat in a folder of its choosing, or create a workspace;
-- without an unlock, take the sensitive actions in the next section;
-- approve or remove devices, change remote access, or reset the home.
+- read or change your keys and other credentials, or your account;
+- answer a prompt that would let the agent manage workspaces and their instructions;
+- open a file or folder in an application on your computer, or open the settings file in an editor there;
+- approve or remove devices, change remote access, unlock itself or make an unlock longer, or reset the home.
 
-Other refused actions show the studio's error message. Images that a reply shows as files on your computer, and file previews, do not show on the phone yet; images attached to messages do.
+Another refused action shows the studio's error message. Images that a reply shows as files on your computer, and file previews, do not show on the phone yet; images attached to messages do.
 
 The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock and removing the device when you lose it. A phone's session ends after 12 hours in which the phone sent nothing, and 14 days after sign-in; its open connections close at that moment. Approving or removing a device closes every phone's open connections; each phone then signs in again from the sign-in page, with its own key.
 
@@ -81,19 +88,13 @@ No outside security review of remote access has happened. Its tests fake `tailsc
 
 ## Unlock sensitive actions for a while
 
-Some actions are refused to a phone unless you unlock them for it at your computer for a short time:
+When you try a sensitive action on the phone, it says "This needs a quick unlock from your computer" and offers **Unlock**. You can also unlock ahead of time from Settings, Devices on the phone.
 
-- see the changes in a chat's workspace;
-- rename, reorder or delete workspaces, and archive, restore or reorder chats;
-- choose a chat's model, which also saves it as the default for new chats;
-- create, edit, pause, resume, complete or clear a chat's goals;
-- create, edit or run scheduled follow-ups, and delete the ones that no longer run.
+1. On the phone, choose **Unlock**. The phone shows an 8-digit code and waits for your computer for up to 5 minutes; **Cancel** withdraws the request.
+2. On your computer, open Settings, Devices in the studio, where the request waits with a code field, or run `delorun devices elevate`, which lists the phones that ask. Type the code the phone shows and approve. Three wrong codes cancel the request; **Decline** turns it down.
+3. The phone shows "Sensitive actions unlocked until" and the time the unlock ends, with **Lock now**.
 
-An unlock never lets a phone grant full access, approve or remove devices, change settings or remote access, or do anything else in the list above.
-
-The phone asks, and shows an 8-digit code. On your computer, run `delorun devices elevate`: it lists the phones that ask and the unlocks that run. Choose the phone and type the code it shows; three wrong codes cancel its request. The unlock lasts 15 minutes; `elevationMinutes` in the profile's reach row sets 1 to 60. Nothing extends it: the phone asks again. `delorun devices elevate` also declines a request or ends an unlock early, and an unlock ends when the phone's session ends, when you remove the phone, and when Delorun stops or turns remote access off. Delorun logs each start and end, and each action taken under an unlock.
-
-The studio on the phone does not offer the request yet, so no unlock can start in this version.
+An unlock lasts 15 minutes; `elevationMinutes` in the profile's reach row sets 1 to 60. Nothing extends it: when it ends, unlock again. It ends early when you choose **Lock now** on the phone, **End** in Settings, Devices on your computer or end it with `delorun devices elevate`, when the phone's session ends, when you remove the phone, and when Delorun stops or turns remote access off. When an unlock ends, the phone reconnects, so a terminal opened under it closes. An unlock works only for the phone that asked, on the address it asked on, and only in the Delorun profile that approved it. Delorun logs each start and end, and each action taken under an unlock.
 
 ## Remove a device
 

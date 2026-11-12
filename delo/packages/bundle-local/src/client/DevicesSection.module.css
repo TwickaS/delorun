@@ -96,6 +96,10 @@
   width: 140px;
 }
 
+.unlock {
+  margin-top: 8px;
+}
+
 .consent {
   margin: 0;
   font-size: 13px;
