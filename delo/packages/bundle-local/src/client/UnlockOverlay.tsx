@@ -58,8 +58,10 @@ export function UnlockOverlay({ useUnlock, request, cancel, lock, dismissEnded, 
     {view.state.kind === 'elevated'
       ? <div className={css.banner} role="status" aria-live="polite" data-unlock="elevated">
         <IconShieldOutlineRegular aria-hidden="true" />
-        <span className={css.bannerText}>{t('unlock.banner', { time: clockTime(t, view.state.endsAt) })}</span>
-        {view.lockFailed ? <span className={css.bannerFailed} role="alert">{t('unlock.lockFailed')}</span> : null}
+        {/* A failed Lock now takes the end time's place, so the banner fits a phone's width. */}
+        {view.lockFailed
+          ? <span className={`${css.bannerText} ${css.bannerFailed}`} role="alert">{t('unlock.lockFailed')}</span>
+          : <span className={css.bannerText}>{t('unlock.banner', { time: clockTime(t, view.state.endsAt) })}</span>}
         <span aria-hidden="true">·</span>
         <button type="button" className={css.bannerAction} onClick={() => { void lock() }}>{t('unlock.lockNow')}</button>
       </div>

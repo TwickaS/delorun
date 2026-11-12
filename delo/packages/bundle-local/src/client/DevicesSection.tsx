@@ -444,7 +444,7 @@ function UnlockRequests({ t, fetch, devices }: { t: Translate; fetch: HostFetch;
         <Button variant="outline" size="sm" onClick={() => { void revoke(running.id) }}>{t('unlock.running.end')}</Button>
       </div>)}
     </> : null}
-    <p className={css.line}>{t('unlock.where')} <code className={css.command}>{ELEVATE_COMMAND}</code></p>
+    <p className={css.line}>{t('unlock.requests.command')} <code className={css.command}>{ELEVATE_COMMAND}</code></p>
   </div>
 }
 
