@@ -1095,6 +1095,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'delegationConsent',
+    summary: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`.',
+    description: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`. A deployment that composes none starts every external provider unreviewed and keeps the delegation tools\' own wording.',
+    methods: [
+      {
+        signature: 'describe?(provider: string): string | undefined',
+        description: 'The model-facing description of a delegation tool whose provider is external, replacing the tool\'s generic opening sentences.',
+        parameters: [{ name: 'provider', description: 'the registered provider name.' }],
+        returns: 'the description, or undefined to keep the tool\'s own.',
+      },
+      {
+        signature: 'review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict>',
+        description: 'Review one external start. The runtime starts the provider only on `allow`; a refusal, any other answer and a throw start nothing.',
+        parameters: [{ name: 'review', description: 'the facts of the start.' }],
+        returns: 'the verdict.',
+      },
+    ],
+  },
+  {
     key: 'directoryPicker',
     summary: 'Abstract directory-picking service.',
     description: 'Abstract directory-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.directoryPicker` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The capability object must be stable for the service lifetime: consumers may capture it across calls.',
@@ -5770,10 +5789,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ApiSessionAgentResult = {\n    readonly agent: Agent;\n} | {\n    readonly error: ApiSessionAgentError;\n};',
   },
   {
-    name: 'ApprovalGrant',
-    declaration: 'export type ApprovalGrant = \'full-access\' | \'workspace-management\';',
-  },
-  {
     name: 'ApprovalOutcome',
     declaration: 'export type ApprovalOutcome = \'allowed-once\' | \'rejected\' | \'cancelled\' | \'unavailable\';',
   },
@@ -6520,6 +6535,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'EveryScheduleRecord',
     declaration: 'export interface EveryScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'every\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly everySeconds: number;\n    readonly scheduledAt: string;\n}',
+  },
+  {
+    name: 'ExternalDelegationReview',
+    declaration: 'export interface ExternalDelegationReview {\n    readonly provider: string;\n    readonly parent: Agent;\n    readonly cwd: string;\n    readonly label?: string | undefined;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'ExternalDelegationVerdict',
+    declaration: 'export type ExternalDelegationVerdict = {\n    readonly kind: \'allow\';\n    readonly timeoutMs?: number | undefined;\n} | {\n    readonly kind: \'refuse\';\n    readonly reason: string;\n};',
   },
   {
     name: 'FeedbackCategory',
