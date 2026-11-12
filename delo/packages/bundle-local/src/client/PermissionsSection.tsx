@@ -110,7 +110,8 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
     answer(async () => { await ask(access); return undefined }, 'action.changeAccess')
   const revokeWorkspace = (access: WorkspaceAccess): Promise<void> => answer(async () => {
     const change = await setFullAccess(fetch, access, false)
-    return t('access.revoked', { workspace: workspaceName(access), count: String(change.chats) })
+    const revoked = t('access.revoked', { workspace: workspaceName(access), count: String(change.chats) })
+    return change.unread.length === 0 ? revoked : `${revoked} ${t('access.unread', { profiles: change.unread.join(', ') })}`
   }, 'action.changeAccess')
   const reviewServer = (server: PendingServer): Promise<void> => answer(async () => {
     const started = await review(server)

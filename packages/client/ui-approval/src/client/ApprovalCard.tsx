@@ -53,6 +53,7 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
   }
   const grantActions = grants === undefined ? null : props.renderSlot('conversation.approval.action', {
     grants, toolName: props.toolName, callId: props.callId, allow: () => answer(onAllow),
+    answered, canAnswer: () => !waiting.current && canAnswer(),
   })
   return (
     <div className={css.root} data-approval-key={requestKey} aria-busy={answered}

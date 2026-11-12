@@ -13,19 +13,20 @@
  * by a running studio is never overwritten. Every Host that uses the store, of any profile, and a running
  * `delorun headless` task read the changed file at their next decision. The command then asks the home process of
  * every profile that runs over the update channel (`permission.reload`, contract C19) to read the store at once, so
- * the open chats of a workspace that lost its grant go back to the safer preset; it says what it changed only after
- * those answers, and names each profile whose studio did not read the change or answered with other entries than were
- * written. A folder Delo never adds as a workspace — a filesystem root, the home folder, the
- * Delo home and the stock home, or a folder containing one — is refused.
+ * the open chats of a workspace that lost its grant go back to the safer preset; it says what it changed, then names
+ * each profile whose studio did not read the change, answered with other entries than were written, or could not be
+ * reached. `off` for a workspace whose full access is already off asks the running profiles the same, so a rerun
+ * after a profile missed the change still reaches it; a running `delorun headless` task has no update channel and
+ * reads the change at its next decision. A folder Delo never adds as a workspace — a filesystem root, the home folder,
+ * the Delo home and the stock home, or a folder containing one — is refused.
  *
  * @module @delo/cli/workspace/command
  */
-import { readdirSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import * as clack from '@clack/prompts'
-import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { resolveDeloHome, shellQuote, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delo/home'
-import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
+import { reloadPermissionsIn, runningProfiles, sendHomeRequest, type PermissionPeerSend } from '@delo/home-process'
 import {
   FULL_ACCESS_PRESET, permissionStorePath, readPermissionStore, SAFER_PRESET, withPermissionStoreLock, writePermissionStore,
   type PermissionPresetName, type WorkspacePermission,
@@ -35,7 +36,6 @@ import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseCommandLine, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
-import { homeRuns } from '../reach/command.ts'
 import { printable } from '../terminal-text.ts'
 
 /** What the command runs against. */
@@ -46,14 +46,8 @@ export interface WorkspaceDependencies {
    * @returns each profile a live process holds the home lock of, sorted.
    */
   readonly runningProfiles: (home: string) => readonly string[]
-  /**
-   * Send one request over the home socket with the token file's token.
-   * @param home - the Delo home.
-   * @param profile - the CLI profile.
-   * @param request - the request.
-   * @returns the response lines.
-   */
-  readonly send: (home: string, profile: string, request: UnsignedRequest) => Promise<ResponseLine[]>
+  /** Send one request over a profile's home socket with the token file's token, within a deadline. */
+  readonly send: PermissionPeerSend
   /**
    * Ask the person a yes-or-no question, defaulting to no.
    * @param message - the question.
@@ -120,22 +114,6 @@ export function createWorkspaceCommand(dependencies: WorkspaceDependencies): Cli
 export async function confirmInTerminal(message: string): Promise<boolean | undefined> {
   const answer = await clack.confirm({ message, initialValue: false })
   return clack.isCancel(answer) ? undefined : answer
-}
-
-/**
- * The profiles whose home process runs: each directory under the home's `run/` whose home lock a live process holds.
- * @param home - the Delo home.
- * @returns the profiles, sorted; none while `run/` cannot be listed.
- */
-export function runningProfiles(home: string): readonly string[] {
-  let names: string[]
-  try {
-    names = readdirSync(join(home, DELO_HOME_ENTRIES.run), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
-  } catch (_missing) {
-    // A home whose run directory is missing or unreadable has no home process to ask.
-    return []
-  }
-  return names.filter(profile => homeRuns(home, profile)).sort()
 }
 
 /** `delorun workspace`, over the home socket and a terminal prompt. */
@@ -216,12 +194,14 @@ async function keyOf(where: Where, folder: string): Promise<string> {
 async function change(where: Where, folder: string, on: boolean): Promise<ExitCode> {
   const { home, context, dependencies } = where
   const workspace = await keyOf(where, folder)
-  const shown = workspaceAccessOf(await entriesOf(home), workspace)
+  const read = await entriesOf(home)
+  const shown = workspaceAccessOf(read, workspace)
   const named = printable(workspace)
   const again = `delorun workspace full-access ${printable(shellQuote(workspace))} ${on ? 'on' : 'off'}`
   if ((shown.grantedAt !== null) === on) {
     context.stdout(`Full access is already ${on ? 'on' : 'off'} for ${named}.\n`)
-    return EXIT.ok
+    // A profile that missed an earlier withdrawal still holds the grant; asking again lets a rerun reach it.
+    return on ? EXIT.ok : reported(context, await reload(where, permissionEntriesDigest(read)))
   }
   if (on) {
     if (!dependencies.terminal) {
@@ -253,6 +233,16 @@ async function change(where: Where, folder: string, on: boolean): Promise<ExitCo
   context.stdout(on
     ? `Full access is on for ${named}. Chats in this workspace may switch to it, and delorun headless there may run with it. Turn it off with: delorun workspace full-access ${printable(shellQuote(workspace))} off\n`
     : `Full access is off for ${named}; its chats start on the safer preset.\n`)
+  return reported(context, unread)
+}
+
+/**
+ * Report the profiles whose studio did not take a change.
+ * @param context - the output.
+ * @param unread - each such profile's name and what happened.
+ * @returns {@link EXIT.ok} when there is none, otherwise {@link EXIT.failed}.
+ */
+function reported(context: CommandContext, unread: readonly string[]): ExitCode {
   if (unread.length === 0) return EXIT.ok
   return failed(context, `the change is recorded, and the studio of ${unread.join('; ')}. Its open chats keep their permission until it reads the record: restart it with delorun stop and delorun start`)
 }
@@ -290,16 +280,22 @@ function recorded(entries: ReadonlyMap<string, WorkspacePermission>, workspace: 
  */
 async function reload(where: Where, written: string): Promise<readonly string[]> {
   const { home, context, dependencies } = where
+  const outcomes = await reloadPermissionsIn({ home, profiles: dependencies.runningProfiles(home), written, send: dependencies.send })
   const unread: string[] = []
-  for (const profile of dependencies.runningProfiles(home)) {
-    const answer = (await dependencies.send(home, profile, { op: 'permission.reload' })).at(-1) ?? { ok: false, error: 'NO_ANSWER' }
-    if (answer.ok === true && answer.digest === written) continue
-    if (answer.ok === true) {
-      unread.push(`profile ${printable(profile)} holds other grants than were written, because it changed the record at the same moment; check it with delorun workspace full-access`)
-    } else if (answer.error === 'CONSENT_UNAVAILABLE') {
-      context.stdout(`The studio of profile ${printable(profile)} does not ask for full access per workspace, so the change applies where a profile asks it, such as delorun headless.\n`)
-    } else {
-      unread.push(`profile ${printable(profile)} did not read it (${String(answer.error)})`)
+  for (const outcome of outcomes) {
+    const profile = printable(outcome.profile)
+    switch (outcome.kind) {
+      case 'read':
+        break
+      case 'other-grants':
+        unread.push(`profile ${profile} holds other grants than were written, because it changed the record at the same moment; check it with delorun workspace full-access`)
+        break
+      case 'unavailable':
+        context.stdout(`The studio of profile ${profile} does not ask for full access per workspace, so the change applies where a profile asks it, such as delorun headless.\n`)
+        break
+      case 'unread':
+        unread.push(`profile ${profile} did not read it (${printable(outcome.reason)})`)
+        break
     }
   }
   return unread

@@ -32,7 +32,7 @@ const isWorkspaceAccess: Check = fields({
 })
 const isWorkspaces: Check = fields({ workspaces: listOf(isWorkspaceAccess), storeProblem: optional(isString) })
 const isReview: Check = fields({ access: isWorkspaceAccess })
-const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime })
+const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime, unread: listOf(isString) })
 const isServerChange: Check = value => SERVER_CHANGES.some(change => change === value)
 const isServerState: Check = value => SERVER_STATES.some(state => state === value)
 const isEnv: Check = listOf(fields({ name: isString, value: optional(isString) }))
@@ -97,7 +97,8 @@ export async function reviewChat(fetch: HostFetch, sessionId: string): Promise<W
  * @param access - the workspace as the consent showed it.
  * @param on - on, which records the grant, or off, which withdraws it.
  * @param chat - the open chat the consent was asked from, which turning on also switches to full access.
- * @returns the workspace after the change and how many open chats changed preset.
+ * @returns the workspace after the change, how many open chats changed preset, and the other running profiles whose
+ *   studio did not read a withdrawal.
  * @throws {HostRequestError} for a refusal (`LOOPBACK_REQUIRED`, `STALE_REVIEW`, `STORE_REFUSED` among them), an
  *   unreachable Host or an unreadable answer.
  */

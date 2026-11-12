@@ -13,6 +13,9 @@ export { acceptServer, declineServer, listServers, reloadPermissions, revokeServ
 export { approveDevices, PENDING_POLL_MS, removeDevice, type ChannelCaller, type LocalDeviceApproval, type PendingDevice } from './devices-approve.ts'
 export { ChannelTokenCheck } from './studio-link.ts'
 export { exchangeLines, queryHomeStatus, sendHomeRequest, updateChannelProbe, type ExchangeOptions, type ResponseLine, type UnsignedRequest } from './client.ts'
+export {
+  PERMISSION_RELOAD_TIMEOUT_MS, profileRuns, reloadPermissionsIn, runningProfiles, type PermissionPeerSend, type PermissionReloadOutcome,
+} from './permission-peers.ts'
 export { HomeProcessError, type HomeProcessFailure } from './errors.ts'
 export { homeProcessDescriber } from './refusal.ts'
 export { HANDOVER_LINE_MAX_BYTES, openHandoverPipe, startSuccessor, type HandoverLine, type HandoverPipe, type Successor } from './handover.ts'

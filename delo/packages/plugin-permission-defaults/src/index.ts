@@ -44,7 +44,10 @@ import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { SandboxModeGuard } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
+import { DELO_PROFILE_ENV } from '@delo/contract-home-layout'
 import { resolveDeloHome, shellQuote, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delo/home'
+import { sendHomeRequest } from '@delo/home-process/client'
+import { reloadPermissionsIn, runningProfiles } from '@delo/home-process/permission-peers'
 import z from '@deepseek-ai/schemastery'
 import {
   defaultPresetOf,
@@ -148,6 +151,11 @@ export interface FullAccessChange {
    * request's chat switched to full access when it was turned on.
    */
   readonly chats: number
+  /**
+   * The other running profiles whose Host did not read a withdrawal, sorted; their open chats keep their permission
+   * until they read the store. Empty when full access was turned on, which each Host reads at its next decision.
+   */
+  readonly unread: readonly string[]
 }
 
 /**
@@ -183,8 +191,11 @@ export interface GrantChanges {
  * withdrawn by another profile's Host, `delorun workspace full-access` or
  * `delorun headless` stops counting at this service's next decision. The open
  * chats of a workspace that lost its grant are set back to the safer preset
- * right after. A change is read, checked and written under the store's lock
- * file before it is remembered.
+ * right after, and at once when the withdrawing process asks this profile's
+ * home process to read the store again ({@link reload}): this service asks the
+ * other running profiles after each withdrawal it records, as
+ * `delorun workspace full-access` does. A change is read, checked and written
+ * under the store's lock file before it is remembered.
  */
 export class PermissionDefaults extends Service {
   /** The permission-preset owner upstream's composition mounts, which seeds and applies presets, and the sandbox policy, which reads a chat's logged mode. */
@@ -198,13 +209,17 @@ export class PermissionDefaults extends Service {
   private queue: Promise<unknown> = Promise.resolve()
   /** The store's path, once the home was resolved; undefined while it cannot be. */
   private path: string | undefined
+  /** The Delo home the store was last written in; undefined until this service writes it. */
+  private home: string | undefined
   /** {@link permissionStoreIdentity} of the file the entries were read from. */
   private identity: string | undefined
-  /**
-   * The grants the open chats may rely on: the entries they were last set by, with every grant a decision read since. A
-   * workspace granted here and not in {@link entries} lost its grant.
-   */
+  /** The entries the open chats were last set by; a workspace granted here and not in {@link entries} lost its grant. */
   private applied: ReadonlyMap<string, WorkspacePermission> = new Map()
+  /**
+   * The grants a decision read since the open chats were last set, which may have let a chat switch to full access; a
+   * workspace granted here and not in {@link entries} lost its grant too.
+   */
+  private relied: ReadonlyMap<string, WorkspacePermission> = new Map()
 
   /**
    * @param ctx - the plugin context.
@@ -310,11 +325,14 @@ export class PermissionDefaults extends Service {
    * computer; the route that calls this refuses every other arrival first. On records the grant, so the guard lets a
    * chat in the workspace switch to full access and new chats there start with it; off withdraws the grant, records
    * the safer preset and sets every open chat of the workspace that runs with full access back to the safer preset,
-   * which appends that chat's `sandbox/mode` and `permission/preset` events. Turning on with the request's `chat` also
-   * switches that chat to full access, so the chat the person answered in stops asking. The change is written to the
-   * store before it is remembered, and one line without the folder's path goes to the Host's log.
+   * which appends that chat's `sandbox/mode` and `permission/preset` events, and then asks the home process of every
+   * other running profile to read the store again, so their open chats in the workspace go back as well
+   * ({@link tellOtherProfiles}). Turning on with the request's `chat` also switches that chat to full access, so the
+   * chat the person answered in stops asking. The change is written to the store before it is remembered, and one line
+   * without the folder's path goes to the Host's log.
    * @param request - the workspace the consent named, the review id it was shown with, on or off, and the answer.
-   * @returns the workspace's full access after the change, and how many open chats were set back.
+   * @returns the workspace's full access after the change, how many open chats were set back, and the other profiles
+   *   that did not read a withdrawal.
    * @throws {FullAccessChangeError} `UNCONFIRMED` without the person's answer, `UNKNOWN_WORKSPACE` for a folder no
    *   surface shows or, when turning full access on, a folder Delo never adds as a workspace (a filesystem root, the
    *   home folder, the Delo home, the stock home, or a folder containing one), `UNKNOWN_CHAT` for a `chat` that is not open in the workspace, `STALE_REVIEW` when the
@@ -332,7 +350,7 @@ export class PermissionDefaults extends Service {
     if (request.chat !== undefined && (chat === undefined || workspaceOf(chat) !== workspace)) {
       throw new FullAccessChangeError('UNKNOWN_CHAT', 'no open chat in this workspace has this id')
     }
-    return this.serial(async () => {
+    const change = await this.serial(async () => {
       await this.locked(async () => {
         const entries = await this.readForChange()
         if (workspaceAccessOf(entries, workspace).reviewId !== request.reviewId) {
@@ -343,8 +361,36 @@ export class PermissionDefaults extends Service {
       const chats = request.on ? this.switchChat(chat) : this.withdrawOpenChats(workspace)
       const grants = [...this.entries.values()].filter(entry => entry.fullAccessGrantedAt !== null).length
       this.ctx.logger.info(`permission-defaults: full access turned ${request.on ? 'on' : 'off'} for one workspace at the home's computer; ${String(grants)} workspace(s) hold a grant`)
-      return { access: workspaceAccessOf(this.entries, workspace, this.titleOf(workspace)), chats }
+      return { access: workspaceAccessOf(this.entries, workspace, this.titleOf(workspace)), chats, written: permissionEntriesDigest(this.entries) }
     })
+    // After the queue and the lock: another profile's reread waits on its own queue, and may wait on this store's lock.
+    const unread = request.on ? [] : await this.tellOtherProfiles(change.written)
+    return { access: change.access, chats: change.chats, unread }
+  }
+
+  /**
+   * Ask the home process of every other running profile to read the store again after this service withdrew a grant
+   * (`permission.reload`, contract C19, through `@delo/home-process`'s {@link reloadPermissionsIn}, which
+   * `delorun workspace full-access` uses too), so their open chats in the workspace go back to the safer preset now
+   * rather than at their next decision. This Host's own profile, `DELO_PROFILE`, is not asked. A profile that does not
+   * read the change does not undo it; the Host's log names it.
+   * @param written - the digest of the entries this service wrote.
+   * @returns the other profiles whose Host did not read the change, sorted.
+   */
+  private async tellOtherProfiles(written: string): Promise<readonly string[]> {
+    const home = this.home
+    /* v8 ignore next -- a withdrawal is told only after this service wrote the store, which sets the home. */
+    if (home === undefined) return []
+    const self = process.env[DELO_PROFILE_ENV]
+    const profiles = runningProfiles(home).filter(profile => profile !== self)
+    const outcomes = await reloadPermissionsIn({ home, profiles, written, send: sendHomeRequest })
+    const unread: string[] = []
+    for (const outcome of outcomes) {
+      if (outcome.kind !== 'unread') continue
+      unread.push(outcome.profile)
+      this.ctx.logger.warn(`permission-defaults: profile ${outcome.profile} did not read a full-access withdrawal (${outcome.reason}); its open chats keep their permission until it reads the store`)
+    }
+    return unread
   }
 
   /**
@@ -371,9 +417,10 @@ export class PermissionDefaults extends Service {
    * @returns the workspaces that gained and lost a grant.
    */
   private reconcile(): GrantChanges {
-    const changes = grantChanges(this.applied, this.entries)
+    const changes = { added: grantChanges(this.applied, this.entries).added, lost: this.lost() }
     for (const workspace of changes.lost) this.withdrawOpenChats(workspace)
     this.applied = this.entries
+    this.relied = new Map()
     if (changes.added.length > 0 || changes.lost.length > 0) {
       this.ctx.logger.info(`permission-defaults: the permission store changed in another process: ${String(changes.added.length)} workspace(s) gained a grant and ${String(changes.lost.length)} lost one`)
     }
@@ -390,10 +437,16 @@ export class PermissionDefaults extends Service {
     const identity = permissionStoreIdentity(this.path)
     if (identity === this.identity) return
     this.identity = identity
-    // A grant read since the open chats were last set may have let a chat switch, so it counts as one to withdraw.
-    this.applied = new Map([...this.applied, ...[...this.entries].filter(([, entry]) => entry.fullAccessGrantedAt !== null)])
     this.take(readPermissionStoreSync(this.path))
-    if (grantChanges(this.applied, this.entries).lost.length > 0) void this.serial(async () => { this.reconcile() })
+    if (this.lost().length > 0) void this.serial(async () => { this.reconcile() })
+  }
+
+  /**
+   * The workspaces whose grant the open chats were set by, or a decision read since, and the entries no longer hold.
+   * @returns the workspaces, sorted.
+   */
+  private lost(): readonly string[] {
+    return grantChanges(new Map([...this.applied, ...this.relied]), this.entries).lost
   }
 
   /**
@@ -417,7 +470,8 @@ export class PermissionDefaults extends Service {
    * @param change - the change.
    * @returns when the change is written.
    * @throws {FullAccessChangeError} `STORE_REFUSED` when the home cannot be resolved or the lock is not free in time,
-   *   and whatever the change throws.
+   *   and the change's own {@link FullAccessChangeError} or {@link FullAccessConsentRefusedError}; any other failure of
+   *   the change as `STORE_REFUSED`.
    */
   private async locked(change: () => Promise<void>): Promise<void> {
     let path: string
@@ -429,7 +483,7 @@ export class PermissionDefaults extends Service {
     try {
       await withPermissionStoreLock(path, change)
     } catch (error) {
-      if (error instanceof FullAccessChangeError) throw error
+      if (error instanceof FullAccessChangeError || error instanceof FullAccessConsentRefusedError) throw error
       throw new FullAccessChangeError('STORE_REFUSED', `no permission is recorded: ${reasonOf(error)}`, { cause: error })
     }
   }
@@ -441,13 +495,20 @@ export class PermissionDefaults extends Service {
    * choosing it withdraws the workspace's earlier grant, so a later full-access
    * selection asks again. A granted ask is recorded before the preset is
    * applied, so the guard lets the switch through; a refused or unanswerable
-   * ask records nothing and the session keeps the preset it had.
+   * ask records nothing and the session keeps the preset it had. The store is
+   * read again first, so a grant another process withdrew is asked for again.
+   * Withdrawing a grant sets the workspace's other open chats that run with
+   * full access back to the safer preset and asks the other running profiles to
+   * read the store again, as {@link setFullAccess} does when it turns full
+   * access off.
    * @param agent - the chat the choice was made in; its workspace is the one
    *   the consent covers, and it carries the approval ask.
    * @param preset - the preset to select for the workspace.
    * @returns when the preset is recorded and applied.
    * @throws {FullAccessConsentRefusedError} when the ask was refused,
-   *   cancelled, unanswerable, or no approval service can carry it.
+   *   cancelled, unanswerable, or no approval service can carry it, or when
+   *   another process withdrew the grant after the store was read and before
+   *   the selection was recorded.
    * @throws {FullAccessChangeError} `STORE_REFUSED` when the store cannot be
    *   read or written.
    */
@@ -456,12 +517,16 @@ export class PermissionDefaults extends Service {
     if (workspace === NO_WORKSPACE) {
       throw new FullAccessConsentRefusedError('this chat has no workspace folder, so it has no per-workspace permission to select')
     }
-    if (preset === FULL_ACCESS_PRESET && !fullAccessGranted(this.entries, workspace)) {
+    // Another process may have withdrawn the grant since this service last read the store.
+    this.refresh()
+    const asked = preset === FULL_ACCESS_PRESET && !fullAccessGranted(this.entries, workspace)
+    if (asked) {
       await this.refuseLocation(workspace)
       await this.ask(agent, workspace)
     }
-    await this.record(workspace, preset)
+    const withdrawn = await this.record(workspace, preset, asked)
     this.ctx.permissionPresets.set(agent.session, preset)
+    if (withdrawn !== undefined) await this.tellOtherProfiles(withdrawn)
   }
 
   /**
@@ -504,14 +569,31 @@ export class PermissionDefaults extends Service {
    * safer preset explicitly withdraws it, so returning to full access asks
    * again. A grant is the person's answer for that folder, and going back to
    * the sandbox is that answer changed.
+   * Full access is recorded only over a grant the store still holds, or after this selection asked: a grant another
+   * process withdrew after this selection read the store is not recorded again without asking.
    * @param workspace - the workspace key.
    * @param preset - the preset to record.
-   * @returns when the store holds the entry.
+   * @param asked - whether this selection asked the person and the person granted full access.
+   * @returns the digest of the entries written when the record withdrew a grant, whose workspace's open chats that run
+   *   with full access are then set back to the safer preset; undefined otherwise.
+   * @throws {FullAccessConsentRefusedError} for full access the selection did not ask for, over a store that holds no
+   *   grant for the workspace; nothing is recorded.
    * @throws when the store cannot be read or written.
    */
-  private record(workspace: string, preset: PermissionPresetName): Promise<void> {
+  private record(workspace: string, preset: PermissionPresetName, asked: boolean): Promise<string | undefined> {
     return this.serial(async () => {
-      await this.locked(async () => { await this.write(await this.readForChange(), workspace, preset) })
+      let withdrew = false
+      await this.locked(async () => {
+        const entries = await this.readForChange()
+        if (preset === FULL_ACCESS_PRESET && !asked && !fullAccessGranted(entries, workspace)) {
+          throw new FullAccessConsentRefusedError(`full access for the workspace ${JSON.stringify(workspace)} was withdrawn while it was being selected, so nothing was recorded; select it again to be asked`)
+        }
+        withdrew = preset !== FULL_ACCESS_PRESET && fullAccessGranted(entries, workspace)
+        await this.write(entries, workspace, preset)
+      })
+      if (!withdrew) return undefined
+      this.withdrawOpenChats(workspace)
+      return permissionEntriesDigest(this.entries)
     })
   }
 
@@ -546,15 +628,19 @@ export class PermissionDefaults extends Service {
       preset,
       fullAccessGrantedAt: preset === FULL_ACCESS_PRESET ? entries.get(workspace)?.fullAccessGrantedAt ?? Date.now() : null,
     })
+    let home: string
     let path: string
     try {
-      path = permissionStorePath((await resolveDeloHome(process.env)).path)
+      home = (await resolveDeloHome(process.env)).path
+      path = permissionStorePath(home)
       await writePermissionStore(path, next)
     } catch (error) {
       throw new FullAccessChangeError('STORE_REFUSED', `the permission store could not be written, so no permission is recorded (${reasonOf(error)})`, { cause: error })
     }
     this.entries = next
     this.applied = next
+    this.relied = new Map()
+    this.home = home
     this.path = path
     this.identity = permissionStoreIdentity(path)
   }
@@ -672,8 +758,7 @@ export class PermissionDefaults extends Service {
     } catch (error) {
       this.path = undefined
       this.identity = undefined
-      this.entries = new Map()
-      this.problem = `the Delo home could not be resolved (${reasonOf(error)})`
+      this.take({ kind: 'refused', problem: `the Delo home could not be resolved (${reasonOf(error)})` })
       return
     }
     // The identity is taken before the read, so a write that lands during the read is read again at the next decision.
@@ -682,10 +767,14 @@ export class PermissionDefaults extends Service {
   }
 
   /**
-   * Keep what a read of the store found.
+   * Keep what a read of the store found. The grants of the entries it replaces join {@link relied} first, so a reread
+   * through {@link refresh}, {@link reload} or a change finds every workspace that lost a grant a decision may have
+   * relied on.
    * @param read - the read.
    */
   private take(read: PermissionStoreRead): void {
+    // A grant read since the open chats were last set may have let a chat switch, so it counts as one to withdraw.
+    this.relied = new Map([...this.relied, ...[...this.entries].filter(([, entry]) => entry.fullAccessGrantedAt !== null)])
     this.entries = read.kind === 'readable' ? read.entries : new Map()
     this.problem = read.kind === 'refused' ? read.problem : undefined
   }

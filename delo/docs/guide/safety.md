@@ -54,6 +54,8 @@ A workspace on full access runs the model's commands outside the sandbox, with e
 
 With setup's **Safer prompts**, the default, Delorun asks for full access once per workspace before it applies: pick Full access in a chat, choose "Allow full access for this workspace" on an approval card, use Settings, Permissions, or run `delorun workspace full-access <folder> on`, and you answer on the home's own computer. A single command can still ask to run outside the sandbox: DeepSeek Harness asks you, and its question does not say that such a command can read Delorun's home. With **Same as stock**, a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness.
 
+To take full access away, use Revoke in Settings, Permissions, pick Workspace Write in a chat of that workspace, or run `delorun workspace full-access <folder> off`. The workspace's open chats go back to Workspace Write in every running profile. A profile Delorun cannot reach is named, and its open chats keep full access until you restart it with `delorun stop` and `delorun start`; running `off` again asks it again. A running `delorun headless` task picks up the change only when it next checks a permission.
+
 ## Consents
 
 Setup's prompts question decides how Delorun asks before risky changes, and `delorun setup prompts` changes the answer:

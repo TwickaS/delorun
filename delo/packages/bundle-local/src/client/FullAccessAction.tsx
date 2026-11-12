@@ -3,8 +3,10 @@
  * home's own computer it offers "Allow full access for this workspace": the click reads the workspace's full access
  * again, so it answers what the home holds then; a workspace without a grant shows the consent first, then the grant is
  * recorded, the chat switches to full access so it stops asking, and the card is answered as
- * allowed. A workspace that already holds a grant is not asked again. On a remote studio, whose review the home
- * refuses, the action says to approve at the computer instead of offering a button. A chat without a workspace folder,
+ * allowed. A workspace that already holds a grant is not asked again. Once the card answered, is sending an answer or
+ * no longer accepts one, the action is disabled, and a click already under way records nothing more: the card's
+ * `canAnswer` is read before the review, before the grant and again when the person confirms the consent. On a remote
+ * studio, whose review the home refuses, the action says to approve at the computer instead of offering a button. A chat without a workspace folder,
  * a profile without per-workspace full access, and the consent's own card (`permission`) show nothing.
  */
 import { useEffect, useState } from 'react'
@@ -60,7 +62,7 @@ export async function offerFor(fetch: HostFetch, sessionId: string): Promise<Off
  * @param props - the card's request, its answer, the chat and the copy.
  * @returns the button, the remote line, or nothing.
  */
-export function FullAccessAction({ grants, toolName, allow, sessionId, fetch, ask, t }: FullAccessActionProps): ReactNode {
+export function FullAccessAction({ grants, toolName, allow, answered, canAnswer, sessionId, fetch, ask, t }: FullAccessActionProps): ReactNode {
   const [offer, setOffer] = useState<Offer>({ kind: 'none' })
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
@@ -75,14 +77,16 @@ export function FullAccessAction({ grants, toolName, allow, sessionId, fetch, as
   if (offer.kind === 'remote') return <p className={css.line} role="status" data-full-access-action="remote">{t('action.atComputer')}</p>
   if (offer.kind === 'none' || toolName === CONSENT_TOOL) return null
   const run = async (): Promise<void> => {
+    if (!canAnswer()) return
     setBusy(true)
     setFailure(undefined)
     try {
       // The review shown at mount may be out of date: another surface may have granted or withdrawn since.
       const access = await reviewChat(fetch, sessionId)
-      if (access === undefined) return
+      // The person may have answered the card, or its request ended, while the review was read.
+      if (access === undefined || !canAnswer()) return
       const granted = access.grantedAt === null
-        ? await ask(access, sessionId)
+        ? await ask(access, sessionId, canAnswer)
         : (await setFullAccess(fetch, access, true, sessionId), true)
       if (granted) await allow()
     } catch (error) {
@@ -92,7 +96,7 @@ export function FullAccessAction({ grants, toolName, allow, sessionId, fetch, as
     }
   }
   return <div className={css.action} data-full-access-action="allow">
-    <Button variant="outline" size="sm" disabled={busy} onClick={() => { void run() }}>{t('action.allowFullAccess')}</Button>
+    <Button variant="outline" size="sm" disabled={busy || answered} onClick={() => { void run() }}>{t('action.allowFullAccess')}</Button>
     {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
   </div>
 }

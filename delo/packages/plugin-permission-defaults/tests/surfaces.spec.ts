@@ -16,6 +16,12 @@ import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { randomLockId } from '@delo/home'
+import type { ResponseLine } from '@delo/home-process/client'
+
+// The other profiles' update channels: a running profile's home process answers `permission.reload` through its Host.
+const { sendHomeRequest } = vi.hoisted(() => ({ sendHomeRequest: vi.fn<(home: string, profile: string) => Promise<ResponseLine[]>>() }))
+vi.mock('@delo/home-process/client', () => ({ sendHomeRequest }))
 import {
   apply,
   FULL_ACCESS_PRESET,
@@ -36,10 +42,15 @@ import { registerPermissionRoutes } from '../src/routes.ts'
 const roots: string[] = []
 const originalHome = process.env['DELO_HOME']
 
+const originalProfile = process.env['DELO_PROFILE']
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
   if (originalHome === undefined) delete process.env['DELO_HOME']
   else process.env['DELO_HOME'] = originalHome
+  if (originalProfile === undefined) delete process.env['DELO_PROFILE']
+  else process.env['DELO_PROFILE'] = originalProfile
+  sendHomeRequest.mockReset()
 })
 
 /** One mounted composition: the real permission services of a chat, a Delo home and two workspace folders. */
@@ -388,6 +399,61 @@ describe('a home shared by several Hosts', () => {
     expect(second.defaults.granted(second.workspace)).toBe(false)
     await new Promise(resolve => setImmediate(resolve))
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
+  })
+
+  /**
+   * Run three profiles' home processes over one home, as this process: `studio`, whose Host the spec drives, `work`,
+   * whose Host answers `permission.reload` through the second mount, and `stale`, whose socket is gone.
+   * @param home - the Delo home.
+   * @param work - the second profile's Host.
+   */
+  function runProfiles(home: string, work: PermissionDefaults): void {
+    for (const profile of ['studio', 'work', 'stale']) {
+      mkdirSync(join(home, 'run', profile), { recursive: true })
+      writeFileSync(join(home, 'run', profile, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: randomLockId(), runtime: '0.0.0', startedAt: new Date(0).toISOString() }), { mode: 0o600 })
+    }
+    process.env['DELO_PROFILE'] = 'studio'
+    sendHomeRequest.mockImplementation(async (_home, profile) => {
+      if (profile === 'work') return [{ ok: true, ...await work.reload() }]
+      throw new Error(`connect ENOENT ${profile}/update.sock`)
+    })
+  }
+
+  it('a withdrawal in one profile\'s studio sets the other running profile\'s open full-access chats back at once, and names a profile it cannot reach', async () => {
+    const first = await mounted()
+    const second = await mounted(first)
+    runProfiles(first.home, second.defaults)
+    await first.harness.create(SessionId('chat-studio'), {}, { cwd: first.workspace })
+    const shown = first.defaults.reviewChat('chat-studio')
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    expect(on.unread).toEqual([])
+    expect(sendHomeRequest).not.toHaveBeenCalled()
+    // The second profile's chat starts with the grant its Host read at that decision.
+    const open = await second.harness.create(SessionId('chat-work'), {}, { cwd: second.workspace })
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
+
+    const off = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+
+    // No decision ran in the second profile: the withdrawal reached it through its update channel.
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
+    expect(sendHomeRequest.mock.calls.map(([, profile]) => profile)).toEqual(['stale', 'work'])
+    expect(off.unread).toEqual(['stale'])
+  })
+
+  it('a return to the safer preset in one profile\'s chat sets the other running profile\'s open full-access chats back at once', async () => {
+    const first = await mounted()
+    const second = await mounted(first)
+    runProfiles(first.home, second.defaults)
+    const chat = await first.harness.create(SessionId('chat-select'), {}, { cwd: first.workspace })
+    const shown = first.defaults.reviewChat('chat-select')
+    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: 'chat-select' })
+    const open = await second.harness.create(SessionId('chat-select-work'), {}, { cwd: second.workspace })
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
+
+    await first.defaults.select(chat, SAFER_PRESET)
+
+    expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
+    expect(sendHomeRequest.mock.calls.map(([, profile]) => profile)).toEqual(['stale', 'work'])
   })
 
   it('refuses full access for a folder Delo never adds as a workspace, through the surfaces and the chat picker', async () => {

@@ -17,7 +17,8 @@
  */
 import { DEFAULT_SERVE_PORT } from '@delo/contract-reach-providers'
 import { funnelOn, ReachError, readServeRules, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delo/reach'
-import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
+import { resolveDeloHome } from '@delo/home'
+import { profileRuns } from '@delo/home-process/permission-peers'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext } from '../command.ts'
 import { hasCliProfile, selectProfile } from '../profile.ts'
@@ -41,14 +42,13 @@ export interface ReachDependencies {
 const USAGE = 'Usage: delorun reach status | on tailscale | off [--profile <name>]'
 
 /**
- * Whether a profile's home process runs.
+ * Whether a profile's home process runs: `@delo/home-process`'s {@link profileRuns}.
  * @param home - the Delo home.
  * @param profile - the CLI profile.
  * @returns true when a live process holds the lock.
  */
 export function homeRuns(home: string, profile: string): boolean {
-  const record = readHomeLock(runDirectory(home, profile))
-  return record !== undefined && processExists(record.pid)
+  return profileRuns(home, profile)
 }
 
 /**

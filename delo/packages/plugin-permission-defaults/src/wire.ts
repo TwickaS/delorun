@@ -107,4 +107,9 @@ export interface SetFullAccessAnswer {
    * request's `chat` switched to full access when it was turned on.
    */
   readonly chats: number
+  /**
+   * The other running profiles whose studio did not read a withdrawal, sorted; their open chats keep their permission
+   * until they read the store. Empty when full access was turned on.
+   */
+  readonly unread: readonly string[]
 }

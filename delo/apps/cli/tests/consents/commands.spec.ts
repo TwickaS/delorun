@@ -5,7 +5,7 @@
  * is accepted only after a yes at a terminal and with the review id that was shown, an allowed server is revoked by its
  * name only after a yes at a terminal and with the acceptance id that was shown, and every action needs Delo to run.
  */
-import { randomLockId, shellQuote } from '@delo/home'
+import { shellQuote } from '@delo/home'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,7 +20,7 @@ import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
 import { createMcpCommand, type McpDependencies } from '../../src/mcp/command.ts'
-import { confirmInTerminal, createWorkspaceCommand, runningProfiles, workspaceCommand, type WorkspaceDependencies } from '../../src/workspace/command.ts'
+import { confirmInTerminal, createWorkspaceCommand, workspaceCommand, type WorkspaceDependencies } from '../../src/workspace/command.ts'
 
 const NOW = 1_800_000_000_000
 let osHome: string
@@ -171,6 +171,45 @@ describe('delorun workspace full-access', () => {
     expect(out.stdout.indexOf('does not ask')).toBeLessThan(out.stdout.indexOf('Full access is off'))
   })
 
+  it('tells the change and asks every later profile when one profile\'s home process cannot be reached, naming that profile', async () => {
+    mkdirSync(join(permissionStorePath(deloHome), '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(permissionStorePath(deloHome), serializePermissionStore(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: 1 }]])), { mode: 0o600 })
+    const off = permissionEntriesDigest(new Map([[workspaceKey(folder), { preset: 'workspace-write', fullAccessGrantedAt: null }]]))
+    const asked: string[] = []
+    const { command } = workspace({
+      runningProfiles: () => ['a-stale', 'b-work'],
+      // A stale home lock whose pid was reused: the socket is gone, so sending throws.
+      send: async (_home, profile) => {
+        asked.push(profile)
+        if (profile === 'a-stale') throw new Error('connect ENOENT update.sock')
+        return Promise.resolve([{ ok: true, digest: off }])
+      },
+    })
+    await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.failed)
+    expect(await grants()).toEqual({ [workspaceKey(folder)]: null })
+    expect(asked).toEqual(['a-stale', 'b-work'])
+    expect(out.stdout).toContain(`Full access is off for ${workspaceKey(folder)}`)
+    expect(out.stderr).toContain('the studio of profile a-stale did not read it (connect ENOENT update.sock)')
+    expect(out.stderr).not.toContain('b-work')
+  })
+
+  it('asks the running profiles to read the store again when full access is already off, and names each that did not', async () => {
+    mkdirSync(join(permissionStorePath(deloHome), '..'), { recursive: true, mode: 0o700 })
+    const entries = new Map([[workspaceKey(folder), { preset: 'workspace-write' as const, fullAccessGrantedAt: null }]])
+    writeFileSync(permissionStorePath(deloHome), serializePermissionStore(entries), { mode: 0o600 })
+    const { command, sent, reloaded } = workspace({ runningProfiles: () => ['cli', 'work'], lines: [[{ ok: true, digest: permissionEntriesDigest(entries) }], [{ ok: false, error: 'BUSY' }]] })
+    await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.failed)
+    expect(sent).toEqual([{ op: 'permission.reload' }, { op: 'permission.reload' }])
+    expect(reloaded).toEqual(['cli', 'work'])
+    expect(out.stdout).toContain('Full access is already off')
+    expect(out.stderr).toContain('the studio of profile work did not read it (BUSY)')
+    // Full access already on needs no reread: a grant counts at each Host's next decision.
+    const on = workspace({ runningProfiles: () => ['cli'] })
+    writeFileSync(permissionStorePath(deloHome), serializePermissionStore(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: 1 }]])), { mode: 0o600 })
+    await expect(on.command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(on.sent).toEqual([])
+  })
+
   it('records nothing and says so when the record cannot be written or another command holds it', async () => {
     const directory = join(permissionStorePath(deloHome), '..')
     mkdirSync(directory, { recursive: true, mode: 0o700 })
@@ -222,17 +261,6 @@ describe('delorun workspace full-access', () => {
     clackConfirm.mockResolvedValueOnce(true).mockResolvedValueOnce(Symbol('cancel'))
     await expect(confirmInTerminal('Turn on?')).resolves.toBe(true)
     await expect(confirmInTerminal('Turn on?')).resolves.toBeUndefined()
-  })
-
-  it('lists the profiles whose home process runs', () => {
-    expect(runningProfiles(join(osHome, 'no-home'))).toEqual([])
-    for (const profile of ['work', 'cli', 'stopped']) mkdirSync(join(deloHome, 'run', profile), { recursive: true })
-    writeFileSync(join(deloHome, 'run', 'file'), '')
-    // This process holds the home lock of two profiles; the third has none.
-    for (const profile of ['work', 'cli']) {
-      writeFileSync(join(deloHome, 'run', profile, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: randomLockId(), runtime: '0.0.0', startedAt: new Date(NOW).toISOString() }), { mode: 0o600 })
-    }
-    expect(runningProfiles(deloHome)).toEqual(['cli', 'work'])
   })
 
   it('lists the workspaces the store holds', async () => {
