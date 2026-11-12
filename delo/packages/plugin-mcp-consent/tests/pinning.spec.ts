@@ -1,6 +1,6 @@
 /**
- * Specs of the files an accepted MCP server start is pinned to: the hasher that follows every symbolic link and hashes
- * the executable and each file an argument names, its digest cache, and the denial cases of the add-time consent — a
+ * Specs of the files an accepted MCP server start is pinned to: the pins that follow every symbolic link and hash the
+ * executable and each file an argument names, and the denial cases of the add-time consent — a
  * rewritten executable, a retargeted `.bin` link, a rewritten, removed or newly named script argument and an
  * unreadable file are each reviewed again with the change `contents`, an answer to a review whose file changed
  * after it was shown records nothing, and an unchanged start still starts without asking.
@@ -13,8 +13,9 @@ import { Context } from '@deepseek-ai/cordis'
 import type { McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeloMcpConsent } from '../src/index.ts'
-import { FileHasher, FilePinError, SETTLED_MS, type CachedDigest } from '../src/pins.ts'
+import { FilePinError, pinFile, pinsOf } from '../src/pins.ts'
 import { acceptanceStorePath, filesChangeOf, parseAcceptanceStore } from '../src/store.ts'
+import { chatWritableRoots, writableByChats } from '../src/writable.ts'
 
 let root: string
 
@@ -66,11 +67,11 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
-describe('the file hasher', () => {
+describe('the file pins', () => {
   it('pins the executable and each argument that names a regular file, by canonical path and contents', async () => {
     file(join(root, 'lib', 'cli.js'), 'cli\n')
     symlinkSync(join(root, 'lib', 'cli.js'), join(root, 'work', 'linked.js'))
-    const pins = await new FileHasher().pinsOf(startOf(['--flag', '', 'server.js', 'data', 'missing.js', 'linked.js', join(root, 'work', 'server.js')]))
+    const pins = await pinsOf(startOf(['--flag', '', 'server.js', 'data', 'missing.js', 'linked.js', join(root, 'work', 'server.js')]))
     expect(pins).toEqual([
       { path: join(root, 'bin', 'node'), sha256: digestOf(join(root, 'bin', 'node')) },
       { argument: 2, path: join(root, 'work', 'server.js'), sha256: digestOf(join(root, 'work', 'server.js')) },
@@ -79,47 +80,39 @@ describe('the file hasher', () => {
     ])
   })
 
+  it('pins the file the value of an --option=value argument names, such as a module --import or --require loads', async () => {
+    file(join(root, 'work', 'hook.js'), 'hook\n')
+    file(join(root, 'work', '--odd=name'), 'odd\n')
+    const pins = await pinsOf(startOf(['--import=./hook.js', '--require=hook.js', '--import=', 'x=hook.js', '--import=data', '--odd=name', 'server.js']))
+    const hook = { path: join(root, 'work', 'hook.js'), sha256: digestOf(join(root, 'work', 'hook.js')) }
+    expect(pins).toEqual([
+      { path: join(root, 'bin', 'node'), sha256: digestOf(join(root, 'bin', 'node')) },
+      { argument: 0, ...hook },
+      { argument: 1, ...hook },
+      { argument: 5, path: join(root, 'work', '--odd=name'), sha256: digestOf(join(root, 'work', '--odd=name')) },
+      { argument: 6, path: join(root, 'work', 'server.js'), sha256: digestOf(join(root, 'work', 'server.js')) },
+    ])
+  })
+
   it('follows a symbolic link of the executable to the file it names', async () => {
     file(join(root, 'pkg', 'bin', 'cli.js'), '#!/usr/bin/env node\n', 0o755)
     symlinkSync(join(root, 'pkg', 'bin', 'cli.js'), join(root, 'bin', 'cli'))
-    await expect(new FileHasher().pin(join(root, 'bin', 'cli'))).resolves.toEqual({ path: join(root, 'pkg', 'bin', 'cli.js'), sha256: digestOf(join(root, 'pkg', 'bin', 'cli.js')) })
+    await expect(pinFile(join(root, 'bin', 'cli'))).resolves.toEqual({ path: join(root, 'pkg', 'bin', 'cli.js'), sha256: digestOf(join(root, 'pkg', 'bin', 'cli.js')) })
   })
 
   it('refuses a path that does not resolve, a directory and a file it cannot open', async () => {
-    const hasher = new FileHasher()
-    await expect(hasher.pin(join(root, 'missing'))).rejects.toThrow(new FilePinError(join(root, 'missing'), 'does not exist or cannot be resolved'))
-    await expect(hasher.pin(join(root, 'work', 'data'))).rejects.toThrow('is not a regular file')
+    await expect(pinFile(join(root, 'missing'))).rejects.toThrow(new FilePinError(join(root, 'missing'), 'does not exist or cannot be resolved'))
+    await expect(pinFile(join(root, 'work', 'data'))).rejects.toThrow('is not a regular file')
     chmodSync(join(root, 'work', 'server.js'), 0o000)
-    await expect(hasher.pin(join(root, 'work', 'server.js'))).rejects.toThrow('cannot be opened for reading')
+    await expect(pinFile(join(root, 'work', 'server.js'))).rejects.toThrow('cannot be opened for reading')
   })
 
-  it('keeps the digest of a settled file and reads the file again once its status changes', async () => {
-    const cache = new Map<string, CachedDigest>()
-    const hasher = new FileHasher({ cache, now: () => Date.now() + SETTLED_MS })
+  it('reads a file again at every pin, after an in-place rewrite that keeps its size and modification time', async () => {
     const path = join(root, 'work', 'server.js')
-    const first = await hasher.pin(path)
-    const kept = cache.get(path)
-    expect(kept?.sha256).toBe(first.sha256)
-    // A kept digest serves the next pin while the status is unchanged, without reading the file.
-    cache.set(path, { key: kept?.key ?? '', sha256: 'sha256:kept' })
-    await expect(hasher.pin(path)).resolves.toEqual({ path, sha256: 'sha256:kept' })
-    writeFileSync(path, 'console.log("rewritten")\n')
-    await expect(hasher.pin(path)).resolves.toEqual({ path, sha256: digestOf(path) })
-  })
-
-  it('keeps no digest of a file whose change time is recent', async () => {
-    const cache = new Map<string, CachedDigest>()
-    await new FileHasher({ cache, now: () => 0 }).pin(join(root, 'work', 'server.js'))
-    expect(cache.size).toBe(0)
-  })
-
-  it('reads a file again after an in-place rewrite that keeps its size and modification time', async () => {
-    const path = join(root, 'work', 'server.js')
-    const hasher = new FileHasher({ now: () => Date.now() + SETTLED_MS })
-    const before = await hasher.pin(path)
+    const before = await pinFile(path)
     writeFileSync(path, 'console.log("rewritten")\n'.slice(0, readFileSync(path).length))
     utimesSync(path, new Date(0), new Date(0))
-    const after = await hasher.pin(path)
+    const after = await pinFile(path)
     expect(after.sha256).not.toBe(before.sha256)
     expect(after.sha256).toBe(digestOf(path))
   })
@@ -165,7 +158,7 @@ describe('the add-time consent of a pinned start', () => {
 
   it('starts an unchanged start without asking, and records the files it pinned', async () => {
     await consent.accept(startOf())
-    await expect(consent.review(startOf())).resolves.toEqual({ allow: true })
+    await expect(consent.review(startOf())).resolves.toMatchObject({ allow: true })
     const accepted = parseAcceptanceStore(readFileSync(acceptanceStorePath(join(root, 'home')), 'utf8')).acceptances.get('files')
     expect(accepted?.files.map(pin => pin.path)).toEqual([join(root, 'bin', 'node'), join(root, 'work', 'server.js')])
     expect((await consent.accepted())[0]?.files).toEqual(accepted?.files)
@@ -193,11 +186,44 @@ describe('the add-time consent of a pinned start', () => {
     symlinkSync('../tool/cli.js', link)
     const start = { ...startOf([]), command: './node_modules/.bin/tool', resolvedCommand: link }
     await consent.accept(start)
-    await expect(consent.review(start)).resolves.toEqual({ allow: true })
+    await expect(consent.review(start)).resolves.toMatchObject({ allow: true })
     rmSync(link)
     symlinkSync('../evil/cli.js', link)
     await expect(consent.review(start)).resolves.toMatchObject({ allow: false })
     expect(heldAs()).toEqual(['contents', `the executable now resolves to the file ${JSON.stringify(join(root, 'work', 'node_modules', 'evil', 'cli.js'))}, and the person accepted ${JSON.stringify(join(root, 'work', 'node_modules', 'tool', 'cli.js'))}`])
+  })
+
+  it('allows a start with the canonical file it pinned as the path to spawn, so a link retargeted after the review is not what runs', async () => {
+    file(join(root, 'work', 'node_modules', 'tool', 'cli.js'), '#!/usr/bin/env node\n', 0o755)
+    file(join(root, 'work', 'node_modules', 'evil', 'cli.js'), '#!/usr/bin/env node\n', 0o755)
+    const link = join(root, 'work', 'node_modules', '.bin', 'tool')
+    mkdirSync(join(link, '..'))
+    symlinkSync('../tool/cli.js', link)
+    const start = { ...startOf([]), command: './node_modules/.bin/tool', resolvedCommand: link }
+    await consent.accept(start)
+    const decision = await consent.review(start)
+    // The link is pointed elsewhere after the review allowed the start, before the mcp-client spawns it.
+    rmSync(link)
+    symlinkSync('../evil/cli.js', link)
+    expect(decision).toEqual({ allow: true, spawnCommand: join(root, 'work', 'node_modules', 'tool', 'cli.js') })
+    await expect(consent.review(startOf())).resolves.toMatchObject({ allow: false })
+    await consent.accept(startOf())
+    await expect(consent.review(startOf())).resolves.toEqual({ allow: true, spawnCommand: join(root, 'bin', 'node') })
+  })
+
+  it('names the working directory and the pinned files that lie in a workspace or a temporary directory chats can write', async () => {
+    const workspace = join(root, 'work')
+    ctx.provide('workspaceRegistry', { list: () => [{ path: workspace }] } as never)
+    await consent.review(startOf())
+    const [review] = consent.pending()
+    // The suite's root is under the temporary directory, so the executable is named as well.
+    expect(review?.writableByChats).toEqual([workspace, join(root, 'bin', 'node'), join(workspace, 'server.js')])
+  })
+
+  it('names nothing chats can write for a start outside every workspace and temporary directory', async () => {
+    await expect(chatWritableRoots([], ['/nonexistent-temporary-directory'])).resolves.toEqual([])
+    expect(writableByChats(['/usr/bin/node', '/srv/work', '/srv/workspace/a.js'], ['/srv/work', '/srv/other'])).toEqual(['/srv/work'])
+    expect(writableByChats(['/srv/work/a.js', '/srv/work/a.js', '/srv'], ['/srv/work'])).toEqual(['/srv/work/a.js'])
   })
 
   it('refuses a script argument that was removed, or an argument that now names a file', async () => {
@@ -233,7 +259,7 @@ describe('the add-time consent of a pinned start', () => {
     expect(again?.reviewId).not.toBe(shown?.reviewId)
     expect(again?.files[1]?.sha256).toBe(digestOf(join(root, 'work', 'server.js')))
     await expect(consent.acceptReview('files', again?.reviewId ?? '', true)).resolves.toEqual({ started: 0 })
-    await expect(consent.review(startOf())).resolves.toEqual({ allow: true })
+    await expect(consent.review(startOf())).resolves.toMatchObject({ allow: true })
   })
 
   it('refuses to accept a start whose file cannot be read', async () => {

@@ -13,7 +13,7 @@
  * to, starts at once, and every other review — a server never accepted, a
  * changed command, argument list, working directory or environment, a start
  * that now resolves to another executable, directory or command shell, a
- * store that is missing, unreadable, superseded or not this version's format —
+ * store that is missing, unreadable or not this version's format —
  * holds the server stopped and asks the person to accept the start, which the
  * service records with {@link DeloMcpConsent.accept}.
  * Different server names never share an acceptance.
@@ -33,6 +33,8 @@ import type { Entry as LoaderEntry } from '@deepseek-ai/cordis-plugin-loader'
 import { McpAddConsent, resolveServerStart } from '@deepseek-ai/dsh-mcp-client'
 import type { McpConsentDecision, McpServerCommand, StdioConfig } from '@deepseek-ai/dsh-mcp-client'
 import schema from '@deepseek-ai/schemastery'
+// Type-only: the ctx.workspaceRegistry merge, read for the places a chat can write.
+import type {} from '@deepseek-ai/dsh-workspace'
 import { resolveDeloHome } from '@delo/home'
 import {
   acceptanceIdOf,
@@ -40,17 +42,18 @@ import {
   acceptanceStorePath,
   acceptedStartDigest,
   changeOf,
-  coversExactly,
   EMPTY_ACCEPTANCE_STORE,
   envDigests,
   filesChangeOf,
   readAcceptanceStore,
   startDigest,
+  withAcceptanceStoreLock,
   writeAcceptanceStore,
 } from './store.ts'
 import type { AcceptanceStore, AcceptanceStoreRead, SetAsideState } from './store.ts'
 import { acceptHint, McpReviewError, pendingReviewOf, type McpReviews, type PendingReview, type RefusedStart } from './review.ts'
-import { FileHasher, type PinnedStart } from './pins.ts'
+import { pinsOf, type PinnedStart } from './pins.ts'
+import { chatWritableRoots, writableByChats } from './writable.ts'
 import { showsEnvValue } from './wire.ts'
 import type { AcceptedServer, EnvVariable, PendingServer, PinnedFile } from './wire.ts'
 import { registerMcpConsentRoutes } from './routes.ts'
@@ -111,12 +114,13 @@ interface ServerRow {
  * given after a refusal lets the next boot start the server.
  */
 export class DeloMcpConsent extends McpAddConsent implements McpReviews {
-  /** The writes to the store, chained so a grant and a review's write never interleave. */
+  /**
+   * The changes to the store, chained so this service's changes run in order; each also holds the store's lock file,
+   * which keeps another profile's process from interleaving.
+   */
   private queue: Promise<unknown> = Promise.resolve()
   /** The latest refused review of each server name, until the person accepts it or a review allows the server. */
   private readonly reviews = new Map<string, PendingReview>()
-  /** Pins the files of each reviewed start, keeping digests of unchanged files for this service's lifetime. */
-  private readonly hasher = new FileHasher()
 
   /**
    * @param ctx - the plugin context.
@@ -137,22 +141,25 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
    *   canonical working directory the mcp-client resolved them to.
    * @returns `allow: true` when the store holds an acceptance for this server
    *   name of exactly this command, these arguments, this working directory,
-   *   these resolved paths and this environment, whatever order the
-   *   environment's keys were written in, and `allow: false` with the reason it
+   *   these resolved paths, this environment, whatever order the
+   *   environment's keys were written in, and these pinned files, with the
+   *   canonical path of the pinned executable as the `spawnCommand`, so a
+   *   symbolic link retargeted after the review does not change the file that
+   *   runs; and `allow: false` with the reason it
    *   does not — the server is not accepted, its start or what it resolves to
    *   differs from its acceptance, the person set this
-   *   start aside, or the store is missing, unreadable, superseded or not this
-   *   version's format, which asks the person again. No reason names an
+   *   start aside, or the store is missing, unreadable or not this version's
+   *   format, which asks the person again. No reason names an
    *   environment value.
    */
   async review(command: McpServerCommand): Promise<McpConsentDecision> {
     const { start, verdict } = await this.judge(command)
     if (verdict.allow) {
       this.reviews.delete(command.serverName)
-      return { allow: true }
+      return { allow: true, spawnCommand: verdict.spawnCommand }
     }
     if (verdict.staleSetAside) await this.clearSetAside(command.serverName, verdict.staleSetAside)
-    this.reviews.set(command.serverName, pendingReviewOf(start, verdict.refused, Date.now()))
+    this.reviews.set(command.serverName, pendingReviewOf(start, verdict.refused, Date.now(), await this.chatWritablePaths(start)))
     return { allow: false, reason: `${verdict.refused.reason}${acceptHint(command.serverName)}` }
   }
 
@@ -210,8 +217,8 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
    */
   async revokeAcceptance(acceptanceId: string, confirmed: boolean): Promise<{ readonly stopped: number }> {
     if (!confirmed) throw new McpReviewError('UNCONFIRMED', 'the person has not confirmed the revoke, so nothing is changed')
-    const serverName = await this.serial(async () => {
-      const path = await this.storePath()
+    const path = await this.storePath()
+    const serverName = await this.serial(() => withAcceptanceStoreLock(path, async () => {
       const read = await readAcceptanceStore(path)
       if (read.kind === 'refused') throw new McpReviewError('STORE_REFUSED', `the acceptance store cannot be read: ${read.problem}`)
       const store = read.kind === 'readable' ? read.store : EMPTY_ACCEPTANCE_STORE
@@ -221,12 +228,11 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
       const acceptances = new Map(store.acceptances)
       acceptances.delete(name)
       const setAside = new Map(store.setAside).set(name, { state: 'revoked', start: acceptedStartDigest(accepted) })
-      try {
-        await writeAcceptanceStore(path, { ...store, acceptances, setAside })
-      } catch (error) {
-        throw new McpReviewError('STORE_REFUSED', reasonOf(error), { cause: error })
-      }
+      await writeAcceptanceStore(path, { ...store, acceptances, setAside })
       return name
+    })).catch((error: unknown) => {
+      // The store's lock not freed in time, or a write that failed, records nothing.
+      throw error instanceof McpReviewError ? error : new McpReviewError('STORE_REFUSED', reasonOf(error), { cause: error })
     })
     this.ctx.logger.info(`mcp-consent: the person revoked the accepted start of the stdio server ${serverName} at the home's computer`)
     let stopped = 0
@@ -311,8 +317,7 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
   /**
    * Record that the person accepted a server start, as the server name's acceptance the reviews allow. Accepting a
    * changed start of the server replaces its earlier acceptance; another server name's acceptance is unchanged. The
-   * acceptance clears the server's declined or revoked start and every version 4 acceptance that covers the start
-   * exactly. Accepting into a superseded store starts a store of this version that holds only this acceptance.
+   * acceptance clears the server's declined or revoked start.
    * @param start - the start the person accepted, as a review was shown it: the server name, the executable, its
    *   arguments in order, its working directory, its configured environment, of which the store keeps each variable's
    *   name and value digest, and the absolute executable path, command shell and working directory they resolved to.
@@ -324,16 +329,15 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
   accept(start: McpServerCommand, files?: readonly PinnedFile[]): Promise<void> {
     return this.serial(async () => {
       assertAcceptable(start)
-      const pinned: PinnedStart = { ...start, files: files ?? await this.hasher.pinsOf(start) }
+      const pinned: PinnedStart = { ...start, files: files ?? await pinsOf(start) }
       const path = await this.path()
-      const store = await this.writableStore(path)
-      const acceptances = new Map(store.acceptances).set(start.serverName, acceptanceOfStart(pinned, Date.now()))
-      const setAside = new Map(store.setAside)
-      setAside.delete(start.serverName)
-      const commandKeyed = new Map(store.commandKeyed)
-      const record = commandKeyed.get(start.command)
-      if (record !== undefined && coversExactly(record, start)) commandKeyed.delete(start.command)
-      await writeAcceptanceStore(path, { acceptances, setAside, commandKeyed })
+      await withAcceptanceStoreLock(path, async () => {
+        const store = await this.writableStore(path)
+        const acceptances = new Map(store.acceptances).set(start.serverName, acceptanceOfStart(pinned, Date.now()))
+        const setAside = new Map(store.setAside)
+        setAside.delete(start.serverName)
+        await writeAcceptanceStore(path, { acceptances, setAside })
+      })
     })
   }
 
@@ -352,7 +356,7 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
     let files: readonly PinnedFile[]
     try {
       current = await resolveServerStart(stdioConfigOf(shown))
-      files = await this.hasher.pinsOf(current)
+      files = await pinsOf(current)
     } catch (error) {
       throw new McpReviewError('STALE_REVIEW', `the start of the server ${shown.serverName} no longer resolves or reads as it was shown, so nothing is accepted: ${reasonOf(error)}`, { cause: error })
     }
@@ -373,8 +377,10 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
   private setAside(serverName: string, state: SetAsideState, start: string): Promise<void> {
     return this.serial(async () => {
       const path = await this.path()
-      const store = await this.writableStore(path)
-      await writeAcceptanceStore(path, { ...store, setAside: new Map(store.setAside).set(serverName, { state, start }) })
+      await withAcceptanceStoreLock(path, async () => {
+        const store = await this.writableStore(path)
+        await writeAcceptanceStore(path, { ...store, setAside: new Map(store.setAside).set(serverName, { state, start }) })
+      })
     })
   }
 
@@ -388,11 +394,13 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
     try {
       await this.serial(async () => {
         const path = await this.path()
-        const read = await readAcceptanceStore(path)
-        if (read.kind !== 'readable' || read.store.setAside.get(serverName)?.start !== start) return
-        const setAside = new Map(read.store.setAside)
-        setAside.delete(serverName)
-        await writeAcceptanceStore(path, { ...read.store, setAside })
+        await withAcceptanceStoreLock(path, async () => {
+          const read = await readAcceptanceStore(path)
+          if (read.kind !== 'readable' || read.store.setAside.get(serverName)?.start !== start) return
+          const setAside = new Map(read.store.setAside)
+          setAside.delete(serverName)
+          await writeAcceptanceStore(path, { ...read.store, setAside })
+        })
       })
     } catch (error) {
       this.ctx.logger.warn(`mcp-consent: the set-aside start of the stdio server ${serverName} could not be dropped: ${reasonOf(error)}`)
@@ -402,8 +410,8 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
   /**
    * The store's content to change.
    * @param path - the store's path.
-   * @returns the store, or an empty one when none exists or it is superseded.
-   * @throws when the store exists but is not this version's or version 4's format: changing a refused store would look
+   * @returns the store, or an empty one when none exists.
+   * @throws when the store exists but is not this version's format: changing a refused store would look
    *   like an answer the file cannot state, so the person fixes or removes the store first, and the review keeps
    *   asking until then.
    */
@@ -457,6 +465,16 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
   }
 
   /**
+   * The working directory and pinned files of a start that lie where this profile's chats can write.
+   * @param start - the start under review, with its pinned files.
+   * @returns the paths, the working directory first.
+   */
+  private async chatWritablePaths(start: PinnedStart): Promise<readonly string[]> {
+    const workspaces = this.ctx.get('workspaceRegistry')?.list().map(workspace => workspace.path) ?? []
+    return writableByChats([start.resolvedCwd, ...start.files.map(file => file.path)], await chatWritableRoots(workspaces))
+  }
+
+  /**
    * The Loader rows configured as stdio servers: a fiber whose configuration names a server and a command.
    * @returns each row with its server name and configured environment.
    */
@@ -502,23 +520,24 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
    * @returns the start with its pinned files, and the decision.
    */
   private async judge(command: McpServerCommand): Promise<{ readonly start: PinnedStart, readonly verdict: Verdict }> {
-    let files: readonly PinnedFile[]
+    let files: Awaited<ReturnType<typeof pinsOf>>
     try {
-      files = await this.hasher.pinsOf(command)
+      files = await pinsOf(command)
     } catch (error) {
       const verdict = refusedWith('contents', `a file this server runs could not be read, so no acceptance covers it (${reasonOf(error)})`)
       return { start: { ...command, files: [] }, verdict }
     }
     const start: PinnedStart = { ...command, files }
-    return { start, verdict: await this.decide(start) }
+    return { start, verdict: await this.decide(start, files[0].path) }
   }
 
   /**
    * Answer one review from the store.
    * @param command - the server start under review, with the files it runs.
+   * @param executable - the canonical path of its pinned executable, which an allowed start is spawned with.
    * @returns the decision.
    */
-  private async decide(command: PinnedStart): Promise<Verdict> {
+  private async decide(command: PinnedStart, executable: string): Promise<Verdict> {
     let path: string
     try {
       path = await this.path()
@@ -528,24 +547,16 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
     const read = await readAcceptanceStore(path)
     if (read.kind === 'absent') return refusedWith('new', 'no server is accepted yet (the acceptance store does not exist)')
     if (read.kind === 'refused') return refusedWith('unreadable', `the acceptance store could not be read, so nothing counts as accepted (${read.problem})`)
-    if (read.kind === 'superseded') {
-      return refusedWith('new', `the acceptance store is of version ${String(read.version)}, recorded before an acceptance covered everything a review now compares, such as the contents of the files a server runs, so nothing counts as accepted until the server is accepted again`)
-    }
     const { store } = read
     const accepted = store.acceptances.get(command.serverName)
     const change = accepted === undefined ? undefined : changeOf(accepted, command)
-    if (accepted !== undefined && change === undefined) return { allow: true }
+    if (accepted !== undefined && change === undefined) return { allow: true, spawnCommand: executable }
     const digest = startDigest(command)
     const setAside = store.setAside.get(command.serverName)
     if (setAside !== undefined && setAside.start === digest) return refusedWith(change?.part ?? 'new', SET_ASIDE_REASONS[setAside.state], setAside.state, change?.changedVariables)
-    const verdict = ((): Refusal => {
-      if (change !== undefined) return refusedWith(change.part, change.reason, 'waiting', change.changedVariables)
-      const record = store.commandKeyed.get(command.command)
-      if (record !== undefined && coversExactly(record, command)) {
-        return refusedWith('upgraded', 'the person accepted this exact start before Delo kept one acceptance per server, so this server is reviewed once')
-      }
-      return refusedWith('new', 'the acceptance store holds no acceptance for this server')
-    })()
+    const verdict = change === undefined
+      ? refusedWith('new', 'the acceptance store holds no acceptance for this server')
+      : refusedWith(change.part, change.reason, 'waiting', change.changedVariables)
     return setAside === undefined ? verdict : { ...verdict, staleSetAside: setAside.start }
   }
 
@@ -645,7 +656,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
  * A review's outcome: the decision the mcp-client reads and, for a refusal, what a surface shows of it, with the
  * digest of a set-aside start of the server that this start no longer matches.
  */
-type Verdict = { readonly allow: true } | Refusal
+type Verdict = { readonly allow: true, readonly spawnCommand: string } | Refusal
 
 /** A refused review's verdict. */
 type Refusal = { readonly allow: false, readonly refused: RefusedStart, readonly staleSetAside?: string }

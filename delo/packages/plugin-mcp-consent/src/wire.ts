@@ -55,11 +55,9 @@ export type McpConsentRefusalCode = typeof MCP_CONSENT_REFUSAL_CODES[number]
  * now resolves to another executable, whose working directory resolves to another directory, or whose batch file runs
  * through another command shell (`resolved`), a start whose executable or a file an argument names was rewritten,
  * points elsewhere through a symbolic link, now exists or no longer exists, or could not be read (`contents`), a
- * store that cannot be read, which counts no acceptance
- * (`unreadable`), or a server whose exact start the person accepted before acceptances were kept per server name,
- * which the person reviews once (`upgraded`).
+ * store that cannot be read, which counts no acceptance (`unreadable`).
  */
-export const SERVER_CHANGES = ['new', 'command', 'arguments', 'directory', 'environment', 'resolved', 'contents', 'unreadable', 'upgraded'] as const
+export const SERVER_CHANGES = ['new', 'command', 'arguments', 'directory', 'environment', 'resolved', 'contents', 'unreadable'] as const
 
 /** One code of {@link SERVER_CHANGES}. */
 export type ServerChange = typeof SERVER_CHANGES[number]
@@ -135,9 +133,17 @@ export interface PendingServer {
   readonly env: readonly EnvVariable[]
   /**
    * The files the start runs, as the review pinned them: the executable first, then each argument that names a regular
-   * file; empty when a file could not be read. An acceptance covers these contents.
+   * file; empty when a file could not be read. An acceptance covers these contents. The executable's pinned path is the
+   * file the server is spawned with; a surface says the command links to it when it differs from `resolvedCommand`.
    */
   readonly files: readonly PinnedFile[]
+  /**
+   * The canonical working directory and the pinned files that lie inside a place this profile's chats can write: one
+   * of its workspaces or a temporary directory. A chat can rewrite such a file or a module loaded from such a
+   * directory, so a surface warns before the person accepts; empty when none does. A chat with full access can write
+   * elsewhere too, which this list does not cover.
+   */
+  readonly writableByChats: readonly string[]
   /** Why the consent refused the start: no acceptance, or what changed since the last one. */
   readonly reason: string
   /** What the review asks about, for a surface's own words. */

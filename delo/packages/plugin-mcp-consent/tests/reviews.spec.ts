@@ -106,6 +106,8 @@ describe('a refused start', () => {
       serverName: 'files', reviewId: reviewIdOf(START), command: START.command, args: START.args, cwd: START.cwd,
       resolvedCommand: START.resolvedCommand, resolvedCwd: START.resolvedCwd, env: [{ name: 'API_TOKEN' }],
       files: [{ path: START.resolvedCommand, sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/) }],
+      // The suite's tree lies in the temporary directory, which chats can write.
+      writableByChats: [START.resolvedCwd, START.resolvedCommand],
       reason: 'no server is accepted yet (the acceptance store does not exist)', change: 'new', changedVariables: [], state: 'waiting',
       reviewedAt: expect.any(Number),
     })
@@ -160,7 +162,7 @@ describe('a refused start', () => {
   it('leaves the list once a review allows the server', async () => {
     await consent.review(START)
     await consent.acceptReview('files', reviewIdOf(START), true)
-    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: true })
     expect(consent.pending()).toEqual([])
   })
 })
@@ -170,7 +172,7 @@ describe('an answer to a pending review', () => {
     await consent.review(START)
     await expect(consent.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 0 })
     expect(storeText()).not.toContain(SECRET)
-    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: true })
   })
 
   it('records nothing without the person\'s confirmation', async () => {
@@ -205,7 +207,7 @@ describe('an answer to a pending review', () => {
     expect(again).toMatchObject({ resolvedCommand: join(root, 'ahead', 'tool'), state: 'waiting' })
     expect(again?.reviewId).not.toBe(reviewIdOf(shown))
     await expect(consent.acceptReview('files', again?.reviewId ?? '', true)).resolves.toEqual({ started: 0 })
-    await expect(consent.review({ ...shown, resolvedCommand: join(root, 'ahead', 'tool') })).resolves.toEqual({ allow: true })
+    await expect(consent.review({ ...shown, resolvedCommand: join(root, 'ahead', 'tool') })).resolves.toMatchObject({ allow: true })
     await expect(consent.review(shown)).resolves.toMatchObject({ allow: false })
     expect(consent.pending()[0]?.change).toBe('resolved')
   })
@@ -284,7 +286,7 @@ describe('an answer to a pending review', () => {
     await consent.review(START)
     await consent.declineReview('files', reviewIdOf(START))
     await expect(consent.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 0 })
-    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: true })
     expect(storeText()).not.toContain('declined')
   })
 
@@ -408,8 +410,8 @@ describe('an accepted start', () => {
     const listed = await consent.accepted()
     expect(listed.map(entry => [entry.serverName, entry.args, entry.configured])).toEqual([['files', files.args, false], ['memory', memory.args, false]])
     expect(new Set(listed.map(entry => entry.acceptanceId)).size).toBe(2)
-    await expect(consent.review(files)).resolves.toEqual({ allow: true })
-    await expect(consent.review(memory)).resolves.toEqual({ allow: true })
+    await expect(consent.review(files)).resolves.toMatchObject({ allow: true })
+    await expect(consent.review(memory)).resolves.toMatchObject({ allow: true })
     await expect(consent.review({ ...memory, serverName: 'files' })).resolves.toMatchObject({ allow: false })
   })
 
@@ -424,7 +426,7 @@ describe('an accepted start', () => {
     expect(updates.get('files')).toHaveBeenCalledWith({ serverName: 'files', command: START.command }, true)
     expect(updates.get('memory')).not.toHaveBeenCalled()
     expect((await consent.accepted()).map(entry => entry.serverName)).toEqual(['memory'])
-    await expect(consent.review(memory)).resolves.toEqual({ allow: true })
+    await expect(consent.review(memory)).resolves.toMatchObject({ allow: true })
     await expect(consent.review(START)).resolves.toMatchObject({ allow: false, reason: expect.stringContaining('the person revoked this server\'s acceptance') })
     expect(consent.pending()).toEqual([expect.objectContaining({ serverName: 'files', state: 'revoked', change: 'new' })])
   })
@@ -437,7 +439,7 @@ describe('an accepted start', () => {
     await restarted.review(START)
     expect(restarted.pending()[0]?.state).toBe('revoked')
     await expect(restarted.acceptReview('files', reviewIdOf(START), true)).resolves.toEqual({ started: 0 })
-    await expect(restarted.review(START)).resolves.toEqual({ allow: true })
+    await expect(restarted.review(START)).resolves.toMatchObject({ allow: true })
     await restarted.revokeAcceptance((await restarted.accepted())[0]?.acceptanceId ?? '', true)
     await restarted.review({ ...START, cwd: OTHER, resolvedCwd: OTHER })
     expect(restarted.pending()[0]).toMatchObject({ state: 'waiting', change: 'new' })
@@ -455,7 +457,7 @@ describe('an accepted start', () => {
     // Accepting a changed start of the server replaces the acceptance, so the id shown before it is stale.
     await accepted({ ...START, cwd: OTHER, resolvedCwd: OTHER })
     await expect(consent.revokeAcceptance(acceptanceId, true)).rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
-    await expect(consent.review({ ...START, cwd: OTHER, resolvedCwd: OTHER })).resolves.toEqual({ allow: true })
+    await expect(consent.review({ ...START, cwd: OTHER, resolvedCwd: OTHER })).resolves.toMatchObject({ allow: true })
   })
 })
 
@@ -502,7 +504,7 @@ describe('the routes', () => {
       const malformed = await routes.post(MCP_CONSENT_ROUTES.revoke, body)
       expect([malformed.status, await malformed.json()]).toEqual([400, expect.objectContaining({ error: 'INVALID_REQUEST' })])
     }
-    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: true })
     const revoked = await routes.post(MCP_CONSENT_ROUTES.revoke, { acceptanceId, confirmed: true })
     expect([revoked.status, await revoked.json()]).toEqual([200, { stopped: 0 }])
     await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
@@ -522,7 +524,7 @@ describe('the routes', () => {
     expect(storeText()).toBeUndefined()
     const accepted = await routes.post(MCP_CONSENT_ROUTES.accept, { serverName: 'files', reviewId, confirmed: true })
     expect([accepted.status, await accepted.json()]).toEqual([200, { started: 0 }])
-    await expect(consent.review(START)).resolves.toEqual({ allow: true })
+    await expect(consent.review(START)).resolves.toMatchObject({ allow: true })
   })
 })
 

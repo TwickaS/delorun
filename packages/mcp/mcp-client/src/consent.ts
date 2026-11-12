@@ -11,7 +11,8 @@
  * absolute executable path and canonical working directory the configured
  * command and directory resolve to when the review runs, and on Windows the
  * command shell that runs a batch file. The server is
- * spawned with those resolved paths, so it runs what was reviewed.
+ * spawned with those resolved paths, or with the executable path an allowing
+ * decision names, so it runs what was reviewed.
  *
  * A provider implements {@link McpAddConsent} and is loaded as a plugin whose
  * module exports {@link MCP_ADD_CONSENT_PROVIDER_EXPORT} set to `true`. The
@@ -47,7 +48,8 @@ export interface McpServerCommand {
   /** The configured working directory; the empty string runs the server in the Host's working directory. */
   readonly cwd: string
   /**
-   * The absolute path of the executable the server is spawned with: `command`
+   * The absolute path of the executable the server is spawned with, unless the
+   * allowing decision names another ({@link McpConsentDecision}): `command`
    * itself when it contains `/`, resolved against {@link resolvedCwd}, or the
    * first executable file named `command` in the `PATH` of the child's
    * environment. Symbolic links are kept; the review covers this path, not the
@@ -70,7 +72,16 @@ export interface McpServerCommand {
 
 /** The decision a consent review returns. */
 export type McpConsentDecision =
-  | { readonly allow: true }
+  | {
+    readonly allow: true
+    /**
+     * The absolute path the server is spawned with instead of the reviewed
+     * `resolvedCommand`, such as the canonical file the provider checked, so
+     * a symbolic link retargeted after the review cannot change the file that
+     * runs. Absent, the server is spawned with `resolvedCommand`.
+     */
+    readonly spawnCommand?: string
+  }
   | { readonly allow: false; readonly reason: string }
 
 /**

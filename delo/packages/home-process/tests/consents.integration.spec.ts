@@ -17,7 +17,7 @@ import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type 
 
 const SERVER: PendingMcpServer = {
   serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: [], cwd: '',
-  resolvedCommand: '/opt/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'PATH', value: '/opt/bin' }, { name: 'TOKEN' }], files: [],
+  resolvedCommand: '/opt/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'PATH', value: '/opt/bin' }, { name: 'TOKEN' }], files: [], writableByChats: [],
   reason: 'not accepted', change: 'environment', changedVariables: ['TOKEN'], state: 'waiting', reviewedAt: 0,
 }
 

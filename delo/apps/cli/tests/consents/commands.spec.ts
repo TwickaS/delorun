@@ -254,7 +254,7 @@ describe('delorun workspace full-access', () => {
 
 const SERVER = {
   serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
-  resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'API_TOKEN' }], files: [] as object[],
+  resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'API_TOKEN' }], files: [] as object[], writableByChats: [] as string[],
   reason: 'the acceptance store holds no acceptance for this server', change: 'new', changedVariables: [], state: 'waiting', reviewedAt: NOW,
 }
 
@@ -308,7 +308,8 @@ describe('delorun mcp', () => {
     expect(out.stdout).toContain('    runs: /home/person/project/node_modules/.bin/npx\n    runs in: /home/person\n')
     const { resolvedCommand: _command, ...unresolved } = SERVER
     const { files: _files, ...unpinned } = SERVER
-    for (const entry of [unresolved, unpinned, { ...SERVER, resolvedCwd: 1 }, { ...SERVER, resolvedShell: 2 }, { ...SERVER, files: [{ path: 3 }] }]) {
+    const { writableByChats: _writable, ...unchecked } = SERVER
+    for (const entry of [unresolved, unpinned, unchecked, { ...SERVER, writableByChats: [4] }, { ...SERVER, resolvedCwd: 1 }, { ...SERVER, resolvedShell: 2 }, { ...SERVER, files: [{ path: 3 }] }]) {
       const unreadable = mcp({ lines: [[{ ok: true, servers: [entry], accepted: [] }]] })
       await expect(unreadable.command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.failed })
     }
@@ -327,7 +328,6 @@ describe('delorun mcp', () => {
       command: 'its command changed', arguments: 'its arguments changed', directory: 'its working directory changed',
       environment: 'its environment variables changed', unreadable: 'the acceptance list could not be read',
       resolved: 'its command or working directory now resolves to another place on this computer',
-      upgraded: 'Delorun now remembers each server separately; review it once',
       contents: 'a file it runs changed since you accepted it',
     }
     for (const [change, words] of Object.entries(changes)) {
@@ -379,6 +379,23 @@ describe('delorun mcp', () => {
     out.stdout = ''
     await expect(empty.command.run(['list'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toBe('No MCP server is waiting for your answer.\n\nNo MCP server is allowed.\n')
+  })
+
+  it('shows on the accept screen the file the command links to, which is the file that runs, and what chats can write', async () => {
+    const linked = {
+      ...SERVER,
+      files: [{ path: '/usr/local/lib/node_modules/npm/bin/npx-cli.js', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 1, path: '/home/person/project/server.js', sha256: `sha256:${'b'.repeat(64)}` }],
+      writableByChats: ['/home/person/project/server.js'],
+    }
+    const { command } = mcp({ answers: [false], lines: [[{ ok: true, servers: [linked], accepted: [] }]] })
+    await expect(command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).toContain('    runs: /usr/local/bin/npx, which links to /usr/local/lib/node_modules/npm/bin/npx-cli.js\n')
+    expect(out.stdout).toContain('    chats can write: /home/person/project/server.js, so a chat can change what this server runs\n')
+    const direct = { ...linked, files: [{ path: '/usr/local/bin/npx', sha256: `sha256:${'a'.repeat(64)}` }], writableByChats: [] }
+    const plain = mcp({ answers: [false], lines: [[{ ok: true, servers: [direct], accepted: [] }]] })
+    await expect(plain.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).toContain('    runs: /usr/local/bin/npx\n')
+    expect(out.stdout).not.toContain('chats can write: /usr')
   })
 
   it('accepts a server with the review id it showed, once the person says yes at a terminal', async () => {

@@ -146,6 +146,16 @@ describe('the add-time consent before a reconnect', () => {
     expect(spawns()).toEqual([[join(root, 'bin', 'tool'), root], [join(root, 'bin', 'tool'), root]])
   })
 
+  it('spawns the executable path an allowing decision names, at boot and at each reconnect', async () => {
+    const pinned = (path: string) => (): Promise<McpConsentDecision> => Promise.resolve({ allow: true, spawnCommand: path })
+    new StubConsent(ctx, [pinned(join(root, 'pinned', 'tool-1')), pinned(join(root, 'pinned', 'tool-2'))])
+    await apply(ctx, config())
+    instances[0]!.onclose?.()
+
+    await vi.waitFor(() => { expect(instances).toHaveLength(2) })
+    expect(spawns()).toEqual([[join(root, 'pinned', 'tool-1'), root], [join(root, 'pinned', 'tool-2'), root]])
+  })
+
   it('stops reconnecting, unregisters the tools and spawns nothing when the consent refuses the reconnect', async () => {
     const consent = new StubConsent(ctx, [allow, () => Promise.resolve({ allow: false, reason: 'the file changed' })])
     await apply(ctx, config())

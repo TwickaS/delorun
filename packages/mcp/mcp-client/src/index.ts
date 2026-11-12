@@ -157,7 +157,8 @@ export const Config = z.union([
 
 /**
  * Resolve a stdio server's start, have the consent review it, and return the
- * config that spawns exactly the reviewed executable in the reviewed directory.
+ * config that spawns the reviewed executable, or the path the consent's
+ * decision names for it, in the reviewed directory.
  * @param consent - the mounted consent.
  * @param config - the server's stdio configuration.
  * @returns the configuration to spawn.
@@ -168,7 +169,7 @@ async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promi
   const start = await resolveServerStart(config)
   const decision = await consent.review(start)
   if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
-  return { ...config, command: start.resolvedCommand, cwd: start.resolvedCwd }
+  return { ...config, command: decision.spawnCommand ?? start.resolvedCommand, cwd: start.resolvedCwd }
 }
 
 /**
@@ -214,8 +215,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // the server does not start until the review allows it, and again before
   // every reconnect spawns it, so a file that changed while the server ran is
   // reviewed before it runs again. The allowed server
-  // is spawned with the reviewed executable path and working directory, so a
-  // later change of the Host's working directory or PATH cannot swap them.
+  // is spawned with the reviewed executable path, or the path the decision
+  // names for it, and working directory, so a later change of the Host's
+  // working directory or PATH cannot swap them.
   // The lookup waits for declaring rows, so the result does not depend on row
   // order. Without a provider — or for a Streamable HTTP server, which starts
   // no local command — startup is exactly upstream's. An unresolved start or a

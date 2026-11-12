@@ -6,7 +6,9 @@
  * - `list` shows each pending server: what changed since the person allowed it (for an environment change, which
  *   variables), whether the person declined it or revoked it, its command, arguments, working directory and configured
  *   environment variables, the absolute executable that runs, on Windows the command shell that runs a batch file, and
- *   the directory it runs in, the files it runs, which the acceptance pins by their contents, and why it waits; then each allowed server with the same start fields, whether a
+ *   the file it links to when that differs, the directory it runs in, the files it runs, which the acceptance pins by
+ *   their contents, the ones of those and the directory that chats can write, and why it waits; then each allowed
+ *   server with the same start fields, whether a
  *   configured server has its name, and when it was allowed. A variable's value is
  *   printed only for a variable that changes what runs (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`,
  *   `PYTHONPATH`, `DYLD_*`).
@@ -74,7 +76,6 @@ const CHANGE_WORDS = {
   resolved: 'its command or working directory now resolves to another place on this computer',
   contents: 'a file it runs changed since you accepted it',
   unreadable: 'the acceptance list could not be read',
-  upgraded: 'Delorun now remembers each server separately; review it once',
 } as const
 
 /** One code of {@link CHANGE_WORDS}, as `mcp.list` answers it. */
@@ -116,6 +117,8 @@ interface ServerStart {
 /** One pending server as `mcp.list` answers it. */
 interface PendingServer extends ServerStart {
   readonly reviewId: string
+  /** The working directory and pinned files that lie where chats can write. */
+  readonly writableByChats: readonly string[]
   readonly reason: string
   readonly change: ServerChange
   readonly changedVariables: readonly string[]
@@ -267,10 +270,10 @@ function fileOf(entry: object): string | undefined {
  */
 function pendingOf(entry: object): PendingServer | undefined {
   const start = startOf(entry)
-  const [reviewId, reason, change, changedVariables, state] = ['reviewId', 'reason', 'change', 'changedVariables', 'state'].map((key): unknown => Reflect.get(entry, key))
-  if (start === undefined || typeof reviewId !== 'string' || typeof reason !== 'string' || !isStrings(changedVariables)) return undefined
+  const [reviewId, reason, change, changedVariables, state, writableByChats] = ['reviewId', 'reason', 'change', 'changedVariables', 'state', 'writableByChats'].map((key): unknown => Reflect.get(entry, key))
+  if (start === undefined || typeof reviewId !== 'string' || typeof reason !== 'string' || !isStrings(changedVariables) || !isStrings(writableByChats)) return undefined
   if (!isKey(CHANGE_WORDS, change) || !isKey(STATE_WORDS, state)) return undefined
-  return { ...start, reviewId, reason, change, changedVariables, state }
+  return { ...start, reviewId, reason, change, changedVariables, state, writableByChats }
 }
 
 /**
@@ -310,11 +313,21 @@ function startFieldLines(start: ServerStart): string[] {
     `    command: ${printable(start.command)}`,
     `    arguments: ${start.args.length === 0 ? 'none' : printable(start.args.map(argument => JSON.stringify(argument)).join(' '))}`,
     `    working directory: ${start.cwd === '' ? 'the studio\'s own' : printable(start.cwd)}`,
-    `    runs: ${printable(start.resolvedCommand)}${start.resolvedShell === undefined ? '' : ` through the command shell ${printable(start.resolvedShell)}`}`,
+    `    runs: ${printable(start.resolvedCommand)}${linksTo(start)}${start.resolvedShell === undefined ? '' : ` through the command shell ${printable(start.resolvedShell)}`}`,
     `    runs in: ${printable(start.resolvedCwd)}`,
     ...(start.files.length === 0 ? [] : [`    files it runs: ${printable(start.files.join(', '))}`]),
     `    environment variables${hidden ? ' (values not shown)' : ''}: ${env.length === 0 ? 'none' : env.join(', ')}`,
   ]
+}
+
+/**
+ * The words naming the file a start's executable links to, which is the file that runs.
+ * @param start - the start.
+ * @returns `, which links to <file>` when the pinned executable differs from the resolved one; otherwise nothing.
+ */
+function linksTo(start: ServerStart): string {
+  const [executable] = start.files
+  return executable === undefined || executable === start.resolvedCommand ? '' : `, which links to ${printable(executable)}`
 }
 
 /**
@@ -328,6 +341,7 @@ function startLines(server: PendingServer): string {
     `${printable(server.serverName)}: ${CHANGE_WORDS[server.change]}${state === '' ? '' : `; ${state}`}`,
     ...(server.changedVariables.length === 0 ? [] : [`    changed variables: ${printable(server.changedVariables.join(', '))}`]),
     ...startFieldLines(server),
+    ...(server.writableByChats.length === 0 ? [] : [`    chats can write: ${printable(server.writableByChats.join(', '))}, so a chat can change what this server runs`]),
     `    waits because: ${printable(server.reason)}`,
   ].join('\n')
 }

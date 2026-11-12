@@ -16,6 +16,7 @@
     { "path": "../../../packages/mcp/mcp-client" },
     { "path": "../../../packages/core/system-prompt" },
     { "path": "../../../packages/core/tools" },
-    { "path": "../../../packages/core/tool-executor-native" }
+    { "path": "../../../packages/core/tool-executor-native" },
+    { "path": "../../../packages/workspace/workspace" }
   ]
 }

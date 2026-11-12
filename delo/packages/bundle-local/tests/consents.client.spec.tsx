@@ -203,7 +203,7 @@ const SERVER = {
   serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
   resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person',
   env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], files: [] as { argument?: number, path: string, sha256: string }[],
-  changedVariables: [] as string[], state: 'waiting' as const,
+  writableByChats: [] as string[], changedVariables: [] as string[], state: 'waiting' as const,
   reason: 'the acceptance store holds no acceptance for this command', change: 'new' as const, reviewedAt: NOW - 60_000,
 }
 const ACCEPTED = {
@@ -360,6 +360,25 @@ describe('the MCP server review', () => {
     expect(within(dialog).getByText((_content, element) => element?.tagName === 'CODE' && element.textContent === '/opt/node/bin/node\n/work/server.js')).toBeTruthy()
   })
 
+  it('names the file the command links to, which is the file that starts, and the paths chats can write', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    const files = [{ path: '/usr/local/lib/npx-cli.js', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 1, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    void source.ask({ ...SERVER, files, writableByChats: ['/work', '/work/server.js'] })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText('/usr/local/bin/npx links to /usr/local/lib/npx-cli.js, which is the file Delorun starts.')).toBeTruthy()
+    expect(within(dialog).getByText('Chats can write to /work, /work/server.js, so a chat can change what this server runs.')).toBeTruthy()
+  })
+
+  it('says nothing about a link or about what chats can write when the command is the file itself and none is writable', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask({ ...SERVER, files: [{ path: '/usr/local/bin/npx', sha256: `sha256:${'a'.repeat(64)}` }] })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(dialog.querySelector('[data-links]')).toBeNull()
+    expect(dialog.querySelector('[data-writable]')).toBeNull()
+  })
+
   it('names the command shell that runs a batch file', () => {
     const source = createMcpReviewSource(fakeHost().fetch)
     void source.ask({ ...SERVER, resolvedCommand: '/nodejs/npx.cmd', resolvedShell: '/Windows/System32/cmd.exe' })
@@ -379,7 +398,7 @@ describe('the MCP server review', () => {
 
   it('says in its own words what each review asks about', () => {
     const t = makeTranslate(en)
-    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'contents', 'unreadable', 'upgraded'] as const) {
+    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'contents', 'unreadable'] as const) {
       expect(serverChangeText(t, { change, changedVariables: [] })).toBe(en[`mcp.change.${change}`])
     }
   })

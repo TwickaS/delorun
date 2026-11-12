@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto'
 import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client'
 import type { PinnedStart } from './pins.ts'
-import { envDigest } from './store.ts'
+import { envDigests } from './store.ts'
 import { showsEnvValue } from './wire.ts'
 import type { AcceptedServer, EnvVariable, McpConsentRefusalCode, PendingServer, ServerChange, ServerState } from './wire.ts'
 
@@ -32,13 +32,13 @@ export interface PendingReview {
 
 /**
  * The id of a review of one server start: a digest of every field the start carries, sorted by name, with the
- * environment replaced by its digest. A field the mcp-client adds to the start changes the id with it, and so do the
+ * environment replaced by each variable's digest. A field the mcp-client adds to the start changes the id with it, and so do the
  * pinned files.
  * @param start - the start under review, with the files it pinned.
  * @returns {@link MCP_REVIEW_ID_LENGTH} hexadecimal digits.
  */
 export function mcpReviewId(start: PinnedStart): string {
-  const fields = Object.entries({ ...start, env: envDigest(start.env) }).sort(([left], [right]) => (left < right ? -1 : 1))
+  const fields = Object.entries({ ...start, env: envDigests(start.env) }).sort(([left], [right]) => (left < right ? -1 : 1))
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex').slice(0, MCP_REVIEW_ID_LENGTH)
 }
 
@@ -78,10 +78,11 @@ export interface RefusedStart {
  * @param start - the refused start, with the files the review pinned.
  * @param refused - what the consent found.
  * @param reviewedAt - when, in milliseconds since the epoch.
+ * @param writableByChats - the working directory and pinned files that lie where chats can write.
  * @returns the review, whose shown fields name the resolved executable path, working directory and command shell, the
- *   environment's variables and only the values a surface may show, and the pinned files.
+ *   environment's variables and only the values a surface may show, the pinned files, and the paths chats can write.
  */
-export function pendingReviewOf(start: PinnedStart, refused: RefusedStart, reviewedAt: number): PendingReview {
+export function pendingReviewOf(start: PinnedStart, refused: RefusedStart, reviewedAt: number, writableByChats: readonly string[]): PendingReview {
   return {
     start,
     shown: {
@@ -95,6 +96,7 @@ export function pendingReviewOf(start: PinnedStart, refused: RefusedStart, revie
       ...start.resolvedShell === undefined ? {} : { resolvedShell: start.resolvedShell },
       env: shownEnv(start.env),
       files: start.files.map(file => ({ ...file })),
+      writableByChats: [...writableByChats],
       reason: refused.reason,
       change: refused.change,
       changedVariables: [...refused.changedVariables],

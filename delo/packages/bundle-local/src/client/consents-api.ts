@@ -40,7 +40,7 @@ const isFiles: Check = listOf(fields({ argument: optional(value => Number.isSafe
 const isPendingServers: Check = fields({
   servers: listOf(fields({
     serverName: isString, reviewId: isString, command: isString, args: listOf(isString), cwd: isString,
-    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, files: isFiles, reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
+    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, files: isFiles, writableByChats: listOf(isString), reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
   })),
   accepted: listOf(fields({
     acceptanceId: isString, serverName: isString, command: isString, args: listOf(isString), cwd: isString,
