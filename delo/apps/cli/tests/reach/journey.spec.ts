@@ -102,7 +102,7 @@ afterAll(async () => {
 describe('remote access from a second device', () => {
   it('runs from reach on to the removal that ends the device\'s session', async () => {
     // `delorun reach on tailscale` checks Tailscale and writes the row the profile loads.
-    await expect(createReachCommand({ tailscale, running: () => false }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    await expect(createReachCommand({ tailscale, running: () => false, send: () => Promise.resolve([]) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
     const row = readReachRow(deloHome, 'default')
     expect(row).toEqual({ enabled: true, address: ADDRESS, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000 })
     expect(output.stdout).toContain('Only a device you approve at this computer')

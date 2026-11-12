@@ -11,7 +11,10 @@
  * the state's sentence. While the option is ready the service runs the provider's check every `checkIntervalMs` on an
  * unreferenced timer: an unknown answer makes it `degraded`, and a blocking one stops it as a failed start does.
  * Disposing the plugin stops each provider, closes its listeners and stops serving it, in that order, and logs a stop
- * that failed. Every option is off by default.
+ * that failed. {@link ReachService.apply} restarts every option from new rows while the home runs, which the update
+ * channel's `reach.apply` drives after `delorun reach on|off` wrote them; starts, applies and disposal run one at a
+ * time. Each state change is logged to the home log with its code and sentence, never a secret. Every option is off by
+ * default.
  *
  * @module @delo/reach/service
  */
@@ -106,6 +109,10 @@ export class ReachService extends Service {
 
   private readonly providers = new Map<ReachOptionId, ReachProvider>()
   private readonly states = new Map<ReachOptionId, ReachStatus>()
+  /** How to stop each started option: its provider, listeners and serving, in that order. */
+  private readonly stops = new Map<ReachOptionId, () => Promise<void>>()
+  /** The last start, apply or disposal; each waits for the one before it. */
+  private queue: Promise<unknown> = Promise.resolve()
   /** The rows. */
   private readonly config: Config
 
@@ -141,6 +148,59 @@ export class ReachService extends Service {
   }
 
   /**
+   * Whether the service runs: the C16 switch `reach` was on when the plugin loaded.
+   * @returns the switch.
+   */
+  get mounted(): boolean {
+    return this.config.enabled
+  }
+
+  /**
+   * Apply new rows to a running home: stop each started option, then start each option whose row is on, as a start
+   * does. A row that does not resolve leaves its option `blocked` with the resolver's code.
+   * @param rows - the rows, as the profile now holds them.
+   * @returns every registered option's state once its start settled, or undefined when the switch `reach` was off at
+   *   load, so no option can start before the next start.
+   */
+  async apply(rows: ReachConfigRows): Promise<readonly ReachStatus[] | undefined> {
+    if (!this.config.enabled) return undefined
+    return this.serialize(async () => {
+      await this.stopAll()
+      for (const provider of this.providers.values()) {
+        let spec: ReachSpec | undefined
+        try {
+          spec = provider.resolve(rows)
+        } catch (error) {
+          if (!(error instanceof ReachError)) throw error
+          this.change({ option: provider.option, state: 'blocked', cause: error.code, detail: error.detail })
+          continue
+        }
+        if (spec === undefined) this.change({ option: provider.option, state: 'off' })
+        else await this.startOption(provider, spec)
+      }
+      return this.status()
+    })
+  }
+
+  /**
+   * Run one start, apply or disposal after the one before it.
+   * @param task - the work.
+   * @returns its result.
+   */
+  private serialize<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(task)
+    this.queue = next.catch((_failed: unknown) => {
+      // The failure reaches the caller of this task; the next task runs regardless.
+    })
+    return next
+  }
+
+  /** Stop every started option. */
+  private async stopAll(): Promise<void> {
+    for (const stop of [...this.stops.values()]) await stop()
+  }
+
+  /**
    * The `tailscale` runner the Tailscale provider uses.
    * @returns the system's `tailscale`, started without a shell.
    */
@@ -156,13 +216,16 @@ export class ReachService extends Service {
     if (!this.config.enabled) return
     this.ctx.effect(() => this.ctx.webServer.register({ kind: 'exact', path: REACH_STATUS_PATH, handler: (request, response) => { this.answerStatus(request, response) } }), 'reach status route')
     this.ctx.effect(() => this.register(new TailscalePrivateProvider(this.tailscale())), 'reach tailscale-private provider')
+    this.ctx.effect(() => async () => { await this.serialize(() => this.stopAll()) }, 'reach options')
     const rows: ReachConfigRows = {
       tailscalePrivate: { ...this.config.tailscalePrivate, address: brandString<StudioAddress>(this.config.tailscalePrivate.address) },
     }
-    for (const provider of this.providers.values()) {
-      const spec = provider.resolve(rows)
-      if (spec !== undefined) await this.startOption(provider, spec)
-    }
+    await this.serialize(async () => {
+      for (const provider of this.providers.values()) {
+        const spec = provider.resolve(rows)
+        if (spec !== undefined) await this.startOption(provider, spec)
+      }
+    })
   }
 
   /**
@@ -205,7 +268,7 @@ export class ReachService extends Service {
 
   /**
    * Start one option: serve its listener, hold its fixed port, open the reach listener, relay the fixed port to it and
-   * connect the provider; watch it while ready, and stop it when the plugin is disposed.
+   * connect the provider; watch it while ready, and record how {@link stopAll} stops it.
    * @param provider - the option's provider.
    * @param spec - the resolved spec.
    */
@@ -283,7 +346,8 @@ export class ReachService extends Service {
         .finally(() => { watch.checking = undefined })
     }, spec.checkIntervalMs)
     timer.unref()
-    this.ctx.effect(() => async () => {
+    this.stops.set(spec.option, async () => {
+      this.stops.delete(spec.option)
       watch.disposing = true
       clearInterval(timer)
       await watch.checking
@@ -293,7 +357,7 @@ export class ReachService extends Service {
         if (removal !== undefined) this.ctx.logger.error(`reach: ${spec.option} stopped, but ${removal.detail} (${removal.code})`)
       }
       this.change({ option: spec.option, state: 'off' })
-    }, `reach ${spec.option}`)
+    })
   }
 
   /**
@@ -315,11 +379,16 @@ export class ReachService extends Service {
   }
 
   /**
-   * Record and announce one option's state.
+   * Record, log and announce one option's state. The log line names the option, the state, and for `blocked`,
+   * `failed` and `degraded` the code and sentence, which name no secret.
    * @param status - the new state.
    */
   private change(status: ReachStatus): void {
     this.states.set(status.option, status)
+    const line = ['reach:', status.option, status.state, ...status.cause === undefined ? [] : [`(${status.cause}):`, status.detail]].join(' ')
+    if (status.state === 'failed') this.ctx.logger.error(line)
+    else if (status.state === 'blocked' || status.state === 'degraded') this.ctx.logger.warn(line)
+    else this.ctx.logger.info(line)
     this.ctx.emit('reach/state', { option: status.option, state: status.state, ...(status.cause === undefined ? {} : { cause: status.cause }) })
   }
 }

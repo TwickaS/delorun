@@ -17,6 +17,7 @@ import type { StudioLink, UpdateJournal } from '@delo/contract-home-process'
 import type { ExchangeOptions, ResponseLine, UnsignedRequest } from './client.ts'
 import type { LocalDeviceApproval } from './devices-approve.ts'
 import type { LocalConsents } from './consents.ts'
+import type { LocalReach } from './reach.ts'
 
 /** C1's two pointers. */
 export interface RuntimePointers {
@@ -345,6 +346,8 @@ export interface RunningHost {
   readonly devices?: LocalDeviceApproval
   /** The consents `permission.reload` and the `mcp.*` operations drive, read from the Host when an operation arrives. */
   readonly consents?: LocalConsents
+  /** The reach service's state and restart, which `reach.status` and `reach.apply` drive. */
+  readonly reach?: LocalReach
   /**
    * The sandbox protection the Host booted with, which a successor's H3 holds its own to.
    * @returns the protection, or `undefined` when the Host has no sandbox row that sets one.

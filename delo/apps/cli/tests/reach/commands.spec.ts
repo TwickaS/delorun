@@ -21,6 +21,7 @@ import { fakeTailscale, ownRule } from '../fixtures/fake-tailscale.ts'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
 import { createReachCommand, homeRuns, type ReachDependencies } from '../../src/reach/command.ts'
+import { localReach, reachRowsOf } from '../../src/reach/host.ts'
 import { createDevicesCommand, type DevicesDependencies } from '../../src/devices/command.ts'
 import { localDeviceApproval } from '../../src/devices/host.ts'
 import { listenerPortFor, readReachRow, REACH_OFF, writeReachRow } from '../../src/reach/row.ts'
@@ -62,7 +63,12 @@ function tailscale(answers: Partial<Record<string, TailscaleResult>> = {}, calls
 }
 
 function reach(overrides: Partial<ReachDependencies> = {}): ReturnType<typeof createReachCommand> {
-  return createReachCommand({ tailscale: tailscale(), running: () => false, ...overrides })
+  return createReachCommand({
+    tailscale: tailscale(),
+    running: () => false,
+    send: () => Promise.resolve([{ stream: 'out', line: '' }] as never),
+    ...overrides,
+  })
 }
 
 function patchRows(): unknown {
@@ -82,7 +88,7 @@ describe('delorun reach', () => {
     expect(calls.flat()).not.toContain('sudo')
     // Pins the choice made once: turning it on again keeps the recorded port.
     await reach({ running: () => true }).run(['on', 'tailscale'], context)
-    expect(out.stdout).toContain('Restart Delo to apply it')
+    expect(out.stderr).toContain('Restart Delo to apply it')
     expect(readReachRow(deloHome, 'default').listenerPort).toBe(row.listenerPort)
   })
 
@@ -113,14 +119,21 @@ describe('delorun reach', () => {
     await expect(reach({ tailscale: stale.run }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
     expect(stale.config).toEqual({ TCP: {}, Web: {} })
     expect(readReachRow(deloHome, 'default').listenerPort).toBe(port)
-    // A running home keeps its own rule and loses a foreign one.
+    // A running home whose option holds the listener port keeps its own rule and loses a foreign one.
+    const live = (state: string) => (async (_home: string, _profile: string, request: { readonly op: string }) =>
+      Promise.resolve([{ ok: true, options: request.op === 'reach.status' ? [{ option: 'tailscale-private', state }] : [] }] as never))
     const own = fakeTailscale(HOST)
     own.config = ownRule(HOST, 443, port)
-    await expect(reach({ tailscale: own.run, running: () => true }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    await expect(reach({ tailscale: own.run, running: () => true, send: live('ready') }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
     expect(own.config).toEqual(ownRule(HOST, 443, port))
+    // Pins the live-state check: a running home whose option is blocked holds no port, so its own rule is removed too.
+    const blocked = fakeTailscale(HOST)
+    blocked.config = ownRule(HOST, 443, port)
+    await expect(reach({ tailscale: blocked.run, running: () => true, send: live('blocked') }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
+    expect(blocked.config).toEqual({ TCP: {}, Web: {} })
     const foreign = fakeTailscale(HOST)
     foreign.config = ownRule(HOST, 443, 1234)
-    await expect(reach({ tailscale: foreign.run, running: () => true }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    await expect(reach({ tailscale: foreign.run, running: () => true }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
     expect(foreign.config).toEqual({ TCP: {}, Web: {} })
     // Pins the removal's result check: a rule that stays is reported, and the command fails.
     const stuck = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: 'denied' } })
@@ -144,12 +157,12 @@ describe('delorun reach', () => {
     const row = readReachRow(deloHome, 'default')
     const live = fakeTailscale(HOST)
     live.config = ownRule(HOST, 443, row.listenerPort)
-    await expect(reach({ tailscale: live.run, running: () => true }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    await expect(reach({ tailscale: live.run, running: () => true }).run(['off'], context)).resolves.toBe(EXIT.failed)
     expect(live.calls).toEqual([['serve', 'status', '--json'], ['serve', '--https=443', 'off'], ['serve', 'status', '--json']])
     expect(live.config).toEqual({ TCP: {}, Web: {} })
     expect(readReachRow(deloHome, 'default')).toEqual({ ...row, enabled: false })
     expect(out.stdout).toContain('Tailscale no longer serves this computer\'s studio.')
-    expect(out.stdout).toContain('Restart Delo to close the remote listener now')
+    expect(out.stderr).toContain('Restart Delo to close it')
     // Pins the confirmation: a rule still served after the removal fails the command with the reason.
     const stuck = fakeTailscale(HOST, { 'serve off': { code: 0, stdout: '', stderr: '' } })
     stuck.config = { Foreground: { session: ownRule(HOST, 443, row.listenerPort) } }
@@ -176,6 +189,77 @@ describe('delorun reach', () => {
     await reach({ running: () => true }).run(['status'], context)
     expect(out.stdout).toContain(`Tailscale private: on, https://${HOST}`)
     expect(out.stdout).toContain('Settings → Devices')
+  })
+
+  it('applies a change to the running home and prints each option\'s live state, and names what the home answered otherwise', async () => {
+    const sent: string[] = []
+    const answering = (answer: (op: string) => ResponseLine[] | Error) => async (_home: string, _profile: string, request: UnsignedRequest): Promise<ResponseLine[]> => {
+      sent.push(request.op)
+      const lines = answer(request.op)
+      return lines instanceof Error ? Promise.reject(lines) : Promise.resolve(lines)
+    }
+    const ready = { option: 'tailscale-private', state: 'ready', address: `https://${HOST}` }
+    await expect(reach({ running: () => true, send: answering(() => [{ ok: true, options: [ready] }]) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
+    expect(sent).toEqual(['reach.apply'])
+    expect(out.stdout).toContain(`Live: tailscale-private is ready at https://${HOST}`)
+    expect(out.stdout).toContain(`Open https://${HOST}/auth/sign-in on the phone`)
+    const failures: [ResponseLine[] | Error, string][] = [
+      [new Error('no socket'), 'the home process did not answer (no socket)'],
+      [[], 'the home process closed the request without an answer'],
+      [[{ ok: false, error: 'REACH_UNAVAILABLE', detail: 'not loaded' }], 'the home process refused with REACH_UNAVAILABLE: not loaded'],
+      [[{ ok: false, error: 'BUSY' }], 'the home process refused with BUSY.'],
+      [[{ ok: true, options: 'x' }], 'the home process answered with states this command cannot read'],
+      [[{ ok: true, options: [null] }], 'the home process answered with states this command cannot read'],
+      [[{ ok: true, options: [{ option: 'tailscale-private' }] }], 'the home process answered with states this command cannot read'],
+    ]
+    for (const [answer, reason] of failures) {
+      out.stderr = ''
+      await expect(reach({ running: () => true, send: answering(op => (op === 'reach.apply' ? answer : [])) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
+      expect(out.stderr).toContain(reason)
+      expect(out.stderr).toContain('Restart Delo to apply it: delorun stop, then delorun start.')
+    }
+    out.stderr = ''
+    // oxlint-disable-next-line prefer-promise-reject-errors -- a socket library that rejects with a bare value.
+    await expect(reach({ running: () => true, send: () => Promise.reject('closed') }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('the home process did not answer (closed)')
+    // A start the home answers as blocked names its cause, and the command fails.
+    out.stdout = ''
+    out.stderr = ''
+    const blocked = { option: 'tailscale-private', state: 'blocked', cause: 'TAILSCALE_FUNNEL_ON', detail: 'Funnel is on' }
+    await expect(reach({ running: () => true, send: answering(() => [{ ok: true, options: [blocked] }]) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).toContain('Live: tailscale-private is blocked (TAILSCALE_FUNNEL_ON): Funnel is on')
+    expect(out.stderr).toContain('did not make the address ready')
+    // Off closes the running listener through the same request.
+    out.stdout = ''
+    await expect(reach({ running: () => true, send: answering(() => [{ ok: true, options: [{ option: 'tailscale-private', state: 'off' }] }]) }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Live: tailscale-private is off')
+    out.stderr = ''
+    await expect(reach({ running: () => true, send: answering(() => []) }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('Restart Delo to close it')
+    // Status reads the live state, and says when it cannot.
+    out.stdout = ''
+    await reach({ running: () => true, send: answering(() => [{ ok: true, options: [{ ...ready, state: 'degraded', cause: 'X' }] }]) }).run(['status'], context)
+    expect(out.stdout).toContain(`Live: tailscale-private is degraded at https://${HOST} (X): `)
+    await reach({ running: () => true, send: answering(() => []) }).run(['status'], context)
+    expect(out.stdout).toContain('its live state could not be read')
+  })
+
+  it('hands the running Host\'s reach service to the update channel, reading the row when an apply arrives', async () => {
+    expect(localReach({ get: () => undefined } as never, () => ({}))).toBeUndefined()
+    const applied: unknown[] = []
+    const service = {
+      mounted: true,
+      status: () => [{ option: 'tailscale-private', state: 'ready', address: `https://${HOST}` }, { option: 'tailscale-private', state: 'blocked', cause: 'C', detail: 'D' }],
+      apply: async (rows: unknown) => { applied.push(rows); return Promise.resolve([{ option: 'tailscale-private', state: 'off' }]) },
+    }
+    const rows = reachRowsOf({ ...REACH_OFF, enabled: true, address: `https://${HOST}` })
+    const local = localReach({ get: () => service } as never, () => rows)
+    expect(local?.status()).toEqual([{ option: 'tailscale-private', state: 'ready', address: `https://${HOST}` }, { option: 'tailscale-private', state: 'blocked', cause: 'C', detail: 'D' }])
+    await expect(local?.apply()).resolves.toEqual([{ option: 'tailscale-private', state: 'off' }])
+    expect(applied).toEqual([{ tailscalePrivate: { ...REACH_OFF, enabled: true, address: `https://${HOST}` } }])
+    const unloaded = localReach({ get: () => ({ ...service, mounted: false, apply: async () => Promise.resolve(undefined) }) } as never, () => rows)
+    expect(unloaded?.status()).toBeUndefined()
+    await expect(unloaded?.apply()).resolves.toBeUndefined()
   })
 
   it('reads a home\'s lock to tell whether Delo runs', async () => {
@@ -230,6 +314,11 @@ describe('delorun devices', () => {
     expect(out.stdout).toContain('  1. Phone (iOS), asked at 1970-01-01T00:00:00.000Z, request AAAAAAAA\n')
     expect(out.stdout).toContain('Approved Phone.')
     expect(out.stderr).toContain('Try again.')
+    expect(out.stdout).toContain('Remote access is off for this profile')
+    // With remote access on, the waiting line names the sign-in page the phone opens.
+    writeReachRow(deloHome, 'default', { ...REACH_OFF, enabled: true, address: `https://${HOST}/` })
+    await devices({ lines: [[{ ok: true, closesAt: 1, pending: [] }]] }).command.run(['approve'], context)
+    expect(out.stdout).toContain(`Open https://${HOST}/auth/sign-in on it and choose Ask for approval.`)
   })
 
   it('lists every pending request and approves the one the person chooses', async () => {
@@ -486,9 +575,9 @@ describe('setup\'s reach section', () => {
 
   it('asks, checks Tailscale, shows the trust statement and writes the row', async () => {
     const notes: string[] = []
-    const section = reachSection(tailscale())
+    const section = reachSection(tailscale(), () => false)
     expect(section.appliesTo({} as never)).toBe(true)
-    const on = await section.ask(io([true], notes), draft, {} as never)
+    const on = await section.ask(io([true], notes), draft, { home: deloHome, profile: 'default' } as never)
     expect(on).toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } }, status: 'answered' })
     expect(notes[0]).toContain(TRUST_STATEMENT[0])
     const directory = join(deloHome, 'profiles', 'default')
@@ -505,18 +594,18 @@ describe('setup\'s reach section', () => {
   it('leaves remote access off when the person says no, goes back, or a check fails', async () => {
     const notes: string[] = []
     const off = { answers: { reach: { option: 'none', identityFactor: null } }, status: 'answered' }
-    await expect(reachSection(tailscale()).ask(io([false], notes), draft, {} as never)).resolves.toEqual(off)
-    await expect(reachSection(tailscale()).ask(io([BACK], notes), draft, {} as never)).resolves.toBe(BACK)
-    await expect(reachSection(tailscale({ version: { code: null, stdout: '', stderr: '' } })).ask(io([true], notes), draft, {} as never)).resolves.toEqual(off)
+    await expect(reachSection(tailscale(), () => false).ask(io([false], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toEqual(off)
+    await expect(reachSection(tailscale(), () => false).ask(io([BACK], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toBe(BACK)
+    await expect(reachSection(tailscale({ version: { code: null, stdout: '', stderr: '' } }), () => false).ask(io([true], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toEqual(off)
     expect(notes.at(-1)).toContain('Remote access stays off')
     // Pins setup's Funnel check: an address on the public internet is not offered.
     const funnel = fakeTailscale(HOST)
     funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
-    await expect(reachSection(funnel.run).ask(io([true], notes), draft, {} as never)).resolves.toEqual(off)
+    await expect(reachSection(funnel.run, () => false).ask(io([true], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toEqual(off)
     expect(notes.at(-1)).toContain('tailscale funnel --https=443 off, then try again\nRemote access stays off')
-    await expect(reachSection(() => Promise.reject(new Error('broken'))).ask(io([true], notes), draft, {} as never)).rejects.toThrow('broken')
+    await expect(reachSection(() => Promise.reject(new Error('broken')), () => false).ask(io([true], notes), draft, { home: deloHome, profile: 'default' } as never)).rejects.toThrow('broken')
     const none = { reach: { option: 'none', identityFactor: null } } as never
-    expect(reachSection(tailscale()).review?.(none)).toBe('Remote access: off')
-    await expect(reachSection(tailscale()).apply({ home: deloHome, env: {}, directory: deloHome, secret: undefined }, none)).resolves.toBeUndefined()
+    expect(reachSection(tailscale(), () => false).review?.(none)).toBe('Remote access: off')
+    await expect(reachSection(tailscale(), () => false).apply({ home: deloHome, env: {}, directory: deloHome, secret: undefined }, none)).resolves.toBeUndefined()
   })
 })

@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { DEFAULT_SERVE_CHECK_INTERVAL_MS, DEFAULT_SERVE_PORT, LISTENER_PORT_RANGE } from '@delo/contract-reach-providers'
+import { REACH_PATHS } from '@delo/home-auth'
 import { chooseListenerPort, isPortFree } from '@delo/reach'
 import { profileDirectory } from '../profile.ts'
 import { setPatchRow } from '../setup/writes.ts'
@@ -102,6 +103,15 @@ export function writeReachRowAt(path: string, option: TailscalePrivateRow): void
       },
     },
   })
+}
+
+/**
+ * The sign-in page of a studio address, which a phone opens to ask for approval.
+ * @param address - the option's studio address, as the row records it.
+ * @returns `<address>/auth/sign-in`.
+ */
+export function signInAddress(address: string): string {
+  return `${address.replace(/\/$/, '')}${REACH_PATHS.signIn}`
 }
 
 /**

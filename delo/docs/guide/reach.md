@@ -27,7 +27,7 @@ Remote access lets you open the studio of the Delorun running on your computer f
 
 ## Turn remote access on
 
-Run `delorun reach on tailscale` in a terminal on your computer, or answer yes to "Remote access" in `delorun setup`'s Full mode. The command checks Tailscale, picks a fixed local port that Tailscale forwards your phone's requests to (the remote listener), writes both into your profile and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. It refuses when Tailscale Funnel is on for that address, because Funnel would put your sign-in page on the public internet; turn Funnel off with the command it prints. It also removes another `tailscale serve` rule on the same port that is not this studio's own, and every rule on that port while Delorun is stopped. Delorun opens the remote listener when it starts, so restart Delorun if it is running: `delorun stop`, then `delorun start`. `delorun reach status` shows whether remote access is on and whether Delorun runs; Settings → Devices in the studio on your computer shows whether the address is ready.
+Run `delorun reach on tailscale` in a terminal on your computer, or answer yes to "Remote access" in `delorun setup`'s Full mode. The command checks Tailscale, picks a fixed local port that Tailscale forwards your phone's requests to (the remote listener), writes both into your profile and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. It refuses when Tailscale Funnel is on for that address, because Funnel would put your sign-in page on the public internet; turn Funnel off with the command it prints. It also removes another `tailscale serve` rule on the same port that is not this studio's own, and every rule on that port while Delorun is not serving it. Before it writes anything it checks that your user may configure `tailscale serve`, and prints the one command to run if not. If Delorun is running, the command applies the change to it at once and prints whether the address is ready; otherwise the remote listener opens when Delorun starts. `delorun reach status` shows whether remote access is on and, while Delorun runs, whether the address is ready.
 
 ## Approve a device
 
@@ -78,7 +78,7 @@ Run `delorun devices remove <device id>` with an id from `delorun devices list`,
 
 ## Turn remote access off
 
-Run `delorun reach off`. It removes Tailscale's rule for your studio, checks that it is gone, and says so if it is not; Delorun opens no remote listener at its next start; restart Delorun to close the listener now. While Delorun runs, it rechecks Tailscale every minute and stops serving if Funnel is turned on for your address.
+Run `delorun reach off`. It removes Tailscale's rule for your studio, checks that it is gone, and says so if it is not; a running Delorun closes the remote listener at once, and none opens at its next start. While Delorun runs, it rechecks Tailscale every minute and stops serving if Funnel is turned on for your address.
 
 If Delorun stops without cleaning up, for example when the computer loses power, Tailscale keeps forwarding your address to the fixed local port until Delorun starts again or you run `delorun reach off`. In that time another user of the same computer could serve a page on that port to your phone. Run `delorun reach off` if Delorun stopped that way and you share the computer. Approved devices stay approved, so turning remote access on again does not ask for them again; remove them if you no longer want them.
 

@@ -66,7 +66,7 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not start: an unfinished update needs the runtime store, and this delorun runs outside it.', remedies: ['Start Delo through the launcher the Delo home installs.', recoverStatus] }
     case 'LOOPBACK_REQUIRED':
       return {
-        lead: 'The home process refused the request: only the person\'s own delorun on this computer approves or removes devices and answers or revokes an MCP server.',
+        lead: 'The home process refused the request: only the person\'s own delorun on this computer manages devices and remote access and answers or revokes an MCP server.',
         remedies: [`Approve the device at this computer: delorun devices approve${profile}`, `Answer the MCP server at this computer: delorun mcp accept <server>${profile}`],
       }
     case 'APPROVAL_FAILED':
@@ -81,6 +81,8 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo changed nothing: what you answered changed after it was shown.', remedies: [`Look at it again: delorun mcp list${profile}`] }
     case 'CONSENT_FAILED':
       return { lead: 'Delo did not record the answer.', remedies: [again] }
+    case 'REACH_UNAVAILABLE':
+      return { lead: 'Delo did not apply remote access to the running home: its profile does not run the reach service now.', remedies: [`Restart Delo to apply it: delorun stop${profile}, then delorun start${profile}`] }
     case 'STUDIO_UNAVAILABLE':
       return { lead: 'Delo did not open the studio: the running home process could not make a sign-in link for this computer.', remedies: [`See whether Delo runs and where its studio listens: delorun status${profile}`] }
   }

@@ -160,7 +160,7 @@ function report(mode: StartMode, profile: string, address: string | undefined, c
   const flag = profileFlag(profile)
   const lines = [mode === 'background'
     ? 'Delorun is running in the background and keeps running after you close this terminal.'
-    : 'Delorun is running in this terminal. Closing the terminal stops it.']
+    : `Delorun is running in this terminal. Closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background${flag}, or run delorun setup background${flag} to make that the default.`]
   lines.push(address === undefined ? `The home process reports no studio; see delorun status${flag} and delorun logs --follow${flag}` : `Studio: ${address}${opened ? ' (opened in your browser)' : ''}`)
   if (!canOpen && address !== undefined) {
     const port = new URL(address).port || '80'

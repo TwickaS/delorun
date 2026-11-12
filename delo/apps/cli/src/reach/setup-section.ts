@@ -1,15 +1,18 @@
 /**
  * Setup's `reach` section, shown in Full setup and as `delorun setup reach`: whether the studio is reachable from the
- * person's phone over their own tailnet. Turning it on runs the Tailscale checks of `delorun reach on tailscale`, Funnel
- * included, and shows the trust statement; a check that fails leaves remote access off and names what to fix. Applying
- * it records the fixed listener port, chosen once; the home removes any other serve rule on the port when it starts. The answer is
- * `tailscale-private` with the factor `tailnet-membership`, or `none`.
+ * person's phone over their own tailnet. Turning it on runs the Tailscale checks of `delorun reach on tailscale`, Funnel,
+ * the removal of a serve rule the home would not keep and the test that the person's user may configure
+ * `tailscale serve` included (`checkServeAccess`), and shows the trust statement; a check that fails leaves remote
+ * access off and names what to fix, with the one command to run for a user who may not configure serve. Applying it
+ * records the fixed listener port, chosen once; the home removes any other serve rule on the port when it starts. The
+ * answer is `tailscale-private` with the factor `tailnet-membership`, or `none`.
  *
  * @module @delo/cli/reach/setup-section
  */
 import { join } from 'node:path'
 import { DEFAULT_SERVE_PORT } from '@delo/contract-reach-providers'
-import { funnelOn, ReachError, readServeRules, readTailscale, serveTarget, tailscaleAddress, type TailscaleRunner } from '@delo/reach'
+import { checkServeAccess, ReachError, readTailscale, tailscaleAddress, type TailscaleRunner } from '@delo/reach'
+import { profileDirectory } from '../profile.ts'
 import type { SetupSection } from '../setup/sections.ts'
 import { BACK } from '../setup/steps.ts'
 import { listenerPortFor, readReachRowAt, writeReachRowAt } from './row.ts'
@@ -21,25 +24,26 @@ export const REACH_SECTION_ORDER = 45
 /**
  * Build the section over a `tailscale` runner.
  * @param tailscale - the runner.
+ * @param running - whether a profile's home process runs; `homeRuns` of `delorun reach` in a real setup.
  * @returns the section.
  */
-export function reachSection(tailscale: TailscaleRunner): SetupSection {
+export function reachSection(tailscale: TailscaleRunner, running: (home: string, profile: string) => boolean): SetupSection {
   return {
     id: 'reach',
     title: 'Remote access',
     mode: 'full',
     asks: () => true,
     appliesTo: () => true,
-    async ask(io, draft) {
+    async ask(io, draft, environment) {
       const on = await io.confirm('Reach this studio from your phone over your own tailnet (Tailscale)?', draft.answers.reach.option === 'tailscale-private')
       if (on === BACK) return BACK
       if (!on) return { answers: { reach: { option: 'none', identityFactor: null } }, status: 'answered' }
       try {
         const { dnsName } = await readTailscale(tailscale)
-        // The Funnel check needs no listener port; the port is chosen when the answer is applied.
-        if ((await readServeRules(tailscale, dnsName, DEFAULT_SERVE_PORT, serveTarget(0))).funnel) {
-          throw funnelOn(dnsName, DEFAULT_SERVE_PORT, 'then try again')
-        }
+        const row = readReachRowAt(join(profileDirectory(environment.home, environment.profile), 'cordis.patch.yml'))
+        const holds = row.enabled && running(environment.home, environment.profile)
+        const listenerPort = await listenerPortFor(row.listenerPort, holds)
+        await checkServeAccess(tailscale, { host: dnsName, servePort: DEFAULT_SERVE_PORT, listenerPort, keepOwn: holds, next: 'then try again' })
       } catch (error) {
         if (!(error instanceof ReachError)) throw error
         io.note(`${error.detail}\nRemote access stays off; run delorun reach on tailscale once that is fixed.`, 'Remote access')

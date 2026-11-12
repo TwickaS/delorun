@@ -176,6 +176,45 @@ export function funnelOn(host: string, servePort: number, next: string): ReachEr
   return new ReachError('TAILSCALE_FUNNEL_ON', `Tailscale Funnel is on for ${host}:${String(servePort)}, which would put this studio on the public internet, so remote access stays off. Turn Funnel off with tailscale funnel --https=${String(servePort)} off, ${next}`)
 }
 
+/** Where {@link checkServeAccess} checks, and what its refusals ask the person to do next. */
+export interface ServeAccessRequest {
+  /** This machine's `ts.net` name. */
+  readonly host: string
+  readonly servePort: number
+  /** The fixed listener port the row records. */
+  readonly listenerPort: number
+  /**
+   * Whether this home's own rule on the serve port stays: true while the profile's home runs with the option on and
+   * holds the listener port, so its rule forwards to the home. Otherwise every rule on the port is removed, because a
+   * port no home holds can be bound by any local program.
+   */
+  readonly keepOwn: boolean
+  /** What the person does once Funnel is off, as a clause beginning with `then`. */
+  readonly next: string
+}
+
+/**
+ * The checks `delorun reach on tailscale` and setup's reach section run before the row is written, after
+ * {@link readTailscale}: Funnel is off for the address; a rule on the serve port that is not kept is removed, and its
+ * removal confirmed; and the person's user may configure `tailscale serve`, which is tested by configuring it. A kept
+ * rule is configured again unchanged; otherwise the serve target is configured to the listener port and removed again,
+ * and the removal confirmed, so the test leaves no rule behind.
+ * @param run - the runner.
+ * @param request - the address, the ports, whether the home's own rule stays, and the next step after Funnel.
+ * @throws {ReachError} `TAILSCALE_FUNNEL_ON`; `TAILSCALE_SERVE_NOT_PERMITTED` with {@link TAILSCALE_OPERATOR_COMMAND}
+ *   when the person's user may not configure serve; `TAILSCALE_SERVE_CONFLICT` when a removal is not confirmed; a
+ *   refusal of {@link readServeRules}.
+ */
+export async function checkServeAccess(run: TailscaleRunner, request: ServeAccessRequest): Promise<void> {
+  const target = serveTarget(request.listenerPort)
+  const rules = await readServeRules(run, request.host, request.servePort, target)
+  if (rules.funnel) throw funnelOn(request.host, request.servePort, request.next)
+  const keep = rules.present && rules.own && request.keepOwn
+  if (rules.present && !keep) await removeServe(run, request.host, request.servePort, target)
+  await serve(run, request.servePort, request.listenerPort)
+  if (!keep) await removeServe(run, request.host, request.servePort, target)
+}
+
 /** What the running home's refusal asks the person to do once Funnel is off. */
 const RESTART = 'then restart Delo'
 
