@@ -82,37 +82,17 @@ const STYLE = asset('sign-in.css', 'text/css; charset=utf-8')
 /** The sign-in page's assets by their content-hashed names: the only names the asset route answers. */
 export const SIGN_IN_ASSETS: ReadonlyMap<string, Asset> = new Map([SCRIPT, STYLE])
 
-/** The sign-in page. Its text is the page's own, in English; it loads only the two assets and no plugin code. */
-const SIGN_IN_PAGE = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in to Delorun</title>
-<link rel="stylesheet" href="/auth/assets/${STYLE[0]}">
-<script type="module" src="/auth/assets/${SCRIPT[0]}"></script>
-</head>
-<body>
-<main>
-<h1>Sign in to Delorun</h1>
-<section data-step="start"><p>Checking this device…</p></section>
-<section data-step="request" hidden>
-<p>This device is not approved for this home yet. On the home's computer, open the studio's settings and choose <strong>Add a device</strong>, or run <code>delorun devices approve</code>. Then name this device and ask for approval here.</p>
-<form id="request-form">
-<label>Name of this device <input id="label" required maxlength="64" value="My phone"></label>
-<button type="submit">Ask for approval</button>
-</form>
-</section>
-<section data-step="code" hidden>
-<p>Type this code at the home's computer:</p>
-<p id="match-code"></p>
-<p>This page signs you in once the home approves the code.</p>
-</section>
-<p id="error" role="alert"></p>
-</main>
-</body>
-</html>
-`
+/** The sign-in page's markup, `assets/sign-in.html`, with its two placeholders. */
+const PAGE_TEMPLATE = readFileSync(new URL('../assets/sign-in.html', import.meta.url), 'utf8')
+
+/**
+ * The sign-in page: `assets/sign-in.html` with the paths of the two assets in place of `{{style}}` and `{{script}}`.
+ * It holds markup only, and every text comes from the copy table of `assets/sign-in.js`, in the browser's language; it
+ * loads only the two assets and no plugin code, and has no inline script, style or event handler.
+ */
+export const SIGN_IN_PAGE = PAGE_TEMPLATE
+  .replace('{{style}}', `${REACH_PATHS.assets}/${STYLE[0]}`)
+  .replace('{{script}}', `${REACH_PATHS.assets}/${SCRIPT[0]}`)
 
 /**
  * The reach listener a request was admitted on, or a refusal: every pre-login route answers only on a reach listener.
