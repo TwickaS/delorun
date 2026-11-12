@@ -22,7 +22,7 @@ description: "Delo 的插件安装检查与安装记录，供维护者修改安�
 
 ## 约定
 
-- **何时运行。** 插件管理器用 `pnpm add --lockfile-only` 解析安装，以 `pending: 'install'` 询问审计，然后才运行 `pnpm install --frozen-lockfile`，由它下载包并运行 profile 允许的构建；完成后它不带 pending 再询问一次，记录在此时写入。恢复在保留所有脚本不运行的安装之后以 `pending: 'scripts'` 询问，并在 `pnpm rebuild --pending` 之后再询问一次。`delorun plugin` 以同样的顺序解析、检查和安装。拒绝会恢复 `package.json` 与锁文件，因此没有任何文件下载进 profile，也没有脚本运行。
+- **何时运行。** 插件管理器用 `pnpm add --lockfile-only` 解析安装，以 `pending: 'install'` 询问审计，然后才运行 `pnpm install --frozen-lockfile`，由它下载包并运行 profile 允许的构建；完成后它不带 pending 再询问一次，记录在此时写入。恢复在保留所有脚本不运行的安装之后以 `pending: 'scripts'` 询问，并在 `pnpm rebuild --pending` 之后再询问一次。`delorun plugin` 以同样的顺序解析、检查和安装。拒绝会恢复 `package.json` 与锁文件，因此没有任何文件下载进 profile，也没有脚本运行。安装失败同样会恢复它们，因此该插件既不在清单中，也没有记录；它已下载的文件仍留在 `node_modules` 中。
 - **检查什么。** 来自 npm、tarball 或 git 的插件，每个已安装的锁文件引用检查一次。插件自身的包总会检查；其依赖只检查尚无其他安装记录持有的锁文件条目。链接的文件夹（`link:`）或本地文件夹（`file:` 目录）既不检查也不记录：本人在其中工作时文件会变化。profile 不依赖的插件，例如安装自带的可选组合包，会被跳过。
 - **发现。** `missing-integrity` 与 `unpinned-commit` 读取锁文件的 `resolution`；`insecure-source` 指出插件管理器询问的注册表或锁文件中的 tarball 或仓库 URL 为明文 `http:`，传输中可能被篡改，存在完整性哈希时仍会校验；`advisory` 通过 [`@delo/release-formats/advisory/feed`](../release-formats/src/advisory/feed.ts)（发布自身的公告检查使用的同一客户端）询问 npm 的批量公告 API，其答案来自 GitHub Advisory Database；`recent-publish` 从注册表的包文档读取 `time[version]`；`similar-name` 在折叠 scope 与标点后按编辑距离比较名称。公告源或注册表无法访问、超时或答复格式错误时，会产生 `advisory-unchecked` 或 `publish-time-unchecked` 发现并说明原因；没有任何检查被悄然跳过。每项发现都写明包、其版本及其在锁文件中的行。
 - **拒绝。** 只有严重程度为 `critical` 的公告会拒绝。审计答复 `needs-acceptance`，studio 列出每项发现并显示「仍然安装」按钮；接受只针对这一组公告（`blockingDigest` 计算的摘要），因此新的严重公告会再次询问。`delorun plugin` 拒绝同样的公告，并接受 `--allow-advisory <GHSA id>`。其他发现都答复 `clear`，studio 在完成页面列出每一项。

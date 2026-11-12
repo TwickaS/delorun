@@ -118,6 +118,18 @@ function readRestoredFiles(profileDir: string): Map<string, string | undefined> 
 }
 
 /**
+ * Put the profile files back as they were before the resolution of an operation that was refused or did not install.
+ * @param profileDir - the profile directory.
+ * @param before - each file's text before the resolution, `undefined` for a file that did not exist.
+ */
+function restoreProfileFiles(profileDir: string, before: ReadonlyMap<string, string | undefined>): void {
+  for (const [file, text] of before) {
+    if (text === undefined) rmSync(join(profileDir, file), { force: true })
+    else writeFileSync(join(profileDir, file), text)
+  }
+}
+
+/**
  * Run `delorun plugin`: register as a shared user of the home's stores, set the profile's package import method to
  * copies ([pnpm import](./pnpm-import.ts)), and run upstream's `dsh plugin` with these arguments, `--profile` first
  * with the selected profile when they name none. With the profile's
@@ -158,10 +170,7 @@ export async function plugin(args: readonly string[], context: CommandContext, d
     const own = urls.length > 0 ? null : await dependencies.profileRegistry(profileDir)
     const outcome = await checkResolved({ profileDir, check, allowedAdvisories: allowed, registries: [...urls, ...own === null ? [] : [own]], output: context })
     if (outcome.refused.length > 0) {
-      for (const [file, text] of before) {
-        if (text === undefined) rmSync(join(profileDir, file), { force: true })
-        else writeFileSync(join(profileDir, file), text)
-      }
+      restoreProfileFiles(profileDir, before)
       context.stderr(`delorun plugin: the profile ${profile} is back as it was before this command; nothing was installed into it and no install script ran\n`)
       return EXIT.failed
     }
@@ -169,8 +178,19 @@ export async function plugin(args: readonly string[], context: CommandContext, d
     if (rest.includes('--lockfile-only')) return EXIT.ok
     // Upstream compares, restores, and activates bundles against the profile as it was before the resolution.
     const baseline = { manifest: before.get('package.json'), lockfile: before.get('pnpm-lock.yaml') }
-    const installed = await dependencies.runUpstream(['plugin', '--profile', profile, 'install', '--frozen-lockfile', ...carriedOptions(rest)], { baseline })
-    if (installed !== 0) return installed
+    let installed: number
+    try {
+      installed = await dependencies.runUpstream(['plugin', '--profile', profile, 'install', '--frozen-lockfile', ...carriedOptions(rest)], { baseline })
+    } catch (error) {
+      // A failed installation must not leave the resolved plugin in package.json and the lockfile, unrecorded.
+      restoreProfileFiles(profileDir, before)
+      throw error
+    }
+    if (installed !== 0) {
+      restoreProfileFiles(profileDir, before)
+      context.stderr(`delorun plugin: the installation failed, so the profile ${profile} is back as it was before this command\n`)
+      return installed
+    }
     await recordAfterInstall(profileDir, outcome.pending, check.settings.maxFiles, context)
     return EXIT.ok
   } finally {

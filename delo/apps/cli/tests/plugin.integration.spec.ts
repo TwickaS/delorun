@@ -190,6 +190,41 @@ describe('delorun plugin', () => {
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(true)
   })
 
+  it('puts the profile files back byte for byte when the installation step fails, so the plugin is neither listed nor recorded', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    writeProfileFiles(profileDir, [])
+    const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
+    const lockfile = readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')
+    const failing: PluginDependencies = { ...dependencies([]), runUpstream: (argv) => {
+      if (argv.includes('--lockfile-only')) writeProfileFiles(profileDir, [GOOD], { installed: false })
+      return Promise.resolve(argv.includes('--frozen-lockfile') ? 1 : 0)
+    } }
+    expect(await plugin(['add', 'good-plugin'], context, failing)).toBe(1)
+    expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(manifest)
+    expect(readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')).toBe(lockfile)
+    expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
+    expect(errors.join('')).toContain('delorun plugin: the installation failed, so the profile default is back as it was before this command\n')
+  })
+
+  it('puts the profile files back when the installation step throws, and rethrows the error', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    writeProfileFiles(profileDir, [])
+    const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
+    const lockfile = readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')
+    const throwing: PluginDependencies = { ...dependencies([]), runUpstream: (argv) => {
+      if (argv.includes('--lockfile-only')) {
+        writeProfileFiles(profileDir, [GOOD], { installed: false })
+        return Promise.resolve(0)
+      }
+      return Promise.reject(new Error('pnpm vanished during the install'))
+    } }
+    await expect(plugin(['add', 'good-plugin'], context, throwing)).rejects.toThrow('pnpm vanished during the install')
+    expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(manifest)
+    expect(readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')).toBe(lockfile)
+  })
+
   it('resolves a removal, then installs and forgets the records of removed plugins', async () => {
     await prepareHome(context, undefined)
     writeEmptyProfile()
