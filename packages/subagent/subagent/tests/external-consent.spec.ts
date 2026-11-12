@@ -158,6 +158,28 @@ describe('limitExternalRunTime', () => {
     await expect(limited.result).resolves.toMatchObject({ diagnostic: expect.stringContaining('after 1 minute,') })
   })
 
+  it('passes on a capture failure before the limit and clears the timer', async () => {
+    vi.useFakeTimers()
+    const backend = execution()
+    const limited = limitExternalRunTime(backend.run, 1_000, 'codex')
+    backend.result.reject(new Error('capture failed'))
+    await expect(limited.result).rejects.toThrow('capture failed')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(backend.dispose).not.toHaveBeenCalled()
+  })
+
+  it('reports the limit when the stopped run\'s capture fails', async () => {
+    vi.useFakeTimers()
+    const result = Promise.withResolvers<SubagentResult>()
+    const dispose = vi.fn(() => {
+      result.reject(new Error('capture failed'))
+      return Promise.resolve()
+    })
+    const limited = limitExternalRunTime({ id: SessionId('r'), result: result.promise, dispose }, 60_000, 'codex')
+    await vi.advanceTimersByTimeAsync(60_000)
+    await expect(limited.result).resolves.toEqual({ output: [], stopReason: 'error', diagnostic: expect.stringContaining('after 1 minute,') })
+  })
+
   it('clears the timer when the run is disposed first', async () => {
     vi.useFakeTimers()
     const backend = execution()

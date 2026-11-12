@@ -116,8 +116,9 @@ export async function assertExternalDelegationConsent(
  * Bound one external run's wall-clock time. When the limit passes first, the
  * run is disposed — the provider tears its process down — and the result is
  * the provider's own final output with `stopReason: 'error'` and a diagnostic
- * that names the limit, so the parent learns why the run ended. Disposal and
- * a result that settles first clear the timer.
+ * that names the limit, so the parent learns why the run ended; a capture
+ * failure after that stop leaves the diagnostic with no output. Disposal and
+ * a result that settles first, a capture failure included, clear the timer.
  * @param run - the provider's published run.
  * @param timeoutMs - the limit in milliseconds, a positive safe integer within the timer range.
  * @param provider - the provider name the diagnostic names.
@@ -129,7 +130,7 @@ export function limitExternalRunTime(run: SubagentRun, timeoutMs: number, provid
     clearTimeout(timer)
     timer = undefined
   }
-  const result = new Promise<SubagentResult>((resolve) => {
+  const result = new Promise<SubagentResult>((resolve, reject) => {
     let expired = false
     timer = setTimeout(() => {
       expired = true
@@ -139,15 +140,20 @@ export function limitExternalRunTime(run: SubagentRun, timeoutMs: number, provid
       const diagnostic = `The "${provider}" run was stopped after ${limit}, the time limit for an external agent run. `
         + 'Its work so far may be incomplete; check the files it changed before relying on them.'
       // The runtime disposes the run again after this result and reports a teardown failure from that call.
-      void run.dispose().catch(() => undefined).then(async () => {
-        const stopped = await run.result
-        resolve({ output: stopped.output, stopReason: 'error', diagnostic })
-      })
+      void run.dispose().catch(() => undefined).then(() => run.result).then(
+        (stopped) => { resolve({ output: stopped.output, stopReason: 'error', diagnostic }) },
+        // A capture failure after the stop leaves no output to keep; the limit's diagnostic is the result.
+        () => { resolve({ output: [], stopReason: 'error', diagnostic }) },
+      )
     }, timeoutMs)
-    void run.result.then((settled) => {
+    run.result.then((settled) => {
       if (expired) return
       clear()
       resolve(settled)
+    }, (error: unknown) => {
+      if (expired) return
+      clear()
+      reject(error)
     })
   })
   return {

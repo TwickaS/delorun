@@ -13,6 +13,8 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../../packages/core/agent" },
     { "path": "../../../packages/core/session" },
+    { "path": "../../../packages/session/session-projection" },
+    { "path": "../../../packages/test-support/agent-loop-testkit" },
     { "path": "../../../packages/core/tools" },
     { "path": "../../../packages/interaction/user-approval" },
     { "path": "../../../packages/sandbox/sandbox-policy" },

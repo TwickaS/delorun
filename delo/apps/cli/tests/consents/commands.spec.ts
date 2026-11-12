@@ -526,10 +526,10 @@ describe('delorun workspace external-agents', () => {
 
   it('refuses a usage error, a missing folder, a folder Delo never adds and an unreadable grants file', async () => {
     const { command } = workspace({ answers: [true] })
-    await expect(command.run(['external-agents', folder], context)).rejects.toMatchObject({ code: EXIT.usage })
-    await expect(command.run(['external-agents', folder, 'Bad Agent', 'on'], context)).rejects.toMatchObject({ code: EXIT.usage })
-    await expect(command.run(['external-agents', folder, 'codex', 'maybe'], context)).rejects.toMatchObject({ code: EXIT.usage })
-    await expect(command.run(['external-agents', folder, 'codex', 'on', 'extra'], context)).rejects.toMatchObject({ code: EXIT.usage })
+    await expect(command.run(['external-agents', folder], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'Bad Agent', 'on'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'codex', 'maybe'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'codex', 'on', 'extra'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(command.run(['external-agents', join(osHome, 'missing'), 'codex', 'on'], context)).rejects.toThrow('is not a folder')
     await expect(command.run(['external-agents', osHome, 'codex', 'on'], context)).rejects.toThrow('Nothing was changed.')
     const path = grantStorePath(deloHome)

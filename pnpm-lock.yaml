@@ -2312,6 +2312,9 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: workspace:*
         version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
@@ -2321,6 +2324,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection
       '@deepseek-ai/dsh-subagent':
         specifier: workspace:*
         version: link:../../../packages/subagent/subagent

@@ -359,12 +359,14 @@ export const PARITY_SWITCHES = [
       key: 'enabled',
     },
     // The consent reaches the model through the external delegation tool's
-    // description and the refusal an unapproved start throws; these files are
-    // the ones whose behaviour the switch turns off at its parity value.
+    // description, the refusal an unapproved start throws and the refusal of a
+    // plugin_manager call; these files are the ones whose behaviour the switch
+    // turns off at its parity value.
     sources: [
       'packages/subagent/subagent/src/consent.ts',
       'packages/subagent/subagent/src/index.ts',
       'packages/subagent/tool-subagent/src/index.ts',
+      'delo/packages/plugin-delegation-consent/src/index.ts',
     ],
   },
   {

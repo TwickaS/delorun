@@ -7,20 +7,20 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import type { ServerResponse } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { randomUUID } from 'node:crypto'
+import { Context, Service } from '@deepseek-ai/cordis'
+import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import { createInboxStub, unsupportedModel } from '@deepseek-ai/dsh-agent-loop-testkit'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { externalTestParent } from '../../../../packages/subagent/subagent/tests/external-activation-helpers.ts'
-import { mountWorkingDirectoryFixture } from '../../../../packages/subagent/subagent/tests/working-directory-fixture.ts'
 import { apply, ConfigSchema, DeloDelegationConsent, DelegationConsentError, packageOfTarget, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
 import { agentName, askText, askTextZh, describeAgent, notApprovedRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
-import { changeGrantStore, grantStorePath, parseGrantStore, readGrantStore } from '../src/store.ts'
+import { changeGrantStore, grantStorePath, parseGrantStore, problemOf, readGrantStore } from '../src/store.ts'
 import { DELEGATION_CONSENT_ROUTES } from '../src/wire.ts'
 
 const roots: string[] = []
@@ -193,6 +193,17 @@ describe('the workspace grant', () => {
     await expect(readGrantStore(grantStorePath(home))).resolves.toEqual({ kind: 'readable', grants: [] })
   })
 
+  it('lists the grants by workspace, then agent, and describes an agent for its delegation tool', async () => {
+    const { consent, home } = await mounted({ agents: [], providers: external })
+    await changeGrantStore(grantStorePath(home), () => [
+      { workspace: '/b', provider: 'codex', grantedAt: 1 },
+      { workspace: '/a', provider: 'codex', grantedAt: 2 },
+      { workspace: '/a', provider: 'claude-code', grantedAt: 3 },
+    ])
+    expect((await consent.grants()).grants.map(grant => `${grant.workspace} ${grant.provider}`)).toEqual(['/a claude-code', '/a codex', '/b codex'])
+    expect(consent.describe('codex')).toBe(describeAgent('codex'))
+  })
+
   it('refuses a chat without a folder and a folder Delo never adds as a workspace', async () => {
     const noFolder = await mounted({ agents: [chat(undefined)], providers: external })
     await expect(noFolder.consent.allowWorkspace({ sessionId: 'chat-1', provider: 'claude-code', confirmed: true })).rejects.toMatchObject({ code: 'NO_WORKSPACE' })
@@ -216,6 +227,11 @@ describe('the grants file', () => {
     expect(() => parseGrantStore(text)).toThrow()
   })
 
+  it('words a failure that is not an Error as text', () => {
+    expect(problemOf(new Error('locked'))).toBe('locked')
+    expect(problemOf('locked')).toBe('locked')
+  })
+
   it('reads a symbolic link as refused', async () => {
     const { home } = folders()
     await expect(readGrantStore(join(home, 'missing', 'grants.json'))).resolves.toEqual({ kind: 'readable', grants: [] })
@@ -235,6 +251,7 @@ describe('the copy', () => {
     expect(describeAgent('codex')).toContain('own Codex sign-in and account')
     expect(askText({ provider: 'codex', workspace: '/w', label: undefined })).not.toContain('Task:')
     expect(askTextZh({ provider: 'codex', workspace: '', label: 'x' })).toContain('此对话的文件夹')
+    expect(askTextZh({ provider: 'codex', workspace: '/w', label: undefined })).not.toContain('任务')
     expect(notApprovedRefusal('codex', 'cancelled', '/w')).toContain('withdrawn')
     expect(notApprovedRefusal('codex', 'rejected', '')).not.toContain('delorun')
   })
@@ -365,17 +382,61 @@ describe('the routes', () => {
   })
 })
 
+/** The working directory the subagent runtime reads: each chat's own folder. */
+class ChatFolder extends Service {
+  constructor(ctx: Context) {
+    super(ctx, 'workingDirectory')
+  }
+
+  get(session: Session): string {
+    return session.header.cwd ?? process.cwd()
+  }
+
+  async ensure(agent: Agent): Promise<string> {
+    return this.get(agent.session)
+  }
+
+  async set(agent: Agent): Promise<string> {
+    return this.get(agent.session)
+  }
+}
+
+/**
+ * Register an idle parent chat in a folder, with a real Session and an Inbox nothing drives.
+ * @param ctx - the scope with the session store and the agent registry.
+ * @param cwd - the chat's folder.
+ * @returns the parent.
+ */
+async function parentChat(ctx: Context, cwd: string): Promise<Agent> {
+  const session = ctx.sessions.create(SessionId(randomUUID()), { meta: { cwd } })
+  const inbox = createInboxStub()
+  const parent: Agent = {
+    id: session.id, session, ctx, options: {}, status: 'idle', model: unsupportedModel(), inbox,
+    send: (message, target) => { inbox.append(target, message) },
+    followup: (message) => { inbox.append('next-turn', message) },
+    steer: (message) => { inbox.append('next-step', message) },
+    inject: (message) => { inbox.append('next-step', message) },
+    cancel: () => { inbox.clear() },
+    whenIdle: () => Promise.resolve(),
+    runMaintenance: task => task(new AbortController().signal),
+  }
+  await ctx.agents.register(parent)
+  return parent
+}
+
 describe('through the subagent runtime', () => {
   it('never starts an external agent the person did not approve, and starts it once approved', async () => {
     const paths = folders()
     const ctx = new Context()
+    await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
-    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(ChatFolder)
     await ctx.plugin(SubagentRuntime)
     let answer: ApprovalOutcome = 'rejected'
     ctx.provide('approval', { request: () => Promise.resolve(answer) } as never)
     await ctx.plugin(DeloDelegationConsent, { timeoutMs: 60_000, env: { DELO_HOME: paths.home }, now: () => 1 })
-    const parent = await externalTestParent(ctx, paths.workspace)
+    const parent = await parentChat(ctx, paths.workspace)
     const result = Promise.withResolvers<SubagentResult>()
     const start = vi.fn(() => Promise.resolve({ id: SessionId('run'), result: result.promise, dispose: () => Promise.resolve() }))
     ctx.subagents.registerProvider({ name: 'claude-code', capabilities: { agentOptions: false, agentPreset: false, outputSchema: false, depthLimit: false }, inheritsParentContext: false, start })

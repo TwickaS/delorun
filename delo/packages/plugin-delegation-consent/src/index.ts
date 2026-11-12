@@ -95,7 +95,7 @@ export function apply(ctx: Context, config?: unknown): void {
   const rows = (): readonly GuardRow[] => [...ctx.get('loader')?.entries() ?? []].map(entry => ({
     id: entry.id, rowId: entry.options.id, name: entry.options.name,
   }))
-  ctx.plugin(DeloDelegationConsent, { timeoutMs: parsed.runTimeoutMinutes * 60_000, env: process.env, now: () => Date.now() })
+  ctx.plugin(DeloDelegationConsent, { timeoutMs: parsed.runTimeoutMinutes * 60_000, env: process.env, now: Date.now })
   ctx.inject(['tools'], (scope) => { scope.tools.guard(exec => pluginManagerVerdict(exec, refused, rows)) })
   ctx.inject(['connection', 'delegationConsent'], (scope) => {
     registerDelegationRoutes(scope, scope.delegationConsent as DeloDelegationConsent)

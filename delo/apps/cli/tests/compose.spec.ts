@@ -154,7 +154,7 @@ describe('a set-up CLI profile', { timeout: 60_000 }, () => {
     const answers = join(deloHome, 'profiles', 'default', 'setup-answers.json')
     writeFileSync(answers, JSON.stringify({ ...JSON.parse(readFileSync(answers, 'utf8')) as object, prompts: 'stock' }))
     rmSync(join(deloHome, 'cordis.patch.yml'))
-    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent']) appendToProfilePatch({ id, config: { enabled: false } })
+    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent', 'delo-delegation-consent']) appendToProfilePatch({ id, config: { enabled: false } })
     const composed = await compose()
     expect(composed.prompts).toBe('stock')
     expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()

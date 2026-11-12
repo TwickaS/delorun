@@ -29,7 +29,7 @@ import { NO_WORKSPACE, workspaceKey } from '@delo/plugin-permission-defaults/wor
 import {
   agentName, askText, askTextZh, describeAgent, notApprovedRefusal, outsideRefusal, readOnlyRefusal, storeRefusal,
 } from './copy.ts'
-import { changeGrantStore, grantOf, grantStorePath, readGrantStore, withGrant, withoutGrant, type ExternalAgentGrant } from './store.ts'
+import { changeGrantStore, grantOf, grantStorePath, problemOf, readGrantStore, withGrant, withoutGrant, type ExternalAgentGrant } from './store.ts'
 import type {
   AllowWorkspaceAnswer, AllowWorkspaceRequest, DelegationRefusalCode, GrantsAnswer, GrantView, RevokeAnswer, RevokeRequest,
 } from './wire.ts'
@@ -53,13 +53,14 @@ export interface ConsentOptions {
 }
 
 /**
- * Whether a directory is a workspace or inside it.
+ * Whether a directory is a workspace or inside it. A filesystem root, which Delo never adds as a workspace, contains
+ * only itself here, so a chat there starts no external agent in another folder.
  * @param workspace - the workspace key.
  * @param directory - the canonical directory.
  * @returns true when the directory is the workspace or below it.
  */
 function inside(workspace: string, directory: string): boolean {
-  return directory === workspace || directory.startsWith(workspace.endsWith(sep) ? workspace : `${workspace}${sep}`)
+  return directory === workspace || directory.startsWith(`${workspace}${sep}`)
 }
 
 /**
@@ -179,7 +180,7 @@ export class DeloDelegationConsent extends Service implements DelegationConsentS
     try {
       return await changeGrantStore(path, change)
     } catch (error) {
-      throw new DelegationConsentError('STORE_REFUSED', `nothing was recorded: ${error instanceof Error ? error.message : String(error)}`)
+      throw new DelegationConsentError('STORE_REFUSED', `nothing was recorded: ${problemOf(error)}`)
     }
   }
 }

@@ -100,13 +100,12 @@ export async function readGrantStore(path: string): Promise<GrantStoreRead> {
 }
 
 /**
- * The words of a failed read.
+ * The words of a failed read or change of the grants file.
  * @param error - the failure.
- * @returns its message.
+ * @returns its message, or the value as text when it is not an Error.
  */
-function problemOf(error: unknown): string {
-  /* v8 ignore next -- the reads and the parser throw only Error instances; the words cover any other value. */
-  return error instanceof Error ? error.message : 'the file could not be read'
+export function problemOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /**

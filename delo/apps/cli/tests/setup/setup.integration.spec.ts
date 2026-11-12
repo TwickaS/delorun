@@ -123,7 +123,7 @@ describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
     expect(lines.join('')).toContain('You can turn them on later in Settings → Privacy.')
     const patch = readFileSync(join(profileDirectory(home, PROFILE), 'cordis.patch.yml'), 'utf8')
     expect(patch).not.toMatch(/reach|forward/i)
-    expect(parse(patch)).toHaveLength(4)
+    expect(parse(patch)).toHaveLength(5)
   })
 
   it('refuses the questions without a terminal, and writes nothing', async () => {

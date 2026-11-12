@@ -18,7 +18,7 @@ import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { shellQuote, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delo/home'
 import { agentName, askText, CLI_COMMAND } from '@delo/plugin-delegation-consent/copy'
-import { changeGrantStore, grantOf, grantStorePath, readGrantStore, withGrant, withoutGrant } from '@delo/plugin-delegation-consent/store'
+import { changeGrantStore, grantOf, grantStorePath, problemOf, readGrantStore, withGrant, withoutGrant } from '@delo/plugin-delegation-consent/store'
 import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import type { CommandContext } from '../command.ts'
@@ -140,6 +140,6 @@ async function changed(path: string, change: Parameters<typeof changeGrantStore>
   try {
     await changeGrantStore(path, change)
   } catch (error) {
-    throw new CliError(EXIT.failed, `${CLI_COMMAND}: nothing was recorded (${error instanceof Error ? error.message : String(error)}). Check that the file belongs to you and that no other delorun command is changing it, then try again.`)
+    throw new CliError(EXIT.failed, `${CLI_COMMAND}: nothing was recorded (${problemOf(error)}). Check that the file belongs to you and that no other delorun command is changing it, then try again.`)
   }
 }

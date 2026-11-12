@@ -500,6 +500,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
       { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
       { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+      { id: 'delo-delegation-consent', name: '@delo/plugin-delegation-consent', config: { enabled: true }, disabled: true },
     ],
   }
   /** The update gate row in the parity form the overlay's fourth patch restates it. */
@@ -542,6 +543,7 @@ describe('the parity overlay\'s mount of @delo/bundle-local', () => {
           { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults', config: { enabled: true }, disabled: true },
           { id: 'delo-schedule-consent', name: '@delo/plugin-schedule-consent', config: { enabled: true }, disabled: true },
           { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard', config: { enabled: true }, disabled: true },
+          { id: 'delo-delegation-consent', name: '@delo/plugin-delegation-consent', config: { enabled: true }, disabled: true },
         ],
       },
       GATE_INSERT,
