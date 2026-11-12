@@ -4,6 +4,7 @@
  * refusal on every runner that cannot express a network rule. Real bwrap runs in `network.e2e.ts`.
  */
 
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,6 +15,7 @@ import { BRIDGE_DIAGNOSTIC, LocalSandboxProvider, NETWORK_DENIED_SOCKET_DIRECTOR
 import type { Config } from '@deepseek-ai/dsh-sandbox-local'
 import { bridgedArgv, networkRefusal } from '../src/network.ts'
 import { bwrapProfileArgs, NO_PROTECTION } from '../src/profiles.ts'
+import type { Protection } from '../src/profiles.ts'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -81,6 +83,31 @@ describe('bwrap network arguments', () => {
     expect(args.filter(arg => arg === '--bind')).toHaveLength(1)
   })
 
+  it('binds a socket outside the protected home after every hiding mount and the home\'s read-only remount, before /tmp turns read-only', () => {
+    const socket = '/run/proxy/list.sock'
+    const protection: Protection = {
+      ...NO_PROTECTION,
+      home: '/h',
+      homeAliases: ['/mnt/root/h'],
+      shadowedSockets: ['/run/docker.sock'],
+      hiddenDirectories: ['/run/user/7', '/mnt/wslg'],
+      privateTmp: true,
+      tmpAliases: ['/mnt/root/tmp'],
+    }
+    const args = bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/tmp/ws', network: { mode: 'proxy', socket } }, protection)
+    const at = (...sequence: string[]): number => {
+      const index = args.findIndex((_arg, start) => sequence.every((arg, offset) => args[start + offset] === arg))
+      expect(index, sequence.join(' ')).toBeGreaterThan(-1)
+      return index
+    }
+    const bind = at('--bind', socket, socket)
+    for (const earlier of [['--remount-ro', '/run/user/7'], ['--remount-ro', '/mnt/wslg'], ['--remount-ro', '/h'], ['--remount-ro', '/mnt/root/h'], ['--remount-ro', '/mnt/root/tmp']]) {
+      expect(at(...earlier), earlier.join(' ')).toBeLessThan(bind)
+    }
+    expect(args.slice(-2)).toEqual(['--remount-ro', '/tmp'])
+    expect(bind).toBe(args.length - 5)
+  })
+
   it('binds a socket outside the protected home after the home\'s mounts', () => {
     const home = homeDirectory()
     const socket = '/run/proxy/list.sock'
@@ -96,6 +123,14 @@ describe('the bridge in front of a `proxy` command', () => {
     expect(argv[2]).toContain('exec "$@"')
     expect(argv.slice(3, 5)).toEqual(['sh', '/opt/node'])
     expect(argv.slice(6)).toEqual(['/s.sock', String(SANDBOX_PROXY_PORT), 'bash', '-c', 'curl https://example.com'])
+  })
+
+  it.skipIf(process.platform === 'win32')('reports a Node executable it cannot start as the bridge\'s failure, and does not run the command', () => {
+    const [shell, ...rest] = bridgedArgv('/s.sock', ['/bin/echo', 'ran'], '/nonexistent/node')
+    const result = spawnSync(shell as string, rest, { encoding: 'utf8', timeout: 10_000 })
+    expect(result.status).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toMatch(new RegExp(`^${BRIDGE_DIAGNOSTIC}the bridge did not start \\(exit status 127\\)$`, 'mu'))
   })
 
   it('runs under the host\'s own Node executable by default', () => {
@@ -189,11 +224,11 @@ describe('confine() with a network', () => {
     expect(profile((await sandbox.confine(['true'], { ...OFF, workspaceRoot: '/' })).argv)).toBe(open)
   })
 
-  it('denies systemd-resolved, nscd, avahi, the system D-Bus and tailscaled by default, and rejects a relative entry', async () => {
+  it('denies systemd-resolved, nscd, avahi, CUPS, the system D-Bus, tailscaled and snapd by default, and rejects a relative entry', async () => {
     expect(LocalSandboxProvider.Config({}).networkDeniedSockets).toEqual([...NETWORK_DENIED_SOCKETS])
     expect(LocalSandboxProvider.Config({}).networkDeniedSocketDirectories).toEqual([...NETWORK_DENIED_SOCKET_DIRECTORIES])
-    expect(NETWORK_DENIED_SOCKETS).toEqual(['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock'])
-    expect(NETWORK_DENIED_SOCKET_DIRECTORIES).toEqual(['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon'])
+    expect(NETWORK_DENIED_SOCKETS).toEqual(['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock', '/run/snapd.socket', '/run/snapd-snap.socket'])
+    expect(NETWORK_DENIED_SOCKET_DIRECTORIES).toEqual(['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon', '/run/cups'])
     await expect(provider({ networkDeniedSockets: ['run/x.sock'] })).rejects.toThrow('networkDeniedSockets entries must be absolute paths')
     await expect(provider({ networkDeniedSocketDirectories: ['run/nscd'] })).rejects.toThrow('networkDeniedSocketDirectories entries must be absolute paths')
     await expect(provider({ networkDeniedSocketDirectories: ['/'] })).rejects.toThrow('networkDeniedSocketDirectories entries must be absolute paths other than the filesystem root')

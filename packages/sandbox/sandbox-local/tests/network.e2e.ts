@@ -110,6 +110,23 @@ describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap network rules', () => {
     expect(result.stdout).toBe('proxy saw: CONNECT example.com:443 HTTP/1.1\n')
   })
 
+  it('a read-only command with a private /tmp and a protected home reaches the proxy, whose socket lies under /tmp or under the home', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-proxy-home-'))
+    dirs.push(home)
+    const inHome = join(home, 'proxy.sock')
+    const server = createServer((client) => {
+      client.once('data', (data) => { client.end(`proxy saw: ${data.toString().split('\r\n')[0] ?? ''}\n`) })
+    })
+    servers.push(server)
+    await new Promise<void>(resolve => server.listen(inHome, resolve))
+    const program = `const s = require('node:net').connect(${SANDBOX_PROXY_PORT}, '127.0.0.1', () => s.write('CONNECT example.com:443 HTTP/1.1\\r\\n\\r\\n')); let out = ''; s.on('data', d => { out += d }); s.on('end', () => { process.stdout.write(out) }); s.on('error', e => { process.stdout.write('error ' + e.code + '\\n') })`
+    for (const socket of [await echoProxy(), inHome]) {
+      const result = await runConfined(program, { mode: 'proxy', socket }, '', { privateTmp: true, protectedHome: home })
+      expect(result.stderr, socket).toBe('')
+      expect(result.stdout, socket).toBe('proxy saw: CONNECT example.com:443 HTTP/1.1\n')
+    }
+  })
+
   it('a `proxy` command reaches nothing but the proxy', async () => {
     const socket = await echoProxy()
     const port = await lineServer('127.0.0.1')

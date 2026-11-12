@@ -52,8 +52,8 @@ kind: "package-reference"
 | `deniedSocketDirectories` | `[]` | 只存放受限命令不能连接的套接字的目录的绝对路径，例如 Docker Desktop 的控制套接字目录；bwrap 隐藏整个目录，Seatbelt 拒绝包装时其中存在的每个套接字 |
 | `escapeSocketDirectories` | `[]` | 其中的套接字能在所有隔离之外启动程序的目录的绝对路径，例如 WSL 的互操作目录 `/run/WSL`。每个条目都像 `deniedSocketDirectories` 条目一样被拒绝；只要其中之一存在，在无法拒绝套接字连接的 runner（Landlock、windows-acl）上的包装就以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝而不运行命令，bwrap 则安装 [vsock 过滤器](#escape-socket-directories-and-the-vsock-filter)。包装时不存在的条目不拒绝任何东西。 |
 | `privateTmp` | `false` | bwrap 是否给 `read-only` 命令一个空的只读 `/tmp`（位于 `/tmp` 下的工作区根目录以只读方式绑定回去），如同 `workspace-write` 命令已得到一个空的可写 `/tmp`，并在两种模式下隐藏主机 `/tmp` 的每个其他挂载，例如 WSLg 的 `/mnt/wslg/distro/tmp`。Landlock 与 Seatbelt 不应用它。 |
-| `networkDeniedSockets` | `['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock']` | 策略带有 `network` 的命令无法连接的套接字的绝对路径，因为其后的守护进程会替它解析名称或发送流量。在 bwrap 上仅对这样的命令像 `deniedSockets` 条目一样拒绝。 |
-| `networkDeniedSocketDirectories` | `['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon']` | 对策略带有 `network` 的命令像 `deniedSocketDirectories` 条目一样隐藏的绝对目录：systemd-resolved 的 varlink 目录、nscd 与 avahi 的目录。 |
+| `networkDeniedSockets` | `['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock', '/run/snapd.socket', '/run/snapd-snap.socket']` | 策略带有 `network` 的命令无法连接的套接字的绝对路径，因为其后的守护进程会替它解析名称或发送流量。在 bwrap 上仅对这样的命令像 `deniedSockets` 条目一样拒绝。 |
+| `networkDeniedSocketDirectories` | `['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon', '/run/cups']` | 对策略带有 `network` 的命令像 `deniedSocketDirectories` 条目一样隐藏的绝对目录：systemd-resolved 的 varlink 目录、nscd 与 avahi 的目录。 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-sandbox-local)是每个受支持字段及其 JSDoc 的穷尽式真源。
 

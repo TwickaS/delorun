@@ -102,9 +102,12 @@ serve.stdout.on('data', (chunk) => {
 
 /**
  * The shell program that starts the bridge and then replaces itself with the command. `ELECTRON_RUN_AS_NODE` makes an
- * Electron host's executable act as Node for the bridge alone; the command's environment does not carry it.
+ * Electron host's executable act as Node for the bridge alone; the command's environment does not carry it. When the
+ * starter fails, including a Node executable the shell cannot run, the shell prints a {@link BRIDGE_DIAGNOSTIC} line
+ * with its exit status and exits 1 without running the command, so the failure reads as the runner's, not the
+ * command's.
  */
-const WRAPPER = 'ELECTRON_RUN_AS_NODE=1 "$1" -e "$2" -- "$3" "$4" || exit 1; shift 4; exec "$@"'
+const WRAPPER = `ELECTRON_RUN_AS_NODE=1 "$1" -e "$2" -- "$3" "$4" || { printf '${BRIDGE_DIAGNOSTIC}the bridge did not start (exit status %s)\\n' "$?" >&2; exit 1; }; shift 4; exec "$@"`
 
 /**
  * The argv that runs `argv` inside the sandbox behind the bridge to the proxy socket.
