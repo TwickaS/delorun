@@ -5,10 +5,11 @@
  * home process is involved, and the stubs never reach a real home: the device-key signature covers the page's origin,
  * which here is `http://127.0.0.1`, so a real home would refuse it.
  *
- *   node_modules/.bin/tsx delo/packages/home-auth/scripts/sign-in-screens.ts --out <directory> [--prefix after] [--only <scenario>]
+ *   node_modules/.bin/tsx delo/packages/home-auth/scripts/sign-in-screens.ts --out <directory> [--prefix after] [--only <scenario>] [--engine webkit]
  *
- * It writes `<prefix>-<scenario>-<width>-<scheme>[-zh].png` for each scenario at phone width (390 px) in light and dark,
- * the main scenarios at desktop width (1280 px) and in Chinese, and exits 1 when the page logged an error or a policy
+ * It writes `<prefix>-<scenario>-<width>-<scheme>[-zh][-webkit].png`: in Chromium, each scenario at 390 px in light
+ * and dark, at 360 px in light, at desktop width (1280 px) in light and dark, and the main scenarios in Chinese; with
+ * `--engine webkit`, each scenario at 390 px in light and dark. It exits 1 when the page logged an error or a policy
  * violation that the scenario does not expect. Playwright comes from `@delo/benchmarks`, which already depends on it.
  * @module @delo/home-auth/scripts/sign-in-screens
  */
@@ -40,7 +41,7 @@ interface Page {
   click(selector: string): Promise<void>
   fill(selector: string, value: string): Promise<void>
   waitForTimeout(ms: number): Promise<void>
-  screenshot(options: { path: string; fullPage: boolean }): Promise<unknown>
+  screenshot(options: { path: string; fullPage: boolean; caret: 'initial' }): Promise<unknown>
   on(event: 'console', handler: (message: { type(): string; text(): string }) => void): void
   on(event: 'pageerror', handler: (error: Error) => void): void
 }
@@ -49,7 +50,7 @@ interface Browser {
   newContext(options: { viewport: { width: number; height: number }; deviceScaleFactor: number; locale: string; isMobile?: boolean; hasTouch?: boolean }): Promise<Context>
   close(): Promise<void>
 }
-interface Playwright { chromium: { launch(): Promise<Browser> } }
+interface Playwright { chromium: { launch(): Promise<Browser> }; webkit: { launch(): Promise<Browser> } }
 
 /** How the stubbed home answers each sign-in call in one scenario. */
 interface Scenario {
@@ -57,6 +58,8 @@ interface Scenario {
   readonly challenge: 'trusted' | 'untrusted' | 'hold' | 'offline'
   /** `POST /auth/device/request`: accepted, or refused with a status and code. */
   readonly request?: { readonly status: number; readonly error?: string }
+  /** `POST /auth/session`: held, so the "signing in" view stays on screen, or refused with a status and code. */
+  readonly session?: { readonly status: number; readonly error: string }
   /** `GET /auth/device/request/<id>`: the states it answers, in order; the last repeats. */
   readonly states?: readonly string[]
   /** Whether the person asks for approval once the form shows. */
@@ -65,7 +68,7 @@ interface Scenario {
   readonly init?: string
   /** Milliseconds to wait after the last step before the screenshot. */
   readonly settle?: number
-  /** Shown also at desktop width and in Chinese. */
+  /** Shown also in Chinese. */
   readonly main?: boolean
 }
 
@@ -83,6 +86,7 @@ const SCENARIOS: Readonly<Record<string, Scenario>> = {
   busy: { challenge: 'untrusted', ask: true, request: { status: 429, error: 'APPROVAL_PENDING_LIMIT' } },
   'name-refused': { challenge: 'untrusted', ask: true, request: { status: 400, error: 'BAD_REQUEST' } },
   returning: { challenge: 'trusted' },
+  sessions: { challenge: 'trusted', session: { status: 429, error: 'SESSION_LIMIT_REACHED' } },
   offline: { challenge: 'offline', main: true },
   unsupported: { challenge: 'untrusted', init: 'Object.defineProperty(globalThis.crypto, "subtle", { value: undefined })' },
 }
@@ -90,7 +94,8 @@ const SCENARIOS: Readonly<Record<string, Scenario>> = {
 /** Console text a scenario produces by design: the browser's own report of a stubbed lost connection. */
 const EXPECTED_CONSOLE = /Failed to load resource/
 
-const { values } = parseArgs({ options: { out: { type: 'string' }, prefix: { type: 'string', default: 'after' }, only: { type: 'string' } } })
+const { values } = parseArgs({ options: { out: { type: 'string' }, prefix: { type: 'string', default: 'after' }, only: { type: 'string' }, engine: { type: 'string', default: 'chromium' } } })
+if (values.engine !== 'chromium' && values.engine !== 'webkit') throw new Error('--engine is chromium or webkit')
 if (values.out === undefined) throw new Error('name the output directory with --out')
 const out = values.out
 await mkdir(out, { recursive: true })
@@ -113,8 +118,8 @@ server.listen(0, '127.0.0.1')
 await once(server, 'listening')
 const origin = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
 
-const { chromium } = createRequire(new URL('../../../apps/benchmarks/package.json', import.meta.url))('playwright') as Playwright
-const browser = await chromium.launch()
+const playwright = createRequire(new URL('../../../apps/benchmarks/package.json', import.meta.url))('playwright') as Playwright
+const browser = await playwright[values.engine].launch()
 const problems: string[] = []
 
 /**
@@ -134,7 +139,9 @@ async function stub(target: Page, scenario: Scenario): Promise<void> {
     return json(route, 401, { error: 'DEVICE_NOT_TRUSTED', message: 'This device is not trusted for this address' })
   })
   // A held sign-in keeps the "signing in" state on screen instead of opening the studio.
-  await target.route(`${origin}${REACH_PATHS.session}`, () => undefined)
+  await target.route(`${origin}${REACH_PATHS.session}`, (route) => {
+    if (scenario.session !== undefined) return json(route, scenario.session.status, { error: scenario.session.error, message: 'Refused by the stub' })
+  })
   await target.route(`${origin}${REACH_PATHS.request}`, (route) => {
     const refusal = scenario.request
     if (refusal !== undefined) return json(route, refusal.status, { error: refusal.error, message: 'Refused by the stub' })
@@ -161,9 +168,12 @@ async function capture(name: string, scenario: Scenario, shot: { readonly width:
   const context = await browser.newContext({ viewport: { width: shot.width, height: shot.height }, deviceScaleFactor: 2, locale: shot.zh ? 'zh-CN' : 'en-US', isMobile: mobile, hasTouch: mobile })
   const target = await context.newPage()
   const label = `${name} ${String(shot.width)} ${shot.scheme}${shot.zh ? ' zh' : ''}`
-  target.on('console', (message) => { if (message.type() === 'error' && !EXPECTED_CONSOLE.test(message.text())) problems.push(`${label}: ${message.text()}`) })
-  target.on('pageerror', (error) => { problems.push(`${label}: ${error.message}`) })
-  await target.addInitScript('document.addEventListener("securitypolicyviolation", (event) => console.error(`CSP violation: ${event.violatedDirective} ${event.blockedURI}`))')
+  // Playwright's WebKit screenshot injects an inline style of its own, which the policy refuses; what the page logs
+  // from then on is not the page's.
+  let shooting = false
+  target.on('console', (message) => { if (!shooting && message.type() === 'error' && !EXPECTED_CONSOLE.test(message.text())) problems.push(`${label}: ${message.text()}`) })
+  target.on('pageerror', (error) => { if (!shooting) problems.push(`${label}: ${error.message}`) })
+  await target.addInitScript('document.addEventListener("securitypolicyviolation", (event) => console.error(`CSP violation: ${event.violatedDirective} ${event.blockedURI} at ${event.sourceFile}:${String(event.lineNumber)} ${event.sample}`))')
   if (scenario.init !== undefined) await target.addInitScript(scenario.init)
   await target.emulateMedia({ colorScheme: shot.scheme })
   await stub(target, scenario)
@@ -173,8 +183,10 @@ async function capture(name: string, scenario: Scenario, shot: { readonly width:
     await target.click('form button[type=submit]')
     await target.waitForTimeout(scenario.settle ?? 600)
   }
-  const file = `${values.prefix}-${name}-${String(shot.width)}-${shot.scheme}${shot.zh ? '-zh' : ''}.png`
-  await target.screenshot({ path: join(out, file), fullPage: true })
+  const engine = values.engine === 'chromium' ? '' : `-${values.engine}`
+  const file = `${values.prefix}-${name}-${String(shot.width)}-${shot.scheme}${shot.zh ? '-zh' : ''}${engine}.png`
+  shooting = true
+  await target.screenshot({ path: join(out, file), fullPage: true, caret: 'initial' })
   await context.close()
   console.log(file)
 }
@@ -183,9 +195,10 @@ try {
   for (const [name, scenario] of Object.entries(SCENARIOS)) {
     if (values.only !== undefined && values.only !== name) continue
     for (const scheme of ['light', 'dark'] as const) await capture(name, scenario, { width: 390, height: 844, scheme, zh: false })
-    if (scenario.main !== true) continue
+    if (values.engine !== 'chromium') continue
+    await capture(name, scenario, { width: 360, height: 740, scheme: 'light', zh: false })
     for (const scheme of ['light', 'dark'] as const) await capture(name, scenario, { width: 1280, height: 800, scheme, zh: false })
-    await capture(name, scenario, { width: 390, height: 844, scheme: 'light', zh: true })
+    if (scenario.main === true) await capture(name, scenario, { width: 390, height: 844, scheme: 'light', zh: true })
   }
 } finally {
   await browser.close()
