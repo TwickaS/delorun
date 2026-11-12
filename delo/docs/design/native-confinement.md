@@ -64,7 +64,7 @@ English
 ## What this does not protect against
 
 - **Landlock and sockets.** Landlock cannot deny a connect to a pathname socket; with a rootful Docker socket, a confined command can reach the engine, which is equivalent to root. A report and the rootless offer are the only remedies on such a system.
-- **The network and other sockets.** Confined commands reach the network, the ssh-agent socket, D-Bus and the display server on every dialect.
+- **The network and other sockets.** Confined commands reach the network on every dialect, pathname sockets outside the directories [C1](../contracts/c01-home-layout.md#confinement-rules) hides, and abstract sockets.
 - **Full access.** A command under `danger-full-access` runs unconfined; the prompt states what it reaches and no rule applies.
 - **A process of the same user.** A program running as the person outside the sandbox can read and change the home, the probes and the checks.
 

@@ -29,22 +29,23 @@ describe('the escape directories a booted sandbox row must name', () => {
 })
 
 describe('a sandbox row\'s protection as H3 compares it', () => {
-  const config = { networkAccess: false, protectedHome: '/h', protectedHomeReadable: ['runtimes', 7], deniedSockets: ['/srv/mine.sock', '/h/run/default/update.sock', '/var/run/docker.sock'], escapeSocketDirectories: ['/run/WSL'] }
+  const config = { networkAccess: false, protectedHome: '/h', protectedHomeReadable: ['runtimes', 7], deniedSockets: ['/srv/mine.sock', '/h/run/default/update.sock', '/var/run/docker.sock'], escapeSocketDirectories: ['/run/WSL'], privateTmp: true }
 
   it('hashes the settings beyond the protection, and reads the protection without the sockets the start found', () => {
     expect(settingsBeyondProtection(config)).toEqual({ networkAccess: false })
     expect(settingsBeyondProtection(null)).toBeNull()
-    expect(hostProtectionOf(config, ['/var/run/docker.sock'])).toEqual({ protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/srv/mine.sock', '/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'] })
-    expect(hostProtectionOf({ protectedHome: '/h', deniedSockets: 'not a list' }, [])).toEqual({ protectedHome: '/h', protectedHomeReadable: [], deniedSockets: [], escapeSocketDirectories: [] })
+    expect(hostProtectionOf(config, ['/var/run/docker.sock'])).toEqual({ protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/srv/mine.sock', '/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'], privateTmp: true })
+    expect(hostProtectionOf({ protectedHome: '/h', deniedSockets: 'not a list', privateTmp: 'yes' }, [])).toEqual({ protectedHome: '/h', protectedHomeReadable: [], deniedSockets: [], escapeSocketDirectories: [], privateTmp: false })
     expect(hostProtectionOf({ deniedSockets: [] }, [])).toBeUndefined()
     expect(hostProtectionOf('no config', [])).toBeUndefined()
   })
 
   it('names every way a later protection is weaker, and none for a stricter one', () => {
-    const before = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/a.sock'], escapeSocketDirectories: ['/run/WSL'] }
+    const before = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/a.sock'], escapeSocketDirectories: ['/run/WSL'], privateTmp: true }
     expect(protectionWeakenings(before, { ...before, protectedHomeReadable: [], deniedSockets: ['/a.sock', '/b.sock'], escapeSocketDirectories: ['/run/WSL', '/x'] })).toEqual([])
-    expect(protectionWeakenings(before, { protectedHome: '/g', protectedHomeReadable: ['runtimes', 'secrets'], deniedSockets: [], escapeSocketDirectories: [] })).toEqual([
-      'protects /g instead of /h', 'lets confined commands read secrets', 'no longer denies /a.sock', 'no longer hides /run/WSL',
+    expect(protectionWeakenings({ ...before, privateTmp: false }, before)).toEqual([])
+    expect(protectionWeakenings(before, { protectedHome: '/g', protectedHomeReadable: ['runtimes', 'secrets'], deniedSockets: [], escapeSocketDirectories: [], privateTmp: false })).toEqual([
+      'protects /g instead of /h', 'lets confined commands read secrets', 'no longer denies /a.sock', 'no longer hides /run/WSL', 'shows confined commands the host\'s /tmp',
     ])
   })
 })

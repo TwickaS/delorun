@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseHandoverLine } from '../src/handover.ts'
 
-const PROTECTION = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'] }
+const PROTECTION = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'], privateTmp: true }
 
 /**
  * A handover line as a predecessor writes it.
@@ -22,8 +22,10 @@ function line(change: Record<string, unknown> = {}, health: Record<string, unkno
 }
 
 describe('the handover line', () => {
-  it('carries the previous Host\'s sandbox protection, and reads a line without it', () => {
+  it('carries the previous Host\'s sandbox protection, requires its privateTmp, and reads a line without it', () => {
     expect(parseHandoverLine(line({}, { previousProtection: PROTECTION })).health.previousProtection).toEqual(PROTECTION)
+    const { privateTmp: _absent, ...withoutPrivateTmp } = PROTECTION
+    expect(() => parseHandoverLine(line({}, { previousProtection: withoutPrivateTmp }))).toThrow('health.previousProtection.privateTmp')
     expect(parseHandoverLine(line()).health).not.toHaveProperty('previousProtection')
   })
 

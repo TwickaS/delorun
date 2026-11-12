@@ -340,7 +340,7 @@ describe('health-check-rollback', TIMEOUT, () => {
   })
 
   it('hands the running Host\'s sandbox protection to the successor: one that denies fewer sockets is rolled back, one that denies more commits', async () => {
-    const protection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock', '/h/run/default/supervisor.sock'], escapeSocketDirectories: ['/run/WSL'] }
+    const protection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock', '/h/run/default/supervisor.sock'], escapeSocketDirectories: ['/run/WSL'], privateTmp: true }
     const home = await setUp({ protection: { ...protection, deniedSockets: ['/h/run/default/update.sock'] } })
     installFixture(home, V1, { protection })
     await start(home)

@@ -68,6 +68,7 @@ const handoverSchema = z.object({
       protectedHomeReadable: z.array(z.string()),
       deniedSockets: z.array(z.string()),
       escapeSocketDirectories: z.array(z.string()),
+      privateTmp: z.boolean(),
     }).optional(),
   }),
   startedAt: z.string().datetime(),

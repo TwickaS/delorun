@@ -268,14 +268,15 @@ describe('a booted Host', { timeout: 60_000 }, () => {
     })
     expect(message).toContain(`sandbox protects "/elsewhere", not the home ${deloHome}`)
     expect(message).toContain(`does not deny ${join(deloHome, 'run', 'default', 'update.sock')}`)
-    expect(message).toContain('sandbox does not hide the escape directories /run/WSL')
+    expect(message).toContain(`sandbox does not hide the escape directories ${composed.protection.escapeSocketDirectories.join(', ')}`)
+    expect(message).toContain('sandbox shows confined commands the host\'s /tmp (privateTmp is not on)')
     expect(message).toContain('sandbox sets runnerCommand')
   })
 
   it('accepts a booted sandbox row that names every escape directory the start set, among its own', async () => {
     const composed = await compose()
     const [row] = composedRows(composed).filter(candidate => candidate.id === 'sandbox')
-    const config = { ...isRecord(row?.config) ? row.config : {}, escapeSocketDirectories: ['/run/mine', '/run/WSL'] }
+    const config = { ...isRecord(row?.config) ? row.config : {}, escapeSocketDirectories: ['/run/mine', ...composed.protection.escapeSocketDirectories] }
     expect(() => { assertDeloInvariants(composed, booted(composed, [{ ...row!, config }])) }).not.toThrow()
   })
 
