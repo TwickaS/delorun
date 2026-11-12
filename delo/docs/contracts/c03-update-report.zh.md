@@ -145,7 +145,7 @@ CLI home 的更新与回滚已构建，并由 `delorun update` 与 `delorun reco
 
 任一版本轴不匹配时，报告会写明两个目标版本，其 `actions` 提供将插件更新到满足目标的版本，并针对未满足的那条轴，提供在目标版本上的精确版本豁免（[C17](c17-plugin-versions.zh.md#exemptions)）。
 
-每个插件的两条轴由上游自己的评估决定，即插件安装程序与启动预检调用的函数（`evaluatePluginCompatibility` 与 `evaluateDeloRequirement`），以目标的 DSH 与 Delo 版本代替正在运行的版本，且不带豁免；报告随后按轴应用豁免文件。在 DSH 轴上，声明了 `engines.dsh` 时由它单独决定；否则每个 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` peer 范围都必须接受目标的 DSH，`workspace:` peer 接受任何版本。未满足的 peer 在 `<range>` 中写作 `<peer range> (peer <package>)`，因此报告会停用下一次启动将停用的每个插件。上游拒绝读取的声明，包括不是字符串的 peer 范围，为 `requirement-unreadable`。更新检查用同一评估统计它将停用的插件，`delorun plugin check` 则为单个插件显示该评估（[C17](c17-plugin-versions.zh.md#checking-a-plugin-before-it-is-installed)）。
+每个插件的两条轴由上游自己的评估决定，即插件安装程序与启动预检调用的函数（`evaluatePluginCompatibility` 与 `evaluateDeloRequirement`），以目标的 DSH 与 Delo 版本代替正在运行的版本，且不带豁免；报告随后按轴应用豁免文件。在 DSH 轴上，声明了 `engines.dsh` 时由它单独决定；否则每个 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` peer 范围都必须接受目标的 DSH，`workspace:` peer 接受任何版本。未满足的 peer 在 `<range>` 中写作 `<peer range> (peer <package>)`，因此报告会停用下一次启动将停用的每个插件。上游拒绝读取的声明，包括不是字符串的 peer 范围，为 `requirement-unreadable`。更新检查用同一评估统计它将停用的插件，`delorun plugin check` 则为单个插件显示该评估（[C17](c17-plugin-versions.zh.md#evaluation)）。
 
 <a id="verified-and-unverified"></a>
 

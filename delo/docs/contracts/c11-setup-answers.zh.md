@@ -130,7 +130,7 @@ setup 按以下顺序提出这些问题。本人接受默认值时即采用该�
 | `profile.port` | 带有该端口的 `webserver` 行，重述 Web bundle 的其他键。默认端口时不写入。 | profile 的 `cordis.patch.yml`。 |
 | `reach.option` | 远程访问约定中的远程访问行。`none` 不写入任何行。 | profile。仅在交互形式中写入。 |
 | `reach.identityFactor` | 针对远程访问地址的登记请求。无配置行。 | home 认证状态，遵循身份约定。 |
-| `importStockHome` | [C8](c08-archive-and-trash.zh.md#the-stock-home-import) 中 stock home 导入的数据：正是该部分预览所显示的计划，在每个 profile 的 home 锁之下进行。此后发生变化的 stock 文件、此后新增了对话的 Delo home，或未显示预览的运行，都会拒绝它。 | home。 |
+| `importStockHome` | [C8](c08-archive-and-trash.zh.md#import-and-export) 中 stock home 导入的数据：正是该部分预览所显示的计划，在每个 profile 的 home 锁之下进行。此后发生变化的 stock 文件、此后新增了对话的 Delo home，或未显示预览的运行，都会拒绝它。 | home。 |
 | `updateCheck` | `false` 按设置 → 隐私保存的方式写入 `delo-update-check` 行：它的 id、插件名称，以及带 `enabled: false` 的 bundle 配置。`true` 不在该行留下任何配置，因此适用 bundle 的 `enabled: true`。 | profile 的 `cordis.patch.yml`，在 Delorun 首次启动之前。 |
 | `sections` | 记录在 `setup-answers.json` 中。 | profile 目录。 |
 
