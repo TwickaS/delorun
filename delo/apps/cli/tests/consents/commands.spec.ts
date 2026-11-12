@@ -172,13 +172,14 @@ describe('delorun workspace full-access', () => {
 })
 
 const SERVER = {
-  serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '', env: [{ name: 'API_TOKEN' }],
+  serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
+  resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'API_TOKEN' }],
   reason: 'the acceptance store holds no acceptance for this server', change: 'new', changedVariables: [], state: 'waiting', reviewedAt: NOW,
 }
 
 const ACCEPTED = {
   acceptanceId: 'c'.repeat(32), serverName: 'git', command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/repo',
-  env: [{ name: 'GIT_TOKEN' }, { name: 'PATH', value: '/opt/git/bin' }], acceptedAt: NOW, configured: true,
+  resolvedCommand: '/opt/uv/bin/uvx.cmd', resolvedCwd: '/srv/repo', resolvedShell: '/Windows/System32/cmd.exe', env: [{ name: 'GIT_TOKEN' }, { name: 'PATH', value: '/opt/git/bin' }], acceptedAt: NOW, configured: true,
 }
 
 /** The `mcp.list` answer of a studio holding {@link SERVER} waiting and {@link ACCEPTED} allowed. */
@@ -215,13 +216,27 @@ describe('delorun mcp', () => {
     const { command, sent } = mcp({ lines: [LISTED] })
     await expect(command.run(['list'], context)).resolves.toBe(EXIT.ok)
     expect(sent).toEqual([{ op: 'mcp.list' }])
-    expect(out.stdout).toContain('files: new server\n    command: npx\n    arguments: "-y" "server-filesystem"\n    working directory: the studio\'s own\n    environment variables (values not shown): API_TOKEN\n')
+    expect(out.stdout).toContain('files: new server\n    command: npx\n    arguments: "-y" "server-filesystem"\n    working directory: the studio\'s own\n    runs: /usr/local/bin/npx\n    runs in: /home/person\n    environment variables (values not shown): API_TOKEN\n')
+  })
+
+  it('names the executable that runs and the directory it runs in, and refuses an entry without them', async () => {
+    const moved = { ...SERVER, change: 'resolved', resolvedCommand: '/home/person/project/node_modules/.bin/npx' }
+    const { command } = mcp({ answers: [false], lines: [[{ ok: true, servers: [moved], accepted: [] }]] })
+    await expect(command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).toContain('files: its command or working directory now resolves to another place on this computer\n')
+    expect(out.stdout).toContain('    runs: /home/person/project/node_modules/.bin/npx\n    runs in: /home/person\n')
+    const { resolvedCommand: _command, ...unresolved } = SERVER
+    for (const entry of [unresolved, { ...SERVER, resolvedCwd: 1 }, { ...SERVER, resolvedShell: 2 }]) {
+      const unreadable = mcp({ lines: [[{ ok: true, servers: [entry], accepted: [] }]] })
+      await expect(unreadable.command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.failed })
+    }
   })
 
   it('says in plain words what changed since the person allowed each waiting server', async () => {
     const changes = {
       command: 'its command changed', arguments: 'its arguments changed', directory: 'its working directory changed',
       environment: 'its environment variables changed', unreadable: 'the acceptance list could not be read',
+      resolved: 'its command or working directory now resolves to another place on this computer',
       upgraded: 'Delorun now remembers each server separately; review it once',
     }
     for (const [change, words] of Object.entries(changes)) {
@@ -262,6 +277,8 @@ describe('delorun mcp', () => {
       '    command: uvx',
       '    arguments: "mcp-server-git"',
       '    working directory: /srv/repo',
+      '    runs: /opt/uv/bin/uvx.cmd through the command shell /Windows/System32/cmd.exe',
+      '    runs in: /srv/repo',
       '    environment variables (values not shown): GIT_TOKEN, PATH="/opt/git/bin"',
       `    allowed: ${new Date(NOW).toISOString()}`,
       'old',
@@ -337,5 +354,53 @@ describe('delorun mcp', () => {
     // A revoke names the server, never the command it runs.
     await expect(mcp({ lines: [LISTED] }).command.run(['revoke', 'uvx'], context)).rejects.toMatchObject({ exit: EXIT.failed })
     await expect(mcp().command.run(['revoke'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+  })
+
+  it('names the action it does not know, and an action without its server', async () => {
+    await expect(mcp().command.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose an action') })
+    await expect(mcp().command.run(['remove', 'files'], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('"remove" is not list') })
+    await expect(mcp().command.run(['list', 'files'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(mcp().command.run(['accept', 'files', 'extra'], context)).rejects.toMatchObject({ exit: EXIT.usage })
+  })
+
+  it('refuses a list it cannot read, and says what the home refused', async () => {
+    const unreadable = [
+      { ok: true, servers: {}, accepted: [] },
+      { ok: true, servers: [1], accepted: [] },
+      { ok: true, servers: [{ ...SERVER, env: [{ name: 1 }] }], accepted: [] },
+      { ok: true, servers: [{ ...SERVER, env: [{ name: 'PATH', value: 2 }] }], accepted: [] },
+      { ok: true, servers: [{ ...SERVER, cwd: 3 }], accepted: [] },
+      { ok: true, servers: [{ ...SERVER, reason: 4 }], accepted: [] },
+      { ok: true, servers: [], accepted: [{ ...ACCEPTED, acceptanceId: 5 }] },
+      { ok: true, servers: [], accepted: [{ ...ACCEPTED, acceptedAt: 1.5 }] },
+      { ok: true, servers: [], accepted: [{ ...ACCEPTED, cwd: undefined }] },
+    ]
+    for (const line of unreadable) {
+      await expect(mcp({ lines: [[line]] }).command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('cannot read') })
+    }
+    await expect(mcp({ lines: [[{ ok: false, error: 'CONSENT_UNAVAILABLE', detail: 'no consent' }]] }).command.run(['list'], context))
+      .rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun mcp: the home refused: CONSENT_UNAVAILABLE (no consent)' })
+    await expect(mcp({ lines: [] }).command.run(['list'], context)).rejects.toMatchObject({ message: 'delorun mcp: the home refused: NO_ANSWER' })
+  })
+
+  it('prints none for a start without arguments or environment variables', async () => {
+    const bare = { ...SERVER, args: [], env: [] }
+    await expect(mcp({ lines: [[{ ok: true, servers: [bare], accepted: [] }]] }).command.run(['list'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('    arguments: none\n')
+    expect(out.stdout).toContain('    environment variables: none\n')
+  })
+
+  it('says when an accepted server starts later, a refused answer, and a revoke of a server that was not running', async () => {
+    const later = mcp({ answers: [true], lines: [LISTED, [{ ok: true, started: 0 }]] })
+    await expect(later.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Accepted files; it starts the next time Delo starts.')
+    const refused = mcp({ answers: [true], lines: [LISTED, [{ ok: false, error: 'CONSENT_FAILED' }]] })
+    await expect(refused.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('delorun mcp: the home refused: CONSENT_FAILED\n')
+    const declined = mcp({ lines: [LISTED, [{ ok: false, error: 'STALE_REVIEW' }]] })
+    await expect(declined.command.run(['decline', 'files'], context)).resolves.toBe(EXIT.failed)
+    const idle = mcp({ answers: [true], lines: [LISTED, [{ ok: true, stopped: 0 }]] })
+    await expect(idle.command.run(['revoke', 'git'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Revoked git; it was not running.')
   })
 })

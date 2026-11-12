@@ -76,7 +76,8 @@ export interface RefusedStart {
  * @param start - the refused start.
  * @param refused - what the consent found.
  * @param reviewedAt - when, in milliseconds since the epoch.
- * @returns the review, whose shown fields name the environment's variables and only the values a surface may show.
+ * @returns the review, whose shown fields name the resolved executable path, working directory and command shell, the
+ *   environment's variables and only the values a surface may show.
  */
 export function pendingReviewOf(start: McpServerCommand, refused: RefusedStart, reviewedAt: number): PendingReview {
   return {
@@ -87,6 +88,9 @@ export function pendingReviewOf(start: McpServerCommand, refused: RefusedStart, 
       command: start.command,
       args: [...start.args],
       cwd: start.cwd,
+      resolvedCommand: start.resolvedCommand,
+      resolvedCwd: start.resolvedCwd,
+      ...start.resolvedShell === undefined ? {} : { resolvedShell: start.resolvedShell },
       env: shownEnv(start.env),
       reason: refused.reason,
       change: refused.change,

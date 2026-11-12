@@ -36,10 +36,12 @@ export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
  *
  * - `INVALID_REQUEST`: the body is not the route's JSON message (400).
  * - `UNCONFIRMED`: an acceptance without `confirmed: true`, which the person's answer sets (400).
- * - `STALE_REVIEW`: the server has no pending review with that id: its start was reviewed again since or accepted; or
- *   no acceptance has the revoked acceptance id: it was revoked or replaced since. The answer was given to a screen that
- *   no longer shows it (409).
- * - `STORE_REFUSED`: the acceptance store cannot be read or written, so nothing is accepted (500).
+ * - `STALE_REVIEW`: the server has no pending review with that id: its start was reviewed again since or accepted, or
+ *   its command or working directory now resolves to other paths than the review showed; or no acceptance has the
+ *   revoked acceptance id: it was revoked or replaced since. The answer was given to a screen that no longer shows it
+ *   (409).
+ * - `STORE_REFUSED`: the acceptance store cannot be read or written, or the shown start holds a resolved path that is
+ *   not absolute, so nothing is accepted (500).
  */
 export const MCP_CONSENT_REFUSAL_CODES = ['INVALID_REQUEST', 'UNCONFIRMED', 'STALE_REVIEW', 'STORE_REFUSED'] as const
 
@@ -49,11 +51,13 @@ export type McpConsentRefusalCode = typeof MCP_CONSENT_REFUSAL_CODES[number]
 /**
  * What a pending review asks about: a server the person never accepted (`new`), a start whose command, arguments,
  * working directory or environment differ from the one the person accepted for the server (`command`, `arguments`,
- * `directory`, `environment`, the first that differs in this order), a store that cannot be read, which counts no
- * acceptance (`unreadable`), or a server whose exact start the person accepted before acceptances were kept per server
- * name, which the person reviews once (`upgraded`).
+ * `directory`, `environment`, the first that differs in this order), a start configured as accepted whose command
+ * now resolves to another executable, whose working directory resolves to another directory, or whose batch file runs
+ * through another command shell (`resolved`), a store that cannot be read, which counts no acceptance
+ * (`unreadable`), or a server whose exact start the person accepted before acceptances were kept per server name,
+ * which the person reviews once (`upgraded`).
  */
-export const SERVER_CHANGES = ['new', 'command', 'arguments', 'directory', 'environment', 'unreadable', 'upgraded'] as const
+export const SERVER_CHANGES = ['new', 'command', 'arguments', 'directory', 'environment', 'resolved', 'unreadable', 'upgraded'] as const
 
 /** One code of {@link SERVER_CHANGES}. */
 export type ServerChange = typeof SERVER_CHANGES[number]
@@ -103,6 +107,15 @@ export interface PendingServer {
   readonly args: readonly string[]
   /** The configured working directory; the empty string is the Host's working directory. */
   readonly cwd: string
+  /**
+   * The absolute path of the executable the server would run: the configured command as the mcp-client resolved it, a bare command
+   * found on the server's `PATH`. A surface shows it, because it is the file that runs.
+   */
+  readonly resolvedCommand: string
+  /** The canonical working directory the server would run in: the configured one resolved against the Host's working directory. */
+  readonly resolvedCwd: string
+  /** On Windows, the canonical command shell (`COMSPEC`) that runs a `.cmd` or `.bat` executable; absent otherwise. */
+  readonly resolvedShell?: string
   /** The configured environment variables, sorted by name; a value only where {@link showsEnvValue} allows it. */
   readonly env: readonly EnvVariable[]
   /** Why the consent refused the start: no acceptance, or what changed since the last one. */
@@ -132,6 +145,15 @@ export interface AcceptedServer {
   readonly args: readonly string[]
   /** The accepted working directory; the empty string is the Host's working directory. */
   readonly cwd: string
+  /**
+   * The absolute path of the executable the person accepted: the configured command as the mcp-client resolved it, a bare command
+   * found on the server's `PATH`. A surface shows it, because it is the file that runs.
+   */
+  readonly resolvedCommand: string
+  /** The canonical working directory the person accepted the server to run in: the configured one resolved against the Host's working directory. */
+  readonly resolvedCwd: string
+  /** On Windows, the canonical command shell (`COMSPEC`) that runs a `.cmd` or `.bat` executable; absent otherwise. */
+  readonly resolvedShell?: string
   /**
    * The accepted environment variables, sorted by name; a value only where {@link showsEnvValue} allows it and the
    * server's configured row still sets that value, since the store keeps digests only.

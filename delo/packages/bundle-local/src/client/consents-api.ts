@@ -39,10 +39,11 @@ const isEnv: Check = listOf(fields({ name: isString, value: optional(isString) }
 const isPendingServers: Check = fields({
   servers: listOf(fields({
     serverName: isString, reviewId: isString, command: isString, args: listOf(isString), cwd: isString,
-    env: isEnv, reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
+    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
   })),
   accepted: listOf(fields({
-    acceptanceId: isString, serverName: isString, command: isString, args: listOf(isString), cwd: isString, env: isEnv,
+    acceptanceId: isString, serverName: isString, command: isString, args: listOf(isString), cwd: isString,
+    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv,
     acceptedAt: isTime, configured: value => typeof value === 'boolean',
   })),
 })

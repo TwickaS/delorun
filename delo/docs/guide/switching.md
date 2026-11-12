@@ -107,7 +107,7 @@ Your chats and workspaces look as they did, and your plugins work as they did in
 - **Where Delorun runs.** `delorun` runs Delorun in the background and opens the studio; `delorun stop` stops it ([Daily use](daily-use.md)).
 - **Your home.** Delorun keeps its own home, `~/.delo`, and never writes `~/.dsh` ([Your Delorun home](home.md)).
 - **What commands can reach.** Commands the model runs cannot write, or read, Delorun's home, and every new workspace starts on Workspace Write ([What Delorun protects](safety.md)).
-- **Consents.** With setup's default Safer prompts, Delorun asks before the model writes instruction files or schedules work, refuses a new MCP server that runs a command, and refuses to switch a workspace to full access ([Consents](safety.md#consents)).
+- **Consents.** With setup's default Safer prompts, Delorun asks before the model writes instruction files or schedules work, holds a new MCP server that runs a command until you allow it, and asks once before a workspace gets full access ([Consents](safety.md#consents)).
 - **`web_fetch`.** It does not fetch addresses on your own computer or network ([The web_fetch guard](safety.md#the-web_fetch-guard)).
 - **Data sharing.** DeepSeek's session-log upload is off until you turn it on in Settings, under Privacy.
 - **Updates.** Delorun checks for a newer release once a day, shows what an update would change before you confirm, and can go back ([Updates](updates.md)).

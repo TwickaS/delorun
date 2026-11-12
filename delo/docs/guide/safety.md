@@ -52,7 +52,7 @@ Commands can still reach the network, other local sockets such as your ssh-agent
 
 A workspace on full access runs the model's commands outside the sandbox, with everything your user can do, Delorun's home and secrets included. Every new workspace starts on Workspace Write instead.
 
-With setup's **Safer prompts**, the default, Delorun asks for full access once per workspace before it applies. The studio has no screen for that consent yet, so in the first release Delorun refuses every switch of a workspace to full access. A single command can still ask to run outside the sandbox: DeepSeek Harness asks you, and its question does not say that such a command can read Delorun's home. With **Same as stock**, a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness.
+With setup's **Safer prompts**, the default, Delorun asks for full access once per workspace before it applies: pick Full access in a chat, choose "Allow full access for this workspace" on an approval card, use Settings, Permissions, or run `delorun workspace full-access <folder> on`, and you answer on the home's own computer. A single command can still ask to run outside the sandbox: DeepSeek Harness asks you, and its question does not say that such a command can read Delorun's home. With **Same as stock**, a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness.
 
 ## Consents
 
@@ -60,14 +60,18 @@ Setup's prompts question decides how Delorun asks before risky changes, and `del
 
 | | Safer prompts (default) | Same as stock |
 | --- | --- | --- |
-| A workspace switched to full access | Asks once per workspace; refused in the first release, as [Full access](#full-access) explains | Switches after the studio's confirmation |
+| A workspace switched to full access | Asks once per workspace, as [Full access](#full-access) explains | Switches after the studio's confirmation |
 | The model writes `AGENTS.md`, a skill or a preset with its file tools | Asks first, says the text will load as instructions in every future chat it reaches, and shows the diff; nothing is written until you allow it | Written as any file |
-| A new MCP server that runs a command | Refused, naming the command, its folder and its environment variables' names; the first release cannot record your consent, so such a server stays stopped | Runs, as in DeepSeek Harness |
+| A new MCP server that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
 | The model creates or edits a scheduled task | Asks with the task's prompt, its schedule, the chat it runs in and that chat's permission preset; a delivery is refused when that chat's preset has changed | Created as in DeepSeek Harness |
 
 The `web_fetch` guard and the update protections stay on with either answer. Plugin management cannot turn off, remove or reconfigure Delorun's consent and guard plugins or the sandbox, in any mode.
 
 A consent covers the tool it names. A shell command or code the model runs can still write `AGENTS.md` or a skill inside a writable workspace without asking.
+
+### MCP servers
+
+An MCP server that runs a command runs it on your computer with your access, outside the sandbox. With Safer prompts, Delorun holds a new one stopped until you allow it in Settings, Permissions or with `delorun mcp accept <server>`. Before you answer you see its command, arguments, folder and environment variable names, and the exact file that will run and the folder it runs in, found the way the server would start. On Windows you also see the command shell that runs a `.cmd` or `.bat` file. Delorun asks again when any of these changes, including when the same command now finds a different file, for example after a folder earlier in `PATH` gains a program with that name. If the file changes between your look and your answer, your answer is refused and the review shows the new file. `delorun mcp revoke <server>` or Revoke in Settings, Permissions stops a server you allowed.
 
 ## The web_fetch guard
 

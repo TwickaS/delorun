@@ -16,11 +16,13 @@ import {
 import { installFixture, killLockHolder, PROFILE, startHome, tempHome, V1, type InProcessHome, type TempHome } from './support.ts'
 
 const SERVER: PendingMcpServer = {
-  serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: [], cwd: '', env: [{ name: 'PATH', value: '/opt/bin' }, { name: 'TOKEN' }],
+  serverName: 'files', reviewId: 'a'.repeat(32), command: 'npx', args: [], cwd: '',
+  resolvedCommand: '/opt/bin/npx', resolvedCwd: '/home/person', env: [{ name: 'PATH', value: '/opt/bin' }, { name: 'TOKEN' }],
   reason: 'not accepted', change: 'environment', changedVariables: ['TOKEN'], state: 'waiting', reviewedAt: 0,
 }
 
-const ACCEPTED: AcceptedMcpServer = { acceptanceId: 'c'.repeat(32), serverName: 'git', command: 'uvx', args: [], cwd: '', env: [], acceptedAt: 1, configured: true }
+const ACCEPTED: AcceptedMcpServer = { acceptanceId: 'c'.repeat(32), serverName: 'git', command: 'uvx', args: [], cwd: '',
+  resolvedCommand: '/usr/bin/uvx', resolvedCwd: '/home/person', resolvedShell: '/bin/sh', env: [], acceptedAt: 1, configured: true }
 
 /** A fake of the Host's consents that records every call and refuses a review id other than the one it holds. */
 class FakeConsents implements LocalConsents {

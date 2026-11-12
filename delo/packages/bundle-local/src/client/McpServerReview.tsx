@@ -1,7 +1,8 @@
 /**
  * The review the studio shows before a waiting stdio MCP server starts: one sentence on what allowing it lets the
- * server do, one on its risk, what changed since the person last allowed it, and, behind Details, the command, its
- * arguments, its folder and the names of its environment variables, never their values. The Permissions section and
+ * server do, one naming the file that runs and the folder it runs in, one on its risk, what changed since the person
+ * last allowed it, and, behind Details, the command, its arguments, its folder, the file, command shell and folder they
+ * resolve to, and the names of its environment variables, with a value only for a variable that changes what runs. The Permissions section and
  * the waiting-server notice both open it. One store behind one `shell.overlay` entry holds the open review, so it
  * outlives the surface that asked.
  */
@@ -110,6 +111,7 @@ export function serverChangeText(t: Translate, server: Pick<PendingServer, 'chan
     case 'arguments': return t('mcp.change.arguments')
     case 'directory': return t('mcp.change.directory')
     case 'environment': return t('mcp.change.environment', { names: server.changedVariables.join(', ') })
+    case 'resolved': return t('mcp.change.resolved')
     case 'unreadable': return t('mcp.change.unreadable')
     case 'upgraded': return t('mcp.change.upgraded')
     /* v8 ignore next 2 -- ServerChange is a closed union. */
@@ -131,6 +133,14 @@ export function ServerStart({ t, start }: { t: Translate; start: PendingServer |
     <dd>{start.args.length === 0 ? t('mcp.argsNone') : <code className={css.command}>{start.args.map(argument => JSON.stringify(argument)).join(' ')}</code>}</dd>
     <dt>{t('mcp.cwd')}</dt>
     <dd>{start.cwd === '' ? t('mcp.cwdHost') : <code className={css.command}>{start.cwd}</code>}</dd>
+    <dt>{t('mcp.resolvedCommand')}</dt>
+    <dd><code className={css.command}>{start.resolvedCommand}</code></dd>
+    {start.resolvedShell === undefined ? null : <>
+      <dt>{t('mcp.resolvedShell')}</dt>
+      <dd><code className={css.command}>{start.resolvedShell}</code></dd>
+    </>}
+    <dt>{t('mcp.resolvedCwd')}</dt>
+    <dd><code className={css.command}>{start.resolvedCwd}</code></dd>
     <dt>{t('mcp.env')}</dt>
     <dd>{start.env.length === 0 ? t('mcp.envNone') : <>
       <code className={css.command}>{start.env.map(variable => variable.value === undefined ? variable.name : `${variable.name}=${variable.value}`).join('\n')}</code>
@@ -157,6 +167,9 @@ export function McpServerReview({ useReview, confirm, cancel, t }: McpServerRevi
     </>}>
     <div className={css.consent}>
       <p className={css.text}>{t('mcp.confirm.allows', { server: server.serverName })}</p>
+      <p className={css.text} data-runs>{server.resolvedShell === undefined
+        ? t('mcp.confirm.runs', { command: server.resolvedCommand, folder: server.resolvedCwd })
+        : t('mcp.confirm.runsShell', { command: server.resolvedCommand, shell: server.resolvedShell, folder: server.resolvedCwd })}</p>
       <p className={css.text}>{t('mcp.confirm.risk')}</p>
       {server.change === 'new' ? null : <p className={css.text} data-change={server.change}>{serverChangeText(t, server)}</p>}
       <details className={css.disclosure}>

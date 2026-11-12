@@ -5,11 +5,12 @@
  *
  * - `list` shows each pending server: what changed since the person allowed it (for an environment change, which
  *   variables), whether the person declined it or revoked it, its command, arguments, working directory and configured
- *   environment variables, and why it waits; then each allowed server with its command, arguments, working directory,
- *   environment variables, whether a configured server has its name, and when it was allowed. A variable's value is
+ *   environment variables, the absolute executable that runs, on Windows the command shell that runs a batch file, and
+ *   the directory it runs in, and why it waits; then each allowed server with the same start fields, whether a
+ *   configured server has its name, and when it was allowed. A variable's value is
  *   printed only for a variable that changes what runs (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`,
  *   `PYTHONPATH`, `DYLD_*`).
- * - `accept` shows the server's start and records it only after the person confirms at a terminal; without a terminal,
+ * - `accept` shows the server's start, resolved paths included, and records it only after the person confirms at a terminal; without a terminal,
  *   or without a yes, nothing is recorded. The running studio then starts the server again. A declined or revoked
  *   server is accepted the same way.
  * - `decline` sets the review aside; the server stays stopped, listed as declined, until its start changes.
@@ -70,6 +71,7 @@ const CHANGE_WORDS = {
   arguments: 'its arguments changed',
   directory: 'its working directory changed',
   environment: 'its environment variables changed',
+  resolved: 'its command or working directory now resolves to another place on this computer',
   unreadable: 'the acceptance list could not be read',
   upgraded: 'Delorun now remembers each server separately; review it once',
 } as const
@@ -99,6 +101,12 @@ interface ServerStart {
   readonly command: string
   readonly args: readonly string[]
   readonly cwd: string
+  /** The absolute executable that runs. */
+  readonly resolvedCommand: string
+  /** The canonical directory it runs in. */
+  readonly resolvedCwd: string
+  /** On Windows, the command shell that runs a batch file. */
+  readonly resolvedShell?: string
   readonly env: readonly EnvVariable[]
 }
 
@@ -163,7 +171,7 @@ export const mcpCommand: CliCommand = createMcpCommand({
   running: homeRuns,
   send: sendHomeRequest,
   confirm: confirmInTerminal,
-  terminal: process.stdin.isTTY && process.stdout.isTTY,
+  terminal: [process.stdin, process.stdout].every(stream => stream.isTTY === true),
 })
 
 /**
@@ -230,10 +238,12 @@ function variableOf(entry: object): EnvVariable | undefined {
  * @returns the fields, or undefined when one is missing or of another type.
  */
 function startOf(entry: object): ServerStart | undefined {
-  const [serverName, command, args, cwd] = ['serverName', 'command', 'args', 'cwd'].map((key): unknown => Reflect.get(entry, key))
+  const [serverName, command, args, cwd, resolvedCommand, resolvedCwd, resolvedShell] = ['serverName', 'command', 'args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'resolvedShell']
+    .map((key): unknown => Reflect.get(entry, key))
   const env = entriesOf(Reflect.get(entry, 'env'), variableOf)
   if (typeof serverName !== 'string' || typeof command !== 'string' || typeof cwd !== 'string' || !isStrings(args) || env === undefined) return undefined
-  return { serverName, command, args, cwd, env }
+  if (typeof resolvedCommand !== 'string' || typeof resolvedCwd !== 'string' || (resolvedShell !== undefined && typeof resolvedShell !== 'string')) return undefined
+  return { serverName, command, args, cwd, resolvedCommand, resolvedCwd, ...resolvedShell === undefined ? {} : { resolvedShell }, env }
 }
 
 /**
@@ -273,8 +283,9 @@ function acceptedOf(entry: object): AcceptedServer | undefined {
 }
 
 /**
- * A start's command, arguments, working directory and environment variables, as indented lines. A variable's value is
- * printed only when the studio sent it, which it does only for a variable that changes what runs.
+ * A start's command, arguments, working directory, the executable, command shell and directory they resolve to, and its
+ * environment variables, as indented lines. A variable's value is printed only when the studio sent it, which it does
+ * only for a variable that changes what runs.
  * @param start - the start.
  * @returns the lines.
  */
@@ -285,6 +296,8 @@ function startFieldLines(start: ServerStart): string[] {
     `    command: ${printable(start.command)}`,
     `    arguments: ${start.args.length === 0 ? 'none' : printable(start.args.map(argument => JSON.stringify(argument)).join(' '))}`,
     `    working directory: ${start.cwd === '' ? 'the studio\'s own' : printable(start.cwd)}`,
+    `    runs: ${printable(start.resolvedCommand)}${start.resolvedShell === undefined ? '' : ` through the command shell ${printable(start.resolvedShell)}`}`,
+    `    runs in: ${printable(start.resolvedCwd)}`,
     `    environment variables${hidden ? ' (values not shown)' : ''}: ${env.length === 0 ? 'none' : env.join(', ')}`,
   ]
 }

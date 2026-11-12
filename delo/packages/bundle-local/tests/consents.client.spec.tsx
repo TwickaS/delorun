@@ -20,7 +20,7 @@ import {
   type FullAccessConsentProps, type FullAccessConsentSource,
 } from '../src/client/FullAccessConsent.tsx'
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
-import { createMcpReviewSource, McpServerReview, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
+import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 
@@ -201,11 +201,13 @@ describe('the full-access consent', () => {
 
 const SERVER = {
   serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
+  resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person',
   env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], changedVariables: [] as string[], state: 'waiting' as const,
   reason: 'the acceptance store holds no acceptance for this command', change: 'new' as const, reviewedAt: NOW - 60_000,
 }
 const ACCEPTED = {
-  acceptanceId: 'e'.repeat(32), serverName: 'git', command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/git', env: [], acceptedAt: NOW - 86_400_000, configured: true,
+  acceptanceId: 'e'.repeat(32), serverName: 'git', command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/git',
+  resolvedCommand: '/opt/uv/uvx.cmd', resolvedCwd: '/srv/git', resolvedShell: '/Windows/System32/cmd.exe', env: [], acceptedAt: NOW - 86_400_000, configured: true,
 }
 const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): Answer => ({ status: 200, body: { servers, accepted } })
 
@@ -333,11 +335,97 @@ describe('the MCP server review', () => {
     expect(dialog.textContent).not.toContain(SERVER.reason)
   })
 
+  it('names the file that runs and the folder it runs in before the person allows it, and lists them under Details', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask(SERVER)
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText('It runs /usr/local/bin/npx in /home/person.')).toBeTruthy()
+    const details = within(dialog).getByText(en['mcp.details']).closest('details')
+    if (details === null) throw new Error('no details')
+    expect(within(details).getByText('/usr/local/bin/npx')).toBeTruthy()
+    expect(within(details).getByText('/home/person')).toBeTruthy()
+    expect(within(details).queryByText(en['mcp.resolvedShell'])).toBeNull()
+  })
+
+  it('names the command shell that runs a batch file', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask({ ...SERVER, resolvedCommand: '/nodejs/npx.cmd', resolvedShell: '/Windows/System32/cmd.exe' })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText('It runs /nodejs/npx.cmd through /Windows/System32/cmd.exe in /home/person.')).toBeTruthy()
+    expect(within(dialog).getByText(en['mcp.resolvedShell'])).toBeTruthy()
+    expect(within(dialog).getByText('/Windows/System32/cmd.exe')).toBeTruthy()
+  })
+
   it('says what changed since the person allowed the server', () => {
     const source = createMcpReviewSource(fakeHost().fetch)
     void source.ask({ ...SERVER, change: 'environment', changedVariables: ['NODE_OPTIONS', 'PATH'] })
     renderReview(source)
     expect(screen.getByText('Its environment variables changed since you allowed it: NODE_OPTIONS, PATH.')).toBeTruthy()
+  })
+
+  it('says in its own words what each review asks about', () => {
+    const t = makeTranslate(en)
+    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'unreadable', 'upgraded'] as const) {
+      expect(serverChangeText(t, { change, changedVariables: [] })).toBe(en[`mcp.change.${change}`])
+    }
+  })
+
+  it('shows nothing while no review is open, and None for a start without arguments', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    const { container } = renderReview(source)
+    expect(container.innerHTML).toBe('')
+    void source.ask({ ...SERVER, args: [] })
+    renderReview(source)
+    const details = screen.getByText(en['mcp.details']).closest('details')
+    if (details === null) throw new Error('no details')
+    expect(within(details).getAllByText(en['mcp.argsNone']).length).toBeGreaterThan(0)
+  })
+
+  it('tells subscribers of each change, and ignores a second confirm and a closed review\'s answer', async () => {
+    let answer: (response: Response) => void = () => {}
+    const source = createMcpReviewSource(async () => new Promise<Response>((resolve) => { answer = resolve }))
+    const listener = vi.fn()
+    const unsubscribe = source.hooks.review.subscribe(listener)
+    source.confirm()
+    expect(listener).not.toHaveBeenCalled()
+    // Asking closes any open review first, then opens this one.
+    const asked = source.ask(SERVER)
+    expect(listener).toHaveBeenCalledTimes(2)
+    source.confirm()
+    source.confirm()
+    expect(listener).toHaveBeenCalledTimes(3)
+    // The review closes before its answer arrives: the late answer changes nothing.
+    source.cancel()
+    await expect(asked).resolves.toBeUndefined()
+    answer(new Response(JSON.stringify({ started: 1 }), { status: 200 }))
+    await settle()
+    expect(source.hooks.review.getSnapshot()).toBeNull()
+    expect(listener).toHaveBeenCalledTimes(4)
+    unsubscribe()
+    void source.ask(SERVER)
+    expect(listener).toHaveBeenCalledTimes(4)
+  })
+
+  it('keeps a refusal of a review closed meanwhile out of the next review', async () => {
+    let refuse: (response: Response) => void = () => {}
+    const source = createMcpReviewSource(async () => new Promise<Response>((resolve) => { refuse = resolve }))
+    void source.ask(SERVER)
+    source.confirm()
+    void source.ask({ ...SERVER, serverName: 'other' })
+    refuse(new Response(JSON.stringify({ error: 'STALE_REVIEW', message: 'stale' }), { status: 409 }))
+    await settle()
+    expect(source.hooks.review.getSnapshot()).toMatchObject({ server: { serverName: 'other' }, busy: false })
+    expect(source.hooks.review.getSnapshot()?.failure).toBeUndefined()
+  })
+
+  it('says when the command or folder now points to a different place', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask({ ...SERVER, change: 'resolved', resolvedCommand: '/home/person/node_modules/.bin/npx' })
+    renderReview(source)
+    expect(screen.getByText(en['mcp.change.resolved'])).toBeTruthy()
+    expect(screen.getByText('It runs /home/person/node_modules/.bin/npx in /home/person.')).toBeTruthy()
   })
 
   it('allows the start it showed with the person\'s answer, and records nothing when cancelled', async () => {
@@ -362,6 +450,19 @@ describe('the MCP server review', () => {
     expect((cancel as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(cancel)
     expect(source.hooks.review.getSnapshot()).not.toBeNull()
+    // The dialog's own close control does not close it either while the answer is recorded.
+    fireEvent.click(screen.getByRole('button', { name: en['mcp.confirm.close'] }))
+    expect(source.hooks.review.getSnapshot()).not.toBeNull()
+  })
+
+  it('closes from its own close control when no answer is being recorded, recording nothing', async () => {
+    const host = fakeHost()
+    const source = createMcpReviewSource(host.fetch)
+    const asked = source.ask(SERVER)
+    renderReview(source)
+    fireEvent.click(screen.getByRole('button', { name: en['mcp.confirm.close'] }))
+    await expect(asked).resolves.toBeUndefined()
+    expect(host.received).toEqual([])
   })
 
   it('stays open with the stale review named', async () => {
@@ -514,10 +615,22 @@ describe('the Permissions section', () => {
     await settle()
     const row = rowOf('git')
     expect(within(row).getByText('uvx')).toBeTruthy()
+    // What runs: the resolved batch file, the command shell that runs it, and the folder.
+    expect(within(row).getByText('/opt/uv/uvx.cmd')).toBeTruthy()
+    expect(within(row).getByText('/Windows/System32/cmd.exe')).toBeTruthy()
+    expect(within(row).getAllByText('/srv/git')).toHaveLength(2)
     fireEvent.click(within(row).getByRole('button', { name: en['mcp.revoke'] }))
     await settle()
     expect(host.received.find(request => request.key === `POST ${MCP_CONSENT_ROUTES.revoke}`)?.body).toEqual({ acceptanceId: ACCEPTED.acceptanceId, confirmed: true })
     expect(screen.getByRole('status').textContent).toBe('Revoked. Servers stopped: 1.')
+  })
+
+  it('reads a pending list whose entries lack the resolved paths as unreadable, showing no start', async () => {
+    const { resolvedCommand: _command, ...unresolved } = SERVER
+    renderPermissions(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([unresolved]) }))
+    await settle()
+    expect(screen.queryByText('npx')).toBeNull()
+    expect(document.querySelector('[data-server="files"]')).toBeNull()
   })
 
   it('names a stale revoke and keeps the grant listed', async () => {

@@ -30,8 +30,8 @@ import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // The ctx.loader merge, read to start a server row again, and the type of its rows.
 import type { Entry as LoaderEntry } from '@deepseek-ai/cordis-plugin-loader'
-import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client'
-import type { McpConsentDecision, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
+import { McpAddConsent, resolveServerStart } from '@deepseek-ai/dsh-mcp-client'
+import type { McpConsentDecision, McpServerCommand, StdioConfig } from '@deepseek-ai/dsh-mcp-client'
 import schema from '@deepseek-ai/schemastery'
 import { resolveDeloHome } from '@delo/home'
 import {
@@ -168,7 +168,7 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
     }
     if (read.kind !== 'readable') return []
     const rows = this.serverRows()
-    return [...read.store.acceptances].sort(([left], [right]) => (left < right ? -1 : 1)).map(([serverName, accepted]) => {
+    return [...read.store.acceptances].sort(([left], [right]) => Number(left > right) - Number(left < right)).map(([serverName, accepted]) => {
       const row = rows.find(entry => entry.serverName === serverName)
       const configured = row === undefined ? {} : envDigests(row.env)
       const env = Object.keys(accepted.env).sort().map((name): EnvVariable => {
@@ -181,6 +181,9 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
         command: accepted.command,
         args: [...accepted.args],
         cwd: accepted.cwd,
+        resolvedCommand: accepted.resolvedCommand,
+        resolvedCwd: accepted.resolvedCwd,
+        ...accepted.resolvedShell === undefined ? {} : { resolvedShell: accepted.resolvedShell },
         env,
         acceptedAt: accepted.acceptedAt,
         configured: row !== undefined,
@@ -245,20 +248,30 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
 
   /**
    * Accept one pending review, in any state, at the home's own computer, after the person confirmed the start it
-   * shows; the route and the update channel that call this refuse every other caller first. The start is recorded as
-   * the server name's acceptance exactly as the review judged it ({@link accept}), the review leaves the list, and
-   * each server row this consent refused for that server name is started again, so the server runs without a restart
-   * of the studio.
+   * shows; the route and the update channel that call this refuse every other caller first. The start's configured
+   * command and working directory are resolved again first: when they now resolve to another executable, working
+   * directory or command shell than the review showed, or no longer resolve, nothing is accepted, and a start that
+   * resolves elsewhere is reviewed again, so the list shows its new paths under a new review id. Otherwise the start
+   * is recorded as the server name's acceptance exactly as the review showed it ({@link accept}), the review leaves the
+   * list, and each server row this consent refused for that server name is started again, so the server runs without a
+   * restart of the studio.
    * @param serverName - the server the person answered for.
    * @param reviewId - the id of the review the person was shown.
    * @param confirmed - whether the person confirmed the start.
    * @returns how many refused server rows started again; a row that fails again stays stopped with its own error.
    * @throws {McpReviewError} `UNCONFIRMED` without the answer, `STALE_REVIEW` when the server has no pending review with
-   *   that id, and `STORE_REFUSED` when the store cannot be written; each records nothing.
+   *   that id or its start now resolves to other paths than the review showed, and `STORE_REFUSED` when the shown start
+   *   holds a resolved path that is not absolute or the store cannot be written; each records nothing.
    */
   async acceptReview(serverName: string, reviewId: string, confirmed: boolean): Promise<{ readonly started: number }> {
     if (!confirmed) throw new McpReviewError('UNCONFIRMED', 'the person has not confirmed the server\'s start, so nothing is accepted')
     const review = this.pendingReview(serverName, reviewId)
+    try {
+      assertAcceptable(review.start)
+    } catch (error) {
+      throw new McpReviewError('STORE_REFUSED', reasonOf(error), { cause: error })
+    }
+    await this.refuseMoved(review.start)
     try {
       await this.accept(review.start)
     } catch (error) {
@@ -304,11 +317,7 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
    */
   accept(start: McpServerCommand): Promise<void> {
     return this.serial(async () => {
-      if (start.command.length === 0) throw new Error('the command to accept is empty')
-      const resolved = [start.resolvedCommand, start.resolvedCwd, ...start.resolvedShell === undefined ? [] : [start.resolvedShell]]
-      if (!resolved.every(entry => isAbsolute(entry))) {
-        throw new Error('the start to accept holds a resolved path that is not absolute')
-      }
+      assertAcceptable(start)
       const path = await this.path()
       const store = await this.writableStore(path)
       const acceptances = new Map(store.acceptances).set(start.serverName, acceptanceOfStart(start, Date.now()))
@@ -319,6 +328,27 @@ export class DeloMcpConsent extends McpAddConsent implements McpReviews {
       if (record !== undefined && coversExactly(record, start)) commandKeyed.delete(start.command)
       await writeAcceptanceStore(path, { acceptances, setAside, commandKeyed })
     })
+  }
+
+  /**
+   * Refuse an answer to a review whose start no longer resolves to the paths the review showed. The configured start is
+   * resolved as the mcp-client resolves it before a review; a start that resolves elsewhere is reviewed again, which
+   * replaces the pending review with one that shows the new paths.
+   * @param shown - the start the review showed.
+   * @returns when the start still resolves to the shown paths.
+   * @throws {McpReviewError} `STALE_REVIEW` when the start resolves to another executable, working directory or command
+   *   shell, or cannot be resolved.
+   */
+  private async refuseMoved(shown: McpServerCommand): Promise<void> {
+    let current: McpServerCommand
+    try {
+      current = await resolveServerStart(stdioConfigOf(shown))
+    } catch (error) {
+      throw new McpReviewError('STALE_REVIEW', `the start of the server ${shown.serverName} no longer resolves as it was shown, so nothing is accepted: ${reasonOf(error)}`, { cause: error })
+    }
+    if (current.resolvedCommand === shown.resolvedCommand && current.resolvedCwd === shown.resolvedCwd && current.resolvedShell === shown.resolvedShell) return
+    await this.review(current)
+    throw new McpReviewError('STALE_REVIEW', `the command or working directory of the server ${shown.serverName} now resolves to other paths than this review showed, so nothing is accepted; look at its review again`)
   }
 
   /**
@@ -517,6 +547,37 @@ const SET_ASIDE_REASONS: Readonly<Record<SetAsideState, string>> = {
  */
 function refusedWith(change: RefusedStart['change'], reason: string, state: RefusedStart['state'] = 'waiting', changedVariables: readonly string[] = []): Refusal {
   return { allow: false, refused: { reason, change, changedVariables, state } }
+}
+
+/**
+ * Refuse a start no review shows: an empty command, or a resolved executable path, working directory or command shell
+ * that is not absolute.
+ * @param start - the start to accept.
+ * @throws {Error} naming which of the two it is.
+ */
+function assertAcceptable(start: McpServerCommand): void {
+  if (start.command.length === 0) throw new Error('the command to accept is empty')
+  const resolved = [start.resolvedCommand, start.resolvedCwd, ...start.resolvedShell === undefined ? [] : [start.resolvedShell]]
+  if (!resolved.every(entry => isAbsolute(entry))) throw new Error('the start to accept holds a resolved path that is not absolute')
+}
+
+/**
+ * The stdio configuration a shown start was resolved from, for {@link resolveServerStart}, which reads its server
+ * name, command, environment and working directory; the call timeout and startup flag are not read.
+ * @param start - the shown start.
+ * @returns the configuration.
+ */
+function stdioConfigOf(start: McpServerCommand): StdioConfig {
+  return {
+    transport: 'stdio',
+    serverName: start.serverName,
+    command: start.command,
+    args: [...start.args],
+    env: { ...start.env },
+    cwd: start.cwd,
+    toolCallTimeoutMs: 0,
+    failOnStartupError: true,
+  }
 }
 
 /**

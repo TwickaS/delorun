@@ -19,10 +19,12 @@ import { HomeProcessError } from './errors.ts'
 
 /**
  * What a pending review asks about: a server never accepted (`new`), a start whose command, arguments, working
- * directory or environment differ from the server's acceptance, an acceptance store that cannot be read
- * (`unreadable`), or a start accepted before Delo kept one acceptance per server, which is reviewed once (`upgraded`).
+ * directory or environment differ from the server's acceptance, a start configured as accepted whose command or
+ * working directory now resolves to another executable, directory or command shell (`resolved`), an acceptance store
+ * that cannot be read (`unreadable`), or a start accepted before Delo kept one acceptance per server, which is reviewed
+ * once (`upgraded`).
  */
-export type McpServerChange = 'new' | 'command' | 'arguments' | 'directory' | 'environment' | 'unreadable' | 'upgraded'
+export type McpServerChange = 'new' | 'command' | 'arguments' | 'directory' | 'environment' | 'resolved' | 'unreadable' | 'upgraded'
 
 /** Where a pending review stands: waiting for an answer, or set aside by a decline or a revoke until its start changes. */
 export type McpServerState = 'waiting' | 'declined' | 'revoked'
@@ -43,6 +45,12 @@ export interface PendingMcpServer {
   readonly command: string
   readonly args: readonly string[]
   readonly cwd: string
+  /** The absolute executable the start resolved to, which is the file that runs. */
+  readonly resolvedCommand: string
+  /** The canonical working directory the start resolved to. */
+  readonly resolvedCwd: string
+  /** On Windows, the canonical command shell that runs a batch file; absent otherwise. */
+  readonly resolvedShell?: string
   /** The configured environment variables, sorted by name. */
   readonly env: readonly McpEnvVariable[]
   readonly reason: string
@@ -64,6 +72,12 @@ export interface AcceptedMcpServer {
   readonly args: readonly string[]
   /** The accepted working directory; the empty string is the Host's working directory. */
   readonly cwd: string
+  /** The absolute executable the accepted start resolved to. */
+  readonly resolvedCommand: string
+  /** The canonical working directory the accepted start resolved to. */
+  readonly resolvedCwd: string
+  /** On Windows, the canonical command shell accepted to run a batch file; absent otherwise. */
+  readonly resolvedShell?: string
   /** The accepted environment variables, sorted by name. */
   readonly env: readonly McpEnvVariable[]
   /** When the person accepted it, in milliseconds since the epoch. */

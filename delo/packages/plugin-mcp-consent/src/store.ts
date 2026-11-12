@@ -191,7 +191,7 @@ export function envDigests(env: Readonly<Record<string, string>>): EnvDigests {
  * @returns `sha256:` and the hexadecimal digest.
  */
 function digestOf(start: Omit<ServerAcceptance, 'acceptedAt'>): string {
-  const env = Object.keys(start.env).sort().map(name => [name, start.env[name] ?? ''])
+  const env = sortedEnvEntries(start.env)
   return sha256(JSON.stringify([start.command, start.args, start.cwd, start.resolvedCommand, start.resolvedCwd, start.resolvedShell ?? null, env]))
 }
 
@@ -249,7 +249,7 @@ export function acceptanceOfStart(start: ServerStart, acceptedAt: number): Serve
 }
 
 /** The part of a start that differs from its server's acceptance. */
-export type ChangedPart = 'command' | 'arguments' | 'directory' | 'environment'
+export type ChangedPart = 'command' | 'arguments' | 'directory' | 'environment' | 'resolved'
 
 /** What differs between a server's acceptance and a start of the server. */
 export interface StartChange {
@@ -285,7 +285,8 @@ function changed(part: ChangedPart, reason: string): StartChange {
 /**
  * What a server's acceptance does not cover of a start of the server. The configured command, arguments, working
  * directory and environment are compared first, then the paths they resolve to: the working directory, the
- * executable and the command shell, so a start whose configuration is unchanged but resolves elsewhere is not covered.
+ * executable and the command shell, so a start whose configuration is unchanged but resolves elsewhere is not covered
+ * and its change is `resolved`.
  * @param accepted - the server's acceptance.
  * @param start - the start under review.
  * @returns the first part that differs with its reason and the changed variables, or `undefined` when the acceptance
@@ -300,13 +301,13 @@ export function changeOf(accepted: ServerAcceptance, start: ServerStart): StartC
     return { part: 'environment', changedVariables, reason: `the person accepted this server with different environment variables or values (${changedVariables.join(', ')})` }
   }
   if (accepted.resolvedCwd !== start.resolvedCwd) {
-    return changed('directory', `the working directory resolves to ${JSON.stringify(start.resolvedCwd)}, and the person accepted this server run in ${JSON.stringify(accepted.resolvedCwd)}`)
+    return changed('resolved', `the working directory resolves to ${JSON.stringify(start.resolvedCwd)}, and the person accepted this server run in ${JSON.stringify(accepted.resolvedCwd)}`)
   }
   if (accepted.resolvedCommand !== start.resolvedCommand) {
-    return changed('command', `the command resolves to the executable ${JSON.stringify(start.resolvedCommand)}, and the person accepted ${JSON.stringify(accepted.resolvedCommand)}`)
+    return changed('resolved', `the command resolves to the executable ${JSON.stringify(start.resolvedCommand)}, and the person accepted ${JSON.stringify(accepted.resolvedCommand)}`)
   }
   if (accepted.resolvedShell !== start.resolvedShell) {
-    return changed('command', `the command runs through ${describeShell(start.resolvedShell)}, and the person accepted it run through ${describeShell(accepted.resolvedShell)}`)
+    return changed('resolved', `the command runs through ${describeShell(start.resolvedShell)}, and the person accepted it run through ${describeShell(accepted.resolvedShell)}`)
   }
   return undefined
 }
@@ -465,8 +466,7 @@ function acceptanceOf(serverName: string, value: unknown): ServerAcceptance {
   if (!isRecord(env) || !Object.values(env).every(isDigest)) {
     throw new AcceptanceStoreError(`${named} does not hold a sha256 digest for each environment variable`)
   }
-  const digests: Record<string, string> = {}
-  for (const [name, digest] of Object.entries(env)) if (isDigest(digest)) digests[name] = digest
+  const digests = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => isDigest(entry[1])))
   return { command, args, cwd, ...resolved, env: digests, acceptedAt: acceptedAtOf(named, acceptedAt) }
 }
 
@@ -636,6 +636,7 @@ function isMissing(error: unknown): boolean {
  * @returns the failure's message, or a plain one when it has none.
  */
 function problemOf(error: unknown): string {
+  /* v8 ignore next -- the protected-file read and the parser throw only Error instances; the words cover any other value. */
   return error instanceof Error ? error.message : 'the file could not be read'
 }
 

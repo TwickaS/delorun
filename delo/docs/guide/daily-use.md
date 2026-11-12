@@ -55,7 +55,7 @@ A workspace is a folder on your computer. Every chat works in one, and the works
 
 Commands the model runs in a Workspace Write workspace cannot write under your Delorun home, read its secrets or tokens, or connect to its control sockets, where your system enforces those rules ([What Delorun protects](safety.md#the-sandbox)). Delorun also refuses some folders as a workspace: the filesystem root, your home folder itself, your Delorun home or DeepSeek Harness's home, and a folder that contains either.
 
-With setup's default **Safer prompts**, Delorun asks once per workspace before full access, and other consents ask before the model edits instruction files, adds an MCP server or schedules work ([Consents](safety.md#consents)). In the first release the studio has no screen for that full-access consent yet, so Delorun refuses to switch a workspace to full access; a single command can still ask to run outside the sandbox, which you approve or deny. With **Same as stock**, chosen in `delorun setup prompts`, a workspace switches to full access as in DeepSeek Harness, after the studio's own confirmation.
+With setup's default **Safer prompts**, Delorun asks once per workspace before full access, and other consents ask before the model edits instruction files, adds an MCP server or schedules work ([Consents](safety.md#consents)). A single command can still ask to run outside the sandbox, which you approve or deny. With **Same as stock**, chosen in `delorun setup prompts`, a workspace switches to full access as in DeepSeek Harness, after the studio's own confirmation.
 
 A chat you copied from DeepSeek Harness or another home that ran with full access opens on Workspace Write.
 
