@@ -146,6 +146,17 @@ describe('delorun plugin', () => {
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(true)
   })
 
+  it('repeats the options that restrict pnpm in the installation step, which runs the install scripts', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    const runs: Run[] = []
+    const restricting = ['--ignore-scripts', '--offline', '--prefer-offline', '--loglevel', 'debug', '--reporter=silent', '--config.store-dir=/tmp/store', '--registry', 'http://registry.example.test/']
+    expect(await plugin(['add', 'good-plugin', '--filter', '.', ...restricting], context, dependencies(runs))).toBe(0)
+    expect(runs[0]!.argv).toEqual(['plugin', '--profile', 'default', 'add', 'good-plugin', '--filter', '.', ...restricting, '--lockfile-only'])
+    expect(runs[1]!.argv).toEqual(['plugin', '--profile', 'default', 'install', '--frozen-lockfile', ...restricting])
+    expect(runs[1]!.argv).toContain('--ignore-scripts')
+  })
+
   it('refuses a known critical advisory after resolution: nothing is installed, the files go back, and the command fails', async () => {
     await prepareHome(context, undefined)
     writeEmptyProfile()

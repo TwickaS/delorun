@@ -269,26 +269,52 @@ export function resolveOnly(args: readonly string[]): string[] {
 }
 
 /**
- * The registry options an operation names, which its installation step repeats and the check compares.
+ * The registry URLs an operation names, which the check compares with the registries pnpm reads.
  * @param args - the arguments after `plugin`.
- * @returns the options as given, and the URLs they name.
+ * @returns the URLs, in argument order.
  */
-export function registryOptions(args: readonly string[]): { readonly options: readonly string[], readonly urls: readonly string[] } {
-  const options: string[] = []
+export function registryUrls(args: readonly string[]): string[] {
   const urls: string[] = []
   for (let index = 0; index < args.length; index++) {
     const argument = args[index]!
     const prefixed = ['--registry=', '--config.registry='].find(prefix => argument.startsWith(prefix))
-    if (prefixed !== undefined) {
-      options.push(argument)
-      urls.push(argument.slice(prefixed.length))
-    } else if (argument === '--registry' && args[index + 1] !== undefined) {
-      options.push(argument, args[index + 1]!)
+    if (prefixed !== undefined) urls.push(argument.slice(prefixed.length))
+    else if (argument === '--registry' && args[index + 1] !== undefined) {
       urls.push(args[index + 1]!)
       index++
     }
   }
-  return { options, urls }
+  return urls
+}
+
+/** The flags that restrict what pnpm fetches or runs; `--ignore-scripts` keeps the install scripts from running. */
+const RESTRICTING_FLAGS = new Set(['--ignore-scripts', '--offline', '--prefer-offline'])
+
+/** The options that take their value as the next argument and restrict or report what pnpm does. */
+const RESTRICTING_VALUE_OPTIONS = new Set(['--registry', '--loglevel', '--reporter'])
+
+/** The prefixes of the options that carry their value inside the argument, or are `--config.*` settings. */
+const RESTRICTING_INLINE = ['--registry=', '--loglevel=', '--reporter=', '--config.']
+
+/**
+ * The options every step of an operation repeats: the flags that restrict what pnpm fetches or runs, the registry, the
+ * `--config.*` settings, and the options that set how it reports. The installation step runs the install scripts, so it
+ * takes them too. The options that choose which project pnpm acts on are not repeated.
+ * @param args - the arguments after `plugin`.
+ * @returns the options in argument order, each with its separate value.
+ */
+export function carriedOptions(args: readonly string[]): string[] {
+  const carried: string[] = []
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]!
+    if (argument === '--') break
+    if (RESTRICTING_FLAGS.has(argument) || RESTRICTING_INLINE.some(prefix => argument.startsWith(prefix))) carried.push(argument)
+    else if (RESTRICTING_VALUE_OPTIONS.has(argument) && args[index + 1] !== undefined) {
+      carried.push(argument, args[index + 1]!)
+      index++
+    }
+  }
+  return carried
 }
 
 /**

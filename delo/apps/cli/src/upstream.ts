@@ -31,7 +31,7 @@ import { prepareHome, type CliCommand, type CommandContext, type CommandResult }
 import { EXIT, type ExitCode } from './exit.ts'
 import { refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
 import { useHomeShared } from './home-exclusion.ts'
-import { checkResolved, forgetRemovedPlugins, installsPackages, profileCheckSettings, recordAfterInstall, registryOptions, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
+import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
 import { readProfileRegistry } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { ensureCopyImport } from './pnpm-import.ts'
 import { profileDirectory, selectCommandProfile } from './profile.ts'
@@ -123,7 +123,8 @@ function readRestoredFiles(profileDir: string): Map<string, string | undefined> 
  * with the selected profile when they name none. With the profile's
  * install check on, an operation that installs packages runs in three steps ([install check](./plugin-install-check.ts)):
  * pnpm resolves it into the lockfile only, the check reads the lockfile, and pnpm then installs the lockfile and runs the
- * builds the profile allows, after which each checked plugin is recorded. An operation that `--lockfile-only` limits to the
+ * builds the profile allows, with the options that restrict pnpm repeated ([carried options](./plugin-install-check.ts)),
+ * after which each checked plugin is recorded. An operation that `--lockfile-only` limits to the
  * lockfile is resolved and checked, and installs nothing. A known critical advisory that no `--allow-advisory <id>`
  * names puts the profile's `package.json` and lockfile back as they were, before anything was fetched into the profile or
  * any script ran, and fails the command.
@@ -153,9 +154,9 @@ export async function plugin(args: readonly string[], context: CommandContext, d
     const before = readRestoredFiles(profileDir)
     const resolved = await dependencies.runUpstream(['plugin', ...resolveOnly(withProfile(rest, profile))], { activateNewBundles: false })
     if (resolved !== 0) return resolved
-    const registry = registryOptions(rest)
-    const own = registry.urls.length > 0 ? null : await dependencies.profileRegistry(profileDir)
-    const outcome = await checkResolved({ profileDir, check, allowedAdvisories: allowed, registries: [...registry.urls, ...own === null ? [] : [own]], output: context })
+    const urls = registryUrls(rest)
+    const own = urls.length > 0 ? null : await dependencies.profileRegistry(profileDir)
+    const outcome = await checkResolved({ profileDir, check, allowedAdvisories: allowed, registries: [...urls, ...own === null ? [] : [own]], output: context })
     if (outcome.refused.length > 0) {
       for (const [file, text] of before) {
         if (text === undefined) rmSync(join(profileDir, file), { force: true })
@@ -168,7 +169,7 @@ export async function plugin(args: readonly string[], context: CommandContext, d
     if (rest.includes('--lockfile-only')) return EXIT.ok
     // Upstream compares, restores, and activates bundles against the profile as it was before the resolution.
     const baseline = { manifest: before.get('package.json'), lockfile: before.get('pnpm-lock.yaml') }
-    const installed = await dependencies.runUpstream(['plugin', '--profile', profile, 'install', '--frozen-lockfile', ...registry.options], { baseline })
+    const installed = await dependencies.runUpstream(['plugin', '--profile', profile, 'install', '--frozen-lockfile', ...carriedOptions(rest)], { baseline })
     if (installed !== 0) return installed
     await recordAfterInstall(profileDir, outcome.pending, check.settings.maxFiles, context)
     return EXIT.ok
