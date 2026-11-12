@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
 import { SidebarSettingsSection } from '../src/client/SettingsSection.tsx'
-import { titleVeilColor } from '../src/client/StageArt.tsx'
+import { INK_EDGE_IDS } from '../src/client/StageArt.tsx'
 import { ART_PALETTES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, MAX_ART_SEED, type SidebarSettings } from '../src/config.ts'
 
 afterEach(() => {
@@ -219,13 +219,21 @@ describe('Settings → Sidebar names and parts', () => {
     expect(container.querySelector('#delo-sidebar-stock')).toBeNull()
   })
 
-  it('previews the brand on the title\'s veil over art, and plain when the art is none', () => {
-    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
+  it('previews the brand through the section\'s own brand edge filter over art, and plain when the art is none', () => {
+    const { container } = renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
     const brands = screen.getAllByText(en['settings.preview.brand'])
     expect(brands).toHaveLength(HEADER_ARTS.length)
-    const veils = brands.map(brand => brand.style.getPropertyValue('--title-veil'))
-    expect(veils.filter(veil => veil === titleVeilColor('title'))).toHaveLength(HEADER_ARTS.length - 1)
-    expect(veils[HEADER_ARTS.indexOf('none')]).toBe('')
+    const filters = brands.map(brand => brand.style.getPropertyValue('filter'))
+    expect(filters[HEADER_ARTS.indexOf('none')]).toBe('')
+    const referenced = new Set(filters.filter(filter => filter !== '').map(filter => /^url\("#(.+)"\)$/.exec(filter)?.[1]))
+    expect(referenced.size).toBe(1)
+    const [id] = referenced
+    const filter = container.querySelector(`[data-ink-edge] filter[id="${String(id)}"]`)
+    expect(filter, String(id)).not.toBeNull()
+    expect(filters.filter(value => value !== '')).toHaveLength(HEADER_ARTS.length - 1)
+    // The section's filters are its own, never the ids the sidebar's art mounts.
+    expect(Object.values(INK_EDGE_IDS)).not.toContain(id)
+    expect(container.querySelectorAll('[data-ink-edge] filter')).toHaveLength(Object.keys(INK_EDGE_IDS).length)
   })
 })
 

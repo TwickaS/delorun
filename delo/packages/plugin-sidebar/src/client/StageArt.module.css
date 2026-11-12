@@ -192,37 +192,10 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary) 12%, transparent);
 }
 
-/*
- * The title's veil: a band of the sidebar's fill under the brand row, feathered above and below, so the title and the
- * toggle keep the theme's colours on any art. Its shares are set where it renders, as `--title-veil` under the brand and
- * `--title-veil-toggle` from 52px before the sidebar's right edge, which clears the toggle's 28px box 8px in from that
- * edge, with the step spread over the 44px before it.
- * The band's solid part spans the brand row's 24px line box, 24px below the sidebar's top, with room on each side. The
- * feather's mask uses an opaque static token, since a mask reads only its colour's opacity.
- */
-.veil {
-  --veil-height: 48px;
-  --veil-feather: 10px;
-  --veil-ramp-start: 96px;
-  --veil-ramp-end: 52px;
-
+/* The holder of the brand row's edge filters: no box of its own, and not `display: none`, which would switch the filters off. */
+.inkEdge {
   position: absolute;
-  top: var(--delo-space-5);
-  right: 0;
-  left: 0;
-  height: var(--veil-height);
-  background: linear-gradient(
-    to right,
-    var(--title-veil) calc(100% - var(--veil-ramp-start)),
-    var(--title-veil-toggle) calc(100% - var(--veil-ramp-end))
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent,
-    var(--dsw-static-neutral-bluish-00) var(--veil-feather),
-    var(--dsw-static-neutral-bluish-00) calc(100% - var(--veil-feather)),
-    transparent
-  );
-  pointer-events: none;
-  user-select: none;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }

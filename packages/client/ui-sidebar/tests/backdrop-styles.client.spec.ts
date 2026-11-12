@@ -36,6 +36,8 @@ const HIDE = rules.find(rule => rule.selectors.some(selector => selector.startsW
 /** The selector that turns the brand row light over art. */
 const LIGHT = rules.find(rule => rule.selectors.some(selector => selector.endsWith(' .logoRow') && selector.includes('.backdrop')))?.selectors
   .find(selector => selector.endsWith(' .logoRow'))
+/** The rules that edge the brand and the toggle's icon over art, by the element each one styles. */
+const EDGES = Object.fromEntries(['.brandIdentity', '.toggle svg'].map(target => [target, rules.find(rule => rule.selectors.length === 1 && rule.selectors[0]?.endsWith(` ${target}`) && rule.selectors[0].includes('.backdrop'))]))
 
 afterEach(() => { document.body.innerHTML = '' })
 
@@ -45,17 +47,21 @@ afterEach(() => { document.body.innerHTML = '' })
  * @param occupant - the markup inside the anchor.
  * @returns the backdrop box and the brand row.
  */
-function mount(occupant: string): { backdrop: Element; logoRow: Element } {
-  document.body.innerHTML = `<div class="root"><div class="backdrop"><div data-slot="sidebar.backdrop" style="display: contents">${occupant}</div></div><div class="logoRow"></div></div>`
+function mount(occupant: string): { backdrop: Element; logoRow: Element; edged: (target: string) => boolean } {
+  document.body.innerHTML = `<div class="root"><div class="backdrop"><div data-slot="sidebar.backdrop" style="display: contents">${occupant}</div></div>`
+    + '<div class="logoRow"><span class="brandIdentity"></span><button class="toggle"><svg></svg></button></div></div>'
   const [backdrop, logoRow] = [document.querySelector('.backdrop'), document.querySelector('.logoRow')]
   if (backdrop === null || logoRow === null) throw new Error('the column did not mount')
-  return { backdrop, logoRow }
+  const edged = (target: string): boolean => document.querySelector(target)?.matches(EDGES[target]?.selectors[0] ?? '') ?? false
+  return { backdrop, logoRow, edged }
 }
 
 describe('the sidebar backdrop through the slot anchor', () => {
-  it('finds both rules in the stylesheet', () => {
+  it('finds the rules in the stylesheet, the edges naming the art\'s filters', () => {
     expect(HIDE).toBeDefined()
     expect(LIGHT).toBeDefined()
+    expect(EDGES['.brandIdentity']?.body).toMatch(/filter:\s*url\('#dsh-sidebar-backdrop-ink-brand'\)/)
+    expect(EDGES['.toggle svg']?.body).toMatch(/filter:\s*url\('#dsh-sidebar-backdrop-ink-control'\)/)
   })
 
   it('hides the box and leaves the brand\'s colours while the anchor holds no art', () => {
@@ -66,17 +72,26 @@ describe('the sidebar backdrop through the slot anchor', () => {
     }
   })
 
-  it('shows the box and turns the brand light over art', () => {
-    const { backdrop, logoRow } = mount('<div class="art"><svg></svg></div>')
+  it('shows the box and turns the brand light, edging it and the toggle\'s icon, over art', () => {
+    const { backdrop, logoRow, edged } = mount('<div class="art"><svg></svg></div>')
     expect(backdrop.matches(HIDE ?? '')).toBe(false)
     expect(logoRow.matches(LIGHT ?? '')).toBe(true)
+    expect([edged('.brandIdentity'), edged('.toggle svg')]).toEqual([true, true])
+  })
+
+  it('edges nothing without art', () => {
+    for (const occupant of ['', '<div data-slot-error="sidebar.backdrop"></div>']) {
+      const { edged } = mount(occupant)
+      expect([edged('.brandIdentity'), edged('.toggle svg')], occupant).toEqual([false, false])
+    }
   })
 
   it('leaves the brand\'s colours when the art marks any of its elements plain', () => {
     for (const occupant of ['<span data-backdrop-plain><svg></svg></span>', '<div class="art"></div><div data-backdrop-plain></div>']) {
-      const { backdrop, logoRow } = mount(occupant)
+      const { backdrop, logoRow, edged } = mount(occupant)
       expect(backdrop.matches(HIDE ?? ''), occupant).toBe(false)
       expect(logoRow.matches(LIGHT ?? ''), occupant).toBe(false)
+      expect([edged('.brandIdentity'), edged('.toggle svg')], occupant).toEqual([false, false])
     }
   })
 })

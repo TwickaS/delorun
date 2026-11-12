@@ -10,12 +10,12 @@ import { applyLayers, requireResolved, type SchemeValues } from '../../plugin-th
 import { themeLayers } from '../../plugin-theme/src/palette/layers.ts'
 import { STOCK_TOKENS } from '../../plugin-theme/src/palette/stock.ts'
 import { HeaderArt } from '../src/client/HeaderArt.tsx'
-import { StageBackdrop, TITLE_VEIL_FILL, TITLE_VEIL_TOKEN, titleVeilColor, type TitleVeilPart } from '../src/client/StageArt.tsx'
+import { INK_EDGE_IDS, INK_EDGE_OPACITY, INK_EDGE_RADIUS, INK_EDGE_TOKEN, InkEdgeFilters, StageBackdrop, type InkEdgePart } from '../src/client/StageArt.tsx'
 import { ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, type SidebarSettings } from '../src/config.ts'
 
 afterEach(cleanup)
 
-/** The title's and the toggle's colours, and the sidebar's fill they sit on when no art lies under them. */
+/** The title's and the toggle's colours on the sidebar, and the sidebar's fill they sit on when no art lies under them. */
 const TITLE = '--dsw-alias-label-primary'
 const TOGGLE = '--dsw-alias-label-secondary'
 const SIDEBAR_FILL = '--dsw-specific-sidebar-fill'
@@ -28,6 +28,13 @@ const SCHEMES = ['light', 'dark'] as const
  * @returns its text.
  */
 const stylesheet = (name: string): string => readFileSync(resolve(import.meta.dirname, '../src/client', name), 'utf8')
+
+/** Upstream's sidebar stylesheet, which turns the brand row light over art and draws it through the edge's filters. */
+const SIDEBAR_ROOT = readFileSync(resolve(import.meta.dirname, '../../../../packages/client/ui-sidebar/src/client/SidebarRoot.module.css'), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+
+/** The body of upstream's rule that turns the brand row light over art. */
+const LIGHT_RULE = /\.logoRow,\s*[^{}]*\.topStrip\s*\{([^{}]*)\}/.exec(SIDEBAR_ROOT)?.[1] ?? ''
 
 type Scheme = typeof SCHEMES[number]
 
@@ -101,71 +108,127 @@ function artColours(values: SchemeValues, scheme: Scheme): Rgb[] {
 }
 
 /**
- * One part of the veil over a colour, at the share `TITLE_VEIL_FILL` gives that part in the scheme.
+ * The white ink upstream's sidebar gives the brand row over art, read from its rule: the title and mark in one static
+ * token, the toggle in a share of it.
  * @param values - the theme's resolved tokens.
+ * @returns the title's and the toggle's ink, the toggle's translucent.
+ */
+function lightInk(values: SchemeValues): Record<InkEdgePart, Rgb> {
+  const title = /--dsw-alias-label-primary:\s*var\((--[\w-]+)\)/.exec(LIGHT_RULE)
+  const toggle = /--dsw-alias-label-secondary:\s*color-mix\(in srgb, var\((--[\w-]+)\) (\d+)%, transparent\)/.exec(LIGHT_RULE)
+  if (title?.[1] === undefined || toggle?.[1] === undefined || toggle[2] === undefined) throw new Error('upstream\'s light brand row rule changed')
+  return { brand: requireResolved(values, title[1]), control: { ...requireResolved(values, toggle[1]), alpha: Number(toggle[2]) / 100 } }
+}
+
+/**
+ * The edge around a part's ink, composited over a colour. The filter fills the ink's grown shape, whose opacity is the
+ * ink's own, so the edge's opacity is the part's share times the ink's opacity.
+ * @param values - the theme's resolved tokens.
+ * @param share - the edge's opacity for fully opaque ink, in percent.
+ * @param ink - the part's ink.
+ * @param art - the colour under the edge.
+ * @returns the colour the ink's outline meets, and the ink sits on.
+ */
+const edged = (values: SchemeValues, share: number, ink: Rgb, art: Rgb): Rgb => {
+  const edge = requireResolved(values, INK_EDGE_TOKEN)
+  return over({ ...edge, alpha: edge.alpha * ink.alpha * share / 100 }, art)
+}
+
+/** The floor each part's ink must reach against its edge: text for the title, a control's icon for the toggle. */
+const FLOOR: Record<InkEdgePart, number> = { brand: 4.5, control: 3 }
+
+/**
+ * The lowest contrast of one part's ink against its edge over every colour under the brand row in a theme palette and
+ * scheme: every art colour at every strength, and the sidebar's fill the art fades into under the row. The filter draws
+ * the ink over its own edge, so the ink is composited over the edge, not over the bare art.
+ * @param palette - the theme palette.
  * @param scheme - the colour scheme.
  * @param part - the title or the toggle.
- * @param art - the colour under the veil.
- * @returns the colour the ink sits on.
+ * @param share - the edge's opacity, in percent.
+ * @returns the contrast ratio.
  */
-const veiled = (values: SchemeValues, scheme: Scheme, part: TitleVeilPart, art: Rgb): Rgb => {
-  const fill = requireResolved(values, TITLE_VEIL_TOKEN)
-  return over({ ...fill, alpha: fill.alpha * TITLE_VEIL_FILL[scheme][part] / 100 }, art)
+function worstContrast(palette: typeof PALETTES[number], scheme: Scheme, part: InkEdgePart, share: number): number {
+  const values = themeValues(palette, scheme)
+  const ink = lightInk(values)[part]
+  const under = [...artColours(values, scheme), requireResolved(values, SIDEBAR_FILL)]
+  return Math.min(...under.map((art) => {
+    const ring = edged(values, share, ink, art)
+    return contrast(over(ink, ring), ring)
+  }))
 }
+
+const PARTS = Object.keys(INK_EDGE_OPACITY) as InkEdgePart[]
 
 describe('the sidebar title over the header art', () => {
   for (const palette of PALETTES) {
     for (const scheme of SCHEMES) {
-      it(`reads at 4.5:1 or more, with the toggle at 3:1, on the veil over every art colour, in ${palette} (${scheme})`, () => {
-        const values = themeValues(palette, scheme)
-        const [title, toggle] = [requireResolved(values, TITLE), requireResolved(values, TOGGLE)]
-        const colours = artColours(values, scheme)
-        expect(colours.length).toBeGreaterThan(100)
-        const worst = (ink: Rgb, part: TitleVeilPart): number => Math.min(...colours.map(art => contrast(ink, veiled(values, scheme, part, art))))
-        expect(worst(title, 'title'), `${TITLE} on the title's share of the veil`).toBeGreaterThanOrEqual(4.5)
-        expect(worst(toggle, 'toggle'), `${TOGGLE} on the toggle's share of the veil`).toBeGreaterThanOrEqual(3)
+      it(`reads in its light ink against its own edge over every art colour, the title at 4.5:1 and the toggle at 3:1, in ${palette} (${scheme})`, () => {
+        expect(artColours(themeValues(palette, scheme), scheme).length).toBeGreaterThan(100)
+        for (const part of PARTS) {
+          expect(worstContrast(palette, scheme, part, INK_EDGE_OPACITY[part]), part).toBeGreaterThanOrEqual(FLOOR[part])
+        }
       })
     }
   }
 
-  it('fails without the veil, or with the title\'s share under the toggle, so the check reaches colours that need each share', () => {
-    const values = themeValues(PALETTES[0], 'light')
-    const [title, toggle] = [requireResolved(values, TITLE), requireResolved(values, TOGGLE)]
-    const colours = artColours(values, 'light')
-    expect(Math.min(...colours.map(art => contrast(title, art)))).toBeLessThan(4.5)
-    expect(Math.min(...colours.map(art => contrast(toggle, veiled(values, 'light', 'title', art))))).toBeLessThan(3)
+  it('keeps each edge within four points of the lightest that reads, so it hides no more of the art than it must', () => {
+    for (const part of PARTS) {
+      const lighter = Math.min(...PALETTES.flatMap(palette => SCHEMES.map(scheme => worstContrast(palette, scheme, part, INK_EDGE_OPACITY[part] - 4))))
+      expect(lighter, part).toBeLessThan(FLOOR[part])
+    }
   })
 
-  it('draws the veil, in the sidebar\'s fill and marked plain so the title keeps its colours, under every art behind the sidebar\'s top', () => {
+  it('fails without an edge, or with the toggle at the title\'s share, so the check reaches colours that need each', () => {
+    expect(worstContrast(PALETTES[0], 'light', 'brand', 0)).toBeLessThan(4.5)
+    expect(worstContrast(PALETTES[0], 'dark', 'brand', 0)).toBeLessThan(4.5)
+    expect(Math.min(...PALETTES.flatMap(palette => SCHEMES.map(scheme => worstContrast(palette, scheme, 'control', INK_EDGE_OPACITY.brand))))).toBeLessThan(3)
+  })
+
+  it('reads the ink from upstream\'s light rule, which draws the brand and the toggle\'s icon through the edge\'s ids', () => {
+    expect(LIGHT_RULE).toContain('--dsw-alias-label-primary')
+    const target = (id: string): string | undefined => new RegExp(`([^{}]+)\\{[^{}]*filter:\\s*url\\('#${id}'\\)[^{}]*\\}`).exec(SIDEBAR_ROOT)?.[1]?.trim()
+    expect(target(INK_EDGE_IDS.brand)).toMatch(/\.brandIdentity$/)
+    expect(target(INK_EDGE_IDS.control)).toMatch(/\.toggle svg$/)
+  })
+
+  it('draws each edge filter from the edge\'s token at its part\'s share, grown by the radius, with the ink on top', () => {
+    const { container } = render(<InkEdgeFilters ids={{ brand: 'b', control: 'c' }} />)
+    for (const [part, id] of [['brand', 'b'], ['control', 'c']] as const) {
+      const filter = container.querySelector(`filter[id="${id}"]`)
+      const grown = filter?.querySelector('feMorphology')
+      expect([grown?.getAttribute('in'), grown?.getAttribute('operator'), grown?.getAttribute('radius')], part).toEqual(['SourceAlpha', 'dilate', String(INK_EDGE_RADIUS)])
+      const edge = filter?.querySelector('feComposite[in2="grown"]')
+      expect(edge?.getAttribute('result'), part).toBe('edge')
+      const fill = edge?.previousElementSibling
+      expect(fill?.getAttribute('style'), part).toBe(`flood-color: var(${INK_EDGE_TOKEN}); flood-opacity: ${String(INK_EDGE_OPACITY[part] / 100)};`)
+      expect([...filter?.querySelectorAll('feMergeNode') ?? []].map(node => node.getAttribute('in')).slice(-2), part).toEqual(['edge', 'SourceGraphic'])
+    }
+  })
+
+  it('mounts the edge\'s filters under the ids upstream names behind every art behind the sidebar\'s top, unmarked so the row turns light', () => {
     for (const headerArt of HEADER_ARTS.filter(art => art !== 'none')) {
       const { container } = render(<HeaderArt useSettings={settingsOf({ headerArt, artStyle: 'artwork' })} />)
-      const veil = container.querySelector<HTMLElement>('[data-title-veil]')
-      expect(veil, headerArt).not.toBeNull()
-      expect(veil?.hasAttribute('data-backdrop-plain')).toBe(true)
-      expect(veil?.style.getPropertyValue('--title-veil')).toBe(titleVeilColor('title'))
-      expect(veil?.style.getPropertyValue('--title-veil-toggle')).toBe(titleVeilColor('toggle'))
+      const ids = [...container.querySelectorAll('[data-ink-edge] filter')].map(filter => filter.id)
+      expect(ids, headerArt).toEqual(PARTS.map(part => INK_EDGE_IDS[part]))
+      expect(container.querySelector('[data-backdrop-plain]'), headerArt).toBeNull()
       cleanup()
-    }
-    for (const part of ['title', 'toggle'] as const) {
-      expect(titleVeilColor(part)).toBe(`light-dark(${[TITLE_VEIL_FILL.light[part], TITLE_VEIL_FILL.dark[part]]
-        .map(share => `color-mix(in srgb, var(${TITLE_VEIL_TOKEN}, var(--dsw-alias-bg-base)) ${String(share)}%, transparent)`).join(', ')})`)
     }
   })
 
-  it('draws no veil for no art or for the pill beside the name, where the title sits on the sidebar', () => {
+  it('mounts no edge for no art or for the pill beside the name, where the title sits on the sidebar', () => {
     for (const artStyle of ART_STYLES) {
       const none = render(<HeaderArt useSettings={settingsOf({ headerArt: 'none', artStyle })} />)
       expect(none.container.childElementCount).toBe(0)
       cleanup()
     }
     const pill = render(<HeaderArt useSettings={settingsOf({ artStyle: 'pill' })} />)
-    expect(pill.container.querySelector('[data-title-veil]')).toBeNull()
+    expect(pill.container.querySelector('[data-ink-edge]')).toBeNull()
     expect(pill.container.querySelector('[data-backdrop-plain]')).not.toBeNull()
   })
 
-  it('finds no veil in the art alone', () => {
+  it('finds no edge in the art alone', () => {
     const { container } = render(<StageBackdrop scene="blueprint" palette="accent" />)
-    expect(container.querySelector('[data-title-veil]')).toBeNull()
+    expect(container.querySelector('[data-ink-edge]')).toBeNull()
   })
 
   it('keeps the title at 4.5:1 on the sidebar itself, where no art or the pill leaves it, in every palette', () => {

@@ -353,43 +353,67 @@ export const STAGE_SCENES = ['night', 'blueprint', ...GENERATIVE_SCENES] as cons
 /** One scene. */
 export type StageScene = typeof STAGE_SCENES[number]
 
-/** The theme token the title's veil is mixed from: the sidebar's own fill, so the veil is invisible where no art lies under it. */
-export const TITLE_VEIL_TOKEN = '--dsw-specific-sidebar-fill'
+/** The static token the brand row's edge is drawn in: a near-black that stays dark in both colour schemes. */
+export const INK_EDGE_TOKEN = '--dsw-static-neutral-bluish-1000'
 
 /**
- * The share of the sidebar's fill in the title's veil, in percent, per colour scheme: `title` under the brand, rising to
- * `toggle` under the sidebar's toggle at the row's end. Over every colour any scene draws in, in every art palette,
- * strength and theme palette, the title in `--dsw-alias-label-primary` reads at 4.5:1 or more on the title's share and
- * the toggle in `--dsw-alias-label-secondary` at 3:1 or more on the toggle's share, which `title-contrast.client.spec.tsx`
- * checks.
+ * The edge's opacity, in percent, around each part of upstream's brand row over the art: `brand` around the title and
+ * its mark, `control` around the toggle's icon. The filter fills the ink's grown shape, so the edge takes the share of
+ * the ink's own opacity: the toggle's ink, white at 82%, gets 82% of its share. Upstream's sidebar draws the row in that
+ * white over art, and the filter draws the ink over its own edge; against that edge composited over every colour any
+ * scene draws in, in every art palette, strength, theme palette and colour scheme, and over the sidebar's fill the art
+ * fades into, the title reads at 4.5:1 or more and the toggle at 3:1 or more. Each share sits within four points of the
+ * smallest that does, so the edge stays as light as legibility allows; `title-contrast.client.spec.tsx` checks both.
  */
-export const TITLE_VEIL_FILL = { light: { title: 56, toggle: 80 }, dark: { title: 64, toggle: 64 } } as const
+export const INK_EDGE_OPACITY = { brand: 60, control: 64 } as const
 
-/** One part of the veil, which `TITLE_VEIL_FILL` gives a share for in each scheme. */
-export type TitleVeilPart = keyof typeof TITLE_VEIL_FILL.light
+/** One part of the brand row the edge is drawn around. */
+export type InkEdgePart = keyof typeof INK_EDGE_OPACITY
 
-const veilMix = (percent: number): string => `color-mix(in srgb, var(${TITLE_VEIL_TOKEN}, var(--dsw-alias-bg-base)) ${String(percent)}%, transparent)`
+/** The parts in a fixed order. */
+const INK_EDGE_PARTS = Object.keys(INK_EDGE_OPACITY) as readonly InkEdgePart[]
 
 /**
- * The veil's colour under one part of the brand row, following the colour scheme.
- * @param part - the title or the toggle.
- * @returns a `light-dark()` colour.
+ * The ids by which upstream's sidebar draws the brand (`brand`) and the toggle's icon (`control`) through the edge's
+ * filters while art lies behind them.
  */
-export function titleVeilColor(part: TitleVeilPart): string {
-  return `light-dark(${veilMix(TITLE_VEIL_FILL.light[part])}, ${veilMix(TITLE_VEIL_FILL.dark[part])})`
-}
+export const INK_EDGE_IDS = { brand: 'dsh-sidebar-backdrop-ink-brand', control: 'dsh-sidebar-backdrop-ink-control' } as const satisfies Record<InkEdgePart, string>
 
-/** The veil's colours as the `--title-veil` and `--title-veil-toggle` custom properties, which the veil and a preview tile's brand read. */
-export const TITLE_VEIL_STYLE = { '--title-veil': titleVeilColor('title'), '--title-veil-toggle': titleVeilColor('toggle') } as CSSProperties
+/** How far the edge reaches beyond the ink, in CSS pixels. */
+export const INK_EDGE_RADIUS = 1
+
+/** The soft shade under the edge, which smooths it into the art: its blur's standard deviation in CSS pixels and its opacity in percent. It adds contrast and the contrast check does not count it. */
+export const INK_EDGE_SHADE = { blur: 1.5, opacity: 24 } as const
+
+const flood = (opacity: number): CSSProperties => ({ floodColor: `var(${INK_EDGE_TOKEN})`, floodOpacity: opacity / 100 })
 
 /**
- * The veil under the sidebar's title and toggle: a band of the sidebar's fill, translucent and feathered above and
- * below, so the title and toggle keep the theme's colours over the art while the art shows through. It marks itself
- * `data-backdrop-plain`, which keeps upstream's sidebar from turning the brand light over the art.
- * @returns the veil, hidden from assistive technology.
+ * The edge's SVG filters, one per part under the id given for it: the ink's shape grown by `INK_EDGE_RADIUS` and filled
+ * in `INK_EDGE_TOKEN` at the part's `INK_EDGE_OPACITY`, over a soft shade, with the ink itself on top. The art mounts
+ * them under `INK_EDGE_IDS`; a preview mounts them under ids of its own.
+ * @param props - the filter id for each part.
+ * @returns a zero-size SVG holding the filters, hidden from assistive technology.
  */
-export function TitleVeil() {
-  return <div className={css.veil} data-title-veil="" data-backdrop-plain="" style={TITLE_VEIL_STYLE} aria-hidden="true" />
+export function InkEdgeFilters({ ids }: { readonly ids: Readonly<Record<InkEdgePart, string>> }) {
+  return (
+    <svg className={css.inkEdge} width="0" height="0" aria-hidden="true" focusable="false" data-ink-edge="">
+      {INK_EDGE_PARTS.map(part => (
+        <filter key={part} id={ids[part]} x="-25%" y="-25%" width="150%" height="150%" colorInterpolationFilters="sRGB">
+          <feMorphology in="SourceAlpha" operator="dilate" radius={INK_EDGE_RADIUS} result="grown" />
+          <feGaussianBlur in="grown" stdDeviation={INK_EDGE_SHADE.blur} result="soft" />
+          <feFlood style={flood(INK_EDGE_SHADE.opacity)} />
+          <feComposite in2="soft" operator="in" result="shade" />
+          <feFlood style={flood(INK_EDGE_OPACITY[part])} />
+          <feComposite in2="grown" operator="in" result="edge" />
+          <feMerge>
+            <feMergeNode in="shade" />
+            <feMergeNode in="edge" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      ))}
+    </svg>
+  )
 }
 
 /** The art palettes: T3 Code's Blueprint, Rose, Grove, Ocean, Ember and Iris, and the studio's accent. */

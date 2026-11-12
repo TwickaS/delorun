@@ -55,6 +55,15 @@
   --dsw-alias-label-tertiary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 72%, transparent);
 }
 
+/* Under the same test, the brand and the toggle's icon draw through the SVG filters the art supplies by these ids, which edge the light ink in a dark tone so it reads on light art. Art that supplies no such filter leaves the ink unedged, since browsers ignore a filter reference to a missing element. */
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .brandIdentity {
+  filter: url('#dsh-sidebar-backdrop-ink-brand');
+}
+
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .toggle svg {
+  filter: url('#dsh-sidebar-backdrop-ink-control');
+}
+
 /* macOS desktop: the AppFrame column owns the translucent sidebar tint; an
    opaque fill here would sit on top of it and block the window vibrancy. */
 :global([data-platform='darwin']) .root {
