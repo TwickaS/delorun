@@ -16,7 +16,9 @@ import { SidebarRoot } from '../src/client/SidebarRoot.tsx'
 import { en } from '../src/client/locales.ts'
 
 /** Pointer dwell the shell waits before it opens the peek. */
-const PEEK_HOVER_DELAY_MS = 200
+const PEEK_HOVER_DELAY_MS = 350
+/** Grace between the pointer leaving and the close fade starting. */
+const PEEK_CLOSE_GRACE_MS = 250
 /** Close fade the shell keeps the expanded content mounted for. */
 const PEEK_SETTLE_MS = 140
 
@@ -181,6 +183,10 @@ describe('SidebarRoot hover peek', () => {
     advance(PEEK_HOVER_DELAY_MS)
     expect(peekAttribute(column)).toBe('open')
     fireEvent.pointerOut(column, { relatedTarget: document.body })
+    expect(peekAttribute(column)).toBe('open')
+    advance(PEEK_CLOSE_GRACE_MS - 1)
+    expect(peekAttribute(column)).toBe('open')
+    advance(1)
     expect(peekAttribute(column)).toBe('closing')
     expect(column.className).toMatch(/peekClosing/)
     advance(PEEK_SETTLE_MS - 1)
@@ -200,10 +206,40 @@ describe('SidebarRoot hover peek', () => {
     fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 30, clientY: 300 })
     advance(PEEK_HOVER_DELAY_MS)
     fireEvent.pointerOut(column, { relatedTarget: document.body })
+    advance(PEEK_CLOSE_GRACE_MS)
     expect(peekAttribute(column)).toBe('closing')
     fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 40, clientY: 300 })
     expect(peekAttribute(column)).toBe('open')
     advance(PEEK_SETTLE_MS)
+    expect(peekAttribute(column)).toBe('open')
+  })
+
+  it('keeps the peek when the pointer returns inside the grace, and closes a full grace after a second leave', () => {
+    stubHoverCapability(true)
+    const { column } = mountRail()
+    openPeek(column)
+    fireEvent.pointerOut(column, { relatedTarget: document.body })
+    advance(PEEK_CLOSE_GRACE_MS - 1)
+    fireEvent.pointerOver(column, { relatedTarget: document.body, clientX: 40, clientY: 300 })
+    advance(PEEK_CLOSE_GRACE_MS * 2)
+    expect(peekAttribute(column)).toBe('open')
+    fireEvent.pointerOut(column, { relatedTarget: document.body })
+    advance(PEEK_CLOSE_GRACE_MS - 1)
+    expect(peekAttribute(column)).toBe('open')
+    advance(1)
+    expect(peekAttribute(column)).toBe('closing')
+  })
+
+  it('keeps the peek when the pointer moves back into the panel box inside the grace', () => {
+    stubHoverCapability(true)
+    const { column } = mountRail()
+    stubPeekBox(column)
+    openPeek(column)
+    fireEvent.pointerMove(document, { clientX: 900, clientY: 300 })
+    fireEvent.pointerMove(document, { clientX: 950, clientY: 300 })
+    advance(PEEK_CLOSE_GRACE_MS - 1)
+    fireEvent.pointerMove(document, { clientX: 100, clientY: 300 })
+    advance(PEEK_CLOSE_GRACE_MS * 2)
     expect(peekAttribute(column)).toBe('open')
   })
 
@@ -396,16 +432,19 @@ describe('SidebarRoot hover peek', () => {
     expect(peekAttribute(column)).toBe('open')
     // Right of the box.
     fireEvent.pointerMove(document, { clientX: 900, clientY: 300 })
+    advance(PEEK_CLOSE_GRACE_MS)
     expect(peekAttribute(column)).toBe('closing')
     advance(PEEK_SETTLE_MS)
     openPeek(column)
     // Below the box.
     fireEvent.pointerMove(document, { clientX: 100, clientY: 900 })
+    advance(PEEK_CLOSE_GRACE_MS)
     expect(peekAttribute(column)).toBe('closing')
     advance(PEEK_SETTLE_MS)
     openPeek(column)
     // Above the box.
     fireEvent.pointerMove(document, { clientX: 100, clientY: -5 })
+    advance(PEEK_CLOSE_GRACE_MS)
     expect(peekAttribute(column)).toBe('closing')
     advance(PEEK_SETTLE_MS)
     openPeek(column)

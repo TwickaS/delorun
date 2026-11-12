@@ -21,8 +21,8 @@
  * open width (the frame's --dsh-sidebar-expanded-width), while the frame keeps
  * the rail's track and the persisted collapse state does not change. It opens
  * on a pointer dwell of the rail's own surface (or the left edge where the
- * platform hides the rail), closes after a short fade when the pointer leaves,
- * on Escape, and when keyboard focus leaves the panel, and it never arms from
+ * platform hides the rail), closes after a short grace and fade when the pointer
+ * leaves, on Escape, and when keyboard focus leaves the panel, and it never arms from
  * a rail control, so every rail click keeps its meaning. Without a hovering
  * fine pointer, or in the phone drawer, there is no peek.
  */
@@ -58,7 +58,13 @@ const SCROLLBAR_LINGER_MS = 2000
  * surface on its way to a control, which cancels the arm, so a click that
  * starts on a control is never intercepted by the expanding panel.
  */
-const PEEK_HOVER_DELAY_MS = 200
+const PEEK_HOVER_DELAY_MS = 350
+
+/**
+ * Grace between the pointer leaving the peek and its close fade starting. Moving back into the panel inside the
+ * grace keeps it open; Escape and focus leaving close it at once.
+ */
+const PEEK_CLOSE_GRACE_MS = 250
 
 /** Hover-peek close fade; matches the 140ms `.peekClosing` animation. */
 const PEEK_SETTLE_MS = 140
@@ -354,8 +360,14 @@ export function SidebarRoot({
       setPeek('open')
     }, PEEK_HOVER_DELAY_MS)
   }, [peekEligible])
+  const closeGraceTimer = useRef<number | undefined>(undefined)
+  const cancelPeekGrace = useCallback((): void => {
+    if (closeGraceTimer.current === undefined) return
+    window.clearTimeout(closeGraceTimer.current)
+    closeGraceTimer.current = undefined
+  }, [])
   const closePeek = useCallback((): void => {
-    if (peekRef.current === 'closed') return
+    cancelPeekGrace()
     // A closing panel would unmount the focused control under the person;
     // hand focus to the rail's toggle (which survives both states) first.
     if (peekRef.current === 'open' && column.current?.contains(document.activeElement) === true) {
@@ -364,14 +376,23 @@ export function SidebarRoot({
       if (toggle !== null) focusWithoutRing(toggle, { preventScroll: true })
     }
     setPeek('closing')
-  }, [])
+  }, [cancelPeekGrace])
+  // A pointer that left starts the close after the grace; a pending grace keeps its original deadline.
+  const closePeekAfterGrace = useCallback((): void => {
+    if (peekRef.current === 'closed' || closeGraceTimer.current !== undefined) return
+    closeGraceTimer.current = window.setTimeout(() => {
+      closeGraceTimer.current = undefined
+      closePeek()
+    }, PEEK_CLOSE_GRACE_MS)
+  }, [closePeek])
   // Expanding, collapsing into the drawer, or leaving the rail ends the peek;
   // its trigger and close timer go with it.
   useEffect(() => {
     if (collapsed && !drawer) return
     cancelPeekArm()
+    cancelPeekGrace()
     setPeek('closed')
-  }, [collapsed, drawer, cancelPeekArm])
+  }, [collapsed, drawer, cancelPeekArm, cancelPeekGrace])
   // The close fade keeps the expanded content mounted for its duration.
   useEffect(() => {
     if (peek !== 'closing') return
@@ -379,6 +400,7 @@ export function SidebarRoot({
     return () => { window.clearTimeout(timer) }
   }, [peek])
   useEffect(() => cancelPeekArm, [cancelPeekArm])
+  useEffect(() => cancelPeekGrace, [cancelPeekGrace])
   // Leaving is decided by the panel's BOX as well as by pointerleave: opening
   // under a stationary pointer (the left edge band) leaves the browser no
   // enter/leave pair to report, so the next move to the page closes it. Moves
@@ -386,12 +408,13 @@ export function SidebarRoot({
   useEffect(() => {
     if (!peeked) return
     const onMove = (event: PointerEvent): void => {
-      if (pointerInsideElement(column.current, event) || isOverlayTarget(event.target)) return
-      closePeek()
+      if (pointerInsideElement(column.current, event)) { cancelPeekGrace(); return }
+      if (isOverlayTarget(event.target)) return
+      closePeekAfterGrace()
     }
     document.addEventListener('pointermove', onMove)
     return () => { document.removeEventListener('pointermove', onMove) }
-  }, [peeked, closePeek])
+  }, [peeked, cancelPeekGrace, closePeekAfterGrace])
   // Escape closes the peek from anywhere, including from inside its panel.
   useEffect(() => {
     if (peek === 'closed') return
@@ -522,7 +545,7 @@ export function SidebarRoot({
         // Returning during the close fade reopens at once; a fresh entry arms
         // the dwell, unless it lands on a rail control (whose click the peek
         // must not move out from under the pointer).
-        if (peek !== 'closed') { setPeek('open'); return }
+        if (peek !== 'closed') { cancelPeekGrace(); setPeek('open'); return }
         if (!isRailControl(event.target)) armPeek()
       }}
       onPointerMove={(event) => {
@@ -533,7 +556,7 @@ export function SidebarRoot({
       onPointerLeave={() => {
         armLinger()
         cancelPeekArm()
-        closePeek()
+        closePeekAfterGrace()
       }}
       onBlurCapture={(event) => {
         if (peek === 'closed') return
