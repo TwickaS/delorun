@@ -5,11 +5,14 @@
  * is accepted only after a yes at a terminal and with the review id that was shown, an allowed server is revoked by its
  * name only after a yes at a terminal and with the acceptance id that was shown, and every action needs Delo to run.
  */
-import { shellQuote } from '@delo/home'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { randomLockId, shellQuote } from '@delo/home'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { clackConfirm } = vi.hoisted(() => ({ clackConfirm: vi.fn<() => Promise<boolean | symbol>>() }))
+vi.mock('@clack/prompts', () => ({ confirm: clackConfirm, isCancel: (value: unknown) => typeof value === 'symbol' }))
 import type { ResponseLine, UnsignedRequest } from '@delo/home-process'
 import { permissionStorePath, readPermissionStore, serializePermissionStore } from '@delo/plugin-permission-defaults/store'
 import { fullAccessNote, permissionEntriesDigest } from '@delo/plugin-permission-defaults/review'
@@ -17,7 +20,7 @@ import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
 import { createMcpCommand, type McpDependencies } from '../../src/mcp/command.ts'
-import { createWorkspaceCommand, type WorkspaceDependencies } from '../../src/workspace/command.ts'
+import { confirmInTerminal, createWorkspaceCommand, runningProfiles, workspaceCommand, type WorkspaceDependencies } from '../../src/workspace/command.ts'
 
 const NOW = 1_800_000_000_000
 let osHome: string
@@ -55,13 +58,15 @@ interface Scripted {
  */
 function workspace(overrides: Partial<WorkspaceDependencies> & Scripted = {}) {
   const sent: UnsignedRequest[] = []
+  const reloaded: string[] = []
   const asked: string[] = []
   const lines = [...(overrides.lines ?? [])]
   const answers = [...(overrides.answers ?? [])]
   const command = createWorkspaceCommand({
-    running: () => false,
-    send: async (_home, _profile, request) => {
+    runningProfiles: () => [],
+    send: async (_home, profile, request) => {
       sent.push(request)
+      reloaded.push(profile)
       return Promise.resolve(lines.shift() ?? [])
     },
     confirm: async (message) => {
@@ -73,7 +78,7 @@ function workspace(overrides: Partial<WorkspaceDependencies> & Scripted = {}) {
     now: () => NOW,
     ...overrides,
   })
-  return { command, sent, asked }
+  return { command, sent, asked, reloaded }
 }
 
 /**
@@ -144,14 +149,90 @@ describe('delorun workspace full-access', () => {
     expect(out.stdout).toContain('Full access is already off')
   })
 
-  it('asks the running studio to read the store again, and reports a studio that holds other entries', async () => {
+  it('asks the studio of every running profile to read the store again, and names each that did not', async () => {
     const written = permissionEntriesDigest(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: NOW }]]))
-    const matching = workspace({ running: () => true, answers: [true], lines: [[{ ok: true, digest: written }]] })
+    const matching = workspace({ runningProfiles: () => ['cli', 'work'], answers: [true], lines: [[{ ok: true, digest: written }], [{ ok: true, digest: written }]] })
     await expect(matching.command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
-    expect(matching.sent).toEqual([{ op: 'permission.reload' }])
-    const other = workspace({ running: () => true, lines: [[{ ok: true, digest: 'sha256:other' }]] })
-    await expect(other.command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('changed the record of full-access grants at the same moment')
+    expect(matching.sent).toEqual([{ op: 'permission.reload' }, { op: 'permission.reload' }])
+    expect(matching.reloaded).toEqual(['cli', 'work'])
+    out.stdout = ''
+    const off = permissionEntriesDigest(new Map([[workspaceKey(folder), { preset: 'workspace-write', fullAccessGrantedAt: null }]]))
+    const mixed = workspace({
+      runningProfiles: () => ['cli', 'stock', 'other', 'gone'],
+      lines: [[{ ok: true, digest: off }], [{ ok: false, error: 'CONSENT_UNAVAILABLE' }], [{ ok: true, digest: 'sha256:other' }], []],
+    })
+    await expect(mixed.command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).toContain('The studio of profile stock does not ask for full access per workspace')
+    expect(out.stdout).toContain(`Full access is off for ${workspaceKey(folder)}`)
+    expect(out.stderr).toContain('the studio of profile other holds other grants than were written')
+    expect(out.stderr).toContain('profile gone did not read it (NO_ANSWER)')
+    expect(out.stderr).toContain('restart it with delorun stop and delorun start')
+    // The change is told only after the studios answered.
+    expect(out.stdout.indexOf('does not ask')).toBeLessThan(out.stdout.indexOf('Full access is off'))
+  })
+
+  it('records nothing and says so when the record cannot be written or another command holds it', async () => {
+    const directory = join(permissionStorePath(deloHome), '..')
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    chmodSync(directory, 0o500)
+    try {
+      await expect(workspace().command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
+      expect(out.stdout).toContain('Full access is already off')
+      writeFileSync(join(osHome, 'unused'), '')
+      const { command } = workspace({ answers: [true] })
+      await expect(command.run(['full-access', folder, 'on'], context)).rejects.toMatchObject({
+        exit: EXIT.failed, message: expect.stringContaining('nothing was recorded, because Delo\'s record of full-access grants'),
+      })
+    } finally {
+      chmodSync(directory, 0o700)
+    }
+    expect(await grants()).toEqual({})
+  })
+
+  it('runs over the shipped dependencies, and refuses a record it cannot read', async () => {
+    mkdirSync(join(permissionStorePath(deloHome), '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(permissionStorePath(deloHome), serializePermissionStore(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: 1 }]])), { mode: 0o600 })
+    await expect(workspaceCommand.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
+    expect(await grants()).toEqual({ [workspaceKey(folder)]: null })
+    chmodSync(permissionStorePath(deloHome), 0o644)
+    await expect(workspaceCommand.run(['full-access'], context)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('cannot be read') })
+  })
+
+  it('names a record that turned unreadable while the person answered, and words the other outcomes', async () => {
+    const { command } = workspace({
+      confirm: async () => {
+        mkdirSync(join(permissionStorePath(deloHome), '..'), { recursive: true, mode: 0o700 })
+        writeFileSync(permissionStorePath(deloHome), '{ not json', { mode: 0o600 })
+        return Promise.resolve(true)
+      },
+    })
+    await expect(command.run(['full-access', folder, 'on'], context)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('cannot be read') })
+    writeFileSync(permissionStorePath(deloHome), serializePermissionStore(new Map([
+      [workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: NOW }], ['/elsewhere', { preset: 'workspace-write', fullAccessGrantedAt: null }],
+    ])), { mode: 0o600 })
+    const { command: again } = workspace()
+    await expect(again.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Full access is already on')
+    await expect(again.run(['full-access'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('/elsewhere  safer preset')
+    await expect(again.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose an action') })
+  })
+
+  it('asks at the terminal, reading a cancel as no answer', async () => {
+    clackConfirm.mockResolvedValueOnce(true).mockResolvedValueOnce(Symbol('cancel'))
+    await expect(confirmInTerminal('Turn on?')).resolves.toBe(true)
+    await expect(confirmInTerminal('Turn on?')).resolves.toBeUndefined()
+  })
+
+  it('lists the profiles whose home process runs', () => {
+    expect(runningProfiles(join(osHome, 'no-home'))).toEqual([])
+    for (const profile of ['work', 'cli', 'stopped']) mkdirSync(join(deloHome, 'run', profile), { recursive: true })
+    writeFileSync(join(deloHome, 'run', 'file'), '')
+    // This process holds the home lock of two profiles; the third has none.
+    for (const profile of ['work', 'cli']) {
+      writeFileSync(join(deloHome, 'run', profile, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: randomLockId(), runtime: '0.0.0', startedAt: new Date(NOW).toISOString() }), { mode: 0o600 })
+    }
+    expect(runningProfiles(deloHome)).toEqual(['cli', 'work'])
   })
 
   it('lists the workspaces the store holds', async () => {
