@@ -1,0 +1,12 @@
+# C16 switch external_agent_consent on: the delegationConsent service is
+# mounted, so every start of an external subagent provider, such as Claude
+# Code or Codex, is reviewed before the provider runs — a read-only chat is
+# refused, a workspace grant allows, and otherwise the person is asked — and
+# the external delegation tool's description names the agent and its ask.
+# Without this row the plugin mounts nothing and every external provider
+# starts and describes itself exactly as upstream's does.
+- insert:
+    - id: delo-delegation-consent
+      name: '@delo/plugin-delegation-consent'
+      config:
+        enabled: true

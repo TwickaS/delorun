@@ -18,6 +18,7 @@ import { randomLockId } from '@delo/home'
 import { permissionStorePath, readPermissionStore, serializePermissionStore } from '@delo/plugin-permission-defaults/store'
 import { fullAccessNote } from '@delo/plugin-permission-defaults/review'
 import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
+import { grantStorePath, readGrantStore } from '@delo/plugin-delegation-consent/store'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
 import { createMcpCommand, type McpDependencies } from '../../src/mcp/command.ts'
@@ -474,5 +475,68 @@ describe('delorun mcp', () => {
     const idle = mcp({ answers: [true], lines: [LISTED, [{ ok: true, stopped: 0 }]] })
     await expect(idle.command.run(['revoke', 'git'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toContain('Revoked git; it was not running.')
+  })
+})
+
+describe('delorun workspace external-agents', () => {
+  /**
+   * The grants file's grants.
+   * @returns each grant as workspace, provider and time.
+   */
+  async function agentGrants(): Promise<unknown> {
+    const read = await readGrantStore(grantStorePath(deloHome))
+    return read.kind === 'readable' ? read.grants : read
+  }
+
+  it('says no agent may start without asking while none is allowed', async () => {
+    const { command } = workspace()
+    await expect(command.run(['external-agents'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('No external agent may start without asking')
+  })
+
+  it('shows what the agent can do and records the grant once the person says yes at a terminal, then revokes it', async () => {
+    const { command, asked } = workspace({ answers: [true, true] })
+    await expect(command.run(['external-agents', 'projects/site', 'claude-code', 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('outside Delo\'s sandbox and approval prompts')
+    expect(asked).toEqual(['Let Claude Code start in this workspace without asking?'])
+    expect(await agentGrants()).toEqual([{ workspace: workspaceKey(folder), provider: 'claude-code', grantedAt: NOW }])
+    await expect(command.run(['external-agents', folder, 'claude-code', 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('(it already could)')
+    await expect(command.run(['external-agents'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Claude Code (claude-code)  since 2027-01-15T08:00:00.000Z')
+    await expect(command.run(['external-agents', folder, 'claude-code', 'off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Claude Code now asks again before it starts in')
+    expect(await agentGrants()).toEqual([])
+    await expect(command.run(['external-agents', folder, 'codex', 'off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Codex already asked before it starts in')
+  })
+
+  it('records nothing without a yes or without a terminal', async () => {
+    for (const answer of [false, undefined]) {
+      const { command } = workspace({ answers: [answer] })
+      await expect(command.run(['external-agents', folder, 'codex', 'on'], context)).resolves.toBe(EXIT.failed)
+    }
+    const { command, asked } = workspace({ terminal: false, answers: [true] })
+    await expect(command.run(['external-agents', folder, 'codex', 'on'], context)).resolves.toBe(EXIT.failed)
+    expect(asked).toEqual([])
+    expect(await agentGrants()).toEqual([])
+    expect(out.stderr).toContain('nothing was changed; Codex still asks before it starts in')
+    expect(out.stderr).toContain('asks you to confirm at a terminal')
+  })
+
+  it('refuses a usage error, a missing folder, a folder Delo never adds and an unreadable grants file', async () => {
+    const { command } = workspace({ answers: [true] })
+    await expect(command.run(['external-agents', folder], context)).rejects.toMatchObject({ code: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'Bad Agent', 'on'], context)).rejects.toMatchObject({ code: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'codex', 'maybe'], context)).rejects.toMatchObject({ code: EXIT.usage })
+    await expect(command.run(['external-agents', folder, 'codex', 'on', 'extra'], context)).rejects.toMatchObject({ code: EXIT.usage })
+    await expect(command.run(['external-agents', join(osHome, 'missing'), 'codex', 'on'], context)).rejects.toThrow('is not a folder')
+    await expect(command.run(['external-agents', osHome, 'codex', 'on'], context)).rejects.toThrow('Nothing was changed.')
+    const path = grantStorePath(deloHome)
+    mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(path, '{"v":9}', { mode: 0o600 })
+    await expect(command.run(['external-agents'], context)).rejects.toThrow('cannot be read')
+    await expect(command.run(['external-agents', folder, 'codex', 'off'], context)).rejects.toThrow('nothing was recorded')
+    chmodSync(path, 0o600)
   })
 })

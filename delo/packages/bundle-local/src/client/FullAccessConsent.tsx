@@ -178,7 +178,7 @@ export type FullAccessConsentProps = PropsLocale<'deloConsents'> & InjectFace<Om
  * @param action - the phrase a remote refusal names: changing full access, or allowing an MCP server.
  * @returns the sentence.
  */
-export function consentFailureText(t: FullAccessConsentProps['t'], failure: ConsentFailure, action: 'action.changeAccess' | 'action.answerServer' = 'action.changeAccess'): string {
+export function consentFailureText(t: FullAccessConsentProps['t'], failure: ConsentFailure, action: 'action.changeAccess' | 'action.answerServer' | 'action.changeAgent' = 'action.changeAccess'): string {
   switch (failure.kind) {
     case 'stale': return t('failed.stale')
     case 'remote': return t('loopback', { action: t(action) })

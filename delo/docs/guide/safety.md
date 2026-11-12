@@ -66,10 +66,17 @@ Setup's prompts question decides how Delorun asks before risky changes, and `del
 | The model writes `AGENTS.md`, a skill or a preset with its file tools | Asks first, says the text will load as instructions in every future chat it reaches, and shows the diff; nothing is written until you allow it | Written as any file |
 | A new MCP server that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
 | The model creates or edits a scheduled task | Asks with the task's prompt, its schedule, the chat it runs in and that chat's permission preset; a delivery is refused when that chat's preset has changed | Created as in DeepSeek Harness |
+| The model starts an external agent, such as Claude Code or Codex | Asks at your computer before each run, as [External agents](#external-agents) explains | Starts, as in DeepSeek Harness |
 
 The `web_fetch` guard and the update protections stay on with either answer. Plugin management cannot turn off, remove or reconfigure Delorun's consent and guard plugins or the sandbox, in any mode.
 
 A consent covers the tool it names. A shell command or code the model runs can still write `AGENTS.md` or a skill inside a writable workspace without asking.
+
+## External agents
+
+Claude Code and Codex are optional delegation plugins: the model can hand a task to one of them. An external agent runs as its own program, outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home with its keys and tokens included, and it uses your own Claude Code or Codex sign-in and account, so any cost goes to that account.
+
+With **Safer prompts**, Delorun asks before each run on the home's own computer; a phone signed in over remote access cannot answer. "Allow once" starts that run only. "Allow for this workspace" lets that agent start there without asking until you revoke it in Settings, Permissions, or with `delorun workspace external-agents <folder> <agent> off`; `delorun workspace external-agents` lists what you allowed. A chat on Read Only never starts an external agent, a run cannot start outside the chat's workspace, and each run stops after 30 minutes. A chat on full access or Auto does not ask you, so there an agent starts only in a workspace where you allowed it. The model cannot install or turn on these plugins itself; you add them from the Plugins page or the first-run setup.
 
 ### MCP servers
 

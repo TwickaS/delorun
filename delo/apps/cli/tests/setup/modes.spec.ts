@@ -148,6 +148,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
       { id: 'delo-instruction-consent', config: { enabled: true } },
       { id: 'delo-mcp-consent', config: { enabled: true } },
       { id: 'delo-schedule-consent', config: { enabled: true } },
+      { id: 'delo-delegation-consent', config: { enabled: true } },
     ])
     expect(recordOf().sections).toEqual([
       { id: 'privacy', status: 'seen' },
@@ -176,6 +177,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
       'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent') },
       'delo-mcp-consent': { enabled: parityOf('mcp_add_consent') },
       'delo-schedule-consent': { enabled: parityOf('scheduled_task_consent') },
+      'delo-delegation-consent': { enabled: parityOf('external_agent_consent') },
     })
     expect([...byId.values()].every(config => config['enabled'] === false)).toBe(true)
     expect(byId.has('delo-fetch-guard')).toBe(false)
@@ -609,7 +611,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
       { id: 'profile', status: 'skipped' },
     ])
     expect(screen()).toContain('Run delorun to start Delo and open the studio.')
-    expect(patchOf().map(row => row.id)).toEqual(['delo-permission-defaults', 'delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent'])
+    expect(patchOf().map(row => row.id)).toEqual(['delo-permission-defaults', 'delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent', 'delo-delegation-consent'])
   })
 
   it('checks the environment key live only with --check-key, and refuses a key the provider does not accept without printing it', async () => {

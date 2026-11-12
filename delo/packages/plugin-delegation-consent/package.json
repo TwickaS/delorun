@@ -1,0 +1,44 @@
+{
+  "name": "@delo/plugin-delegation-consent",
+  "description": "Delo's consent before an external agent runs (delegationConsent): asks at the home's computer before Claude Code, Codex or another external subagent provider starts, records per-workspace grants, bounds each run's time and keeps the model from installing those agents",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./copy": "./src/copy.ts",
+    "./store": "./src/store.ts",
+    "./wire": "./src/wire.ts"
+  },
+  "dependencies": {
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/home": "workspace:*",
+    "@delo/home-auth": "workspace:*",
+    "@delo/plugin-permission-defaults": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-subagent": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-user-approval": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-subagent": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-user-approval": "workspace:*"
+  },
+  "delo": {
+    "state": "shipped"
+  }
+}

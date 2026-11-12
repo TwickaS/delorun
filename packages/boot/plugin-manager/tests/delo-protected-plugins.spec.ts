@@ -204,7 +204,7 @@ describe('plugin_manager in danger-full-access with @delo/bundle-local\'s protec
   it('names the consent and guard plugins, the update gate, the update check, sign-in and reach, and the sandbox rows', () => {
     expect([...PROTECTED].sort()).toEqual([
       '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delo/bundle-local/update-check', '@delo/bundle-local/update-gate',
-      '@delo/home-auth', '@delo/plugin-fetch-guard', '@delo/plugin-instruction-consent', '@delo/plugin-mcp-consent',
+      '@delo/home-auth', '@delo/plugin-delegation-consent', '@delo/plugin-fetch-guard', '@delo/plugin-instruction-consent', '@delo/plugin-mcp-consent',
       '@delo/plugin-permission-defaults', '@delo/plugin-schedule-consent', '@delo/reach',
     ])
   })

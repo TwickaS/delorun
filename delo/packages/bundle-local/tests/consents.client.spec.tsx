@@ -2,7 +2,7 @@
 /**
  * The consent surfaces of the studio: the full-access consent that upstream's permission control asks before a chat
  * switches to full access in a workspace without a grant, the approval card's full-access action, the MCP server review,
- * the notice that a server waits, and the Permissions section with its revokes. The denial cases prove that a remote
+ * the notice that a server waits, the approval card's external-agent action, and the Permissions section with its revokes. The denial cases prove that a remote
  * studio, an unanswered consent and a stale review record nothing, that a phone sees "Approve this at your computer"
  * instead of a button, and that a profile without the consent plugins (such as one set up with "Same as stock") keeps
  * upstream's behaviour.
@@ -12,6 +12,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { MCP_CONSENT_ROUTES } from '@delo/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
+import { DELEGATION_CONSENT_ROUTES, type GrantView } from '@delo/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import type { WorkspaceAccess } from '../src/client/consents-api.ts'
@@ -20,9 +21,10 @@ import {
   workspaceName, type FullAccessConsentProps, type FullAccessConsentSource,
 } from '../src/client/FullAccessConsent.tsx'
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
+import { agentOfferFor, ExternalAgentAction, type ExternalAgentActionProps } from '../src/client/ExternalAgentAction.tsx'
 import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
-import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
+import { AGENTS_COMMAND, MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 
 afterEach(() => {
   cleanup()
@@ -475,6 +477,108 @@ describe('the approval card\'s full-access action', () => {
   })
 })
 
+const GRANT: GrantView = { workspace: '/home/person/projects/site', provider: 'claude-code', agent: 'Claude Code', grantedAt: NOW - 3_600_000 }
+const GRANTS = (grants: readonly GrantView[], storeProblem?: string): Answer => ({ status: 200, body: storeProblem === undefined ? { grants } : { grants, storeProblem } })
+
+/**
+ * The approval card's owner props and the external-agent action's face, over a fake home.
+ * @param host - the fake home.
+ * @param overrides - the props a case changes.
+ * @returns the props.
+ */
+function agentActionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<ExternalAgentActionProps> = {}): ExternalAgentActionProps {
+  return {
+    t: makeTranslate(en), grants: 'external-agent', toolName: 'claude-code', callId: undefined, allow: vi.fn(async () => {}),
+    sessionId: 'chat-1', fetch: host.fetch, ...overrides,
+  } as ExternalAgentActionProps
+}
+
+describe('the approval card\'s external-agent action', () => {
+  it('records the workspace grant first, then answers the card', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${DELEGATION_CONSENT_ROUTES.allow}`)?.body)
+      .toEqual({ sessionId: 'chat-1', provider: 'claude-code', confirmed: true })
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the card unanswered and names the reason when the home records nothing', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: refusal(500, 'STORE_REFUSED', 'The approvals file cannot be changed'),
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe('The approvals file cannot be changed')
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('leaves the card unanswered when the home refuses the grant as remote at the click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: REMOTE,
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('loopback', { action: en['action.changeAgent'] }))
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('tells a phone to approve at the computer, with no button', async () => {
+    const props = agentActionProps(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }))
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    expect(screen.getByRole('status').textContent).toBe(en['action.atComputer'])
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('shows nothing for another grant, a card without a tool, a profile without the plugin and an unreadable home', async () => {
+    const mounted = fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) })
+    const cases = [
+      agentActionProps(mounted, { grants: 'full-access' }),
+      agentActionProps(mounted, { toolName: undefined }),
+      agentActionProps(fakeHost()),
+      agentActionProps(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: refusal(500, 'STORE_REFUSED') })),
+    ]
+    for (const props of cases) {
+      const { container, unmount } = render(<ExternalAgentAction {...props} />)
+      await settle()
+      expect(container.innerHTML).toBe('')
+      unmount()
+    }
+  })
+
+  it('reads its offer from the grants route', async () => {
+    await expect(agentOfferFor(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]) }).fetch)).resolves.toBe('allow')
+    await expect(agentOfferFor(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }).fetch)).resolves.toBe('remote')
+    await expect(agentOfferFor(fakeHost().fetch)).resolves.toBe('none')
+  })
+
+  it('ignores an offer that arrives after the card is gone', async () => {
+    let answer: ((response: Response) => void) | undefined
+    const fetch: HostFetch = async () => new Promise<Response>((resolve) => { answer = resolve })
+    const { container, unmount } = render(<ExternalAgentAction {...agentActionProps({ fetch, received: [], script: {} })} />)
+    unmount()
+    answer?.(new Response(JSON.stringify({ grants: [] }), { status: 200 }))
+    await settle()
+    expect(container.innerHTML).toBe('')
+  })
+})
+
 /**
  * Render the MCP server review over its store.
  * @param source - the store.
@@ -816,12 +920,48 @@ describe('the Permissions section', () => {
     expect(rowOf('git')).toBeTruthy()
   })
 
+  it('lists each external agent allowed per workspace and revokes it in one click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.revoke}`]: { status: 200, body: { revoked: true } },
+    })
+    renderPermissions(host)
+    await settle()
+    const row = rowOf('Claude Code')
+    expect(within(row).getByText(GRANT.workspace)).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: en['agents.revoke'] }))
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${DELEGATION_CONSENT_ROUTES.revoke}`)?.body).toEqual({ workspace: GRANT.workspace, provider: 'claude-code' })
+    expect(screen.getByRole('status').textContent).toBe(`Claude Code asks again before it starts in ${GRANT.workspace}.`)
+  })
+
+  it('says no agent starts without asking, and names a grants file it cannot read', async () => {
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([], 'not JSON') }))
+    await settle()
+    expect(screen.getByText(en['agents.none'])).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('agents.storeProblem', { problem: 'not JSON' }))
+  })
+
+  it('names a refused revoke and keeps the grant listed', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.revoke}`]: REMOTE,
+    })
+    renderPermissions(host)
+    await settle()
+    fireEvent.click(within(rowOf('Claude Code')).getByRole('button', { name: en['agents.revoke'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('loopback', { action: en['action.changeAgent'] }))
+    expect(rowOf('Claude Code')).toBeTruthy()
+  })
+
   it('tells a phone to approve at the computer, and offers no answer', async () => {
-    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE }))
+    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }))
     await settle()
     const line = screen.getByRole('status').textContent
     expect(line).toContain(FULL_ACCESS_COMMAND)
     expect(line).toContain(MCP_COMMAND)
+    expect(line).toContain(AGENTS_COMMAND)
     expect(screen.queryByRole('button')).toBeNull()
   })
 
@@ -868,7 +1008,7 @@ describe('the Permissions section', () => {
   it('says it is loading until each list answers', async () => {
     renderPermissions({ fetch: async () => new Promise<Response>(() => {}), received: [], script: {} })
     await settle()
-    expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(2)
+    expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(3)
   })
 
   it('says only that the profile does not ask, where the plugins are not mounted', async () => {
@@ -876,6 +1016,7 @@ describe('the Permissions section', () => {
     await settle()
     expect(screen.getByText(en['access.unavailable'])).toBeTruthy()
     expect(screen.getByText(en['mcp.unavailable'])).toBeTruthy()
+    expect(screen.getByText(en['agents.unavailable'])).toBeTruthy()
   })
 })
 

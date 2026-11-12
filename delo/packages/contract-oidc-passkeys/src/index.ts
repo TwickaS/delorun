@@ -30,6 +30,7 @@ export const LOOPBACK_REQUIRED_ACTIONS = [
   'full-access-escalation',
   'full-access-consent',
   'workspace-management',
+  'external-agent',
   'device-approve',
   'device-remove',
   'approval-window',

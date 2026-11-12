@@ -120,7 +120,7 @@ describe('the real tree', () => {
     // A row may be restated per profile; one switch is still one claim. The consent plugins and the update gate are
     // inserted rows, which carry their module as `name`.
     expect([...new Set(covered.map(({ id }) => id))].sort()).toEqual([
-      'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'reach', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
+      'external_agent_consent', 'fetch_guard', 'instruction_layer_consent', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'reach', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal',
     ])
     for (const { id, value, declared } of covered) expect(value, id).toBe(declared)
     expect(presenceErrors(registry, shipped, parity)).toEqual([])
@@ -471,7 +471,7 @@ describe('the parity overlay', () => {
     const rows = parseOverlay(readFileSync(join(ROOT, PARITY_OVERLAY_PATH), 'utf8'))
     expect(overlayErrors(rows, PARITY_SWITCHES)).toEqual([])
     expect(rows).toEqual([{ id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', config: { readActionsExempt: false, profileHistory: false } }])
-    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'default_workspace_directory', 'doctor', 'fetch_guard', 'instruction_layer_consent', 'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'preset_inspect', 'reach', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal'])
+    expect(Object.keys(DEFAULT_PARITY).sort()).toEqual(['container_denial_marker', 'default_workspace_directory', 'doctor', 'external_agent_consent', 'fetch_guard', 'instruction_layer_consent', 'main_chat', 'mcp_add_consent', 'one_time_launch_tokens', 'permission_defaults', 'preset_inspect', 'reach', 'sandbox_protected_reads', 'scheduled_task_consent', 'studio_additions', 'update_check', 'update_turn_refusal'])
   })
 
   it('fails a switch left on, a key that is no switch, and a row that sets more than config', () => {

@@ -22,6 +22,7 @@ export const PROMPT_SWITCH_ROWS = {
   instruction_layer_consent: 'delo-instruction-consent',
   mcp_add_consent: 'delo-mcp-consent',
   scheduled_task_consent: 'delo-schedule-consent',
+  external_agent_consent: 'delo-delegation-consent',
 } as const
 
 /**

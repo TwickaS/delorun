@@ -33,7 +33,7 @@ export {
   type SignedIn,
   type TokenAdmission,
 } from './home-auth.ts'
-export { HomeAuthAuthenticator, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, type ReachPeer } from './authenticator.ts'
+export { HomeAuthAuthenticator, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, WORKSPACE_MANAGEMENT_REFUSAL, matchesPreLogin, type ReachPeer } from './authenticator.ts'
 export {
   REACH_ALLOWED_ACTIONS,
   REACH_DENIED_ACTIONS,

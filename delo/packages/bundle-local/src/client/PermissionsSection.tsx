@@ -4,7 +4,8 @@
  * access is allowed through the consent; revoking drops the workspace and its open full-access chats back to the safer
  * preset. MCP servers lists the servers waiting for the person's OK, each opening the review or declined in place, the
  * servers the person declined or revoked, which stay stopped until allowed, and the allowed servers with their starts;
- * revoking one stops that server until the person allows it again. Every request goes to the home through the injected `fetch`; the home answers only its own
+ * revoking one stops that server until the person allows it again. External agents lists each agent, such as Claude
+ * Code, allowed to start in a workspace without asking; revoking one makes it ask again at its next start there. Every request goes to the home through the injected `fetch`; the home answers only its own
  * computer, and the section says in place on a remote studio that the answer is given at the computer. Each answer's
  * outcome is one line under the section's introduction, which no list owns, so a list that changes after the answer
  * does not take it with it, and nothing covers the Settings dialog.
@@ -14,8 +15,8 @@ import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  declineServer, FULL_ACCESS_PRESET, readServers, readWorkspaces, revokeServer, setFullAccess,
-  type AcceptedServer, type PendingServer, type PendingServersAnswer, type WorkspaceAccess, type WorkspacesAnswer,
+  declineServer, FULL_ACCESS_PRESET, readAgentGrants, readServers, readWorkspaces, revokeAgentGrant, revokeServer, setFullAccess,
+  type AcceptedServer, type GrantsAnswer, type GrantView, type PendingServer, type PendingServersAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from './consents-api.ts'
 import { consentFailureOf, consentFailureText, FULL_ACCESS_COMMAND, workspaceName, type FullAccessConsentSource } from './FullAccessConsent.tsx'
 import { serverChangeText, ServerStart, type McpReviewSource } from './McpServerReview.tsx'
@@ -24,6 +25,9 @@ import css from './ConsentSections.module.css'
 
 /** The command the remote line names for the home's own computer. */
 export const MCP_COMMAND = 'delorun mcp list'
+
+/** The command that lists and revokes the external agents allowed per workspace. */
+export const AGENTS_COMMAND = 'delorun workspace external-agents'
 
 /** What the plugin supplies the section. */
 export interface PermissionsSectionInjected {
@@ -82,17 +86,21 @@ async function listing<T>(t: Translate, read: () => Promise<T | undefined>): Pro
 export function PermissionsSection({ t, fetch, ask, review }: PermissionsSectionProps): ReactNode {
   const [workspaces, setWorkspaces] = useState<Listing<WorkspacesAnswer>>({ kind: 'loading' })
   const [servers, setServers] = useState<Listing<PendingServersAnswer>>({ kind: 'loading' })
+  const [agents, setAgents] = useState<Listing<GrantsAnswer>>({ kind: 'loading' })
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<{ readonly text: string; readonly failed: boolean } | undefined>()
 
   const refresh = useCallback(async (): Promise<void> => {
-    const [nextWorkspaces, nextServers] = await Promise.all([listing(t, () => readWorkspaces(fetch)), listing(t, () => readServers(fetch))])
+    const [nextWorkspaces, nextServers, nextAgents] = await Promise.all([
+      listing(t, () => readWorkspaces(fetch)), listing(t, () => readServers(fetch)), listing(t, () => readAgentGrants(fetch)),
+    ])
     setWorkspaces(nextWorkspaces)
     setServers(nextServers)
+    setAgents(nextAgents)
   }, [fetch, t])
   useEffect(() => { void refresh() }, [refresh])
 
-  const answer = async (action: () => Promise<string | undefined>, failureAction: 'action.changeAccess' | 'action.answerServer'): Promise<void> => {
+  const answer = async (action: () => Promise<string | undefined>, failureAction: 'action.changeAccess' | 'action.answerServer' | 'action.changeAgent'): Promise<void> => {
     setBusy(true)
     setOutcome(undefined)
     try {
@@ -126,14 +134,19 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
     return t('mcp.revoked', { count: String(stopped) })
   }, 'action.answerServer')
 
-  const remote = workspaces.kind === 'remote' || servers.kind === 'remote'
+  const revokeAgent = (grant: GrantView): Promise<void> => answer(async () => {
+    await revokeAgentGrant(fetch, grant)
+    return t('agents.revoked', { agent: grant.agent, workspace: grant.workspace })
+  }, 'action.changeAgent')
+
+  const remote = workspaces.kind === 'remote' || servers.kind === 'remote' || agents.kind === 'remote'
 
   return <div className={css.section}>
     <h2 className={css.heading}>{t('permissions.title')}</h2>
     <p className={css.intro}>{t('permissions.intro')}</p>
     {outcome === undefined ? null : <p className={outcome.failed ? css.failed : css.line} role={outcome.failed ? 'alert' : 'status'}>{outcome.text}</p>}
     {remote
-      ? <p className={css.line} role="status">{t('permissions.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code> <code className={css.command}>{MCP_COMMAND}</code></p>
+      ? <p className={css.line} role="status">{t('permissions.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code> <code className={css.command}>{MCP_COMMAND}</code> <code className={css.command}>{AGENTS_COMMAND}</code></p>
       : null}
     <section className={css.group} aria-label={t('access.heading')} data-group="full-access">
       <h3 className={css.subheading}>{t('access.heading')}</h3>
@@ -142,6 +155,10 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
     <section className={css.group} aria-label={t('mcp.heading')} data-group="mcp">
       <h3 className={css.subheading}>{t('mcp.heading')}</h3>
       <ServersGroup t={t} listing={servers} busy={busy} review={reviewServer} decline={declineWaiting} revoke={revokeAccepted} />
+    </section>
+    <section className={css.group} aria-label={t('agents.heading')} data-group="external-agents">
+      <h3 className={css.subheading}>{t('agents.heading')}</h3>
+      <AgentsGroup t={t} listing={agents} busy={busy} revoke={revokeAgent} />
     </section>
   </div>
 }
@@ -160,7 +177,7 @@ interface GroupProps<T> {
  * @param unavailable - the line for a profile that mounts no list.
  * @returns the line, or nothing for a list that is remote or ready.
  */
-function listLine(t: Translate, listing: Listing<unknown>, unavailable: 'access.unavailable' | 'mcp.unavailable'): ReactNode {
+function listLine(t: Translate, listing: Listing<unknown>, unavailable: 'access.unavailable' | 'mcp.unavailable' | 'agents.unavailable'): ReactNode {
   if (listing.kind === 'loading') return <p className={css.line} aria-busy="true">{t('permissions.loading')}</p>
   if (listing.kind === 'unavailable') return <p className={css.line}>{t(unavailable)}</p>
   if (listing.kind === 'failed') return <p className={css.failed} role="alert">{listing.text}</p>
@@ -264,5 +281,30 @@ function ServersGroup({ t, listing, busy, review, decline, revoke }: GroupProps<
         </li>)}
       </ul>
     </>}
+  </>
+}
+
+/**
+ * The external agents group: each agent allowed to start in a workspace without asking, with its revoke.
+ * @param props - the group's list and its revoke.
+ * @returns the group's content.
+ */
+function AgentsGroup({ t, listing, busy, revoke }: GroupProps<GrantsAnswer> & { readonly revoke: (grant: GrantView) => Promise<void> }): ReactNode {
+  if (listing.kind !== 'ready') return listLine(t, listing, 'agents.unavailable')
+  const { grants, storeProblem } = listing.value
+  return <>
+    {storeProblem === undefined ? null : <p className={css.failed} role="alert">{t('agents.storeProblem', { problem: storeProblem })}</p>}
+    {grants.length === 0
+      ? <p className={css.line}>{t('agents.none')}</p>
+      : <ul className={css.list}>
+        {grants.map(grant => <li key={`${grant.workspace}\n${grant.provider}`} className={css.row} data-agent={grant.provider}>
+          <div className={css.details}>
+            <div className={css.title}>{grant.agent}</div>
+            <div className={css.description}>{grant.workspace}</div>
+            <div className={css.description}>{t('agents.allowedAt', { time: formatTime(t, grant.grantedAt) })}</div>
+          </div>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => { void revoke(grant) }}>{t('agents.revoke')}</Button>
+        </li>)}
+      </ul>}
   </>
 }

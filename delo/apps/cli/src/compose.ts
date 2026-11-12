@@ -153,6 +153,7 @@ export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string
   'delo-mcp-consent': { enabled: true },
   'delo-schedule-consent': { enabled: true },
   'delo-permission-defaults': { enabled: true },
+  'delo-delegation-consent': { enabled: true },
   ...GUARD_ROWS,
 }
 
@@ -175,6 +176,7 @@ export const ROW_SERVICES: Readonly<Record<string, readonly string[]>> = {
   'delo-mcp-consent': ['mcpAddConsent'],
   'delo-schedule-consent': ['scheduleConsent'],
   'delo-permission-defaults': ['permissionDefaults', 'sandboxModeGuard'],
+  'delo-delegation-consent': ['delegationConsent'],
 }
 
 /**

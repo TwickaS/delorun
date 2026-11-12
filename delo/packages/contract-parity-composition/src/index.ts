@@ -345,6 +345,29 @@ export const PARITY_SWITCHES = [
     ],
   },
   {
+    id: 'external_agent_consent',
+    state: 'built',
+    registeredBy: '@delo/plugin-delegation-consent',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delo-external-agent-consent',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delo/plugin-delegation-consent',
+      source: 'delo/packages/plugin-delegation-consent/src/index.ts',
+      key: 'enabled',
+    },
+    // The consent reaches the model through the external delegation tool's
+    // description and the refusal an unapproved start throws; these files are
+    // the ones whose behaviour the switch turns off at its parity value.
+    sources: [
+      'packages/subagent/subagent/src/consent.ts',
+      'packages/subagent/subagent/src/index.ts',
+      'packages/subagent/tool-subagent/src/index.ts',
+    ],
+  },
+  {
     id: 'container_denial_marker',
     state: 'built',
     registeredBy: 'Delo edit of upstream container denial reporting',

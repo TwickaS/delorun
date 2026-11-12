@@ -17,6 +17,9 @@
  * profiles whose home process runs, from their home locks alone. A folder Delo never adds as a workspace — a
  * filesystem root, the home folder, the Delo home and the stock home, or a folder containing one — is refused.
  *
+ * `delorun workspace external-agents` lists, allows and revokes the external agents that start in a workspace without
+ * asking ([external-agents](./external-agents.ts)).
+ *
  * @module @delo/cli/workspace/command
  */
 import { readdirSync, statSync } from 'node:fs'
@@ -35,6 +38,7 @@ import { parseCommandLine, type CliCommand, type CommandContext } from '../comma
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
 import { printable } from '../terminal-text.ts'
+import { externalAgents } from './external-agents.ts'
 
 /** What the command runs against. */
 export interface WorkspaceDependencies {
@@ -65,7 +69,7 @@ export interface WorkspaceDependencies {
 }
 
 /** The usage line. */
-const USAGE = 'Usage: delorun workspace full-access [<folder> on|off] [--profile <name>]'
+const USAGE = 'Usage: delorun workspace full-access [<folder> on|off] [--profile <name>]\n       delorun workspace external-agents [<folder> <agent> on|off]'
 
 /** One invocation's home, profile, output and dependencies. */
 interface Where {
@@ -83,10 +87,16 @@ interface Where {
 export function createWorkspaceCommand(dependencies: WorkspaceDependencies): CliCommand {
   return {
     name: 'workspace',
-    summary: 'A workspace\'s full access, turned on or off at this computer: full-access [<folder> on|off]',
+    summary: 'A workspace\'s full access and the external agents that start there without asking, changed at this computer: full-access [<folder> on|off], external-agents [<folder> <agent> on|off]',
     async run(args, context) {
       const { values, positionals } = parseCommandLine('workspace', args, { profile: { type: 'string' } })
       const [action, folder, state, extra] = positionals
+      if (action === 'external-agents') {
+        const home = (await resolveDeloHome(context.env)).path
+        return externalAgents({
+          home, context, terminal: dependencies.terminal, confirm: dependencies.confirm, cwd: dependencies.cwd(), now: dependencies.now(),
+        }, positionals.slice(1))
+      }
       if (action !== 'full-access') {
         throw new CliError(EXIT.usage, `delorun workspace: ${action === undefined ? 'choose an action' : `unknown action ${JSON.stringify(action)}`}\n${USAGE}`)
       }

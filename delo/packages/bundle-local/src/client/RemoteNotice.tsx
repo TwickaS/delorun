@@ -67,6 +67,7 @@ export type RemoteNoticeProps = PropsLocale<'deloDevices'> & InjectFace<Omit<Rem
 export function refusedActionText(t: RemoteNoticeProps['t'], action: string | undefined): string {
   if (action === 'full-access-escalation') return t('remote.action.fullAccessEscalation')
   if (action === 'workspace-management') return t('remote.action.workspaceManagement')
+  if (action === 'external-agent') return t('remote.action.externalAgent')
   return action === undefined ? t('remote.action.unknown') : t('remote.action.other', { action })
 }
 

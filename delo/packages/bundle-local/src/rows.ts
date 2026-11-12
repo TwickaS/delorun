@@ -157,6 +157,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
   {
+    id: 'delo-delegation-consent',
+    kind: 'added',
+    reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the delegationConsent service is absent, so external providers start and describe themselves as upstream\'s do.' },
+  },
+  {
     id: 'delo-update-gate',
     kind: 'added',
     reason: 'The C16 switch `update_turn_refusal` on: while `delorun update` or a stop waits for running chats, the first step of every new turn is refused with `UPDATE_PENDING`, so the wait ends once the running turns end; and the first step of every turn waits until `delorun` has checked the booted Host\'s rows and services (`holdUntilChecked`). The plugin\'s own default, off, is the parity value.',

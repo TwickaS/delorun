@@ -1,0 +1,22 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "tests"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../../packages/core/agent" },
+    { "path": "../../../packages/core/session" },
+    { "path": "../../../packages/core/tools" },
+    { "path": "../../../packages/interaction/user-approval" },
+    { "path": "../../../packages/sandbox/sandbox-policy" },
+    { "path": "../../../packages/subagent/subagent" },
+    { "path": "../../../packages/client/connection/tsconfig.host.json" }
+  ]
+}
