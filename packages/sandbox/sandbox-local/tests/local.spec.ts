@@ -635,6 +635,40 @@ describe('escape socket directories', () => {
     }
   })
 
+  it('says a bwrap probe that timed out did not finish, not that user namespaces are blocked', async () => {
+    const dir = escapeDirectory()
+    const launcher = fakeLauncher()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir], probeTimeoutMs: 1234 }, { platform: 'linux', probeBwrap: () => 'timed-out', probeLandlock: () => 'full', landlockLauncher: launcher, bwrapInstalled: () => true })
+    const refusal = await sandbox.confine(['true'], WW).then(() => undefined, (error: unknown) => error)
+    expect(refusal).toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY', message: expect.stringContaining('did not finish within 1234 ms') as string })
+    expect((refusal as Error).message).not.toContain('user namespaces')
+  })
+
+  it('reads the default bwrap probe as timed out when bwrap does not finish within probeTimeoutMs, and as failed when it exits non-zero', async () => {
+    const dir = escapeDirectory()
+    const bin = escapeDirectory()
+    const launcher = fakeLauncher()
+    const path = process.env.PATH
+    try {
+      process.env.PATH = bin
+      for (const [script, fix] of [['exec /bin/sleep 1', 'did not finish within 250 ms'], ['exit 1', 'could not create a sandbox here']] as const) {
+        writeFileSync(join(bin, 'bwrap'), `#!/bin/sh\n${script}\n`, { mode: 0o755 })
+        const { sandbox } = await setup({ escapeSocketDirectories: [dir], probeTimeoutMs: 250 }, { platform: 'linux', probeLandlock: () => 'full', landlockLauncher: launcher })
+        await expect(sandbox.confine(['true'], WW)).rejects.toThrow(fix)
+      }
+    } finally {
+      process.env.PATH = path
+    }
+  }, 30_000)
+
+  it('gives no bubblewrap advice on a runner other than Landlock', async () => {
+    const dir = escapeDirectory()
+    const { sandbox } = await setup({ escapeSocketDirectories: [dir] }, { platform: 'win32', windowsAclRunnerArgs: ['/bin/true'] })
+    const refusal = await sandbox.confine(['true'], RO).then(() => undefined, (error: unknown) => error)
+    expect(refusal).toMatchObject({ code: 'SANDBOX_UNSUPPORTED_POLICY', message: expect.stringMatching(/the windows-acl sandbox cannot deny the sockets in .*, so confined commands are refused here$/) as string })
+    expect((refusal as Error).message).not.toMatch(/bubblewrap|bwrap/)
+  })
+
   it('looks for an executable bwrap on PATH when no test hook decides', async () => {
     const dir = escapeDirectory()
     const bin = escapeDirectory()
