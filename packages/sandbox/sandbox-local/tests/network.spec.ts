@@ -168,6 +168,27 @@ describe('confine() with a network', () => {
     }
   })
 
+  it('keeps every rule an open command gets for a restricted command: the protected home, denied sockets and escape directories', async () => {
+    const dir = homeDirectory()
+    const home = join(dir, 'home')
+    mkdirSync(home)
+    const socket = join(dir, 'engine.sock')
+    writeFileSync(socket, '')
+    const escape = join(dir, 'escape')
+    mkdirSync(escape)
+    const config: Config = {
+      protectedHome: home, deniedSockets: [socket], escapeSocketDirectories: [escape],
+      networkDeniedSockets: [], networkDeniedSocketDirectories: [],
+    }
+    const sandbox = await provider(config, { chain: ['bwrap'] })
+    const profile = (argv: readonly string[]): string => argv.slice(0, argv.indexOf('--')).filter(arg => arg !== '--unshare-net').join(' ')
+    const open = profile((await sandbox.confine(['true'], { mode: 'read-only', workspaceRoot: '/' })).argv)
+    expect(open).toContain(`--tmpfs ${home}`)
+    expect(open).toContain(`--ro-bind /dev/null ${socket}`)
+    expect(open).toContain(`--tmpfs ${escape} --remount-ro ${escape}`)
+    expect(profile((await sandbox.confine(['true'], { ...OFF, workspaceRoot: '/' })).argv)).toBe(open)
+  })
+
   it('denies systemd-resolved, nscd, avahi, the system D-Bus and tailscaled by default, and rejects a relative entry', async () => {
     expect(LocalSandboxProvider.Config({}).networkDeniedSockets).toEqual([...NETWORK_DENIED_SOCKETS])
     expect(LocalSandboxProvider.Config({}).networkDeniedSocketDirectories).toEqual([...NETWORK_DENIED_SOCKET_DIRECTORIES])
