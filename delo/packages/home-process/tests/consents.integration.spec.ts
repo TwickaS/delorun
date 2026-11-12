@@ -103,6 +103,8 @@ describe('the consent operations', () => {
     await expect(declineServer(answer('mcp.decline', 'b'.repeat(32)), 'person', consents)).rejects.toMatchObject({ code: 'STALE_REVIEW' })
     await expect(acceptServer(answer('mcp.accept'), 'person', { ...ABSENT, acceptServer: async () => Promise.reject(new Error('disk full')) }))
       .rejects.toMatchObject({ code: 'CONSENT_FAILED', detail: 'INTERNAL_ERROR: disk full' })
+    await expect(acceptServer(answer('mcp.accept'), 'person', { ...ABSENT, acceptServer: async () => Promise.reject('gone') }))
+      .rejects.toMatchObject({ code: 'CONSENT_FAILED', detail: 'INTERNAL_ERROR: the answer was not recorded' })
   })
 
   it('revoke for the person, and name a stale acceptance and a store the Host cannot write', async () => {

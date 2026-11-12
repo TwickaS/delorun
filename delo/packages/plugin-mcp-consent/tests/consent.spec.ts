@@ -14,6 +14,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import type { MockInstance } from 'vitest'
 import { apply as startServer, MCP_ADD_CONSENT_PROVIDER_EXPORT, McpConsentRefusedError } from '@deepseek-ai/dsh-mcp-client'
 import type { Config as McpClientConfig, McpServerCommand } from '@deepseek-ai/dsh-mcp-client'
+import { currentHolder, randomLockId } from '@delo/home'
 import * as McpConsentPlugin from '../src/index.ts'
 import { pinsOf, type PinnedStart } from '../src/pins.ts'
 import { DeloMcpConsent, Config, acceptHint, apply } from '../src/index.ts'
@@ -26,6 +27,7 @@ import {
   parseAcceptanceStore,
   serializeAcceptanceStore,
   startDigest,
+  withAcceptanceStoreLock,
 } from '../src/store.ts'
 
 /**
@@ -199,6 +201,40 @@ describe('the acceptance store format', () => {
       expect(() => parseAcceptanceStore(text)).toThrow(AcceptanceStoreError)
       expect(() => parseAcceptanceStore(text)).toThrow(problem)
     }
+  })
+})
+
+describe('the acceptance store lock', () => {
+  let root: string
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'delo-mcp-store-lock-'))
+  })
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('refuses a change while a live process holds the lock past the wait, changing nothing, and replaces a dead holder\'s lock', async () => {
+    const path = acceptanceStorePath(root)
+    mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(`${path}.lock`, JSON.stringify({ v: 1, ...currentHolder(), id: randomLockId() }), { mode: 0o600 })
+    const change = vi.fn(async () => 'changed')
+    await expect(withAcceptanceStoreLock(path, change, 30)).rejects.toThrow(new AcceptanceStoreError(`process ${String(process.pid)} has been changing the MCP acceptance store for longer than 0.03 seconds, so nothing was changed; try again once it finishes`))
+    expect(change).not.toHaveBeenCalled()
+    // A process id that no running process has.
+    writeFileSync(`${path}.lock`, JSON.stringify({ v: 1, pid: 2 ** 22 + 7, id: randomLockId() }), { mode: 0o600 })
+    await expect(withAcceptanceStoreLock(path, change, 1000)).resolves.toBe('changed')
+    expect(existsSync(`${path}.lock`)).toBe(false)
+  })
+
+  it('refuses a change while the lock file holds no lock record, changing nothing', async () => {
+    const path = acceptanceStorePath(root)
+    mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(`${path}.lock`, JSON.stringify({ v: 2, ...currentHolder(), id: randomLockId() }), { mode: 0o600 })
+    const change = vi.fn(async () => 'changed')
+    await expect(withAcceptanceStoreLock(path, change, 30)).rejects.toThrow()
+    expect(change).not.toHaveBeenCalled()
   })
 })
 

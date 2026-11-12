@@ -14,7 +14,7 @@ import { MCP_CONSENT_ROUTES } from '@delo/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
-import type { WorkspaceAccess } from '../src/client/consents-api.ts'
+import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
 import {
   confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
   type FullAccessConsentProps, type FullAccessConsentSource,
@@ -377,6 +377,14 @@ describe('the MCP server review', () => {
     const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
     expect(dialog.querySelector('[data-links]')).toBeNull()
     expect(dialog.querySelector('[data-writable]')).toBeNull()
+  })
+
+  it('reads the pinned files of each waiting server, and refuses an answer whose file names an argument by no index', async () => {
+    const files = [{ path: '/opt/node/bin/node', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 0, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    const good = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, files }]) })
+    await expect(readServers(good.fetch)).resolves.toMatchObject({ servers: [{ files }] })
+    const bad = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, files: [files[0], { ...files[1], argument: -1 }] }]) })
+    await expect(readServers(bad.fetch)).rejects.toThrow()
   })
 
   it('names the command shell that runs a batch file', () => {
