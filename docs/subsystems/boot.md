@@ -289,8 +289,9 @@ Manage profile files and apply their declared reload lifecycle.
  * latest version instead. It installs and audits what it brings back as {@link restore} does. The undo is itself a
  * version, so undoing it is another undo.
  * @returns Saved and runtime outcomes, naming the version taken back as `undone`, or the latest version as `restored`
- * when an unsaved edit was taken back, and listing what changed in `changes`. Fails with `nothing-to-undo` when the history holds fewer than two versions, `history-unavailable` when
- * git cannot keep it, and `audit-findings` or `audit-refused` when the plugin audit refuses a package it brings back.
+ * when an unsaved edit was taken back, and listing what changed in `changes`. Fails with `nothing-to-undo` when the
+ * history holds fewer than two versions, `history-unavailable` when git cannot keep it, and `audit-findings` or
+ * `audit-refused` when the plugin audit refuses a package it brings back.
  */
 @Remote undo(): Promise<ChangeResult>
 

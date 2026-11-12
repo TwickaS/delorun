@@ -232,6 +232,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   settingsLayout: 'client-side Settings layout registry — packages/client/ui-settings-general/README.md owns the API',
   settingsShell: 'client-side Settings shell accessor — packages/client/ui-settings/README.md owns the API',
   sidebarLayout: 'client-side Sidebar layout registry — packages/client/ui-sidebar/README.md owns the API',
+  permissionSwitchConsent: 'client-side optional consent before a permission switch — packages/client/ui-permission-presets/README.md owns the API',
 }
 
 /**
