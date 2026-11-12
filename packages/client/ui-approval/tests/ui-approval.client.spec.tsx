@@ -561,6 +561,45 @@ describe('inline grant actions', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Allow once' }).disabled).toBe(true)
   })
 
+  it('sends nothing when an action allows after the card was answered', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderGrantAction(pending)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    await expect(pending.result).resolves.toBe('rejected')
+    await act(async () => { await owner()!.allow() })
+
+    expect(answer).toHaveBeenCalledExactlyOnceWith('rejected')
+  })
+
+  it('sends nothing when an action allows while the card\'s answer is still being sent', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    // The first answer never settles, so the request stays answerable while the card waits on it.
+    const answer = vi.spyOn(pending, 'answer').mockImplementation(async () => new Promise<void>(() => {}))
+    const { owner } = renderGrantAction(pending)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    expect(pending.answerable).toBe(true)
+    await act(async () => { await owner()!.allow() })
+
+    expect(answer).toHaveBeenCalledExactlyOnceWith('allowed-once')
+    pending.abort(new Error('test cleanup'))
+    await pending.result.catch(() => {})
+  })
+
+  it('sends nothing when an action allows after the request can no longer be answered', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderGrantAction(pending)
+
+    pending.abort(new Error('request withdrawn'))
+    await expect(pending.result).rejects.toThrow('request withdrawn')
+    await act(async () => { await owner()!.allow() })
+
+    expect(answer).not.toHaveBeenCalled()
+  })
+
   it('renders no action list for a request without a grant', () => {
     const pending = new PendingApproval(id('s1'), { toolName: 'bash' })
     const { renderSlot } = renderGrantAction(pending)
