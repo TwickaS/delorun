@@ -155,7 +155,7 @@ describe('the computer routes', () => {
     expect(await send('GET', `${ELEVATION_PATHS.pending}?reach`)).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(await send('POST', `${ELEVATION_PATHS.approve}?reach`, { requestId: asked.body.requestId, typedCode: asked.body.code })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(await send('POST', `${ELEVATION_PATHS.revoke}?reach`, { id: asked.body.requestId })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
-    expect(home.auth.elevationOfDevice(String(home.auth.elevationsAtComputer().pending[0]?.deviceId))).toBeUndefined()
+    expect(home.auth.elevationOf(String(home.auth.elevationsAtComputer().pending[0]?.deviceId), LISTENER)).toBeUndefined()
   })
 
   it('list, approve with the typed code, and revoke', async () => {

@@ -251,7 +251,13 @@ export class HomeAuth {
     this.elevations = new Elevations({
       now: this.now,
       random: this.random,
-      changed: (change) => { for (const listener of this.elevationListeners) listener(change) },
+      changed: (change) => {
+        // The Gateway decides a stream once, when it opens, so a terminal or another elevated stream opened under an
+        // unlock would outlive it: the device's reach connections close when it ends, and the studio reconnects
+        // without it.
+        if (change.kind === 'ended') this.closeReachConnections?.({ deviceId: change.elevation.deviceId })
+        for (const listener of this.elevationListeners) listener(change)
+      },
     })
     const path = (name: string): string => join(options.directory, name)
     this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), ...timed(options) })
@@ -552,19 +558,6 @@ export class HomeAuth {
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
     return this.elevations.of(deviceId, listener)
-  }
-
-  /**
-   * The running elevation of one device on any listener this home serves.
-   * @param deviceId - the device.
-   * @returns the elevation, or undefined.
-   */
-  elevationOfDevice(deviceId: string): ElevationRecord | undefined {
-    for (const listener of this.served.keys()) {
-      const elevation = this.elevations.of(deviceId, listener)
-      if (elevation !== undefined) return elevation
-    }
-    return undefined
   }
 
   /**

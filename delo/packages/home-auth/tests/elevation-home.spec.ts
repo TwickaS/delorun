@@ -1,7 +1,8 @@
 /**
  * Elevation in the home: a signed-in device's request, the approval at the computer with the minutes of the listener
- * it arrived on, and every way the home ends an elevation: the device's own lock, the computer's revoke, the end of the
- * session that asked, a roll that continues it, the device's removal, the listener stopping and a stop.
+ * it arrived on, the binding of an unlock to its device, listener and profile, every way the home ends an elevation (the
+ * device's own lock, the computer's revoke, the end of the session that asked, a roll that continues it, the device's
+ * removal, the listener stopping and a stop), and the device's connections closing when one ends.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
@@ -11,6 +12,7 @@ import { SESSION_LIMITS, type DeviceId, type StudioAddress } from '@delo/contrac
 import { ELEVATION_LIMITS } from '@delo/contract-oidc-passkeys'
 import type { ElevationChange } from '../src/elevation.ts'
 import type { SessionRecord } from '../src/sessions.ts'
+import { HomeAuth } from '../src/home-auth.ts'
 import { claimOf, homeFixture, type Home } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -61,13 +63,13 @@ describe('an elevation in the home', () => {
     // The computer lists the request by the device's name, and without the code.
     expect(home.auth.elevationsAtComputer().pending).toEqual([expect.objectContaining({ deviceId: device.deviceId })])
     expect(home.auth.elevationsAtComputer().pending[0]).not.toHaveProperty('code')
-    expect(home.auth.elevationOfDevice(device.deviceId)).toBeUndefined()
+    expect(home.auth.elevationOf(device.deviceId, LISTENER)).toBeUndefined()
     if (state.kind !== 'pending') throw new Error('no request is waiting')
     const record = home.auth.approveElevation(state.requestId, state.code)
     // Pins the listener's minutes: the served listener's 20, not the default 15.
     expect(record.endsAt - record.startedAt).toBe(20 * MINUTE)
     expect(home.auth.elevationOf(device.deviceId, LISTENER)).toEqual(record)
-    expect(home.auth.elevationOfDevice(device.deviceId)).toEqual(record)
+    expect(home.auth.elevationOf(device.deviceId, LISTENER)).toEqual(record)
     expect(home.auth.elevationsAtComputer().running).toEqual([record])
   })
 
@@ -103,7 +105,7 @@ describe('an elevation in the home', () => {
     const device = await signedIn()
     elevate(device.sessionId, device.session)
     home.auth.lockElevation(device.deviceId, LISTENER)
-    expect(home.auth.elevationOfDevice(device.deviceId)).toBeUndefined()
+    expect(home.auth.elevationOf(device.deviceId, LISTENER)).toBeUndefined()
     const id = elevate(device.sessionId, device.session)
     expect(home.auth.revokeElevation(id)).toBe(true)
     const state = home.auth.requestElevation(device.sessionId, device.session)
@@ -112,6 +114,43 @@ describe('an elevation in the home', () => {
     expect(home.auth.revokeElevation('unknown')).toBe(false)
     expect(home.auth.elevationState(device.deviceId, LISTENER)).toEqual({ kind: 'none' })
     expect(ended()).toEqual(['locked-from-device', 'revoked-at-computer'])
+  })
+
+  it('admits nothing on another listener', async () => {
+    const device = await signedIn()
+    elevate(device.sessionId, device.session)
+    // Pins the listener in the lookup: an unlock approved for the private listener is not the device's on another one.
+    expect(home.auth.elevationOf(device.deviceId, 'reach-tailscale-funnel')).toBeUndefined()
+    expect(home.auth.elevationState(device.deviceId, 'reach-tailscale-funnel')).toEqual({ kind: 'none' })
+    expect(home.auth.elevationOf(device.deviceId, LISTENER)).toBeDefined()
+  })
+
+  it('admits nothing in another profile\'s home that shares the device list', async () => {
+    const device = await signedIn()
+    // A second profile's Host reads the same secrets directory, so it knows the same device and its sessions.
+    const other = new HomeAuth({ directory: home.directory, now: home.clock.read, random: home.random })
+    await other.start()
+    try {
+      other.serve(SERVED)
+      expect(other.admitToken(device.token, LISTENER)).toMatchObject({ kind: 'admitted' })
+      elevate(device.sessionId, device.session)
+      // Pins the profile: an unlock lives in the memory of the Host that approved it, never in the shared files.
+      expect(other.elevationOf(device.deviceId, LISTENER)).toBeUndefined()
+      expect(other.elevationsAtComputer()).toEqual({ pending: [], running: [] })
+      expect(home.auth.elevationOf(device.deviceId, LISTENER)).toBeDefined()
+    } finally {
+      await other.stop()
+    }
+  })
+
+  it('closes the device\'s connections when an unlock ends', async () => {
+    const device = await signedIn()
+    elevate(device.sessionId, device.session)
+    const before = home.closed.length
+    home.auth.lockElevation(device.deviceId, LISTENER)
+    // Pins the close: the Gateway decides a stream once, so a terminal opened under the unlock would outlive it.
+    expect(home.closed.slice(before)).toEqual([{ deviceId: device.deviceId }])
+    expect(ended()).toEqual(['locked-from-device'])
   })
 
   it('follows a roll that continues the session that asked', async () => {
@@ -128,7 +167,7 @@ describe('an elevation in the home', () => {
     // Pins the move on a roll: the old token's grace ending would otherwise end the elevation the new token continues.
     home.clock.advance(SESSION_LIMITS.reach.rollGraceMs)
     expect(home.auth.admitToken(device.token, LISTENER)).toEqual({ kind: 'refused', code: 'NOT_SIGNED_IN' })
-    expect(home.auth.elevationOfDevice(device.deviceId)).toMatchObject({ sessionId: rolled.sessionId })
+    expect(home.auth.elevationOf(device.deviceId, LISTENER)).toMatchObject({ sessionId: rolled.sessionId })
     expect(ended()).toEqual([])
   })
 

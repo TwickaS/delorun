@@ -4,19 +4,19 @@
  * goes through upstream's Gateway and remote access exactly as a request on the reach listener does, through the
  * shared `/api` channel with the Peer the authenticator returned.
  *
- * - Each family C14 reserves for the home's own computer is refused, naming the action: plugin installation and
- *   enabling, profile history undo and restore, a settings write in every settings namespace, credentials, terminals,
- *   the Changes surface, slash commands, schedule changes, dynamic plugin code, workspace management, archiving and
- *   reordering chats, account and the directory picker.
+ * - Each family C14 keeps for an unlock is refused without one, naming the action: plugin installation and enabling,
+ *   profile history undo and restore, a settings write in every settings namespace, terminals, slash commands, dynamic
+ *   plugin code, the directory picker, a new workspace, and a chat in a folder outside the known workspaces. Under an
+ *   unlock each is admitted, and the never families (credentials, the account, the settings document) stay refused.
  * - The reads a device needs to work the way it works at the computer succeed: the installed plugins and their profile
  *   history, the files of a chat's own workspace, the office previews of those files, and the composer's file names.
  *   A workspace-file call whose real path lies outside the workspace or in the Delo home, a link's target included,
  *   is refused.
- * - Reading the chat list and the redacted settings, starting a chat, sending a message, stopping the run, choosing the
- *   preset a chat runs with, and renaming, pinning and unpinning a chat succeed, and the device's event stream carries
- *   the chat events and no plugin management event.
- * - Every Remote method the composition registers and every event it forwards is on the allow list or the deny table,
- *   and every entry of either names one that exists.
+ * - Reading the chat list and the redacted settings, starting a chat in a known workspace with any preset, sending a
+ *   message, stopping the run, choosing the preset a chat runs with, organizing chats and workspaces and schedule changes
+ *   succeed, and the device's event stream carries the chat events and no dynamic plugin event.
+ * - Every Remote method the composition registers and every event it forwards is in one of the three tables, and
+ *   every entry names one that exists.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
@@ -31,7 +31,7 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
-import { DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
 
@@ -95,6 +95,17 @@ async function expectElevationRequired(endpoint: string, args: Record<string, un
 }
 
 /**
+ * Assert that remote access lets one call through to its service, which may still answer it with its own failure.
+ * @param endpoint - the endpoint.
+ * @param args - its named wire arguments.
+ * @param as - the Peer that calls.
+ */
+async function expectAdmitted(endpoint: string, args: Record<string, unknown>, as: PeerScope = peer): Promise<void> {
+  const result = await call(endpoint, args, as)
+  expect(result.ok ? undefined : result.error.code, endpoint).not.toBe('remote-access/denied')
+}
+
+/**
  * The value of a call that must succeed.
  * @param endpoint - the endpoint.
  * @param args - its named wire arguments.
@@ -138,7 +149,7 @@ afterAll(async () => {
 describe('a reach device through the Gateway', () => {
   it('speaks for its own reach-device principal, never the owner', () => {
     // Pins the principal the authenticator gives a reach Peer: an owner Peer passes every access check.
-    expect(peer.principal).toEqual(reachDevicePrincipal(deviceId))
+    expect(peer.principal).toEqual(reachDevicePrincipal(deviceId, LISTENER))
   })
 
   it('reads the chats and the redacted settings, starts a chat, sends a message and stops the run', async () => {
@@ -161,7 +172,7 @@ describe('a reach device through the Gateway', () => {
     try {
       await expect(events.next()).resolves.toMatchObject({ value: { type: 'ready' } })
       // The plugin manager declares this event's type; this package does not compile against it.
-      ctx.emit('plugin-manager/install-state' as never, { requestId: 'reach-install' } as never)
+      ctx.emit('cordis/dynamic-retract' as never, { id: 'reach-dynamic' } as never)
       const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
       const seen: string[] = []
       for (;;) {
@@ -170,7 +181,7 @@ describe('a reach device through the Gateway', () => {
         if (frame.event === 'api-session/added' && frame.args[0]?.sessionId === created.sessionId) break
       }
       // Pins the event roles: a forwarded event reaches the device only when an allowed action names it.
-      expect(seen).not.toContain('plugin-manager/install-state')
+      expect(seen).not.toContain('cordis/dynamic-retract')
     } finally {
       abort.abort()
       await events.return?.()
@@ -184,12 +195,17 @@ describe('a reach device through the Gateway', () => {
     })
   })
 
-  it('refuses a chat in a folder of its choosing or with a preset', async () => {
-    // Pins the create condition: a chat started in any folder may write anywhere under it, and a preset decides its tools.
-    for (const request of [{ cwd: '/' }, { workspaceId, agentPreset: 'any' }]) {
+  it('starts a chat in a known workspace with any preset, and needs an unlock for any other folder', async () => {
+    const roster = await expectAllowed('agentPresets/list', {}) as { readonly presets: readonly { readonly id: string; readonly isDefault: boolean }[] }
+    const chosen = roster.presets.find(preset => !preset.isDefault)
+    if (chosen === undefined) throw new Error('the composition defines no preset besides the default')
+    await expect(expectAllowed('session/create', { request: { workspaceId, agentPreset: chosen.id } })).resolves.toMatchObject({ agentPreset: chosen.id })
+    await expect(expectAllowed('session/create', { request: { cwd: join(directory, 'workspace') } })).resolves.toMatchObject({ sessionId: expect.any(String) })
+    // Pins the known-workspace check: a chat started in any other folder may write anywhere under it.
+    for (const request of [{ cwd: '/' }, { cwd: directory }, {}]) {
       expect(await call('session/create', { request }), JSON.stringify(request)).toMatchObject({
         ok: false,
-        error: { code: 'remote-access/denied', details: { action: 'session/create', reason: 'loopback-required: session/create with a folder or a preset' } },
+        error: { code: 'remote-access/denied', details: { action: 'session/create', reason: CREATE_OUTSIDE_WORKSPACES } },
       })
     }
   })
@@ -203,14 +219,14 @@ describe('a reach device through the Gateway', () => {
     await expect(expectAllowed('agentPresets/select', { agentId: created.sessionId, agentPreset: chosen.id })).resolves.toBe(chosen.id)
   })
 
-  it('refuses plugin installation, enabling and profile history undo', async () => {
-    // Pins the deny-by-default roles: an owner principal, or a role listing these, would dispatch each call.
-    await expectRefused('pluginManager/installBundle', { spec: '@example/bundle' })
-    await expectRefused('pluginManager/setPluginEnabled', { id: 'delo-permission-defaults', enabled: false })
-    await expectRefused('pluginManager/setBundleEnabled', { name: '@delo/bundle-local', enabled: false })
-    await expectRefused('pluginManager/removeBundle', { name: '@delo/bundle-local' })
-    await expectRefused('pluginManager/undo', {})
-    await expectRefused('pluginManager/restore', { version: 'v0' })
+  it('needs an unlock for plugin installation, enabling and profile history undo', async () => {
+    // Pins the unlock check: an owner principal, or a binding without the condition, would dispatch each call.
+    await expectElevationRequired('pluginManager/installBundle', { spec: '@example/bundle' })
+    await expectElevationRequired('pluginManager/setPluginEnabled', { id: 'delo-permission-defaults', enabled: false })
+    await expectElevationRequired('pluginManager/setBundleEnabled', { name: '@delo/bundle-local', enabled: false })
+    await expectElevationRequired('pluginManager/removeBundle', { name: '@delo/bundle-local' })
+    await expectElevationRequired('pluginManager/undo', {})
+    await expectElevationRequired('pluginManager/restore', { version: 'v0' })
   })
 
   it('reads the plugins and the profile history it can no longer change', async () => {
@@ -255,33 +271,32 @@ describe('a reach device through the Gateway', () => {
       .toMatchObject({ ok: false, error: { code: 'remote-access/denied', details: { reason: 'loopback-required: officeToPdf/render with a path outside the chat\'s workspace' } } })
   })
 
-  it('refuses a settings write in every settings namespace, and the settings document', async () => {
+  it('needs an unlock for a settings write in every settings namespace, and never opens the settings document', async () => {
     const described = await expectAllowed('settings/describe', {}) as { readonly namespaces: readonly { readonly ns: string }[] }
     const namespaces = described.namespaces.map(view => view.ns)
     expect(namespaces.length).toBeGreaterThan(0)
     for (const ns of namespaces) {
-      // Pins the deny-by-default roles for each namespace the composition describes.
-      await expectRefused('settings/mutate', { ns, ops: [{ op: 'unset', path: ['delo'] }] })
-      await expectRefused('settings/update', { ns, patch: {} })
-      await expectRefused('settings/replace', { ns, section: {} })
+      // Pins the unlock check for each namespace the composition describes.
+      await expectElevationRequired('settings/mutate', { ns, ops: [{ op: 'unset', path: ['delo'] }] })
+      await expectElevationRequired('settings/update', { ns, patch: {} })
+      await expectElevationRequired('settings/replace', { ns, section: {} })
     }
     await expectRefused('settings/openSettingsDocument', {})
-    await expectElevationRequired('session/initializeDefaultModel', {})
   })
 
-  it('refuses credentials, account sign-in and model discovery with the stored credentials', async () => {
+  it('never reaches credentials or account sign-in', async () => {
     await expectRefused('credentials/describe', { refs: [] })
     await expectRefused('credentials/set', { ref: 'deepseek', value: 'not-a-key' })
     await expectRefused('credentials/unset', { ref: 'deepseek' })
     await expectRefused('account/getState', {})
   })
 
-  it('refuses terminals, the Changes surface, the directory picker and opening applications on the computer', async () => {
+  it('needs an unlock for terminals and the directory picker, and reads the Changes view', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-    await expectRefused('terminal/list', { sessionId: created.sessionId })
-    await expectRefused('terminal/shells', { agentId: created.sessionId })
-    await expectElevationRequired('workspaceFiles/changes', { workspaceFileScopeId: created.sessionId, path: '.' })
-    await expectRefused('directoryPicker/pick', {})
+    await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
+    await expectElevationRequired('terminal/shells', { agentId: created.sessionId })
+    await expectElevationRequired('directoryPicker/pick', {})
+    await expectAdmitted('workspaceFiles/changes', { workspaceFileScopeId: created.sessionId, path: '.' })
   })
 
   it('renames, pins and unpins a chat', async () => {
@@ -295,18 +310,22 @@ describe('a reach device through the Gateway', () => {
     expect(unpinned.pinnedSessionIds).not.toContain(created.sessionId)
   })
 
-  it('refuses slash commands, schedule changes, dynamic plugin code, workspace management, archiving and reordering', async () => {
+  it('needs an unlock for slash commands, dynamic plugin code and a new workspace', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    // Pins the elevated table: without an unlock each is refused naming the unlock it needs.
+    await expectElevationRequired('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
+    await expectElevationRequired('dynamicCordisRunner/inventory', {})
+    await expectElevationRequired('workspace/create', { request: { path: directory } })
+  })
+
+  it('archives, restores and reorders chats and changes scheduled follow-ups without an unlock', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     const other = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-    await expectRefused('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
-    await expectRefused('dynamicCordisRunner/inventory', {})
-    await expectRefused('workspace/create', { request: { path: directory } })
-    // Pins the elevated table: without an elevation each is refused naming the elevation it needs.
-    await expectElevationRequired('schedule/deleteInactive', {})
-    await expectElevationRequired('workspace/initializeDefault', {})
-    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
-    await expectElevationRequired('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })
-    await expectElevationRequired('workspace/insertSessionBefore', { request: { workspaceId, sessionId: created.sessionId, beforeSessionId: other.sessionId } })
+    // Pins the allowed table's organization entries: each was refused as `elevation-required` while it was elevated.
+    await expect(expectAllowed('workspace/archiveSession', { request: { sessionId: created.sessionId } })).resolves.toBeDefined()
+    await expect(expectAllowed('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })).resolves.toBeDefined()
+    await expect(expectAllowed('workspace/insertSessionBefore', { request: { workspaceId, sessionId: created.sessionId, beforeSessionId: other.sessionId } })).resolves.toBeDefined()
+    await expect(expectAllowed('schedule/deleteInactive', {})).resolves.toBeDefined()
   })
 })
 
@@ -323,37 +342,41 @@ describe('an elevated reach device through the Gateway', () => {
     return studio.ctx.homeAuth.approveElevation(state.requestId, state.code).id
   }
 
-  it('takes the elevated actions while the elevation runs, and never a never action', async () => {
+  it('takes the elevated actions while the unlock runs, and never a never action', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
-    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+    await expectElevationRequired('dynamicCordisRunner/inventory', {})
     const id = elevate()
     try {
-      // Pins the elevation check through the Gateway: the same call succeeds once the person approved it.
-      await expect(expectAllowed('workspace/archiveSession', { request: { sessionId: created.sessionId } })).resolves.toBeDefined()
-      await expect(expectAllowed('workspace/unarchiveSession', { request: { sessionId: created.sessionId } })).resolves.toBeDefined()
-      // Pins the never table under an elevation: credentials, the account, terminals, plugins, folders and shell code.
+      // Pins the unlock check through the Gateway: the same calls reach their services once the person approved it.
+      await expectAdmitted('dynamicCordisRunner/inventory', {})
+      await expectAdmitted('terminal/shells', { agentId: created.sessionId })
+      await expectAdmitted('directoryPicker/list', {})
+      await expectAdmitted('settings/update', { ns: 'delo-reach-access-probe', patch: {} })
+      await expect(expectAllowed('session/create', { request: { cwd: directory } })).resolves.toMatchObject({ sessionId: expect.any(String) })
+      // Every elevated action is allowed on the global resource, so none is left `resource-unlisted` under an unlock.
+      const principal = reachDevicePrincipal(deviceId, LISTENER)
+      for (const action of Object.keys(REACH_ELEVATED_ACTIONS)) {
+        expect(studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] }), action).toEqual({ kind: 'allow' })
+      }
+      // Pins the never table under an unlock: credentials, the account and the computer's own screen.
       await expectRefused('credentials/set', { ref: 'deepseek', value: 'not-a-key' })
       await expectRefused('account/getState', {})
-      await expectRefused('terminal/list', { sessionId: created.sessionId })
-      await expectRefused('pluginManager/installBundle', { spec: '@example/bundle' })
-      await expectRefused('workspace/create', { request: { path: directory } })
-      await expectRefused('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
-      await expectRefused('settings/mutate', { ns: 'delo', ops: [{ op: 'unset', path: ['delo'] }] })
-      // A folder for a new chat stays the computer's.
-      expect(await call('session/create', { request: { cwd: directory } })).toMatchObject({ ok: false, error: { details: { reason: 'loopback-required: session/create with a folder or a preset' } } })
+      await expectRefused('settings/openSettingsDocument', {})
+      // The unlock admits nothing for the same device's principal on another listener, where it has no Peer.
+      expect(studio.ctx.remoteAccess.decide({ principal: reachDevicePrincipal(deviceId, 'reach-tailscale-funnel'), action: 'dynamicCordisRunner/inventory', resources: [GLOBAL] }))
+        .toMatchObject({ kind: 'deny' })
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
     }
     // Pins the revoke at the computer: the device's next elevated call is refused again.
-    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+    await expectElevationRequired('dynamicCordisRunner/inventory', {})
   })
 
   it('stops when the device locks it', async () => {
-    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     elevate()
     studio.ctx.homeAuth.lockElevation(deviceId, LISTENER)
-    // Pins the device's lock; the end of an elevation's minutes is pinned in the package's own specs, on their clock.
-    await expectElevationRequired('workspace/archiveSession', { request: { sessionId: created.sessionId } })
+    // Pins the device's lock; the end of an unlock's minutes is pinned in the package's own specs, on their clock.
+    await expectElevationRequired('dynamicCordisRunner/inventory', {})
   })
 
   it('lifts nothing for another device', async () => {
@@ -364,9 +387,9 @@ describe('an elevated reach device through the Gateway', () => {
     if (admitted.kind !== 'admitted') throw new Error('the second device was not admitted')
     const id = elevate()
     try {
-      // Pins the device binding: device A's elevation admits nothing device B asks for.
-      await expectElevationRequired('schedule/deleteInactive', {}, admitted.peer)
-      await expect(expectAllowed('schedule/deleteInactive', {})).resolves.toBeDefined()
+      // Pins the device binding: device A's unlock admits nothing device B asks for.
+      await expectElevationRequired('dynamicCordisRunner/inventory', {}, admitted.peer)
+      await expectAdmitted('dynamicCordisRunner/inventory', {})
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
     }
@@ -496,7 +519,7 @@ describe('the reach access tables', () => {
   })
 
   it('decide through remote access: allowed actions on the global resource, elevated ones needing an elevation, every other refused naming it', () => {
-    const principal = reachDevicePrincipal(deviceId)
+    const principal = reachDevicePrincipal(deviceId, LISTENER)
     const decisions = [...registeredEndpoints(), ...forwarded()].sort().map((action) => {
       const decision = studio.ctx.remoteAccess.decide({ principal, action: action as `${string}/${string}`, resources: [GLOBAL] })
       return { action, decision: decision.kind === 'allow' ? 'allow' : decision.reason }

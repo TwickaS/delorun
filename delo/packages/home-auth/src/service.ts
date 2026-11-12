@@ -218,16 +218,6 @@ export class HomeAuthService extends Service {
   }
 
   /**
-   * The running elevation of one device on any listener this home serves: the reach-device principal names the device
-   * alone, and only one listener serves devices, so the policy asks for the device.
-   * @param deviceId - the device.
-   * @returns the elevation, or undefined, also before the service started.
-   */
-  elevationOfDevice(deviceId: string): ElevationRecord | undefined {
-    return this.core?.elevationOfDevice(deviceId)
-  }
-
-  /**
    * Record a signed-in device's request to elevate.
    * @param sessionId - the admitted session.
    * @param session - its record.

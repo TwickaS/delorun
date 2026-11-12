@@ -118,7 +118,7 @@ describe('the homeAuth service', () => {
     try {
       const service = mounted.ctx.get('homeAuth') as HomeAuthService
       mounted.ctx.logger.info = (line: string) => { lines.push(line) }
-      expect(service.elevationOfDevice('nobody')).toBeUndefined()
+      expect(service.elevationOf('nobody', 'reach-tailscale-private')).toBeUndefined()
       service.serve({ listener: 'reach-tailscale-private', address: TAILNET, factor: 'tailnet-membership' })
       const issued = await service.issueOwnerCode()
       await service.claim(claimOf(issued.code, { address: TAILNET }))
@@ -134,7 +134,6 @@ describe('the homeAuth service', () => {
       expect(service.elevationsAtComputer().pending).toHaveLength(1)
       const record = service.approveElevation(state.requestId, state.code)
       expect(service.elevationOf(deviceId, 'reach-tailscale-private')).toEqual(record)
-      expect(service.elevationOfDevice(deviceId)).toEqual(record)
       service.lockElevation(deviceId, 'reach-tailscale-private')
       const again = service.requestElevation(admitted.sessionId, admitted.session)
       if (again.kind !== 'pending') throw new Error('no request is waiting')

@@ -1,16 +1,18 @@
 /**
  * What a device the home approved may do over a reach listener (C14): its caller identity, the actions the owner's
- * rule permits a phone, the actions it refuses with the reason, and the remote access policy that applies them.
+ * rule permits a phone, the actions it takes only while it holds an unlock, the actions it never takes, and the remote
+ * access policy that applies them.
  *
  * Every Peer a reach listener admits speaks for a `reach-device` principal, never for the owner, so upstream's Gateway
  * asks this policy before it dispatches a call or forwards an event to it. The policy refuses by default: it binds only
- * the actions of {@link REACH_ALLOWED_ACTIONS}, on the global resource, on every Workspace and on every Session the
- * Host can name synchronously. Any other action, an action of {@link REACH_DENIED_ACTIONS} or one neither table names,
- * is refused with the reason `loopback-required: <action>`: the person takes it at the home's own computer. An allowed
- * action on a Session or Workspace the policy cannot name is refused with `resource-unlisted: <action>`.
+ * the actions of {@link REACH_ALLOWED_ACTIONS} and {@link REACH_ELEVATED_ACTIONS}, on the global resource, on every
+ * Workspace and on every Session the Host can name synchronously. An elevated action without an unlock is refused with
+ * the reason `elevation-required: <action>`. Any other action, an action of {@link REACH_DENIED_ACTIONS} or one no table
+ * names, is refused with `loopback-required: <action>`: the person takes it at the home's own computer. An allowed or
+ * elevated action on a Session or Workspace the policy cannot name is refused with `resource-unlisted: <action>`.
  *
- * The two tables name every Remote method and every forwarded event of Delo's default profile; the reach access
- * denial suite fails on a method or event neither names, and on an entry that names none.
+ * The three tables name every Remote method and every forwarded event of Delo's default profile; the reach access
+ * denial suite fails on a method or event no table names, and on an entry that names none.
  *
  * @module @delo/home-auth/reach-access
  */
@@ -27,10 +29,11 @@ import type {
 } from '@deepseek-ai/dsh-api-remote-access/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { Workspace } from '@deepseek-ai/dsh-workspace/types'
+import type { ReachListenerId } from '@delo/contract-admission'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface PrincipalMap {
-    /** One device the home approved, calling over a reach listener. */
+    /** One device the home approved, calling over one reach listener. */
     'reach-device': ReachDevicePrincipal
   }
 }
@@ -39,30 +42,35 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 export const REACH_DEVICE = 'reach-device'
 
 /**
- * One device the home approved, as the Peers of its reach sessions speak for it. Session logs record it as the source
- * of the device's prompts, so it carries the device id alone: no credential, label or address.
+ * One device the home approved on one reach listener, as the Peers of its reach sessions speak for it. Session logs
+ * record it as the source of the device's prompts, so it carries the device id and the listener id alone: no
+ * credential, label or address. An unlock admits only the principal of the listener it was approved on.
  */
 export interface ReachDevicePrincipal {
   readonly kind: typeof REACH_DEVICE
   /** The device's id in the home's device list. */
   readonly deviceId: string
+  /** The reach listener the device's Peer sits on. */
+  readonly listener: ReachListenerId
 }
 
 /**
- * The principal of one device.
+ * The principal of one device on one reach listener.
  * @param deviceId - the device's id in the home's device list.
- * @returns the principal its Peers speak for.
+ * @param listener - the reach listener its Peer sits on.
+ * @returns the principal its Peers on that listener speak for.
  */
-export function reachDevicePrincipal(deviceId: string): ReachDevicePrincipal {
-  return { kind: REACH_DEVICE, deviceId }
+export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId): ReachDevicePrincipal {
+  return { kind: REACH_DEVICE, deviceId, listener }
 }
 
 /**
- * Every action a device may take over a reach listener, with what it lets the person do from it. The owner's rule
- * for a phone: read chats, workspaces, the redacted settings, the plugins and the files of a chat's own workspace,
- * start chats, send messages, stop runs, answer ordinary prompts, choose the preset a chat runs with, and rename,
- * pin and unpin chats, which organize the list reversibly and change no run. A read is listed here only when it
- * reaches no secret and no path outside a chat's workspace.
+ * Every action a device takes over a reach listener without an unlock, with what it lets the person do from it. The
+ * owner's rule for a phone (A297): an approved device is the person, and it can already prompt the agent, so every
+ * action no riskier than a prompt is allowed. That covers reading chats, workspaces, the redacted settings, the plugins
+ * and the files of a chat's own workspace; starting a chat in a known workspace with any preset; replying, stopping a
+ * run and answering ordinary prompts; organizing chats and workspaces, the trash included; goals, scheduled follow-ups,
+ * the model, and feedback. A read is listed here only when it reaches no secret and no path outside a chat's workspace.
  */
 export const REACH_ALLOWED_ACTIONS = {
   'remoteAccess/follow': 'read its own access snapshot, which remote access allows every Peer before any policy',
@@ -80,17 +88,25 @@ export const REACH_ALLOWED_ACTIONS = {
   'session/wait': 'wait on a chat\'s state',
   'session/attachment': 'read an image a chat holds',
   'session/modelCatalog': 'read the models a chat can run',
-  'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one is refused',
-  'session/create': 'start a chat in an existing workspace with the configured preset; a folder or a preset in the request is refused',
+  'session/canOpenWorkspacePath': 'read whether the home can open a folder; opening one belongs to the computer',
+  'session/create': 'start a chat in a workspace you registered at the computer, with any of your presets; a chat in another folder needs an unlock, and full access still needs the workspace\'s consent at the computer',
   'session/fork': 'start a chat from a point of another',
   'session/prompt': 'send a message',
   'session/updateQueue': 'edit or withdraw a message still waiting in a chat\'s queue',
   'session/cancel': 'stop a run',
   'session/rename': 'rename a chat, which changes no run',
+  'session/selectModel': 'choose a chat\'s model and save it as the default',
+  'session/initializeDefaultModel': 'save the default model',
   'fileUploads/upload': 'attach a file to a message',
-  'commands/list': 'read the slash commands the composer offers; running one is refused',
+  'commands/list': 'read the slash commands the composer offers; running one needs an unlock',
   'skills/list': 'read the skills a chat can use',
   'goals/get': 'read a chat\'s goal',
+  'goals/clear': 'clear a chat\'s goal',
+  'goals/complete': 'mark a chat\'s goal done',
+  'goals/create': 'set a chat\'s goal, which steers the chat as a message does',
+  'goals/edit': 'edit a chat\'s goal',
+  'goals/pause': 'pause a chat\'s goal',
+  'goals/resume': 'resume a chat\'s goal',
   'toolResults/watch': 'read the tool results a chat shows',
   'sessionReferenceResolver/candidates': 'read the chats the composer can mention',
   'userQuestions/answer': 'answer a question the agent asked',
@@ -100,39 +116,56 @@ export const REACH_ALLOWED_ACTIONS = {
   'agentPresets/list': 'read the agent presets a chat can start with',
   'agentPresets/read': 'read one agent preset',
   'agentPresets/select': 'choose which of the presets you defined at your computer a chat that has not started runs with, which decides its plugins and tools; choosing one grants no access by itself, so the workspace\'s full-access consent and every approval prompt still decide what that chat may do',
-  'permissionPresets/catalog': 'read the permission presets; changing one is refused',
+  'permissionPresets/catalog': 'read the permission presets',
   'workspaceFiles/list': 'list one folder inside a chat\'s workspace, which the service confines to that workspace and caps at 2000 entries',
   'workspaceFiles/read': 'read one page of a text file inside a chat\'s workspace; an absolute path or one that leaves the workspace is refused',
   'workspaceFiles/readBytes': 'read a file\'s bytes inside a chat\'s workspace within the service\'s window and size caps; an absolute path or one that leaves the workspace is refused',
   'workspaceFiles/stat': 'read a file\'s identity, version and size inside a chat\'s workspace; an absolute path or one that leaves the workspace is refused',
+  'workspaceFiles/changes': 'read the Changes view, the working tree of a chat\'s workspace, by the same workspace-file rule',
   'officeToPdf/render': 'render a document inside a chat\'s workspace as a PDF preview, which reads it through the same workspace-file rule',
   'officeToPdf/generation': 'read which rendering configuration the PDF previews are cached against',
   'fileReferences/list': 'search the file names of a chat\'s workspace for the composer\'s mention list',
-  'pluginManager/history': 'read the profile changes that can be undone; undoing or restoring one is refused',
-  'pluginManager/inspect': 'read what a plugin package contains before it is installed; installing it is refused',
-  'pluginManager/listBundles': 'read the installed bundles; changing one is refused',
-  'pluginManager/listPlugins': 'read the installed plugins; enabling, disabling or removing one is refused',
-  'pluginManager/listVersionExemptions': 'read the pinned plugin versions; changing one is refused',
-  'pluginManager/listVersions': 'read a plugin package\'s published versions; installing one is refused',
-  'pluginManager/readBundleDetail': 'read an installed bundle\'s files; changing it is refused',
+  'pluginManager/history': 'read the profile changes that can be undone; undoing or restoring one needs an unlock',
+  'pluginManager/inspect': 'read what a plugin package contains before it is installed; installing it needs an unlock',
+  'pluginManager/listBundles': 'read the installed bundles',
+  'pluginManager/listPlugins': 'read the installed plugins',
+  'pluginManager/listVersionExemptions': 'read the pinned plugin versions',
+  'pluginManager/listVersions': 'read a plugin package\'s published versions',
+  'pluginManager/readBundleDetail': 'read an installed bundle\'s files',
   'pluginManager/registries': 'read which plugin registries are configured',
-  'pluginManager/waitForInstall': 'wait on an install your computer started; starting one is refused',
+  'pluginManager/waitForInstall': 'wait on an install that was started',
   'pluginInventory/list': 'read the plugins and presets the Host composed',
   'pluginRegistryProbe/fastest': 'measure which configured plugin registry answers fastest',
-  'llm/listProviders': 'read the model providers; their credentials are refused',
-  'llm/listConfigurableProviders': 'read the model providers; their credentials are refused',
+  'llm/listProviders': 'read the model providers; their credentials are never sent',
+  'llm/listConfigurableProviders': 'read the model providers; their credentials are never sent',
+  'llm/discoverModels': 'refresh a provider\'s model list, which the Host asks the provider with the stored credentials without sending them to the device',
   'job/list': 'read a chat\'s background jobs',
   'job/follow': 'follow a chat\'s background job',
   'job/kill': 'stop a background job, as stopping a run',
-  'schedule/catalog': 'read the scheduled follow-ups; creating or editing one is refused',
+  'schedule/catalog': 'read the scheduled follow-ups',
   'schedule/list': 'read the scheduled follow-ups',
   'schedule/view': 'read one scheduled follow-up',
   'schedule/history': 'read a scheduled follow-up\'s runs',
   'schedule/deliveryLimits': 'read the delivery limits of scheduled follow-ups',
+  'schedule/create': 'schedule a follow-up, which runs its prompt later with the chat\'s own permissions, as a message would',
+  'schedule/edit': 'edit a scheduled follow-up',
+  'schedule/run': 'run a scheduled follow-up now',
+  'schedule/deleteInactive': 'delete the scheduled follow-ups that no longer run',
   'workspace/follow': 'read the workspaces and their chats',
   'workspace/pinSession': 'pin a chat to the top of the list, which changes no run',
   'workspace/unpinSession': 'unpin a chat, which changes no run',
+  'workspace/delete': 'move a workspace to the trash, from which the computer restores it',
+  'workspace/initializeDefault': 'create the default workspace in its configured folder',
+  'workspace/insertBefore': 'reorder the workspaces',
+  'workspace/rename': 'rename a workspace',
+  'workspace/archiveSession': 'archive a chat',
+  'workspace/unarchiveSession': 'restore an archived chat',
+  'workspace/insertSessionBefore': 'reorder the chats',
   'settings/describe': 'read the settings with every secret redacted, which the studio renders from',
+  'sessionFeedback/record': 'record feedback on a chat, which leaves the home only when the person turned feedback upload on',
+  'messageFeedback/delete': 'withdraw feedback on a message',
+  'messageFeedback/list': 'read the feedback given on a chat\'s messages',
+  'messageFeedback/put': 'record feedback on a message',
   'event:approval/request': 'answer an ordinary approval prompt; the answer guard still refuses a full-access grant',
   'event:user-questions/request': 'answer a question the agent asks',
   'event:api-session/activity': 'follow a chat\'s activity',
@@ -146,52 +179,33 @@ export const REACH_ALLOWED_ACTIONS = {
   'event:llm/adapters-updated': 'refresh the model providers',
   'event:llm/models-updated': 'refresh the models',
   'event:permission-presets/catalog-changed': 'refresh the permission presets',
-  'event:plugin-manager/changed': 'refresh the plugin list after a change made at the computer',
-  'event:plugin-market/changed': 'refresh the plugin market after a change made at the computer',
+  'event:plugin-manager/changed': 'refresh the plugin list after a change',
+  'event:plugin-manager/install-log': 'follow the log of a plugin install',
+  'event:plugin-manager/install-state': 'follow the progress of a plugin install',
+  'event:plugin-manager/update-state': 'follow the progress of a plugin update',
+  'event:plugin-market/changed': 'refresh the plugin market after a change',
   'event:settings/document-updated': 'refresh the redacted settings',
   'event:schedule/changed': 'refresh the scheduled follow-ups',
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
-const PLUGIN_MANAGEMENT = 'plugin management installs, enables or removes code that runs in the Host outside any sandbox'
-const PROFILE_HISTORY = 'profile history undo and restore can turn a guard plugin off'
-const SETTINGS_WRITE = 'a settings write changes the Host\'s configuration; no settings namespace is writable from a device'
 const CREDENTIALS = 'credentials are secrets of the home'
 const ACCOUNT = 'account sign-in is off in Delo, and an account change belongs to the home\'s own computer'
-const TERMINAL = 'a terminal is a shell on the home\'s computer outside the sandbox'
-const DIRECTORY_PICKER = 'the directory picker browses and creates folders on the home\'s computer'
-const WORKSPACE_MANAGEMENT = 'workspace management registers or removes folders of the home\'s computer'
-const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer'
-const DYNAMIC_PLUGIN = 'runs model-authored plugin code in the Host'
-const FEEDBACK = 'feedback leaves the home, and Delo turns it off'
+const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer, which a device has no use for'
 
 /**
- * Every action a device never takes over a reach listener, elevated or not, with why it belongs to the home's own
- * computer: each reaches the home's credentials or account, its device list, or code that runs outside the sandbox.
- * The refusal names the action; this table tells a deliberate refusal from an action nobody classified.
+ * Every action a device never takes over a reach listener, unlocked or not, with why it belongs to the home's own
+ * computer: each reaches the home's credentials or account, or acts on the computer's own screen. A full-access grant,
+ * device approval and starting or extending an unlock are refused at their own routes and guards, outside these tables.
+ * The refusal names the action; this table tells a deliberate refusal from an action nobody classified. It is fixed in
+ * code: no configuration moves an action out of it.
  */
 export const REACH_DENIED_ACTIONS = {
-  'pluginManager/cancelInstall': PLUGIN_MANAGEMENT,
-  'pluginManager/installBundle': PLUGIN_MANAGEMENT,
-  'pluginManager/removeBundle': PLUGIN_MANAGEMENT,
-  'pluginManager/restore': PROFILE_HISTORY,
-  'pluginManager/setBundleEnabled': PLUGIN_MANAGEMENT,
-  'pluginManager/setPluginEnabled': PLUGIN_MANAGEMENT,
-  'pluginManager/setVersionExemption': PLUGIN_MANAGEMENT,
-  'pluginManager/undo': PROFILE_HISTORY,
-  'pluginManager/updateBundle': PLUGIN_MANAGEMENT,
-  'event:plugin-manager/install-log': PLUGIN_MANAGEMENT,
-  'event:plugin-manager/install-state': PLUGIN_MANAGEMENT,
-  'event:plugin-manager/update-state': PLUGIN_MANAGEMENT,
-  'settings/mutate': SETTINGS_WRITE,
-  'settings/replace': SETTINGS_WRITE,
-  'settings/update': SETTINGS_WRITE,
-  'settings/openSettingsDocument': 'opens the settings document in an editor on the home\'s computer',
+  'settings/openSettingsDocument': 'opens the settings document in an editor on the home\'s computer, which a device has no use for',
   'credentials/describe': CREDENTIALS,
   'credentials/set': CREDENTIALS,
   'credentials/unset': CREDENTIALS,
   'event:credentials/record-updated': CREDENTIALS,
   'event:credentials/reference-updated': CREDENTIALS,
-  'llm/discoverModels': 'calls a model provider with the stored credentials',
   'account/ackBonusNotified': ACCOUNT,
   'account/cancelSignIn': ACCOUNT,
   'account/getBalance': ACCOUNT,
@@ -205,6 +219,38 @@ export const REACH_DENIED_ACTIONS = {
   'account/watchExpiry': ACCOUNT,
   'event:deepseek-account/session-expired': ACCOUNT,
   'event:deepseek-account/model-sign-in-required': ACCOUNT,
+  'session/openWorkspacePath': OPEN_ON_COMPUTER,
+  'session/workspacePathApplications': OPEN_ON_COMPUTER,
+} as const satisfies Readonly<Record<RemoteAccessAction, string>>
+
+const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
+const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
+const SETTINGS_WRITE = 'change a setting of the home'
+const TERMINAL = 'use a terminal, a shell on the home\'s computer outside the sandbox'
+const DIRECTORY_PICKER = 'browse and create folders on the home\'s computer'
+const DYNAMIC_PLUGIN = 'run model-authored plugin code in the Host'
+
+/**
+ * Every action a device takes only while it holds an unlock the person approved at the home's own computer (C14,
+ * "Elevation"), with what it lets the person do: the rare actions that widen what the agent can reach, add code that
+ * runs on the computer, or change the home's settings. Without an unlock each is refused with
+ * `elevation-required: <action>`; so is a `session/create` in a folder outside the known workspaces, which the condition
+ * decides. An action is elevated only by being listed here: a new refused action is never.
+ */
+export const REACH_ELEVATED_ACTIONS = {
+  'settings/mutate': SETTINGS_WRITE,
+  'settings/replace': SETTINGS_WRITE,
+  'settings/update': SETTINGS_WRITE,
+  'commands/execute': 'run a slash command, which can change settings, plugins or the profile',
+  'pluginManager/cancelInstall': PLUGIN_MANAGEMENT,
+  'pluginManager/installBundle': PLUGIN_MANAGEMENT,
+  'pluginManager/removeBundle': PLUGIN_MANAGEMENT,
+  'pluginManager/setBundleEnabled': PLUGIN_MANAGEMENT,
+  'pluginManager/setPluginEnabled': PLUGIN_MANAGEMENT,
+  'pluginManager/setVersionExemption': PLUGIN_MANAGEMENT,
+  'pluginManager/updateBundle': PLUGIN_MANAGEMENT,
+  'pluginManager/undo': PROFILE_HISTORY,
+  'pluginManager/restore': PROFILE_HISTORY,
   'terminal/attach': TERMINAL,
   'terminal/close': TERMINAL,
   'terminal/create': TERMINAL,
@@ -216,10 +262,7 @@ export const REACH_DENIED_ACTIONS = {
   'directoryPicker/createDirectory': DIRECTORY_PICKER,
   'directoryPicker/list': DIRECTORY_PICKER,
   'directoryPicker/pick': DIRECTORY_PICKER,
-  'workspace/create': WORKSPACE_MANAGEMENT,
-  'session/openWorkspacePath': OPEN_ON_COMPUTER,
-  'session/workspacePathApplications': OPEN_ON_COMPUTER,
-  'commands/execute': 'a slash command can change settings, plugins or the profile',
+  'workspace/create': 'register a new folder as a workspace, which decides where a chat\'s commands may write',
   'dynamicCordisRunner/getClientCode': DYNAMIC_PLUGIN,
   'dynamicCordisRunner/inventory': DYNAMIC_PLUGIN,
   'dynamicCordisRunner/invoke': DYNAMIC_PLUGIN,
@@ -238,39 +281,6 @@ export const REACH_DENIED_ACTIONS = {
   'event:cordis/dynamic-retract': DYNAMIC_PLUGIN,
   'event:cordis/inspect-query': DYNAMIC_PLUGIN,
   'event:cordis/inspect-query-resolved': DYNAMIC_PLUGIN,
-  'sessionFeedback/record': FEEDBACK,
-  'messageFeedback/delete': FEEDBACK,
-  'messageFeedback/list': FEEDBACK,
-  'messageFeedback/put': FEEDBACK,
-} as const satisfies Readonly<Record<RemoteAccessAction, string>>
-
-/**
- * Every action a device takes only while it holds an elevation the person approved at the home's own computer (C14,
- * "Elevation"), with what it lets the person do. Each is ordinary work at the computer that reaches no credential, no
- * device approval and no code outside the sandbox; without an elevation it is refused with
- * `elevation-required: <action>`. An action is elevated only by being listed here: a new refused action is never.
- */
-export const REACH_ELEVATED_ACTIONS = {
-  'workspaceFiles/changes': 'read the Changes surface, the working tree of a chat\'s workspace',
-  'workspace/delete': 'move a workspace to the trash, from which the computer restores it',
-  'workspace/initializeDefault': 'create the default workspace in its configured folder',
-  'workspace/insertBefore': 'reorder the workspaces',
-  'workspace/rename': 'rename a workspace',
-  'workspace/archiveSession': 'archive a chat',
-  'workspace/unarchiveSession': 'restore an archived chat',
-  'workspace/insertSessionBefore': 'reorder the chats',
-  'session/selectModel': 'choose a chat\'s model and save it as the default',
-  'session/initializeDefaultModel': 'save the default model',
-  'goals/clear': 'clear a chat\'s goal',
-  'goals/complete': 'mark a chat\'s goal done',
-  'goals/create': 'set a chat\'s goal',
-  'goals/edit': 'edit a chat\'s goal',
-  'goals/pause': 'pause a chat\'s goal',
-  'goals/resume': 'resume a chat\'s goal',
-  'schedule/create': 'schedule a follow-up, which runs its prompt later with the chat\'s own permissions',
-  'schedule/edit': 'edit a scheduled follow-up',
-  'schedule/run': 'run a scheduled follow-up now',
-  'schedule/deleteInactive': 'delete the scheduled follow-ups that no longer run',
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
 /**
@@ -431,34 +441,71 @@ type ReachCondition = (request: {
   readonly args?: Readonly<Record<string, unknown>>
 }) => RemoteAccessDecision
 
+/** The reason a `session/create` outside the known workspaces is refused without an unlock. */
+export const CREATE_OUTSIDE_WORKSPACES = 'elevation-required: session/create in a folder outside the known workspaces'
+
 /**
- * The condition of one device's bindings, the single place an elevated action is decided. It refuses an action of
- * {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running elevation, for a
- * call and for an event, a snapshot or a list filter alike, and logs each elevated call with the elevation that admits
- * it. It refuses a `session/create` that names a folder or a preset, elevated or not: a device starts a chat only in a
- * Workspace the person registered at the computer, with the configured preset, because a folder decides where the
- * chat's commands may write and a preset decides its tools. It refuses a workspace-file call unless every path it names
- * is one a device may reach (see {@link WORKSPACE_PATH_ACTIONS}). Every other action is allowed as its role lists it,
- * and so is every other question asked without a call's arguments.
+ * Whether a `session/create` starts its chat in a Workspace the person registered at the computer: it names a
+ * Workspace the Host lists and no folder, or a folder whose real path is the real path of one. A call that names
+ * neither starts the chat in the Host's own working directory, which is no known workspace.
  * @param facts - the Host state the policy reads.
- * @param deviceId - the device whose bindings carry the condition.
+ * @param args - the call's named arguments.
+ * @returns whether it does.
+ */
+function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, args: Readonly<Record<string, unknown>>): boolean {
+  const request = Object.values(args).find((value): value is object => typeof value === 'object' && value !== null)
+  const workspaceId: unknown = request === undefined ? undefined : Reflect.get(request, 'workspaceId')
+  const cwd: unknown = request === undefined ? undefined : Reflect.get(request, 'cwd')
+  if (workspaceId !== undefined) return cwd === undefined && facts.workspaces().some(workspace => workspace.id === workspaceId)
+  if (typeof cwd !== 'string' || !isAbsolute(cwd) || cwd.includes('\0')) return false
+  const real = realPathOf(cwd)
+  if (real === undefined) return false
+  return facts.workspaces().some((workspace) => {
+    const root = realPathOf(workspace.path)
+    return root !== undefined && comparable(root) === comparable(real)
+  })
+}
+
+/**
+ * The condition of one device's bindings on one listener, the single place an elevated action is decided. It refuses
+ * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
+ * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
+ * call an unlock admits with the unlock's id. It treats a `session/create` that starts a chat outside the known
+ * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
+ * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
+ * device may reach (see {@link WORKSPACE_PATH_ACTIONS}), unlocked or not. Every other action is allowed as its role
+ * lists it, and so is every other question asked without a call's arguments.
+ * @param facts - the Host state the policy reads.
+ * @param principal - the device and the listener whose bindings carry the condition.
  * @returns the condition.
  */
-export function createCondition(facts: Pick<ReachAccessFacts, 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated'>, deviceId: string): ReachCondition {
+export function createCondition(
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated'>,
+  principal: ReachDevicePrincipal,
+): ReachCondition {
+  const { deviceId, listener } = principal
+  /**
+   * Refuse without an unlock on the principal's listener, and log an admitted call.
+   * @param action - the action.
+   * @param reason - the refusal.
+   * @param call - whether a call's arguments came with the question.
+   * @returns the refusal, or undefined when an unlock admits it.
+   */
+  const unlocked = (action: RemoteAccessAction, reason: string, call: boolean): RemoteAccessDecision | undefined => {
+    const elevation = facts.elevationOf(deviceId, listener)
+    if (elevation === undefined) return { kind: 'deny', reason }
+    if (call) facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${listener} action=${action} elevation=${elevation.id}`)
+    return undefined
+  }
   return ({ action, resource, args }) => {
     if (ELEVATED_SET.has(action)) {
-      const elevation = facts.elevationOf(deviceId)
-      if (elevation === undefined) return { kind: 'deny', reason: `elevation-required: ${action}` }
-      if (args !== undefined) facts.logElevated(`home-auth: elevated action: device=${deviceId} listener=${elevation.listener} action=${action} elevation=${elevation.id}`)
+      const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
+      if (refused !== undefined) return refused
     }
     if (args === undefined) return ALLOW
     if (action === 'session/create') {
-      for (const value of Object.values(args)) {
-        if (typeof value === 'object' && value !== null && (Reflect.get(value, 'cwd') !== undefined || Reflect.get(value, 'agentPreset') !== undefined)) {
-          return { kind: 'deny', reason: 'loopback-required: session/create with a folder or a preset' }
-        }
-      }
-      return ALLOW
+      if (createsInKnownWorkspace(facts, args)) return ALLOW
+      return unlocked(action, CREATE_OUTSIDE_WORKSPACES, true) ?? ALLOW
     }
     if (WORKSPACE_PATH_ACTIONS.has(action)) {
       const bounds = boundsOf(facts, resource)
@@ -479,14 +526,15 @@ export interface ReachAccessFacts {
   /**
    * Whether a reach listener holds a live Peer for one device; a removed device holds none.
    * @param deviceId - the device.
-   * @returns whether it does.
+   * @param listener - the reach listener.
+   * @returns whether that listener does.
    */
-  readonly admitted: (deviceId: string) => boolean
+  readonly admitted: (deviceId: string, listener: ReachListenerId) => boolean
   /**
-   * The Workspaces of the Host with their Sessions, empty while no Workspace registry is active.
+   * The Workspaces of the Host with their folders and Sessions, empty while no Workspace registry is active.
    * @returns the Workspaces in registry order.
    */
-  readonly workspaces: () => readonly Pick<Workspace, 'id' | 'sessionIds'>[]
+  readonly workspaces: () => readonly Pick<Workspace, 'id' | 'path' | 'sessionIds'>[]
   /**
    * The Sessions live in the Host, empty while no Session store is active.
    * @returns their ids.
@@ -501,13 +549,14 @@ export interface ReachAccessFacts {
   /** The Delo home, which holds the home's secrets and tokens; no device read reaches a path inside it. */
   readonly deloHome: string
   /**
-   * The running elevation of one device on a listener the home serves, read before each elevated action.
+   * The running unlock of one device on one listener of this profile's home, read before each elevated action.
    * @param deviceId - the device.
-   * @returns its id and listener, or undefined.
+   * @param listener - the listener its Peer sits on.
+   * @returns its id, or undefined.
    */
-  readonly elevationOf: (deviceId: string) => { readonly id: string; readonly listener: string } | undefined
+  readonly elevationOf: (deviceId: string, listener: ReachListenerId) => { readonly id: string } | undefined
   /**
-   * Record one line in the operational log, for each call an elevation admits.
+   * Record one line in the operational log, for each call an unlock admits.
    * @param line - the line.
    */
   readonly logElevated: (line: string) => void
@@ -524,17 +573,17 @@ export function reachRefusal(action: RemoteAccessAction): string {
 }
 
 /**
- * Build the `reach-device` policy. A device a reach listener admits holds the allowed actions on the global resource,
- * on every Workspace and on every Session the facts name: a Session of a Workspace or a live one. It holds nothing
- * once no reach listener holds a Peer for it.
+ * Build the `reach-device` policy. A device a reach listener admits holds the allowed and elevated actions on the global
+ * resource, on every Workspace and on every Session the facts name: a Session of a Workspace or a live one. It holds
+ * nothing on a listener that holds no Peer for it.
  * @param facts - the Host state the policy reads.
  * @returns the policy the authenticator registers for {@link REACH_DEVICE}.
  */
 export function createReachAccessPolicy(facts: ReachAccessFacts): RemoteAccessPolicy<ReachDevicePrincipal> {
   return {
     bindings(device): readonly RemoteAccessBinding[] {
-      if (!facts.admitted(device.deviceId)) return []
-      const condition = createCondition(facts, device.deviceId)
+      if (!facts.admitted(device.deviceId, device.listener)) return []
+      const condition = createCondition(facts, device)
       const bindings: RemoteAccessBinding[] = [{ role: GLOBAL_ROLE, resource: { kind: 'global' }, condition }]
       const sessions = new Set<SessionId>()
       for (const workspace of facts.workspaces()) {

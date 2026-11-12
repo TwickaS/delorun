@@ -314,24 +314,26 @@ describe('the authenticator provider', () => {
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
       // Pins the principal: an owner Peer passes every remote access check.
-      expect(principals).toEqual([reachDevicePrincipal(recordOf(2, ADDRESS).id)])
+      expect(principals).toEqual([reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')])
     })
 
     it('binds an admitted device to the global resource, every Workspace and every Session it can name', async () => {
       const access = await fakeRemoteAccess()
-      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
       // Pins the registry fallbacks: without a Workspace registry or a Session store only the global resource is bound.
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       expect(access.policy().bindings(device)).toEqual([])
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
       expect(access.policy().bindings(device).map(binding => binding.resource)).toEqual([{ kind: 'global' }])
-      ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', sessionIds: ['s-1'] }] } as never)
+      ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', path: '/nowhere/w-1', sessionIds: ['s-1'] }] } as never)
       ctx.provide('sessions', { list: () => [{ id: 's-1' }, { id: 's-live' }] } as never)
       // Pins the facts the authenticator gives the policy: the admitted device, the Workspaces and the live Sessions.
       expect(access.policy().bindings(device).map(binding => binding.resource)).toEqual([
         { kind: 'global' }, { kind: 'workspace', id: 'w-1' }, { kind: 'session', id: 's-1' }, { kind: 'session', id: 's-live' },
       ])
-      expect(access.policy().bindings(reachDevicePrincipal('another-device'))).toEqual([])
+      expect(access.policy().bindings(reachDevicePrincipal('another-device', 'reach-tailscale-private'))).toEqual([])
+      // Pins the listener in the admission fact: the device's Peer on the private listener binds nothing on another.
+      expect(access.policy().bindings(reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-funnel'))).toEqual([])
     })
 
     it('decides an elevated action from the device\'s elevation, and recomputes its snapshot when one starts or ends', async () => {
@@ -343,21 +345,24 @@ describe('the authenticator provider', () => {
       const admitted = ctx.homeAuth.admitToken(token, 'reach-tailscale-private')
       if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${token}` } }), 'reach-tailscale-private')
-      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
       const [binding] = access.policy().bindings(device)
-      const create = () => binding?.condition?.({ action: 'goals/create', resource: { kind: 'global' }, args: {} } as never)
-      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: goals/create' })
+      const create = () => binding?.condition?.({ action: 'terminal/create', resource: { kind: 'global' }, args: {} } as never)
+      const asked = vi.spyOn(ctx.homeAuth, 'elevationOf')
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+      // Pins the listener the authenticator asks for: the principal's own, so an unlock on one listener admits nothing on another.
+      expect(asked).toHaveBeenCalledWith(device.deviceId, 'reach-tailscale-private')
       const before = access.invalidated.length
       const state = ctx.homeAuth.requestElevation(admitted.sessionId, admitted.session)
       if (state.kind !== 'pending') throw new Error('no request is waiting')
       const record = ctx.homeAuth.approveElevation(state.requestId, state.code)
       // Pins the facts the authenticator gives the policy: the home's elevation for the device, and the log.
       expect(create()).toEqual({ kind: 'allow' })
-      expect(logged).toContain(`home-auth: elevated action: device=${device.deviceId} listener=reach-tailscale-private action=goals/create elevation=${record.id}`)
+      expect(logged).toContain(`home-auth: elevated action: device=${device.deviceId} listener=reach-tailscale-private action=terminal/create elevation=${record.id}`)
       ctx.homeAuth.lockElevation(device.deviceId, 'reach-tailscale-private')
       // Pins the invalidation: the device's snapshot is recomputed when its elevation starts and when it ends.
       expect(access.invalidated.slice(before)).toEqual([device, device])
-      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: goals/create' })
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
     })
 
     it('names a Session\'s workspace root from its live header, else from its Workspace, for the file reads', async () => {
@@ -374,7 +379,7 @@ describe('the authenticator provider', () => {
         provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
         ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', path: stored, sessionIds: ['s-stored'] }] } as never)
         ctx.provide('sessions', { list: () => [{ id: 's-live' }], get: (id: string) => (id === 's-live' ? { header: { cwd: live } } : undefined) } as never)
-        const binding = access.policy().bindings(reachDevicePrincipal(recordOf(2, ADDRESS).id))
+        const binding = access.policy().bindings(reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private'))
           .find((candidate): candidate is Extract<RemoteAccessBinding, { readonly resource: { readonly kind: 'session' } }> => candidate.resource.kind === 'session')
         const read = (id: string, path: string) => binding?.condition?.({ action: 'workspaceFiles/read', resource: { kind: 'session', id: id as SessionId }, args: { path } })
         // Pins the root facts: a live Session reads from its working directory, a stored one from its Workspace's path.
@@ -392,7 +397,7 @@ describe('the authenticator provider', () => {
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const token = await session(2)
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${token}` } }), 'reach-tailscale-private')
-      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
       ctx.emit('session/created', {} as never)
       ctx.emit('session/disposed', {} as never)
       ctx.emit('domain/changed', { domain: 'settings' } as never)

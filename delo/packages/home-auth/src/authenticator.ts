@@ -167,7 +167,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     // with it when it goes.
     ctx.inject(['remoteAccess', 'remoteAnswerGuard'], (access) => {
       registerReachPolicy(access.get('remoteAnswerGuard'), access.remoteAccess, createReachAccessPolicy({
-        admitted: deviceId => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId),
+        admitted: (deviceId, listener) => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId && peer.listener === listener),
         workspaces: () => access.get('workspaceRegistry')?.list() ?? [],
         liveSessions: () => (access.get('sessions')?.list() ?? []).map(session => session.id),
         workspaceRootOf: (sessionId) => {
@@ -176,21 +176,20 @@ export class HomeAuthAuthenticator extends Authenticator {
           return access.get('workspaceRegistry')?.list().find(workspace => workspace.sessionIds.includes(sessionId))?.path
         },
         deloHome: ctx.homeAuth.deloHome,
-        elevationOf: deviceId => ctx.homeAuth.elevationOfDevice(deviceId),
+        elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
         logElevated: (line) => { ctx.logger.info(line) },
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {
-        for (const deviceId of new Set([...this.reachPeers.values()].map(peer => peer.deviceId))) {
-          access.remoteAccess.invalidate(reachDevicePrincipal(deviceId))
-        }
+        for (const peer of this.reachPeers.values()) access.remoteAccess.invalidate(reachDevicePrincipal(peer.deviceId, peer.listener))
       }
       access.on('session/created', invalidate)
       access.on('session/disposed', invalidate)
       access.on('domain/changed', (change) => { if (change.domain === 'workspace') invalidate() })
-      // A device's snapshot lists its elevated actions while it holds an elevation, so it is recomputed when one starts or ends.
+      // A device's snapshot on one listener lists its elevated actions while it holds an unlock there, so it is
+      // recomputed when one starts or ends.
       access.effect(() => ctx.homeAuth.onElevationChange((change) => {
-        access.remoteAccess.invalidate(reachDevicePrincipal(change.elevation.deviceId))
+        access.remoteAccess.invalidate(reachDevicePrincipal(change.elevation.deviceId, change.elevation.listener))
       }), 'home-auth elevation snapshots')
     })
   }
@@ -251,7 +250,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     const key = `${served.listener}\u0000${session.deviceId}`
     let peer = this.peers.get(key)
     if (peer === undefined) {
-      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId) })
+      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener) })
       this.peers.set(key, peer)
       this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor })
     }
