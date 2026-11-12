@@ -138,9 +138,10 @@ const SECOND_MS = 1000
 const MINUTE_MS = 60 * SECOND_MS
 
 /**
- * Elevation, "sudo mode": a device the home approved may ask, from its own studio, to take for a short time the ordinary
- * work of the home's computer that a device is refused without one, and the person approves it at the computer by typing
- * the code the device shows (C14, "Elevation"). One elevation lasts the minutes of the reach row it arrived on, from 1
+ * Elevation, "sudo mode", an unlock in the studio's words: a device the home approved may ask, from its own studio, to
+ * take for a short time the rare sensitive actions a device is refused without one (settings writes, slash commands,
+ * plugin changes, terminals, the folder picker, new folders and dynamic plugin code), and the person approves it at the
+ * computer by typing the code the device shows (C14, "Elevation"). One elevation lasts the minutes of the reach row it arrived on, from 1
  * to `maxMinutes`.
  */
 export const ELEVATION_LIMITS = {

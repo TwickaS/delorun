@@ -1,6 +1,6 @@
 /**
- * Elevation, "sudo mode": the short time a device may take the ordinary work of the home's computer that C14 refuses a
- * device without one, approved at that computer (C14, "Elevation").
+ * Elevation, "sudo mode", an unlock in the studio's words: the short time a device may take the rare sensitive actions
+ * C14 refuses a device without one, approved at the home's computer (C14, "Elevation").
  *
  * - **A device asks, the computer answers.** The device's studio posts a request under its own session; the home records
  *   it against the device, the listener and the session it arrived on, and shows the device an 8-digit code. Only the
