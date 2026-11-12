@@ -186,32 +186,65 @@ export async function forgetRemovedPlugins(profileDir: string, output: CommandOu
   }
 }
 
-/** The pnpm commands that install packages, which `delorun plugin` checks between resolving and installing. */
-const INSTALLING = new Set(['add', 'install', 'i', 'update', 'up', 'upgrade'])
+/** The pnpm commands that only read the profile or the registry, which `delorun plugin` runs without the install check. */
+const READ_ONLY = new Set(['ls', 'list', 'll', 'la', 'why', 'outdated', 'view', 'info', 'show', 'help', 'root', 'bin', 'licenses'])
+
+/** The options that print pnpm's usage or version and change nothing. */
+const USAGE_OR_VERSION = new Set(['--version', '-v', '--help', '-h'])
+
+/** pnpm's options that take their value as the next argument; `--name=value` carries its value inside the argument. */
+const VALUE_OPTIONS = new Set(['--registry', '--loglevel', '-C', '--dir', '--filter', '-F', '--reporter', '--workspace-dir', '--store-dir', '--config'])
 
 /**
- * The pnpm command an argument list runs: its first argument that is neither an option nor `--profile`'s value.
+ * The arguments pnpm runs: the arguments after `plugin` without `--profile`, which upstream's parser takes first.
  * @param args - the arguments after `plugin`.
- * @returns the command, or `undefined`.
+ * @returns the arguments without `--profile` and its value.
  */
-function pnpmCommandOf(args: readonly string[]): string | undefined {
+function pnpmArguments(args: readonly string[]): string[] {
+  const kept: string[] = []
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === '--profile') index++
+    else if (!args[index]!.startsWith('--profile=')) kept.push(args[index]!)
+  }
+  return kept
+}
+
+/**
+ * The index of pnpm's command word: its first argument that is neither an option nor the value of one of
+ * {@link VALUE_OPTIONS}. An option without `=` that is not in that list, and `--`, make the command unknown: pnpm may
+ * take the next argument as that option's value (`--prefix` does).
+ * @param args - pnpm's arguments.
+ * @returns the index, or `undefined` when there is no command word or it cannot be told apart from an option's value.
+ */
+function commandIndexOf(args: readonly string[]): number | undefined {
   for (let index = 0; index < args.length; index++) {
     const argument = args[index]!
-    if (argument === '--') return undefined
-    if (argument === '--profile') { index++; continue }
-    if (!argument.startsWith('-')) return argument
+    if (VALUE_OPTIONS.has(argument)) index++
+    else if (!argument.startsWith('-')) return index
+    else if (!argument.includes('=')) return undefined
   }
   return undefined
 }
 
 /**
- * Whether `delorun plugin`'s arguments run a pnpm command that installs packages.
+ * Whether `delorun plugin`'s arguments may change the profile's packages or lockfile, so the install check runs before
+ * anything is installed. Exempt are the read-only commands, `audit` without `--fix`, `config get` and `config list`, and
+ * no arguments or arguments that ask only for usage or version output, which pnpm answers without changing anything.
+ * Every other argument list is checked: an unknown command, `--`, an option whose value cannot be told apart from the
+ * command, and each command that installs or changes packages.
  * @param args - the arguments after `plugin`, without `--allow-advisory`.
- * @returns true for `add`, `install`, `update` and their aliases, unless the person already asked for the lockfile only.
+ * @returns true unless the arguments are exempt.
  */
 export function installsPackages(args: readonly string[]): boolean {
-  const command = pnpmCommandOf(args)
-  return command !== undefined && INSTALLING.has(command) && !args.includes('--lockfile-only')
+  const pnpm = pnpmArguments(args)
+  if (pnpm.every(argument => USAGE_OR_VERSION.has(argument))) return false
+  const index = commandIndexOf(pnpm)
+  if (index === undefined) return true
+  const command = pnpm[index]!
+  if (READ_ONLY.has(command)) return false
+  if (command === 'audit') return pnpm.some(argument => argument === '--fix' || argument.startsWith('--fix='))
+  if (command === 'config') return !['get', 'list'].includes(pnpm[index + 1] ?? '')
+  return true
 }
 
 /**
@@ -231,7 +264,8 @@ export function withProfile(args: readonly string[], profile: string): string[] 
  * @returns them with `--lockfile-only` added and `--frozen-lockfile` removed.
  */
 export function resolveOnly(args: readonly string[]): string[] {
-  return [...args.filter(argument => argument !== '--frozen-lockfile'), '--lockfile-only']
+  const kept = args.filter(argument => argument !== '--frozen-lockfile')
+  return kept.includes('--lockfile-only') ? kept : [...kept, '--lockfile-only']
 }
 
 /**

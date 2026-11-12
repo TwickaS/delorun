@@ -123,9 +123,10 @@ function readRestoredFiles(profileDir: string): Map<string, string | undefined> 
  * with the selected profile when they name none. With the profile's
  * install check on, an operation that installs packages runs in three steps ([install check](./plugin-install-check.ts)):
  * pnpm resolves it into the lockfile only, the check reads the lockfile, and pnpm then installs the lockfile and runs the
- * builds the profile allows, after which each checked plugin is recorded. A known critical advisory that no
- * `--allow-advisory <id>` names puts the profile's `package.json` and lockfile back as they were, before anything was
- * fetched into the profile or any script ran, and fails the command.
+ * builds the profile allows, after which each checked plugin is recorded. An operation that `--lockfile-only` limits to the
+ * lockfile is resolved and checked, and installs nothing. A known critical advisory that no `--allow-advisory <id>`
+ * names puts the profile's `package.json` and lockfile back as they were, before anything was fetched into the profile or
+ * any script ran, and fails the command.
  * @param args - the arguments after `plugin`.
  * @param context - the environment and output.
  * @param dependencies - upstream's plugin command and profile boot, and the exit hook; the real ones by default.
@@ -163,6 +164,8 @@ export async function plugin(args: readonly string[], context: CommandContext, d
       context.stderr(`delorun plugin: the profile ${profile} is back as it was before this command; nothing was installed into it and no install script ran\n`)
       return EXIT.failed
     }
+    // A person who asked for the lockfile only gets it checked, and nothing installed.
+    if (rest.includes('--lockfile-only')) return EXIT.ok
     // Upstream compares, restores, and activates bundles against the profile as it was before the resolution.
     const baseline = { manifest: before.get('package.json'), lockfile: before.get('pnpm-lock.yaml') }
     const installed = await dependencies.runUpstream(['plugin', '--profile', profile, 'install', '--frozen-lockfile', ...registry.options], { baseline })

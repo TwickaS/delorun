@@ -19,7 +19,7 @@ import { advisory, OLD, settingsFor, startStandIn, writeProfileFiles, type Stand
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { registerDataUser } from '../src/home-exclusion.ts'
-import { takeAllowedAdvisories, type ProfileCheckSettings } from '../src/plugin-install-check.ts'
+import { installsPackages, takeAllowedAdvisories, type ProfileCheckSettings } from '../src/plugin-install-check.ts'
 import { plugin, type PluginDependencies, type UpstreamOperation } from '../src/upstream.ts'
 
 let osHome: string
@@ -179,7 +179,7 @@ describe('delorun plugin', () => {
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(true)
   })
 
-  it('runs a command that installs nothing unchanged, and forgets the records of removed plugins', async () => {
+  it('resolves a removal, then installs and forgets the records of removed plugins', async () => {
     await prepareHome(context, undefined)
     writeEmptyProfile()
     await plugin(['add', 'good-plugin'], context, dependencies([]))
@@ -187,9 +187,41 @@ describe('delorun plugin', () => {
     const runs: Run[] = []
     const removing: PluginDependencies = { ...dependencies(runs), runUpstream: (argv) => { runs.push({ argv, registered: [] }); writeProfileFiles(profileDir, []); return Promise.resolve(0) } }
     expect(await plugin(['remove', 'good-plugin'], context, removing)).toBe(0)
-    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'remove', 'good-plugin']])
+    expect(runs.map(run => run.argv)).toEqual([
+      ['plugin', '--profile', 'default', 'remove', 'good-plugin', '--lockfile-only'],
+      ['plugin', '--profile', 'default', 'install', '--frozen-lockfile'],
+    ])
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
   })
+
+  it('checks an installation the person limited to the lockfile, and installs nothing', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    const runs: Run[] = []
+    expect(await plugin(['add', 'good-plugin', '--lockfile-only'], context, dependencies(runs))).toBe(0)
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only']])
+    expect(errors.join('')).toBe('delorun: checked good-plugin 1.0.0: no warnings\n')
+    expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
+  })
+
+  for (const argv of [
+    ['--registry', 'http://registry.example.test/', 'add', 'good-plugin'],
+    ['--loglevel', 'debug', 'add', 'good-plugin'],
+    ['-C', '.', 'add', 'good-plugin'],
+    ['--filter', '.', 'add', 'good-plugin'],
+    ['--prefix', 'bin', 'add', 'good-plugin'],
+    ['dedupe'],
+    ['it'],
+    ['patch-commit', 'good-plugin'],
+  ]) {
+    it(`resolves, checks and then installs for ${argv.join(' ')}`, async () => {
+      await prepareHome(context, undefined)
+      writeEmptyProfile()
+      const runs: Run[] = []
+      expect(await plugin(argv, context, dependencies(runs))).toBe(0)
+      expect(runs.map(run => run.argv.includes('--lockfile-only') ? 'resolve' : run.argv.includes('--frozen-lockfile') ? 'install' : 'direct')).toEqual(['resolve', 'install'])
+    })
+  }
 
   it('checks nothing after a failed operation, or with the check switched off', async () => {
     await prepareHome(context, undefined)
@@ -211,6 +243,27 @@ describe('--allow-advisory', () => {
     expect(() => takeAllowedAdvisories(['add', 'x', '--allow-advisory'])).toThrow(new CliError(EXIT.usage, 'delorun plugin: --allow-advisory takes a GitHub advisory id such as GHSA-xxxx-xxxx-xxxx'))
     expect(() => takeAllowedAdvisories(['--allow-advisory=CVE-2026-1'])).toThrow(new CliError(EXIT.usage, 'delorun plugin: --allow-advisory takes a GitHub advisory id such as GHSA-xxxx-xxxx-xxxx, not "CVE-2026-1"'))
   })
+})
+
+describe('installsPackages', () => {
+  for (const argv of [
+    ['add', 'x'], ['install'], ['i'], ['update', 'x'], ['up'], ['upgrade'], ['remove', 'x'], ['dedupe'], ['it'], ['patch-commit', 'x'],
+    ['--profile', 'default', 'add', 'x'], ['add', 'x', '--lockfile-only'], ['audit', '--fix'], ['audit', '--fix=true'],
+    ['config', 'set', 'registry', 'https://r.example/'], ['config'], ['exec', 'ls'], ['unknown-command'], ['--', 'ls'],
+    ['--registry', 'https://r.example/', 'add', 'x'], ['--loglevel', 'debug', 'add', 'x'], ['-C', '.', 'add', 'x'], ['--filter', '.', 'add', 'x'],
+    ['--prefix', 'bin', 'add', 'x'], ['--silent', 'ls'],
+  ]) {
+    it(`installs for ${argv.join(' ')}`, () => { expect(installsPackages(argv)).toBe(true) })
+  }
+
+  for (const argv of [
+    ['ls'], ['list'], ['ll'], ['la'], ['why', 'x'], ['outdated'], ['view', 'x'], ['info', 'x'], ['show', 'x'], ['help'], ['root'], ['bin'], ['licenses'],
+    ['--loglevel', 'debug', 'why', 'x'], ['--registry=https://r.example/', 'ls'], ['--profile', 'default', 'list'],
+    ['audit'], ['config', 'get', 'registry'], ['config', 'list'],
+    ['--version'], ['-v'], ['--help'], ['-h'], [],
+  ]) {
+    it(`does not install for ${argv.length === 0 ? 'no arguments' : argv.join(' ')}`, () => { expect(installsPackages(argv)).toBe(false) })
+  }
 })
 
 describe('delorun plugin with the real pnpm', { timeout: 120_000 }, () => {
