@@ -2050,15 +2050,15 @@
     },
     {
       "path": "packages/client/ui-permission-presets/src/client/index.ts",
-      "class": "delo-feature",
-      "feature": "permission-defaults",
-      "reason": "Extension point for the per-workspace full-access consent: the optional `permissionSwitchConsent` client service, which both current-session pickers ask after their own risk confirmation and right before they submit `/permission <preset>`; `false` submits nothing. Without a mounted service a pick submits exactly as upstream does, and a typed `/permission <preset>` never asks it. `@delo/bundle-local`'s browser half provides it to show the workspace's consent first. Offer upstream as a generic pre-submit hook."
+      "class": "security",
+      "reason": "Security entry (per-workspace full access, C16 permission_defaults). Lead verdict: approved, stricter only. Both current-session pickers ask the optional `permissionSwitchConsent` client service after their own risk confirmation and before they submit `/permission <preset>`; a `false` answer submits nothing and the Session keeps its preset. Without a mounted service every pick submits exactly as upstream does, so the parity composition is unchanged. The hook can only withhold a switch, never make one. It is not the enforcement: a typed `/permission <preset>` skips it, and the Host's sandbox-mode guard still refuses full access in a workspace with no recorded consent. Denial test: tests/browser-plugin.client.spec.ts (asks a mounted permissionSwitchConsent before either surface submits, and submits nothing it declines).",
+      "sha256": "c6ca08bf7d72c0657c1891fb793e8939b5ca05843be04f8e7628570fdc296440"
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalCard.tsx",
-      "class": "delo-feature",
-      "feature": "permission-defaults",
-      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+      "class": "security",
+      "reason": "Security entry (per-workspace full access). Lead verdict: approved. A request that declares `grants` renders the `conversation.approval.action` list between its body and its decision buttons; each action answers through `allow`, which is the card's own Allow answer (`allowed-once`) behind the same one-shot guard, so an action cannot answer a card twice, answer one that no longer accepts an answer, or give any other outcome. A request without `grants` renders no list and answers exactly as before. Who may grant is decided on the Host: an answer for a `full-access` grant from a session that may not grant it is refused (C14 LOOPBACK_REQUIRED). Tests: tests/ui-approval.client.spec.tsx (renders no action list for a request without a grant; carries the grant; renders the list with the request facts). GAP before recording: no test that an action's `allow` after the card answered sends nothing; add it.",
+      "sha256": "5d6583d5e2ebc404dc754e958347227f366c76bb6acf51dd993c510063ad3ecf"
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalPanel.module.css",
@@ -2068,21 +2068,21 @@
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalPanel.tsx",
-      "class": "delo-feature",
-      "feature": "permission-defaults",
-      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+      "class": "security",
+      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: passes the request's `toolName` and `grants` to the card unchanged and adds no answer path.",
+      "sha256": "a47cb5c9c365fb23c9cac7bad0ac3c9cd403a689b3f3e66f81c0c045c50f043a"
     },
     {
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
-      "class": "delo-feature",
-      "feature": "permission-defaults",
-      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+      "class": "security",
+      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer.",
+      "sha256": "ee1b61f9bbf52554f1d66313e65aaf6d75e1f25f061a21fedd0e8cab9c7b8272"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",
-      "class": "delo-feature",
-      "feature": "permission-defaults",
-      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+      "class": "security",
+      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added.",
+      "sha256": "bdfe0c5c977d157fb41b2744acfa5e73e8d1c7d3aa349ce97ad105a1726dfb9f"
     }
   ],
   "retired": []
