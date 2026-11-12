@@ -7,7 +7,7 @@ kind: "package-library"
 
 ## Summary
 
-Delo's Settings is one large panel with the navigation grouped by topic, a search field, and pages that gather upstream's General rows into cards with headings. The package registers a layout with upstream's Settings shell through upstream's settings layout seam (`ctx.settingsLayout`), so every stock and third-party section and row keeps working. It loads only while the Delo look is on; with the stock look, upstream's flat list and its 800 × 800 panel return.
+Delo's Settings is one large panel with the navigation grouped by topic, a search field, and pages that gather upstream's General rows into cards with headings. The package registers a layout with upstream's Settings shell through upstream's settings layout seam (`ctx.settingsLayout`), so every stock and third-party section and row keeps working. It loads only while the Delo look and upstream's general Settings are on; with the stock look, upstream's flat list and its 800 × 800 panel return.
 
 ## Contents
 
@@ -41,7 +41,7 @@ Privacy is a page of its own under You, not part of About, because it holds a co
 
 ## Contract
 
-- **Stock look.** The client half injects `deloStudio` inside `apply` (`ctx.inject(['deloStudio'], applyStudio)`), so its entry stays active under the stock look, which upstream's web boot requires of every entry. `@delo/plugin-theme` provides that service only while the Delo look is on, so without it the plugin registers nothing. The host half mounts nothing.
+- **Stock look and other Settings.** The client half injects `deloStudio` and `settingsLayout` inside `apply` (`ctx.inject(['deloStudio', 'settingsLayout'], applyStudio)`), so its entry stays active under the stock look and where a plugin turns upstream's general Settings (`ui-settings-general`, the `settingsLayout` provider) off and draws its own Settings, as DS Bot does; upstream's web boot requires every entry to activate. `@delo/plugin-theme` provides `deloStudio` only while the Delo look is on. Without either service the plugin registers nothing. The host half mounts nothing.
 - **The layout** ([`src/client/layout.ts`](src/client/layout.ts)) names sections and General rows by their registration ids; `SECTIONS` and `ITEMS` list them. `HIDDEN_ITEMS` holds the three upstream rows Delo's sections replace: `appearance` (Light, Dark and System, replaced by Appearance), `transcript-view` (Work details, replaced by Conversation) and `session-log-deepseek` (the upload switch, replaced by Privacy). Hidden rows show nowhere, not even under More.
 - **The panel** is about 1080 wide and 88% of the window tall, with a navigation at most 220 wide and at most two fifths of a narrow window. [`PANEL_STYLE`](src/client/index.ts) sets upstream's panel custom properties in one style element tagged `@delo/plugin-settings-layout`. Upstream's own rule below 768px takes the panel to the full window. Rows fill the content column, so every control and switch sits at its right edge.
 - **Copy** is in English and Chinese ([`src/client/locales.ts`](src/client/locales.ts)); the dictionaries load under the `settings.deloLayout` namespace. Every page title comes from the layout, so upstream's Agent presets and Built-in plugins sections read as Modes and Tools; on a titled page, upstream's sections hide their own titles.
@@ -53,7 +53,7 @@ Privacy is a page of its own under You, not part of About, because it holds a co
 
 `node_modules/.bin/vitest run --config delo/vitest.config.ts --maxWorkers=2 packages/plugin-settings-layout/` runs the specs.
 
-- [`tests/layout.client.spec.tsx`](tests/layout.client.spec.tsx) projects the layout over the registered sections and rows: every id it names is in `SECTIONS` or `ITEMS`, an unplaced section or row lands under More, the hidden rows show nowhere, search finds pages, cards and rows, the Chinese copy has every English key, and the plugin registers nothing without `deloStudio` and removes everything when it leaves or is disposed.
+- [`tests/layout.client.spec.tsx`](tests/layout.client.spec.tsx) projects the layout over the registered sections and rows: every id it names is in `SECTIONS` or `ITEMS`, an unplaced section or row lands under More, the hidden rows show nowhere, search finds pages, cards and rows, the Chinese copy has every English key, and the plugin registers nothing without `deloStudio` or `settingsLayout`, stays active without them, and removes everything when either leaves or the plugin is disposed.
 - [`tests/tool-settings.client.spec.tsx`](tests/tool-settings.client.spec.tsx) checks the list from the ledger, nothing without the navigation, a row opening its page and closing Settings, and nothing rendered with no tools.
 - [`tests/ids.spec.ts`](tests/ids.spec.ts) checks that upstream's client sources still register the upstream section and General row ids the layout names.
 - [`tests/host.spec.ts`](tests/host.spec.ts) checks that the host entry mounts nothing.

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Context } from '@deepseek-ai/cordis'
+import { Context, FiberState } from '@deepseek-ai/cordis'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -572,6 +572,14 @@ describe('Show again', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.skip })) })
     expect(progress.value()).toMatchObject({ done: true, step: '' })
     expect(complete).toHaveBeenCalled()
+  })
+
+  it('activates without a Settings shell, as where a plugin draws its own Settings, and Show again still marks the guide unfinished', async () => {
+    const { entries, served, progress, fiber } = await harness({ progress: settings({ done: true, step: 'agents' }), late: {} })
+    expect(fiber.state).toBe(FiberState.ACTIVE)
+    served.on()
+    face<ShowAgainInjected>(entries, ROW_KEY).show()
+    expect(progress.value()).toMatchObject({ done: false, step: '' })
   })
 
   it('warns when the reopened state cannot be saved, and still opens the guide', async () => {
