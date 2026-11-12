@@ -15,7 +15,7 @@ import { EXIT } from '../../src/exit.ts'
 import { profileDirectory } from '../../src/profile.ts'
 import { profileSection } from '../../src/setup/sections.ts'
 import { startRunningHome, type RunningHome } from '../fixtures/running-home.ts'
-import { closeServer, GOOD_KEY, listenOnEphemeralPort } from './fixtures.ts'
+import { closeServer, GOOD_KEY, listenOnEphemeralPort, usableBwrap } from './fixtures.ts'
 
 vi.mock('@delo/home-process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@delo/home-process')>()
@@ -36,6 +36,7 @@ beforeEach(() => {
   mkdirSync(home, { mode: 0o700 })
   emptyBin = join(osHome, 'empty-bin')
   mkdirSync(emptyBin)
+  usableBwrap(emptyBin)
   running = undefined
   // The key check loads the invoking directory's `.env`; the OS home has none.
   cwd = process.cwd()

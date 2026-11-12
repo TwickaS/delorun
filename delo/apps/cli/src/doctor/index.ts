@@ -1,7 +1,7 @@
 /**
- * `delorun doctor [--port <n>]`: runs four checks in order, then reads the
- * running release's release-log check state and the profile's last update
- * check, and prints one line per check.
+ * `delorun doctor [--port <n>]`: runs four checks in order, on Linux the
+ * sandbox check, then reads the running release's release-log check state and
+ * the profile's last update check, and prints one line per check.
  * `pass` lines go to standard output; `warn` and `fail` lines go to standard
  * error. The checks are described in [checks](./checks.ts) and the record
  * lines in [records](./records.ts). The stock-home import line is printed only
@@ -17,7 +17,8 @@
  * over the update channel with a studio address on that port.
  *
  * The command contacts no model, starts no container and runs no command
- * except the read-only `docker version` probe, and it creates no file. It reads
+ * except the read-only `docker version` probe and, on Linux, `bwrap --ro-bind / / true`, which starts `true` in an
+ * empty sandbox, and it creates no file. It reads
  * the DeepSeek key in the order the CLI profile's credential provider resolves
  * it: the reference stored in the home's `.credentials.yaml` first, then the
  * environment, the invoking directory's `.env` and the home's `.env`. The
@@ -29,6 +30,7 @@
  * @module @delo/cli/doctor
  */
 import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE } from '@delo/contract-setup-answers'
@@ -44,7 +46,9 @@ import { profileDirectory, selectProfile } from '../profile.ts'
 import { profileStudioPort } from '../setup/sections.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { studioAddress } from '../status.ts'
+import { escapeDirectories } from '../sandbox-protection.ts'
 import { deloVersion } from '../version.ts'
+import { appArmorRestrictsUserNamespaces, checkSandbox, firstExisting, runBwrapProbe } from './sandbox.ts'
 import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult } from './checks.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 import { checkUpdate } from './update.ts'
@@ -56,14 +60,15 @@ import { launcherAnchor } from '../update/trusted-root.ts'
 const DOCTOR_USAGE = [
   'Usage: delorun doctor [--port <n>]',
   '',
-  'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key) and the studio\'s port (port),',
+  'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key), the studio\'s port (port) and,',
+  'on Linux, whether bubblewrap can sandbox commands (sandbox),',
   'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
   'and the last check for a newer release (update), which sends no request.',
   'Prints one line per check: pass on standard output, warn or fail on standard error.',
   'Exit codes: 0 when no check fails, 1 when one fails, 2 for a wrong command line. Warnings do not change the exit code.',
   '',
   'No model is contacted, no request is sent and no command runs, except the read-only probe `docker version` of the Docker',
-  'engine; no container starts. The update line reports the last check delorun made; delorun update --check makes one now.',
+  'engine and, on Linux, `bwrap --ro-bind / / true`, which runs `true` in an empty sandbox; no container starts. The update line reports the last check delorun made; delorun update --check makes one now.',
   'The key is checked by its format alone, and it is never printed.',
   '',
   `  --port <n>  the loopback port to check, from 1 to 65535 (default: the profile's studio port, or ${String(STUDIO_DEFAULT_PORT)} when the profile sets none)`,
@@ -217,6 +222,20 @@ async function portCheck(context: CommandContext, profile: string, option: numbe
   return checkPort(resolveStudioPort(option, configured, profile), async () => homeStudioPort(await home(), profile))
 }
 
+/**
+ * The sandbox check, on Linux: bwrap's probe, the AppArmor setting, and the first escape socket directory the start
+ * would name that exists.
+ * @param context - the command's environment, whose `PATH` finds `bwrap`.
+ * @returns the check's result.
+ */
+async function sandboxCheck(context: CommandContext): Promise<CheckResult> {
+  return checkSandbox({
+    probe: await runBwrapProbe(context.env.PATH),
+    appArmorRestricts: appArmorRestrictsUserNamespaces(),
+    escapeDirectory: firstExisting(escapeDirectories(process.getuid?.(), homedir())),
+  })
+}
+
 /** What the command reads besides the home and the environment. */
 export interface DoctorEnvironment {
   /**
@@ -241,7 +260,7 @@ export interface DoctorEnvironment {
 export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
   return {
     name: 'doctor',
-    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the release-log check and the last update check',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check',
     async run(args, context) {
       if (args.includes('--help') || args.includes('-h')) {
         context.stdout(DOCTOR_USAGE)
@@ -255,6 +274,7 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         await guarded('docker', () => checkDocker(() => runDockerVersion(dockerProbeEnvironment(context.env)))),
         await guarded('key', () => keyCheck(context, profile)),
         await guarded('port', () => portCheck(context, profile, option)),
+        ...process.platform === 'linux' ? [await guarded('sandbox', () => sandboxCheck(context))] : [],
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
         await guarded('update', async () => updateCheck(context, profile)),
       ]

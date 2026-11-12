@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { recorded, serializeCheckState } from '@delo/release-verify'
-import { closeServer, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX, ANSWERING_DOCKER, FAILING_DOCKER } from './fixtures.ts'
+import { CHECK_NAMES, closeServer, GOOD_KEY, leaksPartOf, listenOnEphemeralPort, POSIX, ANSWERING_DOCKER, FAILING_DOCKER, usableBwrap } from './fixtures.ts'
 
 const BIN = join(import.meta.dirname, '../../src/bin.ts')
 const TSX_LOADER = import.meta.resolve('tsx/esm')
@@ -25,6 +25,8 @@ beforeEach(() => {
   fakeBin = join(osHome, 'fake-bin')
   mkdirSync(emptyBin)
   mkdirSync(fakeBin)
+  usableBwrap(emptyBin)
+  usableBwrap(fakeBin)
 })
 
 afterEach(() => {
@@ -175,7 +177,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     // Without HOME the home resolves from the account database, so the verdicts of the home and key checks depend on the machine.
     const result = doctorWithEnvironment(['--port', '1'], {})
     const lines = (result.stdout + result.stderr).split('\n').filter(line => line !== '')
-    expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(['docker', 'home', 'key', 'port', 'release-log', 'update'])
+    expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(CHECK_NAMES)
     expect(lines.find(line => line.includes(' docker: '))).toMatch(/^(?:pass|warn) docker: /)
     expect(lines.find(line => line.includes(' port: '))).toMatch(/^(?:pass|fail) port: /)
     expect(lines.find(line => / update: /.test(line))).toMatch(/^pass update: this Delo does not run from the runtime store/)
