@@ -3,9 +3,10 @@
  * upstream's `dsh plugin`, and releases the registration when upstream's command line ends or fails. While an exclusive
  * user runs it refuses and upstream's command line does not run. Before pnpm runs, the profile's packages are set to be
  * copied from pnpm's store; after a successful operation, the install check checks and records each plugin it
- * installed, prints every finding, and refuses a known critical advisory unless `--allow-advisory` names it, putting
- * the profile back as it was. Upstream's command line is replaced by one that records its arguments and writes the
- * profile files a package operation would; a loopback stand-in answers for the advisory feed and the registry.
+ * installed, prints every finding, and refuses a known critical advisory unless `--allow-advisory` names it, or a check
+ * that cannot run, putting the profile back as it was. Upstream's command line is replaced by one that records its
+ * arguments and writes the profile files a package operation would; a loopback stand-in answers for the advisory feed
+ * and the registry.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -14,13 +15,19 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DATA_USERS_DIRECTORY } from '@delo/contract-home-layout'
-import { recordPath } from '@delo/plugin-install-check/check'
+import { reconcileProfile, recordPath } from '@delo/plugin-install-check/check'
 import { advisory, OLD, settingsFor, startStandIn, writeProfileFiles, type StandIn } from '@delo/plugin-install-check/tests/fixture'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { registerDataUser } from '../src/home-exclusion.ts'
 import { installsPackages, takeAllowedAdvisories, type ProfileCheckSettings } from '../src/plugin-install-check.ts'
 import { plugin, type PluginDependencies, type UpstreamOperation } from '../src/upstream.ts'
+
+// The check's own call can be made to throw; every other call passes through to the real check.
+vi.mock('@delo/plugin-install-check/check', async (importActual) => {
+  const actual = await importActual<typeof import('@delo/plugin-install-check/check')>()
+  return { ...actual, reconcileProfile: vi.fn(actual.reconcileProfile) }
+})
 
 let osHome: string
 let deloHome: string
@@ -205,6 +212,39 @@ describe('delorun plugin', () => {
     expect(readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')).toBe(lockfile)
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
     expect(errors.join('')).toContain('delorun plugin: the installation failed, so the profile default is back as it was before this command\n')
+  })
+
+  it('refuses the installation when the check throws, and puts the profile back', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    writeProfileFiles(profileDir, [])
+    const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
+    const lockfile = readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')
+    vi.mocked(reconcileProfile).mockRejectedValueOnce(new Error('the advisory feed answered with garbage'))
+    const runs: Run[] = []
+    expect(await plugin(['add', 'good-plugin'], context, dependencies(runs))).toBe(EXIT.failed)
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only']])
+    expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(manifest)
+    expect(readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')).toBe(lockfile)
+    expect(errors.join('')).toContain('delorun: the plugins this command installs could not be checked, so they are refused: the advisory feed answered with garbage. Fix the cause, then run the command again.\n')
+    expect(errors.join('')).toContain('delorun plugin: the profile default is back as it was before this command; nothing was installed into it and no install script ran\n')
+  })
+
+  it('refuses the installation when the lockfile does not read, rather than installing it unchecked', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    const manifest = readFileSync(join(profileDir, 'package.json'), 'utf8')
+    const runs: Run[] = []
+    const unreadable: PluginDependencies = { ...dependencies(runs), runUpstream: (argv, operation) => {
+      runs.push({ argv, registered: registrations(), ...operation === undefined ? {} : { operation } })
+      writeFileSync(join(profileDir, 'pnpm-lock.yaml'), 'packages: [unclosed\n')
+      return Promise.resolve(0)
+    } }
+    expect(await plugin(['add', 'good-plugin'], context, unreadable)).toBe(EXIT.failed)
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only']])
+    expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(manifest)
+    expect(existsSync(join(profileDir, 'pnpm-lock.yaml'))).toBe(false)
+    expect(errors.join('')).toContain('could not be checked, so they are refused: the lockfile is not YAML')
   })
 
   it('puts the profile files back when the installation step throws, and rethrows the error', async () => {

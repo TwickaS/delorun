@@ -138,8 +138,8 @@ function restoreProfileFiles(profileDir: string, before: ReadonlyMap<string, str
  * builds the profile allows, with the options that restrict pnpm repeated ([carried options](./plugin-install-check.ts)),
  * after which each checked plugin is recorded. An operation that `--lockfile-only` limits to the
  * lockfile is resolved and checked, and installs nothing. A known critical advisory that no `--allow-advisory <id>`
- * names puts the profile's `package.json` and lockfile back as they were, before anything was fetched into the profile or
- * any script ran, and fails the command.
+ * names, or a check that cannot run, puts the profile's `package.json` and lockfile back as they were, before anything was
+ * fetched into the profile or any script ran, and fails the command.
  * @param args - the arguments after `plugin`.
  * @param context - the environment and output.
  * @param dependencies - upstream's plugin command and profile boot, and the exit hook; the real ones by default.
@@ -163,13 +163,15 @@ export async function plugin(args: readonly string[], context: CommandContext, d
       if (code === 0 && check !== undefined) await forgetRemovedPlugins(profileDir, context)
       return code
     }
+    // The registry is read before the resolution, so between the resolution and the installation only the check runs,
+    // and it refuses on any error.
+    const urls = registryUrls(rest)
+    const own = urls.length > 0 ? null : await dependencies.profileRegistry(profileDir)
     const before = readRestoredFiles(profileDir)
     const resolved = await dependencies.runUpstream(['plugin', ...resolveOnly(withProfile(rest, profile))], { activateNewBundles: false })
     if (resolved !== 0) return resolved
-    const urls = registryUrls(rest)
-    const own = urls.length > 0 ? null : await dependencies.profileRegistry(profileDir)
     const outcome = await checkResolved({ profileDir, check, allowedAdvisories: allowed, registries: [...urls, ...own === null ? [] : [own]], output: context })
-    if (outcome.refused.length > 0) {
+    if (outcome.refused.length > 0 || outcome.checkFailed) {
       restoreProfileFiles(profileDir, before)
       context.stderr(`delorun plugin: the profile ${profile} is back as it was before this command; nothing was installed into it and no install script ran\n`)
       return EXIT.failed

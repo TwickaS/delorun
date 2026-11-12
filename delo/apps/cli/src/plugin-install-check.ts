@@ -8,10 +8,10 @@
  * An operation that installs packages runs in three steps: pnpm resolves it into the profile's lockfile only, the check
  * reads that lockfile, and only then pnpm installs the lockfile and runs the build scripts the profile allows, after
  * which each checked plugin is recorded. Every finding is printed and none stops the command, except a known critical
- * advisory: `delorun plugin` then puts the profile's `package.json` and lockfile back as they were, so nothing was
- * fetched into the profile and no script ran, and exits 1 naming `--allow-advisory <id>`, which installs it anyway. The
- * checks never stop a start; a plugin whose installed files differ from its record is a warning at every start until it
- * is reinstalled or removed.
+ * advisory and a check that cannot run: `delorun plugin` then puts the profile's `package.json` and lockfile back as they
+ * were, so nothing was fetched into the profile and no script ran, and exits 1. A refused advisory names
+ * `--allow-advisory <id>`, which installs it anyway. The checks never stop a start; a plugin whose installed files differ
+ * from its record is a warning at every start until it is reinstalled or removed.
  *
  * @module @delo/cli/plugin-install-check
  */
@@ -126,30 +126,32 @@ function printCheck(output: CommandOutput, name: string, check: PackageCheck): v
 export interface ResolvedCheck {
   /** The plugins refused for a known critical advisory. */
   readonly refused: readonly string[]
+  /** Whether the check could not run, which refuses the installation; the cause is printed. */
+  readonly checkFailed: boolean
   /** What to record of each plugin that passed, once it is installed and built. */
   readonly pending: readonly PendingRecord[]
 }
 
 /**
  * Check every plugin a resolved package operation adds or changes in the profile's lockfile, before anything is
- * installed, print every finding, and remove the records of removed plugins.
+ * installed, print every finding, and remove the records of removed plugins. A check that throws for any reason refuses
+ * the installation: no advisory id allows it, and its cause is printed.
  * @param request - the profile directory, its settings, the allowed advisories, the registries the operation asks and
  *   the output.
- * @returns the refused plugins and what to record of the others; none when the profile's lockfile does not read,
- *   which is printed as a warning.
+ * @returns the refused plugins and what to record of the others; `checkFailed` set when the check could not run.
  */
 export async function checkResolved(request: { readonly profileDir: string, readonly check: ProfileCheckSettings, readonly allowedAdvisories: readonly string[], readonly registries: readonly string[], readonly output: CommandOutput }): Promise<ResolvedCheck> {
   let result
   try {
     result = await reconcileProfile({ profileDir: request.profileDir, allowedAdvisories: request.allowedAdvisories, knownNames: request.check.knownNames, registries: request.registries, now: Date.now, compareFiles: false }, request.check.settings)
   } catch (error) {
-    if (!(error instanceof LockfileError)) throw error
-    request.output.stderr(`delorun: warning: the plugins this command installs were not checked: ${printable(error.message)}\n`)
-    return { refused: [], pending: [] }
+    request.output.stderr(`delorun: the plugins this command installs could not be checked, so they are refused: ${printable(error instanceof Error ? error.message : String(error))}. Fix the cause, then run the command again.\n`)
+    return { refused: [], checkFailed: true, pending: [] }
   }
   for (const { name, check } of result.checked) printCheck(request.output, name, check)
   return {
     refused: result.checked.flatMap(({ name, check }) => check.kind === 'checked' && check.blocking.length > 0 ? [name] : []),
+    checkFailed: false,
     pending: result.checked.flatMap(({ check }) => check.kind === 'checked' && check.pending !== undefined ? [check.pending] : []),
   }
 }
