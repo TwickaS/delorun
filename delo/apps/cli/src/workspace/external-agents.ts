@@ -72,7 +72,7 @@ export async function externalAgents(where: ExternalAgentsWhere, args: readonly 
       where.context.stderr(`${CLI_COMMAND}: allowing ${name} asks you to confirm at a terminal, so nothing was changed. Run ${CLI_COMMAND} ${printable(shellQuote(workspace))} ${agent} on in a terminal on this computer\n`)
       return EXIT.failed
     }
-    where.context.stdout(`${askText({ provider: agent, workspace, label: undefined })}\n`)
+    where.context.stdout(`${askText({ provider: agent, workspace, cwd: workspace, label: undefined })}\n`)
     if (await where.confirm(`Let ${name} start in this workspace without asking?`) !== true) {
       where.context.stderr(`${CLI_COMMAND}: nothing was changed; ${name} still asks before it starts in ${named}\n`)
       return EXIT.failed
@@ -101,7 +101,7 @@ async function list(where: ExternalAgentsWhere, path: string): Promise<ExitCode>
     throw new CliError(EXIT.failed, `${CLI_COMMAND}: Delo's record of external-agent approvals, ${path}, cannot be read (${read.problem}), so no approval counts. Repair or remove that file.`)
   }
   if (read.grants.length === 0) {
-    where.context.stdout('No external agent may start without asking. Each one asks before its first run in a workspace.\n')
+    where.context.stdout('No external agent may start without asking. Each one asks before every run.\n')
     return EXIT.ok
   }
   const lines = read.grants.map(grant => `${printable(grant.workspace)}  ${agentName(grant.provider)} (${grant.provider})  since ${new Date(grant.grantedAt).toISOString()}`)

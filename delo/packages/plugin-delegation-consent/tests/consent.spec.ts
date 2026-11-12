@@ -15,10 +15,11 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SessionStore, { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
-import type { ApprovalOutcome, ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
+import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, ConfigSchema, DeloDelegationConsent, DelegationConsentError, packageOfTarget, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
-import { agentName, askText, askTextZh, describeAgent, notApprovedRefusal } from '../src/copy.ts'
+import { apply, ConfigSchema, DeloDelegationConsent, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
+import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames, type GuardProfile } from '../src/guard.ts'
+import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
 import { changeGrantStore, grantStorePath, parseGrantStore, problemOf, readGrantStore } from '../src/store.ts'
 import { DELEGATION_CONSENT_ROUTES } from '../src/wire.ts'
@@ -54,10 +55,11 @@ interface Mounted {
 
 /**
  * The service over a fresh home with optional fake neighbours.
- * @param options - the chat's mode, the approval's answer (none for no approval service), and the agents and providers.
+ * @param options - the chat's mode (`workspace-write` by default, none for no sandbox policy), the approval's answer (none
+ *   for no approval service), and the agents and providers.
  */
 async function mounted(options: {
-  mode?: 'read-only' | 'workspace-write'
+  mode?: 'read-only' | 'workspace-write' | null
   answer?: (() => ApprovalOutcome) | null
   agents?: readonly Agent[]
   providers?: Record<string, { prepareContinuable?: () => void }>
@@ -65,10 +67,10 @@ async function mounted(options: {
   const paths = folders()
   const ctx = new Context()
   const asks: ApprovalRequest[] = []
-  if (options.mode !== undefined) ctx.provide('sandboxPolicy', { resolve: () => ({ mode: options.mode }) } as never)
+  if (options.mode !== null) ctx.provide('sandboxPolicy', { resolve: () => ({ mode: options.mode ?? 'workspace-write' }) } as never)
   if (options.answer !== null) {
     const answer = options.answer ?? (() => 'allowed-once')
-    ctx.provide('approval', { request: (request: ApprovalRequest) => { asks.push(request); return Promise.resolve(answer()) } } as never)
+    ctx.provide('approval', { request: (request: ApprovalRequest) => { asks.push(request); return Promise.resolve(answer()) }, config: {}, overrideOf: () => undefined } as never)
   }
   const agents = options.agents ?? []
   ctx.provide('agents', { get: (id: string) => agents.find(agent => agent.id === id) } as never)
@@ -93,7 +95,7 @@ describe('the review', () => {
     const verdict = await consent.review(review(chat(workspace), workspace))
     expect(verdict).toEqual({ kind: 'allow', timeoutMs: 1_800_000 })
     expect(asks).toHaveLength(1)
-    expect(asks[0]).toMatchObject({ toolName: 'claude-code', grants: 'external-agent', reason: askText({ provider: 'claude-code', workspace, label: 'Review the diff' }) })
+    expect(asks[0]).toMatchObject({ toolName: 'claude-code', grants: 'external-agent', reason: askText({ provider: 'claude-code', workspace, cwd: workspace, label: 'Review the diff' }) })
     expect(asks[0]?.displayReason?.['zh']).toContain('Claude Code')
     // Allow once does not persist: the grants file is never written, and the next start asks again.
     expect((await readGrantStore(grantStorePath(home)))).toEqual({ kind: 'readable', grants: [] })
@@ -134,12 +136,33 @@ describe('the review', () => {
     expect(verdict).toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', outcome, workspace) })
   })
 
-  it('refuses when no approval service can ask, and asks for a chat without a folder', async () => {
+  it('refuses when no approval service can ask', async () => {
     const { consent, workspace } = await mounted({ answer: null })
     await expect(consent.review(review(chat(workspace), workspace))).resolves.toMatchObject({ kind: 'refuse', reason: expect.stringContaining('no one could be asked') })
-    const asking = await mounted()
-    await expect(asking.consent.review(review(chat(undefined), asking.workspace))).resolves.toMatchObject({ kind: 'allow' })
-    expect(asking.asks[0]?.reason).toContain('this chat\'s folder')
+  })
+
+  it('refuses a chat without a workspace folder without asking, whatever was granted', async () => {
+    const { consent, asks, home } = await mounted()
+    const run = folders().workspace
+    await grant(home, run)
+    await expect(consent.review(review(chat(undefined), run))).resolves.toEqual({ kind: 'refuse', reason: noWorkspaceRefusal('claude-code') })
+    expect(asks).toEqual([])
+  })
+
+  it('refuses without asking while no sandbox policy can tell a read-only chat apart', async () => {
+    const { consent, asks, home, workspace } = await mounted({ mode: null })
+    await grant(home, workspace)
+    await expect(consent.review(review(chat(workspace), workspace))).resolves.toEqual({ kind: 'refuse', reason: noSandboxPolicyRefusal('claude-code') })
+    expect(asks).toEqual([])
+  })
+
+  it('names the folder the agent runs in when it is inside the workspace', async () => {
+    const { consent, asks, workspace } = await mounted()
+    const sub = join(workspace, 'packages', 'api')
+    mkdirSync(sub, { recursive: true })
+    await consent.review(review(chat(workspace), sub))
+    expect(asks[0]?.reason).toContain(`Start Claude Code in ${sub}, inside the workspace ${workspace}?`)
+    expect(asks[0]?.displayReason?.['zh']).toContain(`${sub}（位于工作区 ${workspace} 内）`)
   })
 
   it.each([
@@ -249,41 +272,94 @@ describe('the copy', () => {
     expect(agentName('acp-gemini')).toBe('acp-gemini')
     expect(describeAgent('claude-code')).toContain('outside Delo\'s sandbox')
     expect(describeAgent('codex')).toContain('own Codex sign-in and account')
-    expect(askText({ provider: 'codex', workspace: '/w', label: undefined })).not.toContain('Task:')
-    expect(askTextZh({ provider: 'codex', workspace: '', label: 'x' })).toContain('此对话的文件夹')
-    expect(askTextZh({ provider: 'codex', workspace: '/w', label: undefined })).not.toContain('任务')
+    expect(describeAgent('codex')).toContain('Every run waits until the person approves it at their computer, unless they allowed Codex for this workspace')
+    expect(askText({ provider: 'codex', workspace: '/w', cwd: '/w', label: undefined })).not.toContain('Task:')
+    expect(askTextZh({ provider: 'codex', workspace: '/w', cwd: '/w', label: 'x' })).toContain('要在 /w 中启动 Codex 吗？任务')
+    expect(askTextZh({ provider: 'codex', workspace: '/w', cwd: '/w', label: undefined })).not.toContain('任务')
     expect(notApprovedRefusal('codex', 'cancelled', '/w')).toContain('withdrawn')
-    expect(notApprovedRefusal('codex', 'rejected', '')).not.toContain('delorun')
+    expect(notApprovedRefusal('codex', 'rejected', '/w')).toContain('the person declined')
   })
 })
 
 describe('the plugin_manager guard', () => {
-  const refused = new Set(['@deepseek-ai/dsh-subagent-claude-code'])
   const rows = () => [
     { id: 'e1', rowId: 'subagent-claude-code', name: '@deepseek-ai/dsh-subagent-claude-code' },
     { id: 'e2', rowId: 'tool-bash', name: '@deepseek-ai/dsh-tool-bash' },
+    { id: 'e3', rowId: 'subagent-acp', name: '@DeepSeek-AI/dsh-subagent-acp/plugin' },
+    { id: 'e4', rowId: 'subagent-fork', name: '@deepseek-ai/dsh-subagent-fork-in-process' },
   ]
-  const call = (args: object) => pluginManagerVerdict({ name: 'plugin_manager', arguments: args }, refused, rows)
+  let profile: GuardProfile | undefined
+  const call = (args: object) => pluginManagerVerdict({ name: 'plugin_manager', arguments: args }, rows, () => profile)
 
-  it('refuses installing, enabling and configuring a refused package', () => {
-    expect(call({ action: 'install_bundle', target: '@deepseek-ai/dsh-subagent-claude-code@0.2.2' })).toBe(PLUGIN_MANAGER_REFUSAL)
-    expect(call({ action: 'install_bundle', target: '@deepseek-ai/dsh-subagent-claude-code' })).toBe(PLUGIN_MANAGER_REFUSAL)
-    expect(call({ action: 'set_bundle', target: '@deepseek-ai/dsh-subagent-claude-code', enabled: true })).toBe(PLUGIN_MANAGER_REFUSAL)
+  it('refuses installing, enabling and configuring an external agent\'s package, however the target spells it', () => {
+    const { workspace: dir } = folders()
+    // A package the profile holds under node_modules, named by its manifest.
+    const local = join(dir, 'node_modules', '@deepseek-ai', 'dsh-subagent-claude-code')
+    mkdirSync(local, { recursive: true })
+    writeFileSync(join(local, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-subagent-claude-code' }))
+    const renamed = join(dir, 'vendor', 'agent')
+    mkdirSync(renamed, { recursive: true })
+    writeFileSync(join(renamed, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-subagent-codex' }))
+    profile = { dir, dependencies: { saved: 'github:someone/agent' } }
+    for (const target of [
+      '@deepseek-ai/dsh-subagent-claude-code@0.2.2',
+      '@deepseek-ai/dsh-subagent-claude-code',
+      'x@npm:@deepseek-ai/dsh-subagent-claude-code',
+      'npm:@deepseek-ai/dsh-subagent-claude-code@^1',
+      './node_modules/@deepseek-ai/dsh-subagent-claude-code',
+      local,
+      './vendor/agent',
+      ' @deepseek-ai/dsh-subagent-claude-code',
+      '@DeepSeek-AI/DSH-Subagent-Claude-Code',
+      '@deepseek-ai/dsh-subagent-acp',
+      '@deepseek-ai/dsh-subagent-dsh-sdk',
+      '@deepseek-ai/dsh-experimental-subagent-oar',
+    ]) {
+      expect(call({ action: 'install_bundle', target }), target).toBe(PLUGIN_MANAGER_REFUSAL)
+    }
+    // A git spec the profile saved under an external agent's name.
+    profile = { dir, dependencies: { '@deepseek-ai/dsh-subagent-codex': 'github:someone/agent' } }
+    expect(call({ action: 'install_bundle', target: 'github:someone/agent' })).toBe(PLUGIN_MANAGER_REFUSAL)
+    expect(call({ action: 'set_bundle', target: '@deepseek-ai/dsh-subagent-codex', enabled: true })).toBe(PLUGIN_MANAGER_REFUSAL)
     expect(call({ action: 'set_plugin', target: 'e1', enabled: true })).toBe(PLUGIN_MANAGER_REFUSAL)
+    expect(call({ action: 'set_plugin', target: ' e3 ', enabled: true })).toBe(PLUGIN_MANAGER_REFUSAL)
     expect(call({ action: 'configure', target: 'subagent-claude-code', config: { permissionMode: 'bypassPermissions' } })).toBe(PLUGIN_MANAGER_REFUSAL)
+    // Without a profile, the target's own text is read.
+    profile = undefined
+    expect(call({ action: 'install_bundle', target: './node_modules/@deepseek-ai/dsh-subagent-claude-code' })).toBe(PLUGIN_MANAGER_REFUSAL)
+    expect(call({ action: 'install_bundle', target: 'node_modules\\@deepseek-ai\\dsh-subagent-codex' })).toBe(PLUGIN_MANAGER_REFUSAL)
   })
 
-  it('lets disabling, other packages, other actions and other tools through', () => {
+  it('lets disabling, in-process subagents, other packages, other actions and other tools through', () => {
+    profile = undefined
     expect(call({ action: 'set_bundle', target: '@deepseek-ai/dsh-subagent-claude-code', enabled: false })).toBeUndefined()
     expect(call({ action: 'install_bundle', target: '@deepseek-ai/dsh-subagent-claude-code', enabled: false })).toBeUndefined()
+    expect(call({ action: 'install_bundle', target: '@deepseek-ai/dsh-subagent-spawn-in-process' })).toBeUndefined()
+    expect(call({ action: 'install_bundle', target: '/nowhere/package' })).toBeUndefined()
+    expect(call({ action: 'install_bundle', target: '/' })).toBeUndefined()
     expect(call({ action: 'set_plugin', target: 'e1', enabled: false })).toBeUndefined()
     expect(call({ action: 'set_plugin', target: 'e2', enabled: true })).toBeUndefined()
+    expect(call({ action: 'set_plugin', target: 'e4', enabled: true })).toBeUndefined()
     expect(call({ action: 'configure', target: 'unknown' })).toBeUndefined()
     expect(call({ action: 'remove_bundle', target: '@deepseek-ai/dsh-subagent-claude-code' })).toBeUndefined()
     expect(call({ action: 'list_plugins' })).toBeUndefined()
-    expect(pluginManagerVerdict({ name: 'plugin_manager', arguments: null }, refused, rows)).toBeUndefined()
-    expect(pluginManagerVerdict({ name: 'bash', arguments: { action: 'install_bundle', target: '@deepseek-ai/dsh-subagent-claude-code' } }, refused, rows)).toBeUndefined()
-    expect(packageOfTarget('plain-name@1')).toBe('plain-name')
+    expect(pluginManagerVerdict({ name: 'plugin_manager', arguments: null }, rows, () => undefined)).toBeUndefined()
+    expect(pluginManagerVerdict({ name: 'bash', arguments: { action: 'install_bundle', target: '@deepseek-ai/dsh-subagent-claude-code' } }, rows, () => undefined)).toBeUndefined()
+    expect(isExternalAgentPackage('@deepseek-ai/dsh-subagent')).toBe(false)
+    expect(modulePackage('plain-name/sub')).toBe('plain-name')
+    expect(targetPackageNames('plain-name@1', undefined)).toContain('plain-name')
+  })
+
+  it('reads the profile\'s saved dependencies, and none from a profile whose manifest cannot be read', () => {
+    const { workspace: dir, other } = folders()
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'profile', dependencies: { a: '1.0.0' } }))
+    expect(guardProfile(dir)).toEqual({ dir, dependencies: { a: '1.0.0' } })
+    writeFileSync(join(other, 'package.json'), JSON.stringify({ name: 'profile' }))
+    expect(guardProfile(other)).toEqual({ dir: other, dependencies: {} })
+    expect(guardProfile(join(other, 'missing'))).toEqual({ dir: join(other, 'missing'), dependencies: {} })
+    expect(guardProfile(undefined)).toBeUndefined()
+    // A relative path with no package there names only its own text.
+    expect(targetPackageNames('./missing', { dir, dependencies: {} })).toEqual(['./missing', 'missing'])
   })
 })
 
@@ -307,6 +383,12 @@ describe('mounting', () => {
     await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
     await vi.waitFor(() => { expect(routes).toHaveLength(3) })
     expect(guards[0]?.({ name: 'plugin_manager', arguments: { action: 'set_plugin', target: 'e1', enabled: true } })).toBe(PLUGIN_MANAGER_REFUSAL)
+    // The guard reads the running profile's saved dependencies.
+    const { workspace: dir } = folders()
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'profile', dependencies: { '@deepseek-ai/dsh-subagent-acp': 'github:someone/acp' } }))
+    expect(guards[0]?.({ name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'github:someone/acp' } })).toBeUndefined()
+    ctx.provide('profileContext', { dir } as never)
+    expect(guards[0]?.({ name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'github:someone/acp' } })).toBe(PLUGIN_MANAGER_REFUSAL)
   })
 
   it('gives each allowed start the configured run time limit in milliseconds', async () => {
@@ -315,6 +397,7 @@ describe('mounting', () => {
     try {
       await grant(paths.home, paths.workspace)
       const ctx = new Context()
+      ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
       apply(ctx, { enabled: true, runTimeoutMinutes: 5 })
       await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
       await expect(ctx.delegationConsent.review(review(chat(paths.workspace), paths.workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 300_000 })
@@ -449,7 +532,8 @@ describe('through the subagent runtime', () => {
     await ctx.plugin(ChatFolder)
     await ctx.plugin(SubagentRuntime)
     let answer: ApprovalOutcome = 'rejected'
-    ctx.provide('approval', { request: () => Promise.resolve(answer) } as never)
+    ctx.provide('approval', { request: () => Promise.resolve(answer), config: {}, overrideOf: () => undefined } as never)
+    ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
     await ctx.plugin(DeloDelegationConsent, { timeoutMs: 60_000, env: { DELO_HOME: paths.home }, now: () => 1 })
     const parent = await parentChat(ctx, paths.workspace)
     const result = Promise.withResolvers<SubagentResult>()
@@ -467,6 +551,57 @@ describe('through the subagent runtime', () => {
     result.resolve({ output: [], stopReason: 'completed' })
     const verdict: ExternalDelegationVerdict = await ctx.delegationConsent.review(review(parent, paths.workspace))
     expect(verdict.kind).toBe('allow')
+    await ctx.fiber.dispose()
+  })
+})
+
+describe('through the approval service', () => {
+  /**
+   * The real approval service over a chat with an open turn, with an answerer that would allow the start.
+   * @param policy - the service's configured approval policy.
+   * @returns the composition, the consent, the chat, the answerer and the folders.
+   */
+  async function approving(policy: 'ask' | 'never') {
+    const paths = folders()
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(ApprovalService, { policy })
+    ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
+    const answerer = vi.fn(() => Promise.resolve<ApprovalOutcome>('allowed-once'))
+    ctx.on('approval/request', answerer)
+    await ctx.plugin(DeloDelegationConsent, { timeoutMs: 60_000, env: { DELO_HOME: paths.home }, now: () => 1 })
+    const session = ctx.sessions.create(SessionId(randomUUID()), { meta: { cwd: paths.workspace } })
+    session.append('turn/start', { turn: 1 })
+    const parent: Agent = { id: session.id, session } as never
+    return { ctx, consent: ctx.delegationConsent, parent, answerer, ...paths }
+  }
+
+  it('refuses a full-access chat, whose policy is never, without asking anyone, unless the workspace allows the agent', async () => {
+    const { ctx, consent, parent, answerer, home, workspace } = await approving('never')
+    const refused = await consent.review(review(parent, workspace))
+    expect(refused).toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
+    expect(notApprovedRefusal('claude-code', 'never', workspace)).toContain('this chat does not ask for approvals')
+    expect(answerer).not.toHaveBeenCalled()
+    await grant(home, workspace)
+    await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 60_000 })
+    await ctx.fiber.dispose()
+  })
+
+  it('reads a chat\'s own never policy over the configured one', async () => {
+    const { ctx, consent, parent, answerer, workspace } = await approving('ask')
+    setApprovalPolicy(parent.session, 'never')
+    await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'never', workspace) })
+    expect(answerer).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+
+  it('asks the person in a chat whose policy asks, such as an Auto chat, and names a decline as theirs', async () => {
+    const { ctx, consent, parent, answerer, workspace } = await approving('ask')
+    await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 60_000 })
+    expect(answerer).toHaveBeenCalledOnce()
+    answerer.mockResolvedValueOnce('rejected')
+    await expect(consent.review(review(parent, workspace))).resolves.toEqual({ kind: 'refuse', reason: notApprovedRefusal('claude-code', 'rejected', workspace) })
     await ctx.fiber.dispose()
   })
 })

@@ -3,12 +3,15 @@
  * `@deepseek-ai/dsh-subagent`. It reviews every start of an external subagent provider, such as Claude Code or Codex,
  * before the provider runs, in this order:
  *
- * 1. A chat that runs read-only is refused, whatever was granted.
- * 2. A run directory outside the chat's workspace is refused.
+ * 1. A chat that runs read-only is refused, whatever was granted, and so is every chat while no sandbox policy is
+ *    composed to tell.
+ * 2. A chat without a workspace folder is refused, and so is a run directory outside the chat's workspace.
  * 3. A grants file that cannot be read refuses, so no grant counts.
  * 4. A grant for the provider in the chat's workspace allows the start.
  * 5. Otherwise the person is asked through the composed approval service, with the `external-agent` grant marker,
- *    so a reach device cannot give the answer; only `allowed-once` allows the start, and it records nothing.
+ *    so a reach device cannot give the answer, naming the folder the agent runs in; only `allowed-once` allows the
+ *    start, and it records nothing. A chat whose approval policy is `never`, the full-access preset's, is refused
+ *    without anyone being asked.
  *
  * Every allowed start carries the configured run time limit. The service also names an external provider in its
  * delegation tool's description, and lists, records and revokes the grants the studio and `delorun` show.
@@ -27,7 +30,8 @@ import type {
 import { resolveDeloHome, workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem } from '@delo/home'
 import { NO_WORKSPACE, workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import {
-  agentName, askText, askTextZh, describeAgent, notApprovedRefusal, outsideRefusal, readOnlyRefusal, storeRefusal,
+  agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal, outsideRefusal,
+  readOnlyRefusal, storeRefusal,
 } from './copy.ts'
 import { changeGrantStore, grantOf, grantStorePath, problemOf, readGrantStore, withGrant, withoutGrant, type ExternalAgentGrant } from './store.ts'
 import type {
@@ -92,20 +96,22 @@ export class DeloDelegationConsent extends Service implements DelegationConsentS
   async review(review: ExternalDelegationReview): Promise<ExternalDelegationVerdict> {
     const { provider, parent } = review
     const session = parent.session
-    if (this.ctx.get('sandboxPolicy')?.resolve({ session }).mode === 'read-only') {
-      return { kind: 'refuse', reason: readOnlyRefusal(provider) }
-    }
+    const sandbox = this.ctx.get('sandboxPolicy')
+    if (sandbox === undefined) return { kind: 'refuse', reason: noSandboxPolicyRefusal(provider) }
+    if (sandbox.resolve({ session }).mode === 'read-only') return { kind: 'refuse', reason: readOnlyRefusal(provider) }
     const workspace = workspaceKey(session.header.cwd ?? '')
-    if (workspace !== NO_WORKSPACE && !inside(workspace, workspaceKey(review.cwd))) {
-      return { kind: 'refuse', reason: outsideRefusal(provider, workspace, review.cwd) }
-    }
+    if (workspace === NO_WORKSPACE) return { kind: 'refuse', reason: noWorkspaceRefusal(provider) }
+    const cwd = workspaceKey(review.cwd)
+    if (!inside(workspace, cwd)) return { kind: 'refuse', reason: outsideRefusal(provider, workspace, review.cwd) }
     const read = await readGrantStore(await this.storePath())
     if (read.kind === 'refused') return { kind: 'refuse', reason: storeRefusal(provider, read.problem) }
     const allowed = { kind: 'allow', timeoutMs: this.options.timeoutMs } as const
-    if (workspace !== NO_WORKSPACE && grantOf(read.grants, workspace, provider) !== undefined) return allowed
+    if (grantOf(read.grants, workspace, provider) !== undefined) return allowed
     const approval = this.ctx.get('approval')
     if (approval === undefined) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'no-approval', workspace) }
-    const facts = { provider, workspace, label: review.label }
+    const facts = { provider, workspace, cwd, label: review.label }
+    // The approval service answers `rejected` without asking anyone while the chat's policy is `never`.
+    const policy = approval.overrideOf(session) ?? approval.config.policy
     const outcome = await approval.request({
       agent: parent,
       toolName: provider,
@@ -114,7 +120,8 @@ export class DeloDelegationConsent extends Service implements DelegationConsentS
       grants: 'external-agent',
       signal: review.signal,
     })
-    return outcome === 'allowed-once' ? allowed : { kind: 'refuse', reason: notApprovedRefusal(provider, outcome, workspace) }
+    if (outcome === 'allowed-once') return allowed
+    return { kind: 'refuse', reason: notApprovedRefusal(provider, outcome === 'rejected' && policy === 'never' ? 'never' : outcome, workspace) }
   }
 
   /**

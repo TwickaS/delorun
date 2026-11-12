@@ -276,7 +276,7 @@ function bundleSelection(manifest: ProfileManifest): readonly string[] {
  * @param profileDir The profile directory saved local paths are relative to.
  * @returns The package name, or `undefined` when only the installation tells it.
  */
-function specPackageName(spec: string, dependencies: Readonly<Record<string, string>>, profileDir: string): string | undefined {
+export function specPackageName(spec: string, dependencies: Readonly<Record<string, string>>, profileDir: string): string | undefined {
   const parsed = parsedForRegistry(spec)
   if (parsed.kind === 'registry') return parsed.name
   if (parsed.kind === 'path') return packageName(parsed.path)

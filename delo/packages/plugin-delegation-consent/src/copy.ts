@@ -38,7 +38,7 @@ export function describeAgent(provider: string): string {
   return `Delegate a self-contained task to ${name}, a separate coding agent program installed on this computer. `
     + `Use it only when the person asks for ${name} or when a second, independent agent clearly helps; do the work yourself otherwise. `
     + `${name} runs outside Delo's sandbox and approval prompts with its own settings, and it uses the person's own ${name} sign-in and account, so every run may cost them money. `
-    + 'The first run in a workspace waits until the person approves it at their computer. '
+    + `Every run waits until the person approves it at their computer, unless they allowed ${name} for this workspace; in a full-access chat or a headless run, where no one is asked, it is refused unless allowed for the workspace. `
     + `${name} does not share this conversation's context, so the prompt must include everything it needs; it returns its final answer, not its intermediate steps.`
 }
 
@@ -46,8 +46,10 @@ export function describeAgent(provider: string): string {
 export interface AskFacts {
   /** The registered provider name. */
   readonly provider: string
-  /** The chat's workspace key, or empty for a chat without a folder. */
+  /** The chat's workspace key. */
   readonly workspace: string
+  /** The canonical folder the agent runs in: the workspace or a folder inside it. */
+  readonly cwd: string
   /** The task's display label. */
   readonly label: string | undefined
 }
@@ -59,7 +61,7 @@ export interface AskFacts {
  */
 export function askText(facts: AskFacts): string {
   const name = agentName(facts.provider)
-  const where = facts.workspace === '' ? 'this chat\'s folder' : facts.workspace
+  const where = facts.cwd === facts.workspace ? facts.workspace : `${facts.cwd}, inside the workspace ${facts.workspace}`
   const task = facts.label === undefined ? '' : ` Task: "${facts.label}".`
   return `Start ${name} in ${where}?${task} ${name} runs as its own program, outside Delo's sandbox and approval prompts. `
     + `It can read and change files in this workspace and anywhere else its own settings allow, including Delo's home folder with its keys and tokens. `
@@ -74,7 +76,7 @@ export function askText(facts: AskFacts): string {
  */
 export function askTextZh(facts: AskFacts): string {
   const name = agentName(facts.provider)
-  const where = facts.workspace === '' ? '此对话的文件夹' : facts.workspace
+  const where = facts.cwd === facts.workspace ? facts.workspace : `${facts.cwd}（位于工作区 ${facts.workspace} 内）`
   const task = facts.label === undefined ? '' : `任务：“${facts.label}”。`
   return `要在 ${where} 中启动 ${name} 吗？${task}${name} 作为独立程序运行，不受 Delo 的沙箱和审批提示约束。`
     + '它可以读取和修改此工作区中的文件，以及其自身设置允许的任何其他位置，包括存放密钥和令牌的 Delo 主目录。'
@@ -94,6 +96,26 @@ export function readOnlyRefusal(provider: string): string {
 }
 
 /**
+ * The refusal for a chat without a workspace folder, where no folder bounds where the agent runs.
+ * @param provider - the registered provider name.
+ * @returns the reason the model reads.
+ */
+export function noWorkspaceRefusal(provider: string): string {
+  const name = agentName(provider)
+  return `${name} was not started: this chat has no workspace folder, and ${name} starts only inside a chat's workspace. `
+    + `Tell the person; to use ${name}, they open a chat in a workspace folder and ask again.`
+}
+
+/**
+ * The refusal for a composition without a sandbox policy, where a read-only chat cannot be told apart.
+ * @param provider - the registered provider name.
+ * @returns the reason the model reads.
+ */
+export function noSandboxPolicyRefusal(provider: string): string {
+  return `${agentName(provider)} was not started: this composition has no sandbox policy, so whether this chat may change files cannot be checked. Tell the person.`
+}
+
+/**
  * The refusal for a run directory outside the chat's workspace.
  * @param provider - the registered provider name.
  * @param workspace - the chat's workspace key.
@@ -105,20 +127,26 @@ export function outsideRefusal(provider: string, workspace: string, cwd: string)
 }
 
 /**
+ * Why an ask did not allow a start: the approval's outcome, `never` for a `rejected` answer that the chat's approval
+ * policy gave without asking anyone (the full-access preset), or `no-approval` without an approval service.
+ */
+export type NotApprovedOutcome = 'rejected' | 'never' | 'cancelled' | 'unavailable' | 'no-approval'
+
+/**
  * The refusal for an ask the person or the chat's policy did not grant.
  * @param provider - the registered provider name.
- * @param outcome - the approval's outcome.
- * @param workspace - the chat's workspace key, or empty.
+ * @param outcome - why the ask did not allow the start.
+ * @param workspace - the chat's workspace key.
  * @returns the reason the model reads.
  */
-export function notApprovedRefusal(provider: string, outcome: 'rejected' | 'cancelled' | 'unavailable' | 'no-approval', workspace: string): string {
+export function notApprovedRefusal(provider: string, outcome: NotApprovedOutcome, workspace: string): string {
   const name = agentName(provider)
-  const allow = workspace === ''
-    ? ''
-    : ` The person can also allow it for this workspace with ${CLI_COMMAND} "${workspace}" ${provider} on.`
+  const allow = ` The person can allow it for this workspace with ${CLI_COMMAND} "${workspace}" ${provider} on.`
   switch (outcome) {
     case 'rejected':
-      return `${name} was not started: the person declined, or this chat does not ask for approvals (full access or Auto). Do not retry unless the person asks for ${name} again.${allow}`
+      return `${name} was not started: the person declined. Do not retry unless the person asks for ${name} again.${allow}`
+    case 'never':
+      return `${name} was not started: this chat does not ask for approvals (its full-access preset refuses each one without asking anyone), so ${name} starts here only once the person allows it for this workspace.${allow}`
     case 'cancelled':
       return `${name} was not started: the approval was withdrawn before anyone answered.`
     case 'unavailable':

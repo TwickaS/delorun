@@ -2,9 +2,11 @@
  * The approval card's action for a request to start an external agent, such as Claude Code or Codex. At the home's own
  * computer it offers "Allow for this workspace": the grant is recorded first, then the card is answered as allowed, so
  * this run starts and later runs in the workspace start without asking until the person revokes the grant in
- * Permissions. A failed grant leaves the card unanswered with the reason under the button. On a remote studio, whose
- * grant the home refuses, the action says to approve at the computer instead of offering a button; the card's own Allow
- * is refused there too. Every other card shows nothing.
+ * Permissions. A failed grant leaves the card unanswered with the reason under the button. Once the card answered, is
+ * sending an answer or no longer accepts one, the action is disabled and a click records nothing: the card's
+ * `canAnswer` is read when the click starts, and again after the grant, before the card is answered. On a remote
+ * studio, whose grant the home refuses, the action says to approve at the computer instead of offering a button; the
+ * card's own Allow is refused there too. Every other card shows nothing.
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -49,7 +51,7 @@ export async function agentOfferFor(fetch: HostFetch): Promise<Offer> {
  * @param props - the card's request, its answer, the chat and the copy.
  * @returns the button, the remote line, or nothing.
  */
-export function ExternalAgentAction({ grants, toolName, allow, sessionId, fetch, t }: ExternalAgentActionProps): ReactNode {
+export function ExternalAgentAction({ grants, toolName, allow, answered, canAnswer, sessionId, fetch, t }: ExternalAgentActionProps): ReactNode {
   const [offer, setOffer] = useState<Offer>('none')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
@@ -63,11 +65,13 @@ export function ExternalAgentAction({ grants, toolName, allow, sessionId, fetch,
   if (!asks || offer === 'none') return null
   if (offer === 'remote') return <p className={css.line} role="status" data-external-agent-action="remote">{t('action.atComputer')}</p>
   const run = async (): Promise<void> => {
+    if (!canAnswer()) return
     setBusy(true)
     setFailure(undefined)
     try {
       await allowAgentForWorkspace(fetch, sessionId, toolName)
-      await allow()
+      // The person may have answered the card, or its request ended, while the grant was recorded.
+      if (canAnswer()) await allow()
     } catch (error) {
       setFailure(consentFailureText(t, consentFailureOf(error), 'action.changeAgent'))
     } finally {
@@ -75,7 +79,7 @@ export function ExternalAgentAction({ grants, toolName, allow, sessionId, fetch,
     }
   }
   return <div className={css.action} data-external-agent-action="allow">
-    <Button variant="outline" size="sm" disabled={busy} onClick={() => { void run() }}>{t('action.allowAgent')}</Button>
+    <Button variant="outline" size="sm" disabled={busy || answered || !canAnswer()} onClick={() => { void run() }}>{t('action.allowAgent')}</Button>
     {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
   </div>
 }

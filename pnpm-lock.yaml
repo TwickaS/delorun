@@ -2315,9 +2315,15 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: workspace:*
         version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
       '@deepseek-ai/dsh-sandbox-policy':
         specifier: workspace:*
         version: link:../../../packages/sandbox/sandbox-policy

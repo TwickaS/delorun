@@ -489,7 +489,7 @@ const GRANTS = (grants: readonly GrantView[], storeProblem?: string): Answer => 
 function agentActionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<ExternalAgentActionProps> = {}): ExternalAgentActionProps {
   return {
     t: makeTranslate(en), grants: 'external-agent', toolName: 'claude-code', callId: undefined, allow: vi.fn(async () => {}),
-    sessionId: 'chat-1', fetch: host.fetch, ...overrides,
+    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, ...overrides,
   } as ExternalAgentActionProps
 }
 
@@ -507,6 +507,63 @@ describe('the approval card\'s external-agent action', () => {
     expect(host.received.find(request => request.key === `POST ${DELEGATION_CONSENT_ROUTES.allow}`)?.body)
       .toEqual({ sessionId: 'chat-1', provider: 'claude-code', confirmed: true })
     expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('is disabled once the card answered or no longer accepts an answer, so a click records nothing', async () => {
+    for (const overrides of [{ answered: true }, { canAnswer: () => false }]) {
+      const host = fakeHost({
+        [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+        [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+      })
+      const props = agentActionProps(host, overrides)
+      const { unmount } = render(<ExternalAgentAction {...props} />)
+      await settle()
+      const button = screen.getByRole<HTMLButtonElement>('button', { name: en['action.allowAgent'] })
+      expect(button.disabled).toBe(true)
+      fireEvent.click(button)
+      await settle()
+      expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+      expect(props.allow).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
+
+  it('records nothing when the card no longer accepts an answer at the click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    let answerable = true
+    const props = agentActionProps(host, { canAnswer: () => answerable })
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    // The request ended after the action rendered, so the card cannot answer, though no answer was sent from it.
+    answerable = false
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('does not answer a card that stopped accepting an answer while the grant was recorded', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    let answerable = true
+    const fetch: HostFetch = async (input, init) => {
+      const response = await host.fetch(input, init)
+      // The person rejects the card while the grant is on its way.
+      if (init?.method === 'POST') answerable = false
+      return response
+    }
+    const props = agentActionProps(host, { fetch, canAnswer: () => answerable })
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`, `POST ${DELEGATION_CONSENT_ROUTES.allow}`])
+    expect(props.allow).not.toHaveBeenCalled()
   })
 
   it('leaves the card unanswered and names the reason when the home records nothing', async () => {
