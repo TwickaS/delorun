@@ -7,7 +7,8 @@
  *   proxy environment and by `CONNECT`, and is refused an unlisted one, which the proxy never looks up.
  * - `network-dns-closed`: the command itself cannot resolve a name, so DNS carries nothing out, and cannot connect to a
  *   daemon that resolves names or sends traffic for it: systemd-resolved's varlink socket, the system D-Bus, nscd,
- *   avahi and tailscaled. Each socket this machine lacks is skipped; the others are connected to only to be refused.
+ *   avahi, snapd, CUPS and tailscaled. Each socket this machine lacks is skipped; the others are connected to only to
+ *   be refused.
  * - `network-private-refused`: a listed name that resolves to a private address is refused.
  * - `network-lists-separate`: a command sees only its own list's proxy socket.
  *
@@ -127,6 +128,9 @@ const RESOLVER_SOCKETS = [
   '/run/nscd/socket',
   '/run/avahi-daemon/socket',
   '/run/tailscale/tailscaled.sock',
+  '/run/snapd.socket',
+  '/run/snapd-snap.socket',
+  '/run/cups/cups.sock',
 ]
 
 /** A program that sends one request to the bridge's port, then a plain GET through the tunnel when it opens. */
