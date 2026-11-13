@@ -83,7 +83,7 @@ it.skipIf(webSnapshotMode() === 'record')('turns each upstream opt-in on alone a
   const openPrivacy = async (): Promise<void> => {
     await openDeloSettings(page)
     await page.getByRole('button', { name: 'Privacy', exact: true }).click()
-    await page.getByText('Delorun has no telemetry of its own.').waitFor()
+    await page.getByText('Delorun sends nothing about you unless you turn it on here.').waitFor()
   }
   const toggle = (name: string) => page.getByRole('switch', { name, exact: true })
   const consentTo = async (name: typeof SESSION_LOG | typeof ANALYTICS): Promise<void> => {
