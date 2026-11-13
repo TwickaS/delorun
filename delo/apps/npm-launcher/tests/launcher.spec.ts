@@ -1021,11 +1021,11 @@ describe('the release-log check at a start', () => {
     const checked: RuntimeVersion[] = []
     let printed = ''
     const store: LauncherStore = {
-      prepareLaunch: request => Promise.resolve({ command: `/home/.delo/runtimes/${current}/node/bin/node`, args: ['entry.js', ...request.args], env: {}, version: current }),
+      prepareLaunch: request => Promise.resolve({ command: `/home/.delo/runtimes/${current}/node/bin/node`, args: ['entry.js', ...request.args], env: {}, version: current, check: { full: false, hashed: 6, files: 40, fullCheckAt: 1_700_000_000_000 } }),
       install: () => Promise.reject(new Error('the launcher must not install')),
       retain: () => Promise.reject(new Error('the launcher must not retain')),
       pointers: () => Promise.resolve({ current, previous }),
-      checkRuntime: checkedVersion => Promise.resolve({ version: checkedVersion, manifest: {} as VerifiedRuntime['manifest'], files: { files: [] } as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) }),
+      checkRuntime: checkedVersion => Promise.resolve({ version: checkedVersion, manifest: {} as VerifiedRuntime['manifest'], files: { files: [] } as Partial<VerifiedRuntime['files']> as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) }),
       launchCommand: (launched, _profile, args) => ({ command: `/home/.delo/runtimes/${launched}/node/bin/node`, args: ['entry.js', ...args], env: {} }),
     }
     const status = await runLauncher(launch({

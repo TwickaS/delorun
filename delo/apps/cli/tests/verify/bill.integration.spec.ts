@@ -331,7 +331,7 @@ describe('the printed bill', () => {
   })
 
   it('prints the block, the access statement and the summary after the check lines', () => {
-    const text = reportLines(RELEASE, { results: [{ id: 'release-signature', result: 'pass', detail: 'ok' }], root: undefined, origins: undefined }, verifiedBill())
+    const text = reportLines(RELEASE, { results: [{ id: 'release-signature', result: 'pass', detail: 'ok' }], root: undefined, origins: undefined, launcher: undefined }, verifiedBill())
     const lines = text.split('\n')
     expect(lines.indexOf('Bill of materials (verify stage, 2026-11-11T00:00:00Z):')).toBeGreaterThan(lines.findIndex(line => line.includes('release-signature')))
     expect(lines.slice(-4)).toEqual(['Your changes: 0 (0 approved harness files, 0 approved plugin versions, 0 waiting for your review, 0 patch rows).', 'These checks run with your access, and a program running with your access can change them.', '1 checks passed, 0 failed, 0 not run; this Delo reads verified; this is not a full verification of this Delo.', ''])

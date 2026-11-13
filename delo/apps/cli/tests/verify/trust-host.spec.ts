@@ -74,7 +74,7 @@ function options(log: DeloLogger): TrustWatchOptions {
 function stages(start: () => Promise<TrustBill> = async () => bill('start'), launcher: RunChild = () => Promise.reject(new Error('no launcher may run'))) {
   const contexts: { readonly stage: string, readonly context: BillContext }[] = []
   const outcome: ReleaseCheckOutcome = {
-    results: [], root: undefined, onlineOnly: true, recorded: undefined, origins: undefined,
+    results: [], root: undefined, launcher: undefined, onlineOnly: true, recorded: undefined, origins: undefined,
     warnings: ['the release log was not reached'], notices: ['a newer root is stored'],
   }
   const value: TrustStages = {
