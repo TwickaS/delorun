@@ -18,6 +18,8 @@ When `delorun` or its npm launcher cannot do what you asked, it prints a refusal
 - [Setup and the model key](#setup-and-the-model-key)
 - [Installs and release checks](#installs-and-release-checks)
 - [Updates and rollback](#updates-and-rollback)
+- [Repair the program and keep your data](#repair)
+- [Last resort, by hand](#by-hand)
 - [Protections and plugins](#protections-and-plugins)
 - [Remote access and devices](#remote-access-and-devices)
 - [Archives, imports and the trash](#archives-imports-and-the-trash)
@@ -136,6 +138,50 @@ A refusal that starts "Delo refused the change and left the profile as it was" p
 | `RESTORE_REFUSED`, `RECOVER_REFUSED` | An undo, restore, rollback or `delorun recover` action cannot be done as asked. |
 
 Its remedies come from this list: do not take this update; keep the item and wait for a release that carries it; update the plugin; keep the plugin disabled; eject the plugin, which keeps its entries and settings in your profile; restore a profile history version with `delorun recover restore <version>`; go back with `delorun recover rollback`; or start in safe mode with `delorun recover safe-mode`. A refusal that starts "Delo could not write the profile snapshot it takes before a change" (`SNAPSHOT_FAILED`) means nothing changed because the snapshot that makes the change undoable could not be written.
+
+<a id="repair"></a>
+
+## Repair the program and keep your data
+
+If Delorun will not start because the installed program fails its check, or `delorun update` cannot run, replace the program and keep everything you made:
+
+```sh
+npx delorun@latest repair
+```
+
+Run it in a terminal. Delorun checks the release it installs the way an update does, asks `Replace the installed program … with …? Your chats, settings and keys stay. [y/N]`, and puts the old program in `runtimes.set-aside-<time>/` instead of deleting it. `delorun recover status` lists it and `delorun recover discard runtimes.set-aside-<time>` removes it once you are happy. Your chats, settings, keys, devices and trust records are not touched. Repair has no `--yes`, and it refuses while Delorun is running: stop it with `delorun stop` first.
+
+<details>
+<summary>Edge cases</summary>
+
+- **`DATA_NEWER`.** A newer Delorun wrote your chats, and the release you asked for may not read them. Install the newer release (`npx delorun@latest repair`), or put back the copy the update took with `npx delorun@latest repair --release <old version> --restore-copy`. Today's chats are set aside, never deleted.
+- **`TARGET_LOWER`.** The release is older than one this home already installed. Go back with `delorun recover rollback`.
+- **`NO_TERMINAL`.** Run the command in a terminal, because Delorun must ask you.
+- **`RESET_TRUST_REFUSED`.** `--reset-trust` works only when the launcher you run ships release keys newer than the ones this home trusts. Install the newest launcher from npm and try again.
+- **`--reset-trust`.** Moves the home's `trust/` to `trust.set-aside-<time>/` so that the home trusts only the keys in the launcher. Use it only with a launcher you installed yourself from npm.
+- **`--from <folder or https address>`.** Verifies the release from files you downloaded from its release page instead of the channel; the same signature, release-log and digest checks apply.
+- Every run adds one line to `logs/repair.log`.
+
+</details>
+
+<a id="by-hand"></a>
+
+## Last resort, by hand
+
+Use this only if `npx delorun@latest repair` cannot run. It needs no Delorun code.
+
+1. Stop Delorun: `delorun stop`, or end the `node` processes that run `@delo/cli`.
+2. Back up the whole home. On Linux or macOS: `cp -a ~/.delo ~/delo-backup-$(date +%F)`. On Windows: `robocopy %USERPROFILE%\.delo %USERPROFILE%\delo-backup /E /COPY:DAT`. `delorun export` saves single chats or workspaces only, so it is not a backup of settings and keys.
+3. Move the program aside, not your data: `mv ~/.delo/runtimes ~/.delo/runtimes.broken`, and `~/.delo/staging` too if it exists.
+4. Install again: `npx delorun@latest`. The program store is empty, so the launcher installs and checks the current release and starts it. Your chats, settings, keys and profiles are untouched.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the launcher refuses with `TRUST_STATE_INVALID` or a stored-root error, also move `~/.delo/trust` aside and run step 4 again. The home then trusts only the keys that npm's launcher ships.
+- If the new release cannot read your chats, move `sessions/` and `storages/` aside, put in the copy from `data-copies/<version>/`, and bring individual exported chats back with `delorun import`.
+
+</details>
 
 ## Protections and plugins
 

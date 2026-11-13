@@ -1534,6 +1534,9 @@ importers:
       '@delo/contract-release-manifest':
         specifier: workspace:*
         version: link:../../packages/contract-release-manifest
+      '@delo/contract-update-report':
+        specifier: workspace:*
+        version: link:../../packages/contract-update-report
       '@delo/contract-verification-checks':
         specifier: workspace:*
         version: link:../../packages/contract-verification-checks
@@ -1555,10 +1558,19 @@ importers:
       '@delo/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
+      '@delo/update':
+        specifier: workspace:*
+        version: link:../../packages/update
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
     devDependencies:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../../../packages/boot/app-boot
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)

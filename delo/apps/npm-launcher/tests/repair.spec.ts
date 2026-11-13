@@ -1,0 +1,253 @@
+import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, relative } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { HOME_DATA_FORMAT_SCHEMA, DATA_FORMATS_FILE, DATA_FORMATS_SCHEMA, type DataFormats, type HomeDataFormat } from '@delo/contract-update-report'
+import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { acquireHomeLock, newStartId } from '@delo/home'
+import { StorePaths, type VerifiedRuntime } from '@delo/runtime-store'
+import { dataFormatsText, saveDataCopy, writeHomeDataFormat } from '@delo/update'
+import { fixtureKeys, fixtureRelease, nextRoot, type Fixture } from '../../install/tests/support.ts'
+import { parseRepairLine, runRepair, type RepairChannel, type RepairLine, type RepairOptions, type RepairStore } from '../src/repair.ts'
+
+const version = (text: string): RuntimeVersion => text as RuntimeVersion
+const FORMATS: DataFormats = { schema: DATA_FORMATS_SCHEMA, persistence: 'c'.repeat(64) as DataFormats['persistence'], deloRecords: { 'update-record': 1 } }
+const record = (overrides: Partial<HomeDataFormat> = {}): HomeDataFormat => ({ schema: HOME_DATA_FORMAT_SCHEMA, delo: '0.1.0', dsh: '0.2.2', formats: FORMATS, ...overrides })
+const PLAIN: RepairLine = { restoreCopy: false, resetTrust: false }
+
+/** Every regular file below a directory, by relative path, with its content hash. */
+async function tree(directory: string): Promise<Record<string, string>> {
+  const found: Record<string, string> = {}
+  if (!existsSync(directory)) return found
+  for (const entry of await readdir(directory, { recursive: true, withFileTypes: true })) {
+    if (entry.isFile()) found[relative(directory, join(entry.parentPath, entry.name))] = createHash('sha256').update(await readFile(join(entry.parentPath, entry.name))).digest('hex')
+  }
+  return found
+}
+
+describe('delorun repair', () => {
+  let home: string
+  let fixture: Fixture
+  let asked: string[]
+  let out: string[]
+  let err: string[]
+  const NOW = new Date('2026-11-13T12:00:00Z')
+
+  beforeEach(async () => {
+    home = await mkdtemp(join(tmpdir(), 'delo-repair-'))
+    fixture = await fixtureRelease()
+    asked = []
+    out = []
+    err = []
+    for (const [path, text] of Object.entries({
+      'runtimes/store.json': 'old store',
+      'runtimes/0.1.0/marker': 'old program that fails its start check',
+      'sessions/chat-1/log.jsonl': 'a chat',
+      'storages/s.db': 'storage',
+      'secrets/key': 'a secret',
+      'settings.json': 'settings',
+    })) {
+      await mkdir(join(home, path, '..'), { recursive: true })
+      await writeFile(join(home, path), text)
+    }
+    await mkdir(join(home, 'run'), { recursive: true })
+    await mkdir(join(home, 'trust'), { recursive: true })
+    await writeFile(join(home, 'trust/root.json'), fixture.roots[0]!, { mode: 0o600 })
+    await writeFile(join(home, 'trust/timestamp.json'), fixture.timestampBytes, { mode: 0o600 })
+    await writeHomeDataFormat(home, record())
+  })
+  afterEach(async () => { await rm(home, { recursive: true, force: true }) })
+
+  function options(overrides: { line?: RepairLine, answer?: boolean | undefined, install?: RepairStore['install'], startCheck?: RepairOptions['startCheck'], release?: string, dsh?: string, formats?: DataFormats | undefined, installed?: string, roots?: readonly Uint8Array[] } = {}): RepairOptions {
+    const paths = new StorePaths(home, 'linux-x64')
+    const target = version(overrides.release ?? '0.1.1')
+    const store: RepairStore = {
+      paths,
+      pointers: () => Promise.resolve({ current: version(overrides.installed ?? '0.1.0') }),
+      install: overrides.install ?? (async () => {
+        await mkdir(paths.version(target), { recursive: true })
+        if (overrides.formats !== undefined || !('formats' in overrides)) await writeFile(join(paths.version(target), DATA_FORMATS_FILE), dataFormatsText(overrides.formats ?? FORMATS))
+        await writeFile(join(paths.root, 'store.json'), 'fresh store')
+        return { version: target, manifest: { dsh: overrides.dsh ?? '0.2.2' } } as unknown as VerifiedRuntime
+      }),
+    }
+    const channel: RepairChannel = {
+      resolve: () => Promise.resolve({ version: target, root: fixture.rootMetadata }),
+      fill: () => Promise.reject(new Error('the fake store does not fill')),
+      recordInstalled: () => Promise.resolve(),
+    }
+    return {
+      home, profile: 'default', line: overrides.line ?? PLAIN, roots: overrides.roots ?? fixture.roots, store, channel,
+      confirm: (question) => { asked.push(question); return Promise.resolve('answer' in overrides ? overrides.answer : true) },
+      startCheck: overrides.startCheck ?? (() => Promise.resolve()),
+      output: { stdout: text => void out.push(text), stderr: text => void err.push(text) },
+      now: () => NOW,
+    }
+  }
+
+  async function unchangedData(): Promise<Record<string, Record<string, string>>> {
+    return { sessions: await tree(join(home, 'sessions')), storages: await tree(join(home, 'storages')), secrets: await tree(join(home, 'secrets')), trust: await tree(join(home, 'trust')), settings: await tree(home).then(files => ({ 'settings.json': files['settings.json']! })) }
+  }
+
+  it('installs into a fresh store, sets the old store aside whole, and leaves chats, secrets, settings and trust byte-identical', async () => {
+    const before = await unchangedData()
+    const oldStore = await tree(join(home, 'runtimes'))
+    expect(await runRepair(options())).toBe(0)
+    expect(await unchangedData()).toEqual(before)
+    expect(await tree(join(home, 'runtimes.set-aside-20261113T120000Z'))).toEqual(oldStore)
+    expect(await readFile(join(home, 'runtimes/store.json'), 'utf8')).toBe('fresh store')
+    expect(asked).toHaveLength(1)
+    expect(asked[0]).toContain('Replace the installed program 0.1.0 with 0.1.1?')
+    expect(out.join('')).toContain('runtimes.set-aside-20261113T120000Z')
+    expect(out.join('')).toContain('delorun recover discard runtimes.set-aside-20261113T120000Z')
+  })
+
+  it('writes one redacted record per run to logs/repair.log at mode 0600', async () => {
+    await runRepair(options())
+    await runRepair(options({ answer: false }))
+    const lines = (await readFile(join(home, 'logs/repair.log'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    expect(lines.map(line => line.outcome)).toEqual(['repaired', 'refused'])
+    expect(lines[0]).toMatchObject({ command: 'repair', versions: { installed: '0.1.0', target: '0.1.1' } })
+    expect((await stat(join(home, 'logs/repair.log'))).mode & 0o777).toBe(0o600)
+  })
+
+  it('refuses while a home process runs, names delorun stop, and moves nothing', async () => {
+    await mkdir(join(home, 'run/default'), { recursive: true })
+    const lock = await acquireHomeLock({ runDirectory: join(home, 'run/default'), runtime: version('0.1.0'), probe: () => Promise.resolve('answered'), startId: newStartId() })
+    try {
+      const before = await tree(home)
+      expect(await runRepair(options())).toBe(1)
+      expect(err.join('')).toContain('HOME_RUNNING')
+      expect(err.join('')).toContain('delorun stop')
+      expect(asked).toEqual([])
+      const after = await tree(home)
+      delete after['logs/repair.log']
+      expect(after).toEqual(before)
+    } finally {
+      lock.release()
+    }
+  })
+
+  it('refuses without a terminal and when the person declines, moving nothing', async () => {
+    const before = await tree(join(home, 'runtimes'))
+    expect(await runRepair(options({ answer: undefined }))).toBe(1)
+    expect(err.join('')).toContain('NO_TERMINAL')
+    expect(await runRepair(options({ answer: false }))).toBe(1)
+    expect(await tree(join(home, 'runtimes'))).toEqual(before)
+    expect(existsSync(join(home, 'runtimes.set-aside-20261113T120000Z'))).toBe(false)
+  })
+
+  it('renames the old store back when the install fails midway', async () => {
+    const before = await unchangedData()
+    const oldStore = await tree(join(home, 'runtimes'))
+    expect(await runRepair(options({ install: () => Promise.reject(new Error('the disk filled')) }))).toBe(1)
+    expect(await tree(join(home, 'runtimes'))).toEqual(oldStore)
+    expect(await unchangedData()).toEqual(before)
+    expect((await readdir(home)).filter(name => name.startsWith('runtimes.'))).toEqual([])
+  })
+
+  it('renames the old store back when the new release fails its start check', async () => {
+    const oldStore = await tree(join(home, 'runtimes'))
+    expect(await runRepair(options({ startCheck: () => Promise.reject(new Error('a file changed')) }))).toBe(1)
+    expect(await tree(join(home, 'runtimes'))).toEqual(oldStore)
+    expect((await readdir(home)).filter(name => name.startsWith('runtimes.'))).toEqual([])
+  })
+
+  it('refuses an older release on newer data, offers the way forward and the copy, and puts the old store back', async () => {
+    await writeHomeDataFormat(home, record({ delo: '0.2.0', dsh: '0.3.0' }))
+    const oldStore = await tree(join(home, 'runtimes'))
+    expect(await runRepair(options({ release: '0.1.1' }))).toBe(1)
+    const text = err.join('')
+    expect(text).toContain("Delo did not repair: release 0.1.1 may not read this home's chats, which Delo 0.2.0 wrote.")
+    expect(text).toContain('npx delorun@latest repair --release 0.1.1 --restore-copy')
+    expect(await tree(join(home, 'runtimes'))).toEqual(oldStore)
+  })
+
+  it('treats a home with no record as unknown and goes on, saying so', async () => {
+    await rm(join(home, 'data-format.json'))
+    expect(await runRepair(options())).toBe(0)
+    expect(out.join('')).toContain('no data-format record')
+  })
+
+  it('puts the copy back with --restore-copy, setting today\'s chats aside', async () => {
+    await saveDataCopy({ home, from: '0.1.0', to: '0.2.0', formats: { from: FORMATS, to: FORMATS }, now: new Date('2026-11-01T00:00:00Z') })
+    await writeFile(join(home, 'sessions/chat-1/log.jsonl'), 'a chat, continued under 0.2.0')
+    await writeHomeDataFormat(home, record({ delo: '0.2.0', dsh: '0.3.0' }))
+    expect(await runRepair(options({ line: { ...PLAIN, restoreCopy: true } }))).toBe(0)
+    expect(await readFile(join(home, 'sessions/chat-1/log.jsonl'), 'utf8')).toBe('a chat')
+    const asides = await readdir(join(home, 'data-set-aside'))
+    expect(asides).toHaveLength(1)
+    expect(await readFile(join(home, 'data-set-aside', asides[0]!, 'sessions/chat-1/log.jsonl'), 'utf8')).toBe('a chat, continued under 0.2.0')
+    expect(asked[0]).toContain("today's chats are set aside")
+  })
+
+  it('refuses --restore-copy when the home keeps no copy for the release that wrote the data', async () => {
+    await writeHomeDataFormat(home, record({ delo: '0.2.0', dsh: '0.3.0' }))
+    expect(await runRepair(options({ line: { ...PLAIN, restoreCopy: true } }))).toBe(1)
+    expect(err.join('')).toContain('keeps no chat-data copy for Delo 0.2.0')
+    expect(await readFile(join(home, 'sessions/chat-1/log.jsonl'), 'utf8')).toBe('a chat')
+  })
+
+  it('refuses a release below the highest the home has installed, and points at rollback', async () => {
+    expect(await runRepair(options({ release: '0.1.0', installed: '0.2.0' }))).toBe(1)
+    expect(err.join('')).toContain('TARGET_LOWER')
+    expect(err.join('')).toContain('delorun recover rollback')
+    expect(asked).toEqual([])
+  })
+
+  describe('--reset-trust', () => {
+    const resetLine: RepairLine = { ...PLAIN, resetTrust: true }
+
+    it('is refused, before any prompt, when the launcher\'s shipped chain is not newer than the stored root', async () => {
+      const before = await tree(join(home, 'trust'))
+      expect(await runRepair(options({ line: resetLine }))).toBe(1)
+      expect(err.join('')).toContain('RESET_TRUST_REFUSED')
+      expect(asked).toEqual([])
+      expect(await tree(join(home, 'trust'))).toEqual(before)
+    })
+
+    it('is refused when the stored root still chains from a shipped root', async () => {
+      const keys = fixtureKeys()
+      const second = nextRoot(fixture.rootMetadata, keys, [keys.root])
+      expect(await runRepair(options({ line: resetLine, roots: [fixture.roots[0]!, second] }))).toBe(1)
+      expect(err.join('')).toContain('RESET_TRUST_REFUSED')
+    })
+
+    it('moves trust aside after the npm-anchor prompt when the shipped chain is newer and the stored root does not chain', async () => {
+      const other = await fixtureRelease()
+      const shipped = [fixture.roots[0]!, nextRoot(fixture.rootMetadata, fixture.keys, [fixture.keys.root])]
+      await writeFile(join(home, 'trust/root.json'), other.roots[0]!, { mode: 0o600 })
+      const stored = await tree(join(home, 'trust'))
+      expect(await runRepair(options({ line: resetLine, roots: shipped }))).toBe(0)
+      expect(asked[0]).toContain('installed it with npx delorun@latest from npm yourself')
+      expect(await tree(join(home, 'trust.set-aside-20261113T120000Z'))).toEqual(stored)
+      expect(existsSync(join(home, 'trust'))).toBe(true)
+    })
+  })
+
+  describe('reach', () => {
+    it('is not a request the home process takes, and no module of the home process or its sockets imports the repair', async () => {
+      const root = join(import.meta.dirname, '../../..')
+      const contract = await readFile(join(root, 'packages/contract-home-process/src/index.ts'), 'utf8')
+      expect(contract).not.toMatch(/repair|restore-copy|reset-trust/iu)
+      expect(await readFile(join(root, 'apps/npm-launcher/src/index.ts'), 'utf8')).not.toMatch(/repair/iu)
+      for (const directory of ['packages/home-process/src', 'packages/home/src', 'apps/cli/src']) {
+        for (const entry of await readdir(join(root, directory), { recursive: true, withFileTypes: true })) {
+          if (!entry.isFile() || !entry.name.endsWith('.ts')) continue
+          expect(await readFile(join(entry.parentPath, entry.name), 'utf8'), join(entry.parentPath, entry.name)).not.toMatch(/runRepair|parseRepairLine|npm-launcher\/src\/repair/u)
+        }
+      }
+    })
+  })
+})
+
+describe('the repair command line', () => {
+  it('reads its flags and refuses anything else', () => {
+    expect(parseRepairLine(['repair', '--profile', 'x', '--from', '/tmp/r', '--restore-copy', '--reset-trust'], version('0.1.0'))).toEqual({ restoreCopy: true, resetTrust: true, release: '0.1.0', from: '/tmp/r' })
+    expect(parseRepairLine(['repair', '--from=https://example.test/r'], undefined)).toEqual({ restoreCopy: false, resetTrust: false, from: 'https://example.test/r' })
+    expect(() => parseRepairLine(['repair', '--yes'], undefined)).toThrow(/not --yes/u)
+    expect(() => parseRepairLine(['repair', '--from'], undefined)).toThrow(/--from needs/u)
+  })
+})

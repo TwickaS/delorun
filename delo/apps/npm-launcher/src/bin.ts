@@ -1,7 +1,8 @@
 /**
  * `delorun` as npm serves it: the launcher's main function, its argument line and the composition of the store, the
  * release channel and the process it starts. `entry.ts` is the published `bin`, which checks the Node version and then
- * calls {@link main}. The launcher's own options are `--profile`, `--release` and `--help`;
+ * calls {@link main}. The launcher's own options are `--profile`, `--release` and `--help`, and `delorun repair` (see
+ * `repair.ts`) is the launcher's own command;
  * every other argument is passed to the runtime unchanged, because the runtime owns `delorun`'s commands.
  *
  * @module @delo/npm-launcher/bin
@@ -14,13 +15,15 @@ import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, DELO_LAUNCHER_VERSION_ENV, type R
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { ensureHomeTree, resolveDeloHome } from '@delo/home'
-import { Downloader, LauncherChannel, writeChannelRecord, type ChannelOrigins, type LauncherChannelOptions } from '@delo/install'
+import { Downloader, LauncherChannel, manualSource, writeChannelRecord, type ChannelOrigins, type LauncherChannelOptions } from '@delo/install'
 import type { ReleaseLogTransport } from '@delo/release-verify/online'
 import { checkAndRecord } from '@delo/release-verify/record'
 import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
 import { FULL_CHECK_DAYS_ENV, parseRuntimeVersion, resolveFullCheckDays, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
-import { runLauncher, launcherProfile, type LauncherOutput, type LauncherStartCheck, type SpawnRuntime } from './launcher.ts'
+import { createInterface } from 'node:readline/promises'
+import { parseRepairLine, runRepair, type RepairLine } from './repair.ts'
+import { runLauncher, launcherProfile, runtimeCommand, type LauncherOutput, type LauncherStartCheck, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
 import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
@@ -145,6 +148,10 @@ export function usage(): string {
     '  --profile <name>   the CLI profile; default is profiles/default',
     '  --release <version>  install this release instead of the channel\'s current one, when no runtime is installed',
     '  --help             this text',
+    '',
+    'delorun repair [--release <version>] [--from <folder|https-address>] [--restore-copy] [--reset-trust]',
+    '  Replaces the installed program with a verified release and keeps your chats, settings and keys.',
+    '  It asks you first, in a terminal; the old program is set aside, never deleted.',
     '  --                 end the launcher\'s options; everything after it is passed to delorun',
     '',
     'Every other argument is passed to delorun unchanged.',
@@ -196,6 +203,23 @@ export interface LauncherContext {
   readonly fetch?: typeof globalThis.fetch | undefined
   /** The clock, in milliseconds; `Date.now` by default. */
   readonly now?: (() => number) | undefined
+  /** Asks `delorun repair`'s yes/no question; `undefined` answers when there is no terminal. This process's terminal by default. */
+  readonly confirm?: ((question: string) => Promise<boolean | undefined>) | undefined
+}
+
+/**
+ * Ask a yes/no question on this process's terminal.
+ * @param question - the question.
+ * @returns whether the person typed `y` or `yes`, or `undefined` when standard input or output is not a terminal.
+ */
+export async function terminalConfirm(question: string): Promise<boolean | undefined> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined
+  const lines = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    return /^y(?:es)?$/iu.test((await lines.question(`${question} `)).trim())
+  } finally {
+    lines.close()
+  }
 }
 
 /** What a start check reads. */
@@ -295,6 +319,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
   let platform: ReturnType<typeof platformOf>
   let target: RuntimeVersion | undefined
   let fullCheckDays: number
+  let repairLine: RepairLine | undefined
   try {
     line = parseCommandLine(argv)
     if (line.help) {
@@ -306,6 +331,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     target = line.release === undefined ? undefined : parseRuntimeVersion(line.release)
     if (line.release !== undefined && target === undefined) throw new Error(`--release names ${line.release}, which is not a Delo release version`)
     fullCheckDays = resolveFullCheckDays(context.env[FULL_CHECK_DAYS_ENV])
+    if (line.passedThrough.length === 0 && runtimeCommand(line.runtimeArgs) === 'repair') repairLine = parseRepairLine(line.runtimeArgs, target)
   } catch (error) {
     const refusal = refusalFor(error, { home: '~/.delo', profile: CLI_PROFILE })
     context.output.stderr(`${refusal.text}\n${usage()}`)
@@ -333,6 +359,26 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       return tilesTransport({ fetch, checkpoint: `${log.origin}/checkpoint`, tiles: log.origin })
     }
     const spawn = context.spawn ?? spawnRuntime
+    const store = new RuntimeStore({ home: home.path, platform, logger })
+    if (repairLine !== undefined) {
+      const manual = repairLine.from === undefined ? undefined : manualSource(repairLine.from)
+      return await runRepair({
+        home: home.path,
+        profile,
+        line: repairLine,
+        roots,
+        store,
+        channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, { home: home.path, platform, roots, channel: 'stable', log: transportFor, source: manual?.source ?? channel.source, downloader: manual?.downloader ?? downloader, progress: report }),
+        confirm: context.confirm ?? terminalConfirm,
+        startCheck: async (version, root) => {
+          await store.checkRuntime(version, root)
+          const check = await startCheck({ home: home.path, platform, version, root, transport: transportFor(root), now: Math.floor((context.now ?? Date.now)() / 1000) })
+          if (check.stop) throw new Error(`the release-log check of release ${String(version)} failed (${String(check.refusal)}${check.detail === undefined ? '' : `: ${check.detail}`})`)
+        },
+        output: context.output,
+        now: () => new Date((context.now ?? Date.now)()),
+      })
+    }
     return await runLauncher({
       home: home.path,
       profile,
@@ -341,7 +387,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       passedThrough: line.passedThrough,
       mode: LAUNCHER_MODE,
       fullCheckDays,
-      store: new RuntimeStore({ home: home.path, platform, logger }),
+      store,
       channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, {
         home: home.path,
         platform,
