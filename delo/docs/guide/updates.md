@@ -49,14 +49,14 @@ delorun update --report    # what would the newest release change? applies nothi
 
 - the versions you go from and to, of Delorun and of the DeepSeek Harness it runs on, and the channel;
 - the release checks: the signature, the freshness of the release files and the public release log;
-- every plugin, bundle and profile entry the update would change, with the reason (a bundle is a package of plugins and settings, and a profile entry, which the report calls a row, is one plugin in your profile's list): `kept`, `changed`, `disabled` or `removed`. A plugin whose declared version ranges exclude the new release is listed as `disabled`, with the range it declares. An item Delorun cannot predict, such as a plugin whose `package.json` it cannot read, says so;
+- every plugin, bundle and profile entry the update would change, with the reason (a bundle is a package of plugins and settings, and a profile entry, which the report calls a row, is one plugin in your profile's list): `kept`, `changed`, `disabled` or `removed`. A plugin whose declared version ranges exclude the new release is listed as `disabled`, with the range it declares and, for a DeepSeek Harness range, the command that accepts the risk for that exact version ([Update Delorun with many plugins](updating-with-plugins.md#check-read-the-report)). An item Delorun cannot predict, such as a plugin whose `package.json` it cannot read, says so;
 - whether the chat data changes format, with the size of the copy and the free disk space ([Chat data that changes format](#chat-data-that-changes-format)).
 
 When nothing changes, the report says `No plugin, bundle or profile row changes.` The report covers plugins, bundles and profile entries; it does not list setting values, which carry over unchanged.
 
 ## Apply an update
 
-Run `delorun update`. It prints the same report and asks `Apply the update to Delo <version>?`, with No as the default. A report is valid for ten minutes: confirm an older one and Delorun asks you to read a fresh report.
+Run `delorun update`. It prints the same report and asks `Apply the update to Delorun <version>?`, with No as the default. A report is valid for ten minutes: confirm an older one and Delorun asks you to read a fresh report.
 
 - `delorun update --yes` confirms without asking, but only a report that turns nothing off, removes nothing and holds nothing Delorun cannot predict. Any other report needs you to run `delorun update` and decide.
 - Without a terminal to ask in, `delorun update` answers no and changes nothing.
@@ -90,16 +90,16 @@ The one thing a folder can loosen is the channel's confirmation that this is the
 `delorun update` prints each step as it goes:
 
 1. **Checking and installing.** Delorun downloads the release, verifies its signature, its signed file list and its entry in the public release log, and installs it beside the running release. A release that does not verify is refused, and nothing changes.
-2. **Snapshot.** Delorun saves a profile history version named `Before update to Delo <version>`, holding your profile's patches, bundle list and plugin version exemptions.
-3. **Waiting.** Running chats finish their turns; a new message gets "Delo started no new turn: an update is waiting for running chats" and you send it again once Delorun is back. Delorun waits up to 30 minutes, then stops the update with `DRAIN_TIMEOUT` and changes nothing.
+2. **Snapshot.** Delorun saves a profile history version named `Before update to Delorun <version>`, holding your profile's patches, bundle list and plugin version exemptions.
+3. **Waiting.** Running chats finish their turns; a new message gets "Delorun started no new turn: an update is waiting for running chats" and you send it again once Delorun is back. Delorun waits up to 30 minutes, then stops the update with `DRAIN_TIMEOUT` and changes nothing.
 4. **Switching.** The studio stops, the chat-data copy is written when one is taken, and the new release starts. The studio is unavailable for this step.
 5. **Health check.** Within two minutes the new release must verify its own files, answer its health request, start every plugin that started before, keep the profile's bundle list, and turn off nothing the report did not name.
 
-If the health check fails, or the new release stops, Delorun goes back on its own to the release and profile you had and prints which check failed: `Delo <version> failed its health check (<check>); Delo <previous> runs again with the profile from before. See delorun logs.` On success it prints `Delo <version> runs now.`
+If the health check fails, or the new release stops, Delorun goes back on its own to the release and profile you had and prints which check failed: `Delorun <version> failed its health check (<check>); Delorun <previous> runs again with the profile from before. See delorun logs.` On success it prints `Delorun <version> runs now.`
 
 ## Chat data that changes format
 
-Most releases store chats as the release before did. When a release changes how chats or other stored data are written, the report says so, for example `Chat data: Delo 1.1.0 keeps chat data in a format Delo 1.0.0 may not read.`, and Delorun treats the change as one-way: once the new release has started, the older release may not read the data.
+Most releases store chats as the release before did. When a release changes how chats or other stored data are written, the report says so, for example `Chat data: Delorun 1.1.0 keeps chat data in a format Delorun 1.0.0 may not read.`, and Delorun treats the change as one-way: once the new release has started, the older release may not read the data.
 
 For such an update, Delorun offers to copy your chat data first, and the copy is the default: `The chat data changes format. Take a copy first?` The copy holds your chats and plugin stores (`sessions/` and `storages/`) as they were, in `data-copies/<version>/` in your Delorun home; attachments stay where they are, and secrets are never copied. The report shows the size of the copy and the free space, and Delorun refuses with `DATA_COPY_NO_SPACE` when it does not fit.
 
@@ -144,7 +144,7 @@ Each release belongs to a channel, `stable` or `beta`, and checks for updates on
 
 - If you have no terminal, then `delorun update` answers no and changes nothing.
 - If you have no git, then `delorun update` refuses before it fetches anything. `--check` and `--report` do not need git.
-- If your report is older than ten minutes, then Delorun says `Delo did not update: the update report is unknown or older than ten minutes.` Run `delorun update` again.
+- If your report is older than ten minutes, then Delorun says `Delorun did not update: the update report is unknown or older than ten minutes.` Run `delorun update` again.
 - If the report turns a plugin off, removes something, or holds something Delorun cannot predict, then `--yes` does not confirm it. Run `delorun update` and decide.
 - If chats are still running, then Delorun waits up to 30 minutes, then stops the update with `DRAIN_TIMEOUT` and changes nothing.
 - If the new release fails its health check, then Delorun goes back on its own and prints which check failed.
@@ -169,6 +169,7 @@ Each release belongs to a channel, `stable` or `beta`, and checks for updates on
 
 ## Next
 
+- Update with many third-party plugins: [Update Delorun with many plugins](updating-with-plugins.md).
 - Use Delorun: [Daily use](daily-use.md).
 - Keep your own changes through updates: [Changing your harness](https://docs.delorun.com/guide/changing-your-harness).
 - If an update failed: [Updates and rollback](troubleshooting.md#updates-and-rollback).

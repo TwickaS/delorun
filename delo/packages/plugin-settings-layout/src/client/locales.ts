@@ -11,7 +11,7 @@ export const en = {
   'page.general': 'General',
   'page.general.keywords': 'language locale look stock original updates release version check shortcuts keys onboarding welcome tour getting started advanced coding view developer',
   'page.appearance': 'Appearance',
-  'page.appearance.keywords': 'theme colour color accent dark light mode contrast font typeface text size density spacing',
+  'page.appearance.keywords': 'theme colour color accent dark light mode contrast font typeface text size density spacing', // us-spelling: quoted output
   'page.sidebar': 'Sidebar',
   'page.sidebar.keywords': 'header art palette chat list folders sort working shelf unpin width snooze idle settle',
   'page.conversation': 'Conversation',

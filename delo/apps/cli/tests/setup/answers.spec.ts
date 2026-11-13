@@ -223,12 +223,12 @@ describe('the answers document', () => {
     expect((error as Error).message).not.toContain('sk-SECRET-VALUE-90')
   })
 
-  it('refuses a model the provider\'s installed catalog does not list, and accepts any model of the custom endpoint', async () => {
+  it('refuses a model the provider\'s installed catalogue does not list, and accepts any model of the custom endpoint', async () => {
     const catalog = await installedCatalog()
     const [first] = catalog.models('openai')
     expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: first?.id ?? '' }, catalog, 'here', '--model') }).not.toThrow()
-    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here', '--model') }).toThrow('here: --model names a model that is not in openai\'s installed catalog; delorun setup key lists the models it serves')
-    expect(() => { checkCatalogModel({ id: 'deepseek-official', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here', '--model') }).toThrow('not in deepseek-official\'s installed catalog')
+    expect(() => { checkCatalogModel({ id: 'openai', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here', '--model') }).toThrow('here: --model names a model that is not in openai\'s installed catalogue; delorun setup key lists the models it serves')
+    expect(() => { checkCatalogModel({ id: 'deepseek-official', credential: { source: 'prompt' }, baseURL: null, model: 'no-such-model' }, catalog, 'here', '--model') }).toThrow('not in deepseek-official\'s installed catalogue')
     expect(() => { checkCatalogModel({ id: 'openai-compatible', credential: { source: 'prompt' }, baseURL: 'http://x.example', model: 'anything' }, catalog, 'here', '--model') }).not.toThrow()
     expect(() => { checkCatalogModel(null, catalog, 'here', '--model') }).not.toThrow()
   })

@@ -1,7 +1,7 @@
 /**
  * The model providers `delorun setup` sets up (contract C11, "Model providers"), and the profile rows each writes.
  * DeepSeek runs on upstream's DeepSeek adapter, the profile's `llm-deepseek` row; every other provider is a route of
- * upstream's pi-ai adapter, the `llm-pi-ai` row: a route of pi-ai's installed catalog, or `openai-compatible`, a route
+ * upstream's pi-ai adapter, the `llm-pi-ai` row: a route of pi-ai's installed catalogue, or `openai-compatible`, a route
  * setup declares with the endpoint and model the person gives. The rows are written in the form the studio's Settings
  * → Models saves them, so the studio shows and edits what setup wrote. A typed key is stored under the provider's
  * credential reference, the environment variable its adapter reads, and the route names that reference.
@@ -32,7 +32,7 @@ export interface KeyCheckSpec {
 export type ProviderAdapter =
   /** Upstream's DeepSeek adapter, the `llm-deepseek` row. */
   | 'deepseek'
-  /** A route of pi-ai's installed catalog on the `llm-pi-ai` row; the catalog supplies the endpoint and models. */
+  /** A route of pi-ai's installed catalogue on the `llm-pi-ai` row; the catalog supplies the endpoint and models. */
   | 'catalog'
   /** A route setup declares on the `llm-pi-ai` row, with the endpoint and the model the person gives. */
   | 'custom'
@@ -52,13 +52,13 @@ export interface SetupProvider {
   /** The provider's page for creating a key; `undefined` when none is named. DeepSeek, OpenAI and xAI refuse automated requests, so their addresses are the ones their documentation gives. */
   readonly keyPage: string | undefined
   /**
-   * The model the model question starts on: a current general chat model of the provider's installed catalog, or for
+   * The model the model question starts on: a current general chat model of the provider's installed catalogue, or for
    * DeepSeek the profile's default; `undefined` for the custom endpoint, whose models setup does not know.
    */
   readonly defaultModel: string | undefined
 }
 
-/** The providers setup offers, by id. Each catalog provider's endpoint is read from pi-ai's installed catalog. */
+/** The providers setup offers, by id. Each catalog provider's endpoint is read from pi-ai's installed catalogue. */
 export const SETUP_PROVIDERS: Readonly<Record<SetupProviderId, SetupProvider>> = {
   'anthropic': { id: 'anthropic', label: 'Anthropic', adapter: 'catalog', keyVariable: 'ANTHROPIC_API_KEY', check: { kind: 'anthropic', path: '/v1/models?limit=1' }, keyPage: 'https://platform.claude.com/settings/keys', defaultModel: 'claude-sonnet-5-5' },
   'deepseek-official': { id: 'deepseek-official', label: 'DeepSeek', adapter: 'deepseek', keyVariable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, check: { kind: 'deepseek', path: '/models' }, keyPage: 'https://platform.deepseek.com/api_keys', defaultModel: 'deepseek-flash' },
@@ -102,7 +102,7 @@ export interface ProviderModel {
   readonly name: string
 }
 
-/** What setup reads from the adapters' installed catalogs. */
+/** What setup reads from the adapters' installed catalogues. */
 export interface ProviderCatalog {
   /**
    * @param id - a DeepSeek or catalog provider.
@@ -118,7 +118,7 @@ export interface ProviderCatalog {
 }
 
 /**
- * Read the installed catalogs: pi-ai's for the catalog providers, the DeepSeek adapter's built-in model list for
+ * Read the installed catalogues: pi-ai's for the catalog providers, the DeepSeek adapter's built-in model list for
  * DeepSeek. Loaded on first use, so a run that never asks about models never loads either package.
  * @returns the catalog.
  */
@@ -133,7 +133,7 @@ export async function installedCatalog(): Promise<ProviderCatalog> {
     },
     baseURL(id) {
       const baseUrl = builtinProviders().find(candidate => candidate.id === id)?.baseUrl ?? ''
-      if (baseUrl === '' || baseUrl.includes('{')) throw new Error(`delorun setup: pi-ai's installed catalog has no fixed endpoint for ${id}`)
+      if (baseUrl === '' || baseUrl.includes('{')) throw new Error(`delorun setup: pi-ai's installed catalogue has no fixed endpoint for ${id}`)
       return baseUrl
     },
   }

@@ -35,6 +35,7 @@ The user guide is for people who install and use Delorun, the community fork of 
 - **Recover from a plugin that stops Delorun starting:** [Safe mode and recovery](daily-use.md#safe-mode-and-recovery).
 - **Restore a deleted chat, or move chats between homes:** [Trash, export and import](daily-use.md#trash-export-and-import).
 - **Move to a new release, or back:** [Updates](updates.md) and [Going back](updates.md#going-back).
+- **Update when I run many third-party plugins:** [Update Delorun with many plugins](updating-with-plugins.md). It covers what is saved first, reading the report's `disabled` lines, trying a plugin anyway with a version exemption, and going back.
 - **Find where my data lives, move it, or use two profiles:** [Your Delorun home](home.md).
 - **Find out why something failed:** [Where Delorun keeps its logs](logs.md).
 - **See what a chat costs:** [See what a chat costs](cost-meter.md).

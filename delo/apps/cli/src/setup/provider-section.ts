@@ -61,7 +61,7 @@ type Question = 'provider' | 'more-providers' | 'endpoint' | 'endpoint-model' | 
  * Where a provider's key is checked.
  * @param provider - the provider.
  * @param baseURL - the endpoint the person gave, for `openai-compatible`.
- * @param catalog - the installed catalogs, for a catalog provider's endpoint.
+ * @param catalog - the installed catalogues, for a catalog provider's endpoint.
  * @returns the key check's target.
  */
 export function keyTarget(provider: SetupProvider, baseURL: string | null, catalog: ProviderCatalog): KeyTarget {
@@ -159,7 +159,7 @@ function pickProvider(next: SetupProvider, earlier: ModelProviderAnswer | null, 
  * @param choice - the answers so far.
  * @param draft - the run's answers, for the mode and the earlier answer.
  * @param environment - what the section may look at.
- * @param catalog - the installed catalogs.
+ * @param catalog - the installed catalogues.
  * @returns the answers after the question and the next question, or {@link BACK}.
  */
 async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choice, draft: Draft, environment: SectionEnvironment, catalog: ProviderCatalog): Promise<{ readonly choice: Choice, readonly next: Question } | Back> {
@@ -233,7 +233,7 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
     case 'model': {
       const models = catalog.models(provider.id)
       const [first] = models
-      if (first === undefined) throw new CliError(EXIT.failed, `delorun setup: the installed catalog lists no model of ${provider.label}; set it up in the studio's Settings → Models`)
+      if (first === undefined) throw new CliError(EXIT.failed, `delorun setup: the installed catalogue lists no model of ${provider.label}; set it up in the studio's Settings → Models`)
       const picked = await io.select(`Which ${provider.label} model should new chats start on?`, models.map(model => ({
         value: model.id, label: model.id, hint: model.name === model.id ? undefined : model.name,
       })), [choice.model, provider.defaultModel].find(candidate => models.some(model => model.id === candidate)) ?? first.id)
@@ -263,7 +263,7 @@ function keySource(answer: ModelProviderAnswer): string {
 
 /**
  * The section.
- * @param catalog - the installed catalogs, loaded when the section first needs them.
+ * @param catalog - the installed catalogues, loaded when the section first needs them.
  * @returns the `key` section.
  */
 export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupSection {

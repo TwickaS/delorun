@@ -27,7 +27,7 @@ import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home
 import type { HarnessDiffNotShown, ReportItem, UpdateReport } from '@delo/contract-update-report'
 import { queryHomeStatus, sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
 import { historyGitProblem } from '@delo/profile-safety'
-import { confirmsWithoutAsking, dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE } from '@delo/update'
+import { confirmsWithoutAsking, dataCopyNote, exemptionNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE } from '@delo/update'
 import { UPDATE_CHECK_DEFAULTS } from '@delo/bundle-local/update-check'
 import semver from 'semver'
 import { CliError, EXIT } from '../exit.ts'
@@ -211,6 +211,8 @@ export function reportLines(report: UpdateReport): readonly string[] {
   lines.push(changes.length === 0 ? 'No plugin, bundle or profile row changes.' : `Changes (${String(changes.length)}):`)
   for (const item of changes) {
     lines.push(`  - ${item.effect}: ${reasonMessage(item, versions)}${item.verification === 'unverified' ? ` ${UNVERIFIED_NOTE}` : ''}`)
+    const note = exemptionNote(item, versions)
+    if (note !== undefined) lines.push(`    ${note}`)
   }
   const harness = report.items.filter(item => item.kind === 'harness')
   if (harness.length > 0) lines.push(`Your changes to Delo's own files (${String(harness.length)}):`)

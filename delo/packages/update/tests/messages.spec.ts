@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { ReportItem } from '@delo/contract-update-report'
-import { UNVERIFIED_NOTE, buildUpdateReport, reasonMessage, uncheckedMessage } from '../src/index.ts'
+import { UNVERIFIED_NOTE, buildUpdateReport, exemptionNote, reasonMessage, uncheckedMessage } from '../src/index.ts'
 import { input, installed, profile, version } from './support.ts'
 
 /**
@@ -121,5 +121,16 @@ describe('reasonMessage', () => {
 
   it('states that the release publishes no revocation list when the report did not read one', () => {
     expect(uncheckedMessage('revocations')).toBe('revocations. This release publishes no revocation list; the health check after the switch holds what one would show.')
+  })
+})
+
+describe('exemptionNote', () => {
+  it('tells how to try a plugin the DSH range excludes, and that the health check rolls a failed try back', () => {
+    expect(exemptionNote(report.items[0]!, report)).toBe('To try it anyway before you update, run: delorun plugin allow-version calendar@2.0.0 --dsh-version 0.3.0 --accept-risk. If the plugin then fails to load, the health check after the switch rolls the update back.')
+  })
+
+  it('stays silent for a plugin the Delorun range excludes, which has no exemption, and for a bundle', () => {
+    expect(exemptionNote(only('bridge', '1.0.0', { delo: '^0.10.0' }), report)).toBeUndefined()
+    expect(exemptionNote({ kind: 'bundle', subject: { package: 'dsh-x' }, reason: 'bundle-skipped', effect: 'disabled', verification: 'verified', detail: {}, actions: [] }, report)).toBeUndefined()
   })
 })

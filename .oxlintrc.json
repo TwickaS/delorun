@@ -322,6 +322,23 @@
       ]
     },
     {
+      // Delorun's own code under delo/ keeps type-only imports explicit; upstream's trees keep their import style.
+      "files": [
+        "delo/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "typescript/consistent-type-imports": [
+          "error",
+          {
+            "disallowTypeAnnotations": false // `typeof import('x')` is the vitest importActual idiom.
+          }
+        ]
+      },
+      "plugins": [
+        "typescript"
+      ]
+    },
+    {
       // The project-free staged profile re-includes this syntax-coverage fixture.
       "files": [
         "packages/typert/generator/tests/fixtures/type-model/**/*.{ts,tsx}"

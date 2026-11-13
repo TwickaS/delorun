@@ -159,7 +159,7 @@ const PATTERNS: readonly Pattern[] = [
   },
   // The value of an Authorization, Proxy-Authorization, Cookie or Set-Cookie header, as a header line or a JSON field.
   {
-    regex: new RegExp(String.raw`\b(proxy-authorization|authorization|set-cookie|cookie)(["']?\s*[:=]\s*)${NOT_A_MARKER}("[^"\r\n]*"|'[^'\r\n]*'|[^\r\n]*)`, 'gi'),
+    regex: new RegExp(String.raw`\b(proxy-authorization|authorization|set-cookie|cookie)(["']?\s*[:=]\s*)${NOT_A_MARKER}("[^"\r\n]*"|'[^'\r\n]*'|[^\r\n]*)`, 'gi'), // us-spelling: quoted output
     replace: (_match, name = '', separator = '', value = '') => {
       const marker = redactionMarker(name.toLowerCase().endsWith('cookie') ? 'cookie' : 'authorization')
       const quote = value.startsWith('"') || value.startsWith("'") ? value.charAt(0) : ''

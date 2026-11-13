@@ -73,7 +73,7 @@ const UPSTREAM: readonly UpstreamGate[] = [
   { id: 'repository-references', title: 'No maintained reference to a repository commit or the disallowed organization URL', run: { script: 'verify-repository-references' }, tier: 'agent' },
   { id: 'concrete-terms', title: 'No tracked file carries the banned ambiguous origin label', run: { script: 'verify-concrete-terms' } },
   { id: 'release-tense', title: 'No release-status phrase in the English Markdown under `delo/`', run: { script: 'verify-release-tense' } },
-  { id: 'british-english', title: 'No curated US spelling in the English Markdown under `delo/`', run: { script: 'verify-british-english' } },
+  { id: 'british-english', title: 'No curated US spelling in the English Markdown and source strings under `delo/`', run: { script: 'verify-british-english' } },
   { id: 'doc-refs', title: 'Documentation paths named in TypeScript, Delo\'s included, exist', run: { script: 'verify-doc-refs' } },
   { id: 'subsystem-pages', title: 'Every package group README links a subsystem page or names its exemption', run: { script: 'verify-subsystem-pages' } },
   { id: 'package-paths', title: 'Root-relative `packages/...` paths in prose and TypeScript name packages that exist', run: { script: 'verify-package-paths' } },

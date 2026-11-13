@@ -19,7 +19,8 @@
  * @module @delo/reach/service
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { Context, Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
+import { Service } from '@deepseek-ai/cordis'
 import { isLoopbackHost } from '@delo/home-auth'
 import schema from '@deepseek-ai/schemastery'
 import { brandString } from '@deepseek-ai/dsh-brand'

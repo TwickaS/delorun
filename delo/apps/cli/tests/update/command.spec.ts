@@ -111,6 +111,7 @@ describe('reportLines', () => {
       'Changes (3):',
       '  - changed: The bundle list matches an installation-owned list that DSH 0.2.2 replaces with its template.',
       '  - disabled: plugin-a requires DSH ^9.0.0; Delorun 1.1.0 runs DSH 0.2.2.',
+      '    To try it anyway before you update, run: delorun plugin allow-version plugin-a@1.0.0 --dsh-version 0.2.2 --accept-risk. If the plugin then fails to load, the health check after the switch rolls the update back.',
       '  - kept: Delorun could not read plugin-b\'s package.json; it cannot predict what the update does to it. Delorun cannot predict this item.',
     ])
   })

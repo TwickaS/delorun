@@ -324,10 +324,10 @@ export function chosenProvider(choice: ProviderChoice): ModelProviderAnswer {
 }
 
 /**
- * Refuse a provider answer that names a model its adapter's installed catalog does not serve. The `openai-compatible`
+ * Refuse a provider answer that names a model its adapter's installed catalogue does not serve. The `openai-compatible`
  * route serves the model the answer names, so any model is accepted there.
  * @param answer - the provider answer, or `null`.
- * @param catalog - the installed catalogs.
+ * @param catalog - the installed catalogues.
  * @param source - the form the answer came from, which starts the message.
  * @param field - the flag or document field that named the model.
  * @throws {CliError} `EXIT.failed` for a model the catalog does not list; the message names the field and not its value.
@@ -335,7 +335,7 @@ export function chosenProvider(choice: ProviderChoice): ModelProviderAnswer {
 export function checkCatalogModel(answer: ModelProviderAnswer | null, catalog: ProviderCatalog, source: string, field: string): void {
   if (answer === null || answer.model === null || SETUP_PROVIDERS[answer.id].adapter === 'custom') return
   if (!catalog.models(answer.id).some(model => model.id === answer.model)) {
-    throw new CliError(EXIT.failed, `${source}: ${field} names a model that is not in ${answer.id}'s installed catalog; delorun setup key lists the models it serves`)
+    throw new CliError(EXIT.failed, `${source}: ${field} names a model that is not in ${answer.id}'s installed catalogue; delorun setup key lists the models it serves`)
   }
 }
 

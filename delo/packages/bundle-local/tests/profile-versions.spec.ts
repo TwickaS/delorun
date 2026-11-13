@@ -5,7 +5,8 @@
 import type { ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import { PROFILE_VERSION_ROUTES } from '../src/client/versions-api.ts'
-import { MAX_VERSIONS_REQUEST_BYTES, ProfileVersions, registerVersionRoutes, VersionsError } from '../src/profile-versions.ts'
+import type { ProfileVersions } from '../src/profile-versions.ts'
+import { MAX_VERSIONS_REQUEST_BYTES, registerVersionRoutes, VersionsError } from '../src/profile-versions.ts'
 
 const NO_CHANGES = {
   plugins: [], bundles: [], exemptions: [], builds: [], patchChanged: false, homePatchChanged: false, lockfileChanged: false, disabled: [], same: true,

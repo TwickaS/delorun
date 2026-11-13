@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findUsSpellings, isBritishEnglishFile, US_SPELLING_MARKER, US_TO_GB } from './verify-british-english.ts'
+import { findUsSpellings, findUsSpellingsInSource, isBritishEnglishFile, isBritishEnglishSourceFile, US_SPELLING_MARKER, US_TO_GB } from './verify-british-english.ts'
 
 describe('British English policy', () => {
   it('names the file, line, word and suggestion of a US spelling in prose', () => {
@@ -82,5 +82,39 @@ describe('British English policy', () => {
     expect(isBritishEnglishFile('delo/docs/contracts/c02-release-manifest.md')).toBe(true)
     expect(isBritishEnglishFile('delo/packages/bundle-local/README.md')).toBe(true)
     expect(isBritishEnglishFile('delo/changelog/pending/relay.md')).toBe(true)
+  })
+
+  it('rejects a planted color and initialize in a string, template and JSX literal', () => {
+    const source = [
+      "export const a = 'Pick a color'",
+      'export const b = `Could not initialize ${name}`',
+      'export const c = <p>Organize this</p>',
+    ].join('\n')
+
+    expect(findUsSpellingsInSource(source, 'delo/packages/x/src/a.tsx').map(({ line, word }) => [line, word]))
+      .toEqual([[1, 'color'], [2, 'initialize'], [3, 'Organize']])
+  })
+
+  it('skips code positions, wire values, markers and comments in source', () => {
+    const source = [
+      "import { color } from './color'",
+      "const style = { 'color': 'red', color: 'red' }",
+      "if (kind === 'catalog') return 'catalog'",
+      "const key = 'authorization'",
+      "const re = 'authorization header' // us-spelling: quoted output",
+      '// Initialize the colour',
+      "type T = 'gray' | 'center'",
+    ].join('\n')
+
+    expect(findUsSpellingsInSource(source, 'delo/packages/x/src/a.ts')).toEqual([])
+  })
+
+  it('selects non-test source files of the Delorun apps and packages', () => {
+    expect(isBritishEnglishSourceFile('delo/apps/cli/src/help.ts')).toBe(true)
+    expect(isBritishEnglishSourceFile('delo/packages/plugin-onboarding/src/client/locales.ts')).toBe(true)
+    expect(isBritishEnglishSourceFile('delo/apps/cli/tests/help.spec.ts')).toBe(false)
+    expect(isBritishEnglishSourceFile('delo/apps/relay/src/index.ts')).toBe(false)
+    expect(isBritishEnglishSourceFile('packages/core/src/index.ts')).toBe(false)
+    expect(isBritishEnglishSourceFile('delo/packages/x/src/types.d.ts')).toBe(false)
   })
 })
