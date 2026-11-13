@@ -44,7 +44,7 @@ import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@delo/release-formats/sign/json'
-import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
+import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema, StrictRuntimeSchema } from '@delo/release-formats/sign/schemas'
 import { patchRuleProblem } from './patch-rule.ts'
 import { npmPackageProblem } from './npm-package.ts'
 import { productionKeyProblem, releaseBranchProblem, tagSignatureProblem } from './source.ts'
@@ -56,9 +56,10 @@ export class SigningRefusal extends Error {
 
 /**
  * The manifest the release workflow drafts: everything but the signing time and the rebuild, which signing adds. Unlike
- * a manifest a reader accepts, a draft must carry `security` and `summary`, so every manifest signing writes holds both.
+ * a manifest a reader accepts, a draft must carry `security` and `summary`, so every manifest signing writes holds both,
+ * and a runtime platform key it does not know is refused instead of dropped.
  */
-export const ManifestDraftSchema = ManifestSchema.omit({ published: true, rebuild: true }).extend({ security: z.boolean(), summary: ReleaseSummarySchema, desktop: DesktopSchema, images: ImagesSchema, install: InstallSchema })
+export const ManifestDraftSchema = ManifestSchema.omit({ published: true, rebuild: true }).extend({ runtime: StrictRuntimeSchema, security: z.boolean(), summary: ReleaseSummarySchema, desktop: DesktopSchema, images: ImagesSchema, install: InstallSchema })
 
 /** {@link ManifestDraftSchema}'s parsed value. */
 export type ManifestDraft = Omit<ReleaseManifest, 'published' | 'rebuild' | 'security' | 'summary' | 'desktop' | 'images' | 'install'> & Required<Pick<ReleaseManifest, 'desktop' | 'images' | 'install'>> & { readonly security: boolean, readonly summary: string }

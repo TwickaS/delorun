@@ -125,6 +125,16 @@ export const ImagesSchema = z.strictObject({ s2: ImageRefSchema, s3: ImageRefSch
 /** The install scripts; optional in {@link ManifestSchema}, required to sign. */
 export const InstallSchema = z.strictObject({ sh: fileRef, ps1: fileRef })
 
+const runtimeArtifacts = z.strictObject({ archive: fileRef, files: fileRef })
+
+/**
+ * The runtime table a signer accepts: a platform key outside {@link RUNTIME_PLATFORMS}, such as a misspelt one, is
+ * refused instead of dropped, so the signed manifest lists every platform the draft names. Only readers ignore unknown
+ * platforms ({@link ManifestSchema}).
+ */
+export const StrictRuntimeSchema: z.ZodType<z.output<typeof ManifestSchema>['runtime']> = z.strictObject(Object.fromEntries(RUNTIME_PLATFORMS.map(platform => [platform, runtimeArtifacts.exactOptional()])))
+  .refine(runtime => Object.keys(runtime).length > 0, 'a release publishes the runtime of at least one platform')
+
 /**
  * The signed content of a release manifest. `security` and `summary` are optional, so a manifest signed before they
  * existed still reads; `desktop`, `images` and `install` are optional so a release without them still reads. Signing
@@ -137,7 +147,7 @@ export const ManifestSchema = z.strictObject({
   channel: z.enum(['stable', 'beta']),
   source: z.strictObject({ repository: z.string().min(1), tag: z.string().min(1), commit: z.string().regex(/^[0-9a-f]{40}$/u) }),
   published: timestamp,
-  runtime: onlyKeys(RUNTIME_PLATFORMS, z.partialRecord(z.enum(RUNTIME_PLATFORMS), z.strictObject({ archive: fileRef, files: fileRef })))
+  runtime: onlyKeys(RUNTIME_PLATFORMS, z.partialRecord(z.enum(RUNTIME_PLATFORMS), runtimeArtifacts))
     .refine(runtime => Object.keys(runtime).length > 0, 'a release publishes the runtime of at least one platform'),
   desktop: DesktopSchema.exactOptional(),
   images: ImagesSchema.exactOptional(),
