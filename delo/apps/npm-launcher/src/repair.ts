@@ -350,7 +350,7 @@ async function recordRepair(options: RepairOptions, log: Record<string, unknown>
     })
   }
   if (begun.found.kind === 'stale') {
-    const text = staleRepairText(begun.found.record)
+    const text = staleRepairText(begun.found.record, options.home)
     options.output.stderr(`${text}\n`)
     log.staleRepair = text
   }

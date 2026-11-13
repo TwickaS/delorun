@@ -152,10 +152,14 @@ export async function beginRepairRecord(home: string, now: Date, graceSeconds: n
 }
 
 /**
- * The report for a record that {@link checkRepairRecord} found stale and removed.
+ * The report for a record that {@link checkRepairRecord} found stale and removed. It names the program store the
+ * repair may have set aside, and the command that puts it back, because a repair killed during its download leaves the
+ * new store half-filled.
  * @param record - the stale record, when it could be read.
- * @returns one sentence.
+ * @param home - the resolved Delo home.
+ * @returns the report.
  */
-export function staleRepairText(record: RepairRecord | undefined): string {
-  return `A repair${record === undefined ? '' : ` that began ${record.startedAt}`} ended without finishing; its mark in run/${REPAIR_RECORD_FILE} is removed.`
+export function staleRepairText(record: RepairRecord | undefined, home: string): string {
+  const runtimes = join(home, DELO_HOME_ENTRIES.runtimes)
+  return `A repair${record === undefined ? '' : ` that began ${record.startedAt}`} ended without finishing; its mark in run/${REPAIR_RECORD_FILE} is removed. If it was killed during its download, the old programs are in the newest folder named ${runtimes}.set-aside-*, and this puts them back: rm -rf "${runtimes}" && mv "$(ls -d "${runtimes}".set-aside-* | tail -n 1)" "${runtimes}". delorun recover status lists the folder.`
 }

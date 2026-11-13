@@ -85,6 +85,7 @@ describe('the repair mark', () => {
     await writeFile(repairRecordPath(home), `${JSON.stringify({ pid: deadPid(), startedAt: '2026-11-13T11:00:00.000Z' })}\n`)
     expect(await runLauncher(launch('default'))).toBe(0)
     expect(err.join('')).toContain('A repair that began 2026-11-13T11:00:00.000Z ended without finishing')
+    expect(err.join('')).toContain(`rm -rf "${join(home, 'runtimes')}" && mv "$(ls -d "${join(home, 'runtimes')}".set-aside-* | tail -n 1)"`)
     expect(existsSync(repairRecordPath(home))).toBe(false)
   })
 
