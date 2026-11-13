@@ -121,6 +121,7 @@
 | `loader/volatile-update` | - | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`plugin-market`](../packages/boot/plugin-market), `product-analytics`, `speech-to-text` |
 | `locale/change` | `locale` (`emit`) | `locale` |
 | `remote/answer-refused` | `gateway` (`emit`) | - |
+| `remote/call-denied` | `gateway` (`emit`) | - |
 | `slots/changed` | `ui-renderer` (`emit`) | - |
 | `theme/change` | `ui-theme` (`emit`) | `ui-layout`, `ui-theme` |
 <!-- END GENERATED event-producer-consumer:undeclared -->

@@ -248,6 +248,27 @@ describe('the unlock store', () => {
     await settle(ELEVATED_POLL_MS)
   })
 
+  it('keeps reading while unlocked when Lock now fails during a read', async () => {
+    const host = deviceHost(ELEVATED)
+    const unlock = createUnlockSource(host.fetch)
+    await unlock.refresh()
+    // Pins the schedule after a failed lock: the overtaken read is discarded and must not end the polling.
+    let answer = (_value: { status: number; body: unknown }): void => {}
+    host.script[`GET ${ELEVATION_ROUTES.state}`] = new Promise(resolve => { answer = resolve })
+    // The timer's own read is on its way, so no timer is armed while it waits.
+    await settle(ELEVATED_POLL_MS)
+    host.script[`POST ${ELEVATION_ROUTES.lock}`] = 'unreachable'
+    await unlock.lock()
+    answer({ status: 200, body: ELEVATED })
+    await settle()
+    host.script[`GET ${ELEVATION_ROUTES.state}`] = ok(NONE)
+    const before = host.count(`GET ${ELEVATION_ROUTES.state}`)
+    await settle(ELEVATED_POLL_MS)
+    expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(before + 1)
+    expect(unlock.hooks.unlock.getSnapshot().state).toEqual(NONE)
+    unlock.dispose()
+  })
+
   it('arms no read when a request answers after the plugin unloaded', async () => {
     const host = deviceHost()
     let answer = (_value: { status: number; body: unknown }): void => {}

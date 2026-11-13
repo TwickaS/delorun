@@ -247,6 +247,8 @@ describe('a session/create', () => {
     // A folder whose real path is a known workspace's, through a link included, is that workspace.
     expect(create({ cwd: known, agentPreset: 'any' })).toEqual(ALLOW)
     expect(create({ cwd: linked })).toEqual(ALLOW)
+    // A workspace recorded at a link is the folder the link resolves to.
+    expect(create({ cwd: known }, { workspaces: () => [{ id: workspace('w-linked'), path: linked, sessionIds: [] }] })).toEqual(ALLOW)
     // A question without a call's arguments is the snapshot's: a device sees that it may start chats.
     expect(createCondition(facts({ workspaces }), DEVICE)({ action: 'session/create', resource: GLOBAL })).toEqual(ALLOW)
   })

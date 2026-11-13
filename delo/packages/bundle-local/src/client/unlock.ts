@@ -203,6 +203,8 @@ export function createUnlockSource(fetch: HostFetch, now: () => number = Date.no
       } catch (_unreachable: unknown) {
         // The banner stays, saying Lock now did not reach the computer, and the next read shows what holds.
         publish({ lockFailed: true })
+        // A read this lock overtook is discarded, so the next read is armed again here.
+        schedule()
         return
       }
       clearTimeout(timer)
