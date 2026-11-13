@@ -5,6 +5,8 @@ kind: "package-bundle"
 
 # @delo/plugin-delegation-consent
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 `@delo/plugin-delegation-consent` provides the `delegationConsent` service, the Service Provider of the external-delegation consent seam of [`@deepseek-ai/dsh-subagent`](../../../packages/subagent/subagent). An external agent is a subagent provider without a local child session, such as Claude Code (`claude-code`) or Codex (`codex`): it runs as its own program outside Delo's sandbox and approval prompts, can read and change files wherever its own settings allow, Delo's home included, and uses the person's own sign-in and account. The runtime asks the service before every external start and starts the provider only on its `allow`. The plugin also gives the model's `plugin_manager` a guard against bringing such an agent in, and serves the loopback-only routes behind the studio's approval card action and its Permissions section. With `enabled` off, the schema's default and the C16 switch `external_agent_consent`'s parity value, it mounts nothing and external providers start as upstream starts them.

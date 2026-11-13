@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write delo/packages/plugin-delegation-consent/README.md
+/:
+  en: af77516384e7fcf6
+  zh: 1c43ebb119c9cd75
+/delo-plugin-delegation-consent:
+  en: 2bb3139236d259c6
+  zh: 6ab3091e37d57193
+/delo-plugin-delegation-consent/summary:
+  en: 4cb43a42ae2918f4
+  zh: 951f847e8481eb54
+/delo-plugin-delegation-consent/contents:
+  en: e5af3cc37c2381f4
+  zh: 5f0e767498a8fbf2
+/delo-plugin-delegation-consent/contract:
+  en: ac69b25ad747621b
+  zh: 9c82ea291aab405e
+/delo-plugin-delegation-consent/configuration:
+  en: 66c3416d0c5f5741
+  zh: 17f92d82bc1ea426
+/delo-plugin-delegation-consent/surfaces:
+  en: aec5cfe00a0324a8
+  zh: 347b18e5cb1ea364
+/delo-plugin-delegation-consent/known-limitations:
+  en: db53bff7f5b40e7a
+  zh: 2ea77b915dccd413
+/delo-plugin-delegation-consent/tests:
+  en: 6ce31afada0b4391
+  zh: 01834032f8703401
