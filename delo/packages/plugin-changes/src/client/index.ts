@@ -18,6 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { ChangesController } from './controller.ts'
 import { createChangesToastSource, ChangesToast } from './ChangesToast.tsx'
+import { CreateSection, type CreateSectionInjected } from './CreateSection.tsx'
 import { ChangesSection, type ChangesSectionInjected } from './ChangesSection.tsx'
 import { en, zh, type ChangesLocaleKey } from './locales.ts'
 import { WorkBadge, type WorkBadgeInjected } from './WorkBadge.tsx'
@@ -25,6 +26,7 @@ import { WorkBadge, type WorkBadgeInjected } from './WorkBadge.tsx'
 export type { ChangesLocaleKey } from './locales.ts'
 export type { ActionOutcome, ChangesLoad, ChangesNotice } from './controller.ts'
 export type { ChangesSectionInjected, ChangesSectionProps } from './ChangesSection.tsx'
+export type { CreateSectionInjected, CreateSectionProps } from './CreateSection.tsx'
 export type { WorkBadgeInjected, WorkBadgeProps } from './WorkBadge.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -42,6 +44,12 @@ export const CHANGES_SECTION_ID = 'delo-changes'
 
 /** The section's place in Settings navigation: after the Trash section (21). */
 export const CHANGES_SECTION_ORDER = 22
+
+/** The `settings.section` id of the Create a plugin section. */
+export const CREATE_SECTION_ID = 'delo-create-plugin'
+
+/** Create a plugin's place in Settings navigation: right after the Changes section. */
+export const CREATE_SECTION_ORDER = 23
 
 /** The `sidebar.footer.action` id of the work-session badge. */
 export const WORK_BADGE_ID = 'delo-changes.work-badge'
@@ -95,6 +103,16 @@ export function apply(ctx: Context): void {
     name: 'settings.section', id: CHANGES_SECTION_ID, order: CHANGES_SECTION_ORDER, label: () => t('nav'), locale: NS,
     inject: () => section,
   }, ChangesSection))
+  const create: CreateSectionInjected = {
+    workspaces: () => changes.workspaces(),
+    create: (name, kind, workspace) => changes.createPlugin(name, kind, workspace),
+    request: (name, workspace) => changes.requestPlugin(name, workspace),
+    reveal: (name, workspace) => changes.revealPlugin(name, workspace),
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: CREATE_SECTION_ID, order: CREATE_SECTION_ORDER, label: () => t('create.nav'), locale: NS,
+    inject: () => create,
+  }, CreateSection))
   const badge: WorkBadgeInjected = { hooks: { changes: changes.state } }
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action', id: WORK_BADGE_ID, order: WORK_BADGE_ORDER, locale: NS, inject: () => badge,

@@ -67,6 +67,7 @@
     "@delo/plugin-permission-defaults": "workspace:*",
     "@delo/plugin-schedule-consent": "workspace:*",
     "@delo/plugin-trash": "workspace:*",
+    "@delo/skill-plugin-authoring": "workspace:*",
     "@delo/reach": "workspace:*",
     "@delo/settings-controls": "workspace:*"
   },

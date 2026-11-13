@@ -17,6 +17,9 @@ export const STATE_PATH = `${CHANGES_ROUTE_PREFIX}/state`
  */
 export const SHOW_PATH = `${CHANGES_ROUTE_PREFIX}/show`
 
+/** The workspaces a plugin may be created in, and whether this request is at the computer. */
+export const WORKSPACES_PATH = `${CHANGES_ROUTE_PREFIX}/workspaces`
+
 /** The actions, each a `POST` whose body names the change or the plugin. */
 export const ACTION_PATHS = {
   apply: `${CHANGES_ROUTE_PREFIX}/apply`,
@@ -320,13 +323,25 @@ export interface RefusalView {
   readonly notShown?: readonly string[]
 }
 
-/** `create`: a plugin the studio's Create a plugin wrote into the Delo home's `plugins` folder. */
+/** The plugin kinds Create a plugin offers, which `@delo/plugin-scaffold`'s `PLUGIN_KINDS` lists too; a spec holds the two equal. */
+export const CREATE_KINDS = ['tool', 'preset', 'ui', 'bundle'] as const
+
+/** `workspaces`: where Create a plugin may put a plugin, the default first. */
+export interface WorkspacesView {
+  /** Whether this request could create: the person at their computer. */
+  readonly atComputer: boolean
+  readonly workspaces: readonly { readonly id: string, readonly title: string, readonly path: string }[]
+}
+
+/** `create`: a plugin the studio's Create a plugin wrote into a workspace's `plugins` folder. */
 export interface CreatedView {
   readonly kind: 'created'
   /** The package name. */
   readonly plugin: string
   /** The plugin kind. */
   readonly pluginKind: string
+  /** The workspace's id. */
+  readonly workspace: string
   /** The plugin's folder, an absolute path. */
   readonly folder: string
   /** The files written, relative to the folder. */

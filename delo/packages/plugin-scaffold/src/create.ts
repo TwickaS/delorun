@@ -59,10 +59,11 @@ export function checkName(name: string): void {
 /**
  * Check that the folder can take the scaffold: an empty directory, or a new one whose parent exists.
  * @param folder - the folder's absolute path.
+ * @param via - words appended to the advice to choose another folder, such as ` with --dir`.
  * @returns whether the folder must be created.
  * @throws {ScaffoldError} of kind `failed` for a folder that exists and is not an empty directory, or a missing parent.
  */
-async function checkFolder(folder: string): Promise<boolean> {
+async function checkFolder(folder: string, via: string): Promise<boolean> {
   const status = await lstat(folder).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw new ScaffoldError('failed', `${folder} cannot be read: ${error instanceof Error ? error.message : String(error)}`)
@@ -70,11 +71,11 @@ async function checkFolder(folder: string): Promise<boolean> {
   if (status === undefined) {
     // The parent may be reached through a symbolic link, such as /tmp on macOS; only the new folder must not be one.
     const parent = await stat(dirname(folder)).catch((_error: unknown) => undefined /* reported as missing below */)
-    if (parent?.isDirectory() !== true) throw new ScaffoldError('failed', `${dirname(folder)} is not a folder; create it first, or choose another folder`)
+    if (parent?.isDirectory() !== true) throw new ScaffoldError('failed', `${dirname(folder)} is not a folder; create it first, or choose another folder${via}`)
     return true
   }
-  if (status.isSymbolicLink() || !status.isDirectory()) throw new ScaffoldError('failed', `${folder} exists and is not a folder; choose another folder`)
-  if ((await readdir(folder)).length > 0) throw new ScaffoldError('failed', `${folder} is not empty; choose a new or empty folder`)
+  if (status.isSymbolicLink() || !status.isDirectory()) throw new ScaffoldError('failed', `${folder} exists and is not a folder; choose another folder${via}`)
+  if ((await readdir(folder)).length > 0) throw new ScaffoldError('failed', `${folder} is not empty; choose a new or empty folder${via}`)
   return false
 }
 
@@ -127,6 +128,8 @@ export interface CreateRequest {
   readonly running: VersionOutput
   /** The installation whose shipped packages a name may not take and whose cordis version the plugin declares. */
   readonly installation: Installation
+  /** Words appended to the advice to choose another folder, such as ` with --dir`; empty when the caller offers no such option. */
+  readonly chooseFolderVia: string
 }
 
 /**
@@ -138,7 +141,7 @@ export interface CreateRequest {
  */
 export async function createPlugin(request: CreateRequest): Promise<readonly string[]> {
   checkName(request.name)
-  const create = await checkFolder(request.folder)
+  const create = await checkFolder(request.folder, request.chooseFolderVia)
   if (await installationShips(request.installation, request.name)) {
     throw new ScaffoldError('usage', `${JSON.stringify(request.name)} is a package this Delo installation ships, and a profile loads the shipped package instead of a plugin of the same name; choose another name, such as @you/${bareName(request.name)}`)
   }

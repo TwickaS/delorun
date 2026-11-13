@@ -71,6 +71,7 @@
     "@deepseek-ai/dsh-tool-testkit": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-user-approval": "workspace:*",
+    "@deepseek-ai/dsh-workspace": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "@testing-library/react": "^16.3.3",
     "@types/react": "~18.3.1",

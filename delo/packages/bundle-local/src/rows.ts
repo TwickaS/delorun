@@ -157,6 +157,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
   {
+    id: 'delo-plugin-authoring',
+    kind: 'added',
+    reason: 'The delo-plugin-authoring skill: it teaches the agent to scaffold a plugin in the chat\'s workspace with `delorun plugin new`, and that turning the plugin on is the person\'s step at the computer; upstream has no such skill.',
+    parity: { kind: 'disabled', reason: 'Recorded scenarios list upstream\'s skills, and a disabled row mounts nothing.' },
+  },
+  {
     id: 'delo-delegation-consent',
     kind: 'added',
     reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the person turns it off in Settings, External agents, which setup\'s prompts answer does not change, and the plugin\'s own default, off, is the parity value.',

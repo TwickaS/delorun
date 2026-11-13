@@ -11,8 +11,10 @@ import {
   LOOPBACK_REQUIRED,
   SHOW_PATH,
   STATE_PATH,
+  WORKSPACES_PATH,
   type ActionView,
   type ChangesStateView,
+  type CreatedView,
   type DiscardView,
   type DoneView,
   type InstallReloadView,
@@ -20,11 +22,14 @@ import {
   type PendingListView,
   type PendingView,
   type RefusalView,
+  type RequestedView,
+  type RevealedView,
   type ReloadView,
   type RiskKindView,
   type ShownView,
   type StartedView,
   type WorkReviewView,
+  type WorkspacesView,
 } from '../wire.ts'
 import type { ChangesToastKey } from './locales.ts'
 
@@ -265,6 +270,57 @@ export class ChangesController {
   async done(plugin: string, version: string, confirmedRisk: boolean): Promise<ActionOutcome> {
     return await this.act(() => request<DoneView>(ACTION_PATHS.done, confirmedRisk ? { plugin, version, confirmedRisk } : { plugin, version }),
       result => result.kind === 'ended' ? { ok: true, key: 'toast.workEnded' } : { ok: false, key: 'toast.wentBack', values: { failure: result.failure } })
+  }
+
+  /**
+   * Read the workspaces a plugin may be created in.
+   * @returns them, the default first, and whether this page is at the computer.
+   * @throws {ChangesRequestError} when the route refuses; a network failure rejects with the fetch error.
+   */
+  async workspaces(): Promise<WorkspacesView> {
+    return await request<WorkspacesView>(WORKSPACES_PATH)
+  }
+
+  /**
+   * Create a plugin in a workspace. A refusal is returned for the form to show beside its fields, not toasted.
+   * @param name - the package name.
+   * @param kind - the plugin kind.
+   * @param workspace - the workspace's id.
+   * @returns the created plugin, or the refusal's sentence.
+   */
+  async createPlugin(name: string, kind: string, workspace: string): Promise<CreatedView | { readonly refused: string }> {
+    try {
+      return await request<CreatedView>(ACTION_PATHS.create, { name, kind, workspace })
+    } catch (error) {
+      return this.refusedWords(error)
+    }
+  }
+
+  /**
+   * Ask for the created plugin to be turned on: the install from its folder waits for the person's review in Changes.
+   * @param name - the package name.
+   * @param workspace - the workspace's id.
+   * @returns the outcome.
+   */
+  async requestPlugin(name: string, workspace: string): Promise<ActionOutcome> {
+    return await this.act(() => request<RequestedView>(ACTION_PATHS.request, { name, workspace }), () => ({ ok: true, key: 'toast.requested' }))
+  }
+
+  /**
+   * Show a created plugin's folder in the computer's file manager.
+   * @param name - the package name.
+   * @param workspace - the workspace's id.
+   * @returns the outcome.
+   */
+  async revealPlugin(name: string, workspace: string): Promise<ActionOutcome> {
+    return await this.act(() => request<RevealedView>(ACTION_PATHS.reveal, { name, workspace }), () => ({ ok: true, key: 'toast.revealed' }))
+  }
+
+  private refusedWords(error: unknown): { readonly refused: string } {
+    console.warn('delo-changes: the plugin was not created:', error)
+    const refusal = error instanceof ChangesRequestError ? error.refusal : undefined
+    if (refusal?.code === LOOPBACK_REQUIRED) this.refusedRemote.set(true)
+    return { refused: refusal?.message ?? '' }
   }
 
   private async act<T>(run: () => Promise<T>, notice: (result: T) => ChangesNotice): Promise<ActionOutcome> {

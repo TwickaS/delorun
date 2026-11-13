@@ -90,6 +90,7 @@ import {
   LOOPBACK_REQUIRED,
   SHOW_PATH,
   STATE_PATH,
+  WORKSPACES_PATH,
   type ActionView,
   type ChangesAction,
   type ChangesStateView,
@@ -108,10 +109,11 @@ import {
   type ShownView,
   type StartedView,
   type WorkReviewView,
+  type WorkspacesView,
 } from './wire.ts'
-import { createAction, CreateRefusal, requestAction, revealAction, type ScaffoldTarget } from './create-actions.ts'
+import { createAction, CreateRefusal, requestAction, revealAction, type ScaffoldTarget, type WorkspaceChoice } from './create-actions.ts'
 
-export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, type ChangesAction } from './wire.ts'
+export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesAction } from './wire.ts'
 
 /** The largest body an action reads, in bytes; a body names one change or plugin. */
 export const MAX_BODY_BYTES = 16 * 1024
@@ -174,6 +176,11 @@ export interface RouteDependencies {
   readonly loopbackPort: LoopbackPort
   /** What Create a plugin targets: the running release and the installation. */
   readonly scaffold: () => ScaffoldTarget
+  /**
+   * The workspaces a plugin may be created in.
+   * @returns the registry's workspaces, the default first.
+   */
+  readonly workspaces: () => readonly WorkspaceChoice[]
   /**
    * Show a folder in the computer's file manager.
    * @param folder - a created plugin's folder.
@@ -768,12 +775,12 @@ function doneView(done: WorkDone): DoneView {
 async function createActionOf(action: 'create' | 'request' | 'reveal', body: Readonly<Record<string, unknown>>, ctx: ChangesContext, dependencies: RouteDependencies): Promise<CreatedView | RequestedView | RevealedView> {
   try {
     if (action === 'create') {
-      onlyFields(body, ['name', 'kind'])
-      return await createAction(ctx.home, body as { readonly name: unknown, readonly kind: unknown }, dependencies.scaffold())
+      onlyFields(body, ['name', 'kind', 'workspace'])
+      return await createAction(dependencies.workspaces(), body as { readonly name: unknown, readonly kind: unknown, readonly workspace?: unknown }, dependencies.scaffold())
     }
-    onlyFields(body, ['name'])
-    const named = body as { readonly name: unknown }
-    return action === 'request' ? await requestAction(ctx, named, entryView) : await revealAction(ctx.home, named, dependencies.reveal)
+    onlyFields(body, ['name', 'workspace'])
+    const named = body as { readonly name: unknown, readonly workspace?: unknown }
+    return action === 'request' ? await requestAction(ctx, dependencies.workspaces(), named, entryView) : await revealAction(dependencies.workspaces(), named, dependencies.reveal)
   } catch (error) {
     if (error instanceof CreateRefusal) throw new RouteRefusal(error.status, error.code, error.message)
     throw error
@@ -908,6 +915,16 @@ function profileOf(dependencies: RouteDependencies): ChangesContext {
 }
 
 /**
+ * `GET workspaces`: where Create a plugin may put a plugin.
+ * @param workspaces - the registry's workspaces, the default first.
+ * @param atComputer - whether the request is at the computer.
+ * @returns the answer.
+ */
+function workspacesOf(workspaces: readonly WorkspaceChoice[], atComputer: boolean): WorkspacesView {
+  return { atComputer, workspaces: workspaces.map(({ id, title, path }) => ({ id, title, path })) }
+}
+
+/**
  * Build a reading route: `state` or `show`. Any admitted session reads, a remote one included.
  * @param read - what the route answers.
  * @param dependencies - what the routes reach.
@@ -971,6 +988,7 @@ export function changesRoutes(dependencies: RouteDependencies): readonly Changes
   return [
     { kind: 'exact', path: STATE_PATH, handler: readingRoute((ctx, _url, atComputer, home) => stateOf(ctx, atComputer, home), dependencies) },
     { kind: 'exact', path: SHOW_PATH, handler: readingRoute((ctx, url) => shownOf(ctx, url), dependencies) },
+    { kind: 'exact', path: WORKSPACES_PATH, handler: readingRoute((_ctx, _url, atComputer) => Promise.resolve(workspacesOf(dependencies.workspaces(), atComputer)), dependencies) },
     ...(Object.keys(ACTION_PATHS) as ChangesAction[]).map((action): ChangesRoute => ({ kind: 'exact', path: ACTION_PATHS[action], handler: actionRoute(action, dependencies) })),
   ]
 }

@@ -16,6 +16,8 @@ Everything Delo does is a plugin, and you can add your own: a tool the agent cal
 
 - [Before you start](#before-you-start)
 - [Create a plugin](#create-a-plugin)
+- [From the studio](#from-the-studio)
+- [In a chat](#in-a-chat)
 - [Run it while you work on it](#run-it-while-you-work-on-it)
 - [Check its versions](#check-its-versions)
 - [Install it](#install-it)
@@ -48,6 +50,18 @@ pnpm run build
 | `bundle` | No code: a `cordis.patch.yml` that turns on an existing plugin, upstream's read-before-edit guard |
 
 The package is written to `./my-plugin`, or to the folder `--dir <folder>` names, which must be empty or missing. It holds `package.json` with the bundle declaration and version ranges for the running Delo and DeepSeek Harness, `cordis.patch.yml`, the title the Plugins page shows, a README with these commands and, for `tool` and `ui`, the TypeScript source under `src/` with a `tsdown.config.ts` that builds it to `lib/` outside this repository. The `ui` build is deliberately small: it bundles no CSS files, images or fonts and writes one file without source maps, as its README says. `delorun plugin new` refuses a name in the `@deepseek-ai/` or `@delo/` scope and the name of a package Delo ships ([why](#forking-a-plugin-delo-ships)).
+
+## From the studio
+
+At your computer, open Settings, Plugins and use Create a plugin. Give the plugin a name, choose what it adds (the same four kinds as `delorun plugin new`) and choose a workspace; the first workspace is the default. Delo writes the same files `delorun plugin new` writes into the workspace's `plugins` folder, shows where they went and lists them. Open folder shows the folder in your file manager, where you and the agent can both work on it with the chat's usual approvals.
+
+Creating a plugin does not turn it on. Turn on records the plugin as a change waiting in Changes, where you review its files and approve it; this is the same review `delorun plugin add link:<folder>` leads to, and it applies in dangerous mode too. A phone or another device can see the section but cannot create a plugin: it says to do this at your computer.
+
+## In a chat
+
+Ask the agent for a plugin and it loads the `delo-plugin-authoring` skill: it scaffolds the plugin in the chat's workspace under `plugins/<name>` with `delorun plugin new`, edits the files, and checks them with `delorun plugin check` and the plugin's own tests. Its file writes and commands follow the chat's normal approvals. It cannot turn the plugin on, reload it or approve its build, so it tells you where the plugin is; turn it on at your computer as above, or with `delorun plugin add link:<folder>`.
+
+With changes protection on, a plugin you approved keeps running the approved files whoever edits its folder afterwards. An edit by the agent or by anyone else appears in Changes as a change waiting for your review and loads only after you approve it. With protection off, the default, a linked plugin reloads live as you save it, and each version is logged as a change decided without review.
 
 ## Run it while you work on it
 

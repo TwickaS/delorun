@@ -51,6 +51,7 @@ import { getDeloRuntimeVersion, getDshRuntimeVersion, type ProfileContext } from
 import type { HostConnectionAdmission, HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-workspace'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type PluginOperation, type ProtectionLevel } from '@delo/changes'
@@ -230,6 +231,7 @@ export function apply(ctx: Context, config: Config): void {
         if (launched === undefined) throw new Error('plugin-changes: this Host runs no profile launched by dsh, so it has no installation to scaffold for.')
         return { running: { delo: getDeloRuntimeVersion() as VersionOutput['delo'], dsh: getDshRuntimeVersion() as VersionOutput['dsh'] }, installation: { anchor: launched.installAnchor } }
       },
+      workspaces: () => scope.get('workspaceRegistry')?.list().map(({ id, title, path }) => ({ id, title, path })) ?? [],
       reveal: showFolder,
     })
     scope.effect(() => {

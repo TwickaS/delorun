@@ -106,10 +106,15 @@
         enabled: true
       disabled: true
 
+    - id: delo-plugin-authoring
+      name: '@delo/skill-plugin-authoring'
+      disabled: true
+
     - id: delo-delegation-consent
       name: '@delo/plugin-delegation-consent'
       config:
         enabled: true
+      disabled: true
 
     - id: delo-plugin-changes
       name: '@delo/plugin-changes'

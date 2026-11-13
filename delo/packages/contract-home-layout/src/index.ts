@@ -141,8 +141,6 @@ export const DELO_HOME_ENTRIES = {
   archive: 'archive',
   /** Approved plugin content, the change log, the protection setting and work sessions (Changes). */
   changes: 'changes',
-  /** Plugins created in the studio's Create a plugin, one folder each; the person's own work, never read by an update. */
-  plugins: 'plugins',
 } as const
 
 /**

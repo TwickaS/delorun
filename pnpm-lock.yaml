@@ -1873,6 +1873,9 @@ importers:
       '@delo/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
+      '@delo/skill-plugin-authoring':
+        specifier: workspace:*
+        version: link:../skill-plugin-authoring
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -2426,6 +2429,9 @@ importers:
       '@deepseek-ai/dsh-user-approval':
         specifier: workspace:*
         version: link:../../../packages/interaction/user-approval
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -3679,6 +3685,15 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+
+  delo/packages/skill-plugin-authoring:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:*
+        version: link:../../../packages/skill/skill
 
   delo/packages/supervisor:
     dependencies:

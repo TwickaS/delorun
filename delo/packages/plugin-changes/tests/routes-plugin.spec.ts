@@ -6,7 +6,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { expect, it, onTestFinished } from 'vitest'
 import * as plugin from '../src/index.ts'
-import { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, type ChangesRoute } from '../src/routes.ts'
+import { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, WORKSPACES_PATH, type ChangesRoute } from '../src/routes.ts'
 
 it('registers the Changes routes with the web server and names them to the boot page, and removes them with the plugin', async () => {
   for (const enabled of [false, true]) {
@@ -23,7 +23,7 @@ it('registers the Changes routes with the web server and names them to the boot 
     } as never)
     ctx.provide('connection', { admit: () => ({ rejection: 401 }), isReachPeer: () => false } as never)
     const fiber = await ctx.plugin(plugin, { enabled, installationBundles: [] })
-    const paths = [STATE_PATH, SHOW_PATH, ...Object.values(ACTION_PATHS)]
+    const paths = [STATE_PATH, SHOW_PATH, WORKSPACES_PATH, ...Object.values(ACTION_PATHS)]
     expect(registered.map(route => [route.kind, route.path])).toEqual(paths.map(path => ['exact', path]))
     const table: { kind: string, name?: string, value?: unknown }[] = []
     ctx.emit('webserver/index-inject', table as never, {} as never)
@@ -55,6 +55,11 @@ it('gives the routes the profile the Host runs and its hot reload', async () => 
   expect(await answer()).toMatchObject({ status: 503, body: { code: 'NO_PROFILE' } })
   ctx.provide('profileContext', { name: 'default', dir: '/nonexistent/profiles/default', home: '/nonexistent' } as never)
   expect(await answer()).toMatchObject({ status: 200, body: { profile: 'default', atComputer: true } })
+  // Create a plugin offers the workspaces the registry holds, in its order.
+  ctx.provide('workspaceRegistry', { list: () => [{ id: 'w1', title: 'Home', path: '/work/home', sessionIds: [] }] } as never)
+  let text = ''
+  await handlers.get(WORKSPACES_PATH)!({ method: 'GET', url: WORKSPACES_PATH, headers: { host: '127.0.0.1:3080' }, socket: { localAddress: '127.0.0.1', localPort: 3080 } } as never, { writeHead: () => {}, end: (body: string) => { text = body } } as never)
+  expect(JSON.parse(text)).toEqual({ atComputer: true, workspaces: [{ id: 'w1', title: 'Home', path: '/work/home' }] })
 })
 
 it('registers no Changes route when Connection cannot name a remote session', async () => {

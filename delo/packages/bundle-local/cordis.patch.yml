@@ -155,6 +155,10 @@
       config:
         enabled: true
 
+    # The skill that teaches the agent to make a plugin in the chat's workspace; turning it on stays the person's step.
+    - id: delo-plugin-authoring
+      name: '@delo/skill-plugin-authoring'
+
     - id: delo-delegation-consent
       name: '@delo/plugin-delegation-consent'
       config:

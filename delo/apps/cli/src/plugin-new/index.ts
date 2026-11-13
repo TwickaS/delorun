@@ -87,7 +87,7 @@ export async function runPluginNew(args: readonly string[], context: CommandCont
   const folder = resolve(typed)
   let files: readonly string[]
   try {
-    files = await createPlugin({ name, kind, folder, running, installation })
+    files = await createPlugin({ name, kind, folder, running, installation, chooseFolderVia: ' with --dir' })
   } catch (error) {
     return parseRefusal(error)
   }
