@@ -175,6 +175,7 @@ function TerminalSwitch({ t, fetch }: { t: Translate; fetch: HostFetch }): React
   }
   if (on === undefined && failure === undefined) return null
   return <div className={css.unlock} data-terminal-switch={on === true ? 'on' : 'off'}>
+    <h3 className={css.subheading}>{t('terminal.title')}</h3>
     {on === undefined ? null : <Switch checked={on} label={t('terminal.title')} disabled={busy} onChange={(next) => { void change(next) }} />}
     <p className={css.line}>{t('terminal.explain')}</p>
     {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}

@@ -11,8 +11,8 @@
  *
  * It signs in with `delorun open --print` of the same home, once per width.
  *
- * It writes `<scenario>-390-<scheme>.png` for each scenario in light and dark, and `computer-requests-1280-<scheme>.png`
- * for the computer's list of requests. It exits 1 when the page logged an error. Playwright comes from
+ * It writes `<scenario>-390-<scheme>.png` for each scenario in light and dark, and `computer-*-1280-<scheme>.png` for the
+ * computer's Devices section. It exits 1 when the page logged an error. Playwright comes from
  * `@delo/benchmarks`, which already depends on it.
  * @module @delo/bundle-local/scripts/unlock-screens
  */
@@ -79,6 +79,8 @@ interface Scenario {
   readonly request?: (now: number) => Stub
   /** `POST /auth/elevation/lock`. */
   readonly lock?: Stub
+  /** `GET /auth/elevation/terminal`: whether the terminal switch is on; off unless named. */
+  readonly terminal?: boolean
   /** Whether the page is the computer, which lists the requests of the devices. */
   readonly computer?: boolean
   /** The steps after the studio loaded. */
@@ -127,6 +129,20 @@ const SCENARIOS: Record<string, Scenario> = {
       stubs.state = pending(Date.now())
       await page.getByRole('button', { name: 'Unlock', exact: true }).click()
       await page.getByText(`${CODE.slice(0, 4)} ${CODE.slice(4)}`).waitFor()
+    },
+  },
+  'dialog-expired': {
+    state: none,
+    request: now => ({ status: 201, body: { kind: 'pending', requestId: 'request-1', code: CODE, expiresAt: now + 3_000 } }),
+    steps: async (page, stubs) => {
+      await openDialog(page)
+      stubs.state = { status: 201, body: { kind: 'pending', requestId: 'request-1', code: CODE, expiresAt: Date.now() + 3_000 } }
+      await page.getByRole('button', { name: 'Unlock', exact: true }).click()
+      await page.getByText(`${CODE.slice(0, 4)} ${CODE.slice(4)}`).waitFor()
+      // The home forgets a request once it expires; before then, `none` would read as declined.
+      await page.waitForTimeout(3_500)
+      stubs.state = none()
+      await page.getByText('expired', { exact: false }).waitFor({ timeout: 10_000 })
     },
   },
   'dialog-unreachable': {
@@ -187,6 +203,25 @@ const SCENARIOS: Record<string, Scenario> = {
     state: elevated,
     steps: async (page) => { await openDevices(page); await page.getByText(/Unlocked until/u).first().waitFor() },
   },
+  'devices-terminal-refused': {
+    state: none,
+    steps: async (page) => {
+      await openDevices(page)
+      await page.getByRole('switch', { name: 'Terminal from phone without unlock' }).click()
+      await page.locator('[data-terminal-switch] [role="alert"]').waitFor()
+    },
+  },
+  'devices-terminal-on': {
+    state: none,
+    terminal: true,
+    steps: async (page) => { await openDevices(page); await page.locator('[data-terminal-switch="on"]').waitFor() },
+  },
+  'computer-terminal-on': {
+    state: () => ({ status: 421, body: { error: 'HOST_MISMATCH', message: 'This address is not a device address.' } }),
+    terminal: true,
+    computer: true,
+    steps: async (page) => { await openDevices(page); await page.locator('[data-terminal-switch="on"]').waitFor() },
+  },
   'computer-requests': {
     state: () => ({ status: 421, body: { error: 'HOST_MISMATCH', message: 'This address is not a device address.' } }),
     computer: true,
@@ -235,6 +270,12 @@ async function stub(page: Page, origin: string, scenario: Scenario): Promise<Stu
   await page.route(`${origin}${ELEVATION_ROUTES.state}`, route => answer(route, stubs.state))
   await page.route(`${origin}${ELEVATION_ROUTES.request}`, route => answer(route, scenario.request?.(Date.now()) ?? pending(Date.now())))
   await page.route(`${origin}${ELEVATION_ROUTES.lock}`, route => answer(route, scenario.lock ?? none()))
+  // The home turns the switch on only at the computer, and lets any studio turn it off.
+  await page.route(`${origin}${ELEVATION_ROUTES.terminal}`, route => answer(route, route.request().method() === 'GET'
+    ? { status: 200, body: { withoutUnlock: scenario.terminal === true } }
+    : JSON.parse(route.request().postData() ?? '{}').withoutUnlock === true && scenario.computer !== true
+      ? { status: 403, body: { error: 'LOOPBACK_REQUIRED', message: 'Only the computer turns this on.' } }
+      : { status: 200, body: { withoutUnlock: JSON.parse(route.request().postData() ?? '{}').withoutUnlock === true } }))
   await page.route(`${origin}${ELEVATION_ROUTES.pending}`, route => answer(route, {
     status: 200,
     body: {
@@ -305,6 +346,15 @@ async function studioReady(page: Page, failed: string): Promise<void> {
     await page.screenshot({ path: failed, fullPage: false, caret: 'initial' })
     throw error
   }
+  // A scratch home without a model key asks for one over the shell; the screenshots do not need a model.
+  const later = page.getByRole('button', { name: 'Configure later' })
+  try {
+    await later.waitFor({ timeout: 3_000 })
+  } catch (_noKeyPrompt: unknown) {
+    // The home has a key, so no prompt shows.
+    return
+  }
+  await later.click()
 }
 
 const playwright = createRequire(new URL('../../../apps/benchmarks/package.json', import.meta.url))('playwright') as Playwright
