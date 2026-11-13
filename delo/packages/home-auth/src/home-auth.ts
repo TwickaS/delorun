@@ -210,8 +210,6 @@ export interface HomeAuthOptions {
    * a loopback request.
    */
   readonly loopbackPort?: LoopbackPort
-  /** Whether dangerous mode holds now. Never holds without it. */
-  readonly dangerousMode?: () => boolean
   /** The resolved pairing choices ({@link resolvePairing}), read at each use; {@link PAIRING_DEFAULTS} when absent. */
   readonly pairing?: () => PairingSpec
 }
@@ -232,7 +230,6 @@ export class HomeAuth {
   private readonly now: () => number
   private readonly closeReachConnections: HomeAuthOptions['closeReachConnections']
   private readonly loopbackPort: LoopbackPort
-  private readonly dangerousMode: () => boolean
   private readonly random: RandomBytes
   private readonly secrets: SecretSink | undefined
   private readonly served = new Map<ReachListenerId, ServedListener>()
@@ -267,7 +264,6 @@ export class HomeAuth {
     this.now = options.now ?? Date.now
     this.closeReachConnections = options.closeReachConnections
     this.loopbackPort = options.loopbackPort ?? (() => undefined)
-    this.dangerousMode = options.dangerousMode ?? (() => false)
     this.random = options.random ?? systemRandom
     this.secrets = options.secrets
     this.challenges = new Challenges(this.now, this.random)

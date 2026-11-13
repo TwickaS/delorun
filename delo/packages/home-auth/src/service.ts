@@ -103,6 +103,13 @@ export const Config: schema<ConfigInput, Config> = schema.object({
   }).default({}).description('The pairing choices. Out-of-bounds values fail the load. The computer\'s Settings change them live; a reach device cannot.').volatile(),
 })
 
+/** What the settings service provides to this package: the live values of a namespace and the writes that set them. */
+interface SettingsServiceView {
+  describe(): readonly { readonly ns: string; readonly value: unknown }[]
+  update(ns: string, patch: object): Promise<void>
+  mutate(ns: string, ops: readonly { readonly op: 'unset'; readonly path: readonly string[] }[]): Promise<void>
+}
+
 /** The settings writes a reach device is refused: any write to the home-auth row, whose `pairing` and `secretsDirectory` decide who is admitted. */
 export const HOME_AUTH_SWITCH: ComputerOnlySwitch = { ns: 'delo-home-auth', field: EVERY_FIELD, label: 'the home-auth settings' }
 
@@ -154,7 +161,6 @@ export class HomeAuthService extends Service {
       directory: this.secretsDirectory,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
-      dangerousMode: () => this.dangerousMode(),
       secrets: this.ctx.get('deloSecrets'),
     })
     await core.start()
@@ -324,7 +330,7 @@ export class HomeAuthService extends Service {
   }
 
   private settingsFields(): SettingsFieldAccess {
-    const settings = this.ctx.get('settings')
+    const settings: SettingsServiceView | undefined = this.ctx.get('settings')
     return {
       read: (ns, field) => Reflect.get(settings?.describe().find(row => row.ns === ns)?.value ?? {}, field),
       write: async (ns, field, value) => {

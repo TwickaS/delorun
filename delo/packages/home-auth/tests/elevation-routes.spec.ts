@@ -39,12 +39,9 @@ let home: Home
 let port = 0
 let token = ''
 let close: () => Promise<void> = () => Promise.resolve()
-/** Whether dangerous mode holds, which the terminal switch route reads per request. */
-let dangerous = false
 
 beforeEach(async () => {
-  dangerous = false
-  home = await homeFixture({ dangerousMode: () => dangerous })
+  home = await homeFixture()
   home.auth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   const issued = await home.auth.issueOwnerCode()
   const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
@@ -108,12 +105,6 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
     request.on('error', reject)
     request.end(text)
   })
-}
-
-/** Give the signed-in device a running unlock, approved at the computer. */
-async function unlockDevice(): Promise<void> {
-  const asked = await send('POST', `${ELEVATION_PATHS.request}?reach`)
-  await send('POST', ELEVATION_PATHS.approve, { requestId: asked.body.requestId, typedCode: asked.body.code })
 }
 
 describe('the device routes', () => {
