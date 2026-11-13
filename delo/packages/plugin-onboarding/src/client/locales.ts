@@ -25,6 +25,7 @@ export const en = {
   'copy.done': 'Copied',
   'copy.failed': 'Could not copy. Select the command and copy it yourself.',
 
+  'welcome.lead': 'Welcome to Delorun. Choose your language, then add a model key so chats can start.',
   'welcome.language': 'Language',
   'welcome.model': 'Model providers',
   'welcome.models.open': 'Add or change providers',
@@ -253,6 +254,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'copy.done': '已复制',
   'copy.failed': '无法复制。请选中命令后自行复制。',
 
+  'welcome.lead': '欢迎使用 Delorun。先选择语言，再添加模型密钥，对话才能开始。',
   'welcome.language': '语言',
   'welcome.model': '模型服务商',
   'welcome.models.open': '添加或修改服务商',

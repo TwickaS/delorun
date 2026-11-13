@@ -89,6 +89,7 @@ export function WelcomeStep({ services, guide, notice }: StepProps & { readonly 
   const paragraphs = notice?.paragraphs() ?? []
   return (
     <div className={css.stack}>
+      <p className={css.lead}>{t('welcome.lead')}</p>
       <Choices label={t('welcome.language')} options={locale.locales.map(each => ({
         key: each.id, checked: locale.active === each.id, onSelect: () => { language.setLocale(each.id) }, content: each.label,
       }))} />

@@ -413,8 +413,8 @@
     {
       "path": "packages/client/connection/src/browser-auth.ts",
       "class": "security",
-      "reason": "Admission seam (C4, loopback credential records): `BrowserAuth.create` takes an `onMint` callback, called synchronously with the credential's kind, the SHA-256 of its value, its audience, issue and expiry times and, for `/connect`, its Peer id, before the launch-token exchange or `/connect` writes the response that sets it. It never receives the credential's value. Without a callback nothing is called, so upstream's minting is unchanged. `writeUnauthorized` is public, so Connection answers a refused index or `/connect` request with the same 401. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4, C16 switch `one_time_launch_tokens`): with `LaunchTokenOptions.oneTime` no process token exists, `authenticatedUrl` mints a token per call, every presented token is consumed, an exchange from another site or with another `Host` is refused, the 401 body carries the configured `reopenHint` and, for a token presented at another host, the host it was minted for; the default keeps upstream's reusable token and text. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10).",
-      "sha256": "3e21aeb70feef4b4ed2d0d48bcdca9236ca39496a43bc4936660cdb531e8f65a"
+      "reason": "Admission seam (C4, loopback credential records): `BrowserAuth.create` takes an `onMint` callback, called synchronously with the credential's kind, the SHA-256 of its value, its audience, issue and expiry times and, for `/connect`, its Peer id, before the launch-token exchange or `/connect` writes the response that sets it. It never receives the credential's value. Without a callback nothing is called, so upstream's minting is unchanged. `writeUnauthorized` is public, so Connection answers a refused index or `/connect` request with the same 401. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4, C16 switch `one_time_launch_tokens`): with `LaunchTokenOptions.oneTime` no process token exists, `authenticatedUrl` mints a token per call, every presented token is consumed, an exchange from another site or with another `Host` is refused, the 401 body carries the configured `reopenHint` and, for a token presented at another host, the host it was minted for; the default keeps upstream's reusable token and text. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Studio polish (2026-11-13): a cross-site one-time link is accepted when it is the person's own tap (Sec-Fetch-Mode navigate, Sec-Fetch-Dest document, Sec-Fetch-User ?1, no Sec-Purpose), since the link already carries the secret and a page cannot set Sec-Fetch-User; a request with Sec-Purpose or Purpose (prefetch, prerender) is refused without spending the token. Every other cross-site, foreign-Origin, HEAD or repeated presentation stays refused and consumed. Lead to review.",
+      "sha256": "52299b6bce7cc0043f30a0191fe62c6cda18aadd7228630f5f28749cad616e18"
     },
     {
       "path": "packages/client/connection/src/client/index.ts",
@@ -871,6 +871,12 @@
       "class": "delo-feature",
       "feature": "studio-seams",
       "reason": "Shows the Web welcome notice only while welcomeNotice is on, so a composition with its own onboarding can drop it."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/locales.ts",
+      "class": "generic-fix",
+      "feature": "studio-polish",
+      "reason": "The English key field placeholder and the missing-key line say where the key comes from in plain words instead of naming an environment variable, which means nothing on a phone. The other languages are unchanged. Offer upstream."
     },
     {
       "path": "packages/client/ui-settings-models/src/index.ts",
