@@ -1,6 +1,6 @@
 {
   "name": "@delo/plugin-chat-states",
-  "description": "Snooze and settle chats: kept on the harness outside the session log, with the Snoozed and Settled shelves in the sidebar",
+  "description": "Snooze and idle chats: kept on the harness outside the session log, with the Snoozed and Settled shelves in the sidebar",
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
