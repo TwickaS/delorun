@@ -666,6 +666,22 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
 }
 
 /**
+ * Run the composed profile as the home process's Host, with the home log attached: the `.env` layers load, their
+ * secret-named values are registered with the log's redactor, and the Host's root context receives `ctx.deloSecrets`,
+ * the credential registrations and the Cordis logger exporter before its first entry mounts.
+ * @param dependencies - the environment loader and the profile runner.
+ * @param homeLog - the home process's log.
+ * @param options - the run options except the environment and the preparation hook, which this function supplies.
+ * @returns the booted profile.
+ */
+export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>): Promise<BootedProfile> {
+  const environment = dependencies.loadEnvironment()
+  // The `.env` layers apply their names to this process's environment, so the secret-named values they add are read from it.
+  registerEnvironment(process.env, homeLog.redactor)
+  return dependencies.runProfile({ ...options, environment, prepare: (root) => { attachHomeLogs(root, homeLog) } })
+}
+
+/**
  * Compose the CLI profile and boot it: the home process's Host. The composition is the one every Host over a Delo home
  * goes through ([compose](./compose.ts)), with C1's confinement on its sandbox row, whose overlay exists while the Host
  * runs; the booted Host is held to the composition's invariants before it serves. Changes records which of its plugins
@@ -706,14 +722,12 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   let booted: BootedProfile
   try {
-    booted = await dependencies.runProfile({
-      environment: dependencies.loadEnvironment(),
+    booted = await runHost(dependencies, homeLog, {
       profile: request.profile,
       resolvedProfile: composed.resolvedProfile,
       patchFiles: composed.patchFiles,
       // The studio opens through the home process's `studio.open-token`, never through upstream's browser handoff.
       args: ['--no-open'],
-      prepare: (root) => { attachHomeLogs(root, homeLog) },
     })
   } catch (error) {
     await recordChangesBoot({ home: request.home, profile: request.profile, logger }, [], error)

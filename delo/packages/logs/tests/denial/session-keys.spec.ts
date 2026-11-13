@@ -78,7 +78,7 @@ async function run(options: { readonly attach: boolean }) {
     parameters: {},
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
     execute: () => {
-      ctx.logger('probe-tool').info('probe ran')
+      ctx.logger('delo-probe').info('probe ran')
       process.stdout.write('probe printed\n')
       return Promise.resolve('ok')
     },
@@ -109,8 +109,8 @@ describe('log-session-keys', () => {
     const records = recordsOf(location.file)
     const probe = records.filter(record => record.msg === 'probe ran')
     expect(probe.map(record => [record.logger, record.source, record.sessionId, record.turn])).toEqual([
-      ['probe-tool', 'delo', 's-keys', 1],
-      ['probe-tool', 'delo', 's-keys', 2],
+      ['delo-probe', 'delo', 's-keys', 1],
+      ['delo-probe', 'delo', 's-keys', 2],
     ])
     const printed = records.filter(record => record.msg === 'probe printed')
     expect(printed.map(record => [record.logger, record.source, record.sessionId, record.turn])).toEqual([

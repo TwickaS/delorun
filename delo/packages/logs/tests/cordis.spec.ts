@@ -4,7 +4,7 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
-import { attachCordisLogs } from '../src/cordis.ts'
+import { attachCordisLogs, isDeloLogger } from '../src/cordis.ts'
 import { canary, openLog, recordsOf, tempHome, type TempHome } from './support.ts'
 
 let context: Context | undefined
@@ -35,5 +35,23 @@ describe('attachCordisLogs', () => {
     ])
     expect(records[1]?.err).toMatchObject({ name: 'TypeError', message: 'bad [redacted:model-key]' })
     expect(JSON.stringify(records)).not.toContain('plain-value')
+  })
+
+  it('marks messages from Delo\'s loggers as delo and every other logger\'s as captured', () => {
+    const ctx = context = new Context()
+    temp = tempHome()
+    const { log, location } = openLog(temp.home)
+    attachCordisLogs(ctx, log)
+    ctx.logger('delo-home').info('mine')
+    ctx.logger('@delo/home-auth').info('mine too')
+    ctx.logger('delorun').info('not a Delo name')
+    ctx.logger('agent-loop').warn('upstream quoting a chat line')
+    expect(recordsOf(location.file).map(record => [record.logger, record.source])).toEqual([
+      ['delo-home', 'delo'],
+      ['@delo/home-auth', 'delo'],
+      ['delorun', 'captured'],
+      ['agent-loop', 'captured'],
+    ])
+    expect(isDeloLogger('delo')).toBe(true)
   })
 })

@@ -287,6 +287,7 @@ export class HomeAuth {
     this.elevations = new Elevations({
       now: this.now,
       random: this.random,
+      secrets: options.secrets,
       changed: (change) => {
         // The Gateway decides a stream once, when it opens, so a terminal or another elevated stream opened under an
         // unlock would outlive it: the device's reach connections close when it ends, and the studio reconnects

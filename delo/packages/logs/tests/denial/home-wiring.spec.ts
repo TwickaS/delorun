@@ -9,7 +9,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { CredentialProvider, credentialKey, credentialRef, type CredentialInfo, type CredentialRecord, type CredentialRecordEntry, type CredentialRecordInfo, type CredentialRef, type ResolvedCredential } from '@deepseek-ai/dsh-credentials'
-import { createUserMessage, LlmAdapter, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmAdapter, ToolCallId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { attachHomeLogs, registerEnvironment } from '../../../../apps/cli/src/log-secrets.ts'
@@ -134,7 +134,7 @@ describe('log-canary-every-surface: the secrets the home process holds', () => {
     const deviceNonce = brandString<Base64Url>(Buffer.alloc(16, 7).toString('base64url'))
     const deviceId = brandString<DeviceId>(Buffer.alloc(32, 5).toString('base64url'))
     const address = brandString<StudioAddress>('https://h.example')
-    const accepted = approvals.request({ devicePublicKey: { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>('x'), y: brandString<Base64Url>('y') }, deviceId, deviceNonce, label: 'phone', platform: 'ios' }, { listener: 'tailscale-private' as ReachListenerId, address, source: '100.64.0.1' })
+    const accepted = approvals.request({ devicePublicKey: { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>('x'), y: brandString<Base64Url>('y') }, deviceId, deviceNonce, label: 'phone', platform: 'ios' }, { listener: 'tailscale-private' as ReachListenerId, address, source: '192.0.2.1' })
     const code = matchCode({ homePublicKey: key.publicKey, deviceId, homeNonce: accepted.homeNonce, deviceNonce, address })
     expect(code).toHaveLength(8)
     note('session-secret', accepted.requestSecret)
@@ -178,16 +178,50 @@ describe('log-canary-every-surface: the secrets the home process holds', () => {
     for (const kind of planted.keys()) expect(joined, kind).toContain(`[redacted:${kind}]`)
   })
 
-  it('drops a registration when its value is removed or replaced', async () => {
+  it('keeps a model or provider key registered after it is replaced or removed', async () => {
     const { ctx, log } = await openHome()
     await ctx.plugin(MemoryCredentials, undefined)
     const ref = credentialRef('ROTATED_API_KEY')
-    await ctx.credentials.set(ref, 'delo-canary-before-rotation-1111')
-    expect(log.redactor.text('x delo-canary-before-rotation-1111 y')).toContain('[redacted:model-key]')
-    await ctx.credentials.set(ref, 'delo-canary-after-rotation-22222')
-    expect(log.redactor.text('x delo-canary-before-rotation-1111 y')).toBe('x delo-canary-before-rotation-1111 y')
+    const before = 'delo-canary-before-rotation-1111'
+    const after = 'delo-canary-after-rotation-22222'
+    await ctx.credentials.set(ref, before)
+    await ctx.credentials.set(ref, after)
+    // The provider accepts the replaced key until it is revoked, so a line that quotes it is still redacted.
+    expect(log.redactor.text(`x ${before} y`)).toContain('[redacted:model-key]')
     await ctx.credentials.unset(ref)
-    expect(log.redactor.text('x delo-canary-after-rotation-22222 y')).toBe('x delo-canary-after-rotation-22222 y')
+    expect(log.redactor.text(`x ${after} y`)).toContain('[redacted:model-key]')
+    const record = credentialKey('model', 'provider-record')
+    await ctx.credentials.modifyRecord(record, () => Promise.resolve({ kind: 'api-key', key: 'delo-canary-record-key-3333' }))
+    await ctx.credentials.deleteRecord(record)
+    expect(log.redactor.text('x delo-canary-record-key-3333 y')).toContain('[redacted:model-key]')
+  })
+
+  it('registers only the key and the secret-named fields of a stored record, and drops a grant when it is replaced or deleted', async () => {
+    const { ctx, log } = await openHome()
+    await ctx.plugin(MemoryCredentials, undefined)
+    const ordinary = ['eu-west-1-ordinary-region', 'https://example.test/ordinary/path', 'read:ordinary-scope']
+    const unchanged = (): void => { for (const text of ordinary) expect(log.redactor.text(`x ${text} y`)).toBe(`x ${text} y`) }
+    await ctx.credentials.modifyRecord(credentialKey('model', 'bedrock'), () => Promise.resolve({
+      kind: 'api-key',
+      key: 'delo-canary-bedrock-key-4444',
+      env: { AWS_REGION: ordinary[0] ?? '', AWS_SECRET_ACCESS_KEY: 'delo-canary-aws-secret-5555' },
+    }))
+    expect(log.redactor.text('x delo-canary-bedrock-key-4444 y')).toContain('[redacted:model-key]')
+    expect(log.redactor.text('x delo-canary-aws-secret-5555 y')).toContain('[redacted:model-key]')
+    const grant = credentialKey('client-connection', 'oauth')
+    const write = (secret: string): Promise<CredentialRecord | undefined> => ctx.credentials.modifyRecord(grant, () => Promise.resolve({
+      kind: 'grant',
+      payload: { region: ordinary[0], url: ordinary[1], scopes: [ordinary[2]], tokens: { access_token: secret } },
+    }))
+    await write('delo-canary-grant-first-6666')
+    expect(log.redactor.text('x delo-canary-grant-first-6666 y')).toContain('[redacted:session-secret]')
+    unchanged()
+    await write('delo-canary-grant-second-7777')
+    expect(log.redactor.text('x delo-canary-grant-first-6666 y')).toBe('x delo-canary-grant-first-6666 y')
+    expect(log.redactor.text('x delo-canary-grant-second-7777 y')).toContain('[redacted:session-secret]')
+    await ctx.credentials.deleteRecord(grant)
+    expect(log.redactor.text('x delo-canary-grant-second-7777 y')).toBe('x delo-canary-grant-second-7777 y')
+    unchanged()
   })
 })
 
@@ -214,13 +248,14 @@ describe('log-session-keys: on the home surface', () => {
     const { ctx, home, log } = await openHome()
     await mountAgentLoopTestDependencies(ctx)
     const harness = await mountAgentLoopTestHarness(ctx)
-    const call = [
+    const callId = ToolCallId('c1')
+    const call: StreamChunk[] = [
       { type: 'block-start', index: 0, blockType: 'tool-call' },
-      { type: 'tool-call-delta', index: 0, id: 'c1', name: 'probe', argumentsDelta: '{}' },
-      { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'c1', name: 'probe', arguments: '{}' } },
+      { type: 'tool-call-delta', index: 0, id: callId, name: 'probe', argumentsDelta: '{}' },
+      { type: 'block-end', index: 0, block: { type: 'tool-call', id: callId, name: 'probe', arguments: '{}' } },
       usage,
       { type: 'finish', reason: { kind: 'tool-calls' } },
-    ] as unknown as StreamChunk[]
+    ]
     const done: StreamChunk[] = [
       { type: 'block-start', index: 0, blockType: 'text' },
       { type: 'text-delta', index: 0, text: 'done' },
@@ -235,7 +270,7 @@ describe('log-session-keys: on the home surface', () => {
       parameters: {},
       output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
       execute: () => {
-        ctx.logger('probe-tool').info('probe ran')
+        ctx.logger('delo-probe').info('probe ran')
         process.stdout.write('probe printed\n')
         return Promise.resolve('ok')
       },
