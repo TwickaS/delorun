@@ -1005,10 +1005,13 @@ function registryOption(registry: Registry, t: Translate, resolved: string | nul
   return name === host ? name : <>{name}{' '}<span className={css.registryHint}>{host}</span></>
 }
 
-/** The plugin audit's findings on the failed screen, with the person's acceptance when the refusal allows one. */
-function AuditFindings({ audit, acceptable, onAccept, t }: {
+/**
+ * The plugin audit's findings: on the failed screen, with the person's acceptance when the refusal allows one, and on
+ * the done screen after an installation the audit let through, so every finding is read where the plugin was chosen.
+ */
+function AuditFindings({ audit, kind, onAccept, t }: {
   readonly audit: PluginAuditResult
-  readonly acceptable: boolean
+  readonly kind: 'acceptable' | 'refused' | 'installed'
   readonly onAccept: () => void
   readonly t: Translate
 }) {
@@ -1016,17 +1019,17 @@ function AuditFindings({ audit, acceptable, onAccept, t }: {
   return (
     <section className={css.approval} role="group" aria-labelledby={titleId} data-install-audit>
       <h3 id={titleId} className={css.approvalTitle}>{t('installAuditTitle')}</h3>
-      <p className={css.approvalText}>{t(acceptable ? 'installAuditDescription' : 'installAuditRefusedDescription')}</p>
+      <p className={css.approvalText}>{t(AUDIT_DESCRIPTION_KEYS[kind])}</p>
       <ul className={css.auditList}>
         {audit.findings.map(finding => (
-          <li key={`${finding.rule}:${finding.path}:${String(finding.line)}`} data-severity={finding.severity}>
-            <span className={css.auditSeverity}>{t(AUDIT_SEVERITY_KEYS[finding.severity])}</span> {finding.title} <code>{`${finding.path}:${String(finding.line)}`}</code>
+          <li key={`${finding.rule}:${finding.path}:${String(finding.line)}:${finding.excerpt}`} data-severity={finding.severity}>
+            <span className={css.auditSeverity}>{t(AUDIT_SEVERITY_KEYS[finding.severity])}</span> {finding.title}{finding.path === '' ? null : <> <code>{finding.line > 0 ? `${finding.path}:${String(finding.line)}` : finding.path}</code></>}
             {finding.excerpt === '' ? null : <pre className={css.auditExcerpt}>{finding.excerpt}</pre>}
           </li>
         ))}
       </ul>
       {audit.truncated ? <p className={css.approvalText}>{t('installAuditTruncated')}</p> : null}
-      {acceptable
+      {kind === 'acceptable'
         ? (
           <>
             <p className={css.approvalCaution}>{t('installAuditCaution')}</p>
@@ -1037,6 +1040,9 @@ function AuditFindings({ audit, acceptable, onAccept, t }: {
     </section>
   )
 }
+
+/** The description above the findings on each screen that lists them. */
+const AUDIT_DESCRIPTION_KEYS = { acceptable: 'installAuditDescription', refused: 'installAuditRefusedDescription', installed: 'installAuditInstalledDescription' } as const satisfies Record<'acceptable' | 'refused' | 'installed', PluginManagerLocaleKey>
 
 /** The words each finding's severity reads as. */
 const AUDIT_SEVERITY_KEYS = { critical: 'auditSeverityCritical', warning: 'auditSeverityWarning', notice: 'auditSeverityNotice' } as const satisfies Record<PluginAuditResult['findings'][number]['severity'], PluginManagerLocaleKey>
@@ -1542,10 +1548,15 @@ function InstallDialog({
             )
             : null}
           {phase === 'failed' && install.failure?.audit !== undefined
-            ? <AuditFindings audit={install.failure.audit} acceptable={install.failure.code === 'audit-findings'} onAccept={onAcceptAudit} t={t} />
+            ? <AuditFindings audit={install.failure.audit} kind={install.failure.code === 'audit-findings' ? 'acceptable' : 'refused'} onAccept={onAcceptAudit} t={t} />
             : null}
           {phase === 'done' && install.audit !== null && install.audit.findings.length > 0
-            ? <p className={css.result} role="status">{t(install.audit.decision === 'accepted' ? 'installDoneAuditAccepted' : 'installDoneAuditNotices', { count: String(install.audit.findings.length) })}</p>
+            ? (
+              <>
+                <p className={css.result} role="status">{t(install.audit.decision === 'accepted' ? 'installDoneAuditAccepted' : 'installDoneAuditNotices', { count: String(install.audit.findings.length) })}</p>
+                <AuditFindings audit={install.audit} kind="installed" onAccept={onAcceptAudit} t={t} />
+              </>
+            )
             : null}
           {phase === 'done' && install.installed === null
             ? <p className={css.result} role="status">{t('installDoneNothing')}</p>

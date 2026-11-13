@@ -11,8 +11,14 @@
  * C18 makes no failure: the command then prints the warning that the release was not checked against the log, since
  * when, and why. It is 1 otherwise. A summary line states what was and was not checked.
  *
+ * After the release checks, every profile's installed plugins are compared with their install records, every file
+ * hashed, and the profile's trust status written; a plugin whose files changed since it was installed is a warning on
+ * standard error and does not change the exit code ([install check](../plugin-install-check.ts)).
+ *
  * @module @delo/cli/verify
  */
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { DELO_LAUNCHER_ROOTS_ENV, DELO_LAUNCHER_VERSION_ENV } from '@delo/contract-home-layout'
 import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationMode, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
 import type { DeloLogger } from '@delo/logs'
@@ -21,6 +27,7 @@ import { parseRuntimeVersion } from '@delo/runtime-store'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput } from '../command.ts'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { deloVersion } from '../version.ts'
+import { checkInstalledPlugins } from '../plugin-install-check.ts'
 import { checkRelease, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
 
 /** The `delorun verify --help` text. */
@@ -65,6 +72,28 @@ export interface VerifyEnvironment {
    * @returns the version.
    */
   readonly running: () => string
+  /**
+   * Compare every profile's installed plugins with their install records, hashing every file, and print a warning for
+   * each changed plugin; absent compares none.
+   * @param home - the Delo home.
+   * @param output - where the warnings go.
+   */
+  readonly checkPlugins?: (home: string, output: CommandOutput) => Promise<void>
+}
+
+/**
+ * The full plugin change check of every profile in a home ([install check](../plugin-install-check.ts)).
+ * @param home - the Delo home.
+ * @param output - where the warnings go.
+ */
+async function checkEveryProfile(home: string, output: CommandOutput): Promise<void> {
+  const profiles = join(home, 'profiles')
+  if (!existsSync(profiles)) return
+  const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
+  for (const entry of readdirSync(profiles, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    await checkInstalledPlugins({ home, profile: entry.name, profileDir: join(profiles, entry.name), installAnchor: INSTALL_ANCHOR, full: true, output })
+  }
 }
 
 /** This process's fetch, clock, platform and version. */
@@ -73,6 +102,7 @@ const PROCESS_ENVIRONMENT: VerifyEnvironment = {
   now: () => Math.floor(Date.now() / 1000),
   platform: `${process.platform}-${process.arch}`,
   running: deloVersion,
+  checkPlugins: checkEveryProfile,
 }
 
 /**
@@ -212,6 +242,8 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
       else context.stdout(reportLines(release, outcome))
       for (const notice of outcome.notices) context.stderr(`notice: ${notice}\n`)
       for (const warning of outcome.warnings) context.stderr(`warning: ${warning}\n`)
+      // A changed plugin is a warning and fails nothing: the plugins are the person's, not the release's.
+      await environment.checkPlugins?.(home.path, context)
       return exitOf(outcome)
     },
   }

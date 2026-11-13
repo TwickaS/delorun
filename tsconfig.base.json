@@ -92,6 +92,8 @@
       "@deepseek-ai/dsh-experimental-claude-code-mods/examples/*": ["./packages/experimental/claude-code-mods/examples/*"],
       "@deepseek-ai/dsh/profile-boot": ["./apps/cli/src/profile-boot.ts"],
       "@deepseek-ai/dsh/lib/bin.js": ["./apps/cli/src/bin.ts"],
+      "@deepseek-ai/dsh/lib/args.js": ["./apps/cli/src/args.ts"],
+      "@deepseek-ai/dsh/lib/plugin.js": ["./apps/cli/src/plugin.ts"],
       "@deepseek-ai/dsh-browser-use": ["./packages/browser-use/browser-use/src/index.ts"],
       "@deepseek-ai/dsh-browser-use/brand": ["./packages/browser-use/browser-use/src/brand.ts"],
       "@deepseek-ai/dsh-experimental-browser-use-runtime": ["./packages/experimental/browser-use-runtime/src/index.ts"],

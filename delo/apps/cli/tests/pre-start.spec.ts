@@ -35,7 +35,7 @@ function context(kind: PreStartContext['kind'], successor = false): PreStartCont
  * @returns the steps.
  */
 function recorded(ran: string[], migrated: PreStartContext[]): PreStartStep[] {
-  return preStartSteps({ migrations: (start) => { migrated.push(start); return [] } }).map(step => ({
+  return preStartSteps({ migrations: (start) => { migrated.push(start); return [] }, pluginChanges: () => Promise.resolve() }).map(step => ({
     ...step,
     run: async (start: PreStartContext) => {
       ran.push(step.name)
@@ -45,17 +45,17 @@ function recorded(ran: string[], migrated: PreStartContext[]): PreStartStep[] {
 }
 
 describe('the pre-start steps', () => {
-  it('run in one order: the import recovery, the restore recovery, the migrations, then the update notice', () => {
-    expect(preStartSteps({ migrations: () => [] }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'update-notice'])
+  it('run in one order: the import recovery, the restore recovery, the migrations, the plugin change check, then the update notice', () => {
+    expect(preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'plugin-changes', 'update-notice'])
   })
 
   it('run every step for the CLI profile, and all but the restore recovery for delorun headless', async () => {
     const cli: string[] = []
     await runPreStartSteps(recorded(cli, []), context('cli'))
-    expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'update-notice'])
+    expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'plugin-changes', 'update-notice'])
     const headless: string[] = []
     await runPreStartSteps(recorded(headless, []), context('headless'))
-    expect(headless).toEqual(['stock-import-recovery', 'profile-migrations', 'update-notice'])
+    expect(headless).toEqual(['stock-import-recovery', 'profile-migrations', 'plugin-changes', 'update-notice'])
   })
 
   it('ask for the migrations of the headless profile on every delorun headless run, and none for a successor', async () => {
@@ -76,6 +76,15 @@ describe('the pre-start steps', () => {
     expect(migrated.map(start => start.profile)).toEqual(['default'])
   })
 
+  it('run the plugin change check for both starts, an update\'s successor included', async () => {
+    const checked: string[] = []
+    const steps = preStartSteps({ migrations: () => [], pluginChanges: (start) => { checked.push(`${start.kind}:${String(start.successor)}`); return Promise.resolve() } }).filter(step => step.name === 'plugin-changes')
+    await runPreStartSteps(steps, context('cli'))
+    await runPreStartSteps(steps, context('cli', true))
+    await runPreStartSteps(steps, context('headless'))
+    expect(checked).toEqual(['cli:false', 'cli:true', 'headless:false'])
+  })
+
   it('stop at the first step that refuses, and run none after it', async () => {
     const ran: string[] = []
     const refusal = new Error('the import journal cannot be trusted')
@@ -85,7 +94,7 @@ describe('the pre-start steps', () => {
   })
 
   it('finish no restore and withdraw no import on a home without either, and leave the notice slot doing nothing until its feature fills it', async () => {
-    const real = preStartSteps({ migrations: () => [] })
+    const real = preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() })
     await expect(real.find(step => step.name === 'data-copy-recovery')!.run(context('cli'))).resolves.toBeUndefined()
     await expect(recoverStockImportStep(context('cli'))).resolves.toBeUndefined()
     await expect(updateNoticeStep(context('headless'))).resolves.toBeUndefined()

@@ -1,0 +1,38 @@
+{
+  "name": "@delo/plugin-install-check",
+  "description": "Delo's plugin install check: the pluginAudit provider that warns about missing integrity, known advisories, very new versions and lookalike names for every package an installation brings, refuses a known critical advisory until the person allows it, records each installed plugin's files, and the deloPluginTrust service that reports plugins changed since their installation",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./check": "./src/check.ts",
+    "./tests/*": "./tests/*.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-atomic-write": "workspace:*",
+    "@delo/contract-release-manifest": "workspace:*",
+    "@delo/release-formats": "workspace:*",
+    "@delo/runtime-store": "workspace:*",
+    "semver": "^7.8.5",
+    "yaml": "^2.9.0",
+    "zod": "4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@types/semver": "^7.8.0"
+  },
+  "delo": {
+    "state": "shipped"
+  }
+}

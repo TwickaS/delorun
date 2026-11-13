@@ -53,6 +53,33 @@ export interface PackageOperationOptions {
   idleTimeoutMs?: number
   /** Bound on the pre-install registry lookup, in milliseconds; without one a fixed bound applies. */
   lookupTimeoutMs?: number
+  /**
+   * The profile's files as they were before an earlier resolution-only run (`--lockfile-only`) of the same operation,
+   * `undefined` for a file that did not exist. This run then restores these files on a rejection, and treats the
+   * dependencies the earlier `package.json` lacks as new, as it would had it resolved them itself; a `package.json` that
+   * did not exist reads as a profile without dependencies.
+   */
+  baseline?: ProfileBaseline
+}
+
+/** The profile files {@link PackageOperationOptions.baseline} names, as text. */
+export interface ProfileBaseline {
+  readonly manifest: string | undefined
+  readonly lockfile: string | undefined
+}
+
+/**
+ * Read a baseline `package.json` the way {@link readProfileManifest} reads the file.
+ * @param text The file's text, `undefined` when it did not exist.
+ * @returns The manifest; an empty one for a file that did not exist.
+ * @throws Error when the text holds no JSON object.
+ */
+function baselineManifest(text: string | undefined): ProfileManifest {
+  if (text === undefined) return {}
+  // The object check below validates the file data before trusting the parse type.
+  const parsed = JSON.parse(text) as ProfileManifest | null
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('dsh: the baseline profile manifest must hold a JSON object')
+  return parsed
 }
 
 /** Resolve relative package specs against the caller's directory.
@@ -311,8 +338,11 @@ export async function runProfilePnpm(
     const bytes = Buffer.from(active)
     return { exitCode: 1, output: bytes.subarray(Math.max(0, bytes.length - options.outputBytes)).toString('utf8'), truncated: bytes.length > options.outputBytes, logPath }
   }
-  const before = readProfileManifest('dsh', dir)
-  const savedFiles = ['package.json', 'pnpm-lock.yaml'].map(name => ({ path: join(dir, name), text: optionalFile(join(dir, name)) }))
+  const baseline = options.baseline
+  const before = baseline === undefined ? readProfileManifest('dsh', dir) : baselineManifest(baseline.manifest)
+  const savedFiles = baseline === undefined
+    ? ['package.json', 'pnpm-lock.yaml'].map(name => ({ path: join(dir, name), text: optionalFile(join(dir, name)) }))
+    : [{ path: join(dir, 'package.json'), text: baseline.manifest }, { path: join(dir, 'pnpm-lock.yaml'), text: baseline.lockfile }]
   const beforeDependencies = directDependencies(before)
   const installedBefore = new Map(Object.keys(beforeDependencies).map(name => [name, optionalFile(join(dir, 'node_modules', name, 'package.json'))]))
   let output = Buffer.alloc(0)

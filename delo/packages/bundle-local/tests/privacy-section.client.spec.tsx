@@ -10,31 +10,31 @@ import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject, type ConfigForm, type ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject, OPT_IN_ROWS, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, VERSION_ROW, VERSIONS_GLOBAL } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { OptIn, type OptInSettings } from '../src/client/opt-in.ts'
+import { OptIn, type OptInField, type OptInSettings } from '../src/client/opt-in.ts'
 import { PrivacySection, type OptInId, type PrivacySectionProps } from '../src/client/PrivacySection.tsx'
 import { NOTICE_STORAGE_KEY, NOTICE_VERSION } from '../src/client/DeloNotice.tsx'
 import { TITLE_KEY } from '../src/client/title.ts'
 
 afterEach(cleanup)
 
-/** One opt-in's Host form, accepting each write as the Host would. */
-function hostForm(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', enabled = false) {
+/** One switch's Host form, accepting each write of its field as the Host would. */
+function hostForm(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', enabled = false, field: OptInField = 'enabled') {
   const state = createSnapshotStore<ConfigFormSnapshot<OptInSettings>>({
-    status, value: status === 'ready' ? { enabled } : undefined, base: {}, user: {}, revision: 0, writable: true,
+    status, value: status === 'ready' ? { [field]: enabled } : undefined, base: {}, user: {}, revision: 0, writable: true,
   })
-  const set = vi.fn(async (_field: string, value: unknown) => {
-    state.update((draft) => { draft.value = { enabled: value === true } })
+  const set = vi.fn(async (written: string, value: unknown) => {
+    state.update((draft) => { draft.value = { [written]: value === true } })
     return true
   })
   const form: ConfigForm<OptInSettings> = {
     getSnapshot: () => state.getSnapshot(), subscribe: listener => state.subscribe(listener),
     set, unset: vi.fn(), mutate: vi.fn(),
   }
-  return { form, set, optIn: new OptIn(form) }
+  return { form, set, optIn: new OptIn(form, field) }
 }
 
 function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', updateCheck: { status?: ConfigFormSnapshot<OptInSettings>['status']; enabled?: boolean } = {}) {
-  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus), updateCheck: hostForm(updateCheck.status, updateCheck.enabled) }
+  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus), updateCheck: hostForm(updateCheck.status, updateCheck.enabled), npmMirror: hostForm('ready', false, 'npmMirror') }
   // The renderer's standard props are absent: the section reads none of them.
   const props = {
     t: makeTranslate(en),
@@ -45,6 +45,8 @@ function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['statu
     useAnalyticsMutation: bindSnapshotSelector(forms.analytics.optIn.state),
     useUpdateCheck: bindSnapshotSelector(forms.updateCheck.form),
     useUpdateCheckMutation: bindSnapshotSelector(forms.updateCheck.optIn.state),
+    useNpmMirror: bindSnapshotSelector(forms.npmMirror.form),
+    useNpmMirrorMutation: bindSnapshotSelector(forms.npmMirror.optIn.state),
     setEnabled: (id: OptInId, enabled: boolean) => forms[id].optIn.setEnabled(enabled),
   } as PrivacySectionProps
   render(<PrivacySection {...props} />)
@@ -89,6 +91,21 @@ describe('the Privacy section', () => {
     await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('false') })
     expect(forms[id].set.mock.calls).toEqual([['enabled', true], ['enabled', false]])
     expect(forms[other].set).not.toHaveBeenCalled()
+  })
+
+  it('turns the npm mirror on after consent by writing npmMirror of the install check\'s row, and off at once', async () => {
+    const forms = renderSection()
+    const toggle = switchOf(en['npmMirror.title'])
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+    const dialog = screen.getByRole('dialog', { name: en['npmMirror.confirm.title'] })
+    expect(within(dialog).getByText(en['npmMirror.confirm.body']).textContent).toMatch(/It applies from the next start\.$/u)
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
+    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('true') })
+    fireEvent.click(toggle)
+    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('false') })
+    expect(forms.npmMirror.set.mock.calls).toEqual([['npmMirror', true], ['npmMirror', false]])
+    expect(OPT_IN_ROWS.npmMirror).toBe('delo-plugin-install-check')
   })
 
   it('says why desktop analytics has no switch in a profile that does not serve it', () => {
@@ -160,7 +177,7 @@ describe('the Privacy section', () => {
 
 describe('the plugin', () => {
   it('registers the section and writes each opt-in to its own upstream row', async () => {
-    expect(OPT_IN_ROWS).toEqual({ sessionLog: 'session-log-deepseek', analytics: 'product-analytics', updateCheck: 'delo-update-check' })
+    expect(OPT_IN_ROWS).toEqual({ sessionLog: 'session-log-deepseek', analytics: 'product-analytics', updateCheck: 'delo-update-check', npmMirror: 'delo-plugin-install-check' })
     const ctx = new Context()
     const locale = new LocaleRuntime(ctx)
     try {
@@ -196,6 +213,9 @@ describe('the plugin', () => {
       await face.setEnabled('analytics', true)
       expect(analytics).toHaveBeenCalledWith('enabled', true)
       expect(sessionLog).not.toHaveBeenCalled()
+      const mirror = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.npmMirror), 'set').mockResolvedValue(true)
+      await face.setEnabled('npmMirror', true)
+      expect(mirror).toHaveBeenCalledWith('npmMirror', true)
       await face.setEnabled('sessionLog', false)
       expect(sessionLog).toHaveBeenCalledWith('enabled', false)
       const updateCheck = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.updateCheck), 'set').mockResolvedValue(true)

@@ -2072,6 +2072,14 @@ describe('PluginManagerPage', () => {
     // Notices of a clear audit are said as notices; a finding without an excerpt shows no excerpt block.
     set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'done', subject, installed: 'dsh-x', audit: { ...audit, decision: 'clear', findings: [{ ...finding, severity: 'notice', excerpt: '' }] } } })
     expect(screen.getByText(en.installDoneAuditNotices.replace('{count}', '1'))).toBeTruthy()
+    // An installation the audit let through lists every finding where the person chose the plugin, with no acceptance.
+    const installed = within(screen.getByRole('group', { name: en.installAuditTitle }))
+    expect(installed.getByText(en.installAuditInstalledDescription)).toBeTruthy()
+    expect(installed.getByText(finding.title)).toBeTruthy()
+    expect(installed.queryByRole('button', { name: en.installAuditAccept })).toBeNull()
+    // A finding about the whole lockfile names the file without a line; one with no file names none.
+    set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'done', subject, installed: 'dsh-x', audit: { ...audit, decision: 'clear', findings: [{ ...finding, path: 'pnpm-lock.yaml', line: 0 }, { ...finding, rule: 'other', path: '', line: 0 }] } } })
+    expect(within(screen.getByRole('group', { name: en.installAuditTitle })).getByText('pnpm-lock.yaml')).toBeTruthy()
     set({ install: { ...IDLE_INSTALL, open: true, spec: 'dsh-x', phase: 'failed', subject, failure: { reason: '', code: 'audit-findings', audit: { ...audit, findings: [{ ...finding, excerpt: '' }] } } } })
     expect(within(screen.getByRole('group', { name: en.installAuditTitle })).queryByText('fetch("https://webhook.site/x")')).toBeNull()
   })

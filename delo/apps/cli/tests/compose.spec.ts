@@ -7,18 +7,18 @@
  * runs another plugin, refuses; safe mode exempts no required row; the "Same as stock" answer is honoured; and the
  * approved plugin content slot applies before the sandbox overlay.
  */
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { stringify } from 'yaml'
+import { parse, stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { assertComposedInvariants, assertDeloInvariants, composeDeloProfile, composedRows, NO_APPROVED_CONTENT, ROW_SERVICES, TURN_GATE_SERVICE, type BootedHost, type ComposedStart, type ComposeKind, type ServiceProvider } from '../src/compose.ts'
 import type { BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
-import { isRecord } from '../src/patch-layers.ts'
+import { composedRow, isRecord } from '../src/patch-layers.ts'
 import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts'
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 
@@ -359,6 +359,7 @@ describe('the headless profile', { timeout: 60_000 }, () => {
       { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults' },
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard' },
       { id: 'delo-update-gate', name: '@delo/bundle-local/update-gate' },
+      { id: 'delo-plugin-install-check', name: '@delo/plugin-install-check' },
     ])
     expect(composed.prompts).toBeUndefined()
     expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()
@@ -417,5 +418,60 @@ describe('the headless profile', { timeout: 60_000 }, () => {
     const message = await refused(() => { assertDeloInvariants(composed, booted(composed, [], { [service]: undefined })) })
     expect(message).toContain(`${service} is not provided`)
     expect(message).toContain(service === TURN_GATE_SERVICE ? 'an update or a stop could not refuse new turns' : `by ${row}`)
+  })
+})
+
+/** The plugins `@delo/bundle-local`'s patch of the plugin manager's row protects. */
+const PROTECTED = (parse(readFileSync(join(import.meta.dirname, '../../../packages/bundle-local/cordis.patch.yml'), 'utf8')) as { id?: string, config?: { protectedPlugins?: string[] } }[])
+  .find(patch => patch.id === 'plugin-manager')?.config?.protectedPlugins ?? []
+
+describe('the plugin manager\'s row', { timeout: 60_000 }, () => {
+  it('asks no mirror until the install check\'s npmMirror setting is on, and keeps the protected plugins either way', async () => {
+    expect(PROTECTED).toContain('@delo/plugin-install-check')
+    expect((await compose()).npmMirror).toBe(false)
+    appendToProfilePatch({ id: 'delo-plugin-install-check', config: { enabled: true, npmMirror: true } })
+    const mirrored = await compose()
+    expect(mirrored.npmMirror).toBe(true)
+    expect(composedRow(mirrored.layers, 'plugin-manager')?.config).toMatchObject({ protectedPlugins: PROTECTED })
+    expect(() => { assertDeloInvariants(mirrored, booted(mirrored)) }).not.toThrow()
+  })
+
+  it('accepts a plain http registry, which the install check warns about, and refuses a patch that drops a protected plugin', async () => {
+    appendToProfilePatch({ id: 'plugin-manager', config: { registry: 'http://registry.example.test/', protectedPlugins: PROTECTED } })
+    await compose()
+    const path = appendToProfilePatch({ id: 'plugin-manager', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } })
+    const message = await refused(compose)
+    expect(message).toContain(`plugin-manager no longer protects ${PROTECTED.filter(name => name !== '@delo/plugin-fetch-guard').join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists (set in `)
+    expect(message).toContain(`, ${path})`)
+  })
+
+  it('refuses a booted Host whose plugin manager protects fewer plugins than Delo\'s bundle lists', async () => {
+    const composed = await compose()
+    const manager = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active' as const, config: { protectedPlugins: [] } }
+    expect(await refused(() => { assertDeloInvariants(composed, booted(composed, [manager])) })).toContain('plugin-manager no longer protects @delo/plugin-instruction-consent')
+  })
+})
+
+describe('a Delo row from another copy of its package', { timeout: 60_000 }, () => {
+  it('refuses a same-named stand-in of a Delo bundle that the profile resolved, naming the row, the package and both places', async () => {
+    // Resolution order puts the installation's copy first today; the invariant holds without relying on that order.
+    const standIn = join(deloHome, 'profiles', 'default', 'node_modules', '@delo', 'bundle-local-stand-in')
+    const prepared = await upstreamDependencies().prepareProfile('default')
+    const real = realpathSync(prepared.profile.layers.find(layer => layer.packageName === '@delo/bundle-local')!.packageDir)
+    cpSync(real, standIn, { recursive: true, filter: source => !source.slice(real.length).includes(`${sep}node_modules`) })
+    const layers = prepared.profile.layers.map(layer => layer.packageName === '@delo/bundle-local' ? { ...layer, packageDir: standIn } : layer)
+    const message = await refused(() => composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome }, {
+      prepareProfile: () => Promise.resolve({ ...prepared, profile: { ...prepared.profile, layers } }),
+      approvedPluginContent: NO_APPROVED_CONTENT,
+    }))
+    expect(message).toContain(`delo-fetch-guard loads @delo/bundle-local from ${standIn}, which is not this Delo's own copy in `)
+    expect(message).toContain(`delo-update-gate loads @delo/bundle-local from ${standIn}`)
+  })
+
+  it('records where each required Delo row resolves, inside this Delo\'s packages', async () => {
+    const composed = await compose()
+    const installCheck = composed.rowPackages.filter(row => row.id === 'delo-plugin-install-check').map(row => row.packageName)
+    expect(installCheck).toEqual(['@delo/bundle-local', '@delo/plugin-install-check'])
+    expect(composed.rowPackages.every(row => row.dir.startsWith(composed.packagesRoot))).toBe(true)
   })
 })

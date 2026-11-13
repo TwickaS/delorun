@@ -30,7 +30,7 @@ import { OPTIONAL_BUNDLES, OFFICIAL_ON_DEMAND_CATALOG, PROTECTED_PLUGINS } from 
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-config-editor'
 import type { ProfileContext, ProfileLayer, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
-import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage } from './operations.ts'
+import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage, type ProfileBaseline } from './operations.ts'
 import { classifyInstallFailure } from './install-failure.ts'
 import { officialBundleInstallTarget } from './official-install-target.ts'
 import { dependencySpec, InvalidInstallSpecError, parseInstallSpec, type ParsedInstallSpec } from './install-spec.ts'
@@ -753,7 +753,7 @@ export class PluginManager extends TypertRemoteService {
     result.packageResult = await this.runPnpm(['install', lockfileOf(files), '--ignore-scripts', ...registryArgs])
     if (!succeeded(result.packageResult)) throw new Error(result.packageResult.output)
     try {
-      await this.auditRestored(audited)
+      await this.auditRestored(audited, 'scripts')
       this.assertProtectedRowsKept(rows, this.composedRows())
       this.assertProtectedExemptionsKept(exemptions, readProfileVersionExemptions(this.profile.dir))
     } catch (error) {
@@ -767,6 +767,8 @@ export class PluginManager extends TypertRemoteService {
     }
     result.packageResult = await this.runPnpm(['rebuild', '--pending'])
     if (!succeeded(result.packageResult)) throw new Error(result.packageResult.output)
+    // Asked again once the builds have run, so an audit that records the installed files records their output too.
+    await this.auditRestored(audited)
     for (const plugin of changes.plugins) if (plugin.change === 'removed') this.installedFrom.delete(plugin.name)
     Object.assign(result, await this.publishAndReload())
   }
@@ -775,13 +777,14 @@ export class PluginManager extends TypertRemoteService {
    * Ask the distribution's plugin audit about each package a restored version brings back, as an installation and an
    * enablement would; a distribution without one audits nothing.
    * @param names - the packages, as {@link broughtBack} names them.
+   * @param pending - `scripts` while the restore has installed them with every script held back.
    * @throws ManagementFailure `audit-refused` or `audit-findings` when the audit refuses one.
    */
-  private async auditRestored(names: readonly string[]): Promise<void> {
+  private async auditRestored(names: readonly string[], pending?: 'scripts'): Promise<void> {
     if (this.ownerContext.get('pluginAudit') === undefined) return
     for (const name of names) {
       const dir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
-      await this.auditBundle(name, dir, readProfileManifest('dsh', dir).version)
+      await this.auditBundle(name, dir, readProfileManifest('dsh', dir).version, undefined, pending)
     }
   }
 
@@ -1178,7 +1181,9 @@ export class PluginManager extends TypertRemoteService {
   @Remote
   setBundleEnabled(name: string, enabled: boolean): Promise<ChangeResult> {
     return this.change(result => this.configure(async () => {
-      await this.selectBundle(name, enabled)
+      const audit = await this.selectBundle(name, enabled)
+      // The findings an audit let the enablement go on with reach the person as an installation's do.
+      if (audit !== undefined && audit.findings.length > 0) result.audit = audit
       Object.assign(result, enabled ? await this.publishAndReload(this.bundleRows(name).map(row => row.id)) : await this.reload())
     }), { stage: 'enable', target: name, enabled }, 'bundle', () => `${enabled ? 'Turned on' : 'Turned off'} ${name}`)
   }
@@ -1189,7 +1194,9 @@ export class PluginManager extends TypertRemoteService {
    * only network failures or timeouts stop installation, and a stop streams the check's diagnostic
    * as the installation's install-log run under its request id, while pnpm owns authentication and transport fallback. An
    * HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs
-   * find that only SSH can read it. A run
+   * find that only SSH can read it. With a `pluginAudit` provider composed, pnpm first only resolves the package into
+   * the lockfile, the audit answers with `pending: 'install'`, and only then pnpm installs the lockfile; without one the
+   * installation is a single `pnpm add`. A run
    * that fails, is cancelled, or adds a package without a bundle patch restores
    * `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.
    * @param spec One package spec, including local paths relative to the invocation directory.
@@ -1223,6 +1230,8 @@ export class PluginManager extends TypertRemoteService {
         result.approvedBuilds = options.approvedBuilds
       }
       const files = await this.readRestoredFiles()
+      // Read once, so the resolution and the installation below take the same path for the whole installation.
+      const audited = this.ownerContext.get('pluginAudit') !== undefined
       let name: string
       let version: string | undefined
       try {
@@ -1270,7 +1279,10 @@ export class PluginManager extends TypertRemoteService {
           result.registries.push(registry)
           used = registry
           announce('installing', { registry, index: index + 1, total: plan.length })
-          run = await this.runPnpm(['add', installSpec, ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)], control.abort.signal, requestId)
+          // With an audit, resolution only: no file is fetched into the profile and no script runs until it answered;
+          // pnpm runs an approved git dependency's `prepare` even while it only resolves, unless scripts are ignored.
+          const resolveOnly = audited ? ['--lockfile-only', '--ignore-scripts'] : []
+          run = await this.runPnpm(['add', installSpec, ...resolveOnly, ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)], control.abort.signal, requestId)
           result.packageResult = run
           if (stopped()) throw new InstallCancelledError()
           // A compatibility refusal is the package's own answer, so no other registry is asked.
@@ -1312,6 +1324,24 @@ export class PluginManager extends TypertRemoteService {
         name = target
         const providedByTarget = this.providedProtected(name)
         if (providedByTarget.length > 0) throw this.protectionFailure(providedByTarget)
+        if (audited) {
+          // The lockfile names what will be installed; a refusal here leaves nothing fetched and no script run.
+          await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install', result.registries)
+          const fetched = await this.runPnpm(['install', '--frozen-lockfile', ...registryArguments(used)], control.abort.signal, requestId, {
+            manifest: files.get(join(this.profile.dir, 'package.json')), lockfile: files.get(join(this.profile.dir, 'pnpm-lock.yaml')),
+          })
+          result.packageResult = fetched
+          if (stopped()) throw new InstallCancelledError()
+          if (fetched.incompatible !== undefined) throw new ManagementFailure('incompatible-version', fetched.incompatible)
+          if (fetched.exitCode !== 0 || fetched.timedOut === true) {
+            // The build scripts pnpm reported as blocked are offered for approval, as for a failed resolution.
+            try { result.pendingBuilds = await recordPendingBuilds(this.profile.dir, fetched.output) }
+            catch (error) {
+              this.ownerContext.logger.warn('Could not read pending build approvals after pnpm failed', error)
+            }
+            throw new Error(fetched.output)
+          }
+        }
         const dir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
         const manifest = bundleManifest(name, this.profile.dir, this.profile.installAnchor)
         if (manifest?.dsh?.bundle === undefined) throw new ManagementFailure('not-bundle')
@@ -1450,9 +1480,12 @@ export class PluginManager extends TypertRemoteService {
     return { rows, overrides }
   }
 
-  /** Run one pnpm command in the profile, streaming its output as install-log chunks. */
+  /**
+   * Run one pnpm command in the profile, streaming its output as install-log chunks; `baseline` is the profile's files
+   * from before an earlier resolution-only run, as the package operation takes it.
+   */
   private async runPnpm(
-    args: readonly string[], signal?: AbortSignal, requestId?: PluginInstallRequestId,
+    args: readonly string[], signal?: AbortSignal, requestId?: PluginInstallRequestId, baseline?: ProfileBaseline,
   ): Promise<PackageResult> {
     const jobId = randomUUID()
     const argv = ['pnpm', ...args]
@@ -1462,7 +1495,7 @@ export class PluginManager extends TypertRemoteService {
       execution: 'service', ...this.profile.packageManager ?? { command: this.pnpmCommand },
       signal: signal === undefined ? this.abort.signal : AbortSignal.any([this.abort.signal, signal]),
       outputBytes: this.outputBytes, activateNewBundles: false, idleTimeoutMs: this.idleTimeoutMs,
-      lookupTimeoutMs: this.inspectTimeoutMs,
+      lookupTimeoutMs: this.inspectTimeoutMs, ...baseline === undefined ? {} : { baseline },
       onOutput: (text, stream) => {
         this.ownerContext.emit('plugin-manager/install-log', { ...identity, jobId, argv, cwd, stream, text })
       },
@@ -1507,17 +1540,22 @@ export class PluginManager extends TypertRemoteService {
 
   /**
    * Ask the distribution's plugin audit about a bundle's package, with the digests the user accepted for it and the one
-   * this call accepts; a distribution without one audits nothing.
+   * this call accepts, what the change has yet to do for it, and the registries an installation asked; a distribution
+   * without one audits nothing.
    * @returns The audit, or undefined without one.
    * @throws ManagementFailure `audit-refused` or `audit-findings` when the audit refuses the change.
    */
   private async auditBundle(
-    name: string, dir: string, version: string | undefined, accepting?: string,
+    name: string, dir: string, version: string | undefined, accepting?: string, pending?: 'install' | 'scripts',
+    registries?: Registry[],
   ): Promise<PluginAuditResult | undefined> {
     const audit = this.ownerContext.get('pluginAudit')
     if (audit === undefined) return undefined
     const accepted = [...await acceptedAudits(this.profile.dir, name), ...accepting === undefined ? [] : [accepting]]
-    const result = await audit.audit({ name, ...version === undefined ? {} : { version }, dir, accepted })
+    const result = await audit.audit({
+      name, ...version === undefined ? {} : { version }, dir, accepted, ...pending === undefined ? {} : { pending },
+      ...registries === undefined ? {} : { registries: [...registries] },
+    })
     switch (result.decision) {
       case 'clear':
       case 'accepted':
@@ -1529,9 +1567,11 @@ export class PluginManager extends TypertRemoteService {
     }
   }
 
-  private async selectBundle(name: string, enabled: boolean): Promise<void> {
+  /** Select or deselect a bundle; returns what the plugin audit answered for an enablement it let go on. */
+  private async selectBundle(name: string, enabled: boolean): Promise<PluginAuditResult | undefined> {
     const manifest = readProfileManifest('dsh', this.profile.dir)
     const previous = bundleSelection(manifest)
+    let audit: PluginAuditResult | undefined
     if (enabled || !previous.includes(name)) {
       const metadata = bundleManifest(name, this.profile.dir, this.profile.installAnchor)
       if (metadata === undefined) throw new ManagementFailure('not-bundle')
@@ -1539,7 +1579,7 @@ export class PluginManager extends TypertRemoteService {
         assertBundlePlatform(metadata.dsh?.bundle?.platforms, process.platform)
         const compatibility = evaluatePluginCompatibility(metadata, readProfileVersionExemptions(this.profile.dir))
         if (compatibility !== undefined && !compatibility.exempted) throw new ManagementFailure('incompatible-version', [incompatiblePlugin(compatibility)])
-        await this.auditBundle(name, resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir), metadata.version)
+        audit = await this.auditBundle(name, resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir), metadata.version)
         if (!previous.includes(name)) this.assertProtectedRowsKept(this.currentRows(), this.composedRows(name))
       }
     }
@@ -1547,10 +1587,11 @@ export class PluginManager extends TypertRemoteService {
       if (this.protectsManager(name)) throw this.bundleRefusal(name)
     }
     const bundles = enabled ? [...previous, ...previous.includes(name) ? [] : [name]] : previous.filter(item => item !== name)
-    if (JSON.stringify(previous) === JSON.stringify(bundles)) return
+    if (JSON.stringify(previous) === JSON.stringify(bundles)) return audit
     manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
     await saveManifest(this.profile.dir, manifest)
     if (enabled) this.protectsManager(name)
+    return audit
   }
 
   private bundleRows(name: string): EntryOptions[] {

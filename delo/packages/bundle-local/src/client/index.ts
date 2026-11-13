@@ -40,7 +40,7 @@ import { en, zh, type PrivacyLocaleKey } from './locales.ts'
 import { en as networkEn, zh as networkZh, type NetworkLocaleKey } from './network-locales.ts'
 import { NetworkSection, type NetworkSectionInjected } from './NetworkSection.tsx'
 import { OptIn, type OptInSettings } from './opt-in.ts'
-import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
+import { OPT_IN_FIELDS, PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
@@ -130,11 +130,15 @@ export const PRIVACY_SECTION_ORDER = 20
 /** The row of Delo's release check, whose `enabled` is C16 switch `update_check`; setup's `updateCheck` answer writes the same field. */
 export const UPDATE_CHECK_ROW = SETUP_UPDATE_CHECK_ROW
 
-/** The Host row each switch writes: the opt-ins and the release check from C11's answer-to-row mapping. */
+/** The row whose `npmMirror` the npm mirror switch writes: the plugin install check's. */
+export const NPM_MIRROR_ROW = 'delo-plugin-install-check'
+
+/** The Host row each switch writes: the opt-ins and the release check from C11's answer-to-row mapping, and the npm mirror's. */
 export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
   sessionLog: SETUP_OPT_IN_ROWS.sessionLogUpload,
   analytics: SETUP_OPT_IN_ROWS.desktopAnalytics,
   updateCheck: UPDATE_CHECK_ROW,
+  npmMirror: NPM_MIRROR_ROW,
 }
 
 /**
@@ -213,6 +217,7 @@ export function apply(ctx: Context): void {
     sessionLog: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.sessionLog)),
     analytics: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.analytics)),
     updateCheck: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.updateCheck)),
+    npmMirror: new OptIn(ctx.configForms.get<OptInSettings>(OPT_IN_ROWS.npmMirror), OPT_IN_FIELDS.npmMirror),
   }
   const face = (): PrivacySectionInjected => ({
     hooks: {
@@ -222,6 +227,8 @@ export function apply(ctx: Context): void {
       analyticsMutation: optIns.analytics.state,
       updateCheck: optIns.updateCheck.form,
       updateCheckMutation: optIns.updateCheck.state,
+      npmMirror: optIns.npmMirror.form,
+      npmMirrorMutation: optIns.npmMirror.state,
     },
     setEnabled: (id, enabled) => optIns[id].setEnabled(enabled),
   })

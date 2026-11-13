@@ -59,6 +59,7 @@
     "@delo/contract-update-report": "workspace:*",
     "@delo/home-auth": "workspace:*",
     "@delo/plugin-fetch-guard": "workspace:*",
+    "@delo/plugin-install-check": "workspace:*",
     "@delo/plugin-instruction-consent": "workspace:*",
     "@delo/plugin-mcp-consent": "workspace:*",
     "@delo/plugin-permission-defaults": "workspace:*",

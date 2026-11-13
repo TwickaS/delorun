@@ -1384,6 +1384,9 @@ importers:
       '@delo/npm-launcher':
         specifier: workspace:*
         version: link:../npm-launcher
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../../packages/plugin-install-check
       '@delo/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../../packages/plugin-mcp-consent
@@ -1782,6 +1785,9 @@ importers:
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../plugin-install-check
       '@delo/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
@@ -1818,6 +1824,9 @@ importers:
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
+      '@delo/plugin-install-check':
+        specifier: workspace:*
+        version: link:../plugin-install-check
       '@delo/plugin-instruction-consent':
         specifier: workspace:*
         version: link:../plugin-instruction-consent
@@ -2324,6 +2333,46 @@ importers:
       undici:
         specifier: 8.11.2
         version: 8.11.2
+
+  delo/packages/plugin-install-check:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:*
+        version: link:../../../packages/util/atomic-write
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../contract-release-manifest
+      '@delo/release-formats':
+        specifier: workspace:*
+        version: link:../release-formats
+      '@delo/runtime-store':
+        specifier: workspace:*
+        version: link:../runtime-store
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delo/packages/plugin-instruction-consent:
     dependencies:
