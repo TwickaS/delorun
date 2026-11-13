@@ -76,7 +76,7 @@ Every signed file (root, timestamp, manifest, runtime file list, the catalogue f
 }
 ```
 
-- The signed bytes are the RFC 8785 JSON Canonicalization Scheme serialization of `signed`.
+- The signed bytes are the RFC 8785 JSON Canonicalization Scheme serialisation of `signed`.
 - Each signature is a pure Ed25519 signature (RFC 8032) over those bytes, in standard base64 with padding.
 - A key's `keyid` is the lowercase hex SHA-256 of its 32-byte raw public key.
 - `signed.schema` names the file kind and its major version; a reader refuses a kind or major version it does not know.

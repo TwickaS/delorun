@@ -47,7 +47,7 @@ The relay id is the base64url SHA-256 hash of the token public key's 32 raw byte
 
 ## Tunnel token
 
-`POST /v1/tunnel-token` takes `{ v, name, homePublicKey, timestamp, signature }`, where the signature is the Ed25519 signature by the home key over the RFC 8785 serialization of the object without `signature`.
+`POST /v1/tunnel-token` takes `{ v, name, homePublicKey, timestamp, signature }`, where the signature is the Ed25519 signature by the home key over the RFC 8785 serialisation of the object without `signature`.
 It answers `{ token }`, or one of these refusals:
 
 | Status | Code | When |

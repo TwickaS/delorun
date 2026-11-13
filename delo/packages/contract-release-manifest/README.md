@@ -22,4 +22,4 @@ The release build in `delo/apps/release/`, the install script and npm launcher, 
 
 ## Known limitations
 
-- Canonical JSON serialization and Ed25519 verification are left to each consumer's chosen library; the package names the algorithms and does not implement them.
+- Canonical JSON serialisation and Ed25519 verification are left to each consumer's chosen library; the package names the algorithms and does not implement them.

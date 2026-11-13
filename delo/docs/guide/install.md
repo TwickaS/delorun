@@ -178,7 +178,7 @@ A new chat starts in one of the agent [presets](../reference/glossary.md#preset)
 
 - If the browser does not open, then run `delorun open`, or `delorun open --print` and open the printed link yourself.
 - If the link says it has expired, then run `delorun open` again. Each link works once, within one minute.
-- If the browser shows "unauthorized" (HTTP 401) at the studio address, then you opened the address without a sign-in link. Run `delorun open`.
+- If the browser shows "unauthorized" (HTTP 401) at the studio address, then you opened the address without a sign-in link. Run `delorun open`. <!-- us-spelling: quoted output -->
 - If `delorun status` says `state: not running`, then start it with `delorun start`; if the start fails, read `delorun logs` and [Starting and stopping](troubleshooting.md#starting-and-stopping).
 - If your key is not set, then `delorun doctor` shows `warn key`, and a chat reports that the model cannot answer. Fix it with `delorun setup key`.
 
