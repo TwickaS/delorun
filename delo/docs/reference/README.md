@@ -1,12 +1,12 @@
 ---
-description: "The Delo reference index: the glossary of plain-English definitions for anyone, and the developer and maintainer pages for the divergence ledger, the parity checklist, the parity baseline and the harness feedback log."
+description: "The Delorun developer reference index: the glossary of plain-English definitions for anyone, and the developer and maintainer pages for the divergence ledger, the parity checklist, the parity baseline and the harness feedback log."
 ---
 
-# Delo reference
+# Delorun developer reference
 
 English | [中文](README.zh.md)
 
-The reference is for looking something up. It has two audiences, and each page below says which one it is for. If you want to learn how to use Delo, read the [user guide](../guide/README.md) instead.
+The developer reference is for looking something up about how Delorun is built and checked. The glossary here is for everyone; the other pages are for developers and maintainers. If you want to learn how to use Delorun, read the [user guide](../guide/README.md) instead.
 
 ## For everyone
 
