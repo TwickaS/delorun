@@ -7,6 +7,8 @@
  *   and a `POST` only from the studio's own origin (no foreign `Sec-Fetch-Site`, and an `Origin`, when sent, naming the
  *   request's own host). The session is read without rolling it: a roll answers only on a route the authenticator
  *   admits.
+ * - **The terminal switch** answers both: the computer reads and sets it, and a device reads it and turns it off. A
+ *   device that asks to turn it on is refused with `LOOPBACK_REQUIRED`, because the switch lowers protection.
  * - **Computer routes** answer only the person at the computer ({@link personAtComputer}); a device reaching them over
  *   a reach listener is refused with `LOOPBACK_REQUIRED`, which is what keeps `elevation-approve` and `elevation-revoke`
  *   at the computer.
@@ -33,6 +35,11 @@ export const ELEVATION_PATHS = {
   approve: '/auth/elevation/approve',
   /** `POST` `{ id }`: the computer declines a request or ends an elevation. */
   revoke: '/auth/elevation/revoke',
+  /**
+   * `GET` `{ withoutUnlock }` and `POST` `{ withoutUnlock }`: whether a device opens a terminal without an unlock in every
+   * folder. The computer turns it on and off; a device reads it and turns it off only.
+   */
+  terminal: '/auth/elevation/terminal',
 } as const
 
 /** A device's admitted session on the listener its request arrived on. */
@@ -200,6 +207,44 @@ export function elevationRevokeHandler(auth: HomeAuth, credential: LoopbackCrede
       if (message === undefined) return
       if (typeof message.id !== 'string') throw new HomeAuthError('BAD_REQUEST', 'a revoke carries the request or elevation id')
       sendJson(response, 200, { revoked: auth.revokeElevation(message.id) })
+    } catch (error) {
+      sendThrown(response, error)
+    }
+  }
+}
+
+/**
+ * Build the route of the terminal switch. On a reach listener it answers the device's own session, which may read the
+ * switch and turn it off; anywhere else it answers only the person at the computer, who may also turn it on.
+ * @param auth - the home-auth instance.
+ * @param credential - the loopback credential check.
+ * @returns the handler.
+ */
+export function terminalSwitchHandler(auth: HomeAuth, credential: LoopbackCredential): RouteHandler {
+  return async (request, response) => {
+    const listener = auth.arrivalOf(request).listener
+    const fromDevice = listener !== undefined && listener !== 'loopback'
+    const method = request.method === 'POST' ? 'POST' : 'GET'
+    if (fromDevice) {
+      if (deviceSession(auth, request, response, method) === undefined) return
+    } else {
+      if (!personAtComputer(auth, credential, request, response, 'Changing the terminal switch', method === 'POST')) return
+      if (request.method !== method) {
+        sendError(response, new HomeAuthError('METHOD_NOT_ALLOWED', 'this route takes GET or POST'))
+        return
+      }
+    }
+    if (method === 'GET') {
+      sendJson(response, 200, { withoutUnlock: auth.terminalWithoutUnlock() })
+      return
+    }
+    try {
+      const message = await readMessage(request, response)
+      if (message === undefined) return
+      const withoutUnlock = message.withoutUnlock
+      if (typeof withoutUnlock !== 'boolean') throw new HomeAuthError('BAD_REQUEST', 'the terminal switch takes withoutUnlock, true or false')
+      await auth.setTerminalWithoutUnlock(withoutUnlock, fromDevice ? 'device' : 'computer')
+      sendJson(response, 200, { withoutUnlock: auth.terminalWithoutUnlock() })
     } catch (error) {
       sendThrown(response, error)
     }

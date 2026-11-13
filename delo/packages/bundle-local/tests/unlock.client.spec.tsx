@@ -14,7 +14,7 @@ import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-tes
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import {
   approveElevation, DEVICE_ROUTES, ELEVATED_POLL_MS, ELEVATION_POLL_MS, ELEVATION_ROUTES, lockElevation, readElevation,
-  readElevationsAtComputer, requestElevation, revokeElevation, type ElevationId, type ElevationRequestId,
+  readElevationsAtComputer, readTerminalSwitch, requestElevation, revokeElevation, type ElevationId, type ElevationRequestId,
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
 import { DevicesSection, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
@@ -548,5 +548,67 @@ describe('the Devices section\'s unlock', () => {
     await settle(ELEVATION_POLL_MS)
     expect(screen.queryByText(en['unlock.requests.title'])).toBeNull()
     expect(absent.count(`GET ${ELEVATION_ROUTES.pending}`)).toBe(1)
+  })
+
+  it('shows the terminal switch, which the computer turns on and a device only turns off', async () => {
+    const host = computerHost({ pending: [], running: [] })
+    host.script[`GET ${ELEVATION_ROUTES.terminal}`] = ok({ withoutUnlock: false })
+    host.script[`POST ${ELEVATION_ROUTES.terminal}`] = ok({ withoutUnlock: true })
+    renderSection(host)
+    await settle()
+    const toggle = screen.getByRole('switch', { name: en['terminal.title'] })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByText(en['terminal.explain'])).toBeTruthy()
+    fireEvent.click(toggle)
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${ELEVATION_ROUTES.terminal}`)?.body).toEqual({ withoutUnlock: true })
+    expect(screen.getByRole('switch', { name: en['terminal.title'] }).getAttribute('aria-checked')).toBe('true')
+    cleanup()
+    // A device that turns it on is refused at the home, and the refusal shows in place.
+    const device = fakeHost({
+      [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
+      [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'LOOPBACK_REQUIRED'),
+      [`GET ${ELEVATION_ROUTES.terminal}`]: ok({ withoutUnlock: false }),
+      [`POST ${ELEVATION_ROUTES.terminal}`]: refusal(403, 'LOOPBACK_REQUIRED'),
+    })
+    renderSection(device, { ...AWAY, place: 'device', state: { kind: 'none' } })
+    await settle()
+    fireEvent.click(screen.getByRole('switch', { name: en['terminal.title'] }))
+    await settle()
+    expect(screen.getAllByRole('alert').map(alert => alert.textContent)).toContain(t('loopback', { action: en['action.terminalOn'] }))
+    expect(screen.getByRole('switch', { name: en['terminal.title'] }).getAttribute('aria-checked')).toBe('false')
+    device.script[`GET ${ELEVATION_ROUTES.terminal}`] = ok({ withoutUnlock: true })
+    cleanup()
+    renderSection(device, { ...AWAY, place: 'device', state: { kind: 'none' } })
+    await settle()
+    device.script[`POST ${ELEVATION_ROUTES.terminal}`] = 'unreachable'
+    fireEvent.click(screen.getByRole('switch', { name: en['terminal.title'] }))
+    await settle()
+    expect(screen.getAllByRole('alert').map(alert => alert.textContent)).toContain(en['failed.unreachable'])
+  })
+
+  it('hides the terminal switch on a home without it, and says when it cannot be read', async () => {
+    const host = computerHost({ pending: [], running: [] })
+    renderSection(host)
+    await settle()
+    expect(screen.queryByRole('switch', { name: en['terminal.title'] })).toBeNull()
+    cleanup()
+    host.script[`GET ${ELEVATION_ROUTES.terminal}`] = 'unreachable'
+    renderSection(host)
+    await settle()
+    expect(screen.queryByRole('switch', { name: en['terminal.title'] })).toBeNull()
+    expect(screen.getAllByRole('alert').map(alert => alert.textContent)).toContain(en['failed.unreachable'])
+    // A section closed before the switch answers drops the answer.
+    for (const status of [200, 500]) {
+      cleanup()
+      let answer = (_value: { status: number; body: unknown }): void => {}
+      host.script[`GET ${ELEVATION_ROUTES.terminal}`] = new Promise(resolve => { answer = resolve })
+      renderSection(host)
+      await settle()
+      cleanup()
+      answer({ status, body: status === 200 ? { withoutUnlock: true } : { error: 'INTERNAL', message: 'failed' } })
+      await settle()
+    }
+    await expect(readTerminalSwitch(fakeHost({ [`GET ${ELEVATION_ROUTES.terminal}` as const]: refusal(401, 'NOT_SIGNED_IN') }).fetch)).rejects.toMatchObject({ failure: { code: 'NOT_SIGNED_IN' } })
   })
 })

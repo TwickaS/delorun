@@ -291,6 +291,36 @@ describe('a reach device through the Gateway', () => {
     await expectRefused('account/getState', {})
   })
 
+  it('opens a terminal without an unlock in a workspace with a full-access grant, and needs one everywhere else', async () => {
+    const elsewhere = join(directory, 'elsewhere')
+    await mkdir(elsewhere, { recursive: true })
+    const otherWorkspace = (await studio.ctx.workspaceRegistry.create(elsewhere)).id
+    const granted = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const ungranted = await expectAllowed('session/create', { request: { workspaceId: otherWorkspace } }) as { readonly sessionId: SessionId }
+    const folder = join(directory, 'workspace')
+    const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { grantedFolders: () => [folder] }), 'test grants')
+    try {
+      // Pins the grant check through the Gateway: the Session's own folder decides, never a folder the call names.
+      await expectAdmitted('terminal/shells', { agentId: granted.sessionId })
+      await expectAdmitted('terminal/list', { sessionId: granted.sessionId })
+      await expectElevationRequired('terminal/shells', { agentId: ungranted.sessionId })
+      await expectElevationRequired('terminal/create', { agentId: ungranted.sessionId, request: { id: 'phone-1', cols: 80, rows: 24 } })
+      // A request that names the granted folder is refused too: a terminal request carries no folder of its own.
+      const claimed = await call('terminal/create', { agentId: ungranted.sessionId, request: { id: 'phone-2', cols: 80, rows: 24, cwd: folder } })
+      expect(claimed.ok ? undefined : claimed.error.code).toBeDefined()
+      // Pins the switch: on, a device opens a terminal in every folder; a device cannot turn it on (the route test).
+      await studio.ctx.homeAuth.setTerminalWithoutUnlock(true, 'computer')
+      await expectAdmitted('terminal/shells', { agentId: ungranted.sessionId })
+      await studio.ctx.homeAuth.setTerminalWithoutUnlock(false, 'computer')
+      await expectElevationRequired('terminal/shells', { agentId: ungranted.sessionId })
+    } finally {
+      await dispose()
+      await studio.ctx.homeAuth.setTerminalWithoutUnlock(false, 'computer')
+    }
+    // Pins the provider: without one no workspace counts as granted.
+    await expectElevationRequired('terminal/shells', { agentId: granted.sessionId })
+  })
+
   it('needs an unlock for terminals and the directory picker, and reads the Changes view', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     await expectElevationRequired('terminal/list', { sessionId: created.sessionId })
@@ -370,6 +400,28 @@ describe('an elevated reach device through the Gateway', () => {
     }
     // Pins the revoke at the computer: the device's next elevated call is refused again.
     await expectElevationRequired('dynamicCordisRunner/inventory', {})
+  })
+
+  it('never turns the terminal switch on, through any writer an unlocked device reaches', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const id = elevate()
+    try {
+      // The switch is no setting: a generic settings save in any namespace, the home-auth and reach rows' included, leaves it off.
+      for (const ns of ['delo-reach-access-probe', 'home-auth', 'reach', 'homeAuth']) {
+        await call('settings/update', { ns, patch: { terminalWithoutUnlock: true, withoutUnlock: true } })
+        await call('settings/mutate', { ns, mutation: { op: 'set', path: ['withoutUnlock'], value: true } })
+      }
+      // A slash command runs as the device's call too, and no command writes the switch.
+      await call('commands/execute', { agentId: created.sessionId, line: '/config set withoutUnlock true', submittedAttachments: [] })
+      expect(studio.ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+      // Pins the write point: a caller that speaks for a device is refused the on-value, wherever it calls from.
+      await expect(studio.ctx.homeAuth.setTerminalWithoutUnlock(true, 'device')).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+      expect(studio.ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+      await studio.ctx.homeAuth.setTerminalWithoutUnlock(false, 'device')
+      expect(studio.ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(id)
+    }
   })
 
   it('stops when the device locks it', async () => {

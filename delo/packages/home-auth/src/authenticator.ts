@@ -26,6 +26,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
+import type {} from '@deepseek-ai/dsh-working-directory'
+import type {} from './full-access-grants.ts'
 import { Authenticator, LOOPBACK_LISTENER, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
 import type { RemoteAnswerGuard, RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
 import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
@@ -178,6 +180,15 @@ export class HomeAuthAuthenticator extends Authenticator {
         deloHome: ctx.homeAuth.deloHome,
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
         logElevated: (line) => { ctx.logger.info(line) },
+        terminalFoldersOf: (sessionId) => {
+          // A terminal opens in the Session's current directory, or in its original folder when that one is gone.
+          const session = access.get('sessions')?.get(sessionId)
+          const current = session === undefined ? undefined : access.get('workingDirectory')?.get(session)
+          const original = session?.header.cwd
+          return current === undefined || original === undefined ? undefined : [current, original]
+        },
+        grantedFolders: () => access.get('reachFullAccessGrants')?.grantedFolders() ?? [],
+        terminalWithoutUnlock: () => ctx.homeAuth.terminalWithoutUnlock(),
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {
@@ -191,6 +202,8 @@ export class HomeAuthAuthenticator extends Authenticator {
       access.effect(() => ctx.homeAuth.onElevationChange((change) => {
         access.remoteAccess.invalidate(reachDevicePrincipal(change.elevation.deviceId, change.elevation.listener))
       }), 'home-auth elevation snapshots')
+      // A device's snapshot lists the terminal actions it may take without an unlock, so the switch recomputes it.
+      access.effect(() => ctx.homeAuth.onTerminalSwitchChange(invalidate), 'home-auth terminal switch snapshots')
     })
   }
 

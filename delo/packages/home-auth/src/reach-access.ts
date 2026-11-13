@@ -7,7 +7,7 @@
  * asks this policy before it dispatches a call or forwards an event to it. The policy refuses by default: it binds only
  * the actions of {@link REACH_ALLOWED_ACTIONS} and {@link REACH_ELEVATED_ACTIONS}, on the global resource, on every
  * Workspace and on every Session the Host can name synchronously. An elevated action without an unlock is refused with
- * the reason `elevation-required: <action>`. Any other action, an action of {@link REACH_DENIED_ACTIONS} or one no table
+ * the reason `elevation-required: <action>`, except a terminal action that needs none (see `terminalWithoutUnlock`). Any other action, an action of {@link REACH_DENIED_ACTIONS} or one no table
  * names, is refused with `loopback-required: <action>`: the person takes it at the home's own computer. An allowed or
  * elevated action on a Session or Workspace the policy cannot name is refused with `resource-unlisted: <action>`.
  *
@@ -441,6 +441,30 @@ type ReachCondition = (request: {
   readonly args?: Readonly<Record<string, unknown>>
 }) => RemoteAccessDecision
 
+/** The terminal actions: elevated, except where {@link terminalWithoutUnlock} says the device needs no unlock. */
+const TERMINAL_PREFIX = 'terminal/'
+
+/**
+ * Whether a device uses a Session's terminals without an unlock: the person turned the terminal switch on, or every
+ * folder a terminal of the Session would open in lies inside a workspace that holds a full-access grant, where the
+ * agent already runs commands outside the sandbox. The folders are the ones the Host resolves; a call's arguments never
+ * name them. A folder the Host cannot name, or that does not resolve, keeps the unlock.
+ * @param facts - the switch, the Session's terminal folders and the granted folders.
+ * @param resource - the resource the question names.
+ * @returns whether no unlock is needed.
+ */
+function terminalWithoutUnlock(facts: Pick<ReachAccessFacts, 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders'>, resource: RemoteAccessResource): boolean {
+  if (facts.terminalWithoutUnlock()) return true
+  if (resource.kind !== 'session') return false
+  const folders = facts.terminalFoldersOf(resource.id)
+  if (folders === undefined || folders.length === 0) return false
+  const granted = facts.grantedFolders().flatMap(folder => realPathOf(folder) ?? [])
+  return folders.every((folder) => {
+    const real = realPathOf(folder)
+    return real !== undefined && granted.some(root => within(root, real))
+  })
+}
+
 /** The reason a `session/create` outside the known workspaces is refused without an unlock. */
 export const CREATE_OUTSIDE_WORKSPACES = 'elevation-required: session/create in a folder outside the known workspaces'
 
@@ -470,7 +494,9 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * The condition of one device's bindings on one listener, the single place an elevated action is decided. It refuses
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
- * call an unlock admits with the unlock's id. It treats a `session/create` that starts a chat outside the known
+ * call an unlock admits with the unlock's id. A `terminal/*` action needs no unlock where {@link terminalWithoutUnlock}
+ * says so: the terminal switch is on, or the Session's terminal folders lie inside workspaces with a full-access grant.
+ * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
  * device may reach (see {@link WORKSPACE_PATH_ACTIONS}), unlocked or not. Every other action is allowed as its role
@@ -480,7 +506,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener } = principal
@@ -498,7 +524,7 @@ export function createCondition(
     return undefined
   }
   return ({ action, resource, args }) => {
-    if (ELEVATED_SET.has(action)) {
+    if (ELEVATED_SET.has(action) && !(action.startsWith(TERMINAL_PREFIX) && terminalWithoutUnlock(facts, resource))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
@@ -560,6 +586,23 @@ export interface ReachAccessFacts {
    * @param line - the line.
    */
   readonly logElevated: (line: string) => void
+  /**
+   * The folders a terminal of one Session would open in, as the Host resolves them: the Session's current working
+   * directory, and the folder the Host falls back to when that one is gone.
+   * @param sessionId - the Session.
+   * @returns the folders, or undefined when the Host cannot name them synchronously.
+   */
+  readonly terminalFoldersOf: (sessionId: SessionId) => readonly string[] | undefined
+  /**
+   * The workspace folders that hold a full-access grant now, empty without a grant provider or a readable grant store.
+   * @returns the folders.
+   */
+  readonly grantedFolders: () => readonly string[]
+  /**
+   * Whether the person turned on terminals without an unlock in every folder.
+   * @returns whether the switch is on.
+   */
+  readonly terminalWithoutUnlock: () => boolean
 }
 
 /**

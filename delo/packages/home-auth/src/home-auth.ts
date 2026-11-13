@@ -35,6 +35,7 @@ import { REACH_OPTION_LISTENERS } from '@delo/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
 import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from './arrival.ts'
 import { DeviceStore } from './devices.ts'
+import { ReachTerminalStore } from './reach-terminal.ts'
 import { HomeAuthError } from './errors.ts'
 import { readStoreFile, writeStoreFile } from './files.ts'
 import { AttemptLimiter } from './rate-limit.ts'
@@ -203,6 +204,9 @@ export interface HomeAuthOptions {
  * The instance holds no state of its own besides the claim limit: every answer is read from the protected files of
  * {@link HomeAuthOptions.directory}, so two callers in one process never disagree and a restart keeps the answer.
  */
+/** Who asks to change the terminal switch: the home's own computer, or a device over a reach session. */
+export type TerminalSwitchOrigin = 'computer' | 'device'
+
 export class HomeAuth {
   /** The absolute path of the secrets directory. */
   readonly directory: string
@@ -232,6 +236,9 @@ export class HomeAuth {
   private readonly expiries = new Map<string, ArmedExpiry>()
   private readonly removalListeners = new Set<(deviceId: DeviceId) => void>()
   private readonly elevationListeners = new Set<(change: ElevationChange) => void>()
+  private readonly terminalListeners = new Set<() => void>()
+  /** Whether a device opens a terminal without an unlock everywhere. */
+  private readonly reachTerminal: ReachTerminalStore
   /** The elevations of this home and the requests waiting for the person at the computer (C14, "Elevation"). */
   private readonly elevations: Elevations
   /** The tail of the queue that serialises a claim and a revocation against each other. */
@@ -262,6 +269,7 @@ export class HomeAuth {
     const path = (name: string): string => join(options.directory, name)
     this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), ...timed(options) })
     this.deviceStore = new DeviceStore({ file: path(HOME_AUTH_FILES.devices) })
+    this.reachTerminal = new ReachTerminalStore(path(HOME_AUTH_FILES.reachTerminal))
     this.sessions = new SessionStore({ file: path(SESSIONS_FILE), ...timed(options) })
     this.claims = new AttemptLimiter({
       limit: options.claimAttemptsPerMinute ?? DEVICE_APPROVAL_LIMITS.ownerClaimAttemptsPerMinutePerSource,
@@ -526,6 +534,40 @@ export class HomeAuth {
   onElevationChange(listener: (change: ElevationChange) => void): () => void {
     this.elevationListeners.add(listener)
     return () => { this.elevationListeners.delete(listener) }
+  }
+
+  /**
+   * Whether a device the home approved opens a terminal without an unlock in every folder, as the store holds it now;
+   * the reach-device policy reads it before each terminal action.
+   * @returns whether the switch is on.
+   */
+  terminalWithoutUnlock(): boolean {
+    return this.reachTerminal.withoutUnlock()
+  }
+
+  /**
+   * Turn the terminal switch on or off, the one place the switch is written. Turning it on lowers protection, so only
+   * the person at the home's own computer does it; any studio of the home's may turn it off. The switch is not a
+   * setting or a plugin's configuration, so no settings save, slash command, profile undo or restore, or model tool
+   * that writes configuration reaches it.
+   * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
+   * @param from - who asks: `computer` for the loopback studio or the person's own command, `device` for a reach session.
+   * @throws {HomeAuthError} `LOOPBACK_REQUIRED` when a device asks to turn it on.
+   */
+  async setTerminalWithoutUnlock(withoutUnlock: boolean, from: TerminalSwitchOrigin): Promise<void> {
+    if (withoutUnlock && from !== 'computer') throw new HomeAuthError('LOOPBACK_REQUIRED', 'Turning this on needs you at your computer')
+    await this.reachTerminal.set(withoutUnlock)
+    for (const listener of this.terminalListeners) listener()
+  }
+
+  /**
+   * Call a listener after this home turns the terminal switch on or off; the provider recomputes each device's access.
+   * @param listener - called after the change.
+   * @returns the disposer.
+   */
+  onTerminalSwitchChange(listener: () => void): () => void {
+    this.terminalListeners.add(listener)
+    return () => { this.terminalListeners.delete(listener) }
   }
 
   /**

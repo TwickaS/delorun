@@ -68,6 +68,7 @@ Every byte string on the wire is base64url without padding. Every signed object 
 | Device id | RFC 7638 SHA-256 thumbprint of the device public key | Everyone | Not secret. |
 | Passkey | A WebAuthn credential, algorithm ES256, EdDSA or RS256, with user verification | The authenticator | The authenticator; the home keeps the credential id, public key and address in `~/.delo/secrets/home-auth/passkeys.json` ([C14](c14-oidc-passkeys.md#passkeys)). |
 | Owner code | 16 random bytes | The home and the person | Shown once in a terminal; the home keeps only its SHA-256 hash and expiry in `~/.delo/secrets/home-auth/owner-code.json`. |
+| Terminal switch | A boolean | The home | Whether a device opens a terminal without an unlock in every folder ([C14](c14-oidc-passkeys.md#elevation)); `~/.delo/secrets/home-auth/reach-terminal.json`, off until the person turns it on at the computer. |
 | Recovery kit | 32 random bytes, written `DELO-RK1-` followed by 52 base32 characters | The person | Shown once in the studio; the home keeps only its SHA-256 hash in `~/.delo/secrets/home-auth/recovery.json`. |
 
 Device records live in `~/.delo/secrets/home-auth/devices.json`: for each device its id, public key, studio address, label, platform, approval time, approving device and last sign-in time. The owner record lives in `~/.delo/secrets/home-auth/owner.json`: the claim time, the first device and the pinned identities of [C14](c14-oidc-passkeys.md#owner-subject). Each file has mode 0600 and a `v` field with the value `1`.

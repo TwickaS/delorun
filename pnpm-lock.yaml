@@ -2107,6 +2107,9 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../../packages/typert/protocol
+      '@deepseek-ai/dsh-working-directory':
+        specifier: workspace:*
+        version: link:../../../packages/session/working-directory
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace

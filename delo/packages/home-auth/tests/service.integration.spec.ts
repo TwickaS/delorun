@@ -41,6 +41,7 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', ELEVATION_PATHS.pending],
   ['exact', ELEVATION_PATHS.approve],
   ['exact', ELEVATION_PATHS.revoke],
+  ['exact', ELEVATION_PATHS.terminal],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { deviceIdOf } from '../src/records.ts'
@@ -66,10 +67,10 @@ interface Mount {
 
 /**
  * Mount the service over a temporary secrets directory and a fake web server.
- * @param extra - what else to provide on the context, such as a connection service.
+ * @param extra - what else to provide on the context, such as a connection service, and extra plugin configuration.
  * @returns the mount.
  */
-async function mount(extra: { readonly connection?: unknown } = {}): Promise<Mount> {
+async function mount(extra: { readonly connection?: unknown, readonly config?: Readonly<Record<string, unknown>> } = {}): Promise<Mount> {
   const directory = await mkdtemp(join(tmpdir(), 'delo-home-auth-service-'))
   const ctx = new Context()
   const registered: Registered[] = []
@@ -81,7 +82,7 @@ async function mount(extra: { readonly connection?: unknown } = {}): Promise<Mou
     },
   } as never)
   if (extra.connection !== undefined) ctx.provide('connection', extra.connection as never)
-  const fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
+  const fiber = await ctx.plugin(HomeAuthService, { ...extra.config, secretsDirectory: join(directory, 'secrets', 'home-auth') })
   return { ctx, fiber, registered, unregistered, directory }
 }
 
@@ -264,6 +265,23 @@ describe('the homeAuth service', () => {
     } finally {
       await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })
+    }
+  })
+
+  it('reads the terminal switch from its own store, never from the plugin\'s configuration', async () => {
+    // A plugin row's configuration is what a settings save, a slash command, the plugin manager's configure, undo and
+    // restore, and the model's configuration tools write; none of it turns the switch on.
+    const { ctx, fiber, directory } = await mount({ config: { terminalWithoutUnlock: true, withoutUnlock: true, reachTerminal: true } })
+    try {
+      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+      await ctx.homeAuth.setTerminalWithoutUnlock(true, 'computer')
+      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(true)
+      await expect(ctx.homeAuth.setTerminalWithoutUnlock(true, 'device')).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+      await ctx.homeAuth.setTerminalWithoutUnlock(false, 'device')
+      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
     }
   })
 

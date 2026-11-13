@@ -19,7 +19,7 @@ import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import type { DeviceRecord } from './records.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
-  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
+  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TerminalSwitchOrigin, type TokenAdmission,
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
@@ -38,6 +38,7 @@ import {
   elevationPendingHandler,
   elevationRequestHandler,
   elevationRevokeHandler,
+  terminalSwitchHandler,
   elevationStateHandler,
 } from './elevation-routes.ts'
 
@@ -130,6 +131,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.terminal, handler: terminalSwitchHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -215,6 +217,32 @@ export class HomeAuthService extends Service {
    */
   elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
     return this.core?.elevationOf(deviceId, listener)
+  }
+
+  /**
+   * Whether a device opens a terminal without an unlock in every folder.
+   * @returns whether the switch is on; off before the service started.
+   */
+  terminalWithoutUnlock(): boolean {
+    return this.core?.terminalWithoutUnlock() ?? false
+  }
+
+  /**
+   * Turn the terminal switch on or off.
+   * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
+   * @param from - who asks; a device is refused turning it on.
+   */
+  async setTerminalWithoutUnlock(withoutUnlock: boolean, from: TerminalSwitchOrigin): Promise<void> {
+    await this.state().setTerminalWithoutUnlock(withoutUnlock, from)
+  }
+
+  /**
+   * Call a listener after this home turns the terminal switch on or off.
+   * @param listener - called after the change.
+   * @returns the disposer.
+   */
+  onTerminalSwitchChange(listener: () => void): () => void {
+    return this.state().onTerminalSwitchChange(listener)
   }
 
   /**

@@ -62,12 +62,14 @@ Without an unlock, the phone can:
 - give feedback on a chat or a message;
 - answer ordinary prompts and questions the agent asks, and stop a run or a background job.
 
+In a workspace you put on full access, the phone opens a terminal without an unlock, because the agent can already run any command there. A terminal opened that way keeps running when you take full access away; the next one needs an unlock. To skip the unlock for terminals everywhere, turn on **Terminal from phone without unlock** in Settings, Devices on your computer. Only your computer turns it on; the phone can turn it off.
+
 With an unlock, the phone can also:
 
 - change settings;
 - run slash commands;
 - install, enable, update or remove plugins, and undo or restore a profile change. Delo's own guard plugins and remote access cannot be turned off or changed this way;
-- open a terminal;
+- open a terminal in a folder outside the workspaces you put on full access;
 - browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
 - run plugin code the agent wrote.
 

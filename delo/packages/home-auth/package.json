@@ -18,6 +18,7 @@
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
     "@deepseek-ai/dsh-workspace": "workspace:*",
+    "@deepseek-ai/dsh-working-directory": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "@delo/contract-admission": "workspace:*",
     "@delo/contract-device-approval": "workspace:*",

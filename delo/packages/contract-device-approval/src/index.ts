@@ -41,6 +41,8 @@ export const HOME_AUTH_FILES = {
   passkeys: 'passkeys.json',
   ownerCode: 'owner-code.json',
   recovery: 'recovery.json',
+  /** Whether a device opens a terminal without an unlock everywhere (C14, "Elevation"). */
+  reachTerminal: 'reach-terminal.json',
 } as const
 
 /** IndexedDB database and store that hold a browser device key on its origin. */

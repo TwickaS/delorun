@@ -45,6 +45,9 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     deloHome: '/nowhere',
     elevationOf: () => undefined,
     logElevated: () => {},
+    terminalFoldersOf: () => undefined,
+    grantedFolders: () => [],
+    terminalWithoutUnlock: () => false,
     ...overrides,
   }
 }
@@ -267,6 +270,79 @@ describe('a session/create', () => {
     expect(create({ cwd: other }, unlocked)).toEqual(ALLOW)
     expect(create({ workspaceId: 'w-1' }, unlocked)).toEqual(ALLOW)
     expect(lines).toEqual([`home-auth: elevated action: device=device-1 listener=${LISTENER} action=session/create elevation=elevation-1`])
+  })
+})
+
+describe('a terminal', () => {
+  const ALLOW = { kind: 'allow' }
+  const OPEN = { action: 'terminal/create' as RemoteAccessAction, resource: { kind: 'session', id: session('s-1') } as const, args: {} }
+  let directory = ''
+  let granted = ''
+  let sibling = ''
+  let linkedGranted = ''
+
+  beforeAll(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'delo-reach-terminal-'))
+    granted = join(directory, 'ws')
+    sibling = join(directory, 'ws-other')
+    linkedGranted = join(directory, 'link-to-ws')
+    await mkdir(join(granted, 'inner'), { recursive: true })
+    await mkdir(sibling)
+    await symlink(granted, linkedGranted)
+  })
+
+  afterAll(async () => {
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  /**
+   * Decide one terminal question for a device without an unlock.
+   * @param overrides - the facts the question differs in.
+   * @param request - the question.
+   * @returns the decision.
+   */
+  const decide = (overrides: Partial<ReachAccessFacts>, request: Parameters<ReturnType<typeof createCondition>>[0] = OPEN) =>
+    createCondition(facts({ grantedFolders: () => [granted], ...overrides }), DEVICE)(request)
+
+  it('opens without an unlock where every folder it would open in lies inside a granted workspace', () => {
+    expect(decide({ terminalFoldersOf: () => [granted, granted] })).toEqual(ALLOW)
+    expect(decide({ terminalFoldersOf: () => [join(granted, 'inner'), granted] })).toEqual(ALLOW)
+    // A grant recorded at a link covers the folder the link resolves to.
+    expect(decide({ grantedFolders: () => [linkedGranted], terminalFoldersOf: () => [join(granted, 'inner'), granted] })).toEqual(ALLOW)
+    // Every terminal action follows, so a terminal opened there can be attached and kept.
+    for (const action of Object.keys(REACH_ELEVATED_ACTIONS).filter(name => name.startsWith('terminal/'))) {
+      expect(decide({ terminalFoldersOf: () => [granted, granted] }, { ...OPEN, action: action as RemoteAccessAction }), action).toEqual(ALLOW)
+    }
+  })
+
+  it('needs an unlock outside a granted workspace, wherever the Host cannot name the folder, and for any other elevated action', () => {
+    // Pins the containment: a sibling whose name starts with the granted folder's is outside it.
+    expect(decide({ terminalFoldersOf: () => [sibling, sibling] })).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+    // Pins the fallback folder: a terminal of a chat whose folder is gone opens in the original one, which must be granted too.
+    expect(decide({ terminalFoldersOf: () => [granted, sibling] })).toMatchObject({ kind: 'deny' })
+    // Pins the unresolved folder: one the Host cannot name, or that does not exist, keeps the unlock.
+    expect(decide({ terminalFoldersOf: () => undefined })).toMatchObject({ kind: 'deny' })
+    expect(decide({ terminalFoldersOf: () => [] })).toMatchObject({ kind: 'deny' })
+    expect(decide({ terminalFoldersOf: () => [join(granted, 'gone'), granted] })).toMatchObject({ kind: 'deny' })
+    expect(decide({ terminalFoldersOf: () => [granted, granted], grantedFolders: () => [join(directory, 'gone')] })).toMatchObject({ kind: 'deny' })
+    // Pins the grant: without one the folder needs an unlock, so a withdrawn grant applies to the next open.
+    expect(decide({ terminalFoldersOf: () => [granted, granted], grantedFolders: () => [] })).toMatchObject({ kind: 'deny' })
+    // A question on another resource names no Session folder.
+    expect(decide({ terminalFoldersOf: () => [granted, granted] }, { ...OPEN, resource: GLOBAL })).toMatchObject({ kind: 'deny' })
+    // Pins the terminal prefix: a granted workspace drops the unlock for terminals only.
+    expect(decide({ terminalFoldersOf: () => [granted, granted] }, { ...OPEN, action: 'commands/execute' as RemoteAccessAction })).toMatchObject({ kind: 'deny' })
+  })
+
+  it('decides on the Session\'s folders and never on a folder the call names', () => {
+    // Pins the source of the folder: a call that names a granted folder for a Session elsewhere still needs an unlock.
+    expect(decide({ terminalFoldersOf: () => [sibling, sibling] }, { ...OPEN, args: { cwd: granted, request: { cwd: granted } } })).toMatchObject({ kind: 'deny' })
+  })
+
+  it('opens everywhere without an unlock while the terminal switch is on, and nothing else', () => {
+    // Pins the switch: on, it drops the unlock for terminals in every folder and on every resource.
+    expect(decide({ terminalWithoutUnlock: () => true, grantedFolders: () => [] })).toEqual(ALLOW)
+    expect(decide({ terminalWithoutUnlock: () => true }, { ...OPEN, resource: GLOBAL })).toEqual(ALLOW)
+    expect(decide({ terminalWithoutUnlock: () => true }, { ...OPEN, action: 'directoryPicker/list' as RemoteAccessAction })).toMatchObject({ kind: 'deny' })
   })
 })
 
