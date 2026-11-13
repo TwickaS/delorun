@@ -2,9 +2,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import SubagentRuntime, { limitExternalRunTime } from '../src/index.ts'
+import SubagentRuntime, { DELEGATION_CONSENT_PROVIDER_EXPORT, limitExternalRunTime } from '../src/index.ts'
 import type { DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict } from '../src/index.ts'
 import type { SubagentCapabilities, SubagentResult, SubagentRun } from '../src/types.ts'
 import { mountWorkingDirectoryFixture } from './working-directory-fixture.ts'
@@ -124,6 +125,70 @@ describe('external delegation consent', () => {
     expect(result.stopReason).toBe('error')
     expect(result.output).toEqual([{ type: 'text', text: 'partial' }])
     expect(result.diagnostic).toContain('stopped after 30 minutes')
+  })
+})
+
+describe('a Loader row that declares the external-delegation consent', () => {
+  /**
+   * Mount the runtime under a Loader and create one row from a module.
+   * @param module - the row's plugin module, or its pending import.
+   * @param disabled - the row's `disabled` value, or its getter.
+   * @returns the fixture and the row's creation.
+   */
+  async function withRow(module: object | Promise<object>, disabled?: () => boolean) {
+    const fixture = await setup()
+    await fixture.ctx.plugin(Loader)
+    fixture.ctx.loader.builtins['row'] = module
+    const options = { name: 'cordis:row' }
+    if (disabled !== undefined) Object.defineProperty(options, 'disabled', { get: disabled, enumerable: true })
+    const created = fixture.ctx.loader.create(options)
+    return { ...fixture, created }
+  }
+
+  const allow: DelegationConsentService = { review: () => Promise.resolve({ kind: 'allow' }) }
+
+  it('starts nothing while the declaring row is not running', async () => {
+    const fixture = await withRow({ name: 'consent', [DELEGATION_CONSENT_PROVIDER_EXPORT]: true, apply() { throw new Error('the consent crashed') } })
+    await fixture.created
+    await expect(fixture.startRun()).rejects.toMatchObject({ code: 'DELEGATION_CONSENT_UNAVAILABLE' })
+    expect(fixture.start).not.toHaveBeenCalled()
+  })
+
+  it('waits for a declaring row whose module is still importing, then asks the consent it provides', async () => {
+    const module = Promise.withResolvers<object>()
+    const review = vi.fn(allow.review)
+    const fixture = await withRow(module.promise)
+    const activation = fixture.startRun()
+    module.resolve({ name: 'consent', [DELEGATION_CONSENT_PROVIDER_EXPORT]: true, apply(ctx: Context) { ctx.provide('delegationConsent', { review }) } })
+    await activation
+    expect(review).toHaveBeenCalledOnce()
+    expect(fixture.start).toHaveBeenCalledOnce()
+  })
+
+  it('starts unreviewed, as upstream does, when the declaring row runs without providing a consent', async () => {
+    const fixture = await withRow({ name: 'consent', [DELEGATION_CONSENT_PROVIDER_EXPORT]: true, apply() {} })
+    await fixture.created
+    await fixture.startRun()
+    expect(fixture.start).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    ['a row that declares nothing and fails', { name: 'other', apply() { throw new Error('unrelated failure') } }, undefined],
+    ['a function plugin row', (): void => undefined, undefined],
+    ['a disabled declaring row', { name: 'consent', [DELEGATION_CONSENT_PROVIDER_EXPORT]: true, apply() { throw new Error('never starts') } }, () => true],
+    ['a declaring row whose disabled expression throws', { name: 'consent', [DELEGATION_CONSENT_PROVIDER_EXPORT]: true, apply() { throw new Error('never starts') } }, () => { throw new Error('the expression failed') }],
+  ])('starts unreviewed, as upstream does, beside %s', async (_name, module, disabled) => {
+    const fixture = await withRow(module, disabled)
+    await fixture.created.catch((error: unknown) => error)
+    await fixture.startRun()
+    expect(fixture.start).toHaveBeenCalledOnce()
+  })
+
+  it('starts unreviewed when the only row\'s module fails to import', async () => {
+    const fixture = await withRow(Promise.reject(new Error('the module could not be imported')))
+    await fixture.created.catch((error: unknown) => error)
+    await fixture.startRun()
+    expect(fixture.start).toHaveBeenCalledOnce()
   })
 })
 

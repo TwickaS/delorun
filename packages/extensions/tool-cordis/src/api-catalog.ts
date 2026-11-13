@@ -1098,7 +1098,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'delegationConsent',
     summary: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`.',
-    description: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`. A deployment that composes none starts every external provider unreviewed and keeps the delegation tools\' own wording.',
+    description: 'Optional consent over external delegation, read with `ctx.get(\'delegationConsent\')`. A deployment that composes none starts every external provider unreviewed and keeps the delegation tools\' own wording. A provider\'s plugin module exports DELEGATION_CONSENT_PROVIDER_EXPORT as `true`, so a start refuses while that row is not running.',
     methods: [
       {
         signature: 'describe?(provider: string): string | undefined',
@@ -2093,7 +2093,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: 'abstract review(command: McpServerCommand): Promise<McpConsentDecision>',
-        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, so the provider can let an accepted start through at once and ask again when the command, arguments, working directory, environment, resolved executable path, resolved command shell or resolved working directory it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
+        description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, and again before every reconnect spawns the server after its connection dropped, where a refusal ends the reconnect loop and leaves the server stopped until its row starts again. The provider can therefore compare what the start names, such as the contents of its executable, with what it accepted each time, and let an accepted start through at once and ask again when the command, arguments, working directory, environment, resolved executable path, resolved command shell or resolved working directory it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
         parameters: [{ name: 'command', description: 'the server start under review.' }],
         returns: '`allow: true` to start the server, or `allow: false` with the reason that leaves the server stopped.',
       },
@@ -5707,7 +5707,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Admission',
-    declaration: 'export type Admission = {\n    readonly kind: \'admitted\';\n    readonly peer: PeerScope;\n    readonly deviceId?: string;\n    readonly sessionId?: string;\n    readonly setCookie?: string;\n} | {\n    readonly kind: \'pre-login\';\n    readonly route: PreLoginRoute;\n} | {\n    readonly kind: \'refused\';\n    readonly status: 401 | 403 | 421;\n    readonly code: string;\n};',
+    declaration: 'export type Admission = {\n    readonly kind: \'admitted\';\n    readonly peer: PeerScope;\n    readonly deviceId?: string;\n    readonly sessionId?: string;\n    readonly setCookie?: string;\n} | {\n    readonly kind: \'pre-login\';\n    readonly route: PreLoginRoute;\n} | {\n    readonly kind: \'refused\';\n    readonly status: 401 | 403 | 421;\n    readonly code: string;\n    readonly location?: string;\n};',
   },
   {
     name: 'AdmittedPromptContentPart',
@@ -7351,7 +7351,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpConsentDecision',
-    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
+    declaration: 'export type McpConsentDecision = {\n    readonly allow: true;\n    readonly spawnCommand?: string;\n} | {\n    readonly allow: false;\n    readonly reason: string;\n};',
   },
   {
     name: 'McpResourceProvider',

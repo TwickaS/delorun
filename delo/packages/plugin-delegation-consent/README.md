@@ -48,7 +48,7 @@ Every route answers only the home's own computer and refuses others with `LOOPBA
 ## Known limitations
 
 - The service decides whether an external agent starts, not what it does: once started it acts under its own settings, outside Delo's sandbox, until it ends or reaches the time limit.
-- The review exists only while the row runs. `delorun` checks at start that a profile with the switch on mounts the row enabled and started, as for Delo's other consent rows; a composition started another way has no such check.
+- The review exists only while the row runs. The module exports `providesDelegationConsent` as `true`, so while an enabled row of this plugin is not running, for example after its start failed, the runtime starts no external agent (`DELEGATION_CONSENT_UNAVAILABLE`); with the switch off the row runs without the service and external agents start as upstream starts them. `delorun` also checks at start that a profile with the switch on mounts the row enabled and started, as for Delo's other consent rows.
 - The guard does not cover `plugin_manager`'s undo and restore of an earlier profile state, and a git or tarball spec the profile has not saved names its package only once installed, so the guard cannot read it; the review still asks before each start of the provider it registers. A full-access chat can run any command, `pnpm` included.
 - A preset's own plugin rows, such as an agent team preset's, are outside bundle patches; external providers they register are still reviewed, because the review sits in the subagent runtime.
 

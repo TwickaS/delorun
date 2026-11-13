@@ -42,6 +42,12 @@ export const Config: z<Partial<DelegationConsentSettings>, Config> = z.object({
 })
 
 /**
+ * Declares that this plugin's row provides `delegationConsent` (`DELEGATION_CONSENT_PROVIDER_EXPORT` of
+ * `@deepseek-ai/dsh-subagent`), so an external start waits for the row and starts nothing while it is not running.
+ */
+export const providesDelegationConsent = true
+
+/**
  * The consent's `enabled` field as a switch only the home's own computer turns off (A299). While the plugin is mounted
  * it registers the switch with `@delo/home-auth`, whose reach policy then refuses a device's settings write that could
  * turn it off, unlocked or not; the run time limit and turning it on stay ordinary settings writes.

@@ -404,7 +404,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.delegationConsent` — `DelegationConsentService`
 
-Optional consent over external delegation, read with `ctx.get('delegationConsent')`. A deployment that composes none starts every external provider unreviewed and keeps the delegation tools' own wording.
+Optional consent over external delegation, read with `ctx.get('delegationConsent')`. A deployment that composes none starts every external provider unreviewed and keeps the delegation tools' own wording. A provider's plugin module exports DELEGATION_CONSENT_PROVIDER_EXPORT as `true`, so a start refuses while that row is not running.
 
 ```ts cordis-catalog
 /**

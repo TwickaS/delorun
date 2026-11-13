@@ -13,7 +13,7 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import { createInboxStub, unsupportedModel } from '@deepseek-ai/dsh-agent-loop-testkit'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SessionStore, { SessionId, type Session } from '@deepseek-ai/dsh-session'
-import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import SubagentRuntime, { DELEGATION_CONSENT_PROVIDER_EXPORT } from '@deepseek-ai/dsh-subagent'
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -371,6 +371,11 @@ describe('the plugin_manager guard', () => {
 })
 
 describe('mounting', () => {
+  it('declares its row as the provider an external start waits for', async () => {
+    const plugin: Record<string, unknown> = await import('../src/index.ts')
+    expect(plugin[DELEGATION_CONSENT_PROVIDER_EXPORT]).toBe(true)
+  })
+
   it('mounts nothing with the switch off, its parity value', async () => {
     const parity = configOf({})
     expect([parity.enabled.get(), parity.runTimeoutMinutes.get()]).toEqual([false, 30])

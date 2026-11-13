@@ -5,11 +5,15 @@
  * govern. When a plugin provides this service, the runtime reviews every
  * external start before the provider's `start` runs, and the delegation tools
  * take the model-facing description of an external provider from it. Without
- * the service, starts and descriptions are exactly as before.
+ * the service, starts and descriptions are exactly as before, unless a Loader
+ * row whose plugin declares a provider is not running: then no external
+ * provider starts.
  *
  * @module @deepseek-ai/dsh-subagent/consent
  */
 
+import { FiberState, type Context } from '@deepseek-ai/cordis'
+import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SubagentError } from './error.ts'
 import type { SubagentResult, SubagentRun } from './types.ts'
@@ -42,7 +46,9 @@ export type ExternalDelegationVerdict =
 /**
  * Optional consent over external delegation, read with
  * `ctx.get('delegationConsent')`. A deployment that composes none starts every
- * external provider unreviewed and keeps the delegation tools' own wording.
+ * external provider unreviewed and keeps the delegation tools' own wording. A
+ * provider's plugin module exports {@link DELEGATION_CONSENT_PROVIDER_EXPORT}
+ * as `true`, so a start refuses while that row is not running.
  */
 export interface DelegationConsentService {
   /**
@@ -69,6 +75,62 @@ declare module '@deepseek-ai/cordis' {
      */
     delegationConsent: DelegationConsentService
   }
+}
+
+/**
+ * The name of the module export by which a plugin declares that its row may provide `delegationConsent`. A provider
+ * module exports it as `true`; {@link findDelegationConsent} waits for the rows that declare it and refuses a start
+ * while one of them is not running.
+ */
+export const DELEGATION_CONSENT_PROVIDER_EXPORT = 'providesDelegationConsent'
+
+/**
+ * Whether a Loader row starts and its imported plugin declares a `delegationConsent` provider. A `disabled` expression
+ * that throws counts as disabled, because such a row does not start.
+ * @param entry - the row, after its module import settled.
+ * @param unwrap - the Loader's export normalization.
+ * @returns true when the row is enabled and its plugin exports {@link DELEGATION_CONSENT_PROVIDER_EXPORT} as `true`.
+ */
+function declaresConsent(entry: Entry, unwrap: (exports: unknown) => unknown): boolean {
+  try {
+    if (entry.disabled || entry.moduleNamespace === undefined) return false
+  } catch (_failedExpression) {
+    // The Loader reports the expression's failure for the row, which then provides nothing.
+    return false
+  }
+  const plugin = unwrap(entry.moduleNamespace)
+  return typeof plugin === 'object' && plugin !== null && Reflect.get(plugin, DELEGATION_CONSENT_PROVIDER_EXPORT) === true
+}
+
+/**
+ * Find the `delegationConsent` service for one external start, independent of the order in which a Loader starts its
+ * rows. A registered service is returned at once. Under a Loader, the lookup first waits for every row's module import,
+ * then for every enabled row whose plugin declares a provider to settle.
+ * @param ctx - the runtime's context.
+ * @param provider - the registered provider name the start selects, named in a refusal.
+ * @returns the service, or undefined when no row declares a provider or every declaring row runs without providing
+ *   one, as a provider whose own switch is off does.
+ * @throws {SubagentError} `DELEGATION_CONSENT_UNAVAILABLE` when a declaring row is not running, so nothing starts
+ *   unreviewed.
+ */
+export async function findDelegationConsent(ctx: Context, provider: string): Promise<DelegationConsentService | undefined> {
+  const loader = ctx.get('loader')
+  if (ctx.get('delegationConsent') !== undefined || loader === undefined) return ctx.get('delegationConsent')
+  let imports = [...loader.entries()].flatMap(entry => entry._initTask ?? [])
+  while (imports.length > 0) {
+    await Promise.allSettled(imports)
+    imports = [...loader.entries()].flatMap(entry => entry._initTask ?? [])
+  }
+  const declaring = [...loader.entries()].filter(entry => declaresConsent(entry, exports => loader.unwrapExports(exports)))
+  await Promise.allSettled(declaring.map(entry => entry.fiber?.await()))
+  const consent = ctx.get('delegationConsent')
+  const stopped = declaring.filter(entry => entry.fiber?.state !== FiberState.ACTIVE).map(entry => entry.id)
+  if (consent !== undefined || stopped.length === 0) return consent
+  throw new SubagentError(
+    `the row ${stopped.join(', ')} declares the external-agent consent but is not running, so "${provider}" was not started. `
+      + 'Fix the consent row\'s failure and start again.',
+    'DELEGATION_CONSENT_UNAVAILABLE',
+  )
 }
 
 /**

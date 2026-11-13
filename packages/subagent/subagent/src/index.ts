@@ -79,11 +79,11 @@ import type { SubagentCatalogEntry } from './projection-types.ts'
 import { subagentIdentityProjectionDefinition, subagentTimingProjectionDefinition } from './projection.ts'
 import { subagentCatalogProjectionDefinition } from './catalog.ts'
 import { deliverSubagentPrompt } from './internal.ts'
-import { assertExternalDelegationConsent, limitExternalRunTime } from './consent.ts'
+import { assertExternalDelegationConsent, findDelegationConsent, limitExternalRunTime } from './consent.ts'
 
 export type {} from './catalog.ts'
 export * from './out-of-process.ts'
-export { assertExternalDelegationConsent, limitExternalRunTime } from './consent.ts'
+export { assertExternalDelegationConsent, DELEGATION_CONSENT_PROVIDER_EXPORT, findDelegationConsent, limitExternalRunTime } from './consent.ts'
 export type { DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict } from './consent.ts'
 export { AssistantOutputFold, finalAssistantOutput } from './assistant-output.ts'
 export { SubagentRunId } from './types.ts'
@@ -218,7 +218,7 @@ export class SubagentRuntime extends TypertRemoteService {
     ctx.inject(['agents'], (childCtx: Context) => {
       const manager = new SubagentManager(childCtx, {
         startExternal: async (name, request) => {
-          const consent = this.ctx.get('delegationConsent')
+          const consent = await findDelegationConsent(this.ctx, name)
           const timeoutMs = consent === undefined ? undefined : await assertExternalDelegationConsent(consent, {
             provider: name, parent: request.parent, cwd: request.cwd, label: request.label, signal: request.signal,
           })
