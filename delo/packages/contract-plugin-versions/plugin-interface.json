@@ -19,6 +19,7 @@
     { "kind": "service", "name": "deloReach", "side": "browser", "source": "delo/packages/plugin-onboarding/src/client/index.ts" },
     { "kind": "service", "name": "deloSidebar", "side": "browser", "source": "delo/packages/plugin-sidebar/src/client/index.ts" },
     { "kind": "service", "name": "mcpReviews", "side": "host", "source": "delo/packages/plugin-mcp-consent/src/review.ts" },
-    { "kind": "service", "name": "permissionDefaults", "side": "host", "source": "delo/packages/plugin-permission-defaults/src/index.ts" }
+    { "kind": "service", "name": "permissionDefaults", "side": "host", "source": "delo/packages/plugin-permission-defaults/src/index.ts" },
+    { "kind": "service", "name": "deloCommandNetwork", "side": "host", "source": "delo/packages/plugin-permission-defaults/src/command-network.ts" }
   ]
 }
