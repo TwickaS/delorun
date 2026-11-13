@@ -28,11 +28,11 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
-import { EXIT, type ExitCode } from './exit.ts'
+import { CliError, EXIT, type ExitCode } from './exit.ts'
 import { HEADLESS_PROFILE, refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
 import { useHomeShared } from './home-exclusion.ts'
 import { requiredModelKey, resolveModelKey } from './model-key.ts'
-import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
+import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, pnpmCommand, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
 import { readProfileRegistry } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { ensureCopyImport } from './pnpm-import.ts'
 import { profileDirectory, selectCommandProfile } from './profile.ts'
@@ -106,6 +106,22 @@ const UPSTREAM_PLUGIN: PluginDependencies = {
   onExit: (listener) => { process.once('exit', listener) },
 }
 
+/** The words pnpm's list command answers to; pnpm prints nothing for a profile with no plugins. */
+const LIST_COMMANDS = new Set(['list', 'ls', 'la', 'll'])
+
+/**
+ * Whether a profile has no plugin in its `package.json`, the state in which pnpm's list prints nothing; a profile with no
+ * manifest has none either.
+ * @param profileDir - the profile directory.
+ * @returns true when the manifest is missing or lists no dependency.
+ */
+function hasNoPlugins(profileDir: string): boolean {
+  const manifest = join(profileDir, 'package.json')
+  if (!existsSync(manifest)) return true
+  const { dependencies = {} } = JSON.parse(readFileSync(manifest, 'utf8')) as { readonly dependencies?: Readonly<Record<string, string>> }
+  return Object.keys(dependencies).length === 0
+}
+
 /** The profile files a refused installation puts back. */
 const RESTORED_FILES = ['package.json', 'pnpm-lock.yaml'] as const
 
@@ -162,6 +178,9 @@ export async function plugin(args: readonly string[], context: CommandContext, d
     if (check === undefined || !installsPackages(rest)) {
       const code = await dependencies.runUpstream(['plugin', ...withProfile(rest, profile)])
       if (code === 0 && check !== undefined) await forgetRemovedPlugins(profileDir, context)
+      if (code === 0 && LIST_COMMANDS.has(pnpmCommand(rest) ?? '') && hasNoPlugins(profileDir)) {
+        context.stdout(`No plugins added to the profile ${profile}.\n`)
+      }
       return code
     }
     // The registry is read before the resolution, so between the resolution and the installation only the check runs,
@@ -215,6 +234,9 @@ export async function pluginMirror(args: readonly string[], context: CommandCont
   return runMirror(args, { home: home.path, profile, profileDir: profileDirectory(home.path, profile), installAnchor: await dependencies.installAnchor(), output: context })
 }
 
+/** The usage line of `delorun plugin`, shown when it is run without arguments. */
+const PLUGIN_USAGE = 'Usage: delorun plugin [--profile <name>] <list | add <package> | remove <package> | update>\n       delorun plugin check <directory>\n       delorun plugin mirror on|off'
+
 /**
  * `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management; `delorun plugin check <directory>` is
  * Delo's own ([plugin check](./plugin-check.ts)), which needs no profile.
@@ -223,6 +245,7 @@ export const pluginCommand: CliCommand = {
   name: 'plugin',
   summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; mirror on|off',
   run: async (args, context) => {
+    if (args.length === 0) throw new CliError(EXIT.usage, `delorun plugin: name what to do.\n${PLUGIN_USAGE}`)
     if (args[0] === 'check') return runPluginCheck(args.slice(1), context)
     if (args[0] === 'mirror') return pluginMirror(args.slice(1), context)
     // pnpm's exit code is the command's, which the CLI's exit codes do not list, so the process ends with it here.

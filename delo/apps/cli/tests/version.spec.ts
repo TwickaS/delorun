@@ -73,8 +73,8 @@ describe('the versions Delo reports', () => {
 })
 
 describe('the version output', () => {
-  it('prints the two lines, Delo first', () => {
-    expect(versionLines({ delo: at('1.0.0'), dsh: at('0.2.2') })).toBe('Delo 1.0.0\nDSH 0.2.2\n')
+  it('prints the two lines, Delorun first', () => {
+    expect(versionLines({ delo: at('1.0.0'), dsh: at('0.2.2') })).toBe('Delorun 1.0.0\nDSH 0.2.2\n')
   })
 
   it('prints one JSON line with --json', () => {
@@ -84,7 +84,7 @@ describe('the version output', () => {
   it('prints both versions through delorun --version, before a home is resolved', async () => {
     const context = recorder()
     expect(await main(['--version'], context)).toBe(EXIT.ok)
-    expect(context.stdoutText).toBe(`Delo ${deloVersion()}\nDSH ${dshVersion()}\n`)
+    expect(context.stdoutText).toBe(`Delorun ${deloVersion()}\nDSH ${dshVersion()}\n`)
     expect(context.stderrText).toBe('')
   })
 

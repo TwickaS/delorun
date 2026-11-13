@@ -162,6 +162,14 @@ describe('delorun plugin check', () => {
     expect(out).toContain('e@1.0.0')
   })
 
+  it('shows Delorun\'s own usage for delorun plugin with no arguments, not pnpm\'s', async () => {
+    const context = { env: {}, stdout: () => {}, stderr: () => {} }
+    const failure = await pluginCommand.run([], context).then(() => undefined, (error: unknown) => error)
+    expect(failure).toMatchObject({ exit: EXIT.usage })
+    expect(String(failure)).toContain('Usage: delorun plugin')
+    expect(String(failure)).not.toContain('pnpm')
+  })
+
   it('targets the running minor, before and after 1.0', () => {
     expect(targetRange('0.1.3')).toBe('^0.1.0')
     expect(targetRange('1.4.2-rc.1')).toBe('^1.4.0')

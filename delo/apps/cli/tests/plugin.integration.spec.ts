@@ -102,6 +102,25 @@ function writeEmptyProfile(): void {
 }
 
 describe('delorun plugin', () => {
+  it('says when the profile has no plugins to list, since pnpm prints nothing for it', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    const printed: string[] = []
+    const listing: CommandContext = { ...context, stdout: (text) => { printed.push(text) } }
+    expect(await plugin(['--profile', 'default', 'list'], listing, dependencies([]))).toBe(0)
+    expect(printed).toEqual(['No plugins added to the profile default.\n'])
+  })
+
+  it('prints nothing extra when a profile lists plugins', async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+    writeFileSync(join(profileDir, 'package.json'), '{"name":"profile","private":true,"dependencies":{"good-plugin":"1.0.0"}}\n')
+    const printed: string[] = []
+    const listing: CommandContext = { ...context, stdout: (text) => { printed.push(text) } }
+    expect(await plugin(['--profile', 'default', 'ls'], listing, dependencies([]))).toBe(0)
+    expect(printed).toEqual([])
+  })
+
   it('runs upstream\'s plugin command registered as a shared user, and releases the registration afterwards', async () => {
     const runs: Run[] = []
     expect(await plugin(['--profile', 'default', 'list'], context, dependencies(runs))).toBe(0)

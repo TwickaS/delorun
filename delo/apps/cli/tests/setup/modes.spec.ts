@@ -113,7 +113,7 @@ const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
   Full (also the release check, background running, the profile name and the port)
 = Quick
 # Privacy
-  Delo has no telemetry of its own.
+  Delorun has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
   Once a day, and at start when a day has passed, Delorun checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delorun's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → General → Updates.
@@ -350,12 +350,12 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
   Full (also the release check, background running, the profile name and the port)
 = Full
 # Privacy
-  Delo has no telemetry of its own.
+  Delorun has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
   Once a day, and at start when a day has passed, Delorun checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delorun's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → General → Updates.
 ? Check for new releases?
-> Yes (once a day Delo fetches signed release files from releases.delorun.com and GitHub; it sends nothing about this installation, and those hosts see this computer's address)
+> Yes (once a day Delorun fetches signed release files from releases.delorun.com and GitHub; it sends nothing about this installation, and those hosts see this computer's address)
   No (no release check request is made; turn it on later in Settings → General → Updates or with delorun setup privacy)
   ← Back
 = Yes
@@ -665,7 +665,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
       { id: 'reach', status: 'skipped' },
       { id: 'profile', status: 'skipped' },
     ])
-    expect(screen()).toContain('Run delorun to start Delo and open the studio.')
+    expect(screen()).toContain('Run delorun to start Delorun and open the studio.')
     expect(patchOf().map(row => row.id)).toEqual(['delo-permission-defaults', 'delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent'])
   })
 
@@ -696,7 +696,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
     const document = join(osHome, 'named.json')
     writeFileSync(document, JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: true, profile: { name: 'work', port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
     expect(await unattended({ form: { kind: 'config', path: document } })).toBe(EXIT.ok)
-    expect(screen()).toContain('Run delorun --profile work to start Delo and open the studio.')
+    expect(screen()).toContain('Run delorun --profile work to start Delorun and open the studio.')
   })
 })
 
@@ -844,7 +844,7 @@ describe('the release check', { timeout: TIMEOUT_MS }, () => {
     expect(patchOf()).toEqual([...prompts, OFF_ROW])
     expect(recordOf()).toMatchObject({ updateCheck: false })
     expect(recordOf().sections.find(record => record.id === 'privacy')?.status).toBe('answered')
-    expect(screen()).toContain('Delo has no telemetry of its own.')
+    expect(screen()).toContain('Delorun has no telemetry of its own.')
     expect(screen()).toContain('> Yes (once a day')
     expect(screen()).toContain('Updated the privacy section of the profile default.')
     recording.screen.length = 0

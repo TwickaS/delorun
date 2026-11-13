@@ -135,7 +135,7 @@ describe.skipIf(!POSIX)('resolveDefaultWorkspace', () => {
     expect(failure).toBeInstanceOf(CliError)
     expect((failure as CliError).exit).toBe(1)
     expect((failure as CliError).message.split('\n')).toEqual([
-      'delorun: Delo found no folder for the default workspace.',
+      'delorun: Delorun found no folder for the default workspace.',
       `${under(documents)}: ${workspaceLocationMessage('stock-home')}`,
       `${under(osHome)}: ${workspaceLocationMessage('delo-home')}`,
       `Choose one in ${patchPath}: add the row \`- id: workspace-controller\` with \`config: { defaultWorkspaceDirectory: <a folder of your own> }\`, then start again.`,

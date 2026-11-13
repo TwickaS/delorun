@@ -85,7 +85,7 @@ export function versions(): VersionOutput {
 }
 
 /**
- * The two lines `delorun --version` prints (contract C17): `Delo <delo>`, then `DSH <dsh>`.
+ * The two lines `delorun --version` prints (contract C17): `Delorun <delo>`, then `DSH <dsh>`.
  * @param output - the versions.
  * @returns the lines, each ending in a newline.
  */

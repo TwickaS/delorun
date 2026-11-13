@@ -331,7 +331,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
   removeProgress(runDir)
   request.output.stdout(`Set up the CLI profile ${profile} at ${directory}.\n`)
   if (request.form.kind !== 'interactive') {
-    request.output.stdout(`Run delorun${profile === 'default' ? '' : ` --profile ${profile}`} to start Delo and open the studio.\n`)
+    request.output.stdout(`Run delorun${profile === 'default' ? '' : ` --profile ${profile}`} to start Delorun and open the studio.\n`)
     return EXIT.ok
   }
   return finishSetup(prompterFor(request.form), request.ending ?? computerEnding(request.home, profile, request.output, request.env), { profile, background: progress.answers.background, output: request.output })

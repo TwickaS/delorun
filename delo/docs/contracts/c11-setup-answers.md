@@ -187,7 +187,7 @@ Setup resumes an interrupted run at the first step that did not finish. A step t
 
 Setup shows the privacy note at the start of every terminal run, and prints it before an unattended run.
 
-- Delo has no telemetry of its own.
+- Delorun has no telemetry of its own.
 - Upstream's desktop analytics and DeepSeek's session-log upload are off unless you turn them on, and Settings → Privacy changes them.
 - Upstream's feedback send includes a session-log prefix, and it happens only when you send feedback. The CLI profile has no feedback send, so this statement describes upstream's profiles only.
 - Delo checks once a day whether a newer release exists, which hosts it fetches from, that it sends nothing about the installation and its plugins, that those hosts see the computer's address, and that Settings → General → Updates turns it off.

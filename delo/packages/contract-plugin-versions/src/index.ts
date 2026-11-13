@@ -81,8 +81,8 @@ export interface VersionOutput {
   readonly dsh: SemanticVersion
 }
 
-/** The label of each line `delorun --version` prints, in order: `Delo <delo>`, then `DSH <dsh>`. */
-export const VERSION_OUTPUT_LABELS: readonly ['Delo', 'DSH'] = ['Delo', 'DSH']
+/** The label of each line `delorun --version` prints, in order: `Delorun <delo>`, then `DSH <dsh>`. */
+export const VERSION_OUTPUT_LABELS: readonly ['Delorun', 'DSH'] = ['Delorun', 'DSH']
 
 /** The `schema` value of `plugin-interface.json`, the inventory of the interfaces Delo offers plugins. */
 export const PLUGIN_INTERFACE_SCHEMA = 'delo.plugin-interface/1'
