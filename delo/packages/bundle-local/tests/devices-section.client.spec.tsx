@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconLinkOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
@@ -510,7 +510,7 @@ describe('the plugin', () => {
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
       expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
-      expect(slots.entries('settings.section.icon').map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineRegular]])
+      expect(slots.entries('settings.section.icon').map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineMedium]])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
       const devicesEntry = slots.entries('settings.section')[1]

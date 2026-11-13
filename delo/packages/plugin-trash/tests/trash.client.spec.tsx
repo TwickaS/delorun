@@ -3,7 +3,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { IconTrashOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconTrashOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { FunctionComponent } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -175,7 +175,7 @@ describe('the plugin', () => {
     expect([section.id, section.order, section.label?.()]).toEqual([TRASH_SECTION_ID, TRASH_SECTION_ORDER, en.nav])
     expect(page.entryOf('shell.overlay').options.id).toBe('delo-trash.toast')
     const icon = page.entryOf('settings.section.icon')
-    expect([icon.options.id, icon.component]).toEqual([TRASH_SECTION_ID, IconTrashOutlineRegular])
+    expect([icon.options.id, icon.component]).toEqual([TRASH_SECTION_ID, IconTrashOutlineMedium])
     await page.dispose()
     expect([page.dictionaries.size, page.contributions.size]).toEqual([0, 0])
   })

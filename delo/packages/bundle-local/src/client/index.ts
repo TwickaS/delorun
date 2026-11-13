@@ -28,7 +28,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the 'sidebar.brand.mark' and 'sidebar.brand.name' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import { IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconLinkOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SETUP_OPT_IN_ROWS, SETUP_UPDATE_CHECK_ROW } from '@delo/contract-setup-answers'
 import { DeloBrandMark, DeloBrandName } from './brand.tsx'
 import { acknowledgeNotice, DeloNotice, noticeAcknowledged, type DeloNoticeInjected } from './DeloNotice.tsx'
@@ -237,7 +237,7 @@ export function apply(ctx: Context): void {
     inject: devicesFace,
   }, DevicesSection))
   // A link glyph stands in for a device glyph, which the icon library lacks; without this Settings draws the generic gear.
-  ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: DEVICES_SECTION_ID }, IconLinkOutlineRegular))
+  ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: DEVICES_SECTION_ID }, IconLinkOutlineMedium))
   applyRemoteNotice(ctx)
   applyConsents(ctx, browserFetch)
 }
