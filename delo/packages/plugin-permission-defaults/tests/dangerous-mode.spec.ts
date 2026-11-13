@@ -12,7 +12,7 @@ import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, Config, FULL_ACCESS_PRESET, permissionStorePath, PermissionDefaults, SAFER_PRESET } from '../src/index.ts'
 import {
   DANGEROUS_WARNING_VERSION, dangerousGrantPath, deviceGrantsPath, readDangerousGrant, readDangerousGrantSync, removeDangerousGrant, serializePermissionStore,
@@ -20,10 +20,25 @@ import {
 } from '../src/store.ts'
 import { workspaceKey } from '../src/workspace.ts'
 
+/** Whether the next store write fails, to prove the read-time answer when a withdrawal cannot be written. */
+const storeWrites = { failing: false }
+
+vi.mock('../src/store.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/store.ts')>()
+  return {
+    ...original,
+    writePermissionStore: (...args: Parameters<typeof original.writePermissionStore>) => {
+      if (storeWrites.failing) return Promise.reject(new Error('the store is read-only'))
+      return original.writePermissionStore(...args)
+    },
+  }
+})
+
 const roots: string[] = []
 const originalHome = process.env['DELO_HOME']
 
 afterEach(() => {
+  storeWrites.failing = false
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
   if (originalHome === undefined) delete process.env['DELO_HOME']
   else process.env['DELO_HOME'] = originalHome
@@ -193,6 +208,28 @@ describe('dangerous mode with the row and the grant file', () => {
     expect(presetOf(ctx, minted.session)).toBe(SAFER_PRESET)
     expect(presetOf(ctx, own.session)).toBe(FULL_ACCESS_PRESET)
     expect(existsSync(deviceGrantsPath(home))).toBe(false)
+  })
+
+  it('refuses full access to a device-made grant once the mode is off, although writing its withdrawal failed', async () => {
+    const { harness, defaults, workspace, home } = await mounted({ everywhere: true, grant: 'valid' })
+    const minter = await harness.create(SessionId('chat-failed-withdrawal'), {}, { cwd: workspace })
+    const review = defaults.reviewChat('chat-failed-withdrawal')
+    await defaults.setFullAccess({ workspace, reviewId: review.reviewId, on: true, confirmed: true }, 'device')
+    expect(defaults.granted(workspace)).toBe(true)
+    storeWrites.failing = true
+    await removeDangerousGrant(home)
+    await defaults.reload()
+    // Pins the read-time rule: the store still holds the grant (its withdrawal was not written) and the record still names it, yet nothing counts.
+    expect(readFileSync(permissionStorePath(home), 'utf8')).toContain('fullAccessGrantedAt')
+    expect(existsSync(deviceGrantsPath(home))).toBe(true)
+    expect(defaults.granted(workspace)).toBe(false)
+    expect(defaults.grantedFolders()).toEqual([])
+    expect(defaults.review(minter.session, FULL_ACCESS_PRESET)).toContain('needs one consent')
+    expect(defaults.workspaces().workspaces.find(row => row.workspace === workspaceKey(workspace))?.grantedAt).toBeNull()
+    storeWrites.failing = false
+    await defaults.reload()
+    expect(existsSync(deviceGrantsPath(home))).toBe(false)
+    expect(defaults.granted(workspace)).toBe(false)
   })
 
   it('keeps a grant the computer made, and one it re-made over a device\'s, when the mode ends', async () => {

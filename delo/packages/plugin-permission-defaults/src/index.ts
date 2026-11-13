@@ -390,7 +390,19 @@ export class PermissionDefaults extends Service {
    */
   granted(cwd: string): boolean {
     this.refresh()
-    return this.everywhereOn() || fullAccessGranted(this.entries, workspaceKey(cwd))
+    return this.everywhereOn() || fullAccessGranted(this.grantedEntries(), workspaceKey(cwd))
+  }
+
+  /**
+   * The entries as a read-time decision sees them: while dangerous mode is off, a grant a device made under the mode
+   * counts as none, even when withdrawing it failed. The retry at the next reload only cleans the store.
+   * @param entries - the entries to view; the ones in memory by default.
+   * @returns the entries, with those grants removed.
+   */
+  private grantedEntries(entries: ReadonlyMap<string, WorkspacePermission> = this.entries): ReadonlyMap<string, WorkspacePermission> {
+    if (this.deviceGrants.size === 0 || this.everywhereOn()) return entries
+    return new Map([...entries].map(([workspace, entry]): [string, WorkspacePermission] =>
+      this.deviceGrants.has(workspace) ? [workspace, { ...entry, fullAccessGrantedAt: null }] : [workspace, entry]))
   }
 
   /**
@@ -401,7 +413,7 @@ export class PermissionDefaults extends Service {
   grantedFolders(): readonly string[] {
     this.refresh()
     if (this.problem !== undefined) return []
-    return [...this.entries].flatMap(([workspace, entry]) => entry.fullAccessGrantedAt === null ? [] : [workspace])
+    return [...this.grantedEntries()].flatMap(([workspace, entry]) => entry.fullAccessGrantedAt === null ? [] : [workspace])
   }
 
   /**
@@ -421,7 +433,7 @@ export class PermissionDefaults extends Service {
       return undefined
     }
     const workspace = workspaceOf(session)
-    if (fullAccessGranted(this.entries, workspace)) return undefined
+    if (fullAccessGranted(this.grantedEntries(), workspace)) return undefined
     return fullAccessRefusal(workspace, this.problem ?? this.grantProblem())
   }
 
@@ -437,7 +449,7 @@ export class PermissionDefaults extends Service {
     const keys = new Set<string>([...titles.keys(), ...this.entries.keys()])
     for (const agent of this.ctx.get('agents')?.list() ?? []) keys.add(workspaceOf(agent.session))
     keys.delete(NO_WORKSPACE)
-    const workspaces = [...keys].sort().map(key => workspaceAccessOf(this.entries, key, titles.get(key)))
+    const workspaces = [...keys].sort().map(key => workspaceAccessOf(this.grantedEntries(), key, titles.get(key)))
     const storeProblem = this.problem ?? this.grantProblem()
     const everywhere = this.everywhere()
     return storeProblem === undefined ? { workspaces, everywhere } : { workspaces, everywhere, storeProblem }
@@ -458,7 +470,7 @@ export class PermissionDefaults extends Service {
       throw new FullAccessChangeError('NO_WORKSPACE', 'this chat has no workspace folder, so it has no per-workspace permission')
     }
     this.refresh()
-    return workspaceAccessOf(this.entries, workspace, this.titleOf(workspace))
+    return workspaceAccessOf(this.grantedEntries(), workspace, this.titleOf(workspace))
   }
 
   /**
@@ -495,7 +507,7 @@ export class PermissionDefaults extends Service {
     return this.serial(async () => {
       await this.locked(async () => {
         const entries = await this.readForChange()
-        if (workspaceAccessOf(entries, workspace).reviewId !== request.reviewId) {
+        if (workspaceAccessOf(this.grantedEntries(entries), workspace).reviewId !== request.reviewId) {
           throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
         }
         const mintedByDevice = request.on && from === 'device' && !fullAccessGranted(entries, workspace)
@@ -506,7 +518,7 @@ export class PermissionDefaults extends Service {
       const chats = request.on ? this.switchChat(chat) : this.withdrawOpenChats(workspace)
       const grants = [...this.entries.values()].filter(entry => entry.fullAccessGrantedAt !== null).length
       this.ctx.logger.info(`permission-defaults: full access turned ${request.on ? 'on' : 'off'} for one workspace at the home's computer; ${String(grants)} workspace(s) hold a grant`)
-      return { access: workspaceAccessOf(this.entries, workspace, this.titleOf(workspace)), chats }
+      return { access: workspaceAccessOf(this.grantedEntries(), workspace, this.titleOf(workspace)), chats }
     })
   }
 
@@ -586,7 +598,7 @@ export class PermissionDefaults extends Service {
   private withdrawUngrantedChats(): void {
     for (const agent of this.ctx.get('agents')?.list() ?? []) {
       const session = agent.session
-      if (this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET || fullAccessGranted(this.entries, workspaceOf(session))) continue
+      if (this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET || fullAccessGranted(this.grantedEntries(), workspaceOf(session))) continue
       try {
         this.ctx.permissionPresets.set(session, SAFER_PRESET)
       } catch (error) {
@@ -677,7 +689,7 @@ export class PermissionDefaults extends Service {
     // Another process may have withdrawn the grant since this service last read the store.
     this.refresh()
     const everywhere = this.everywhereOn()
-    const asked = preset === FULL_ACCESS_PRESET && !everywhere && !fullAccessGranted(this.entries, workspace)
+    const asked = preset === FULL_ACCESS_PRESET && !everywhere && !fullAccessGranted(this.grantedEntries(), workspace)
     if (asked) {
       await this.refuseLocation(workspace)
       await this.ask(agent, workspace)
@@ -869,7 +881,7 @@ export class PermissionDefaults extends Service {
     const workspace = workspaceOf(session)
     const recorded = defaultPresetOf(this.entries, workspace)
     // A default of full access recorded under dangerous mode starts on the safer preset once the mode is off.
-    const preset = recorded === FULL_ACCESS_PRESET && !this.everywhereOn() && !fullAccessGranted(this.entries, workspace) ? SAFER_PRESET : recorded
+    const preset = recorded === FULL_ACCESS_PRESET && !this.everywhereOn() && !fullAccessGranted(this.grantedEntries(), workspace) ? SAFER_PRESET : recorded
     try {
       this.ctx.permissionPresets.set(session, preset)
       // `set` records a change, and a workspace whose preset is the one the
@@ -899,7 +911,7 @@ export class PermissionDefaults extends Service {
   private withdrawUngranted(session: Session): void {
     if (this.ctx.sandboxPolicy.overrideOf(session) !== FULL_ACCESS_PRESET || this.everywhereOn()) return
     const workspace = workspaceOf(session)
-    if (fullAccessGranted(this.entries, workspace)) return
+    if (fullAccessGranted(this.grantedEntries(), workspace)) return
     try {
       this.ctx.permissionPresets.set(session, SAFER_PRESET)
     } catch (error) {
