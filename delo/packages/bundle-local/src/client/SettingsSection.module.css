@@ -1,0 +1,25 @@
+/* A Delo Settings section: its title, which a page that titles itself hides, an optional introduction, then the cards of `@delo/settings-controls`. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: var(--dsh-settings-section-max-width, 760px);
+  color: var(--dsw-alias-label-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--dsh-settings-section-title-size, 18px);
+  font-weight: var(--dsh-settings-section-title-weight, 600);
+  line-height: var(--dsh-settings-section-title-line-height, normal);
+  display: var(--dsh-settings-section-title-display, block);
+}
+
+.intro {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}

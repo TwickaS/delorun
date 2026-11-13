@@ -159,7 +159,7 @@ export async function refuseUngrantedFullAccess(home: string, args: readonly str
     default:
       read satisfies never
   }
-  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it at this computer, run delorun workspace full-access ${printable(shellQuote(workspace))} on, or turn it on in the studio's Settings, Permissions; delorun headless in this folder then keeps that grant. Or run without full access.`)
+  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it at this computer, run delorun workspace full-access ${printable(shellQuote(workspace))} on, or turn it on in the studio's Settings → Permissions; delorun headless in this folder then keeps that grant. Or run without full access.`)
 }
 
 /**

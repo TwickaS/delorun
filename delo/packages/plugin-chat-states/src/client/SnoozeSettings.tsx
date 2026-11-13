@@ -1,15 +1,16 @@
 /**
- * Snooze and settle, in Settings: T3 Code's two settings for them. The snooze
- * menu's presets, up to eight, show as chips worded as the menu words them;
- * picking one opens a small editor below for its length or its day and time,
- * and Add opens a new one there. Under them, Settle idle chats turns
- * auto-settle on with its number of days.
+ * Snooze and idle chats, in Settings: T3 Code's two settings for them under one
+ * heading. The snooze menu's presets, up to eight, show as chips worded as the
+ * menu words them; picking one opens a small editor below for its kind and its
+ * length or its day and time, and Add opens a new one there. Under them, Settle
+ * idle chats turns auto-settle on with its number of days.
  */
 import {
-  Button, IconClockOutlineRegular, IconPlusOutlineRegular, IconTrashOutlineRegular, Input, SegmentedControl, Switch, Tooltip,
+  Button, IconClockOutlineRegular, IconPlusOutlineRegular, IconTrashOutlineRegular, Input, Switch, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { cardCss, ChoiceGroup, SettingHeading, SettingsCard } from '@delo/settings-controls'
 import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import {
   AUTO_SETTLE_DAYS, DEFAULT_CHAT_STATES_SETTINGS, PRESET_DAYS, SNOOZE_PRESET_LIMITS, type ChatStatesSettings,
@@ -76,7 +77,6 @@ function PresetEditor({ preset, disabled, removable, t, onChange, onRemove }: {
   readonly onChange: (preset: SnoozePresetSetting) => void
   readonly onRemove: () => void
 }) {
-  const id = useId()
   const unit = preset.kind === 'after' ? unitOf(preset.minutes) : 'hours'
   const amount = preset.kind === 'after' ? String(preset.minutes / UNITS[unit]) : ''
   // Typing passes through an empty or out-of-range field; only a valid length is saved.
@@ -91,7 +91,7 @@ function PresetEditor({ preset, disabled, removable, t, onChange, onRemove }: {
   return (
     <div className={css.editor}>
       <div className={css.editorRow}>
-        <SegmentedControl id={`${id}-kind`} label={t('settings.preset.kind')} value={preset.kind} disabled={disabled}
+        <ChoiceGroup label={t('settings.preset.kind')} value={preset.kind} disabled={disabled}
           options={[{ value: 'after', label: t('settings.preset.after') }, { value: 'at', label: t('settings.preset.at') }]}
           onChange={(kind) => { onChange(kind === 'after' ? NEW_AFTER : NEW_AT) }} />
         <Tooltip label={removeLabel} side="bottom" align="end" delayMs={500}>
@@ -100,7 +100,7 @@ function PresetEditor({ preset, disabled, removable, t, onChange, onRemove }: {
           </button>
         </Tooltip>
       </div>
-      <div className={css.fields} role="tabpanel" id={`${id}-kind-${preset.kind}-panel`} aria-labelledby={`${id}-kind-${preset.kind}`}>
+      <div className={css.fields}>
         {preset.kind === 'after'
           ? (
             <>
@@ -109,7 +109,7 @@ function PresetEditor({ preset, disabled, removable, t, onChange, onRemove }: {
                   min={1} max={Math.floor(SNOOZE_PRESET_LIMITS.minutes.max / UNITS[unit])} value={draft}
                   onChange={(event) => { setAmount(event.currentTarget.value) }} />
               </span>
-              <SegmentedControl id={`${id}-unit`} label={t('settings.preset.unit')} value={unit} disabled={disabled}
+              <ChoiceGroup label={t('settings.preset.unit')} value={unit} disabled={disabled}
                 options={(Object.keys(UNITS) as Unit[]).map(each => ({ value: each, label: t(`custom.unit.${each}`) }))}
                 onChange={(next) => {
                   const minutes = Math.round(Number(draft === '' ? '1' : draft) * UNITS[next])
@@ -159,77 +159,71 @@ export function SnoozeSettingsSection({ settings, locale, reportFailure, t }: Sn
   const isDefault = presets.map(snoozePresetId).join() === DEFAULT_SNOOZE_PRESETS.map(snoozePresetId).join()
   const days = current.autoSettleDays
   return (
-    <div className={css.section}>
-      <section className={css.block} aria-labelledby={`${titleId}-presets`}>
-        <div className={css.row}>
-          <div className={css.heading}>
-            <h3 id={`${titleId}-presets`} className={css.title}>{t('settings.presets')}</h3>
-            <p className={css.lead}>{t('settings.presets.lead')}</p>
+    <SettingsCard id={titleId} title={t('settings.nav')} className={css.section}>
+        <section className={cardCss.block} aria-labelledby={`${titleId}-presets`}>
+          <div className={cardCss.row}>
+            <SettingHeading id={`${titleId}-presets`} title={t('settings.presets')} lead={t('settings.presets.lead')} />
+            <div className={css.meta}>
+              <span className={css.count}>{t('settings.presets.count', { n: String(presets.length), max: String(SNOOZE_PRESET_LIMITS.count) })}</span>
+              {!isDefault && (
+                <Button variant="ghost" disabled={disabled} onClick={() => { setEditing(null); savePresets([...DEFAULT_SNOOZE_PRESETS]) }}>
+                  {t('settings.preset.reset')}
+                </Button>
+              )}
+            </div>
           </div>
-          <div className={css.meta}>
-            <span className={css.count}>{t('settings.presets.count', { n: String(presets.length), max: String(SNOOZE_PRESET_LIMITS.count) })}</span>
-            {!isDefault && (
-              <Button variant="ghost" disabled={disabled} onClick={() => { setEditing(null); savePresets([...DEFAULT_SNOOZE_PRESETS]) }}>
-                {t('settings.preset.reset')}
-              </Button>
-            )}
-          </div>
-        </div>
-        <ul className={css.chips} aria-label={t('settings.presets')}>
-          {presets.map((preset, index) => {
-            const text = chipText(preset, t, language)
-            return (
-              // A preset has no id of its own and two may be equal while being edited, so the place is the key.
-              <li key={index}>
-                <button type="button" className={css.chip} aria-pressed={editing === index} disabled={disabled}
-                  onClick={() => { setEditing(editing === index ? null : index) }}>
-                  <IconClockOutlineRegular size={14} />
-                  <span>{text.name}</span>
-                  {text.time !== undefined && <span className={css.chipTime}>{text.time}</span>}
-                </button>
-              </li>
-            )
-          })}
-          <li>
-            <button type="button" className={css.chip} data-add="" disabled={disabled || presets.length >= SNOOZE_PRESET_LIMITS.count}
-              onClick={() => { savePresets([...presets, NEW_AFTER]); setEditing(presets.length) }}>
-              <IconPlusOutlineRegular size={14} />
-              <span>{t('settings.preset.add')}</span>
-            </button>
-          </li>
-        </ul>
-        {edited !== undefined && (
-          <PresetEditor key={editing} preset={edited} disabled={disabled} removable={presets.length > 1} t={t}
-            onChange={(next) => { savePresets(presets.map((each, at) => (at === editing ? next : each))) }}
-            onRemove={() => { savePresets(presets.filter((_, at) => at !== editing)); setEditing(null) }} />
-        )}
-      </section>
+          <ul className={css.chips} aria-label={t('settings.presets')}>
+            {presets.map((preset, index) => {
+              const text = chipText(preset, t, language)
+              return (
+                // A preset has no id of its own and two may be equal while being edited, so the place is the key.
+                <li key={index}>
+                  <button type="button" className={css.chip} aria-pressed={editing === index} disabled={disabled}
+                    onClick={() => { setEditing(editing === index ? null : index) }}>
+                    <IconClockOutlineRegular size={14} />
+                    <span>{text.name}</span>
+                    {text.time !== undefined && <span className={css.chipTime}>{text.time}</span>}
+                  </button>
+                </li>
+              )
+            })}
+            <li>
+              <button type="button" className={css.chip} data-add="" disabled={disabled || presets.length >= SNOOZE_PRESET_LIMITS.count}
+                onClick={() => { savePresets([...presets, NEW_AFTER]); setEditing(presets.length) }}>
+                <IconPlusOutlineRegular size={14} />
+                <span>{t('settings.preset.add')}</span>
+              </button>
+            </li>
+          </ul>
+          {edited !== undefined && (
+            <PresetEditor key={editing} preset={edited} disabled={disabled} removable={presets.length > 1} t={t}
+              onChange={(next) => { savePresets(presets.map((each, at) => (at === editing ? next : each))) }}
+              onRemove={() => { savePresets(presets.filter((_, at) => at !== editing)); setEditing(null) }} />
+          )}
+        </section>
 
-      <section className={css.block} aria-labelledby={`${titleId}-settle`}>
-        <div className={css.row}>
-          <div className={css.heading}>
-            <h3 id={`${titleId}-settle`} className={css.title}>{t('settings.autoSettle')}</h3>
-            <p className={css.lead}>{t('settings.autoSettle.lead')}</p>
+        <section className={cardCss.block} aria-labelledby={`${titleId}-settle`}>
+          <div className={cardCss.row}>
+            <SettingHeading id={`${titleId}-settle`} title={t('settings.autoSettle')} lead={t('settings.autoSettle.lead')} />
+            <div className={css.control}>
+              {days > 0 && (
+                <div className={css.settleDays}>
+                  <span className={css.amount}>
+                    <Input type="number" inputMode="numeric" aria-label={t('settings.autoSettle.days')} disabled={disabled}
+                      min={1} max={AUTO_SETTLE_DAYS.max} value={days}
+                      onChange={(event) => {
+                        const next = Math.round(Number(event.currentTarget.value))
+                        if (next >= 1 && next <= AUTO_SETTLE_DAYS.max) save('autoSettleDays', next)
+                      }} />
+                  </span>
+                  <span>{t('settings.autoSettle.unit')}</span>
+                </div>
+              )}
+              <Switch checked={days > 0} disabled={disabled} label={t('settings.autoSettle')}
+                onChange={(on) => { save('autoSettleDays', on ? AUTO_SETTLE_ON : 0) }} />
+            </div>
           </div>
-          <div className={css.control}>
-            {days > 0 && (
-              <div className={css.settleDays}>
-                <span className={css.amount}>
-                  <Input type="number" inputMode="numeric" aria-label={t('settings.autoSettle.days')} disabled={disabled}
-                    min={1} max={AUTO_SETTLE_DAYS.max} value={days}
-                    onChange={(event) => {
-                      const next = Math.round(Number(event.currentTarget.value))
-                      if (next >= 1 && next <= AUTO_SETTLE_DAYS.max) save('autoSettleDays', next)
-                    }} />
-                </span>
-                <span>{t('settings.autoSettle.unit')}</span>
-              </div>
-            )}
-            <Switch checked={days > 0} disabled={disabled} label={t('settings.autoSettle')}
-              onChange={(on) => { save('autoSettleDays', on ? AUTO_SETTLE_ON : 0) }} />
-          </div>
-        </div>
-      </section>
-    </div>
+        </section>
+    </SettingsCard>
   )
 }

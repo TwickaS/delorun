@@ -1,6 +1,6 @@
 /**
  * The `updateCheck` answer as a profile row: `config.enabled` of `@delo/bundle-local`'s `delo-update-check` row, the
- * C16 switch `update_check`, written into the profile's `cordis.patch.yml` in the form Settings → Privacy saves it.
+ * C16 switch `update_check`, written into the profile's `cordis.patch.yml` in the form Settings → General → Updates saves it.
  * The bundle's own patch, which the profile patch follows, supplies the row's plugin name and inherited config.
  *
  * @module @delo/cli/setup/update-check

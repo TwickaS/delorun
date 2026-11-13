@@ -7,6 +7,8 @@
 /** English dictionary. */
 export const en = {
   'settings.nav': 'Sidebar',
+  'settings.group.header': 'Header',
+  'settings.group.list': 'Chat list',
   'settings.art': 'Header art',
   'settings.art.lead': 'Art behind the top of the sidebar, fading into it. Shuffle draws a generated scene anew.',
   'settings.art.none': 'None',
@@ -29,7 +31,7 @@ export const en = {
   'settings.palette.ember': 'Ember',
   'settings.palette.iris': 'Iris',
   'settings.palette.accent': 'Accent',
-  'settings.view': 'Chat list',
+  'settings.view': 'Chat list style',
   'settings.view.lead': 'Chat cards with shelves, or a folder per workspace.',
   'settings.view.cards': 'Cards',
   'settings.view.folders': 'Workspace folders',
@@ -236,6 +238,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Chinese dictionary. */
 export const zh: Record<SidebarLocaleKey, string> = {
   'settings.nav': '侧边栏',
+  'settings.group.header': '顶部',
+  'settings.group.list': '对话列表',
   'settings.art': '顶部图案',
   'settings.art.lead': '侧边栏顶部的图案，向下渐隐。点“随机生成”可重新绘制场景。',
   'settings.art.none': '无',
@@ -258,7 +262,7 @@ export const zh: Record<SidebarLocaleKey, string> = {
   'settings.palette.ember': '余烬',
   'settings.palette.iris': '鸢尾',
   'settings.palette.accent': '强调色',
-  'settings.view': '对话列表',
+  'settings.view': '对话列表样式',
   'settings.view.lead': '带分区的对话卡片，或每个工作区一个文件夹。',
   'settings.view.cards': '卡片',
   'settings.view.folders': '工作区文件夹',

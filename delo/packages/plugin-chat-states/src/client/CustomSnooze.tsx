@@ -4,10 +4,11 @@
  * Ported from T3 Code's `CustomSnoozeDialog` (MIT, © 2026 T3 Tools Inc.) onto
  * the studio's primitives.
  */
-import { useId, useState, useSyncExternalStore } from 'react'
-import { Button, Input, Modal, SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useState, useSyncExternalStore } from 'react'
+import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { ChoiceGroup } from '@delo/settings-controls'
 import type { ChatStateRequest } from '../wire.ts'
 import { localSnoozeDate, localSnoozeTime, resolveCustomSnooze, type CustomSnoozeInput, type SnoozePresetSetting } from '../snooze.ts'
 import { snoozeOptions, snoozeWhenText } from './snooze-text.ts'
@@ -52,7 +53,6 @@ export function CustomSnoozeDialog(props: CustomSnoozeProps) {
 }
 
 function CustomSnoozeForm({ session, closeCustom, change, locale, now, presets, t }: CustomSnoozeProps & { readonly session: SessionId }) {
-  const id = useId()
   const [opened] = useState(() => new Date(now()))
   const [initial] = useState(() => new Date(opened.getTime() + STARTING_OFFSET_MS))
   const [mode, setMode] = useState<CustomSnoozeInput['mode']>('date')
@@ -82,8 +82,6 @@ function CustomSnoozeForm({ session, closeCustom, change, locale, now, presets, 
     set(value)
     setError(null)
   }
-  const modeId = `${id}-mode`
-  const unitId = `${id}-unit`
   return (
     <Modal
       open
@@ -110,14 +108,14 @@ function CustomSnoozeForm({ session, closeCustom, change, locale, now, presets, 
             ))}
           </div>
         </section>
-        <SegmentedControl
-          id={modeId}
+        <ChoiceGroup
           label={t('custom.mode')}
           value={mode}
           options={[{ value: 'date', label: t('custom.mode.date') }, { value: 'duration', label: t('custom.mode.duration') }]}
           onChange={edit(setMode)}
+          disabled={false}
         />
-        <div className={css.fields} role="tabpanel" id={`${modeId}-${mode}-panel`} aria-labelledby={`${modeId}-${mode}`}>
+        <div className={css.fields}>
           {mode === 'date'
             ? (
               <>
@@ -141,12 +139,12 @@ function CustomSnoozeForm({ session, closeCustom, change, locale, now, presets, 
                 </label>
                 <div className={css.field}>
                   <span className={css.label}>{t('custom.unit')}</span>
-                  <SegmentedControl
-                    id={unitId}
+                  <ChoiceGroup
                     label={t('custom.unit')}
                     value={unit}
                     options={UNITS.map(value => ({ value, label: t(`custom.unit.${value}`) }))}
                     onChange={edit(setUnit)}
+                    disabled={false}
                   />
                 </div>
               </>

@@ -15,7 +15,6 @@
   display: var(--dsh-settings-section-title-display, block);
 }
 
-.intro,
 .line {
   margin: 0 0 8px;
   color: var(--dsw-alias-label-secondary);
@@ -24,15 +23,40 @@
   overflow-wrap: anywhere;
 }
 
-.group {
-  margin-top: 16px;
+/* A line inside a Permissions group's box stands in for its rows, with a row's vertical padding. */
+.boxLine,
+.boxFailed {
+  margin: 0;
+  padding: 16px 0;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
 }
 
-.subheading {
-  margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+.boxLine {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.boxFailed {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* The other workspaces' disclosure in the Full access box; its rows follow the summary. */
+.others {
+  padding: 12px 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.others > summary {
+  width: fit-content;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+/* A list that ends its box leaves the closing line to the box's border. */
+.list:last-child > .row:last-child {
+  border-bottom: none;
 }
 
 .label {

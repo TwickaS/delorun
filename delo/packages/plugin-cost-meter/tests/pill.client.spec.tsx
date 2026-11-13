@@ -45,7 +45,7 @@ describe('the cost pill', () => {
     expect(within(dialog).getByText('Chat cost')).toBeTruthy()
     const opus = within(dialog).getByRole('button', { name: 'claude-opus-5-5: 2 requests, 2.2K tokens, $1.50' })
     expect(within(dialog).getByRole('button', { name: 'llama: 1 requests, 1.1K tokens, No price' })).toBeTruthy()
-    expect(within(dialog).getByText('1 request has no price. Add its model to the cost meter\'s prices under Settings → Plugins.')).toBeTruthy()
+    expect(within(dialog).getByText('1 request has no price. Add its model to the cost meter\'s prices on the Plugins page in the sidebar.')).toBeTruthy()
     expect(within(dialog).queryByText('Input')).toBeNull()
     fireEvent.click(opus)
     expect(opus.getAttribute('aria-expanded')).toBe('true')

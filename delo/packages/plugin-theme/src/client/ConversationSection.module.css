@@ -1,74 +1,18 @@
-/* Appearance → Conversation: one card of settings, as the Appearance card. */
+/* The Conversation cards' own geometry, declared once on each box; the box, the
+   blocks and the headings are `@delo/settings-controls`'. */
 .section {
-  /* Geometry that is neither spacing nor type, declared once. */
-  --heading-basis: 220px;
   --bars-height: 34px;
   --bar-height: 3px;
   --slider-line-height: 2px;
   --slider-knob-size: 8px;
   --slider-knob-offset: -3px;
-  --chip-height: 36px;
+  --select-height: 36px;
   --preview-width: 640px;
   --preview-icon-width: 14px;
   --chevron-size: 6px;
   --preview-line: 20px;
   --preview-dot-size: 6px;
   --pulse-size: 8px;
-  display: flex;
-  flex-direction: column;
-  padding: 0 var(--delo-space-7);
-  border: 0.5px solid var(--dsw-alias-border-l1);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-primary);
-}
-
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delo-space-5);
-  padding: var(--delo-space-7) 0;
-}
-
-.block + .block {
-  border-top: 0.5px solid var(--dsw-alias-border-l1);
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--delo-space-5) var(--delo-space-8);
-}
-
-.block.row {
-  flex-direction: row;
-}
-
-.heading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delo-space-1);
-  min-width: 0;
-}
-
-.row > .heading {
-  flex: 1 1 var(--heading-basis);
-}
-
-.title {
-  margin: 0;
-  font-size: var(--dsw-font-s-14-font-size);
-  font-weight: 500;
-  line-height: var(--dsw-font-s-14-line-height);
-}
-
-.lead {
-  margin: 0;
-  color: var(--dsw-alias-label-secondary);
 }
 
 /* The display tiles: a bar for each kind of thing the mode shows. */
@@ -111,8 +55,7 @@
   box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
 }
 
-.modeTile:focus-visible,
-.chip:focus-visible {
+.modeTile:focus-visible {
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
@@ -197,34 +140,42 @@
 }
 
 /* The thinking choices. */
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--delo-space-4);
-}
-
-.chip {
+/* The Thinking select: upstream's settings select, a pill with the choice and a chevron. */
+.select {
   display: inline-flex;
   align-items: center;
-  gap: var(--delo-space-4);
-  height: var(--chip-height);
+  gap: var(--delo-space-5);
+  height: var(--select-height);
   padding: 0 var(--delo-space-5);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-panel);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-module-platform);
   font: inherit;
+  font-size: var(--dsw-font-s-14-font-size);
+  line-height: var(--dsw-font-s-14-line-height);
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.chip[aria-checked='true'] {
-  border-color: var(--dsw-alias-brand-primary);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, var(--dsw-alias-bg-layer-2));
+@media (hover: hover) {
+  .select:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
-.chip:disabled {
+.select:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.select:disabled {
   cursor: default;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.selectChevron {
+  flex: none;
 }
 
 /* The preview: a sample chat inside a quiet frame. */
@@ -247,10 +198,8 @@
 
 .previewLabel {
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--dsw-font-xxs-12-font-size);
+  font-size: var(--dsw-font-xs-13-font-size);
   font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 .pvChat {
@@ -402,12 +351,6 @@
   .pvPulse {
     animation: pulse 1.2s ease-in-out infinite;
   }
-}
-
-.failure {
-  margin: 0;
-  padding: 0 0 var(--delo-space-6);
-  color: var(--dsw-alias-state-error-primary);
 }
 
 @media (max-width: 720px) {

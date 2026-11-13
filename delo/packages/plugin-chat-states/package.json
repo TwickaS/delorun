@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@delo/contract-archive-and-trash": "workspace:*",
+    "@delo/settings-controls": "workspace:*",
     "zod": "4.4.3"
   },
   "peerDependencies": {

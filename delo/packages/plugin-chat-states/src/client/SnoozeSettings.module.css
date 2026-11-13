@@ -1,60 +1,13 @@
-/* Snooze and settle in Settings: one settings card, each setting a block. */
+/*
+ * Snooze and idle chats in Settings: the box of a `@delo/settings-controls` card, each setting a block, and the geometry
+ * of its chips and editor.
+ */
 .section {
-  --heading-basis: 220px;
   --chip-height: 32px;
   --day-height: 28px;
   --button-size: 32px;
   --amount-width: 72px;
   --time-width: 120px;
-  display: flex;
-  flex-direction: column;
-  padding: 0 var(--delo-space-7);
-  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
-  border-radius: var(--dsw-radius-xl);
-  background: var(--dsw-alias-settings-card-fill);
-  color: var(--dsw-alias-label-primary);
-  font: var(--dsw-font-xs-13);
-}
-
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delo-space-5);
-  padding: var(--delo-space-7) 0;
-}
-
-.block + .block {
-  border-top: 0.5px solid var(--dsw-alias-border-l1);
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--delo-space-5) var(--delo-space-8);
-}
-
-.heading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--delo-space-1);
-  min-width: 0;
-}
-
-.row > .heading {
-  flex: 1 1 var(--heading-basis);
-}
-
-.title {
-  margin: 0;
-  font: var(--dsw-font-s-14);
-  font-weight: 500;
-}
-
-.lead {
-  margin: 0;
-  color: var(--dsw-alias-label-secondary);
 }
 
 .meta {

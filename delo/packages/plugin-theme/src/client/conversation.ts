@@ -1,5 +1,5 @@
 /**
- * The chat display choices Appearance → Conversation offers, over upstream's
+ * The chat display choices the Conversation section offers, over upstream's
  * `ui-chat` settings: the four presets, Custom and its parts, and the parts
  * each preset stands for, which seed Custom when the person changes one part.
  * @module @delo/plugin-theme/client/conversation
@@ -18,8 +18,11 @@ export type DisplayMode = typeof DISPLAY_MODES[number]
 /** A preset, as opposed to Custom. */
 export type Preset = Exclude<DisplayMode, 'custom'>
 
-/** The thinking displays offered, in order. Upstream's `rsvp` display needs a thinking view this studio does not ship, so it is not offered. */
-export const THINKING_CHOICES: readonly Exclude<ThinkingDisplay, 'rsvp'>[] = ['title', 'preview', 'live', 'expanded', 'window']
+/** A thinking display the section offers: every one of upstream's but `rsvp`, which needs a thinking view this studio does not ship. */
+export type ThinkingChoice = Exclude<ThinkingDisplay, 'rsvp'>
+
+/** The thinking displays offered, in order. */
+export const THINKING_CHOICES: readonly ThinkingChoice[] = ['title', 'preview', 'live', 'expanded', 'window']
 
 /** The window heights offered for `window` thinking. */
 export const WINDOW_LINES = [3, 6, 10] as const

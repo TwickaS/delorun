@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
 import { SnoozeSettingsSection } from '../src/client/SnoozeSettings.tsx'
@@ -42,6 +42,16 @@ const change = async (element: HTMLElement, value: string) => { await act(async 
 const chip = (name: RegExp) => screen.getByRole('button', { name })
 const amount = () => screen.getByRole('spinbutton', { name: en['settings.preset.amount'] })
 
+describe('the section', () => {
+  it('heads its two settings with Snooze and idle chats, over one box', () => {
+    mount(liveForm(DEFAULT_CHAT_STATES_SETTINGS).form)
+    const heading = screen.getByRole('heading', { level: 3 })
+    expect(heading.textContent).toBe(en['settings.nav'])
+    const region = screen.getByRole('region', { name: en['settings.nav'] })
+    expect(within(region).getAllByRole('heading', { level: 4 }).map(title => title.textContent)).toEqual([en['settings.presets'], en['settings.autoSettle']])
+  })
+})
+
 describe('the snooze presets', () => {
   it('show as chips worded as the snooze menu words them, with their count and no reset while they are the defaults', () => {
     mount(liveForm(DEFAULT_CHAT_STATES_SETTINGS).form)
@@ -68,7 +78,7 @@ describe('the snooze presets', () => {
     await click(chip(/In 1 hour/))
     expect((amount() as HTMLInputElement).value).toBe('1')
     await change(amount(), '2')
-    await click(screen.getByRole('tab', { name: en['custom.unit.days'] }))
+    await click(screen.getByRole('radio', { name: en['custom.unit.days'] }))
     expect(presets()?.[0]).toEqual({ kind: 'after', minutes: 2880 })
     set.mockClear()
     await change(amount(), '')
@@ -76,19 +86,19 @@ describe('the snooze presets', () => {
     await change(amount(), '0')
     expect(set).not.toHaveBeenCalled()
     expect((amount() as HTMLInputElement).value).toBe('0')
-    await click(screen.getByRole('tab', { name: en['custom.unit.minutes'] }))
+    await click(screen.getByRole('radio', { name: en['custom.unit.minutes'] }))
     expect(presets()?.[0]).toEqual({ kind: 'after', minutes: 1 })
     await change(amount(), '')
-    await click(screen.getByRole('tab', { name: en['custom.unit.days'] }))
+    await click(screen.getByRole('radio', { name: en['custom.unit.days'] }))
     expect(presets()?.[0]).toEqual({ kind: 'after', minutes: 1440 })
     await change(amount(), '30')
-    await click(screen.getByRole('tab', { name: en['custom.unit.hours'] }))
+    await click(screen.getByRole('radio', { name: en['custom.unit.hours'] }))
     expect(presets()?.[0]).toEqual({ kind: 'after', minutes: 1800 })
-    await click(screen.getByRole('tab', { name: en['custom.unit.days'] }))
+    await click(screen.getByRole('radio', { name: en['custom.unit.days'] }))
     await change(amount(), '30')
-    await click(screen.getByRole('tab', { name: en['custom.unit.hours'] }))
+    await click(screen.getByRole('radio', { name: en['custom.unit.hours'] }))
     await change(amount(), '720')
-    await click(screen.getByRole('tab', { name: en['custom.unit.days'] }))
+    await click(screen.getByRole('radio', { name: en['custom.unit.days'] }))
     expect(presets()?.[0]).toEqual({ kind: 'after', minutes: 43_200 })
   })
 
@@ -111,13 +121,28 @@ describe('the snooze presets', () => {
     const { form, presets } = liveForm(DEFAULT_CHAT_STATES_SETTINGS)
     mount(form)
     await click(chip(/In 1 hour/))
-    await click(screen.getByRole('tab', { name: en['settings.preset.at'] }))
+    await click(screen.getByRole('radio', { name: en['settings.preset.at'] }))
     expect(presets()?.[0]).toEqual({ kind: 'at', day: 'tomorrow', time: '09:00' })
-    await click(screen.getByRole('tab', { name: en['settings.preset.after'] }))
+    await click(screen.getByRole('radio', { name: en['settings.preset.after'] }))
     expect(presets()?.[0]).toEqual({ kind: 'after', minutes: 120 })
     await click(screen.getByRole('button', { name: en['settings.preset.remove'] }))
     expect(presets()).toHaveLength(4)
     expect(screen.queryByRole('spinbutton', { name: en['settings.preset.amount'] })).toBeNull()
+  })
+
+  it('offer an option\'s kind and unit as radio groups whose arrow keys move and save the choice', async () => {
+    const { form, presets } = liveForm(DEFAULT_CHAT_STATES_SETTINGS)
+    mount(form)
+    await click(chip(/In 1 hour/))
+    const units = within(screen.getByRole('radiogroup', { name: en['settings.preset.unit'] })).getAllByRole('radio')
+    expect(units.map(unit => unit.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false'])
+    await act(async () => { fireEvent.keyDown(units[1]!, { key: 'ArrowRight' }) })
+    expect(presets()?.[0]).toEqual({ kind: 'after', minutes: 1440 })
+    const after = screen.getByRole('radio', { name: en['settings.preset.after'] })
+    expect(screen.getByRole('radiogroup', { name: en['settings.preset.kind'] }).contains(after)).toBe(true)
+    await act(async () => { fireEvent.keyDown(after, { key: 'ArrowRight' }) })
+    expect(presets()?.[0]).toEqual({ kind: 'at', day: 'tomorrow', time: '09:00' })
+    expect(screen.queryAllByRole('tab')).toEqual([])
   })
 
   it('add an option up to the limit, open its editor, reset to the defaults, and keep the last option', async () => {

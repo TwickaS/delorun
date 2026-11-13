@@ -3,11 +3,12 @@
  * (the `studioAdditions` setting). While the switch is on it applies the
  * theme settings (the palette, the accent and the type as override layers on
  * upstream's theme, plus Delo's font faces), registers the Appearance and
- * Conversation sections of Settings, Delo's New Session headline and Delo's
+ * Conversation sections of Settings with the Look, Typeface, Density and
+ * Reasoning effort labels rows, Delo's New Session headline and Delo's
  * vocabulary, and provides `ctx.deloStudio`, which Delo's other studio
  * plugins list in `inject`, so turning the switch off unloads them all and
  * leaves upstream's studio. While it is off the plugin registers one thing, a
- * row in Settings → General that turns it back on, and nothing else is
+ * `settings.general.item` row (`delo-look`) that turns it back on, and nothing else is
  * visible. Light, dark and system stay upstream's preference.
  * @module @delo/plugin-theme/client
  */
@@ -26,6 +27,7 @@ import { readBootSettings } from '../boot-settings.ts'
 import { THEME_ROW_ID, type ThemeSettings } from '../config.ts'
 import { FIRST_PAINT_MARK, STOCK_ATTRIBUTE } from '../palette/layers.ts'
 import { AppearanceSection, type AppearanceInjected, type SchemePreference } from './AppearanceSection.tsx'
+import { DensityRow, EffortLabelsRow, StudioLookRow, TypefaceRow, type AppearanceRowInjected } from './AppearanceRows.tsx'
 import { HeroHeadline, HeroWordmark } from './brand.tsx'
 import { en as brandEn, zh as brandZh, type BrandLocaleKey } from './brand-locales.ts'
 import { ThemeController } from './controller.ts'
@@ -51,6 +53,7 @@ export { STOCK_ATTRIBUTE } from '../palette/layers.ts'
 export type { ConversationInjected, ConversationSectionProps } from './ConversationSection.tsx'
 export type { ConversationLocaleKey } from './conversation-locales.ts'
 export type { AppearanceInjected, AppearanceSectionProps, SchemePreference } from './AppearanceSection.tsx'
+export type { AppearanceRowInjected, AppearanceRowProps } from './AppearanceRows.tsx'
 export type { AppearanceLocaleKey } from './locales.ts'
 export type { BrandLocaleKey } from './brand-locales.ts'
 export type { LookLocaleKey } from './look-locales.ts'
@@ -74,7 +77,7 @@ export interface DeloStudio {
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** The Appearance section's copy. */
+    /** The copy of the Appearance section and of the studio half's General rows. */
     'settings.deloAppearance': AppearanceLocaleKey
     /** The Conversation section's copy. */
     'settings.deloConversation': ConversationLocaleKey
@@ -97,8 +100,24 @@ export const SECTION_ORDER = 1
 /** The Conversation section's id, its dictionary namespace and its place, after Appearance. */
 export const CONVERSATION = { id: 'delo-conversation', ns: 'settings.deloConversation', order: 2 } as const
 
-/** The General row that turns the studio additions on again: its id, dictionary namespace and place, after Language (0). */
+/**
+ * The General row that turns the studio additions on again: its id, dictionary namespace and place, after Language (0).
+ * The studio half's Look row (`STUDIO_ROWS.look`) has the same id and place; the two are never registered together.
+ */
 export const LOOK_ROW = { id: 'delo-look', ns: 'settings.deloLook', order: 1 } as const
+
+/**
+ * The General rows the studio half registers, with the Appearance dictionary
+ * (`NS`): their ids and places among upstream's rows. Typeface sits between
+ * upstream's colour scheme (10) and font size (11), Density after font size,
+ * and Reasoning effort labels after the composer's Enter behaviour (20).
+ */
+export const STUDIO_ROWS = {
+  look: { id: LOOK_ROW.id, order: LOOK_ROW.order },
+  typeface: { id: 'delo-typeface', order: 10.5 },
+  density: { id: 'delo-density', order: 11.5 },
+  effortLabels: { id: 'delo-effort-labels', order: 20.5 },
+} as const
 
 /** The New Session headline's dictionary namespace. */
 export const BRAND_NS = 'deloBrand'
@@ -203,7 +222,8 @@ function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Regi
 
 /**
  * Everything Delo's look adds: the theme layers and faces, the Appearance and
- * Conversation sections, the New Session headline, Delo's vocabulary over
+ * Conversation sections, the Look, Typeface, Density and Reasoning effort
+ * labels rows, the New Session headline, Delo's vocabulary over
  * upstream's texts, and `ctx.deloStudio`.
  * @param ctx - the plugin's context.
  * @param form - the theme row's settings form.
@@ -214,17 +234,24 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
   const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
+  const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)
   const appearance: AppearanceInjected = {
     settings: form,
-    useStockLook: () => form.set('studioAdditions', false),
     scheme: {
       get: () => ctx.theme.getTheme().preference as SchemePreference,
       subscribe: listener => ctx.on('theme/change', () => { listener() }),
       set: (preference) => { ctx.theme.setTheme(preference) },
     },
   }
+  const rowFace: AppearanceRowInjected = { settings: form, useStockLook }
   const chat: ConversationInjected = { settings: ctx.configForms.get<ChatDisplaySettings>(CHAT_NAMESPACE) }
-  const studio: DeloStudio = { useStockLook: () => form.set('studioAdditions', false) }
+  const studio: DeloStudio = { useStockLook }
+  const rows: ReadonlyArray<readonly [{ readonly id: string; readonly order: number }, typeof StudioLookRow]> = [
+    [STUDIO_ROWS.look, StudioLookRow],
+    [STUDIO_ROWS.typeface, TypefaceRow],
+    [STUDIO_ROWS.density, DensityRow],
+    [STUDIO_ROWS.effortLabels, EffortLabelsRow],
+  ]
   controller.update(initial)
   const disposers = [
     ctx.locale.register(NS, { en, zh }),
@@ -233,6 +260,9 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section', id: SECTION_ID, order: SECTION_ORDER, label: () => t('nav'), locale: NS, inject: () => appearance,
     }, AppearanceSection)),
+    ...rows.map(([row, component]) => ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item', id: row.id, order: row.order, locale: NS, inject: () => rowFace,
+    }, component))),
     ctx.configForms.whileServed([CHAT_NAMESPACE], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
       name: 'settings.section', id: CONVERSATION.id, order: CONVERSATION.order, label: () => conversationT('title'), locale: CONVERSATION.ns, inject: () => chat,
     }, ConversationSection))),

@@ -48,12 +48,12 @@ describe('Settings → Sidebar choices', () => {
     expect(art(en['settings.art.night']).getAttribute('aria-checked')).toBe('false')
     fireEvent.click(art(en['settings.art.night']))
     fireEvent.click(screen.getByRole('radio', { name: en['settings.palette.ocean'] }))
-    fireEvent.click(screen.getByRole('tab', { name: en['settings.view.folders'] }))
+    fireEvent.click(screen.getByRole('radio', { name: en['settings.view.folders'] }))
     fireEvent.click(screen.getByRole('switch', { name: en['settings.working'] }))
-    fireEvent.click(screen.getByRole('tab', { name: en['settings.strength.subtle'] }))
+    fireEvent.click(screen.getByRole('radio', { name: en['settings.strength.subtle'] }))
     fireEvent.click(screen.getByRole('radio', { name: en['settings.fade.long'] }))
-    fireEvent.click(screen.getByRole('tab', { name: en['settings.style.pill'] }))
-    fireEvent.click(screen.getByRole('tab', { name: en['settings.sort.created'] }))
+    fireEvent.click(screen.getByRole('radio', { name: en['settings.style.pill'] }))
+    fireEvent.click(screen.getByRole('radio', { name: en['settings.sort.created'] }))
     fireEvent.click(screen.getByRole('switch', { name: en['settings.confirmUnpin'] }))
     expect(set.mock.calls).toEqual([
       ['headerArt', 'night'], ['artPalette', 'ocean'], ['view', 'folders'], ['workingShelf', false], ['artStrength', 'subtle'], ['artFade', 'long'], ['artStyle', 'pill'],
@@ -108,11 +108,44 @@ describe('Settings → Sidebar choices', () => {
     const controls = [
       art(en['settings.art.night']), screen.getByRole('radio', { name: en['settings.palette.ocean'] }), shuffle(), slider(),
       screen.getByRole('button', { name: '280' }), screen.getByRole('switch', { name: en['settings.working'] }),
-      screen.getByRole('tab', { name: en['settings.sort.created'] }),
+      screen.getByRole('radio', { name: en['settings.sort.created'] }),
     ]
     for (const control of controls) expect((control as HTMLButtonElement).disabled || control.getAttribute('aria-disabled') === 'true').toBe(true)
     fireEvent.click(art(en['settings.art.night']))
     expect(set).not.toHaveBeenCalled()
+  })
+})
+
+describe('Settings → Sidebar groups', () => {
+  it('heads the header art settings and the chat list settings, each over its own box, in the order of the pane', () => {
+    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
+    const groups = screen.getAllByRole('heading', { level: 3 })
+    expect(groups.map(heading => heading.textContent)).toEqual([en['settings.group.header'], en['settings.group.list']])
+    const titlesIn = (heading: HTMLElement) => within(screen.getByRole('region', { name: heading.textContent ?? '' })).getAllByRole('heading', { level: 4 }).map(title => title.textContent)
+    expect(titlesIn(groups[0]!)).toEqual([en['settings.art'], en['settings.palette'], en['settings.strength'], en['settings.style'], en['settings.fade']])
+    expect(titlesIn(groups[1]!)).toEqual([en['settings.view'], en['settings.sort'], en['settings.working'], en['settings.confirmUnpin'], en['settings.width']])
+    expect(within(screen.getByRole('region', { name: en['settings.group.list'] })).getByText(en['settings.credit'])).toBeTruthy()
+  })
+
+  it('offers strength, style, list style and sort order as radio groups whose arrow keys move and save the choice', () => {
+    const set = recordingSet()
+    renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS, set))
+    const expected = [
+      [en['settings.strength'], 'artStrength', 'vivid', 'subtle'],
+      [en['settings.style'], 'artStyle', 'pill', 'pill'],
+      [en['settings.view'], 'view', 'folders', 'folders'],
+      [en['settings.sort'], 'sort', 'created', 'created'],
+    ] as const
+    for (const [name, field, right, left] of expected) {
+      const group = screen.getByRole('radiogroup', { name })
+      const radios = within(group).getAllByRole('radio')
+      const chosen = radios.find(radio => radio.getAttribute('aria-checked') === 'true')!
+      expect(radios.filter(radio => radio.getAttribute('aria-checked') === 'true')).toEqual([chosen])
+      fireEvent.keyDown(chosen, { key: 'ArrowRight' })
+      fireEvent.keyDown(chosen, { key: 'ArrowLeft' })
+      expect(set.mock.calls.slice(-2)).toEqual([[field, right], [field, left]])
+    }
+    expect(screen.queryAllByRole('tab')).toEqual([])
   })
 })
 
@@ -227,7 +260,7 @@ describe('Settings → Sidebar names and parts', () => {
     }
   })
 
-  it('offers the way back to the stock look nowhere in the section, since Appearance is its one place', () => {
+  it('offers the way back to the stock look nowhere in the section, since General → Look is its one place', () => {
     const { container } = renderSection(formOf(DEFAULT_SIDEBAR_SETTINGS))
     expect(container.textContent?.toLowerCase()).not.toContain('stock look')
     expect(screen.queryByRole('button', { name: /look/i })).toBeNull()

@@ -163,7 +163,7 @@ describe('the studio half', () => {
     expect(face.hooks.connectionState).toBe(h.connection)
   })
 
-  it('shows the Snooze and settle section only while the settings are served', async () => {
+  it('shows the Snooze and idle chats section only while the settings are served', async () => {
     const h = harness({ settings: SETTINGS, served: false })
     await h.fiber.await()
     expect(h.entries.has(`settings.section#${SECTION.id}`)).toBe(false)

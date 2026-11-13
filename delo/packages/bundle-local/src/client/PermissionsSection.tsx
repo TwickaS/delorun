@@ -6,8 +6,8 @@
  * servers the person declined or revoked, which stay stopped until allowed, and the allowed servers with their starts;
  * revoking one stops that server until the person allows it again. Every request goes to the home through the injected `fetch`; the home answers only its own
  * computer, and the section says in place on a remote studio that the answer is given at the computer. Each answer's
- * outcome is one line under the section's introduction, which no list owns, so a list that changes after the answer
- * does not take it with it, and nothing covers the Settings dialog.
+ * outcome is one line above the groups, which no list owns, so a list that changes after the answer does not take it
+ * with it, and nothing covers the Settings dialog.
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -20,6 +20,7 @@ import {
 import { consentFailureOf, consentFailureText, FULL_ACCESS_COMMAND, workspaceName, type FullAccessConsentSource } from './FullAccessConsent.tsx'
 import { serverChangeText, ServerStart, type McpReviewSource } from './McpServerReview.tsx'
 import type { HostFetch } from './host-api.ts'
+import { SettingsCard } from '@delo/settings-controls'
 import css from './ConsentSections.module.css'
 
 /** The command the remote line names for the home's own computer. */
@@ -130,19 +131,16 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
 
   return <div className={css.section}>
     <h2 className={css.heading}>{t('permissions.title')}</h2>
-    <p className={css.intro}>{t('permissions.intro')}</p>
     {outcome === undefined ? null : <p className={outcome.failed ? css.failed : css.line} role={outcome.failed ? 'alert' : 'status'}>{outcome.text}</p>}
     {remote
       ? <p className={css.line} role="status">{t('permissions.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code> <code className={css.command}>{MCP_COMMAND}</code></p>
       : null}
-    <section className={css.group} aria-label={t('access.heading')} data-group="full-access">
-      <h3 className={css.subheading}>{t('access.heading')}</h3>
+    <SettingsCard title={t('access.heading')} description={t('access.description')} group="full-access">
       <FullAccessGroup t={t} listing={workspaces} busy={busy} allow={allowWorkspace} revoke={revokeWorkspace} />
-    </section>
-    <section className={css.group} aria-label={t('mcp.heading')} data-group="mcp">
-      <h3 className={css.subheading}>{t('mcp.heading')}</h3>
+    </SettingsCard>
+    <SettingsCard title={t('mcp.heading')} description={t('mcp.description')} group="mcp">
       <ServersGroup t={t} listing={servers} busy={busy} review={reviewServer} decline={declineWaiting} revoke={revokeAccepted} />
-    </section>
+    </SettingsCard>
   </div>
 }
 
@@ -161,9 +159,9 @@ interface GroupProps<T> {
  * @returns the line, or nothing for a list that is remote or ready.
  */
 function listLine(t: Translate, listing: Listing<unknown>, unavailable: 'access.unavailable' | 'mcp.unavailable'): ReactNode {
-  if (listing.kind === 'loading') return <p className={css.line} aria-busy="true">{t('permissions.loading')}</p>
-  if (listing.kind === 'unavailable') return <p className={css.line}>{t(unavailable)}</p>
-  if (listing.kind === 'failed') return <p className={css.failed} role="alert">{listing.text}</p>
+  if (listing.kind === 'loading') return <p className={css.boxLine} aria-busy="true">{t('permissions.loading')}</p>
+  if (listing.kind === 'unavailable') return <p className={css.boxLine}>{t(unavailable)}</p>
+  if (listing.kind === 'failed') return <p className={css.boxFailed} role="alert">{listing.text}</p>
   return null
 }
 
@@ -189,13 +187,13 @@ function FullAccessGroup({ t, listing, busy, allow, revoke }: GroupProps<Workspa
     {action}
   </li>
   return <>
-    {listing.value.storeProblem === undefined ? null : <p className={css.failed} role="alert">{t('access.storeProblem', { problem: listing.value.storeProblem })}</p>}
+    {listing.value.storeProblem === undefined ? null : <p className={css.boxFailed} role="alert">{t('access.storeProblem', { problem: listing.value.storeProblem })}</p>}
     {granted.length === 0
-      ? <p className={css.line}>{t('access.none')}</p>
+      ? <p className={css.boxLine}>{t('access.none')}</p>
       : <ul className={css.list}>
         {granted.map(access => row(access, <Button variant="outline" size="sm" disabled={busy} onClick={() => { void revoke(access) }}>{t('access.revoke')}</Button>))}
       </ul>}
-    {others.length === 0 ? null : <details className={css.disclosure} data-others="">
+    {others.length === 0 ? null : <details className={css.others} data-others="">
       <summary>{t('access.others', { count: String(others.length) })}</summary>
       <ul className={css.list}>
         {others.map(access => row(access, <Button variant="outline" size="sm" disabled={busy} onClick={() => { void allow(access) }}>{t('access.allow')}</Button>))}
@@ -216,7 +214,7 @@ function ServersGroup({ t, listing, busy, review, decline, revoke }: GroupProps<
 }): ReactNode {
   if (listing.kind !== 'ready') return listLine(t, listing, 'mcp.unavailable')
   const { servers, accepted } = listing.value
-  if (servers.length === 0 && accepted.length === 0) return <p className={css.line}>{t('mcp.none')}</p>
+  if (servers.length === 0 && accepted.length === 0) return <p className={css.boxLine}>{t('mcp.none')}</p>
   const waiting = servers.filter(server => server.state === 'waiting')
   const stopped = servers.filter(server => server.state !== 'waiting')
   return <>

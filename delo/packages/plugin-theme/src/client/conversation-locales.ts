@@ -1,8 +1,11 @@
-/** Copy of Appearance → Conversation: the chat display. */
+/** Copy of the Conversation section: the chat display. */
 
 /** English dictionary. */
 export const en = {
   'title': 'Conversation',
+  'detail': 'Detail',
+  'folding': 'Folding',
+  'mode': 'Display',
   'lead': 'How much of the agent’s work a chat shows. The preview follows each choice.',
   'mode.compact': 'Compact',
   'mode.compact.lead': 'The answer and a short trail',
@@ -54,9 +57,11 @@ export const en = {
   'fold': 'Fold finished turns',
   'fold.lead': 'Tuck a finished turn’s steps behind one summary row.',
   'timing': 'When to fold',
+  'timing.lead': 'Fold a turn as soon as it ends, or when you send your next message.',
   'timing.completion': 'After the answer',
   'timing.next-input': 'On my next message',
   'replies': 'Replies after folding',
+  'replies.lead': 'Which of the agent’s replies stay visible beside the summary row.',
   'replies.all': 'All replies',
   'replies.final': 'Final answer only',
   'saveFailed': 'Could not save this. Try again.',
@@ -68,6 +73,9 @@ export type ConversationLocaleKey = keyof typeof en
 /** Chinese dictionary. */
 export const zh: Record<ConversationLocaleKey, string> = {
   'title': '对话',
+  'detail': '详细程度',
+  'folding': '收起',
+  'mode': '显示方式',
   'lead': '对话中显示多少智能体的工作。预览会随每个选择更新。',
   'mode.compact': '简洁',
   'mode.compact.lead': '答案和简短的过程',
@@ -119,9 +127,11 @@ export const zh: Record<ConversationLocaleKey, string> = {
   'fold': '收起已完成的轮次',
   'fold.lead': '把已完成轮次的步骤收进一行摘要。',
   'timing': '收起时机',
+  'timing.lead': '轮次一结束就收起，或在你发送下一条消息时收起。',
   'timing.completion': '回答结束后',
   'timing.next-input': '我发送下一条消息时',
   'replies': '收起后显示的回复',
+  'replies.lead': '智能体的哪些回复在摘要行旁保持可见。',
   'replies.all': '全部回复',
   'replies.final': '仅最终回答',
   'saveFailed': '无法保存，请重试。',

@@ -3,7 +3,7 @@
  * the sidebar's one-list view through upstream's `uiWorkspace.registerShelf`,
  * Snooze and Settle in each chat's menu through `ctx.contextMenus`, a settle
  * hover button, a notice when a change could not be saved, `ctx.deloChatStates`
- * for a sidebar that draws its own shelves, Settings' Snooze and settle
+ * for a sidebar that draws its own shelves, Settings' Snooze and idle chats
  * section, which edits the snooze presets and auto-settle, and a polite live
  * region that announces when the studio loses and regains Delo. The states come
  * from the harness, so every studio shows the same ones.
@@ -115,7 +115,7 @@ export const NS = 'deloChatStates'
 /** The shelves' ids and places: Snoozed above Settled. */
 export const SHELVES = { snoozed: { id: 'delo-snoozed', order: 10 }, settled: { id: 'delo-settled', order: 20 } } as const
 
-/** The Snooze and settle section's id and its place in Settings, after the Sidebar section. */
+/** The Snooze and idle chats section's id and its place in Settings, after the Sidebar section. */
 export const SECTION = { id: 'delo-chat-states', order: 3 } as const
 
 /**
@@ -175,7 +175,7 @@ export function applyStudio(ctx: Context): void {
   const section: SnoozeSettingsInjected = { settings: form, locale, reportFailure: () => { store.failed.set(true) } }
   ctx.effect(() => ctx.configForms.whileServed([CHAT_STATES_ROW_ID], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: SECTION.id, order: SECTION.order, label: () => t('settings.nav'), locale: NS, inject: () => section,
-  }, SnoozeSettingsSection))), 'delo-chat-states: Snooze and settle section')
+  }, SnoozeSettingsSection))), 'delo-chat-states: Snooze and idle chats section')
 
   // An archived chat offers neither entry. Each entry re-resolves when the states, the archive or the language change,
   // and `run` reads the states again, since a menu can stay open while another browser changes the chat.

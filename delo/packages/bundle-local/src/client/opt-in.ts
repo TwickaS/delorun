@@ -1,6 +1,12 @@
-/** One switch on the Privacy section: its Host configuration form and its write state. */
+/** One opt-in switch, on the Privacy section or the release check's General row: its Host configuration form and its write state. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+
+/** Every opt-in switch: its copy prefix in the dictionary. */
+export const OPT_INS = ['sessionLog', 'analytics', 'updateCheck'] as const
+
+/** One switch of {@link OPT_INS}. */
+export type OptInId = (typeof OPT_INS)[number]
 
 /** The field every switch's row exposes: `config.enabled` of its profile row. */
 export interface OptInSettings {

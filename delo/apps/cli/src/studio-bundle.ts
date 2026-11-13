@@ -4,7 +4,7 @@
  * `@delo/bundle-local` alone and so kept the stock look. `delorun start` adds the studio bundle to such a profile with
  * the same operation setup uses ({@link linkDeloBundles}), once: a profile that lists it, and one that does not list
  * `@delo/bundle-local` (not a profile Delo's setup made), is left as it is. The person turns the Delo look off in
- * Settings → Appearance, which writes the profile's own patch and survives this step.
+ * Settings → General → Look, which writes the profile's own patch and survives this step.
  *
  * @module @delo/cli/studio-bundle
  */

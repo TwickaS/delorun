@@ -51,6 +51,9 @@
     },
     {
       "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../plugin-theme/tsconfig.client.json"
     }
   ]
 }

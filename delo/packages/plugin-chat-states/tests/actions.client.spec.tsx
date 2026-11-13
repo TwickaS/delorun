@@ -127,16 +127,29 @@ describe('the snooze dialog', () => {
 
   it('snoozes for a duration in the chosen unit, and refuses one of zero', () => {
     const { change } = dialog()
-    fireEvent.click(screen.getByRole('tab', { name: en['custom.mode.duration'] }))
-    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(screen.getByRole('tab', { name: en['custom.mode.duration'] }).id)
+    fireEvent.click(screen.getByRole('radio', { name: en['custom.mode.duration'] }))
+    expect(screen.getByRole('radio', { name: en['custom.mode.duration'] }).getAttribute('aria-checked')).toBe('true')
     fireEvent.change(screen.getByLabelText(en['custom.amount']), { target: { value: '0' } })
     submit()
     expect(screen.getByRole('alert').textContent).toBe(en['custom.invalid.duration'])
     expect(change).not.toHaveBeenCalled()
     fireEvent.change(screen.getByLabelText(en['custom.amount']), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('tab', { name: en['custom.unit.days'] }))
+    fireEvent.click(screen.getByRole('radio', { name: en['custom.unit.days'] }))
     submit()
     expect(change).toHaveBeenCalledWith({ action: 'snooze', session: 'a', until: opened + 3 * 86_400_000 })
+  })
+
+  it('offers the way to pick the end and the unit as radio groups that arrow keys move', () => {
+    dialog()
+    const date = screen.getByRole('radio', { name: en['custom.mode.date'] })
+    expect(screen.getByRole('radiogroup', { name: en['custom.mode'] }).contains(date)).toBe(true)
+    fireEvent.keyDown(date, { key: 'ArrowRight' })
+    expect(screen.getByRole('radio', { name: en['custom.mode.duration'] }).getAttribute('aria-checked')).toBe('true')
+    const units = within(screen.getByRole('radiogroup', { name: en['custom.unit'] })).getAllByRole('radio')
+    const chosen = units.findIndex(unit => unit.getAttribute('aria-checked') === 'true')
+    fireEvent.keyDown(units[chosen]!, { key: 'ArrowLeft' })
+    expect(within(screen.getByRole('radiogroup', { name: en['custom.unit'] })).getAllByRole('radio')[(chosen + units.length - 1) % units.length]!.getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryAllByRole('tab')).toEqual([])
   })
 
   it('submits from the keyboard through a field, and closes without a change from Cancel', () => {

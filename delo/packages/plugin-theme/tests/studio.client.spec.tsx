@@ -9,13 +9,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BOOT_SETTINGS_GLOBAL } from '../src/boot-settings.ts'
 import { DEFAULT_SETTINGS, THEME_ROW_ID } from '../src/config.ts'
 import {
-  apply, BRAND_NS, CONVERSATION, inject, LAYERS, LOOK_ROW, NS, PLUGIN_ID, SECTION_ID, STOCK_ATTRIBUTE,
+  apply, BRAND_NS, CONVERSATION, inject, LAYERS, LOOK_ROW, NS, PLUGIN_ID, SECTION_ID, STOCK_ATTRIBUTE, STUDIO_ROWS,
 } from '../src/client/index.ts'
 import { en as brandEn, zh as brandZh } from '../src/client/brand-locales.ts'
 import { bootStyle } from '../src/palette/layers.ts'
 import { COPY, COPY_ZH } from '../src/client/copy.ts'
 import { VOCABULARY } from '../src/client/vocabulary.ts'
 import type { AppearanceInjected } from '../src/client/AppearanceSection.tsx'
+import type { AppearanceRowInjected } from '../src/client/AppearanceRows.tsx'
 import type { LookRowInjected } from '../src/client/LookRow.tsx'
 import { en, zh } from '../src/client/locales.ts'
 import { en as lookEn, zh as lookZh } from '../src/client/look-locales.ts'
@@ -29,6 +30,9 @@ interface Registered {
   readonly options: { readonly id?: string; readonly name: string; readonly order?: number; readonly locale?: string; readonly label?: () => string; readonly inject?: () => unknown }
   readonly component: ComponentType<Record<string, unknown>>
 }
+
+/** The ids of the studio half's General rows. */
+const ROW_IDS = Object.values(STUDIO_ROWS).map(row => row.id)
 
 afterEach(() => {
   cleanup()
@@ -87,6 +91,18 @@ function renderRow(slots: Map<string, Registered>) {
   render(<Row t={makeTranslate(lookEn)} {...row.options.inject?.() as LookRowInjected} />)
 }
 
+/**
+ * One of the studio half's General rows, rendered from its registration.
+ * @param slots - the registrations.
+ * @param id - the row's id.
+ */
+function renderStudioRow(slots: Map<string, Registered>, id: string) {
+  const row = slots.get(id)
+  if (row === undefined) throw new Error(`no General row ${id}`)
+  const Row = row.component
+  render(<Row t={makeTranslate(en)} {...row.options.inject?.() as AppearanceRowInjected} />)
+}
+
 describe('with the studio additions off', () => {
   it('registers only the General row: no service, no layers, no faces, no sections, no headline, no vocabulary', async () => {
     const form = themeForm(DEFAULT_SETTINGS)
@@ -117,7 +133,8 @@ describe('with the studio additions off', () => {
     expect(ctx.get('deloStudio')).toBeDefined()
     expect([...layers.keys()]).toEqual([LAYERS.palette, LAYERS.accent, LAYERS.type, LAYERS.density])
     expect(faces()).not.toBeNull()
-    expect(slots.has(LOOK_ROW.id)).toBe(false)
+    // The id now holds the studio half's Look row, on the Appearance dictionary.
+    expect(slots.get(LOOK_ROW.id)?.options.locale).toBe(NS)
     expect(document.documentElement.hasAttribute(STOCK_ATTRIBUTE)).toBe(false)
     await fiber.dispose()
   })
@@ -144,8 +161,9 @@ describe('with the studio additions on', () => {
     expect(document.head.querySelector(`style[data-plugin-css="${PLUGIN_ID}/fonts.css"]`)).not.toBeNull()
     expect(faces()?.textContent).toContain("[data-effort-levels='3']")
     expect(faces()?.textContent).toContain('[data-composer-card]:has([data-composer-input]:focus-visible)')
-    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', CONVERSATION.id, SECTION_ID].sort())
+    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', CONVERSATION.id, SECTION_ID, ...ROW_IDS].sort())
     expect(slots.get(SECTION_ID)?.options).toMatchObject({ name: 'settings.section', order: 1, locale: NS })
+    expect(Object.values(STUDIO_ROWS).map(row => slots.get(row.id)?.options)).toEqual(Object.values(STUDIO_ROWS).map(row => expect.objectContaining({ name: 'settings.general.item', id: row.id, order: row.order, locale: NS })))
     expect(slots.get(CONVERSATION.id)?.options).toMatchObject({ order: 2, locale: CONVERSATION.ns })
     expect(slots.get(SECTION_ID)?.options.label?.()).toBe(en.nav)
     expect(slots.get(CONVERSATION.id)?.options.label?.()).toBe(conversationEn.title)
@@ -166,7 +184,7 @@ describe('with the studio additions on', () => {
 
   it('leaves the Conversation section out while the Host does not serve upstream\'s chat settings', async () => {
     const { slots, fiber } = await mount(themeForm(STUDIO_ON), [])
-    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', SECTION_ID].sort())
+    expect([...slots.keys()].sort()).toEqual(['conversation.hero.brand.mark', 'conversation.hero.headline', SECTION_ID, ...ROW_IDS].sort())
     await fiber.dispose()
   })
 
@@ -242,6 +260,19 @@ describe('with the studio additions on', () => {
   })
 })
 
+describe('the studio half\'s General rows', () => {
+  it('write the typeface, the density and the effort labels through the theme row\'s form', async () => {
+    const form = themeForm(STUDIO_ON)
+    const { fiber, slots } = await mount(form)
+    for (const row of [STUDIO_ROWS.typeface, STUDIO_ROWS.density, STUDIO_ROWS.effortLabels]) renderStudioRow(slots, row.id)
+    await act(async () => { fireEvent.click(within(screen.getByRole('radiogroup', { name: en.typeface })).getByRole('radio', { name: /System/ })) })
+    await act(async () => { fireEvent.click(within(screen.getByRole('radiogroup', { name: en.density })).getByRole('radio', { name: /Spacious/ })) })
+    await act(async () => { fireEvent.click(screen.getByRole('radio', { name: en['effort.bars'] })) })
+    expect(form.writes).toEqual([['typeface', 'system'], ['density', 'spacious'], ['effort', 'bars']])
+    await fiber.dispose()
+  })
+})
+
 describe('turning the studio additions off', () => {
   it('through ctx.deloStudio: writes false, unloads the plugins that require the service, and leaves the General row', async () => {
     const form = themeForm(STUDIO_ON)
@@ -277,16 +308,14 @@ describe('turning the studio additions off', () => {
     await fiber.dispose()
   })
 
-  it('through the Look choice in the Appearance section', async () => {
+  it('through the studio half\'s Look row, which takes the id of the stock look\'s row', async () => {
     const form = themeForm(STUDIO_ON)
     const { ctx, fiber, slots } = await mount(form)
-    const section = slots.get(SECTION_ID)
-    if (section === undefined) throw new Error('no Appearance section')
-    const Section = section.component
-    render(<Section t={makeTranslate(en)} {...section.options.inject?.() as AppearanceInjected} />)
+    renderStudioRow(slots, STUDIO_ROWS.look.id)
     await act(async () => { fireEvent.click(screen.getByRole('radio', { name: en['look.stock'] })) })
     expect(form.writes).toEqual([['studioAdditions', false]])
     expect(ctx.get('deloStudio')).toBeUndefined()
+    expect(slots.get(LOOK_ROW.id)?.options.locale).toBe(LOOK_ROW.ns)
     await fiber.dispose()
   })
 })

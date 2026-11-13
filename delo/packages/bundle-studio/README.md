@@ -33,7 +33,7 @@ kind: "package-bundle"
 | `delo-chat-states` | [`@delo/plugin-chat-states`](../plugin-chat-states/README.md) | Snooze and settle chats, with their shelves |
 | `delo-sidebar` | [`@delo/plugin-sidebar`](../plugin-sidebar/README.md) | The chat list as cards, workspace icons and header art |
 | `delo-onboarding` | [`@delo/plugin-onboarding`](../plugin-onboarding/README.md) | The first-run guide that ends in a new chat; this bundle sets its `plugins` to four experimental plugins that ship with DeepSeek Harness: session search, the terminal bundle, the worktree tool and session titles |
-| `delo-cost-meter` | [`@delo/plugin-cost-meter`](../plugin-cost-meter/README.md) | The estimated chat cost under the composer; inserted with `disabled: true`, so it mounts only after the person turns it on in Settings → Plugins |
+| `delo-cost-meter` | [`@delo/plugin-cost-meter`](../plugin-cost-meter/README.md) | The estimated chat cost under the composer; inserted with `disabled: true`, so it mounts only after the person turns it on in the sidebar's Plugins page |
 
 ## The first-run key dialog
 
@@ -43,7 +43,7 @@ kind: "package-bundle"
 
 - **One switch.** The theme row's `studioAdditions` is C16 switch `studio_additions`. Its Config default is `false`, the parity value; this bundle sets it to `true`, and the registry's default value, `true`, is checked against this row by the `parity-switches` specs, so the two cannot drift.
 - **How it reaches every plugin.** While the switch is on, the theme's browser half provides the `deloStudio` service. The browser half of every other plugin here registers everything inside an injection of that service, so turning the switch off disposes all of it and the studio shows upstream's sidebar, Settings and look. The harness halves keep running: snoozed and settled chats stay stored and return when the switch is turned back on.
-- **Where the person finds it.** With the Delo look on, Settings → Appearance offers the choice at its top; with the stock look, upstream's General section shows one row to turn the Delo look back on, and nothing else of Delo's look remains.
+- **Where the person finds it.** With the Delorun look on, Settings → General → Look offers the choice; with the stock look, upstream's General section shows one row to turn the Delo look back on, and nothing else of Delo's look remains.
 - **The parity composition.** No profile the recorded-session replay runs mounts this bundle, so the switch stays at its Config default, off, and none of the plugins mounts.
 
 ## Tests

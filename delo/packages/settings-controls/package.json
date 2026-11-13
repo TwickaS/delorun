@@ -1,0 +1,22 @@
+{
+  "name": "@delo/settings-controls",
+  "description": "The settings controls Delo's Settings sections share: the card with its heading, setting titles, the General row frame, the radio segmented control and the preview tiles",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0"
+  },
+  "delo": {
+    "state": "shipped"
+  }
+}

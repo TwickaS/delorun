@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** Settings → Appearance saves each choice through the theme row's form and offers the way back to the stock look. */
+/** The Appearance section saves each colour choice through the theme row's form, under one Colours heading. */
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -12,19 +12,17 @@ afterEach(cleanup)
 /**
  * Render the section on a form.
  * @param form - the settings form.
- * @param useStockLook - what the Look choice calls.
  */
-function open(form: ThemeFormHandle, useStockLook: () => Promise<boolean> = () => Promise.resolve(true)) {
+function open(form: ThemeFormHandle) {
   let preference: SchemePreference = 'system'
   const listeners = new Set<() => void>()
   const set = vi.fn((next: SchemePreference) => { preference = next; for (const listener of listeners) listener() })
   const face: AppearanceInjected = {
     settings: form.scope,
-    useStockLook,
     scheme: { get: () => preference, subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } }, set },
   }
   render(<AppearanceSection t={makeTranslate(en)} {...face} />)
-  return { set, useStockLook }
+  return { set }
 }
 
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
@@ -62,19 +60,25 @@ describe('the Appearance section', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Custom accent colour').value).toBe('#e5734a')
   })
 
-  it('saves the typeface, the density, the theme, the effort display and the contrast; a choice already made saves nothing', async () => {
+  it('saves the theme; a theme already chosen saves nothing, and a theme other than Soft sets the accent', async () => {
     const form = themeForm(STUDIO_ON)
     open(form)
-    await click(within(group(en.typeface)).getByRole('radio', { name: /System/ }))
-    await click(within(group(en.typeface)).getByRole('radio', { name: /System/ }))
-    await click(within(group(en.typeface)).getByRole('radio', { name: /Schibsted/ }))
-    await click(within(group(en.density)).getByRole('radio', { name: /Compact/ }))
-    await click(within(group(en.density)).getByRole('radio', { name: /Compact/ }))
     await click(within(group(en.palette)).getByRole('radio', { name: /Grove/ }))
     await click(within(group(en.palette)).getByRole('radio', { name: /Grove/ }))
-    await click(screen.getByRole('radio', { name: en['effort.bars'] }))
-    expect(form.writes).toEqual([['typeface', 'system'], ['typeface', 'delo'], ['density', 'compact'], ['palette', 'grove'], ['effort', 'bars']])
+    expect(form.writes).toEqual([['palette', 'grove']])
     expect(screen.getByText(en['accent.byTheme'])).toBeTruthy()
+  })
+
+  it('holds mode, theme, accent and contrast under one Colours heading that names the section', () => {
+    open(themeForm(STUDIO_ON))
+    const heading = screen.getByRole('heading', { level: 3, name: en.colours })
+    expect(heading.closest('section')?.getAttribute('aria-labelledby')).toBe(heading.id)
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1)
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([en.mode, en.palette, en.accent, en.contrast])
+    expect(screen.queryByRole('radiogroup', { name: en.look })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: en.typeface })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: en.density })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: en.effort })).toBeNull()
   })
 
   it('saves the contrast when the slider is let go by pointer, key or blur, only when it moved, and resets to 100 from the notch', async () => {
@@ -106,20 +110,6 @@ describe('the Appearance section', () => {
     expect(within(group('Mode')).getByRole('radio', { name: /System/ }).getAttribute('aria-checked')).toBe('true')
   })
 
-  it('offers the look choice first, with Delo chosen, and calls the way back to the stock look from Stock', async () => {
-    const useStockLook = vi.fn(() => Promise.resolve(true))
-    open(themeForm(STUDIO_ON), useStockLook)
-    const look = within(screen.getByRole('radiogroup', { name: en.look }))
-    const radios = look.getAllByRole('radio')
-    expect(radios[0]?.textContent).toBe(en['look.delo'])
-    expect(radios[0]?.getAttribute('aria-checked')).toBe('true')
-    expect(screen.queryAllByRole('tab')).toHaveLength(0)
-    expect(document.querySelector('[aria-controls]')).toBeNull()
-    await click(screen.getByRole('radio', { name: en['look.stock'] }))
-    expect(useStockLook).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('alert')).toBeNull()
-  })
-
   it('reports a write the Host refused or could not carry, and clears the report on the next save', async () => {
     const form = themeForm(STUDIO_ON)
     open(form)
@@ -132,12 +122,6 @@ describe('the Appearance section', () => {
     form.answer = true
     await click(screen.getByRole('radio', { name: 'Mono' }))
     expect(screen.queryByRole('alert')).toBeNull()
-  })
-
-  it('reports a refused way back to the stock look', async () => {
-    open(themeForm(STUDIO_ON), () => Promise.resolve(false))
-    await click(screen.getByRole('radio', { name: en['look.stock'] }))
-    expect(screen.getByRole('alert')).toBeTruthy()
   })
 
   it('locks every choice while the document is not writable, and draws the defaults before the settings arrive', () => {

@@ -1,12 +1,14 @@
 /**
- * Settings → Sidebar: the header art as preview tiles drawn in the chosen
- * palette, the palette swatches, the art's strength, fade and style, the chat
- * list's view, sort order and Working shelf, Ask before unpinning, the
- * sidebar's width on a notched slider.
+ * Settings → Sidebar, in two headed groups. Header: the header art as preview
+ * tiles drawn in the chosen palette, the palette swatches, the art's strength
+ * and style as radio segments, and its fade as tiles. Chat list: the list's
+ * style and sort order as radio segments, the Working shelf, Ask before
+ * unpinning and the sidebar's width on a notched slider.
  * @module @delo/plugin-sidebar/client/SettingsSection
  */
-import { Button, SegmentedControl, Switch, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Switch, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { ChoiceGroup, SettingHeading, SettingsCard } from '@delo/settings-controls'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { useCallback, useId, useLayoutEffect, useState, useSyncExternalStore, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import {
@@ -110,10 +112,7 @@ function SettingRow({ id, title, lead, muted, children }: {
   return (
     <section className={css.block} aria-labelledby={id} data-muted={muted}>
       <div className={css.row}>
-        <div className={css.heading}>
-          <h3 id={id} className={css.title}>{title}</h3>
-          <p className={css.lead}>{lead}</p>
-        </div>
+        <SettingHeading id={id} title={title} lead={lead} />
         {children}
       </div>
     </section>
@@ -187,125 +186,120 @@ export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
     <div className={css.section}>
       <InkEdgeFilters ids={edgeIds} />
       {failed && <Toast text={t('settings.failed')} onDone={() => { setFailed(false) }} />}
-      <section className={css.block} aria-labelledby="delo-sidebar-art">
-        <div className={css.row}>
-          <div className={css.heading}>
-            <h3 id="delo-sidebar-art" className={css.title}>{t('settings.art')}</h3>
-            <p className={css.lead}>{t('settings.art.lead')}</p>
+      <SettingsCard id="delo-sidebar-header" title={t('settings.group.header')}>
+        <section className={css.block} aria-labelledby="delo-sidebar-art">
+          <div className={css.row}>
+            <SettingHeading id="delo-sidebar-art" title={t('settings.art')} lead={t('settings.art.lead')} />
+            <Button variant="outline" disabled={disabled || !GENERATIVE.has(current.headerArt)}
+              onClick={() => { save('artSeed', 1 + Math.floor(Math.random() * (MAX_ART_SEED - 1))) }}>
+              {t('settings.art.shuffle')}
+            </Button>
           </div>
-          <Button variant="outline" disabled={disabled || !GENERATIVE.has(current.headerArt)}
-            onClick={() => { save('artSeed', 1 + Math.floor(Math.random() * (MAX_ART_SEED - 1))) }}>
-            {t('settings.art.shuffle')}
-          </Button>
-        </div>
-        <SwipeStrip label={t('settings.art')}>
-          {HEADER_ARTS.map(art => (
-            <button key={art} type="button" role="radio" aria-checked={current.headerArt === art} aria-label={t(`settings.art.${art}`)}
-              className={css.tile} disabled={disabled}
-              onClick={() => { if (current.headerArt !== art) save('headerArt', art) }}>
-              <span className={css.preview}>
-                {art !== 'none' && <StageBackdrop scene={art} palette={current.artPalette} seed={current.artSeed} compact />}
-                <span className={css.previewBrand} style={art === 'none' ? undefined : edgedBrand}>{t('settings.preview.brand')}</span>
-                <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
-              </span>
-              <span className={css.tileFoot}>
-                <span className={css.tileLabel}>{t(`settings.art.${art}`)}</span>
-                <span className={css.radio} aria-hidden="true" />
-              </span>
-            </button>
-          ))}
-        </SwipeStrip>
-      </section>
+          <SwipeStrip label={t('settings.art')}>
+            {HEADER_ARTS.map(art => (
+              <button key={art} type="button" role="radio" aria-checked={current.headerArt === art} aria-label={t(`settings.art.${art}`)}
+                className={css.tile} disabled={disabled}
+                onClick={() => { if (current.headerArt !== art) save('headerArt', art) }}>
+                <span className={css.preview}>
+                  {art !== 'none' && <StageBackdrop scene={art} palette={current.artPalette} seed={current.artSeed} compact />}
+                  <span className={css.previewBrand} style={art === 'none' ? undefined : edgedBrand}>{t('settings.preview.brand')}</span>
+                  <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
+                </span>
+                <span className={css.tileFoot}>
+                  <span className={css.tileLabel}>{t(`settings.art.${art}`)}</span>
+                  <span className={css.radio} aria-hidden="true" />
+                </span>
+              </button>
+            ))}
+          </SwipeStrip>
+        </section>
 
-      <section className={css.block} aria-labelledby="delo-sidebar-palette" data-muted={current.headerArt === 'none'}>
-        <div className={css.row}>
-          <div className={css.heading}>
-            <h3 id="delo-sidebar-palette" className={css.title}>{t('settings.palette')}</h3>
-            <p className={css.lead}>{t('settings.palette.lead')}</p>
-          </div>
-          <div className={css.picker}>
-            <span className={css.pickerName} aria-hidden="true">{t(`settings.palette.${current.artPalette}`)}</span>
-            <div className={css.swatches} role="radiogroup" aria-label={t('settings.palette')}>
-              {ART_PALETTES.map(palette => (
-                <button key={palette} type="button" role="radio" aria-checked={current.artPalette === palette}
-                  aria-label={t(`settings.palette.${palette}`)} title={t(`settings.palette.${palette}`)} className={css.swatch} disabled={disabled}
-                  onClick={() => { if (current.artPalette !== palette) save('artPalette', palette) }}>
-                  {swatch(palette)}
-                </button>
-              ))}
+        <section className={css.block} aria-labelledby="delo-sidebar-palette" data-muted={current.headerArt === 'none'}>
+          <div className={css.row}>
+            <SettingHeading id="delo-sidebar-palette" title={t('settings.palette')} lead={t('settings.palette.lead')} />
+            <div className={css.picker}>
+              <span className={css.pickerName} aria-hidden="true">{t(`settings.palette.${current.artPalette}`)}</span>
+              <div className={css.swatches} role="radiogroup" aria-label={t('settings.palette')}>
+                {ART_PALETTES.map(palette => (
+                  <button key={palette} type="button" role="radio" aria-checked={current.artPalette === palette}
+                    aria-label={t(`settings.palette.${palette}`)} title={t(`settings.palette.${palette}`)} className={css.swatch} disabled={disabled}
+                    onClick={() => { if (current.artPalette !== palette) save('artPalette', palette) }}>
+                    {swatch(palette)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <SettingRow id="delo-sidebar-strength" title={t('settings.strength')} lead={t('settings.strength.lead')} muted={current.headerArt === 'none'}>
-        <SegmentedControl id="delo-sidebar-strength-control" label={t('settings.strength')} value={current.artStrength} disabled={disabled}
-          options={ART_STRENGTHS.map(strength => ({ value: strength, label: t(`settings.strength.${strength}`) }))}
-          onChange={(strength) => { save('artStrength', strength) }} />
-      </SettingRow>
+        <SettingRow id="delo-sidebar-strength" title={t('settings.strength')} lead={t('settings.strength.lead')} muted={current.headerArt === 'none'}>
+          <ChoiceGroup label={t('settings.strength')} value={current.artStrength} disabled={disabled}
+            options={ART_STRENGTHS.map(strength => ({ value: strength, label: t(`settings.strength.${strength}`) }))}
+            onChange={(strength) => { save('artStrength', strength) }} />
+        </SettingRow>
 
-      <section className={css.block} aria-labelledby="delo-sidebar-fade" data-muted={current.headerArt === 'none'}>
-        <div className={css.row}>
-          <div className={css.heading}>
-            <h3 id="delo-sidebar-fade" className={css.title}>{t('settings.fade')}</h3>
-            <p className={css.lead}>{t('settings.fade.lead')}</p>
+        <SettingRow id="delo-sidebar-style" title={t('settings.style')} lead={t('settings.style.lead')} muted={current.headerArt === 'none'}>
+          <ChoiceGroup label={t('settings.style')} value={current.artStyle} disabled={disabled}
+            options={ART_STYLES.map(style => ({ value: style, label: t(`settings.style.${style}`) }))}
+            onChange={(style) => { save('artStyle', style) }} />
+        </SettingRow>
+
+        <section className={css.block} aria-labelledby="delo-sidebar-fade" data-muted={current.headerArt === 'none'}>
+          <div className={css.row}>
+            <SettingHeading id="delo-sidebar-fade" title={t('settings.fade')} lead={t('settings.fade.lead')} />
           </div>
-        </div>
-        <SwipeStrip label={t('settings.fade')}>
-          {ART_FADES.map(fade => (
-            <button key={fade} type="button" role="radio" aria-checked={current.artFade === fade} aria-label={t(`settings.fade.${fade}`)}
-              className={css.tile} disabled={disabled}
-              onClick={() => { if (current.artFade !== fade) save('artFade', fade) }}>
-              <span className={css.preview}>
-                <StageBackdrop scene={current.headerArt === 'none' ? 'blueprint' : current.headerArt} palette={current.artPalette} seed={current.artSeed}
-                  strength={current.artStrength} compact fade={fade} />
-                <span className={css.previewBrand} style={edgedBrand}>{t('settings.preview.brand')}</span>
-                <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
-              </span>
-              <span className={css.tileFoot}>
-                <span className={css.tileLabel}>{t(`settings.fade.${fade}`)}</span>
-                <span className={css.radio} aria-hidden="true" />
-              </span>
-            </button>
-          ))}
-        </SwipeStrip>
-      </section>
+          <SwipeStrip label={t('settings.fade')}>
+            {ART_FADES.map(fade => (
+              <button key={fade} type="button" role="radio" aria-checked={current.artFade === fade} aria-label={t(`settings.fade.${fade}`)}
+                className={css.tile} disabled={disabled}
+                onClick={() => { if (current.artFade !== fade) save('artFade', fade) }}>
+                <span className={css.preview}>
+                  <StageBackdrop scene={current.headerArt === 'none' ? 'blueprint' : current.headerArt} palette={current.artPalette} seed={current.artSeed}
+                    strength={current.artStrength} compact fade={fade} />
+                  <span className={css.previewBrand} style={edgedBrand}>{t('settings.preview.brand')}</span>
+                  <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
+                </span>
+                <span className={css.tileFoot}>
+                  <span className={css.tileLabel}>{t(`settings.fade.${fade}`)}</span>
+                  <span className={css.radio} aria-hidden="true" />
+                </span>
+              </button>
+            ))}
+          </SwipeStrip>
+        </section>
+      </SettingsCard>
 
-      <SettingRow id="delo-sidebar-style" title={t('settings.style')} lead={t('settings.style.lead')} muted={current.headerArt === 'none'}>
-        <SegmentedControl id="delo-sidebar-style-control" label={t('settings.style')} value={current.artStyle} disabled={disabled}
-          options={ART_STYLES.map(style => ({ value: style, label: t(`settings.style.${style}`) }))}
-          onChange={(style) => { save('artStyle', style) }} />
-      </SettingRow>
+      <SettingsCard id="delo-sidebar-list" title={t('settings.group.list')}>
+        <SettingRow id="delo-sidebar-view" title={t('settings.view')} lead={t('settings.view.lead')}>
+          <ChoiceGroup label={t('settings.view')} value={current.view} disabled={disabled}
+            options={LIST_VIEWS.map(view => ({ value: view, label: t(`settings.view.${view}`) }))}
+            onChange={(view) => { save('view', view) }} />
+        </SettingRow>
 
-      <SettingRow id="delo-sidebar-view" title={t('settings.view')} lead={t('settings.view.lead')}>
-        <SegmentedControl id="delo-sidebar-view-control" label={t('settings.view')} value={current.view} disabled={disabled}
-          options={LIST_VIEWS.map(view => ({ value: view, label: t(`settings.view.${view}`) }))}
-          onChange={(view) => { save('view', view) }} />
-      </SettingRow>
+        <SettingRow id="delo-sidebar-sort" title={t('settings.sort')} lead={t('settings.sort.lead')}>
+          <ChoiceGroup label={t('settings.sort')} value={current.sort} disabled={disabled}
+            options={SORT_ORDERS.map(sort => ({ value: sort, label: t(`settings.sort.${sort}`) }))}
+            onChange={(sort) => { save('sort', sort) }} />
+        </SettingRow>
 
-      <SettingRow id="delo-sidebar-sort" title={t('settings.sort')} lead={t('settings.sort.lead')}>
-        <SegmentedControl id="delo-sidebar-sort-control" label={t('settings.sort')} value={current.sort} disabled={disabled}
-          options={SORT_ORDERS.map(sort => ({ value: sort, label: t(`settings.sort.${sort}`) }))}
-          onChange={(sort) => { save('sort', sort) }} />
-      </SettingRow>
+        <SettingRow id="delo-sidebar-working" title={t('settings.working')} lead={t('settings.working.lead')}>
+          <Switch checked={current.workingShelf} disabled={disabled} label={t('settings.working')}
+            onChange={(checked) => { save('workingShelf', checked) }} />
+        </SettingRow>
 
-      <SettingRow id="delo-sidebar-working" title={t('settings.working')} lead={t('settings.working.lead')}>
-        <Switch checked={current.workingShelf} disabled={disabled} label={t('settings.working')}
-          onChange={(checked) => { save('workingShelf', checked) }} />
-      </SettingRow>
+        <SettingRow id="delo-sidebar-unpin" title={t('settings.confirmUnpin')} lead={t('settings.confirmUnpin.lead')}>
+          <Switch checked={current.confirmUnpin} disabled={disabled} label={t('settings.confirmUnpin')}
+            onChange={(checked) => { save('confirmUnpin', checked) }} />
+        </SettingRow>
 
-      <SettingRow id="delo-sidebar-unpin" title={t('settings.confirmUnpin')} lead={t('settings.confirmUnpin.lead')}>
-        <Switch checked={current.confirmUnpin} disabled={disabled} label={t('settings.confirmUnpin')}
-          onChange={(checked) => { save('confirmUnpin', checked) }} />
-      </SettingRow>
+        <SettingRow id="delo-sidebar-width" title={t('settings.width')} lead={t('settings.width.lead')}>
+          <WidthSlider value={current.width} disabled={disabled} label={t('settings.width')}
+            format={px => t('settings.width.value', { px: String(px) })} notchLabel={px => String(px)}
+            onCommit={(px) => { save('width', px) }} />
+        </SettingRow>
 
-      <SettingRow id="delo-sidebar-width" title={t('settings.width')} lead={t('settings.width.lead')}>
-        <WidthSlider value={current.width} disabled={disabled} label={t('settings.width')}
-          format={px => t('settings.width.value', { px: String(px) })} notchLabel={px => String(px)}
-          onCommit={(px) => { save('width', px) }} />
-      </SettingRow>
-
-      <p className={css.credit}>{t('settings.credit')}</p>
+        <p className={css.credit}>{t('settings.credit')}</p>
+      </SettingsCard>
     </div>
   )
 }

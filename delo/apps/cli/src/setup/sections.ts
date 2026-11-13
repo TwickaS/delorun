@@ -235,7 +235,7 @@ export const privacySection: SetupSection = {
     io.note(statementLines().join('\n'), en.title)
     const check = await io.select('Check for new releases?', [
       { value: 'on', label: 'Yes', hint: 'once a day Delo fetches signed release files from releases.delorun.com and GitHub; it sends nothing about this installation, and those hosts see this computer\'s address' },
-      { value: 'off', label: 'No', hint: 'no release check request is made; turn it on later in Settings → Privacy or with delorun setup privacy' },
+      { value: 'off', label: 'No', hint: 'no release check request is made; turn it on later in Settings → General → Updates or with delorun setup privacy' },
     ], draft.answers.updateCheck ? 'on' : 'off')
     return check === BACK ? BACK : { answers: { updateCheck: check === 'on' }, status: 'answered' }
   },

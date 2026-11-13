@@ -123,7 +123,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'delo-privacy',
     kind: 'added',
-    reason: 'The browser half of this bundle: the Privacy section in Settings, the Delo sidebar brand, and Delo\'s own preview notice.',
+    reason: 'The browser half of this bundle: the Privacy and About sections and the release check\'s switch in Settings, the Delo sidebar brand, and Delo\'s own preview notice.',
     parity: { kind: 'disabled', reason: 'Recorded web scenarios compare upstream\'s interface output, which has no Privacy section, shows upstream\'s brand and shows upstream\'s preview notice.' },
   },
   {

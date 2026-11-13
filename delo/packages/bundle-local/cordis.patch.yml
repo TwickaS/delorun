@@ -108,8 +108,9 @@
     enabled: false
     appVersion: !!js process.env.DSH_CLIENT_VERSION
 
-# The Privacy section in Settings: the statements and the consent switches
-# for the two rows above.
+# The browser half: the Privacy section in Settings with the consent switches
+# for the two rows above, the release check's switch under General, and the
+# About section.
 - insert:
     - id: delo-privacy
       name: '@delo/bundle-local'
@@ -171,9 +172,9 @@
 # The update check (C16 switch `update_check`): when the last check is an
 # interval old, at start or at an hourly wake while the Host runs, the
 # channel's newest release is fetched and verified as an update verifies it,
-# and the studio's sidebar shows a notice when it is newer. `delorun`
-# attaches the check to the deloUpdateCheck service this row provides;
-# Settings → Privacy turns `enabled` off in the profile's own patch, which
+# and the studio's sidebar shows a notice when it is newer. `delorun` attaches
+# the check to the deloUpdateCheck service this row provides; Settings →
+# General → Updates turns `enabled` off in the profile's own patch, which
 # comes after this one. The other two keys keep the plugin's defaults.
 - insert:
     - id: delo-update-check
@@ -190,9 +191,9 @@
 # access, cannot disable a protected row, change its settings, or deselect or
 # remove a bundle that carries one, this bundle included, so no chat in one
 # workspace turns a guard off, or silences the update check, for every
-# workspace. Settings → Privacy writes the update check's switch through the
-# settings service, which this list does not govern. Upstream's base
-# bundle gives the row no config, so `protectedPlugins` is the only key.
+# workspace. Settings → General → Updates writes the update check's switch
+# through the settings service, which this list does not govern. Upstream's
+# base bundle gives the row no config, so `protectedPlugins` is the only key.
 - id: plugin-manager
   config:
     protectedPlugins:

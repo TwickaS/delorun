@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-/** The Privacy section turns each switch on only after consent, alone, and off again from the same screen. */
+/**
+ * The Privacy section and the release check's General row turn each switch on only after consent, alone, and off again
+ * from the same screen; the plugin registers them, the versions row and the About section.
+ */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
@@ -8,10 +11,15 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { COMMON_NS, LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject, type ConfigForm, type ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { apply, inject, OPT_IN_ROWS, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, VERSION_ROW, VERSIONS_GLOBAL } from '../src/client/index.ts'
+import { SettingsLayoutRegistry, type SettingsLayout } from '@deepseek-ai/dsh-client-ui-settings-general/client'
+import {
+  ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, inject, OPT_IN_ROWS, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, UPDATE_CHECK_ITEM,
+  VERSION_ROW, VERSIONS_GLOBAL, VERSIONS_ITEM,
+} from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { OptIn, type OptInSettings } from '../src/client/opt-in.ts'
-import { PrivacySection, type OptInId, type PrivacySectionProps } from '../src/client/PrivacySection.tsx'
+import { PrivacySection, type PrivacyOptInId, type PrivacySectionProps } from '../src/client/PrivacySection.tsx'
+import { UpdateCheckRow, type UpdateCheckRowProps } from '../src/client/UpdateCheckRow.tsx'
 import { NOTICE_STORAGE_KEY, NOTICE_VERSION } from '../src/client/DeloNotice.tsx'
 import { TITLE_KEY } from '../src/client/title.ts'
 
@@ -33,8 +41,8 @@ function hostForm(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready',
   return { form, set, optIn: new OptIn(form) }
 }
 
-function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', updateCheck: { status?: ConfigFormSnapshot<OptInSettings>['status']; enabled?: boolean } = {}) {
-  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus), updateCheck: hostForm(updateCheck.status, updateCheck.enabled) }
+function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['status'] = 'ready') {
+  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus) }
   // The renderer's standard props are absent: the section reads none of them.
   const props = {
     t: makeTranslate(en),
@@ -43,28 +51,42 @@ function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['statu
     useSessionLogMutation: bindSnapshotSelector(forms.sessionLog.optIn.state),
     useAnalytics: bindSnapshotSelector(forms.analytics.form),
     useAnalyticsMutation: bindSnapshotSelector(forms.analytics.optIn.state),
-    useUpdateCheck: bindSnapshotSelector(forms.updateCheck.form),
-    useUpdateCheckMutation: bindSnapshotSelector(forms.updateCheck.optIn.state),
-    setEnabled: (id: OptInId, enabled: boolean) => forms[id].optIn.setEnabled(enabled),
+    setEnabled: (id: PrivacyOptInId, enabled: boolean) => forms[id].optIn.setEnabled(enabled),
   } as PrivacySectionProps
   render(<PrivacySection {...props} />)
   return forms
 }
 
+function renderUpdateCheck(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', enabled = true) {
+  const updateCheck = hostForm(status, enabled)
+  // The renderer's standard props are absent: the row reads none of them.
+  const props = {
+    t: makeTranslate(en),
+    useUpdateCheck: bindSnapshotSelector(updateCheck.form),
+    useUpdateCheckMutation: bindSnapshotSelector(updateCheck.optIn.state),
+    setEnabled: (value: boolean) => updateCheck.optIn.setEnabled(value),
+  } as UpdateCheckRowProps
+  render(<UpdateCheckRow {...props} />)
+  return updateCheck
+}
+
 const switchOf = (name: string): HTMLElement => screen.getByRole('switch', { name })
 
 describe('the Privacy section', () => {
-  it('states that Delo has no telemetry and how the release check works, and shows both opt-ins off', () => {
+  it('opens with one sentence, shows both opt-ins off under their heading, states how feedback is sent, and leaves the release check to General', () => {
     renderSection()
-    for (const key of ['statement.delo', 'statement.optIns', 'statement.feedback', 'statement.updateCheck'] as const) expect(screen.getByText(en[key])).toBeTruthy()
-    expect(switchOf(en['sessionLog.title']).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByText(en.intro)).toBeTruthy()
+    const group = screen.getByRole('region', { name: en['sharing.heading'] })
+    expect(within(group).getByText(en['statement.feedback'])).toBeTruthy()
+    expect(within(group).getByRole('switch', { name: en['sessionLog.title'] }).getAttribute('aria-checked')).toBe('false')
     expect(switchOf(en['analytics.title']).getAttribute('aria-checked')).toBe('false')
+    for (const key of ['statement.delo', 'statement.optIns', 'statement.updateCheck', 'updateCheck.title'] as const) expect(screen.queryByText(en[key])).toBeNull()
+    expect(screen.queryAllByRole('switch')).toHaveLength(2)
   })
 
   it.each([
     { id: 'sessionLog', other: 'analytics' },
     { id: 'analytics', other: 'sessionLog' },
-    { id: 'updateCheck', other: 'sessionLog' },
   ] as const)('turns $id on alone after consent and off again from the same screen', async ({ id, other }) => {
     const forms = renderSection()
     const toggle = switchOf(en[`${id}.title`])
@@ -98,32 +120,6 @@ describe('the Privacy section', () => {
     expect(switchOf(en['sessionLog.title'])).toBeTruthy()
   })
 
-  it('shows the release check on by default, turns it off at once, and asks before it is on again', async () => {
-    const forms = renderSection('ready', { enabled: true })
-    const toggle = switchOf(en['updateCheck.title'])
-    expect(toggle.getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByText(en['updateCheck.description'])).toBeTruthy()
-    fireEvent.click(toggle)
-    expect(screen.queryByRole('dialog')).toBeNull()
-    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('false') })
-    fireEvent.click(toggle)
-    const dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
-    expect(within(dialog).getByText(en['updateCheck.confirm.body']).textContent).toMatch(/Nothing is downloaded or installed until you run delorun update\.$/)
-    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
-    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('true') })
-    expect(forms.updateCheck.set.mock.calls).toEqual([['enabled', false], ['enabled', true]])
-    expect([forms.sessionLog.set, forms.analytics.set].map(set => set.mock.calls.length)).toEqual([0, 0])
-  })
-
-  it('closes the consent dialog from its close button without writing', () => {
-    const forms = renderSection()
-    fireEvent.click(switchOf(en['updateCheck.title']))
-    const dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
-    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.close'] }))
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(forms.updateCheck.set).not.toHaveBeenCalled()
-  })
-
   it('writes a switch once while its first write is still crossing the wire', async () => {
     const { set, optIn } = hostForm()
     let release: (accepted: boolean) => void = () => {}
@@ -134,13 +130,6 @@ describe('the Privacy section', () => {
     release(true)
     await first
     expect(optIn.state.getSnapshot()).toEqual({ busy: false, failed: false })
-  })
-
-  it('says why the release check has no switch in a profile that does not serve it', () => {
-    renderSection('ready', { status: 'unavailable' })
-    expect(screen.getByText(en['updateCheck.unavailable'])).toBeTruthy()
-    expect(screen.queryByRole('switch', { name: en['updateCheck.title'] })).toBeNull()
-    expect(screen.queryByText(en['analytics.unavailable'])).toBeNull()
   })
 
   it.each(['refused', 'rejected'] as const)('keeps the accepted value and says so after a %s write', async (failure) => {
@@ -158,8 +147,53 @@ describe('the Privacy section', () => {
   })
 })
 
+describe('the release check\'s General row', () => {
+  it('shows the check on by default, turns it off at once, and asks before it is on again', async () => {
+    const updateCheck = renderUpdateCheck()
+    const toggle = switchOf(en['updateCheck.title'])
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText(en['updateCheck.description'])).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('false') })
+    expect(updateCheck.set.mock.calls).toEqual([['enabled', false]])
+    // Cancelling the consent dialog writes nothing.
+    fireEvent.click(toggle)
+    let dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.cancel'] }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(updateCheck.set.mock.calls).toEqual([['enabled', false]])
+    fireEvent.click(toggle)
+    dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
+    expect(within(dialog).getByText(en['updateCheck.confirm.body']).textContent).toMatch(/Nothing is downloaded or installed until you run delorun update\.$/)
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.accept'] }))
+    await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('true') })
+    expect(updateCheck.set.mock.calls).toEqual([['enabled', false], ['enabled', true]])
+  })
+
+  it('closes the consent dialog from its close button without writing', () => {
+    const updateCheck = renderUpdateCheck('ready', false)
+    fireEvent.click(switchOf(en['updateCheck.title']))
+    const dialog = screen.getByRole('dialog', { name: en['updateCheck.confirm.title'] })
+    fireEvent.click(within(dialog).getByRole('button', { name: en['confirm.close'] }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(updateCheck.set).not.toHaveBeenCalled()
+  })
+
+  it('says why there is no switch in a profile that does not serve the check', () => {
+    renderUpdateCheck('unavailable')
+    expect(screen.getByText(en['updateCheck.unavailable'])).toBeTruthy()
+    expect(screen.queryByRole('switch')).toBeNull()
+  })
+
+  it('names the General path that turns the check off', () => {
+    expect(en['statement.updateCheck']).toMatch(/Turn it off in Settings → General → Updates\.$/)
+    expect(zh['statement.updateCheck']).toMatch(/设置 → 通用 → 更新/)
+  })
+})
+
 describe('the plugin', () => {
-  it('registers the section and writes each opt-in to its own upstream row', async () => {
+  it('registers the sections and the release check\'s row, and writes each opt-in to its own row', async () => {
     expect(OPT_IN_ROWS).toEqual({ sessionLog: 'session-log-deepseek', analytics: 'product-analytics', updateCheck: 'delo-update-check' })
     const ctx = new Context()
     const locale = new LocaleRuntime(ctx)
@@ -177,9 +211,13 @@ describe('the plugin', () => {
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const [section] = slots.entries('settings.section')
+      const about = slots.entries('settings.section').find(entry => entry.options.id === ABOUT_SECTION_ID)
       expect(section?.options).toMatchObject({ id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER })
       const label = section?.options.label
       expect(typeof label === 'function' ? label() : label).toBe(en.nav)
+      expect(about?.options).toMatchObject({ order: ABOUT_SECTION_ORDER })
+      const aboutLabel = about?.options.label
+      expect(typeof aboutLabel === 'function' ? aboutLabel() : aboutLabel).toBe(en['about.nav'])
       // The preview notice's onboarding step reads its copy from this bundle's dictionary.
       const [noticeStep] = slots.entries('settings.onboarding')
       const noticeFace = noticeStep?.inject?.()
@@ -198,12 +236,16 @@ describe('the plugin', () => {
       expect(sessionLog).not.toHaveBeenCalled()
       await face.setEnabled('sessionLog', false)
       expect(sessionLog).toHaveBeenCalledWith('enabled', false)
+      // The release check's General row writes the same row through its own opt-in.
       const updateCheck = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.updateCheck), 'set').mockResolvedValue(true)
-      await face.setEnabled('updateCheck', false)
+      const items = slots.entries('settings.general.item')
+      // No versions in the page: the stock version row stays, and no versions line shows.
+      expect(items.map(item => item.options)).toMatchObject([{ id: UPDATE_CHECK_ITEM.id, order: UPDATE_CHECK_ITEM.order }])
+      const rowFace = items[0]?.inject?.()
+      if (rowFace === undefined || !('setEnabled' in rowFace) || typeof rowFace.setEnabled !== 'function') throw new Error('no row face')
+      await rowFace.setEnabled(false)
       expect(updateCheck.mock.calls).toEqual([['enabled', false]])
       expect(analytics).toHaveBeenCalledTimes(1)
-      // No versions in the page: the stock version row stays.
-      expect(slots.entries('settings.general.item')).toEqual([])
       // ctx.deloNotice records the notice's acknowledgement for a flow that shows its copy itself.
       const notice = ctx.get('deloNotice')
       if (notice === undefined) throw new Error('no deloNotice service')
@@ -219,7 +261,7 @@ describe('the plugin', () => {
     expect(locale.bind(COMMON_NS)(TITLE_KEY)).toBe(TITLE_KEY)
   })
 
-  it('puts the version row in the stock version row\'s place when the page carries both versions', async () => {
+  it('puts the version row in the stock version row\'s place when the page carries both versions, and adds the versions line only while a layout is in force', async () => {
     Reflect.set(globalThis, VERSIONS_GLOBAL, { delo: '0.1.0', dsh: '0.2.2-rc.1' })
     const ctx = new Context()
     try {
@@ -232,13 +274,36 @@ describe('the plugin', () => {
       slots.register({ name: 'root', children: { 'settings.general.item': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.general.item', {})}</>)
       await ctx.plugin({ inject, apply }).await()
-      const [row] = slots.entries('settings.general.item')
+      const rows = slots.entries('settings.general.item')
+      const row = rows.find(entry => entry.options.id === VERSION_ROW.id)
       expect(row?.options).toMatchObject({ id: VERSION_ROW.id, priority: VERSION_ROW.priority })
       expect(VERSION_ROW).toEqual({ id: 'current-version', priority: -1 })
       const face = row?.inject?.()
       if (face === undefined || !('versions' in face) || !('t' in face) || typeof face.t !== 'function') throw new Error('no row face')
       expect(face.versions).toEqual({ delo: '0.1.0', dsh: '0.2.2-rc.1' })
-      expect(face.t('version.delo', { version: '0.1.0' })).toBe('Delo version: 0.1.0')
+      expect(face.t('version.delo', { version: '0.1.0' })).toBe('Delorun version: 0.1.0')
+      const ids = (): string[] => slots.entries('settings.general.item').map(entry => String(entry.options.id)).sort()
+      // Without the layout registry, the flat list keeps the version row alone.
+      expect(ids()).toEqual([VERSION_ROW.id, UPDATE_CHECK_ITEM.id].sort())
+      const text = (): string => ''
+      const layout: SettingsLayout = { groups: [], other: { label: text, itemsLabel: text }, search: { placeholder: text, empty: text } }
+      const layouts = new SettingsLayoutRegistry()
+      ctx.provide('settingsLayout', layouts)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      // The registry alone, with no layout in force, still shows the flat list.
+      expect(ids()).toEqual([VERSION_ROW.id, UPDATE_CHECK_ITEM.id].sort())
+      const unregisterLayout = layouts.register(layout)
+      const line = slots.entries('settings.general.item').find(entry => entry.options.id === VERSIONS_ITEM.id)
+      expect(line?.options).toMatchObject({ order: VERSIONS_ITEM.order })
+      expect(line?.inject?.()).toEqual({ versions: { delo: '0.1.0', dsh: '0.2.2-rc.1' } })
+      // A second change while in force registers nothing twice.
+      const unregisterSecond = layouts.register(layout)
+      expect(ids()).toEqual([VERSION_ROW.id, UPDATE_CHECK_ITEM.id, VERSIONS_ITEM.id].sort())
+      unregisterSecond()
+      unregisterLayout()
+      expect(ids()).toEqual([VERSION_ROW.id, UPDATE_CHECK_ITEM.id].sort())
+      layouts.register(layout)
+      expect(ids()).toContain(VERSIONS_ITEM.id)
     } finally {
       Reflect.deleteProperty(globalThis, VERSIONS_GLOBAL)
       await ctx.fiber.dispose()

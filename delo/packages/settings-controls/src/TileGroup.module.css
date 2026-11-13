@@ -1,0 +1,100 @@
+/* Preview tiles: the whole tile is the target, its preview above a label and a radio mark.
+   The consumer's class sets the grid's columns. */
+.tiles {
+  --radio-size: 16px;
+  --radio-checked-width: 5px;
+  display: grid;
+  gap: var(--delo-space-5);
+  font-size: var(--dsw-font-xs-13-font-size);
+  line-height: var(--dsw-font-xs-13-line-height);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--delo-space-4);
+  min-width: 0;
+  padding: var(--delo-space-4);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tile {
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+}
+
+@media (hover: hover) {
+  .tile:hover:not(:disabled) {
+    border-color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+.tile[aria-checked='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.tile:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.tile:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.preview {
+  display: block;
+  min-width: 0;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--delo-space-4);
+  padding: 0 var(--delo-space-2);
+}
+
+.label {
+  font-size: var(--dsw-font-xs-13-font-size);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A radio mark: a ring, filled with the accent when chosen. */
+.radio {
+  flex: none;
+  width: var(--radio-size);
+  height: var(--radio-size);
+  box-sizing: border-box;
+  border: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+}
+
+.tile[aria-checked='true'] .radio {
+  border: var(--radio-checked-width) solid var(--dsw-alias-brand-primary);
+}
+
+/* A phone keeps each row of tiles side by side, smaller: the previews stay
+   recognisable at a third of the width, and the page stays one screen of choices. */
+@media (max-width: 560px) {
+  .tiles {
+    gap: var(--delo-space-4);
+  }
+
+  .tile {
+    gap: var(--delo-space-3);
+    padding: var(--delo-space-3) var(--delo-space-3) var(--delo-space-4);
+  }
+}

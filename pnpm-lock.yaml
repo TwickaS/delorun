@@ -1833,6 +1833,9 @@ importers:
       '@delo/reach':
         specifier: workspace:*
         version: link:../reach
+      '@delo/settings-controls':
+        specifier: workspace:*
+        version: link:../settings-controls
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -1879,6 +1882,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: workspace:*
         version: link:../../../packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-settings-general':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-settings-general
       '@deepseek-ai/dsh-client-ui-sidebar':
         specifier: workspace:*
         version: link:../../../packages/client/ui-sidebar
@@ -2232,6 +2238,9 @@ importers:
       '@delo/contract-archive-and-trash':
         specifier: workspace:*
         version: link:../contract-archive-and-trash
+      '@delo/settings-controls':
+        specifier: workspace:*
+        version: link:../settings-controls
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -2844,6 +2853,9 @@ importers:
       '@delo/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
+      '@delo/settings-controls':
+        specifier: workspace:*
+        version: link:../settings-controls
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -2928,6 +2940,10 @@ importers:
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
   delo/packages/plugin-theme:
+    dependencies:
+      '@delo/settings-controls':
+        specifier: workspace:*
+        version: link:../settings-controls
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -3271,6 +3287,18 @@ importers:
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
+
+  delo/packages/settings-controls:
+    devDependencies:
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   delo/packages/supervisor:
     dependencies:

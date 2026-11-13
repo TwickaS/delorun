@@ -1,10 +1,12 @@
 /**
  * Browser half of Delo's Settings layout: registers the layout with
- * upstream's Settings shell, sizes the panel and adds the Tool settings
- * section, which opens each tool's page in Plugins. It loads only while the
- * Delo look is on (the `deloStudio` service exists) and upstream's general
- * Settings provides `settingsLayout`; disposing it restores upstream's flat
- * list and its panel size.
+ * upstream's Settings shell, sizes the panel, styles the section headings,
+ * adds the Tool settings section, which opens each tool's page in Plugins,
+ * and provides `settingsPluginGroups`, where a third-party plugin names its
+ * sections to get a group of its own. It loads only while the Delo look is on
+ * (the `deloStudio` service exists) and upstream's general Settings provides
+ * `settingsLayout`; disposing it restores upstream's flat list and its panel
+ * size.
  * @module @delo/plugin-settings-layout/client
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,11 +23,24 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { deloSettingsLayout, SECTIONS } from './layout.ts'
 import { en, zh, type SettingsLayoutLocaleKey } from './locales.ts'
+import { SettingsPluginGroups } from './plugin-groups.ts'
 import { ToolSettingsSection, type ToolSettingsEntry, type ToolSettingsInjected } from './ToolSettingsSection.tsx'
 
-export { deloSettingsLayout, HIDDEN_ITEMS, ITEMS, SECTIONS } from './layout.ts'
+export { deloSettingsLayout, HIDDEN_ITEMS, ITEMS, SECTIONS, type SettingsPluginGroup } from './layout.ts'
+export { SettingsPluginGroups } from './plugin-groups.ts'
 export type { SettingsLayoutLocaleKey } from './locales.ts'
 export type { ToolSettingsEntry, ToolSettingsInjected, ToolSettingsSectionProps } from './ToolSettingsSection.tsx'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /**
+     * Third-party plugin groups of Delo's Settings, present while the layout is registered. A plugin registers its
+     * display title and its `settings.section` ids here, and they form a group of their own after Data; a section no
+     * group and no page places shows under Other.
+     */
+    settingsPluginGroups: SettingsPluginGroups
+  }
+}
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -51,9 +66,12 @@ const NS = 'settings.deloLayout'
  * The panel's size: about 1080 wide and 88% of the window tall, with a navigation
  * 220 wide at most and no more than two fifths of a narrow window. Rows fill the
  * content column, so each control sits at its right edge. Upstream's own narrow
- * rule takes the panel to the full window below 768px.
+ * rule takes the panel to the full window below 768px. The card headings take
+ * the sentence-case heading Delo's sections draw, from the same properties.
  */
-export const PANEL_STYLE = ':root{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw)}'
+export const PANEL_STYLE = ':root{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw);'
+  + '--dsh-settings-card-heading-size:15px;--dsh-settings-card-heading-line-height:22px;--dsh-settings-card-heading-weight:600;'
+  + '--dsh-settings-card-heading-letter-spacing:normal;--dsh-settings-card-heading-transform:none;--dsh-settings-card-heading-color:var(--dsw-alias-label-primary)}'
 
 /**
  * While the Delo look provides `deloStudio` and upstream's Settings shell provides `settingsLayout`, register the
@@ -71,7 +89,22 @@ export function apply(ctx: Context): void {
 export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delo-settings-layout: dictionaries')
   const t = ctx.locale.bind(NS)
-  ctx.effect(() => ctx.settingsLayout.register(deloSettingsLayout(t)), 'delo-settings-layout: layout')
+  const groups = new SettingsPluginGroups()
+  const sectionLabel = (id: string): string =>
+    resolveSlotLabel(ctx.slots.entries('settings.section').find(entry => entry.options.id === id)?.options.label) ?? id
+  // A plugin group changes the layout's groups, so the layout is registered again.
+  ctx.effect(() => {
+    let unregister = ctx.settingsLayout.register(deloSettingsLayout(t, groups.getSnapshot(), sectionLabel))
+    const unsubscribe = groups.subscribe(() => {
+      unregister()
+      unregister = ctx.settingsLayout.register(deloSettingsLayout(t, groups.getSnapshot(), sectionLabel))
+    })
+    return () => {
+      unsubscribe()
+      unregister()
+    }
+  }, 'delo-settings-layout: layout')
+  ctx.provide('settingsPluginGroups', groups)
   ctx.effect(() => {
     const tag = document.createElement('style')
     tag.dataset.plugin = PLUGIN_ID

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** Settings → Conversation writes upstream's chat display settings, and its preview draws each choice. */
+/** The Conversation section writes upstream's chat display settings under its Detail and Folding headings, and its preview draws each choice. */
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { CustomDisplay } from '@deepseek-ai/dsh-client-ui-chat'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
@@ -38,6 +38,18 @@ function open(value: ChatDisplaySettings, writable = true) {
 
 const click = async (element: HTMLElement) => { await act(async () => { fireEvent.click(element) }) }
 
+/** The Thinking select's button. */
+const thinkingSelect = () => screen.getByRole('button', { name: new RegExp(`^${en.thinking} `) })
+
+/**
+ * Choose a thinking display from the select.
+ * @param label - the display's label.
+ */
+async function chooseThinking(label: string) {
+  await click(thinkingSelect())
+  await click(screen.getByRole('menuitem', { name: label }))
+}
+
 describe('the display parts of each preset', () => {
   it.each(['compact', 'standard', 'detailed', 'verbose'] as const)('match what upstream\'s %s mode shows', (mode: Preset) => {
     const policy = presentationPolicyFor(mode)
@@ -72,7 +84,7 @@ describe('the Conversation section', () => {
 
   it('changes a part of a preset by switching to Custom seeded with that preset\'s parts', async () => {
     const { writes } = open({ transcriptView: 'verbose' })
-    await click(screen.getByRole('radio', { name: 'Always open' }))
+    await chooseThinking('Always open')
     expect(writes).toEqual([['customDisplay', { ...PRESET_PARTS.verbose, thinking: 'expanded' }], ['transcriptView', 'custom']])
   })
 
@@ -103,11 +115,57 @@ describe('the Conversation section', () => {
     expect(screen.queryByText(en.timing)).toBeNull()
   })
 
-  it('offers no thinking display the studio does not ship, and leaves a choice already made unwritten', async () => {
+  it('offers thinking as a select showing the current display, with no display the studio does not ship, and leaves a choice already made unwritten', async () => {
     const { writes } = open({ transcriptView: 'standard' })
-    expect(screen.queryByRole('radio', { name: /Word by word/ })).toBeNull()
-    await click(screen.getByRole('radio', { name: 'One-line preview' }))
+    const select = thinkingSelect()
+    expect(select.getAttribute('aria-haspopup')).toBe('menu')
+    expect(select.getAttribute('aria-expanded')).toBe('false')
+    expect(select.textContent).toBe('One-line preview')
+    await click(select)
+    expect(select.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Title only', 'One-line preview', 'Open while thinking', 'Always open', 'Sliding window'])
+    await click(screen.getByRole('menuitem', { name: 'One-line preview' }))
     expect(writes).toEqual([])
+    expect(screen.queryByRole('menuitem')).toBeNull()
+    await click(thinkingSelect())
+    await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }) })
+    expect(thinkingSelect().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('shows upstream\'s reserved word-by-word thinking as the one-line preview it draws', () => {
+    open({ transcriptView: 'custom', customDisplay: { ...PARTS, thinking: 'rsvp' } })
+    expect(thinkingSelect().textContent).toBe('One-line preview')
+  })
+
+  it('opens the window height when Sliding window is chosen, writing Custom thinking', async () => {
+    const handle = stubConfigForm<ChatDisplaySettings>()
+    handle.set.mockImplementation((field: string, next: unknown) => {
+      handle.publish({ value: { ...handle.scope.getSnapshot().value, [field]: next } })
+      return Promise.resolve(true)
+    })
+    handle.publish({ status: 'ready', value: { transcriptView: 'detailed' }, writable: true })
+    render(<ConversationSection t={t} settings={handle.scope} />)
+    expect(screen.queryByText(en.window)).toBeNull()
+    await chooseThinking('Sliding window')
+    expect(handle.scope.getSnapshot().value).toEqual({ transcriptView: 'custom', customDisplay: { ...PRESET_PARTS.detailed, thinking: 'window' } })
+    expect(thinkingSelect().textContent).toBe('Sliding window')
+    expect(screen.getByRole('radiogroup', { name: en.window })).toBeTruthy()
+  })
+
+  it('heads its cards Detail and Folding, each naming its section, and describes when and what folds', () => {
+    open({ transcriptView: 'detailed' })
+    const headings = screen.getAllByRole('heading', { level: 3 })
+    expect(headings.map(heading => heading.textContent)).toEqual([en.detail, en.folding])
+    for (const heading of headings) expect(heading.closest('section')?.getAttribute('aria-labelledby')).toBe(heading.id)
+    expect(screen.getByRole('radiogroup', { name: en.mode })).toBeTruthy()
+    expect(screen.getByText(en['timing.lead'])).toBeTruthy()
+    expect(screen.getByText(en['replies.lead'])).toBeTruthy()
+    expect(screen.getByText(en.preview).textContent).toBe('Preview')
+  })
+
+  it('locks the thinking select while the settings are not writable', () => {
+    open({ transcriptView: 'detailed' }, false)
+    expect(thinkingSelect().hasAttribute('disabled')).toBe(true)
   })
 
   it('previews the finished or the running turn', async () => {

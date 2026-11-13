@@ -1,4 +1,4 @@
-/* Settings → Tools → Tool settings: one card of rows, each opening a tool's page. */
+/* Settings → Tools: one card of rows, each opening a tool's page. */
 .section {
   display: flex;
   flex-direction: column;
@@ -10,13 +10,18 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 0 4px;
 }
 
+/* The section heading every Delo section shares; the layout's panel style sets the variables. */
 .title {
   margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
+  font-size: var(--dsh-settings-card-heading-size, 15px);
+  font-weight: var(--dsh-settings-card-heading-weight, 600);
+  line-height: var(--dsh-settings-card-heading-line-height, 22px);
+  letter-spacing: var(--dsh-settings-card-heading-letter-spacing, normal);
+  text-transform: var(--dsh-settings-card-heading-transform, none);
+  color: var(--dsh-settings-card-heading-color, var(--dsw-alias-label-primary));
 }
 
 .lead {

@@ -6,8 +6,9 @@ import { clientBundle } from '../../../packages/client/tsdown.client.ts'
 const configs = clientBundle(import.meta.dirname, ['lib/types/index.js'])
 
 // The page's module table does not provide Delo's own packages, so the browser half inlines the import-free modules it
-// reads from their source: the setup contract and the consent plugins' route messages.
+// reads from their source: the shared settings controls, the setup contract and the consent plugins' route messages.
 const INLINED = {
+  '@delo/settings-controls': fileURLToPath(new URL('../settings-controls/src/index.ts', import.meta.url)),
   '@delo/contract-setup-answers': fileURLToPath(new URL('../contract-setup-answers/src/index.ts', import.meta.url)),
   '@delo/plugin-mcp-consent/wire': fileURLToPath(new URL('../plugin-mcp-consent/src/wire.ts', import.meta.url)),
   '@delo/plugin-permission-defaults/wire': fileURLToPath(new URL('../plugin-permission-defaults/src/wire.ts', import.meta.url)),

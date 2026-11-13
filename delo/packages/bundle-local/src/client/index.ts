@@ -1,7 +1,8 @@
 /**
- * `@delo/bundle-local`'s browser half: the Privacy section in Settings, with Delo's statements, the consent
- * switches for upstream's two opt-ins, DeepSeek's session-log upload (`session-log-deepseek`) and the desktop app's
- * analytics (`product-analytics`), and the switch of Delo's release check (`delo-update-check`). Each switch writes
+ * `@delo/bundle-local`'s browser half: the Privacy section in Settings, with the consent switches for upstream's two
+ * opt-ins, DeepSeek's session-log upload (`session-log-deepseek`) and the desktop app's analytics
+ * (`product-analytics`); the General row with the switch of Delo's release check (`delo-update-check`) and the General
+ * row that names both versions; and the About section with the licence and the project's links. Each switch writes
  * only its own row's `config.enabled` through upstream's configuration form, into the active profile's
  * `cordis.patch.yml`.
  *
@@ -26,6 +27,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the 'settings.section' and 'settings.section.icon' SlotMap entries and the ctx.configForms Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: the ctx.settingsLayout Context merge.
+import type {} from '@deepseek-ai/dsh-client-ui-settings-general/client'
 // Type-only: the 'sidebar.brand.mark' and 'sidebar.brand.name' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { IconLinkOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -37,8 +40,11 @@ import { en as devicesEn, zh as devicesZh, type DevicesLocaleKey } from './devic
 import type { HostFetch } from './devices-api.ts'
 import { DevicesSection, type DevicesSectionInjected } from './DevicesSection.tsx'
 import { en, zh, type PrivacyLocaleKey } from './locales.ts'
-import { OptIn, type OptInSettings } from './opt-in.ts'
-import { PrivacySection, type OptInId, type PrivacySectionInjected } from './PrivacySection.tsx'
+import { OptIn, type OptInId, type OptInSettings } from './opt-in.ts'
+import { PrivacySection, type PrivacySectionInjected } from './PrivacySection.tsx'
+import { UpdateCheckRow, type UpdateCheckRowInjected } from './UpdateCheckRow.tsx'
+import { VersionsRow, type VersionsRowInjected } from './VersionsRow.tsx'
+import { AboutSection } from './AboutSection.tsx'
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
@@ -65,8 +71,12 @@ export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaiti
 export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
 export type { DeloVersionRowInjected, DeloVersionRowProps } from './DeloVersionRow.tsx'
 export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
-export type { OptInMutation, OptInSettings } from './opt-in.ts'
-export type { OptInId, PrivacySectionInjected, PrivacySectionProps } from './PrivacySection.tsx'
+export type { OptInId, OptInMutation, OptInSettings } from './opt-in.ts'
+export type { OptInRowProps } from './OptInRow.tsx'
+export type { PrivacyOptInId, PrivacySectionInjected, PrivacySectionProps } from './PrivacySection.tsx'
+export type { UpdateCheckRowInjected, UpdateCheckRowProps } from './UpdateCheckRow.tsx'
+export type { VersionsRowInjected, VersionsRowProps } from './VersionsRow.tsx'
+export type { AboutSectionProps } from './AboutSection.tsx'
 export type { DevicesSectionInjected, DevicesSectionProps } from './DevicesSection.tsx'
 export {
   DEVICE_ROUTES, HostRequestError, readReachStatus, REACH_STATES,
@@ -93,7 +103,7 @@ declare module '@deepseek-ai/cordis' {
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** The Privacy section's copy. */
+    /** The copy of the Privacy and About sections and of the release check's and versions' General rows. */
     'deloPrivacy': PrivacyLocaleKey
     /** The Devices section's copy and the remote studio's refused-answer notice. */
     'deloDevices': DevicesLocaleKey
@@ -129,6 +139,21 @@ export const OPT_IN_ROWS: Readonly<Record<OptInId, string>> = {
  * keeps its place in grouped Settings.
  */
 export const VERSION_ROW = { id: 'current-version', priority: -1 } as const
+
+/** The General row of the release check, placed just before upstream's version row (100) in the flat General list. */
+export const UPDATE_CHECK_ITEM = { id: 'delo-update-check', order: 98 } as const
+
+/**
+ * The General row that names both versions on one line, right after the release check's row. It shows only while a
+ * Settings layout is in force, whose Updates card holds it; the flat list keeps the version row alone.
+ */
+export const VERSIONS_ITEM = { id: 'delo-versions', order: 99 } as const
+
+/** The `settings.section` id of the About section. */
+export const ABOUT_SECTION_ID = 'delo-about'
+
+/** The About section's place in the Settings navigation: after the Permissions section. */
+export const ABOUT_SECTION_ORDER = 23
 
 /** The `settings.section` id of the Devices section, which onboarding and other surfaces open. */
 export const DEVICES_SECTION_ID = 'delo-devices'
@@ -167,9 +192,10 @@ export const FULL_ACCESS_ACTION_ID = 'delo-full-access'
 export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Register the Privacy and Devices sections, the Delo sidebar brand, the product name as the document title, Delo's
- * preview notice, `ctx.deloNotice`, the refused-answer notice, and, when the harness printed both versions into the
- * page, the version row that names Delo's version and the DeepSeek Harness version. All of them come from this bundle's
+ * Register the Privacy, About and Devices sections, the release check's General row, the Delo sidebar brand, the
+ * product name as the document title, Delo's preview notice, `ctx.deloNotice`, the refused-answer notice, and, when the
+ * harness printed both versions into the page, the version row that names Delo's version and the DeepSeek Harness
+ * version and, while a Settings layout is in force, the General row that names both on one line. All of them come from this bundle's
  * `delo-privacy` row, which the parity composition leaves disabled, so upstream's brand, title and notice stay in the
  * parity composition.
  * @param ctx - the browser plugin context.
@@ -201,11 +227,19 @@ export function apply(ctx: Context): void {
       sessionLogMutation: optIns.sessionLog.state,
       analytics: optIns.analytics.form,
       analyticsMutation: optIns.analytics.state,
-      updateCheck: optIns.updateCheck.form,
-      updateCheckMutation: optIns.updateCheck.state,
     },
     setEnabled: (id, enabled) => optIns[id].setEnabled(enabled),
   })
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: UPDATE_CHECK_ITEM.id,
+    order: UPDATE_CHECK_ITEM.order,
+    locale: NS,
+    inject: (): UpdateCheckRowInjected => ({
+      hooks: { updateCheck: optIns.updateCheck.form, updateCheckMutation: optIns.updateCheck.state },
+      setEnabled: enabled => optIns.updateCheck.setEnabled(enabled),
+    }),
+  }, UpdateCheckRow))
   const versions = readVersions()
   if (versions !== undefined) {
     ctx.slots.inject('settings.general.item', () => ctx.slots.register({
@@ -214,6 +248,32 @@ export function apply(ctx: Context): void {
       priority: VERSION_ROW.priority,
       inject: (): DeloVersionRowInjected => ({ versions, t: (key, params) => t(key, params) }),
     }, DeloVersionRow))
+    ctx.inject(['settingsLayout'], (laid) => {
+      laid.slots.inject('settings.general.item', () => {
+        let unregister: (() => void) | undefined
+        const follow = (): void => {
+          const inForce = laid.settingsLayout.getSnapshot() !== undefined
+          if (inForce && unregister === undefined) {
+            unregister = laid.slots.register({
+              name: 'settings.general.item',
+              id: VERSIONS_ITEM.id,
+              order: VERSIONS_ITEM.order,
+              locale: NS,
+              inject: (): VersionsRowInjected => ({ versions }),
+            }, VersionsRow)
+          } else if (!inForce && unregister !== undefined) {
+            unregister()
+            unregister = undefined
+          }
+        }
+        follow()
+        const unsubscribe = laid.settingsLayout.subscribe(follow)
+        return () => {
+          unsubscribe()
+          unregister?.()
+        }
+      })
+    })
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -223,6 +283,13 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: face,
   }, PrivacySection))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: ABOUT_SECTION_ID,
+    order: ABOUT_SECTION_ORDER,
+    label: () => t('about.nav'),
+    locale: NS,
+  }, AboutSection))
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delo-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.

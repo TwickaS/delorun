@@ -1,7 +1,7 @@
 /**
  * Host half of `@delo/bundle-local`'s Privacy section row. The section is a browser plugin; the Host mounts the row so
  * the browser roster lists it, and prints Delo's version and the DeepSeek Harness version into each page for the
- * version row in Settings.
+ * version rows in Settings.
  * @module @delo/bundle-local
  */
 import type { Context } from '@deepseek-ai/cordis'

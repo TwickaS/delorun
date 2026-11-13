@@ -42,7 +42,7 @@ export const en = {
   'key.untested': 'No free test for this provider',
 
   'look.studio': 'Studio look',
-  'look.studio.lead': 'Delo\'s look is on now. The stock look is DeepSeek Harness as its developers ship it. Choosing it turns Delo\'s studio additions off and closes this guide. Settings → Appearance switches between the two; with the stock look on, the Delo look row in Settings → General turns them back on.',
+  'look.studio.lead': 'Delo\'s look is on now. The stock look is DeepSeek Harness as its developers ship it. Choosing it turns Delo\'s studio additions off and closes this guide. Settings → General → Look switches between the two; with the stock look on, the Delorun look row in Settings → General turns them back on.',
   'look.preview': 'A chat in the chosen look',
   'look.preview.ask': 'Tidy up the README',
   'look.preview.tool': 'Read README.md',
@@ -191,7 +191,7 @@ export const en = {
   'ready.workspace.none': 'None chosen yet',
   'ready.workspace.last': 'The workspace you used last',
   'ready.starters': 'The chat offers these starting prompts; one only writes into the message box:',
-  'start.later': 'Settings → About shows this guide again.',
+  'start.later': 'Settings → General → Getting started shows this guide again.',
 
   'keyBanner.text': 'Add a model key to start chatting',
   'keyBanner.open': 'Open Settings → Models',
@@ -269,7 +269,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'key.untested': '这个服务商没有免费的测试方式',
 
   'look.studio': '工作室外观',
-  'look.studio.lead': '现在使用的是 Delo 的外观。原版外观是 DeepSeek Harness 开发者发布的样子。选择它会关闭 Delo 的工作室附加功能，本引导也会随之关闭。“设置 → 外观”可以在两者之间切换；使用原版外观时，“设置 → 通用”中的“Delo 外观”一行可以重新打开它们。',
+  'look.studio.lead': '现在使用的是 Delo 的外观。原版外观是 DeepSeek Harness 开发者发布的样子。选择它会关闭 Delo 的工作室附加功能，本引导也会随之关闭。“设置 → 通用 → 外观风格”可以在两者之间切换；使用原版外观时，“设置 → 通用”中的“Delorun 外观”一行可以重新打开它们。',
   'look.preview': '所选外观下的对话',
   'look.preview.ask': '整理一下 README',
   'look.preview.tool': '读取 README.md',
@@ -418,7 +418,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'ready.workspace.none': '尚未选择',
   'ready.workspace.last': '你上次使用的工作区',
   'ready.starters': '对话会提供这些起始提示；选择一条只会写入消息框：',
-  'start.later': '“设置 → 关于”中可以再次打开本引导。',
+  'start.later': '“设置 → 通用 → 开始使用”中可以再次打开本引导。',
 
   'keyBanner.text': '添加模型密钥后即可开始对话',
   'keyBanner.open': '打开“设置 → 模型”',

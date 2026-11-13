@@ -294,7 +294,7 @@ export async function apply(ctx: Context, config: ChatStatesConfig): Promise<voi
     ctx.logger.warn(`${name}: the stored state of chat ${session} is not valid and is left out until the chat changes: ${problem}`)
   })
   sweepPeriodically(ctx, states, config)
-  // Settings → Snooze and settle edits the settings in the studio, so the settings service builds no form for them.
+  // Settings → Sidebar → Snooze and idle chats edits the settings in the studio, so the settings service builds no form for them.
   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
 
   const answer = (route: string, handle: (request: Request) => Promise<Response>) => async (request: Request): Promise<Response> => {

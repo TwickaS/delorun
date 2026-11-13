@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The General row that brings Delo's look back: a switch that writes once and reports a refusal. */
+/** The General row that brings Delorun's look back: a switch that writes once and reports a refusal. */
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -17,7 +17,7 @@ function open(form: ThemeFormHandle, useDeloLook: () => Promise<boolean>) {
   return screen.getByRole('switch', { name: en.title })
 }
 
-describe('the Delo look row', () => {
+describe('the Delorun look row', () => {
   it('shows the switch off with a one-line description, and calls the write once while it is pending', async () => {
     let finish: (ok: boolean) => void = () => {}
     let calls = 0

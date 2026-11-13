@@ -48,7 +48,7 @@
     welcomeNotice: false
 
 # Optional studio plugins: each row is inserted disabled, so a new profile
-# mounts nothing of it until the person turns it on in Settings → Plugins,
+# mounts nothing of it until the person turns it on in the sidebar's Plugins page,
 # which writes `disabled: false` for the row in the profile's own patch. Like
 # the rows above, the browser half requires `deloStudio`.
 - insert:

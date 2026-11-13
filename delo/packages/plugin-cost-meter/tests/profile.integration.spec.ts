@@ -1,6 +1,6 @@
 /**
  * The cost meter in a real Delo CLI profile: upstream's loader composes the profile from Delo's bundles, where the row
- * is present and disabled; the row the person turns on in Settings → Plugins (a `disabled: false` override in the
+ * is present and disabled; the row the person turns on in the sidebar's Plugins page (a `disabled: false` override in the
  * profile's own patch) composes enabled, resolves to this package from `@delo/bundle-studio`, and boots with its
  * composed config beside upstream's real Session store and projection registry, serving the chat's cost.
  */

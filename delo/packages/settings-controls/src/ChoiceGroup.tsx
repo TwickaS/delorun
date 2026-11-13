@@ -2,7 +2,7 @@
  * A few exclusive choices as one row of segments, drawn as upstream's segmented
  * control and exposed as a radio group: the choices are options of one setting,
  * not tabs of panels.
- * @module @delo/plugin-theme/client/ChoiceGroup
+ * @module @delo/settings-controls/ChoiceGroup
  */
 import type { CSSProperties, KeyboardEvent } from 'react'
 import css from './ChoiceGroup.module.css'

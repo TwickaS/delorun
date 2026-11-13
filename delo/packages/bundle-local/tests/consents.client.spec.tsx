@@ -673,6 +673,17 @@ describe('the Permissions section', () => {
     expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(2)
   })
 
+  it('says when no workspace has full access and no MCP server waits, and why no grant counts when the grants cannot be read', async () => {
+    renderPermissions(fakeHost({
+      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF], storeProblem: 'unreadable' } },
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([]),
+    }))
+    await settle()
+    expect(screen.getByText(en['access.none'])).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toBe(en['access.storeProblem'].replace('{problem}', 'unreadable'))
+    expect(screen.getByText(en['mcp.none'])).toBeTruthy()
+  })
+
   it('says only that the profile does not ask, where the plugins are not mounted', async () => {
     renderPermissions(fakeHost())
     await settle()

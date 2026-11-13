@@ -1,21 +1,18 @@
 /**
- * Settings → Appearance: the look (Delo's or the stock look), the colour
- * scheme, the palette (Soft or one of T3 Code's themes) and the typeface as
- * preview tiles, the accent as one row of swatches with a custom colour, the
- * density, contrast on a slider, and effort as a name or bars.
+ * The Appearance section, one card headed "Colours": the colour scheme and
+ * the palette (Soft or one of T3 Code's themes) as preview tiles, the accent
+ * as one row of swatches with a custom colour, and contrast on a slider.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import {
-  ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, DENSITIES, EFFORT_DISPLAYS, PALETTES, TYPEFACES, type AccentChoice, type Density, type PaletteChoice, type ThemeSettings, type Typeface,
-} from '../config.ts'
+import { ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, PALETTES, type AccentChoice, type PaletteChoice, type ThemeSettings } from '../config.ts'
 import { formatRgb, fromOklch } from '../palette/color.ts'
 import { previewColors, type SchemePreview } from '../palette/layers.ts'
-import { ACCENTS, FONT_FAMILIES, parseHex } from '../palette/soft.ts'
-import { STOCK_FONT_STACKS } from '../palette/stock.ts'
+import { ACCENTS, parseHex } from '../palette/soft.ts'
 import css from './AppearanceSection.module.css'
-import { ChoiceGroup } from './ChoiceGroup.tsx'
+import { useFormWrites } from './form-writes.ts'
+import { cardCss, SettingHeading, SettingsCard, TileGroup } from '@delo/settings-controls'
 
 /** The colour-scheme preference, as upstream's theme service keeps it. */
 export type SchemePreference = 'light' | 'dark' | 'system'
@@ -24,11 +21,6 @@ export type SchemePreference = 'light' | 'dark' | 'system'
 export interface AppearanceInjected {
   /** The theme settings, stored by the host half. */
   readonly settings: ConfigForm<ThemeSettings>
-  /**
-   * Turn Delo's look and every Delo studio plugin off, which withdraws this section.
-   * @returns whether the setting was saved.
-   */
-  readonly useStockLook: () => Promise<boolean>
   /** Upstream's colour-scheme preference. */
   readonly scheme: {
     /** @returns the current preference. */
@@ -52,15 +44,6 @@ export type AppearanceSectionProps = PropsLocale<'settings.deloAppearance'> & In
 
 const SCHEMES: readonly SchemePreference[] = ['light', 'dark', 'system']
 
-/** The looks offered; this section is shown only while Delo's is on. */
-const LOOKS = ['delo', 'stock'] as const
-
-/** The font stack each typeface tile shows its specimen in. */
-const SPECIMEN_FONTS: Readonly<Record<Typeface, string>> = {
-  delo: `'${FONT_FAMILIES.text}', ${STOCK_FONT_STACKS.text}`,
-  system: STOCK_FONT_STACKS.text,
-}
-
 /** A preset's swatch colours, its fill in each scheme, as custom properties. */
 function presetSwatch(choice: Exclude<AccentChoice, 'custom'>): CSSProperties {
   const accent = ACCENTS[choice]
@@ -78,6 +61,16 @@ function mockColours(colours: SchemePreview): CSSProperties {
     '--mock-quiet': colours.quiet,
     '--mock-accent': colours.accent,
   } as CSSProperties
+}
+
+/** The light studio with the dark one over its right half, for a choice that covers both schemes. */
+function SchemePair({ light, dark }: { light: SchemePreview; dark: SchemePreview }) {
+  return (
+    <span className={css.mockPair}>
+      <StudioMock colours={light} />
+      <StudioMock colours={dark} className={css.mockDarkHalf} />
+    </span>
+  )
 }
 
 /** A miniature studio in one scheme: a sidebar of rows, a reply and the composer with its send button. */
@@ -133,32 +126,19 @@ function ContrastSlider({ value, disabled, label, onCommit }: {
   )
 }
 
-/** The name and help of one setting. */
-function Heading({ id, title, lead }: { id: string; title: string; lead: string }) {
-  return (
-    <div className={css.heading}>
-      <h3 id={id} className={css.title}>{title}</h3>
-      <p className={css.lead}>{lead}</p>
-    </div>
-  )
-}
-
 /**
  * Render the Appearance section.
  * @param props - the dictionary and the services.
  * @returns the section.
  */
-export function AppearanceSection({ t, settings, scheme, useStockLook }: AppearanceSectionProps) {
-  // Stable subscribe functions: a new one per render would resubscribe on every render, including after the plugin is disposed.
-  const subscribeSettings = useCallback((listener: () => void) => settings.subscribe(listener), [settings])
+export function AppearanceSection({ t, settings, scheme }: AppearanceSectionProps) {
+  const { snapshot, disabled, failed, save } = useFormWrites(settings)
+  // A stable subscribe function: a new one per render would resubscribe on every render, including after the plugin is disposed.
   const subscribeScheme = useCallback((listener: () => void) => scheme.subscribe(listener), [scheme])
-  const snapshot = useSyncExternalStore(subscribeSettings, () => settings.getSnapshot())
   const current = snapshot.value ?? DEFAULT_SETTINGS
   const preference = useSyncExternalStore(subscribeScheme, () => scheme.get())
-  const [failed, setFailed] = useState(false)
   const [hex, setHex] = useState(current.customAccent)
   useEffect(() => { setHex(current.customAccent) }, [current.customAccent])
-  const disabled = !snapshot.writable
   // The previews draw Delo's look whatever the stored switch says.
   const colours = useMemo(() => previewColors({ ...current, studioAdditions: true }), [current])
   const paletteColours = useMemo(
@@ -166,11 +146,6 @@ export function AppearanceSection({ t, settings, scheme, useStockLook }: Appeara
     [current],
   )
 
-  const track = (write: Promise<boolean>): void => {
-    setFailed(false)
-    void write.then((ok) => { if (!ok) setFailed(true) }, () => { setFailed(true) })
-  }
-  const save = (field: keyof ThemeSettings, value: unknown): void => { track(settings.set(field, value)) }
   const saveCustom = (value: string): void => {
     const color = parseHex(value)
     if (color === undefined) return
@@ -181,58 +156,32 @@ export function AppearanceSection({ t, settings, scheme, useStockLook }: Appeara
   const customColour = parseHex(current.customAccent) === undefined ? DEFAULT_SETTINGS.customAccent : current.customAccent
 
   return (
-    <div className={css.section}>
-      <section className={`${css.block} ${css.row}`} aria-labelledby="delo-appearance-look">
-        <Heading id="delo-appearance-look" title={t('look')} lead={t('look.lead')} />
-        <ChoiceGroup<(typeof LOOKS)[number]> label={t('look')} value="delo" disabled={disabled}
-          options={LOOKS.map(look => ({ value: look, label: t(`look.${look}`) }))}
-          onChange={() => { track(useStockLook()) }} />
+    <SettingsCard id="delo-appearance-colours" title={t('colours')} className={css.section}>
+      <section className={cardCss.block} aria-labelledby="delo-appearance-mode">
+        <SettingHeading id="delo-appearance-mode" title={t('mode')} lead={t('mode.lead')} />
+        <TileGroup labelledBy="delo-appearance-mode" className={css.schemeTiles} value={preference} disabled={false}
+          onChange={(value) => { scheme.set(value) }}
+          tiles={SCHEMES.map(value => ({
+            value,
+            label: t(`mode.${value}`),
+            preview: value === 'system' ? <SchemePair light={colours.light} dark={colours.dark} /> : <StudioMock colours={colours[value]} />,
+          }))} />
       </section>
 
-      <section className={css.block} aria-labelledby="delo-appearance-mode">
-        <Heading id="delo-appearance-mode" title={t('mode')} lead={t('mode.lead')} />
-        <div className={css.schemeTiles} role="radiogroup" aria-labelledby="delo-appearance-mode">
-          {SCHEMES.map(value => (
-            <button key={value} type="button" role="radio" aria-checked={preference === value} className={css.tile} onClick={() => { scheme.set(value) }}>
-              {value === 'system'
-                ? (
-                  <span className={css.mockPair}>
-                    <StudioMock colours={colours.light} />
-                    <StudioMock colours={colours.dark} className={css.mockDarkHalf} />
-                  </span>
-                )
-                : <StudioMock colours={colours[value]} />}
-              <span className={css.tileFoot}>
-                <span className={css.tileLabel}>{t(`mode.${value}`)}</span>
-                <span className={css.radio} aria-hidden="true" />
-              </span>
-            </button>
-          ))}
-        </div>
+      <section className={cardCss.block} aria-labelledby="delo-appearance-palette">
+        <SettingHeading id="delo-appearance-palette" title={t('palette')} lead={t('palette.lead')} />
+        <TileGroup labelledBy="delo-appearance-palette" className={css.paletteTiles} value={current.palette} disabled={disabled}
+          onChange={(value) => { save('palette', value) }}
+          tiles={PALETTES.map(value => ({
+            value,
+            label: t(`palette.${value}`),
+            preview: <SchemePair light={paletteColours[value].light} dark={paletteColours[value].dark} />,
+          }))} />
       </section>
 
-      <section className={css.block} aria-labelledby="delo-appearance-palette">
-        <Heading id="delo-appearance-palette" title={t('palette')} lead={t('palette.lead')} />
-        <div className={css.paletteTiles} role="radiogroup" aria-labelledby="delo-appearance-palette">
-          {PALETTES.map(value => (
-            <button key={value} type="button" role="radio" aria-checked={current.palette === value} className={css.tile} disabled={disabled}
-              onClick={() => { if (current.palette !== value) save('palette', value) }}>
-              <span className={css.mockPair}>
-                <StudioMock colours={paletteColours[value].light} />
-                <StudioMock colours={paletteColours[value].dark} className={css.mockDarkHalf} />
-              </span>
-              <span className={css.tileFoot}>
-                <span className={css.tileLabel}>{t(`palette.${value}`)}</span>
-                <span className={css.radio} aria-hidden="true" />
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className={css.block} aria-labelledby="delo-appearance-accent" data-muted={current.palette !== 'soft'}>
-        <div className={css.row}>
-          <Heading id="delo-appearance-accent" title={t('accent')} lead={t(current.palette === 'soft' ? 'accent.lead' : 'accent.byTheme')} />
+      <section className={cardCss.block} aria-labelledby="delo-appearance-accent" data-muted={current.palette !== 'soft'}>
+        <div className={cardCss.row}>
+          <SettingHeading id="delo-appearance-accent" title={t('accent')} lead={t(current.palette === 'soft' ? 'accent.lead' : 'accent.byTheme')} />
           <div className={css.accentPicker}>
             <span className={css.accentName} aria-hidden="true">{t(`accent.${current.accent}`)}</span>
             <div className={css.swatches} role="radiogroup" aria-labelledby="delo-appearance-accent">
@@ -283,62 +232,12 @@ export function AppearanceSection({ t, settings, scheme, useStockLook }: Appeara
         )}
       </section>
 
-      <section className={css.block} aria-labelledby="delo-appearance-typeface">
-        <Heading id="delo-appearance-typeface" title={t('typeface')} lead={t('typeface.lead')} />
-        <div className={css.typeTiles} role="radiogroup" aria-labelledby="delo-appearance-typeface">
-          {TYPEFACES.map(value => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={current.typeface === value}
-              className={css.tile}
-              disabled={disabled}
-              onClick={() => { if (current.typeface !== value) save('typeface', value) }}
-            >
-              <span className={css.specimen} style={{ fontFamily: SPECIMEN_FONTS[value] }} aria-hidden="true">
-                <span className={css.specimenGlyphs}>Aa</span>
-                <span className={css.specimenLine}>{t('typeface.specimen')}</span>
-              </span>
-              <span className={css.tileFoot}>
-                <span className={css.tileLabel}>{t(`typeface.${value}`)}</span>
-                <span className={css.radio} aria-hidden="true" />
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className={css.block} aria-labelledby="delo-appearance-density">
-        <Heading id="delo-appearance-density" title={t('density')} lead={t('density.lead')} />
-        <div className={css.densityTiles} role="radiogroup" aria-labelledby="delo-appearance-density">
-          {DENSITIES.map((value: Density) => (
-            <button key={value} type="button" role="radio" aria-checked={current.density === value}
-              className={css.tile} data-density={value} disabled={disabled}
-              onClick={() => { if (current.density !== value) save('density', value) }}>
-              <span className={css.densityMock} aria-hidden="true"><span /><span /><span /><span /></span>
-              <span className={css.tileFoot}>
-                <span className={css.tileLabel}>{t(`density.${value}`)}</span>
-                <span className={css.radio} aria-hidden="true" />
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className={`${css.block} ${css.row}`} aria-labelledby="delo-appearance-contrast">
-        <Heading id="delo-appearance-contrast" title={t('contrast')} lead={t('contrast.lead')} />
+      <section className={`${cardCss.block} ${cardCss.row}`} aria-labelledby="delo-appearance-contrast">
+        <SettingHeading id="delo-appearance-contrast" title={t('contrast')} lead={t('contrast.lead')} />
         <ContrastSlider value={current.contrast} disabled={disabled} label={t('contrast')} onCommit={(value) => { save('contrast', value) }} />
       </section>
 
-      <section className={`${css.block} ${css.row}`} aria-labelledby="delo-appearance-effort">
-        <Heading id="delo-appearance-effort" title={t('effort')} lead={t('effort.lead')} />
-        <ChoiceGroup label={t('effort')} value={current.effort} disabled={disabled}
-          options={EFFORT_DISPLAYS.map(display => ({ value: display, label: t(`effort.${display}`) }))}
-          onChange={(display) => { save('effort', display) }} />
-      </section>
-
-      {failed && <p className={css.failure} role="alert">{t('saveFailed')}</p>}
-    </div>
+      {failed && <p className={cardCss.failure} role="alert">{t('saveFailed')}</p>}
+    </SettingsCard>
   )
 }

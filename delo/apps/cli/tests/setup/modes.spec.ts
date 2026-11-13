@@ -116,7 +116,7 @@ const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
   Delo has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
-  Once a day, and at start when a day has passed, Delo checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delo's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → Privacy.
+  Once a day, and at start when a day has passed, Delorun checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delorun's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → General → Updates.
   Quick setup keeps the release check on. To turn it off before Delorun first starts, choose ← Back at the next question, then Full.
 ? Which model provider should Delorun use?
   Anthropic
@@ -351,10 +351,10 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
   Delo has no telemetry of its own.
   DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. You can turn them on later in Settings → Privacy.
   Sending feedback includes a session-log prefix, and it is sent only when you send feedback.
-  Once a day, and at start when a day has passed, Delo checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delo's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → Privacy.
+  Once a day, and at start when a day has passed, Delorun checks whether a newer release exists: it fetches timestamp.json, and a new root file when Delorun's signing keys change, from releases.delorun.com and the newest release's manifest and log record from GitHub. It sends nothing about this installation or its plugins; those hosts see this computer's address. Turn it off in Settings → General → Updates.
 ? Check for new releases?
 > Yes (once a day Delo fetches signed release files from releases.delorun.com and GitHub; it sends nothing about this installation, and those hosts see this computer's address)
-  No (no release check request is made; turn it on later in Settings → Privacy or with delorun setup privacy)
+  No (no release check request is made; turn it on later in Settings → General → Updates or with delorun setup privacy)
   ← Back
 = Yes
 ? Which model provider should Delorun use?
@@ -812,10 +812,10 @@ describe('the way back inside the full sections', { timeout: TIMEOUT_MS }, () =>
 })
 
 describe('the release check', { timeout: TIMEOUT_MS }, () => {
-  /** The release-check row turned off, as Settings → Privacy saves it: the bundle's config restated with `enabled` off. */
+  /** The release-check row turned off, as Settings → General → Updates saves it: the bundle's config restated with `enabled` off. */
   const OFF_ROW = { id: 'delo-update-check', name: '@delo/bundle-local/update-check', config: { intervalHours: 24, timeoutSeconds: 15, enabled: false } }
 
-  it('Full asks whether to check, and No writes the row off as Settings → Privacy would and shows it on the review', async () => {
+  it('Full asks whether to check, and No writes the row off as Settings → General → Updates would and shows it on the review', async () => {
     expect(await interactive(['full', 'off', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(patchOf()).toContainEqual(OFF_ROW)
     expect(recordOf()).toMatchObject({ schemaVersion: 4, updateCheck: false })

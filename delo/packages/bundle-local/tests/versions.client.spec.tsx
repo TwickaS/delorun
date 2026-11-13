@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-/** The version row names Delo's version and the DeepSeek Harness version, from the page global the harness prints. */
+/** The version row and the versions line name Delorun's version and the DeepSeek Harness version, from the page global the harness prints. */
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { DeloVersionRow, type DeloVersionRowProps } from '../src/client/DeloVersionRow.tsx'
 import { en } from '../src/client/locales.ts'
+import { VersionsRow, type VersionsRowProps } from '../src/client/VersionsRow.tsx'
 import { readVersions, VERSIONS_GLOBAL } from '../src/client/versions.ts'
 
 afterEach(() => { cleanup() })
@@ -39,7 +41,15 @@ describe('the version row', () => {
   it('labels Delo\'s version first and the DeepSeek Harness version beneath it', () => {
     const props = { versions: { delo: '0.1.0', dsh: '0.2.2-rc.1' }, t } as DeloVersionRowProps
     render(<DeloVersionRow {...props} />)
-    expect(screen.getByText('Delo version: 0.1.0')).toBeTruthy()
+    expect(screen.getByText('Delorun version: 0.1.0')).toBeTruthy()
     expect(screen.getByText('DeepSeek Harness version: 0.2.2-rc.1')).toBeTruthy()
+  })
+})
+
+describe('the versions line', () => {
+  it('names both versions on one line, Delorun\'s first', () => {
+    const props = { versions: { delo: '0.1.0', dsh: '0.2.2-rc.1' }, t: makeTranslate(en) } as VersionsRowProps
+    render(<VersionsRow {...props} />)
+    expect(screen.getByText('Delorun 0.1.0 · DeepSeek Harness 0.2.2-rc.1')).toBeTruthy()
   })
 })

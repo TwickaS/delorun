@@ -43,7 +43,7 @@ export interface Config {
   /**
    * C16 switch `update_check`: whether the row provides the `deloUpdateCheck` service and serves its notice. Off, the
    * parity value and the default, it mounts nothing and no check runs. Delo's composition turns it on, and
-   * Settings → Privacy turns it off.
+   * Settings → General → Updates turns it off.
    */
   readonly enabled: boolean
   /** How long after one check, successful or not, the next one runs, in hours. */

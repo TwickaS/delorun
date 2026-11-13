@@ -72,5 +72,8 @@
   },
   "delo": {
     "state": "shipped"
+  },
+  "dependencies": {
+    "@delo/settings-controls": "workspace:*"
   }
 }

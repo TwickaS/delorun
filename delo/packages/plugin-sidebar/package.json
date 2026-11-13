@@ -46,6 +46,7 @@
   "dependencies": {
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/contract-update-report": "workspace:*",
+    "@delo/settings-controls": "workspace:*",
     "zod": "4.4.3"
   },
   "peerDependencies": {

@@ -163,7 +163,7 @@ export function studioBundleMigration(add: () => Promise<boolean>, output: Comma
     id: 'studio-bundle',
     async run() {
       try {
-        if (await add()) output.stderr(`delorun: added Delo's studio look to the profile ${profile}; Settings → Appearance switches back to the stock look.\n`)
+        if (await add()) output.stderr(`delorun: added Delo's studio look to the profile ${profile}; Settings → General → Look switches back to the stock look.\n`)
         return true
       } catch (error) {
         if (!(error instanceof CliError)) throw error

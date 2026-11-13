@@ -1,11 +1,12 @@
-/** The theme's copy: the Appearance section of Settings and the General row that brings the look back. */
+/** The theme's copy: the Appearance section of Settings and the Look, Typeface, Density and Reasoning effort labels rows. */
 
 /** English dictionary. */
 export const en = {
   'nav': 'Appearance',
-  'look': 'Look',
-  'look.lead': "Delo's look and add-ons, or the original look. You can switch back to Delo under General.",
-  'look.delo': 'Delo',
+  'colours': 'Colours',
+  'look': 'Studio look',
+  'look.lead': "Delorun's look and add-ons, or the original look. You can switch back under General → Look.",
+  'look.delo': 'Delorun',
   'look.stock': 'Stock',
   'mode': 'Mode',
   'mode.lead': 'Light, dark, or follow your system.',
@@ -23,7 +24,7 @@ export const en = {
   'accent.hex': 'Hex colour',
   'accent.hexInvalid': 'Use six hex digits, such as #E5734A.',
   'typeface': 'Typeface',
-  'typeface.lead': 'Your own fonts, under Text on this page, come first either way.',
+  'typeface.lead': 'Fonts you set under More font settings in this card come first either way.',
   'typeface.delo': 'Schibsted Grotesk',
   'typeface.system': 'System',
   'typeface.specimen': 'The quick brown fox jumps over the lazy dog',
@@ -44,8 +45,8 @@ export const en = {
   'accent.byTheme': 'Set by the theme. Choose Soft to pick your own.',
   'contrast': 'Contrast',
   'contrast.lead': 'Quieter or stronger secondary text and rules. 100 is as designed.',
-  'effort': 'Reasoning effort',
-  'effort.lead': "How the composer's model picker shows the effort: its name, or bars.",
+  'effort': 'Reasoning effort labels',
+  'effort.lead': "How the composer's model picker shows reasoning effort: its name, or bars.",
   'effort.label': 'Name',
   'effort.bars': 'Bars',
   'saveFailed': 'Could not save this. Try again.',
@@ -57,9 +58,10 @@ export type AppearanceLocaleKey = keyof typeof en
 /** Chinese dictionary. */
 export const zh: Record<AppearanceLocaleKey, string> = {
   'nav': '外观',
-  'look': '外观风格',
-  'look.lead': 'Delo 的外观和附加功能，或原版外观。想切换回 Delo，请到“通用”设置。',
-  'look.delo': 'Delo',
+  'colours': '颜色',
+  'look': '工作室外观',
+  'look.lead': 'Delorun 的外观和附加功能，或原版外观。之后可在“通用 → 外观风格”中切换回来。',
+  'look.delo': 'Delorun',
   'look.stock': '原版',
   'mode': '模式',
   'mode.lead': '浅色、深色，或跟随系统。',
@@ -77,7 +79,7 @@ export const zh: Record<AppearanceLocaleKey, string> = {
   'accent.hex': '十六进制颜色',
   'accent.hexInvalid': '请输入六位十六进制数字，例如 #E5734A。',
   'typeface': '字体',
-  'typeface.lead': '本页“文字”中设置的字体始终优先。',
+  'typeface.lead': '在本卡片“更多字体设置”中设置的字体始终优先。',
   'typeface.delo': 'Schibsted Grotesk',
   'typeface.system': '系统字体',
   'typeface.specimen': '敏捷的棕色狐狸跳过了懒狗',
@@ -98,7 +100,7 @@ export const zh: Record<AppearanceLocaleKey, string> = {
   'accent.byTheme': '由主题决定。选择“柔和”可自选强调色。',
   'contrast': '对比度',
   'contrast.lead': '让次要文字和分隔线更淡或更清晰。100 为设计值。',
-  'effort': '推理强度',
+  'effort': '推理强度标签',
   'effort.lead': '输入框的模型选择器如何显示推理强度：名称或条形。',
   'effort.label': '名称',
   'effort.bars': '条形',
