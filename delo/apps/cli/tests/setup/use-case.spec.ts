@@ -101,7 +101,7 @@ describe('the three use cases', { timeout: TIMEOUT_MS }, () => {
     expect(recordOf()).toMatchObject({ useCase: 'local', background: true, updateCheck: true, prompts: 'safer', reach: { option: 'none' } })
     expect(recordOf().sections).toEqual([
       { id: 'privacy', status: 'seen' }, { id: 'import', status: 'skipped' }, { id: 'key', status: 'answered' }, { id: 'prompts', status: 'answered' },
-      { id: 'background', status: 'skipped' }, { id: 'reach', status: 'skipped' }, { id: 'profile', status: 'skipped' },
+      { id: 'background', status: 'skipped' }, { id: 'reach', status: 'skipped' }, { id: 'changes-protection', status: 'skipped' }, { id: 'profile', status: 'skipped' },
     ])
   })
 
@@ -122,8 +122,8 @@ describe('the three use cases', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('More settings on the review opens the remaining sections, then returns to the review', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'more', 'off', 'no', 'no', 'default', '4100', 'save'])).toBe(EXIT.ok)
-    expect(screen()).toContain('> Save and set up\n  More settings (privacy, background, remote access, profile name and port)\n  Cancel (nothing is saved)')
+    expect(await interactive(['local', DS, 'environment', 'safer', 'more', 'off', 'no', 'no', 'no', 'default', '4100', 'save'])).toBe(EXIT.ok)
+    expect(screen()).toContain('> Save and set up\n  More settings (privacy, background, remote access, changes protection, profile name and port)\n  Cancel (nothing is saved)')
     expect(questions().filter(question => question.startsWith('Save these'))).toHaveLength(2)
     expect(recordOf()).toMatchObject({ useCase: 'local', background: false, updateCheck: false })
     expect(recordOf().sections.find(record => record.id === 'profile')?.status).toBe('answered')
@@ -174,6 +174,7 @@ describe('the review', { timeout: TIMEOUT_MS }, () => {
       '  Prompts: Ask me first',
       '  Keep running in the background: yes',
       '  Remote access: off',
+      '  Changes protection: unchanged',
       '  Setup name: default, studio port 3080',
       '  ',
       '  Nothing is saved until you choose Save and set up.',
@@ -198,7 +199,7 @@ describe('the way back', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('returns from the first More settings question to the review, and from the next ones to the one before', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'more', 'on', 'yes', BACK_CHOICE, 'no', 'no', 'default', BACK_CHOICE, '3080', 'save'])).toBe(EXIT.ok)
+    expect(await interactive(['local', DS, 'environment', 'safer', 'more', 'on', 'yes', BACK_CHOICE, 'no', 'no', 'no', 'default', BACK_CHOICE, '3080', 'save'])).toBe(EXIT.ok)
     expect(questions().filter(question => question.startsWith('Keep Delorun running'))).toHaveLength(2)
   })
 

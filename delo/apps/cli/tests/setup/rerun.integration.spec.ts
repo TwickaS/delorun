@@ -32,7 +32,7 @@ let recording: Recording
 function run(script: readonly Answer[], hooks?: SetupHooks): Promise<number> {
   recording = { screen: [], asked: [] }
   const form: SetupForm = { kind: 'interactive', prompter: scriptedPrompter(script, recording) }
-  return runSetup({ home, profile: PROFILE, env: {}, output: { stdout: text => void lines.push(text), stderr: text => void lines.push(text) }, form, keyCheck: () => Promise.resolve({ ok: true }), ...hooks === undefined ? {} : { hooks } })
+  return runSetup({ home, profile: PROFILE, env: {}, output: { stdout: text => void lines.push(text), stderr: text => void lines.push(text) }, form, keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true), ...hooks === undefined ? {} : { hooks } })
 }
 
 const patchPath = (): string => join(profileDirectory(home, PROFILE), 'cordis.patch.yml')
@@ -73,7 +73,7 @@ describe('setup on a finished profile in a terminal', { timeout: TIMEOUT_MS }, (
     writePromptRows(patchPath(), 'stock')
     writeUpdateCheckRow(patchPath(), false)
     // The answers record still says "Ask me first" and the check on; the rows decide.
-    expect(await run(['local', DS, 'keep', 'stock', 'more', 'off', 'yes', 'no', '3080', 'save'])).toBe(EXIT.ok)
+    expect(await run(['local', DS, 'keep', 'stock', 'more', 'off', 'yes', 'no', 'no', '3080', 'save'])).toBe(EXIT.ok)
     const screen = recording.screen.join('\n')
     expect(screen).toContain('> Ask less (like DeepSeek Harness)')
     expect(screen).toMatch(/\? Check for new releases\?\n {2}Yes[^\n]*\n> No/u)

@@ -64,6 +64,7 @@ Each topic is a registered section with an id, a title, a plan per use case, a t
 | `prompts` | `asked` | `asked` | `asked` | Ask me first (`safer`), Ask less (`stock`), or Never ask (dangerous), which is always listed last, prints a warning, asks a yes-or-no that starts on No, and then asks for the exact phrase `full access everywhere`; anything else keeps the previous answer. "← Back" from the confirmation returns to the prompts question. |
 | `background` | `more` | `more` | `never` | Whether Delorun keeps running after the terminal closes. |
 | `reach` | `more` | `asked` | `never` | Whether the studio is reachable from the person's phone over their own tailnet. A yes runs the Tailscale checks of `delorun reach on tailscale`, Funnel included, and shows the trust statement; a failed check leaves remote access off and names what to fix. Applying it writes the reach row with a fixed listener port. |
+| `changes-protection` | `more` | `more` | `more` | Shows one line on what changes protection ([C21](c21-changes.md)) means at its current setting, then asks whether changes to the person's plugins and to Delo itself wait for their review before they load. Every use case asks it only under "More settings", and the answer defaults to no. |
 | `profile` | `more` | `more` | `more` | The profile's name and the studio's port. |
 
 Every question after the first can return to the nearest earlier question that was asked, including from the first "More settings" question to the review: a select or yes-or-no question offers "← Back", and a text or key question takes an empty entry as "go back". A review screen lists the answers before anything is written.
@@ -87,6 +88,7 @@ Setup asks these questions, in this order. The default applies when the person a
 | Prompts | `prompts` | Ask me first (`safer`), Ask less (`stock`), or Never ask (dangerous); `--yes` never selects dangerous. | Ask me first |
 | Keep running in the background | `background` | Yes or no. | Yes; No for `automation`, which does not ask. |
 | Open Delorun from your phone or another device over Tailscale? | `reach` | Yes or no. | No; the question starts on Yes for `remote`. |
+| Hold changes to your plugins and to Delo itself for your review before they load? | `changes-protection` | Yes or no. No leaves the home's setting as it is, and setup never turns protection off. | No; yes when protection is already on. |
 | Profile name and port | `profile` | A profile name and a free port from 1024 to 65535. | The selected profile, and 3080. |
 
 Reach beyond the person's tailnet, a passkey or OIDC identity factor and the runtime are not asked; Delorun does not include them in setup ([roadmap](../guide/roadmap.md)). Setup reads a stock home only to copy from it, and never modifies it. Setup's import copies the data alone: no profile, settings layer, instructions, skill or stored key, which can change what Delo runs or what the agent is told; `delorun import-home` copies each of those after its own yes.

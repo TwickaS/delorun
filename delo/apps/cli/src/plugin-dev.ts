@@ -216,9 +216,9 @@ export interface DevDependencies {
   /**
    * Run `delorun plugin` with these arguments ([upstream](./upstream.ts)).
    * @param args - the arguments after `plugin`.
-   * @returns its exit code.
+   * @returns pnpm's exit code, which the CLI's exit codes do not list.
    */
-  readonly plugin: (args: readonly string[]) => Promise<CommandResult>
+  readonly plugin: (args: readonly string[]) => Promise<number>
   /**
    * Run the folder's build script.
    * @param folder - the folder.
@@ -270,7 +270,7 @@ function runBuild(folder: string): Promise<boolean> {
  * @param plugin - `delorun plugin`'s runner.
  * @returns the dependencies.
  */
-export function realDevDependencies(context: CommandContext, plugin: (args: readonly string[], context: CommandContext) => Promise<CommandResult>): DevDependencies {
+export function realDevDependencies(context: CommandContext, plugin: (args: readonly string[], context: CommandContext) => Promise<number>): DevDependencies {
   return {
     plugin: args => plugin(args, context),
     build: runBuild,

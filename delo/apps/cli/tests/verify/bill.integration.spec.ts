@@ -341,7 +341,7 @@ describe('the printed bill', () => {
 describe('delorun verify', { timeout: 30_000 }, () => {
   it('prints the bill after the check lines and carries it under `bill` with --json', async () => {
     const fixture = await home()
-    const command = createVerifyCommand({ fetch: fixture.tiles.fetch, now: () => NOW, platform: PLATFORM, running: () => RELEASE })
+    const command = createVerifyCommand({ fetch: fixture.tiles.fetch, now: () => NOW, platform: PLATFORM, running: () => RELEASE, fromStore: () => true })
     let stdout = ''
     const env = { DELO_HOME: fixture.home, DELO_LAUNCHER_ROOTS: fixture.launcherRoots, DSH_AGENTS_HOME: join(dirname(fixture.home), 'agents') }
     expect(await command.run([], { env, stdout: (text) => { stdout += text }, stderr: () => undefined })).toBe(EXIT.ok)

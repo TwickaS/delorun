@@ -349,13 +349,13 @@ const GIT_KEY = 'git-plug@git+file:///tmp/repo#8edca4e355d5677de0397415bf6ea4a73
  * @param options - `check` to switch the install check off with `undefined`; `afterStep` runs after each installation step.
  * @returns the dependencies.
  */
-function refusingBuild(runs: Run[], options: { readonly check?: false, readonly afterStep?: (step: number) => void, readonly confirm?: (question: string) => Promise<boolean> | undefined } = {}): PluginDependencies {
+function refusingBuild(runs: Run[], options: { readonly check?: false, readonly afterStep?: (step: number) => void, readonly confirm?: (question: string) => Promise<boolean> } = {}): PluginDependencies {
   const base = dependencies(runs)
   let steps = 0
   return {
     ...base,
     ...options.check === false ? { checkSettings: () => Promise.resolve(undefined) } : {},
-    confirmBuild: options.confirm,
+    ...options.confirm === undefined ? {} : { confirmBuild: options.confirm },
     runUpstream: (argv, operation) => {
       if (!argv.includes('--frozen-lockfile') && !(options.check === false && operation?.capture !== undefined)) return base.runUpstream(argv, operation)
       runs.push({ argv, registered: [], ...operation === undefined ? {} : { operation } })

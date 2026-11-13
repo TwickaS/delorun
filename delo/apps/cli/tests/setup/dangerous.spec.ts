@@ -208,7 +208,8 @@ describe('the accepted path', { timeout: TIMEOUT_MS }, () => {
   it('shows the warning, then writes the rows and the grant file', async () => {
     expect(await interactive(ACCEPT_DANGEROUS)).toBe(EXIT.ok)
     expect(rows().get('delo-permission-defaults')).toEqual({ enabled: true, fullAccessEverywhere: true })
-    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent']) expect(rows().get(id)).toEqual({ enabled: false })
+    expect(rows().get('delo-instruction-consent')).toEqual({ enabled: false, approvedPluginWrites: false })
+    for (const id of ['delo-mcp-consent', 'delo-schedule-consent']) expect(rows().get(id)).toEqual({ enabled: false })
     expect(recordedPrompts()).toBe('dangerous')
     const grant = JSON.parse(readFileSync(dangerousGrantPath(home), 'utf8')) as Record<string, unknown>
     expect(Object.keys(grant)).toEqual(['v', 'grantedAt', 'warning'])
@@ -329,7 +330,7 @@ describe('what start, status and doctor show', { timeout: TIMEOUT_MS }, () => {
     const out: string[] = []
     const context = { env: { DELO_HOME: home }, stdout: (text: string) => void out.push(text), stderr: () => undefined }
     await statusCommand.run([], context)
-    expect(out.join('')).toContain(`profile: ${PROFILE}\n${DANGEROUS_ON_LINE}\nstate: not running`)
+    expect(out.join('')).toContain(`${DANGEROUS_ON_LINE}\nDelorun is not running`)
     expect(await dangerousModeCheck(context, PROFILE)).toEqual({ name: 'dangerous-mode', status: 'warn', message: DANGEROUS_ON_LINE })
   })
 

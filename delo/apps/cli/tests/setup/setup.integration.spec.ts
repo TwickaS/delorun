@@ -246,7 +246,7 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
 
   it('update-notice-off-at-first-start: a setup that turns the check off under More settings has the row off in the profile the first start composes, so no check mounts', async () => {
     const run = runSetup({
-      home, profile: PROFILE, output, env: {}, form: asked(['local', 'deepseek-official', 'environment', 'safer', 'more', 'off', 'yes', 'no', 'default', '3080', 'save']),
+      home, profile: PROFILE, output, env: {}, form: asked(['local', 'deepseek-official', 'environment', 'safer', 'more', 'off', 'yes', 'no', 'no', 'default', '3080', 'save']),
       keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
     })
     expect(await run).toBe(EXIT.ok)

@@ -15,6 +15,7 @@
  * @module @delo/cli/verify/changes
  */
 import { changesStatus, harnessStatus, leftOutFact, notApprovedCount, type ChangesStatus, type HarnessStatus, type PendingStatus, type ProtectionLevel, type SignedRuntime } from '@delo/changes'
+import type { ChangesReader } from './bill.ts'
 import { isCarriedPackage } from '../changes/start.ts'
 import { EXIT, type ExitCode } from '../exit.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
@@ -68,6 +69,22 @@ export interface VerifyHarness {
 export async function readVerifyChanges(home: string, profile: string, fromStore: boolean, harness?: VerifyHarness): Promise<VerifyChanges> {
   const status = hasCliProfile(home, profile) ? await changesStatus({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage }) : null
   return { fromStore, profile, status, ...harness === undefined ? {} : { harness: await harnessStatus(home, harness.runtime, harness.signed) } }
+}
+
+/**
+ * Changes as the bill reads it: the approved plugins, the approved files of the release's harness, and the changes
+ * waiting for review. Nothing is written.
+ */
+export const processChangesReader: ChangesReader = {
+  async read(home, profile, release) {
+    const status = hasCliProfile(home, profile) ? await changesStatus({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage }) : null
+    const harness = await harnessStatus(home, release, undefined)
+    return {
+      harnessEdits: harness.approved.map(({ file }) => ({ file })),
+      approvedPlugins: (status?.approved ?? []).map(({ plugin, source }) => ({ plugin, version: null, source })),
+      notReviewed: status === null ? 0 : notApprovedCount(status),
+    }
+  },
 }
 
 /**

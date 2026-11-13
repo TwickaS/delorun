@@ -324,6 +324,7 @@ describe('delorun headless', () => {
         seen.push(existsSync(join(home, 'profiles', 'headless', 'package.json')) ? plugSpec('headless') : undefined)
         return Promise.reject(new Error('stopped after Changes'))
       },
+      missingModelKey: () => Promise.resolve(undefined),
       approvedPluginContent: changesApprovedContent,
       preStartSteps: start.preStartSteps,
       runProfile: start.runProfile,

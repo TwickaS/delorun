@@ -96,8 +96,10 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: ['delorun doctor [--port <n>]'],
     about: [
       'Checks your Delorun folder, the Docker engine, the format of your DeepSeek API key, the studio port, the sandbox (on Linux), the recorded release-log check and the last check for a newer release.',
+      'Then it reports your changes: the protection setting, any work session, and for each plugin you link from a folder whether it loaded at the last start, whether it runs the content you approved, its version requirements and what it registers that changes a consent, a guard or the sandbox policy, with the change to undo when it did not load.',
+      'Then the profile\'s plugins, and each plugin by name: the installed packages and the bundle list, where each package comes from and whether it is enabled, version ranges this Delorun does not meet, packages a shipped package of the same name hides, enabled bundles that are not installed, safe mode, and the plugin rows that did not activate at the last start.',
       'Prints one line per check: pass on standard output, warn or fail on standard error. Warnings do not change the exit code.',
-      'No model is contacted and no request is sent. The only commands run are the read-only probe docker version and, on Linux, bwrap --ro-bind / / true. The key is checked by its format and never printed.',
+      'No model is contacted and no request is sent. The only commands run are the read-only probe docker version and, on Linux, bwrap --ro-bind / / true; no container starts and no plugin code is imported. The key is checked by its format and never printed.',
     ],
     options: [{ name: '--port <n>', text: 'The loopback port to check, 1 to 65535 (default: the profile\'s studio port, or 3080).' }],
     exitCodes: 'Exit codes: 0 no check failed, 1 a check failed, 2 wrong command line.',
@@ -244,14 +246,35 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     exitCodes: 'Exit codes: 0 no check failed, 1 a check failed, 2 wrong command line.',
   },
   plugin: {
-    usage: ['delorun plugin check <directory>', 'delorun plugin mirror on|off [--profile <name>]', 'delorun plugin <pnpm arguments> [--profile <name>]'],
+    usage: ['delorun plugin check <directory>', 'delorun plugin new <name>', 'delorun plugin dev <folder>', 'delorun plugin mirror on|off [--profile <name>]', 'delorun plugin <pnpm arguments> [--profile <name>]'],
     about: ['Manages a profile\'s plugins. Other arguments go to pnpm in the profile\'s folder, as dsh plugin does.'],
     actions: [
       { name: 'check <directory>', text: 'Show which Delorun versions a plugin\'s version ranges admit.' },
+      { name: 'new <name>', text: 'Start a plugin in a new folder.' },
+      { name: 'dev <folder>', text: 'Link a plugin folder, rebuild it when it changes and reload it.' },
       { name: 'mirror on|off', text: 'Install plugins from the npm mirror, or not.' },
       { name: 'add <pkg>, remove <pkg>, why <pkg>, …', text: 'Run the pnpm command in the profile\'s folder.' },
     ],
     options: [PROFILE, { name: '--allow-advisory <id>', text: 'Install despite a known critical advisory with this id.' }],
+  },
+  changes: {
+    usage: ['delorun changes [list | show <id> [--diff] | apply <id> | discard <id> | undo <id> | off <plugin> | on <plugin> | protection [on|off]] [--profile <name>] [--json]', 'delorun changes work <plugin> [--for <minutes>] | done <plugin> | edit-harness [--discard] [--profile <name>]'],
+    about: [
+      'Shows what waits for your review and acts on it: the changes to your plugins and to Delorun itself. Without an action it lists them.',
+      'Applying, discarding and turning protection on need you at a terminal.',
+    ],
+    actions: [
+      { name: 'list', text: 'What waits for your review, and what you approved.' },
+      { name: 'show <id>', text: 'One change, with its diff when you pass --diff.' },
+      { name: 'apply <id>', text: 'Approve a change so that it loads.' },
+      { name: 'discard <id>', text: 'Throw a waiting change away.' },
+      { name: 'undo <id>', text: 'Take an applied change back.' },
+      { name: 'off <plugin>, on <plugin>', text: 'Stop a plugin loading, or load it again.' },
+      { name: 'protection [on|off]', text: 'Show or change whether changes wait for your review before they load.' },
+      { name: 'work <plugin>, done <plugin>', text: 'Open or close a work session on a plugin you link from a folder.' },
+      { name: 'edit-harness', text: 'Open a writable copy of Delorun itself; --discard drops it.' },
+    ],
+    options: [JSON_OUTPUT, { name: '--diff', text: 'With show: print the changed lines.' }, { name: '--for <minutes>', text: 'With work: how long the session lasts.' }, PROFILE],
   },
   headless: {
     usage: ['delorun headless [options] [task...]'],

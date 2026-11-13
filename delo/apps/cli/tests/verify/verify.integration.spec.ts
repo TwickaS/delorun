@@ -106,7 +106,7 @@ describe('a release that verifies', { timeout: 30_000 }, () => {
     expect(lines[2]).toBe('Release channel: production; release log: production; as the launcher that installed this Delorun recorded them.')
     expect(lines[3]).toBe(`Launcher: the launcher that started this Delorun reported no version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${RELEASE} lists.`)
     expect(lines.at(-2)).toBe('2 checks passed, 0 failed, 0 not run; this Delorun reads unknown; this is not a full verification of this Delorun.')
-    expect(lines.at(-3)).toBe('These checks run with your access, and a program running with your access can change them.')
+    expect(lines.slice(lines.indexOf('These checks run with your access, and a program running with your access can change them.') + 1, -2)).toEqual(['Changes:', 'The profile default is not set up, so no changes are recorded.'])
     expect(line(run, 'release-signature')).toMatch(/^passed\s+release-signature\s+trusted root 1 is anchored on the launcher's shipped roots; trusted root 1 is valid until 2027-10-01T00:00:00Z; the manifest's targets signature verifies; the stored timestamp is fresh; the release-log entry verifies and the log is consistent with the stored checkpoint$/u)
     expect(line(run, 'runtime-files')).toMatch(/^passed\s+runtime-files\s+all 5 files of runtime 0\.1\.0 match the signed file list$/u)
     expect(lines).toContain('Delorun does not include 9 more checks.')

@@ -99,39 +99,6 @@ export interface UpstreamOperation {
   readonly capture?: string
 }
 
-/** What upstream's command line threw in place of exiting the process, so the plugin command can finish its part. */
-class UpstreamExit extends Error {
-  /** The exit code upstream asked for. */
-  readonly code: number
-
-  /**
-   * @param code - the exit code upstream asked for.
-   */
-  constructor(code: number) {
-    super(`upstream exited with ${String(code)}`)
-    this.code = code
-  }
-}
-
-/**
- * Run upstream's command line, which ends by exiting the process, and keep its exit code instead.
- * @param runUpstream - runs upstream's command line.
- * @returns the exit code upstream asked for; 0 when it returned without exiting.
- */
-async function upstreamExitCode(runUpstream: () => Promise<void>): Promise<number> {
-  const exit = process.exit
-  process.exit = ((code?: number | string | null) => { throw new UpstreamExit(Number(code ?? 0)) }) as typeof process.exit
-  try {
-    await runUpstream()
-    return 0
-  } catch (error) {
-    if (!(error instanceof UpstreamExit)) throw error
-    return error.code
-  } finally {
-    process.exit = exit
-  }
-}
-
 /**
  * Run upstream's `dsh plugin` package operation in this process: its parser, which ends the process for `--help` and a
  * wrong command line as `dsh` does, then its plugin command.

@@ -803,7 +803,7 @@ describe('the Host while delorun changes runs', () => {
     const outcomes: ReloadOutcome[] = [OK, { ok: false, error: 'plug failed to start' }]
     const chats = new CountingChatGate()
     const host: RunningHost = {
-      chats, failedRows: () => [], rows: () => [], studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
+      chats, protection: () => undefined, failedRows: () => [], rows: () => [], studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
       check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve(),
       reload: async () => Promise.resolve(outcomes.shift()!),
     }

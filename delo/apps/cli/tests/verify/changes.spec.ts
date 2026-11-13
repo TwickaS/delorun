@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 /** The summary line of a run in which every release check passed and everything present is approved. */
-const PLAIN_SUMMARY = '2 checks passed, 0 failed, 9 not run; this is not a full verification of this Delo.'
+const PLAIN_SUMMARY = '2 checks passed, 0 failed, 0 not run; this Delorun reads unknown; this is not a full verification of this Delorun.'
 const TERMINAL = attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } })
 const PROTECTION_ON = 'Protection is on: changes load only after you apply them.'
 const PROTECTION_OFF = 'Protection is off: changes load without your review and are recorded; turn it on with: delorun changes protection on.'
@@ -144,7 +144,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
       `  other from ${other}`,
       '1 change loaded without review (protection is off):',
       `  plug from ${home.source} (${id})`,
-      '2 checks passed, 0 failed, 9 not run; 1 change loaded without review (protection is off); this is not a full verification of this Delo.',
+      '2 checks passed, 0 failed, 0 not run; this Delorun reads unknown; 1 change loaded without review (protection is off); this is not a full verification of this Delorun.',
     ])
     expect(off.exit).toBe(EXIT.ok)
     expect(changesBlock(off).join('\n')).not.toMatch(/integrity|trust|drift/iu)
@@ -152,7 +152,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     await setProtection(home.fixture.home, 'on', TERMINAL)
     const on = changesBlock(await verify(home.fixture))
     expect(on.slice(1, 6)).toEqual([PROTECTION_ON, '1 change you approved:', `  other from ${other}`, '1 change loaded without review (while protection was off):', `  plug from ${home.source} (${id})`])
-    expect(on.at(-1)).toBe('2 checks passed, 0 failed, 9 not run; 1 change loaded without review (while protection was off); this is not a full verification of this Delo.')
+    expect(on.at(-1)).toBe('2 checks passed, 0 failed, 0 not run; this Delorun reads unknown; 1 change loaded without review (while protection was off); this is not a full verification of this Delorun.')
   })
 
   it('verify never prints a plain pass with an invariant that does not hold, and exits 1', async () => {
@@ -160,7 +160,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
     const broken = await changesHome()
     linkPlugin(broken, 'plug', broken.source)
     const unsound = await verify(broken.fixture)
-    expect(changesBlock(unsound).at(-1)).toBe('2 checks passed, 0 failed, 9 not run; 1 part of your changes is not as Changes keeps them; this is not a full verification of this Delo.')
+    expect(changesBlock(unsound).at(-1)).toBe('2 checks passed, 0 failed, 0 not run; this Delorun reads unknown; 1 part of your changes is not as Changes keeps them; this is not a full verification of this Delorun.')
     expect(changesBlock(unsound)).toContainEqual(expect.stringMatching(/^ {2}Not as Changes keeps it: plug is linked from .*, not from its active directory /u))
     expect(unsound.exit).toBe(EXIT.failed)
   })
@@ -184,7 +184,7 @@ describe('delorun verify on a home with changes', { timeout: 180_000 }, () => {
       'Not approved:',
       expect.stringMatching(new RegExp(`^ {2}other from ${other} waits for your review: delorun changes show c[0-9a-f]{10}$`, 'u')),
       `  plug has changes in ${home.source} waiting for your review: run delorun changes list`,
-      '2 checks passed, 0 failed, 9 not run; 2 changes you have not approved are present; this is not a full verification of this Delo.',
+      '2 checks passed, 0 failed, 0 not run; this Delorun reads unknown; 2 changes you have not approved are present; this is not a full verification of this Delorun.',
     ])
   })
 

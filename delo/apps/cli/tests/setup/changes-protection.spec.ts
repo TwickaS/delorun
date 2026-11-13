@@ -12,7 +12,7 @@ import { runSection, runSetup, type SetupRequest } from '../../src/setup/index.t
 import { readProgress } from '../../src/setup/progress.ts'
 import { defaultRegistry, SectionRegistry } from '../../src/setup/sections.ts'
 import { BACK_CHOICE } from '../../src/setup/steps.ts'
-import { fakeEnding, scriptedPrompter, type Answer, type Recording } from './support.ts'
+import { scriptedPrompter, type Answer, type Recording } from './support.ts'
 
 vi.mock('../../src/delo-bundles.ts', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../src/delo-bundles.ts')>(),
@@ -25,10 +25,12 @@ const AT_TERMINAL: TerminalStreams = { stdin: { isTTY: true }, stdout: { isTTY: 
 const REDIRECTED: TerminalStreams = { stdin: { isTTY: true }, stdout: { isTTY: false } }
 const ON_NOTE = 'Changes protection is on: changes to your plugins and to Delo itself wait for your review in delorun changes list.'
 
-/** Full answers up to the protection question: DeepSeek's key from the environment with its model, safer prompts, background, no remote access. */
-const BEFORE: readonly Answer[] = ['full', 'on', 'deepseek-official', 'environment', 'deepseek-flash', 'safer', 'yes', 'no']
-/** Full answers after the protection question: the default name and port, save, no install. */
-const AFTER: readonly Answer[] = ['default', '3080', 'save', false]
+/** Answers up to the protection question: the local use case, DeepSeek's key from the environment, safer prompts, then under More settings the update check on, background on, no remote access. */
+const BEFORE: readonly Answer[] = ['local', 'deepseek-official', 'environment', 'safer', 'more', 'on', 'yes', 'no']
+/** Answers after the protection question: the default name and port, save. */
+const AFTER: readonly Answer[] = ['default', '3080', 'save']
+/** The answers of a run that never opens More settings. */
+const MAIN_ONLY: readonly Answer[] = ['local', 'deepseek-official', 'environment', 'safer', 'save']
 
 let osHome: string
 let home: string
@@ -62,7 +64,6 @@ function request(script: readonly Answer[], streams: TerminalStreams = AT_TERMIN
     registry: registryWith(streams),
     keyCheck: () => Promise.resolve({ ok: true }),
     portIsFree: () => Promise.resolve(true),
-    ending: fakeEnding({ spawned: [], started: [], opened: 0 }),
   }
 }
 
@@ -102,7 +103,7 @@ afterEach(() => {
 })
 
 describe('the changes protection question', { timeout: TIMEOUT_MS }, () => {
-  it('is asked in Full setup with no preselected, after a one-line explanation, and shows on the review', async () => {
+  it('is asked under More settings with no preselected, after a one-line explanation, and shows on the review', async () => {
     expect(await runSetup(request([...BEFORE, 'no', ...AFTER]))).toBe(EXIT.ok)
     expect(screen()).toContain([
       '# Changes protection',
@@ -132,16 +133,16 @@ describe('the changes protection question', { timeout: TIMEOUT_MS }, () => {
     expect(recordedAnswer()).toBe(false)
   })
 
-  it('is never asked in Quick setup, which leaves the home at the default', async () => {
-    expect(await runSetup(request(['quick', 'deepseek-official', 'environment', 'safer', 'save', false]))).toBe(EXIT.ok)
+  it('is not asked in the main flow, which leaves the home at the default', async () => {
+    expect(await runSetup(request(MAIN_ONLY))).toBe(EXIT.ok)
     expect(recording.asked).not.toContain(`select: ${PROTECTION_QUESTION}`)
-    expect(screen()).not.toContain('Changes protection')
+    expect(screen()).not.toContain('# Changes protection')
     expect(existsSync(protectionPath(home))).toBe(false)
   })
 
   it('goes back to the remote access question', async () => {
     expect(await runSetup(request([...BEFORE, BACK_CHOICE, 'no', 'yes', ...AFTER]))).toBe(EXIT.ok)
-    expect(recording.asked.filter(asked => asked === 'select: Reach this studio from your phone over your own tailnet (Tailscale)?')).toHaveLength(2)
+    expect(recording.asked.filter(asked => asked === 'select: Open Delorun from your phone or another device over Tailscale?')).toHaveLength(2)
     expect(protectionRecord()?.level).toBe('on')
   })
 })
@@ -167,7 +168,7 @@ describe('without a terminal proof', { timeout: TIMEOUT_MS }, () => {
     expect((error as CliError).message).toBe('delorun setup: turning changes protection on needs you at a terminal; run delorun setup in one to finish, or delorun changes protection on')
     expect(existsSync(protectionPath(home))).toBe(false)
     expect(readProgress(runDirectory(home, PROFILE))?.completed).not.toContain('section:changes-protection')
-    expect(await runSetup(request([false]))).toBe(EXIT.ok)
+    expect(await runSetup(request([]))).toBe(EXIT.ok)
     expect(protectionRecord()?.level).toBe('on')
   })
 
@@ -186,7 +187,7 @@ describe('without a terminal proof', { timeout: TIMEOUT_MS }, () => {
 
 describe('delorun setup changes-protection', { timeout: TIMEOUT_MS }, () => {
   it('asks again on a profile that is set up, turns protection on and records the answer', async () => {
-    expect(await runSetup(request(['quick', 'deepseek-official', 'environment', 'safer', 'save', false]))).toBe(EXIT.ok)
+    expect(await runSetup(request(MAIN_ONLY))).toBe(EXIT.ok)
     expect(await runSection(request([true]), 'changes-protection')).toBe(EXIT.ok)
     expect(protectionRecord()?.level).toBe('on')
     expect(recordedAnswer()).toBe(true)

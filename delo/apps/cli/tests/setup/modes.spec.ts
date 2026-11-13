@@ -104,7 +104,7 @@ describe('the main flow', { timeout: TIMEOUT_MS }, () => {
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: TYPED_KEY } })
     expect(patchOf()).toEqual([
       { id: 'delo-permission-defaults', config: { enabled: true, fullAccessEverywhere: false } },
-      { id: 'delo-instruction-consent', config: { enabled: true } },
+      { id: 'delo-instruction-consent', config: { enabled: true, approvedPluginWrites: true } },
       { id: 'delo-mcp-consent', config: { enabled: true } },
       { id: 'delo-schedule-consent', config: { enabled: true } },
     ])
@@ -120,7 +120,7 @@ describe('the main flow', { timeout: TIMEOUT_MS }, () => {
     }
     expect(Object.fromEntries(byId)).toEqual({
       'delo-permission-defaults': { enabled: parityOf('permission_defaults'), fullAccessEverywhere: false },
-      'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent') },
+      'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent'), approvedPluginWrites: parityOf('approved_plugin_write_consent') },
       'delo-mcp-consent': { enabled: parityOf('mcp_add_consent') },
       'delo-schedule-consent': { enabled: parityOf('scheduled_task_consent') },
     })
@@ -266,13 +266,14 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
   it('lists the sections, one line each', () => {
     expect(sectionList(defaultRegistry())).toBe([
       'Sections (delorun setup <section> runs one again):',
-      '  privacy     Privacy',
-      '  import      Import a DeepSeek Harness home',
-      '  key         Model provider and key',
-      '  prompts     Prompts',
-      '  background  Background',
-      '  reach       Remote access',
-      '  profile     Profile name and port',
+      '  privacy             Privacy',
+      '  import              Import a DeepSeek Harness home',
+      '  key                 Model provider and key',
+      '  prompts             Prompts',
+      '  background          Background',
+      '  reach               Remote access',
+      '  changes-protection  Changes protection',
+      '  profile             Profile name and port',
       '',
     ].join('\n'))
   })
@@ -372,7 +373,7 @@ describe('the section registry', () => {
     }, { order: 16 })
     expect(await interactive(['local', 'yes', DS, 'environment', 'safer', 'save'], { registry })).toBe(EXIT.ok)
     expect(recording.asked.slice(0, 3)).toEqual(['select: How will you use Delorun?', 'select: Example question?', 'select: Which model provider should Delorun use?'])
-    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'import', 'example', 'key', 'prompts', 'background', 'reach', 'profile'])
+    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'import', 'example', 'key', 'prompts', 'background', 'reach', 'changes-protection', 'profile'])
     expect(screen()).toContain('  Example: yes')
   })
 })

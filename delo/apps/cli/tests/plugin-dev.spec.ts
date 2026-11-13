@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
-import type { CommandContext, CommandResult } from '../src/command.ts'
+import type { CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { addDevRoot, HMR_ROW, isSourceChange, linkState, removeDevRoot, runPluginDev, type DevDependencies } from '../src/plugin-dev.ts'
 
@@ -104,7 +104,7 @@ function fakes(link = true): Fakes {
     change: (name) => { onChange(name) },
     stop: () => { stop() },
     dependencies: {
-      plugin: (args): Promise<CommandResult> => {
+      plugin: (args): Promise<number> => {
         plugin.push(args)
         if (!link) return Promise.resolve(EXIT.failed)
         depend('my-plugin', `link:${relative(profileDir, folder)}`)

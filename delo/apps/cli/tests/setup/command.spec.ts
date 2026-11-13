@@ -39,8 +39,8 @@ async function refusal(args: readonly string[]): Promise<CliError> {
 describe('delorun setup', { timeout: 60_000 }, () => {
   it('--list names every section without touching the home', async () => {
     expect(await setupCommand.run(['--list'], context)).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('  key         Model provider and key\n')
-    expect(lines.join('')).toContain('  profile     Profile name and port')
+    expect(lines.join('')).toContain('  key                 Model provider and key\n')
+    expect(lines.join('')).toContain('  profile             Profile name and port')
     expect(lines.join('')).toContain('Sections (delorun setup <section> runs one again):')
   })
 

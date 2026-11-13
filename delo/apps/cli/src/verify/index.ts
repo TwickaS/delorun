@@ -39,7 +39,7 @@ import { checkInstalledPlugins } from '../plugin-install-check.ts'
 import { installedPluginsCheck } from './plugin-bill.ts'
 import { runVerifyStage, type ChangesReader, type PluginInstallCheck } from './bill.ts'
 import { ACCESS_LINE, billLines, billSuffix } from './bill-text.ts'
-import { changesExit, changesLines, changesSuffix, readVerifyChanges, type VerifyChanges } from './changes.ts'
+import { changesExit, changesLines, changesSuffix, processChangesReader, readVerifyChanges, type VerifyChanges } from './changes.ts'
 import { NOT_RUN_HERE, VERIFY_MODE, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
 
 /** The `delorun verify --help` text. */
@@ -142,6 +142,7 @@ const PROCESS_ENVIRONMENT: VerifyEnvironment = {
   running: deloVersion,
   checkPlugins: checkEveryProfile,
   plugins: processPluginsCheck,
+  changes: processChangesReader,
   fromStore: runsFromStore,
 }
 
