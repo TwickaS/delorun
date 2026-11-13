@@ -84,7 +84,7 @@ Delorun 遵守以下规则：
 - DeepSeek 的会话日志上传在你开启之前保持关闭。
 - `web_fetch` 拒绝回环、链路本地与私有网络目标。
 - 在你的系统能够强制执行时，模型运行的命令无法写入或读取 Delorun 的 home，也无法连接其控制套接字。
-- 选择 Safer 提示时，指令文件、MCP 服务器与计划任务的同意适用。设置中的 **Same as stock** 回答会关闭它们以及完全访问的拒绝（[Same as stock](switching.md#same-as-stock)）。
+- 选择 Safer 提示时，指令文件、MCP 服务器与计划任务的同意适用。设置中的 **Same as stock** 回答会关闭它们以及完全访问的拒绝（[Same as stock](switching.md#ask-less-like-deepseek-harness)）。
 - 默认工作区是你的 Documents 文件夹中的 `Delo/default-workspace`；系统未指定 Documents 文件夹时，位于你的 home 文件夹中。
 
 对等注册表声明的其他差异，例如 `preset_inspect`、供模型使用的 profile 历史操作与容器拒绝标记，在 `delorun` 运行的 profile 中都是关闭的，因此每一项都保持 DSH 的行为。
