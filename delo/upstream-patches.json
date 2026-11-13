@@ -419,8 +419,8 @@
     {
       "path": "packages/client/connection/src/client/index.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "d8e48b760494c0a67e4f92561578812468c4551d7a4956174bdaa9d593805e72"
+      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. A page served from a loopback Host also ignores the browser's online and offline events (`watchBrowserNetwork` takes `hostIsLoopback`), so a computer with its network off, or a browser in a namespace with only loopback, no longer shows the studio as Disconnected while its loopback connection works; a failed connection still reports disconnected. The Content Security Policy handling above is untouched. Offer upstream.",
+      "sha256": "0759d5fb91669d767afbc653299b63ce48b60a0b19a0eb2d75578f979ac83ca8"
     },
     {
       "path": "packages/client/connection/src/index.ts",
@@ -1289,8 +1289,8 @@
     {
       "path": "packages/sandbox/sandbox/src/escalation.ts",
       "class": "security",
-      "reason": "Container denial marker: adds `environmentDenialMarker()` and `denialMarkers(facts, escalationModes, subject)`, which return upstream's marker and escalation hint for a policy denial and only the environment's marker, with no hint, for an environment denial. Lead verdict: kept; stricter (fewer escalation invitations; the approval prompt is unchanged), permitted by A84. The escalation request to `danger-full-access` also carries `grants: 'full-access'`, the marker the Host's remote answer guard reads to refuse that grant when a remote device answers it; without a guard the marker changes nothing.",
-      "sha256": "9fcbd4fa2051a1fd37abf8f56ac1753c1fe7174729f043afcd47c21ad0fa24b4"
+      "reason": "Container denial marker: adds `environmentDenialMarker()` and `denialMarkers(facts, escalationModes, subject)`, which return upstream's marker and escalation hint for a policy denial and only the environment's marker, with no hint, for an environment denial. Lead verdict: kept; stricter (fewer escalation invitations; the approval prompt is unchanged), permitted by A84. The escalation request to `danger-full-access` also carries `grants: 'full-access'`, the marker the Host's remote answer guard reads to refuse that grant when a remote device answers it; without a guard the marker changes nothing. A308: the escalation approval request of a shell command or operation names the mode it asks for in `escalatesTo` (never a `plugin_manager` request, whose cards keep upstream's buttons); the mode the escalation grants is still decided here, not by the card. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "a81111aae9e4812d07341f642a4aa33160f972d1162d523408d46a0d88744f48"
     },
     {
       "path": "packages/sandbox/sandbox/src/index.ts",
@@ -1931,8 +1931,8 @@
     {
       "path": "packages/interaction/user-approval/src/types.ts",
       "class": "security",
-      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it. Lead verdict (2026-11-11): kept; `grants` comes only from a pre-execute decision or a direct approval request, never from model arguments. Adds `external-agent` to `ApprovalGrant`: the start of an external agent program, which runs outside the sandbox and the approval prompts; the remote answer guard treats it like the other reserved grants. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "46509aa53f410d77a671ee6a4b1419ad47e653856b28473bcfe4864020f30ea6"
+      "reason": "An approval request can carry a `grants: 'full-access'` marker the remote answer guard reads; unset, behaviour is upstream's. The marker is the `ApprovalGrant` union, `'full-access'` or `'workspace-management'`; the remote answer guard refuses either when a remote device grants it. Lead verdict (2026-11-11): kept; `grants` comes only from a pre-execute decision or a direct approval request, never from model arguments. Adds `external-agent` to `ApprovalGrant`: the start of an external agent program, which runs outside the sandbox and the approval prompts; the remote answer guard treats it like the other reserved grants. Lead verdict (2026-11-13): approved after the lead review of the merged diff. A308: the request also carries the presentation-only `escalatesTo` (the sandbox mode a sandbox escalation asks for), like `grants` and `displayReason` never copied into `approval/asked` or any logged event, so a card can offer to switch the chat to that mode. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "6c1c3d18f474ff55fb1c056fd7771ce1efa0496a526b5f30c2b6e59bb9a794a6"
     },
     {
       "path": "packages/api/gateway/src/client/index.ts",
@@ -1973,8 +1973,8 @@
     {
       "path": "packages/interaction/user-approval/src/index.ts",
       "class": "security",
-      "reason": "Exports the `ApprovalGrant` marker type, so Delo plugins can mark prompts that only the home's own computer may grant. Lead verdict (2026-11-11): kept; the approval audit events list their fields explicitly, so the `grants` marker is never stored, and no outcome changes.",
-      "sha256": "6665282b9987bd80b84ecc92e929d32db98394ced3798e29feb764f56c2eb74d"
+      "reason": "Exports the `ApprovalGrant` marker type, so Delo plugins can mark prompts that only the home's own computer may grant. Lead verdict (2026-11-11): kept; the approval audit events list their fields explicitly, so the `grants` marker is never stored, and no outcome changes. A308: exports the `ApprovalEscalation` type of `escalatesTo`. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "1ba03817e841fa25eef744878a8293b11838c61235bcc5bf8521bbfec7dd0e76"
     },
     {
       "path": "packages/fs/fs-local/src/fsio.ts",
@@ -2051,38 +2051,38 @@
     {
       "path": "packages/client/ui-permission-presets/src/client/index.ts",
       "class": "security",
-      "reason": "Security entry (per-workspace full access, C16 permission_defaults). Lead verdict: approved, stricter only. Both current-session pickers ask the optional `permissionSwitchConsent` client service after their own risk confirmation and before they submit `/permission <preset>`; a `false` answer submits nothing and the Session keeps its preset. Without a mounted service every pick submits exactly as upstream does, so the parity composition is unchanged. The hook can only withhold a switch, never make one. It is not the enforcement: a typed `/permission <preset>` skips it, and the Host's sandbox-mode guard still refuses full access in a workspace with no recorded consent. Denial test: tests/browser-plugin.client.spec.ts (asks a mounted permissionSwitchConsent before either surface submits, and submits nothing it declines).",
-      "sha256": "c6ca08bf7d72c0657c1891fb793e8939b5ca05843be04f8e7628570fdc296440"
+      "reason": "Security entry (per-workspace full access, C16 permission_defaults). Lead verdict: approved, stricter only. Both current-session pickers ask the optional `permissionSwitchConsent` client service after their own risk confirmation and before they submit `/permission <preset>`; a `false` answer submits nothing and the Session keeps its preset. Without a mounted service every pick submits exactly as upstream does, so the parity composition is unchanged. The hook can only withhold a switch, never make one. It is not the enforcement: a typed `/permission <preset>` skips it, and the Host's sandbox-mode guard still refuses full access in a workspace with no recorded consent. Denial test: tests/browser-plugin.client.spec.ts (asks a mounted permissionSwitchConsent before either surface submits, and submits nothing it declines). `PermissionSwitchConsent` gains the optional `ownsConfirmation(preset)`: when the mounted service answers true for a preset, the `/permission` picker omits its built-in confirmation for it and the composer control is told the same through `PermissionSelectInjected.ownsConfirmation`, because the service asks its own risk question in `confirm`. Without a service, or for a preset it does not own, the built-in confirmation shows as upstream. Lead verdict (2026-11-13): approved after the lead review of the diff; every switch to full access still asks exactly one question.",
+      "sha256": "5df9cc410d341353291dfc839c75d26ddbbd84dc548ea0b38c5f75afcf371e9a"
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalCard.tsx",
       "class": "security",
-      "reason": "Security entry (per-workspace full access). Lead verdict: approved. A request that declares `grants` renders the `conversation.approval.action` list between its body and its decision buttons; each action answers through `allow`, which is the card's own Allow answer (`allowed-once`) behind the same one-shot guard, so an action cannot answer a card twice, answer one that no longer accepts an answer, or give any other outcome. A request without `grants` renders no list and answers exactly as before. Who may grant is decided on the Host: an answer for a `full-access` grant from a session that may not grant it is refused (C14 LOOPBACK_REQUIRED). Tests: tests/ui-approval.client.spec.tsx (renders no action list for a request without a grant; carries the grant; renders the list with the request facts). GAP before recording: no test that an action's `allow` after the card answered sends nothing; add it. The action list also receives `answered` and `canAnswer()`, so an action renders disabled once the card is sending or has answered and checks before each effect; how the card answers is unchanged. The earlier test gap is closed by the specs for an action after the card answered. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "1cd6913e2aefb7da2d05dc68f696b98a056574a32b2e243319849bbd2ee77de6"
+      "reason": "Security entry (per-workspace full access). Lead verdict: approved. A request that declares `grants` renders the `conversation.approval.action` list between its body and its decision buttons; each action answers through `allow`, which is the card's own Allow answer (`allowed-once`) behind the same one-shot guard, so an action cannot answer a card twice, answer one that no longer accepts an answer, or give any other outcome. A request without `grants` renders no list and answers exactly as before. Who may grant is decided on the Host: an answer for a `full-access` grant from a session that may not grant it is refused (C14 LOOPBACK_REQUIRED). Tests: tests/ui-approval.client.spec.tsx (renders no action list for a request without a grant; carries the grant; renders the list with the request facts). GAP before recording: no test that an action's `allow` after the card answered sends nothing; add it. The action list also receives `answered` and `canAnswer()`, so an action renders disabled once the card is sending or has answered and checks before each effect; how the card answers is unchanged. The earlier test gap is closed by the specs for an action after the card answered. Lead verdict (2026-11-13): approved after the lead review of the merged diff. A308: the decision row renders the `conversation.approval.choice` list slot after Allow once for a request with `escalatesTo`; an entry answers through the card's own one-shot `allow`, and Allow once draws as outline while an entry reports `offer(true)`. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "ca66c8f38c3cc0435257eb3983d87ffcb5aba24bc77502c0de426f75da45b395"
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalPanel.module.css",
       "class": "delo-feature",
       "feature": "permission-defaults",
-      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer."
+      "reason": "Approval cards carry the request's `grants` and render the `conversation.approval.action` list slot for a grant-asking request, so Delo's consent plugin offers the workspace consent inline and a reach device says to approve at the computer. A308: the decision row wraps while a choice is shown, so a failure line sits under the buttons."
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalPanel.tsx",
       "class": "security",
-      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: passes the request's `toolName` and `grants` to the card unchanged and adds no answer path.",
-      "sha256": "a47cb5c9c365fb23c9cac7bad0ac3c9cd403a689b3f3e66f81c0c045c50f043a"
+      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: passes the request's `toolName` and `grants` to the card unchanged and adds no answer path. A308: passes the request's `escalatesTo` to the card. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "b4a8159bbd37f603ae15f66415acade35ec32742c3bd696c181551332256ef2a"
     },
     {
       "path": "packages/client/ui-approval/src/client/contract/slots.ts",
       "class": "security",
-      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "200e6abf592c0e5e6e2b3afc23d557652db23fd71ecd5da36f7435f1ee802bd2"
+      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: declares the `conversation.approval.action` list slot, the `ApprovalGrant` values of `@deepseek-ai/dsh-user-approval`, and carries `grants` on the pending request unchanged; the action's `allow` is documented as the Allow button's one-shot answer. `ApprovalGrant` gains `external-agent`; `ApprovalActionOwnerProps` gains `answered` and `canAnswer`. Lead verdict (2026-11-13): approved after the lead review of the merged diff. A308: declares the `conversation.approval.choice` slot and its owner props (`escalatesTo`, `toolName`, `callId`, `allow`, `answered`, `canAnswer`, `offer`). Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "65587a2c0a6b9fb67285935b091e33a545ef7ccfd9da574e43dd8d57f9f2244b"
     },
     {
       "path": "packages/client/ui-approval/src/client/index.ts",
       "class": "security",
-      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added.",
-      "sha256": "bdfe0c5c977d157fb41b2744acfa5e73e8d1c7d3aa349ce97ad105a1726dfb9f"
+      "reason": "Security entry, same feature and verdict as ApprovalCard.tsx: forwards `grants` from the Remote Event request to the pending approval and registers the action list as a child slot of the card; no answer path is added. A308: forwards `escalatesTo` from the request to the card input. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "b8e079efbbd4874bd8e3ca6493a8de613042024c4f09a5655f4112c6f35887c6"
     },
     {
       "path": "apps/cli/src/plugin.ts",
@@ -2149,6 +2149,18 @@
       "class": "security",
       "reason": "An external provider's tool description opens with the consent's `describe` text when one is composed, and the tool remounts when the `delegationConsent` service appears or leaves; without it the wording is upstream's. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
       "sha256": "ad96b6d895478817d32b55c2a8aeb47bec3f4f0871f6fffdbe05b8f3595bdd06"
+    },
+    {
+      "path": "packages/client/ui-permission-presets/src/client/PermissionSelect.tsx",
+      "class": "security",
+      "reason": "Security entry (per-workspace full access, A307). The composer permission control skips its built-in `RiskConfirmation` for full access or auto review only when the injected `ownsConfirmation(preset)` is true, i.e. the composition's `permissionSwitchConsent` asks its own risk question before the switch is submitted; otherwise unchanged. Lead verdict (2026-11-13): approved after the lead review of the diff; every switch to full access still asks exactly one question. A308 follow-up: the composer chip shows a pick only after an owning `permissionSwitchConsent` confirmed it, so a cancelled or refused full-access consent never shows Full access. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
+      "sha256": "b9176ff50c96e4ae1f772374aac561a774701467a2db30a927164477a4c487cc"
+    },
+    {
+      "path": "scripts/no-unknown-casts.baseline.json",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Drops the baseline entry of packages/client/ui-permission-presets/tests/permission-select.client.spec.tsx, whose `as unknown` cast the Allow for this chat change replaced with typed props, so the no-unknown-casts gate keeps the baseline exact. Only that entry is removed."
     }
   ],
   "retired": []

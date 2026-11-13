@@ -69,6 +69,11 @@
   padding: 14px 16px;
 }
 
+/* A choice's failure sits on a line of its own under the buttons. */
+.actionRowWrap {
+  flex-wrap: wrap;
+}
+
 @media (hover: hover) {
   .reject:hover:not(:disabled) {
     background: var(--dsw-alias-interactive-bg-hover-danger);

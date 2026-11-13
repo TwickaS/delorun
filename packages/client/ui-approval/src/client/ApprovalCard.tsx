@@ -1,5 +1,5 @@
 /** Shared approval presentation; each caller retains its decision policy and answer channel. */
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './contract/slots.ts'
@@ -15,9 +15,10 @@ export function ApprovalCard(props: FactoryComponentPropsOf<'conversation.approv
 }
 
 function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card'>) {
-  const { requestKey, title, description, subject, allowLabel, grants, canAnswer, onAllow, onReject, onAlways, t } = props
+  const { requestKey, title, description, subject, allowLabel, grants, escalatesTo, canAnswer, onAllow, onReject, onAlways, t } = props
   const detail = props.callId === undefined ? null : props.renderSlot('conversation.approval.detail', { callId: props.callId })
   const [answered, setAnswered] = useState(false)
+  const [offered, setOffered] = useState(false)
   const waiting = useRef(false)
   const active = useRef(true)
   const composing = useRef(false)
@@ -26,6 +27,7 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
     active.current = true
     return () => { active.current = false }
   }, [])
+  const offer = useCallback((shown: boolean): void => { if (active.current) setOffered(shown) }, [])
   const answer = (send: () => Promise<void>): Promise<void> => {
     if (waiting.current || !canAnswer()) return Promise.resolve()
     waiting.current = true
@@ -55,6 +57,11 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
     grants, toolName: props.toolName, callId: props.callId, allow: () => answer(onAllow),
     answered, canAnswer: () => !waiting.current && canAnswer(),
   })
+  const choices = escalatesTo === undefined ? null : props.renderSlot('conversation.approval.choice', {
+    escalatesTo, toolName: props.toolName, callId: props.callId, allow: () => answer(onAllow),
+    answered, canAnswer: () => !waiting.current && canAnswer(),
+    offer,
+  })
   return (
     <div className={css.root} data-approval-key={requestKey} aria-busy={answered}
       onKeyDown={keydown}
@@ -79,16 +86,17 @@ function ApprovalFlow(props: FactoryComponentPropsOf<'conversation.approval.card
           {detail !== null && <div className={css.command}>{detail}</div>}
         </div>
         {grantActions !== null && <div className={css.grantActions}>{grantActions}</div>}
-        <div className={css.actionRow}>
+        <div className={offered ? `${css.actionRow} ${css.actionRowWrap}` : css.actionRow}>
           <Button variant="outline" className={css.reject} disabled={answered} onClick={() => { void answer(onReject) }}>
             {t('reject')}
           </Button>
-          <Button variant={onAlways === undefined ? 'primary' : 'outline'} disabled={answered} onClick={() => { void answer(onAllow) }}>
+          <Button variant={onAlways === undefined && !offered ? 'primary' : 'outline'} disabled={answered} onClick={() => { void answer(onAllow) }}>
             {allowLabel ?? t('allowOnce')}
           </Button>
           {onAlways !== undefined && <Button variant="primary" disabled={answered} onClick={() => { void answer(onAlways) }}>
             {t('allowAlways')}
           </Button>}
+          {choices}
         </div>
       </div>
     </div>

@@ -26,6 +26,7 @@
  * @module @delo/bundle-local/client
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
@@ -61,11 +62,16 @@ import { UnlockOverlay } from './UnlockOverlay.tsx'
 import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 // Type-only: the 'conversation.approval.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-approval/client'
+// Type-only: ctx.sessions, whose live sessions take the composer's `/permission <preset>` command.
+import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { PermissionSelection } from '@deepseek-ai/dsh-permission-presets/client'
 import { en as consentsEn, zh as consentsZh, type ConsentsLocaleKey } from './consents-locales.ts'
 import { ConsentToast, createConsentToastSource } from './ConsentToast.tsx'
+import { AllowForChat, ChatSwitchRefused, type AllowForChatInjected } from './AllowForChat.tsx'
 import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAction.tsx'
 import { ExternalAgentAction, type ExternalAgentActionInjected } from './ExternalAgentAction.tsx'
-import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent } from './FullAccessConsent.tsx'
+import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation } from './FullAccessConsent.tsx'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
@@ -234,11 +240,14 @@ export const CONSENT_TOAST_ID = 'delo-consents-toast'
 /** The `conversation.approval.action` id of the full-access action. */
 export const FULL_ACCESS_ACTION_ID = 'delo-full-access'
 
+/** The `conversation.approval.choice` id of the "Allow for this chat" choice. */
+export const ALLOW_FOR_CHAT_ID = 'delo-allow-for-chat'
+
 /** The `conversation.approval.action` id of the external-agent action. */
 export const EXTERNAL_AGENT_ACTION_ID = 'delo-external-agent'
 
-/** Required services. */
-export const inject = ['slots', 'locale', 'configForms']
+/** Required services; `sessions` is read by the "Allow for this chat" choice to switch a live chat. */
+export const inject = ['slots', 'locale', 'configForms', 'sessions', 'connection']
 
 /**
  * Register the Privacy, About, Devices and Network sections, the release check's General row, the Delo sidebar brand, the
@@ -255,8 +264,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => overrideTitle(ctx.locale), 'delo-privacy: the product name as the document title')
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
-      yield ctx.slots.register({ name: 'sidebar.brand.mark' }, DeloBrandMark)
-      yield ctx.slots.register({ name: 'sidebar.brand.name' }, DeloBrandName)
+      yield ctx.slots.register({ name: 'sidebar.brand.mark', priority: -1 }, DeloBrandMark)
+      yield ctx.slots.register({ name: 'sidebar.brand.name', priority: -1 }, DeloBrandName)
     }))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
@@ -346,7 +355,7 @@ export function apply(ctx: Context): void {
   const devicesT = ctx.locale.bind(DEVICES_NS)
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const unlock = applyUnlock(ctx, browserFetch)
+  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const devicesFace = (): DevicesSectionInjected => ({ fetch: browserFetch, hooks: unlock.hooks, openUnlock: unlock.open, lockUnlock: unlock.lock })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -374,6 +383,34 @@ export function apply(ctx: Context): void {
 }
 
 /**
+ * The chat's permission preset as its permission projection reports it.
+ * @param ctx - the browser plugin context.
+ * @param sessionId - the chat.
+ * @returns the preset, or undefined while the chat is not materialized or has no permission control.
+ */
+function presetOf(ctx: Context, sessionId: SessionId): string | undefined {
+  return (ctx.sessions.binding(sessionId)?.session.projections.faceOf('permissions').getSnapshot() as PermissionSelection | undefined)?.currentValue
+}
+
+/**
+ * Switch a live chat's permission preset as the composer does, so the switch is logged and announced as any other, then
+ * confirm that the chat's permission reports the preset.
+ * @param live - the chat's session, or undefined while the chat is not materialized.
+ * @param currentPreset - reads the chat's permission preset; called after the command.
+ * @param preset - the preset.
+ * @throws {ChatSwitchRefused} with the host's sentence when the switch is refused, or with a sentence saying the chat's
+ * permission did not change.
+ */
+export async function switchChat(live: Pick<ISession, 'command'> | undefined, currentPreset: () => string | undefined, preset: string): Promise<void> {
+  if (live === undefined) throw new ChatSwitchRefused('this session is not materialized yet')
+  const result = await live.command(`/permission ${preset}`)
+  if (!result.ok) throw new ChatSwitchRefused(result.error.message)
+  if (!result.value.matched) throw new ChatSwitchRefused('the host offers no /permission command')
+  // `command` reports whether a line matched, not whether it applied: an unknown preset answers with an error the result omits.
+  if (currentPreset() !== preset) throw new ChatSwitchRefused('the chat\'s permission did not change')
+}
+
+/**
  * Register the consent surfaces: the full-access consent behind upstream's `permissionSwitchConsent` service and its
  * `shell.overlay` entry, the approval card's full-access action, the MCP server review and the notice that a server
  * waits, and the Permissions and External agents sections.
@@ -386,6 +423,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
   const consent = createFullAccessConsentSource(fetch)
   ctx.provide('permissionSwitchConsent', {
     confirm: (sessionId, preset) => confirmPermissionSwitch(fetch, consent, sessionId, preset),
+    ownsConfirmation: ownsPermissionConfirmation,
   } satisfies PermissionSwitchConsent)
   ctx.effect(() => () => { consent.cancel() }, 'delo-consents: an open consent answers no once the plugin unloads')
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
@@ -414,8 +452,24 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     name: 'conversation.approval.action',
     id: FULL_ACCESS_ACTION_ID,
     locale: CONSENTS_NS,
-    inject: (sessionId): FullAccessActionInjected => ({ sessionId, fetch, ask: consent.ask }),
+    inject: (sessionId): FullAccessActionInjected => ({ sessionId, fetch }),
   }, FullAccessAction))
+  ctx.slots.inject('conversation.approval.choice', () => ctx.slots.register({
+    name: 'conversation.approval.choice',
+    id: ALLOW_FOR_CHAT_ID,
+    locale: CONSENTS_NS,
+    inject: (chat: string): AllowForChatInjected => {
+      const sessionId = chat as SessionId
+      const currentPreset = (): string | undefined => presetOf(ctx, sessionId)
+      return {
+        sessionId,
+        fetch,
+        consent,
+        currentPreset,
+        switchTo: (preset) => switchChat(ctx.sessions.binding(sessionId)?.session, currentPreset, preset),
+      }
+    },
+  }, AllowForChat))
   ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
     name: 'conversation.approval.action',
     id: EXTERNAL_AGENT_ACTION_ID,
@@ -456,13 +510,14 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
 /**
  * Register the remote studio's unlock: its store, which reads this device's unlock now, after each connection reset and
  * after each call remote access refused with `elevation-required:`, and its `shell.overlay` entry. On the home's own
- * computer the first read finds no device and the entry renders nothing.
+ * computer the store reads nothing and the entry renders nothing.
  * @param ctx - the browser plugin context.
  * @param fetch - the request function.
+ * @param onComputer - whether the page is on the home's own computer ({@link createUnlockSource}).
  * @returns the store, which the Devices section reads too.
  */
-export function applyUnlock(ctx: Context, fetch: HostFetch): UnlockSource {
-  const unlock = createUnlockSource(fetch)
+export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false): UnlockSource {
+  const unlock = createUnlockSource(fetch, Date.now, onComputer)
   ctx.effect(() => () => { unlock.dispose() }, 'delo-devices: the unlock\'s timers stop once the plugin unloads')
   ctx.on('remote/call-denied', (denial) => { unlock.refused(denial.reason) })
   ctx.on('connection/reset', () => { void unlock.refresh() })

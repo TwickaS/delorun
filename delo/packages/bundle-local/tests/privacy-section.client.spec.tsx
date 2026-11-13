@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
+import { apply as connectionApply } from '@deepseek-ai/dsh-client-connection/client'
 import { bindSnapshotSelector, makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { COMMON_NS, LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
@@ -218,6 +219,7 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', locale)
+      ctx.provide('sessions', {})
       const describeSettings = vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } }))
       new TestRemote(ctx, { settings: { describe: describeSettings } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
@@ -227,6 +229,10 @@ describe('the plugin', () => {
       // The sidebar's brand holes are declared at the root, where the Delo occupants wait for them.
       slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.general.item': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
+      await ctx.plugin({ inject: [], apply: connectionApply }).await()
+      // Upstream's brand is already registered at the default priority when this bundle applies, as it is once the bundle also waits for `connection`.
+      slots.register({ name: 'sidebar.brand.mark' }, () => null)
+      slots.register({ name: 'sidebar.brand.name' }, () => null)
       await ctx.plugin({ inject, apply }).await()
       const [section] = slots.entries('settings.section')
       const about = slots.entries('settings.section').find(entry => entry.options.id === ABOUT_SECTION_ID)
@@ -241,8 +247,10 @@ describe('the plugin', () => {
       const noticeFace = noticeStep?.inject?.()
       if (noticeFace === undefined || !('t' in noticeFace) || typeof noticeFace.t !== 'function') throw new Error('no notice face')
       expect(noticeFace.t('notice.title')).toBe(en['notice.title'])
-      expect(slots.entries('sidebar.brand.name')).toHaveLength(1)
-      expect(slots.entries('sidebar.brand.mark')).toHaveLength(1)
+      // Delo's brand registers beside upstream's at a lower priority, which renders, instead of colliding with it.
+      for (const slot of ['sidebar.brand.name', 'sidebar.brand.mark'] as const) {
+        expect(slots.entries(slot).map(entry => entry.options.priority ?? 0).sort()).toEqual([-1, 0])
+      }
       // The document title upstream's frame reads in a build without DSH_CLIENT_TITLE.
       expect(locale.bind(COMMON_NS)(TITLE_KEY)).toBe('Delo')
       const sessionLog = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.sessionLog), 'set').mockResolvedValue(true)
@@ -288,12 +296,14 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', new LocaleRuntime(ctx))
+      ctx.provide('sessions', {})
       new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
       slots.register({ name: 'root', children: { 'settings.general.item': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.general.item', {})}</>)
+      await ctx.plugin({ inject: [], apply: connectionApply }).await()
       await ctx.plugin({ inject, apply }).await()
       const rows = slots.entries('settings.general.item')
       const row = rows.find(entry => entry.options.id === VERSION_ROW.id)

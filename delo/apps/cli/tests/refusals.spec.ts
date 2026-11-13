@@ -49,6 +49,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   InstructionsRefusedError: PLUGIN,
   WorkspaceRefusedError: PLUGIN,
   FetchGuardRefusedError: PLUGIN,
+  ChatSwitchRefused: 'raised by the studio\'s Allow for this chat choice in the browser and shown on the card as the failure sentence',
   TrashRequestError: 'raised by the studio\'s trash client in the browser',
   ChatStateRefusedError: PLUGIN,
   ChatStatesRequestError: 'raised by the studio\'s chat-states client in the browser',

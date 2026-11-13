@@ -351,6 +351,21 @@ describe('ui-permission browser plugin', () => {
     expect(asked).toEqual([[sid('s1'), 'danger-full-access'], [sid('s1'), 'danger-full-access'], [sid('s1'), 'danger-full-access']])
   })
 
+  it('drops the built-in confirmation only for presets the consent service owns', async () => {
+    const b = await bench()
+    b.ctx.provide('permissionSwitchConsent', {
+      confirm: () => Promise.resolve(true),
+      ownsConfirmation: (preset: string) => preset === 'danger-full-access',
+    })
+    const proj = { sessionId: sid('s1') }
+    b.values.set(sid('s1'), { currentValue: 'workspace-write' })
+    const options = await b.popup().options(proj, new AbortController().signal)
+    expect(options.find(option => option.id === 'danger-full-access')?.confirmation).toBeUndefined()
+    expect(options.find(option => option.id === 'auto')?.confirmation).toBeDefined()
+    expect(b.selectFace(sid('s1')).ownsConfirmation('danger-full-access')).toBe(true)
+    expect(b.selectFace(sid('s1')).ownsConfirmation('auto')).toBe(false)
+  })
+
   it('disposal removes the decoration (HMR safety)', async () => {
     const b = await bench()
     expect(b.decoration()).toBeDefined()

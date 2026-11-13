@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
+import { apply as connectionApply } from '@deepseek-ai/dsh-client-connection/client'
 import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -296,12 +297,15 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', new LocaleRuntime(ctx))
+      // Read only when the "Allow for this chat" choice switches a live chat.
+      ctx.provide('sessions', {})
       new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
       slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
+      await ctx.plugin({ inject: [], apply: connectionApply }).await()
       await ctx.plugin({ inject, apply }).await()
       const entry = slots.entries('settings.section').find(section => section.options.id === NETWORK_SECTION_ID)
       if (entry === undefined) throw new Error('no Network section')

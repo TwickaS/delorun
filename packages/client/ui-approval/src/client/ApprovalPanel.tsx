@@ -14,6 +14,7 @@ export function ApprovalPanel(props: ApprovalComposerProps) {
     title: reason ?? props.t('escalation', { toolName: approval.toolName }),
     toolName: approval.toolName,
     ...(approval.grants === undefined ? {} : { grants: approval.grants }),
+    ...(approval.escalatesTo === undefined ? {} : { escalatesTo: approval.escalatesTo }),
     ...(approval.callId === undefined ? {} : { callId: approval.callId }),
     canAnswer: () => approval.answerable,
     onAllow: () => approval.answer('allowed-once'),

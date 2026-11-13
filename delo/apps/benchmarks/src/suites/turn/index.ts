@@ -16,10 +16,11 @@
  * folder's `workspace-write` preset without asking, in both compositions; a call that fails or is refused fails the
  * repetition, so a refusal is never measured as a fast call.
  *
- * Scenarios: `delorun` runs the home as setup leaves it; `stock` adds to the profile's patch the rows of the C16 parity
- * form for the six switch rows `@delo/bundle-local` inserts (consents, fetch guard and update gate), restated disabled,
- * read from the installed runtime's bundle, so the same home runs those rows as upstream's composition does. The
- * sandbox row's home protection stays in both: `delorun start` writes it on every start.
+ * Scenarios: `delorun` runs the home as setup leaves it; `stock` is the same home after setup's "Same as stock" prompts
+ * answer: the profile's patch restates the four prompt rows of `@delo/bundle-local` (instruction, MCP and schedule
+ * consents, and permission defaults) with `enabled: false`, and the profile's `setup-answers.json` records `stock`, so
+ * the home runs those rows as upstream's composition does and `delorun start` accepts it. The fetch guard, the update
+ * gate and the sandbox row's home protection stay in both: `delorun start` refuses a profile that disables them.
  *
  * @module @delo/benchmarks/suites/turn
  */
@@ -75,8 +76,11 @@ export const TURN_ITEMS: Readonly<Record<string, string>> = {
 /** The suite's scenarios. */
 export const TURN_SCENARIOS: readonly { readonly id: 'delorun' | 'stock', readonly description: string }[] = [
   { id: 'delorun', description: 'Delo\'s composition, as setup leaves the home' },
-  { id: 'stock', description: 'The same home with the six switch rows of @delo/bundle-local (consents, fetch guard, update gate) disabled, their C16 parity form' },
+  { id: 'stock', description: 'The same home after setup\'s "Same as stock" prompts answer: the four prompt rows of @delo/bundle-local (consents and permission defaults) switched off, their C16 parity form' },
 ]
+
+/** The prompt rows of `@delo/bundle-local` that setup's "Same as stock" answer switches off (`PROMPT_SWITCH_ROWS` of `@delo/cli`). */
+export const STOCK_PROMPT_ROWS: readonly string[] = ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent']
 
 /**
  * The switch rows a bundle patch inserts: each inserted row whose `config` turns `enabled` on.
@@ -100,14 +104,35 @@ export function switchRows(patch: string): readonly string[] {
 }
 
 /**
+ * The prompt rows of the `stock` scenario among a bundle's switch rows.
+ * @param rows - the switch rows the bundle inserts.
+ * @returns {@link STOCK_PROMPT_ROWS}, in the bundle's order.
+ * @throws {Error} when the bundle inserts none of them or lacks one, so a changed bundle cannot turn the scenario into a second `delorun`.
+ */
+export function stockRows(rows: readonly string[]): readonly string[] {
+  const missing = STOCK_PROMPT_ROWS.filter(id => !rows.includes(id))
+  if (missing.length > 0) throw new Error(`@delo/bundle-local inserts no switch row ${missing.join(', ')}; the stock scenario would not switch off every prompt`)
+  return rows.filter(id => STOCK_PROMPT_ROWS.includes(id))
+}
+
+/**
  * The profile patch rows of the `stock` scenario.
- * @param rows - the switch rows.
- * @returns each row restated disabled, as patch text.
+ * @param rows - the prompt rows.
+ * @returns each row restated with its switch off, as patch text. `delorun start` refuses a row that is `disabled`.
  * @throws {Error} when there is no row, so a changed bundle cannot turn the scenario into a second `delorun`.
  */
 export function stockPatch(rows: readonly string[]): string {
   if (rows.length === 0) throw new Error('@delo/bundle-local inserts no switch row; the stock scenario would equal delorun')
-  return rows.map(id => `- id: ${id}\n  disabled: true\n`).join('')
+  return rows.map(id => `- id: ${id}\n  config:\n    enabled: false\n`).join('')
+}
+
+/**
+ * Record the "Same as stock" prompts answer in a profile's setup answers, which `delorun start` holds the prompt rows to.
+ * @param record - the text of `setup-answers.json`.
+ * @returns the record with `prompts` set to `stock`.
+ */
+export function stockAnswers(record: string): string {
+  return `${JSON.stringify({ ...JSON.parse(record) as Record<string, unknown>, prompts: 'stock' }, null, 2)}\n`
 }
 
 /** One finished turn: when its prompt left, what the client saw and what the stub saw from then. */
@@ -199,7 +224,9 @@ function scenarioTemplate(context: SuiteContext, scenario: 'delorun' | 'stock'):
     writeFileSync(join(root.home, PROJECT_DIRECTORY, READ_FILE), 'A small file the benchmark reads.\n'.repeat(20))
     if (scenario === 'stock') {
       const bundle = readFileSync(join(runtimeDirectory(root, INSTALLED_VERSION), 'app/node_modules/@delo/bundle-local/cordis.patch.yml'), 'utf8')
-      appendFileSync(join(root.deloHome, 'profiles', PROFILE, 'cordis.patch.yml'), stockPatch(switchRows(bundle)))
+      const profile = join(root.deloHome, 'profiles', PROFILE)
+      appendFileSync(join(profile, 'cordis.patch.yml'), stockPatch(stockRows(switchRows(bundle))))
+      writeFileSync(join(profile, 'setup-answers.json'), stockAnswers(readFileSync(join(profile, 'setup-answers.json'), 'utf8')), { mode: 0o600 })
     }
   })
 }

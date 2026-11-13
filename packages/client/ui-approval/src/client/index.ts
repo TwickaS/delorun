@@ -18,7 +18,9 @@ export type {
   ApprovalCardInput,
   ApprovalComposerProps,
   ApprovalDecision,
+  ApprovalChoiceOwnerProps,
   ApprovalDetailOwnerProps,
+  ApprovalEscalation,
   ApprovalGrant,
   ApprovalPresentationRequest,
   PendingApproval,
@@ -54,6 +56,7 @@ async function answerApproval(
     ...(request.reason === undefined ? {} : { reason: request.reason }),
     ...(request.displayReason === undefined ? {} : { displayReason: request.displayReason }),
     ...(request.grants === undefined ? {} : { grants: request.grants }),
+    ...(request.escalatesTo === undefined ? {} : { escalatesTo: request.escalatesTo }),
     ...(request.signal === undefined ? {} : { signal: request.signal }),
   })
   const completed = Promise.withResolvers<void>()
@@ -98,6 +101,7 @@ export function apply(ctx: ClientContext): void {
     children: {
       'conversation.approval.detail': { kind: 'single', scope: 'session' },
       'conversation.approval.action': { kind: 'list', scope: 'session' },
+      'conversation.approval.choice': { kind: 'list', scope: 'session' },
     },
   }, ApprovalCard)
   ctx.slots.inject('conversation.composer', () => ctx.slots.register({
