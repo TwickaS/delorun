@@ -170,15 +170,18 @@ export function stamp(time: Date): string {
   return time.toISOString().replace(/[-:]/gu, '').replace(/\.\d+Z$/u, 'Z')
 }
 
+/** The characters PowerShell reads as a single quote: the ASCII one and U+2018 to U+201B. */
+const POWERSHELL_QUOTE = /['\u2018\u2019\u201A\u201B]/gu
+
 /**
  * Quote a path as one literal word of the person's shell.
  * @param path - the path.
  * @param platform - `win32` for PowerShell, anything else for a POSIX shell.
- * @returns the path in single quotes, with a single quote inside doubled for PowerShell or written `'\''` for POSIX, so
+ * @returns the path in single quotes, with each single quote inside (including U+2018 to U+201B) doubled for PowerShell or written `'\''` for POSIX, so
  *   `$`, double quotes and backticks stay literal.
  */
 export function quoteForShell(path: string, platform: NodeJS.Platform): string {
-  return platform === 'win32' ? `'${path.replaceAll("'", "''")}'` : `'${path.replaceAll("'", "'\\''")}'`
+  return platform === 'win32' ? `'${path.replaceAll(POWERSHELL_QUOTE, '$&$&')}'` : `'${path.replaceAll("'", "'\\''")}'`
 }
 
 /** Whether a path exists. */

@@ -13,7 +13,7 @@ import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { StorePaths, type LaunchCommand, type LaunchPlan, type VerifiedRuntime } from '@delo/runtime-store'
 import { fixtureRelease, type Fixture } from '../../install/tests/support.ts'
 import { runLauncher, type LauncherOptions, type LauncherStore } from '../src/launcher.ts'
-import { beginRepairRecord, repairRecordPath, resolveRepairMarkGraceSeconds, staleRepairText } from '../src/repair-record.ts'
+import { beginRepairRecord, quoteForShell, repairRecordPath, resolveRepairMarkGraceSeconds, staleRepairText } from '../src/repair-record.ts'
 import { runRepair, type RepairChannel, type RepairOptions, type RepairStore } from '../src/repair.ts'
 
 const version = (text: string): RuntimeVersion => text as RuntimeVersion
@@ -113,7 +113,7 @@ describe('the repair mark', () => {
       const command = /: (mv .*)\. delorun recover status/.exec(text)?.[1]
       if (command === undefined) throw new Error(`no command in ${text}`)
       // Pins the quoting: unquoted or double-quoted, the shell expands $HOME and runs `id`, and the moves miss.
-      execFileSync('sh', ['-c', command], { env: { PATH: process.env.PATH ?? '', HOME: '/nonexistent' } })
+      execFileSync('sh', ['-c', command], { env: { PATH: process.env.PATH ?? '', HOME: '/nonexistent' }, timeout: 10_000 })
       expect(await readFile(join(odd, 'runtimes/old'), 'utf8')).toBe('good')
       expect(await readFile(join(odd, 'runtimes.set-aside-20261113T120000Z-unfinished/new'), 'utf8')).toBe('half')
     })
@@ -235,5 +235,19 @@ describe('the repair mark', () => {
       expect(existsSync(repairRecordPath(home))).toBe(true)
       await other.end()
     })
+  })
+})
+
+describe('quoting a path for the person\'s shell', () => {
+  const smart = '\u2018\u2019\u201A\u201B'
+
+  it('doubles every character PowerShell reads as a single quote', () => {
+    // Pins the typographic quotes: PowerShell ends the string at U+2018 to U+201B, so a path holding one would break out.
+    expect(quoteForShell('C:\\Users\\O\u2019Brien\\.delo', 'win32')).toBe("'C:\\Users\\O\u2019\u2019Brien\\.delo'")
+    expect(quoteForShell(`a'${smart}b`, 'win32')).toBe(`'a''${[...smart].map(c => c + c).join('')}b'`)
+  })
+
+  it('leaves the POSIX form to the ASCII quote', () => {
+    expect(quoteForShell(`a'${smart}b`, 'linux')).toBe(`'a'\\''${smart}b'`)
   })
 })
