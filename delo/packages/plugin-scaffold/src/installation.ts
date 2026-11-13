@@ -1,17 +1,17 @@
 /**
- * What `delorun plugin new` reads from the running installation: whether a package name is one the installation ships,
+ * What a scaffold reads from the running installation: whether a package name is one the installation ships,
  * and the version of `@deepseek-ai/cordis` it runs. A profile resolves a bundle from the installation before the
  * profile (upstream's `resolveBundleDir`), and a plugin's imports of a package the installation's runtime resolution
  * carries reach the installation's copy, so a plugin that takes a shipped package's name is never the code that loads.
  *
- * @module @delo/cli/plugin-new/installation
+ * @module @delo/plugin-scaffold/installation
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import semver from 'semver'
-import { CliError, EXIT } from '../exit.ts'
+import { ScaffoldError } from './error.ts'
 
 /** The running installation, named by the `package.json` of its `@deepseek-ai/dsh` package, as upstream's launcher names it. */
 export interface Installation {
@@ -73,7 +73,7 @@ export async function installationShips(installation: Installation, name: string
  * The version of `@deepseek-ai/cordis` the installation runs, which a plugin declares as its peer.
  * @param installation - the installation.
  * @returns the version.
- * @throws {CliError} with the failure code when the installation carries no readable `@deepseek-ai/cordis`.
+ * @throws {ScaffoldError} of kind `failed` when the installation carries no readable `@deepseek-ai/cordis`.
  */
 export function installedCordisVersion(installation: Installation): string {
   const directory = packageDirFrom(installation.anchor, '@deepseek-ai/cordis')
@@ -82,10 +82,10 @@ export function installedCordisVersion(installation: Installation): string {
     if (directory === undefined) throw new Error('it is not installed')
     version = (JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as { readonly version?: unknown }).version
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun plugin new: the installation's @deepseek-ai/cordis cannot be read (${error instanceof Error ? error.message : String(error)}); reinstall Delo`)
+    throw new ScaffoldError('failed', `the installation's @deepseek-ai/cordis cannot be read (${error instanceof Error ? error.message : String(error)}); reinstall Delo`)
   }
   if (typeof version !== 'string' || semver.valid(version) === null) {
-    throw new CliError(EXIT.failed, `delorun plugin new: the installation's @deepseek-ai/cordis declares ${JSON.stringify(version)}, which is not a semantic version; reinstall Delo`)
+    throw new ScaffoldError('failed', `the installation's @deepseek-ai/cordis declares ${JSON.stringify(version)}, which is not a semantic version; reinstall Delo`)
   }
   return version
 }

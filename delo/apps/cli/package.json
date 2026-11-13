@@ -56,6 +56,7 @@
     "@delo/plugin-mcp-consent": "workspace:*",
     "@delo/plugin-delegation-consent": "workspace:*",
     "@delo/plugin-permission-defaults": "workspace:*",
+    "@delo/plugin-scaffold": "workspace:*",
     "@delo/profile-safety": "workspace:*",
     "@delo/reach": "workspace:*",
     "@delo/release-formats": "workspace:*",

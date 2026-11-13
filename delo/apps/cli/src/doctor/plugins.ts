@@ -36,7 +36,7 @@ import { messageOf } from '@delo/install'
 import { readSafeMode } from '@delo/profile-safety'
 import { isDeloPackage } from '../delo-bundles.ts'
 import { PLUGIN_MANIFEST_LIMIT, readRegularFile } from '../plugin-check.ts'
-import { resolvesFrom } from '../plugin-new/installation.ts'
+import { resolvesFrom } from '@delo/plugin-scaffold'
 import { profileDirectory } from '../profile.ts'
 import type { CheckResult, CheckStatus } from './checks.ts'
 

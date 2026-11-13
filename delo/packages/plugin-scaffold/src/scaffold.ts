@@ -1,12 +1,21 @@
 /**
- * The files `delorun plugin new` writes for each plugin kind, computed without touching the disk: the package
+ * The files `delorun plugin new` and the studio's Create a plugin write for each plugin kind, computed without touching the disk: the package
  * manifest, the bundle patch, the sources and build configuration where the kind has code, the locale file the plugin
  * list reads, and the README. Every file is a path relative to the new folder and its text.
  *
- * @module @delo/cli/plugin-new/scaffold
+ * @module @delo/plugin-scaffold/scaffold
  */
-import { targetRange } from '../plugin-check.ts'
+import semver from 'semver'
 import { bundleTemplate, presetTemplate, readme, toolTemplate, uiTemplate, type KindTemplate } from './templates.ts'
+
+/**
+ * The range that targets a Delo release's minor: every patch of it, and no later minor.
+ * @param delo - the running Delo version.
+ * @returns `^<major>.<minor>.0`, which before 1.0 admits only that minor's patches.
+ */
+export function targetRange(delo: string): string {
+  return `^${String(semver.major(delo))}.${String(semver.minor(delo))}.0`
+}
 
 /** The kinds of plugin the command scaffolds. */
 export const PLUGIN_KINDS = ['tool', 'preset', 'ui', 'bundle'] as const

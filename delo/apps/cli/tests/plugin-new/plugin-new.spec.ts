@@ -13,9 +13,7 @@ import type { SemanticVersion } from '@delo/contract-release-manifest'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { runPluginCheck } from '../../src/plugin-check.ts'
 import { runPluginNew } from '../../src/plugin-new/index.ts'
-import type { Installation } from '../../src/plugin-new/installation.ts'
-import { PLUGIN_KINDS, TOOLCHAIN, type PluginKind } from '../../src/plugin-new/scaffold.ts'
-import { PAGE_MODULES } from '../../src/plugin-new/templates.ts'
+import { PAGE_MODULES, PLUGIN_KINDS, TOOLCHAIN, type Installation, type PluginKind } from '@delo/plugin-scaffold'
 // Relative: the CLI does not depend on the web shell; the scaffold's build must name the page's module table exactly.
 import { PLATFORM_MODULES } from '../../../../../packages/client/web/src/platform.ts'
 

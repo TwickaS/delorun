@@ -37,7 +37,7 @@ import { CliError, EXIT } from './exit.ts'
 import { useHomeShared } from './home-exclusion.ts'
 import { shippedPackageManager } from './package-manager.ts'
 import { readPluginManifest } from './plugin-check.ts'
-import { installationShips, RESERVED_SCOPES, runningInstallation } from './plugin-new/installation.ts'
+import { installationShips, RESERVED_SCOPES, runningInstallation } from '@delo/plugin-scaffold'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { printable } from './terminal-text.ts'
 

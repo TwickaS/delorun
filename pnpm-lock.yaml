@@ -1403,6 +1403,9 @@ importers:
       '@delo/plugin-permission-defaults':
         specifier: workspace:*
         version: link:../../packages/plugin-permission-defaults
+      '@delo/plugin-scaffold':
+        specifier: workspace:*
+        version: link:../../packages/plugin-scaffold
       '@delo/profile-safety':
         specifier: workspace:*
         version: link:../../packages/profile-safety
@@ -2329,9 +2332,18 @@ importers:
       '@delo/changes':
         specifier: workspace:*
         version: link:../changes
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/contract-plugin-versions':
+        specifier: workspace:*
+        version: link:../contract-plugin-versions
       '@delo/home':
         specifier: workspace:*
         version: link:../home
+      '@delo/plugin-scaffold':
+        specifier: workspace:*
+        version: link:../plugin-scaffold
       '@delo/profile-safety':
         specifier: workspace:*
         version: link:../profile-safety
@@ -3129,6 +3141,22 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
+
+  delo/packages/plugin-scaffold:
+    dependencies:
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@delo/contract-plugin-versions':
+        specifier: workspace:*
+        version: link:../contract-plugin-versions
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delo/packages/plugin-schedule-consent:
     dependencies:

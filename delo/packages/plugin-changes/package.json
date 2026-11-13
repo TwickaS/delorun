@@ -32,7 +32,10 @@
   },
   "dependencies": {
     "@delo/changes": "workspace:*",
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/contract-plugin-versions": "workspace:*",
     "@delo/home": "workspace:*",
+    "@delo/plugin-scaffold": "workspace:*",
     "@delo/profile-safety": "workspace:*"
   },
   "peerDependencies": {

@@ -5,7 +5,7 @@
  * a factory to `window.__ModuleLoader__.load({ id, factory })`, requires the modules the page provides through the
  * factory's `require`, and carries everything else in the file. It handles no stylesheets, assets or code splitting.
  *
- * @module @delo/cli/plugin-new/templates
+ * @module @delo/plugin-scaffold/templates
  */
 import type { ScaffoldFile, ScaffoldNames, PluginKind, TOOLCHAIN } from './scaffold.ts'
 

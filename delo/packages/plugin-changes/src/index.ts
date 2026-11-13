@@ -44,9 +44,10 @@
  * `isReachPeer`; a Connection without it registers no route.
  * @module @delo/plugin-changes
  */
+import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ProfileContext } from '@deepseek-ai/dsh-app-boot'
+import { getDeloRuntimeVersion, getDshRuntimeVersion, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import type { HostConnectionAdmission, HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-host-webserver'
@@ -55,6 +56,7 @@ import z from '@deepseek-ai/schemastery'
 import { PACKAGE_NAME_PATTERN, prepareReload, readProtection, reloadProfile, startNotice, type ChangeEntry, type ChangesContext, type PluginOperation, type ProtectionLevel } from '@delo/changes'
 import { recordPluginRequest, type PluginRequest } from '@delo/changes/install'
 import { loadUpstreamChecks, upstreamPluginOperation } from '@delo/changes/plugin-operation'
+import type { VersionOutput } from '@delo/contract-plugin-versions'
 import { CHANGES_ROUTE_PREFIX, changesRoutes, type RouteConnection } from './routes.ts'
 
 /**
@@ -223,6 +225,12 @@ export function apply(ctx: Context, config: Config): void {
       installationBundles: config.installationBundles,
       logger: scope.logger,
       loopbackPort: () => scope.webServer.port,
+      scaffold: () => {
+        const launched = scope.get('profileContext')
+        if (launched === undefined) throw new Error('plugin-changes: this Host runs no profile launched by dsh, so it has no installation to scaffold for.')
+        return { running: { delo: getDeloRuntimeVersion() as VersionOutput['delo'], dsh: getDshRuntimeVersion() as VersionOutput['dsh'] }, installation: { anchor: launched.installAnchor } }
+      },
+      reveal: showFolder,
     })
     scope.effect(() => {
       const registered = routes.map(route => scope.webServer.register(route))
@@ -292,6 +300,18 @@ export function hostPluginOperation(ctx: Context, changes: ChangesContext): Plug
     output: (text, stream) => { ctx.logger[stream === 'stderr' ? 'warn' : 'info'](text.trimEnd()) },
     upstream: async () => ({ installAnchor, ...await loadUpstreamChecks() }),
   })
+}
+
+/**
+ * Show a folder in the computer's file manager: the platform's own opener, started detached with the folder as its only
+ * argument, so no shell reads the path.
+ * @param folder - a created plugin's folder.
+ */
+function showFolder(folder: string): void {
+  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+  const child = spawn(command, [folder], { detached: true, stdio: 'ignore' })
+  child.on('error', () => { /* the folder is also shown as a path, so a missing opener leaves the person that. */ })
+  child.unref()
 }
 
 /**

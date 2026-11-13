@@ -93,7 +93,7 @@ describe('who reaches the Changes routes', () => {
     const { ctx } = routeHome()
     const server = await serveRoutes(ctx)
     // No route names the protection setting, and the studio's proof is refused by the setting's writer.
-    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), pluginOperation: () => () => Promise.resolve({ exitCode: 0 }), installationBundles: [], logger: { warn: () => {} }, loopbackPort: () => undefined }).map(route => route.path)
+    const paths = changesRoutes({ connection: { admit: () => ({ rejection: 401 }), isReachPeer: () => false }, profile: () => undefined, reload: () => Promise.resolve(undefined), pluginOperation: () => () => Promise.resolve({ exitCode: 0 }), installationBundles: [], logger: { warn: () => {} }, loopbackPort: () => undefined, scaffold: () => { throw new Error('unused') }, reveal: () => {} }).map(route => route.path)
     expect(paths.filter(path => path.includes('protection'))).toEqual([])
     expect((await post(server.port, '/delo/changes/protection', { level: 'off' })).status).toBe(404)
     await expect(setProtection(ctx.home, 'on', attestStudio({ loopback: true, credential: true, remoteSession: false }))).rejects.toMatchObject({ code: 'NOT_AT_COMPUTER' })

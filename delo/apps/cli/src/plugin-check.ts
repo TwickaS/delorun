@@ -14,6 +14,7 @@ import { join, resolve } from 'node:path'
 import { evaluatePluginCompatibility, pluginCompatibilityWarning } from '@deepseek-ai/dsh-app-boot'
 import type { VersionOutput } from '@delo/contract-plugin-versions'
 import { messageOf } from '@delo/install'
+import { targetRange } from '@delo/plugin-scaffold'
 import { evaluatePluginAxes, type AxisDecision } from '@delo/update'
 import semver from 'semver'
 import { CliError, EXIT } from './exit.ts'
@@ -90,15 +91,6 @@ export async function readPluginManifest(directory: string, command = 'delorun p
   }
   if (!isObject(value)) throw new CliError(EXIT.failed, `${command}: ${printable(path)} is not a package manifest object`)
   return value
-}
-
-/**
- * The range that targets a Delo release's minor: every patch of it, and no later minor.
- * @param delo - the running Delo version.
- * @returns `^<major>.<minor>.0`, which before 1.0 admits only that minor's patches.
- */
-export function targetRange(delo: string): string {
-  return `^${String(semver.major(delo))}.${String(semver.minor(delo))}.0`
 }
 
 /**

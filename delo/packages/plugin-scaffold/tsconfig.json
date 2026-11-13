@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "src",
+    "tests"
+  ],
+  "references": [
+    {
+      "path": "../../../packages/util/brand"
+    },
+    {
+      "path": "../../../packages/util/home-paths"
+    }
+  ]
+}

@@ -94,6 +94,7 @@ import {
   type ChangesAction,
   type ChangesStateView,
   type ChangeView,
+  type CreatedView,
   type DiscardView,
   type DoneView,
   type EntryView,
@@ -101,11 +102,14 @@ import {
   type InstallView,
   type PendingListView,
   type PendingView,
+  type RequestedView,
+  type RevealedView,
   type RiskView,
   type ShownView,
   type StartedView,
   type WorkReviewView,
 } from './wire.ts'
+import { createAction, CreateRefusal, requestAction, revealAction, type ScaffoldTarget } from './create-actions.ts'
 
 export { ACTION_PATHS, CHANGES_ROUTE_PREFIX, SHOW_PATH, STATE_PATH, type ChangesAction } from './wire.ts'
 
@@ -168,6 +172,13 @@ export interface RouteDependencies {
   readonly logger: { warn(message: string): void }
   /** The loopback listener's bound port, the web server's `port` in the Host: an unstamped request is on the loopback listener only when it arrived on that socket. */
   readonly loopbackPort: LoopbackPort
+  /** What Create a plugin targets: the running release and the installation. */
+  readonly scaffold: () => ScaffoldTarget
+  /**
+   * Show a folder in the computer's file manager.
+   * @param folder - a created plugin's folder.
+   */
+  readonly reveal: (folder: string) => void
 }
 
 /** A refusal a route answers with: its status, its code and the sentence the person reads. */
@@ -746,6 +757,30 @@ function doneView(done: WorkDone): DoneView {
 }
 
 /**
+ * Run one of Create a plugin's actions for a request at the computer.
+ * @param action - the route.
+ * @param body - the request's body.
+ * @param ctx - the profile.
+ * @param dependencies - the release the scaffold targets and the file manager.
+ * @returns what the person reads.
+ * @throws {RouteRefusal} for a body the action does not take, a refused name or a plugin the studio did not create.
+ */
+async function createActionOf(action: 'create' | 'request' | 'reveal', body: Readonly<Record<string, unknown>>, ctx: ChangesContext, dependencies: RouteDependencies): Promise<CreatedView | RequestedView | RevealedView> {
+  try {
+    if (action === 'create') {
+      onlyFields(body, ['name', 'kind'])
+      return await createAction(ctx.home, body as { readonly name: unknown, readonly kind: unknown }, dependencies.scaffold())
+    }
+    onlyFields(body, ['name'])
+    const named = body as { readonly name: unknown }
+    return action === 'request' ? await requestAction(ctx, named, entryView) : await revealAction(ctx.home, named, dependencies.reveal)
+  } catch (error) {
+    if (error instanceof CreateRefusal) throw new RouteRefusal(error.status, error.code, error.message)
+    throw error
+  }
+}
+
+/**
  * Run one action for a request at the computer.
  * @param action - the route.
  * @param body - the request's body.
@@ -756,7 +791,7 @@ function doneView(done: WorkDone): DoneView {
  * @throws {RouteRefusal} for a body the action does not take, a change to Delo itself, an unconfirmed risk or agent's
  *   plugin request, or safe mode without the installation's bundles; {@link ChangesError} for a refusal of Changes.
  */
-async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<ActionView | InstallView | DiscardView | StartedView | DoneView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
+async function act(action: ChangesAction, body: Readonly<Record<string, unknown>>, ctx: ChangesContext, presence: AtComputer, dependencies: RouteDependencies): Promise<ActionView | InstallView | DiscardView | StartedView | DoneView | CreatedView | RequestedView | RevealedView | { readonly lines: readonly string[], readonly skipped: readonly string[] | undefined }> {
   const options = { reload: dependencies.reload }
   switch (action) {
     case 'apply': {
@@ -803,6 +838,10 @@ async function act(action: ChangesAction, body: Readonly<Record<string, unknown>
       if (review.change !== undefined) requireRiskConfirmation(review.change.risk, confirmed)
       return doneView(await finishWork(ctx, plugin, presence, { ...options, approve: version }))
     }
+    case 'create':
+    case 'request':
+    case 'reveal':
+      return createActionOf(action, body, ctx, dependencies)
     case 'safe-mode': {
       onlyFields(body, [])
       if (dependencies.installationBundles.length === 0) throw new RouteRefusal(503, 'SAFE_MODE_UNAVAILABLE', 'This composition names no bundles of the installation, so safe mode starts from a terminal: delorun recover safe-mode')

@@ -17,8 +17,7 @@ import {
   boot, composeEntries, createRuntimeResolution, DELO_VERSION_ENV, initProfile, loadProfileDirectory, PluginPackages,
 } from '@deepseek-ai/dsh-app-boot'
 import { runPluginNew } from '../../src/plugin-new/index.ts'
-import { scaffoldNames, type PluginKind } from '../../src/plugin-new/scaffold.ts'
-import { PAGE_MODULES } from '../../src/plugin-new/templates.ts'
+import { PAGE_MODULES, scaffoldNames, type PluginKind } from '@delo/plugin-scaffold'
 import { versions } from '../../src/version.ts'
 // Relative: the CLI does not depend on the studio's client module system; the spec loads lib/client.js through it.
 import { createClientModuleSystem, type ClientBundleRegistration, type ClientModuleLoaderTarget } from '../../../../../packages/client/modules/src/client/index.ts'

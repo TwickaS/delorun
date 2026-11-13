@@ -170,6 +170,8 @@ export async function serveRoutes(ctx: ChangesContext | undefined, options: Part
     installationBundles: [],
     logger: { warn: (message: string) => { warnings.push(message) } },
     loopbackPort: () => port,
+    scaffold: () => { throw new Error('this route fixture scaffolds nothing') },
+    reveal: () => {},
     ...options,
   })
   const server = createServer((request, response) => {

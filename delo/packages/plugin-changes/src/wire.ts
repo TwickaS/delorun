@@ -27,6 +27,9 @@ export const ACTION_PATHS = {
   work: `${CHANGES_ROUTE_PREFIX}/work`,
   done: `${CHANGES_ROUTE_PREFIX}/done`,
   'safe-mode': `${CHANGES_ROUTE_PREFIX}/safe-mode`,
+  create: `${CHANGES_ROUTE_PREFIX}/create`,
+  request: `${CHANGES_ROUTE_PREFIX}/request`,
+  reveal: `${CHANGES_ROUTE_PREFIX}/reveal`,
 } as const
 
 /** One action route. */
@@ -315,4 +318,29 @@ export interface RefusalView {
   readonly message: string
   readonly kinds?: readonly RiskKindView[]
   readonly notShown?: readonly string[]
+}
+
+/** `create`: a plugin the studio's Create a plugin wrote into the Delo home's `plugins` folder. */
+export interface CreatedView {
+  readonly kind: 'created'
+  /** The package name. */
+  readonly plugin: string
+  /** The plugin kind. */
+  readonly pluginKind: string
+  /** The plugin's folder, an absolute path. */
+  readonly folder: string
+  /** The files written, relative to the folder. */
+  readonly files: readonly string[]
+}
+
+/** `request`: the install from a created plugin's folder, recorded as a change that waits for the person's review. */
+export interface RequestedView {
+  readonly kind: 'requested'
+  readonly entry: EntryView
+}
+
+/** `reveal`: the folder was shown in the computer's file manager. */
+export interface RevealedView {
+  readonly kind: 'revealed'
+  readonly folder: string
 }
