@@ -15,6 +15,7 @@ This package is the home of the authenticator provider of [contract C4](../../do
 - [The owner claim and device list](#the-owner-claim-and-device-list)
 - [Reach sign-in](#reach-sign-in)
 - [The admission denial suite](#the-admission-denial-suite)
+- [Dangerous mode](#dangerous-mode)
 - [Notes for the provider](#notes-for-the-provider)
 - [Tests](#tests)
 
@@ -69,6 +70,26 @@ A type-level check holds C4's `Admission` and `ListenerPolicy` types assignable 
 ## The reach access denial suite
 
 `delo/apps/cli/tests/denial/reach/` boots the same web composition, loads this package's service, opens a session for an approved device and admits it through the provider, then calls the Gateway with the Peer it returns. Each family `REACH_DENIED_ACTIONS` lists is refused naming the action, a settings write in every settings namespace the composition describes included; reading the chat list, the redacted settings, the plugin list and the files of a chat's own workspace, starting a chat, sending a message, choosing a preset and stopping the run succeed, and the device's event stream carries the chat events and no plugin management event. The suite also lists every Remote method the composition registers and every event it forwards, and fails on one that neither table names and on a table entry that names none, so a new method is refused by default and its classification is a decision.
+
+## Dangerous mode
+
+While dangerous mode holds, an unlocked, signed-in device does what the computer does. The fact is `HomeAuthService.dangerousMode()`, read when asked from the `reachFullAccessGrants` service that [`@delo/plugin-permission-defaults`](../plugin-permission-defaults/README.md) provides: true only when the row sets `fullAccessEverywhere` and the grant file `delorun setup` wrote is valid, and false without that plugin or while its store cannot be read. Removing the grant file or turning the row off restores every refusal at the next call. A device whose unlock has ended keeps every refusal it has today, and each lifted refusal below still needs an unlock.
+
+| Refusal | Safer prompts and Same as stock | Dangerous mode |
+| --- | --- | --- |
+| A settings write that turns a computer-only switch off (`loopback-required: turning … off`) | Refused, unlocked or not | Decided by the unlock |
+| A settings write that loosens the permission new chats start in | Refused, unlocked or not | Decided by the unlock |
+| `pluginManager/setPluginEnabled` on a protected row (the plugin manager still refuses a change to a guard plugin itself) | Refused, unlocked or not | Decided by the unlock |
+| `commands/execute` of a command a device does not run | Refused, unlocked or not | Decided by the unlock |
+| An approval prompt marked `full-access`, `workspace-management` or `external-agent` answered from a device | `LOOPBACK_REQUIRED` | Given by an unlocked device |
+| The permission-defaults routes that review and grant a workspace's consent (`deloPermission.workspaces`, `.review`, `.setFullAccess`) | `LOOPBACK_REQUIRED` before the body is read | Admitted for an unlocked device |
+| The network routes (`deloNetwork.list`, `.set`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |
+| The MCP consent routes (`deloMcpConsent.pending`, `.accept`, `.decline`, `.revoke`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |
+| The external-agent consent routes (`deloDelegationConsent.*`) | `LOOPBACK_REQUIRED` | Admitted for an unlocked device |
+
+Every route above calls `requireComputerUnlessDangerous` from its `connection/request` hook and registers `admitUnlockedDevice` as its `admitPeer`, both in `src/computer-only.ts`. The hook lets a request through that arrived on a reach listener only while the mode holds, and the Peer check admits only a `reach-device` that holds a running unlock then; a request the home cannot place, or that names a foreign `Host` on the loopback listener, is refused in both modes.
+
+These stay at the computer in every mode: turning the mode on (only `delorun setup` writes the grant, and no route or call does), approving a device and opening the approval window, the device sign-in, approving or revoking an unlock, the terminal switch, removing a device, and the home's reset, recovery kit and reach settings. Credentials, account actions and opening an application on the computer stay in `REACH_DENIED_ACTIONS`, and a workspace-file call still reaches only paths inside the chat's workspace. `tests/dangerous-mode.spec.ts` proves each lifted refusal in both modes and fails when one of the routes that approve or sign in reads the mode.
 
 ## Notes for the provider
 

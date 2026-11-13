@@ -283,14 +283,16 @@ interface FakeConnection {
  * the listener given.
  * @param defaults - the service.
  * @param listener - the listener `homeAuth` reports.
+ * @param unlocked - the devices that hold an unlock.
+ * @param dangerous - whether `homeAuth` reports dangerous mode.
  * @returns the captured hook and a caller of the captured routes.
  */
-function routesOver(defaults: PermissionDefaults, listener: string | undefined, unlocked: readonly string[] = []): FakeConnection {
+function routesOver(defaults: PermissionDefaults, listener: string | undefined, unlocked: readonly string[] = [], dangerous = false): FakeConnection {
   let hook: FakeConnection['hook'] | undefined
   const routes = new Map<string, { fetch: (request: Request) => Promise<Response> | Response, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }>()
   const ctx = {
     on: (_name: string, listener: FakeConnection['hook']) => { hook = listener },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e' } : undefined) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e' } : undefined) } : undefined),
     connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }) => { routes.set(route.path, route) } } },
     permissionDefaults: defaults,
   }
@@ -667,6 +669,37 @@ describe('the dangerous-mode routes', () => {
       expect(routes.admits(path, reach)).toBe(false)
       expect(routes.admits(path, { kind: 'owner' })).toBe(false)
       expect(routes.admits(path, { ...reach, deviceId: 'unlocked-phone' })).toBe(true)
+    }
+  })
+
+  it('lift the computer-only routes for an unlocked device only while dangerous mode holds, and for no locked device or other Peer', async () => {
+    const { defaults } = await mounted()
+    const computerOnly = [PERMISSION_ROUTES.workspaces, PERMISSION_ROUTES.review, PERMISSION_ROUTES.setFullAccess]
+    for (const path of computerOnly) {
+      // Pins the mode check: with the mode off the hook refuses the device before any route, as it always did.
+      const off = recordingResponse()
+      let reachedOff = false
+      await routesOver(defaults, 'tailscale-private', ['unlocked-phone'], false).hook({ url: path, headers: { host: 'home.example.ts.net' } }, off.response, async () => { reachedOff = true })
+      expect({ path, reachedOff, status: off.answered.status }).toEqual({ path, reachedOff: false, status: 403 })
+      const on = routesOver(defaults, 'tailscale-private', ['unlocked-phone'], true)
+      let reached = false
+      await on.hook({ url: path, headers: { host: 'home.example.ts.net' } }, recordingResponse().response, async () => { reached = true })
+      expect({ path, reached }).toEqual({ path, reached: true })
+      // Pins the peer check: a locked device and a Peer that is no reach device are refused in the mode.
+      expect(on.admits(path, { ...reach, deviceId: 'unlocked-phone' })).toBe(true)
+      expect(on.admits(path, reach)).toBe(false)
+      expect(on.admits(path, { kind: 'anonymous' })).toBe(false)
+      expect(routesOver(defaults, 'tailscale-private', ['unlocked-phone'], false).admits(path, { ...reach, deviceId: 'unlocked-phone' })).toBe(false)
+    }
+  })
+
+  it('still refuse an off-loopback Host on the loopback listener and an unplaced request in dangerous mode', async () => {
+    const { defaults } = await mounted()
+    for (const [listener, host] of [['loopback', 'rebind.example.com'], [undefined, 'localhost:3080']] as const) {
+      const { response, answered } = recordingResponse()
+      let reached = false
+      await routesOver(defaults, listener, [], true).hook({ url: PERMISSION_ROUTES.setFullAccess, headers: { host } }, response, async () => { reached = true })
+      expect({ listener, reached, status: answered.status }).toEqual({ listener, reached: false, status: 403 })
     }
   })
 

@@ -119,6 +119,29 @@ describe('dangerous mode refuses without both halves', () => {
   })
 })
 
+describe('the dangerous-mode fact the reach policy reads', () => {
+  it.each<[string, boolean, Grant, boolean]>([
+    ['the row set and no grant file', true, 'none', false],
+    ['a grant file and the row off', false, 'valid', false],
+    ['a symlinked grant file', true, 'symlink', false],
+    ['a 0644 grant file', true, 'lax-mode', false],
+    ['a malformed grant file', true, 'malformed', false],
+    ['a grant file for another warning', true, 'other-warning', false],
+    ['the row set and a valid grant file', true, 'valid', true],
+  ])('reads %s as %s', async (_label, everywhere, grant, expected) => {
+    const { ctx } = await mounted({ everywhere, grant })
+    expect(ctx.get('reachFullAccessGrants')?.dangerousMode()).toBe(expected)
+  })
+
+  it('reads false again once the grant file is removed', async () => {
+    const { ctx, defaults, home } = await mounted({ everywhere: true, grant: 'valid' })
+    expect(ctx.get('reachFullAccessGrants')?.dangerousMode()).toBe(true)
+    await removeDangerousGrant(home)
+    await defaults.reload()
+    expect(ctx.get('reachFullAccessGrants')?.dangerousMode()).toBe(false)
+  })
+})
+
 describe('dangerous mode with the row and the grant file', () => {
   it('admits full access in any workspace, asks nothing and records the default without a grant time', async () => {
     const { ctx, harness, asks, defaults, workspace, home } = await mounted({ everywhere: true, grant: 'valid' })

@@ -27,6 +27,9 @@ import css from './ConsentSections.module.css'
 /** The command the remote line names for the home's own computer. */
 export const MCP_COMMAND = 'delorun mcp list'
 
+/** The command that turns dangerous mode off, which the Settings card names. */
+const SETUP_PROMPTS_COMMAND = 'delorun setup prompts'
+
 /** What the plugin supplies the section. */
 export interface PermissionsSectionInjected {
   /** Sends the section's same-origin requests: the browser's `fetch`, or a spec's fake. */
@@ -114,7 +117,7 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
             <div className={css.details}>
               <div className={css.title}>{t('everywhere.on')}</div>
               {everywhere.grantedAt === undefined ? null : <div className={css.description}>{t('everywhere.since', { time: formatTime(t, Date.parse(everywhere.grantedAt)) })}</div>}
-              <div className={css.description}>{t('everywhere.how')}</div>
+              <div className={css.description}>{t('everywhere.howBefore')} <code className={css.command}>{SETUP_PROMPTS_COMMAND}</code>{t('everywhere.howAfter')}</div>
             </div>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => { void turnOff() }}>{t('everywhere.off')}</Button>
           </div>

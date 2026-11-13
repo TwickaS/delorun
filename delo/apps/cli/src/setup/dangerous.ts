@@ -23,6 +23,7 @@ export const DANGEROUS_ON_LINE = 'Dangerous mode is on: any chat can switch to f
 /** The warning of step 1, one paragraph per entry; {@link DANGEROUS_WARNING_VERSION} names this text. */
 export const DANGEROUS_WARNING_LINES: readonly string[] = [
   'Dangerous mode lets any chat switch to full access without asking: a chat at this computer, a phone signed in over remote access, a scheduled task, a bot, or delorun headless.',
+  'A phone or browser signed in over remote access can then also do everything this computer can, except turn this mode on and approve new devices.',
   'Commands then run outside the sandbox with everything your user can do, including reading and changing Delorun\'s home, its keys and the token that controls it.',
   'The questions before writing AGENTS.md or skills, adding MCP servers and creating scheduled tasks are off, as in DeepSeek Harness.',
   'Text the model reads (web pages, files, repositories) can tell it to do harmful things.',

@@ -14,7 +14,8 @@
  * - {@link HomeAuthService} — the same behind Cordis as the `homeAuth` service, with the routes registered.
  * - The claim route, the device list route and the removal route, and the refusal a reach listener answers a claim
  *   with; the arrival helpers that decide whether a request came from the loopback listener and which address a claim
- *   records, and {@link requireComputer}, which another Delo plugin's route calls to refuse a request that did not.
+ *   records, and {@link requireComputer}, which another Delo plugin's route calls to refuse a request that did not, and
+ *   {@link requireComputerUnlessDangerous}, which lets an unlocked device through while dangerous mode holds.
  * - The stores of the secrets directory with the bounds on the records they hold, the typed refusal and the secret
  *   primitives.
  *
@@ -81,7 +82,7 @@ export {
   type RouteHandler,
 } from './routes.ts'
 export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from './arrival.ts'
-export { requireComputer, routedPathname, type ComputerRequest } from './computer-only.ts'
+export { admitUnlockedDevice, requireComputer, requireComputerUnlessDangerous, routedPathname, type ComputerRequest, type DangerousModeHome } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,
   isForeignFetchSite,

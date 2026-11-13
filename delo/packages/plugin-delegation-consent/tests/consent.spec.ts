@@ -475,25 +475,29 @@ describe('mounting', () => {
 interface FakeConnection {
   readonly hook: (request: object, response: ServerResponse, next: () => Promise<void>) => Promise<void>
   readonly fetch: (path: string, init?: RequestInit) => Promise<Response>
+  /** The route's `admitPeer` answer for a Peer principal. */
+  readonly admits: (path: string, principal: object) => boolean
 }
 
 /**
  * Register the routes on a fake Connection whose `homeAuth` places every request on one listener.
  * @param service - the consent service.
  * @param listener - the listener `homeAuth` reports.
+ * @param dangerous - whether `homeAuth` reports dangerous mode.
  */
-function routesOver(service: DeloDelegationConsent, listener: string | undefined): FakeConnection {
+function routesOver(service: DeloDelegationConsent, listener: string | undefined, dangerous = false): FakeConnection {
   let hook: FakeConnection['hook'] | undefined
-  const routes = new Map<string, { fetch: (request: Request) => Promise<Response> }>()
+  const routes = new Map<string, { fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }>()
   const ctx = {
     on: (_name: string, registered: FakeConnection['hook']) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }) } : undefined),
-    connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response> }) => { routes.set(route.path, route) } } },
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } : undefined),
+    connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }) => { routes.set(route.path, route) } } },
   }
   registerDelegationRoutes(ctx as never, service)
   return {
     hook: (request, response, next) => hook!(request, response, next),
     fetch: async (path, init) => routes.get(path)!.fetch(new Request(`http://localhost${path}`, init)),
+    admits: (path, principal) => routes.get(path)?.admitPeer?.(new Request(`http://localhost${path}`), { principal }) === true,
   }
 }
 
@@ -513,6 +517,27 @@ describe('the routes', () => {
       let other = false
       await routes.hook({ url: '/api/other', headers: { host: 'home.example.ts.net' } }, {} as never, async () => { other = true })
       expect(other).toBe(true)
+    }
+  })
+
+  it('let an unlocked device through only while dangerous mode holds, and refuse a locked device and another Peer at the peer check', async () => {
+    const { consent } = await mounted()
+    const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
+    for (const path of Object.values(DELEGATION_CONSENT_ROUTES)) {
+      // Pins the mode check: the hook refuses the device before any route with the mode off.
+      const off = routesOver(consent, 'reach-tailscale-private', false)
+      const answered: { status?: number } = {}
+      let reachedOff = false
+      await off.hook({ url: path, headers: { host: 'home.example.ts.net' } }, { writeHead: (status: number) => { answered.status = status }, end: () => {} } as never, async () => { reachedOff = true })
+      expect({ path, reachedOff, status: answered.status }).toEqual({ path, reachedOff: false, status: 403 })
+      expect(off.admits(path, device('unlocked-phone'))).toBe(false)
+      const on = routesOver(consent, 'reach-tailscale-private', true)
+      let reached = false
+      await on.hook({ url: path, headers: { host: 'home.example.ts.net' } }, {} as never, async () => { reached = true })
+      expect({ path, reached }).toEqual({ path, reached: true })
+      expect(on.admits(path, device('unlocked-phone'))).toBe(true)
+      expect(on.admits(path, device('locked-phone'))).toBe(false)
+      expect(on.admits(path, { kind: 'sdk' })).toBe(false)
     }
   })
 

@@ -74,6 +74,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
     defaultPermission: () => PERMISSION,
+    dangerousMode: () => false,
     ...overrides,
   }
 }

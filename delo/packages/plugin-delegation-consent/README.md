@@ -45,7 +45,7 @@ Both fields are a schemastery `Config`, so upstream's settings service describes
 - **External agents.** Settings, External agents holds the switch **Ask before external agents run** and the run time limit, written to this row through upstream's settings service as live fields, so a saved change applies without restarting the row: turning `enabled` off disposes the service, guard and routes, turning it on mounts them again, and a new run time limit applies from the next run. It also lists each grant with its revoke (`GET .grants`, `POST .revoke`).
 - **Terminal.** `delorun workspace external-agents [<folder> <agent> on|off]` lists, adds after a terminal confirmation, and revokes grants.
 
-Every route answers only the home's own computer and refuses others with `LOOPBACK_REQUIRED` ([routes](src/routes.ts), [messages](src/wire.ts)).
+Every route answers only the home's own computer and refuses others with `LOOPBACK_REQUIRED` ([routes](src/routes.ts), [messages](src/wire.ts)); while dangerous mode holds, a device that holds an unlock is admitted too ([`@delo/home-auth`](../home-auth/README.md#dangerous-mode)).
 
 ## Known limitations
 

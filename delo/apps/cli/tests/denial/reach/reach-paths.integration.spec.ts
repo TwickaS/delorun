@@ -82,9 +82,10 @@ interface FetchDecision {
 }
 
 const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
-const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate'
+const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate, unless dangerous mode holds and the device holds an unlock'
 const MCP_ANSWER = 'accepting or revoking a stdio MCP server decides whether its command runs outside the sandbox, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
 const EXTERNAL_AGENT = 'allowing or revoking an external agent for a workspace decides whether a program outside the sandbox starts without asking, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
+const DANGEROUS_STATE = 'reading and turning off dangerous mode: the route admits only a device that holds a running unlock, and this device holds none; no route turns the mode on'
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
 /**
@@ -116,6 +117,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloPermission.workspaces': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloPermission.review': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloPermission.setFullAccess': { device: 'refused', reason: FULL_ACCESS, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloPermission.everywhere': { device: 'refused', reason: DANGEROUS_STATE },
+  '/api/deloPermission.everywhereOff': { device: 'refused', reason: DANGEROUS_STATE },
   '/api/deloMcpConsent.pending': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.accept': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloMcpConsent.decline': { device: 'refused', reason: MCP_ANSWER, refusal: 'LOOPBACK_REQUIRED' },

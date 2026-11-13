@@ -11,6 +11,7 @@
  *
  * @module @delo/home-auth/service
  */
+import type {} from './full-access-grants.ts'
 import { basename, dirname } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import schema from '@deepseek-ai/schemastery'
@@ -229,6 +230,20 @@ export class HomeAuthService extends Service {
    */
   terminalWithoutUnlock(): boolean {
     return this.core?.terminalWithoutUnlock() ?? false
+  }
+
+  /**
+   * Whether dangerous mode holds now, read from the permission-defaults service when asked. While it does, an unlocked
+   * device does what the computer does, except turn the mode on, approve a device and sign in.
+   * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
+   */
+  dangerousMode(): boolean {
+    try {
+      return this.ctx.get('reachFullAccessGrants')?.dangerousMode() ?? false
+    } catch (_unreadable) {
+      // An unreadable store cannot show the grant, so no refusal is lifted.
+      return false
+    }
   }
 
   /**

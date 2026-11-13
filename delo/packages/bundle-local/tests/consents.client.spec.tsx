@@ -1442,7 +1442,9 @@ describe('dangerous mode', () => {
     renderPermissions(host, {})
     await settle()
     expect(screen.getByText(en['everywhere.on'])).toBeTruthy()
-    expect(screen.getByText(en['everywhere.how'])).toBeTruthy()
+    // The command is inline code, never text with literal backticks around it.
+    expect(screen.getByText('delorun setup prompts').tagName).toBe('CODE')
+    expect(document.body.textContent).not.toContain('`')
     host.script[EVERYWHERE_ROUTE] = { status: 200, body: { on: false } }
     fireEvent.click(screen.getByRole('button', { name: en['everywhere.off'] }))
     await settle()

@@ -725,16 +725,17 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
  * device may reach (see {@link WORKSPACE_PATH_ACTIONS}), unlocked or not. Before the unlock check, and so unlocked or
- * not, it refuses a settings write that could turn a registered {@link ComputerOnlySwitch} off, a plugin-manager call
- * that names a protected row ({@link PROTECTED_ROW_REFUSAL}), and a slash command {@link REACH_DEVICE_COMMANDS} does not
- * list ({@link UNLISTED_COMMAND_REFUSAL}). Every other action is allowed as its role lists it, and so is every other
- * question asked without a call's arguments.
+ * not, it refuses a settings write that could turn a registered {@link ComputerOnlySwitch} off or loosen the
+ * permission new chats start in, a plugin-manager call that names a protected row ({@link PROTECTED_ROW_REFUSAL}), and
+ * a slash command {@link REACH_DEVICE_COMMANDS} does not list ({@link UNLISTED_COMMAND_REFUSAL}), except while
+ * dangerous mode holds ({@link ReachAccessFacts.dangerousMode}), when an unlock decides them. Every other action is allowed as its role lists it, and so is every
+ * other question asked without a call's arguments.
  * @param facts - the Host state the policy reads.
  * @param principal - the device and the listener whose bindings carry the condition.
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener } = principal
@@ -752,7 +753,9 @@ export function createCondition(
     return undefined
   }
   return ({ action, resource, args }) => {
-    if (args !== undefined) {
+    // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
+    // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
+    if (args !== undefined && !facts.dangerousMode()) {
       // A computer-only switch stays on, new chats' permission stays as loose as it is, a protected row stays as it is,
       // and a command a device does not run stays unrun, so no unlock admits any of them.
       if (SETTINGS_WRITES.has(action)) {
@@ -857,6 +860,12 @@ export interface ReachAccessFacts {
    * @returns it, or undefined while no permission presets run.
    */
   readonly defaultPermission: () => DefaultPermission | undefined
+  /**
+   * Whether dangerous mode holds: the computer-only refusals of a settings write, a protected plugin row and an unlisted
+   * command are lifted for a device that holds an unlock. Approving a device and signing in stay at the computer.
+   * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
+   */
+  readonly dangerousMode: () => boolean
 }
 
 /**

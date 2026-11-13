@@ -12,7 +12,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { REACH_DEVICE, requireComputer, routedPathname, type ReachDevicePrincipal } from '@delo/home-auth'
+import { REACH_DEVICE, admitUnlockedDevice, requireComputerUnlessDangerous, routedPathname, type ReachDevicePrincipal } from '@delo/home-auth'
 import { removeDangerousGrant } from './store.ts'
 import { resolveDeloHome } from '@delo/home'
 import { z } from 'zod'
@@ -113,7 +113,7 @@ export function registerPermissionRoutes(ctx: Context): void {
       // The two routes that only tighten or read are decided for a reach device by `admitPeer`; the computer's own
       // request keeps the loopback listener and Host check, and a request the home cannot place is refused here.
       const toDevice = deviceRoutes.has(pathname) && listener !== undefined && listener !== 'loopback'
-      if (!toDevice && !requireComputer(request, response, homeAuth, ACTION)) return
+      if (!toDevice && !requireComputerUnlessDangerous(request, response, homeAuth, ACTION)) return
     }
     await next()
   })
@@ -123,6 +123,8 @@ export function registerPermissionRoutes(ctx: Context): void {
     const { deviceId, listener } = peer.principal as ReachDevicePrincipal
     return ctx.get('homeAuth')?.elevationOf(deviceId, listener) !== undefined
   }
+  // The routes that grant, read and review consent: the computer, or an unlocked device while dangerous mode holds.
+  const dangerousDevice = admitUnlockedDevice(() => ctx.get('homeAuth'))
   ctx.connection.fetch.register({
     path: PERMISSION_ROUTES.everywhere,
     methods: ['GET'],
@@ -147,12 +149,14 @@ export function registerPermissionRoutes(ctx: Context): void {
     path: PERMISSION_ROUTES.workspaces,
     methods: ['GET'],
     requestBody: 'buffered',
+    admitPeer: dangerousDevice,
     fetch: () => answered(() => ctx.permissionDefaults.workspaces()),
   })
   ctx.connection.fetch.register({
     path: PERMISSION_ROUTES.review,
     methods: ['POST'],
     requestBody: 'buffered',
+    admitPeer: dangerousDevice,
     fetch: async (request) => {
       const body = await bodyOf(request, ReviewBody)
       if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with one session id')
@@ -163,6 +167,7 @@ export function registerPermissionRoutes(ctx: Context): void {
     path: PERMISSION_ROUTES.setFullAccess,
     methods: ['POST'],
     requestBody: 'buffered',
+    admitPeer: dangerousDevice,
     fetch: async (request) => {
       const body = await bodyOf(request, SetFullAccessBody)
       if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with the workspace, the review id, on and confirmed')

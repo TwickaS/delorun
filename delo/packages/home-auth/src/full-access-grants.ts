@@ -15,6 +15,13 @@ export interface ReachFullAccessGrants {
    * @returns the folders; empty when the grant store cannot be read.
    */
   grantedFolders(): readonly string[]
+  /**
+   * Whether dangerous mode holds now: the permission-defaults row sets `fullAccessEverywhere` and the grant file
+   * `delorun setup` wrote is valid. The reach policy then lifts the refusals that only keep a device from what the
+   * computer does (README, "Dangerous mode").
+   * @returns whether it holds; false while the store cannot be read.
+   */
+  dangerousMode(): boolean
 }
 
 declare module '@deepseek-ai/cordis' {

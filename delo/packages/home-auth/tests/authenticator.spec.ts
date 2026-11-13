@@ -221,6 +221,34 @@ describe('the authenticator provider', () => {
       .toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
+  it('lets an unlocked device give full-access, workspace-management and external-agent grants while dangerous mode holds, and no other device', async () => {
+    ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+    const admitted = provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+    if (admitted.kind !== 'admitted') throw new Error('not admitted')
+    let mode = true
+    let grants: object | undefined = { grantedFolders: () => [], dangerousMode: () => mode }
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? grants : Context.prototype.get.call(ctx, name as never))) as never)
+    let unlocked = true
+    vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => (unlocked ? { id: 'elevation-1' } as never : undefined))
+    const give = (grantsMarker: string): void => {
+      provider().checkAnswer({ peer: admitted.peer, event: 'approval/request', request: { grants: grantsMarker }, value: 'allowed-once' })
+    }
+    for (const marker of ['full-access', 'workspace-management', 'external-agent']) expect(() => { give(marker) }, marker).not.toThrow()
+    // Pins the unlock check: a device whose unlock ended keeps every refusal.
+    unlocked = false
+    for (const marker of ['full-access', 'workspace-management', 'external-agent']) expect(() => { give(marker) }, marker).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    unlocked = true
+    // Pins the mode check: with the mode off, without a service and with a store that cannot be read, nothing is lifted.
+    mode = false
+    expect(() => { give('full-access') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    grants = undefined
+    expect(ctx.homeAuth.dangerousMode()).toBe(false)
+    expect(() => { give('external-agent') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+    grants = { grantedFolders: () => [], dangerousMode: () => { throw new Error('unreadable store') } }
+    expect(ctx.homeAuth.dangerousMode()).toBe(false)
+    expect(() => { give('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
+  })
+
   it('sets the rolled cookie on a plain request and never on an upgrade', async () => {
     // The home reads the clock it was built with, so it is rebuilt over a faked `Date`.
     await fiber.dispose()
@@ -307,7 +335,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
