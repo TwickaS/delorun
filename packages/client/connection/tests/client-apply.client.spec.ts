@@ -263,13 +263,32 @@ describe('connection client apply', () => {
     }
   })
 
-  it('feeds browser offline and online events into the owned retry loop', async () => {
+  it('stays connected on a loopback page while the browser reports the network offline', async () => {
+    const browser = new BrowserNetworkProbe()
+    browser.navigator.onLine = false
+    vi.stubGlobal('window', browser)
+    ;(globalThis as Win).location = { hostname: '127.0.0.1' }
+    const handle = await mount()
+    installGeneration(handle)
+    const loop = handle.start({})
+    try {
+      await vi.waitFor(() => { expect(handle.state.getSnapshot()).toBe('connected') })
+      browser.setOnline(false)
+      expect(handle.state.getSnapshot()).toBe('connected')
+      browser.setOnline(true)
+      expect(handle.state.getSnapshot()).toBe('connected')
+    } finally {
+      loop.stop()
+    }
+  })
+
+  it('feeds browser offline and online events into the owned retry loop of a page served from another computer', async () => {
     vi.useFakeTimers()
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const browser = new BrowserNetworkProbe()
     vi.stubGlobal('window', browser)
-    ;(globalThis as Win).location = { hostname: 'localhost' }
+    ;(globalThis as Win).location = { hostname: 'studio.example.test' }
     const handle = await mount()
     let calls = 0
     const source: ConnectionGenerationSource = (signal, ready) => new Promise<void>((resolve) => {

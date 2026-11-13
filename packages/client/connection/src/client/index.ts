@@ -217,7 +217,17 @@ interface BrowserNetworkTarget {
   removeEventListener(type: 'online' | 'offline', listener: () => void): void
 }
 
-function watchBrowserNetwork(controller: ConnectionController): () => void {
+/**
+ * Feed the browser's online and offline events into the controller, which pauses automatic retries while offline.
+ * A loopback Host is reachable without any network, so a page served from it never follows them: a computer with its
+ * Wi-Fi off, or a browser in a network namespace with only loopback, reports `navigator.onLine === false` while the
+ * studio on the same computer is up.
+ * @param controller - the connection controller.
+ * @param hostIsLoopback - whether the page's Host is on this computer.
+ * @returns the function that removes the listeners.
+ */
+function watchBrowserNetwork(controller: ConnectionController, hostIsLoopback: boolean): () => void {
+  if (hostIsLoopback) return () => {}
   const browser = (globalThis as { readonly window?: BrowserNetworkTarget }).window
   const initiallyAvailable = browser?.navigator?.onLine
   if (browser === undefined || initiallyAvailable === undefined) return () => {}
@@ -338,7 +348,7 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
           sinks.onStateChange?.(state)
         },
       }, { ...recovery, ...config })
-      const current = { token, source, controller, stopNetworkWatch: watchBrowserNetwork(controller) }
+      const current = { token, source, controller, stopNetworkWatch: watchBrowserNetwork(controller, handle.isLoopback) }
       owner = current
       controller.start()
       return {
