@@ -87,9 +87,11 @@ export function setupWorktree(root: string): void {
   step(root, 'pnpm', ['install', '--frozen-lockfile'])
   // The documentation site is a workspace of its own with its own lockfile; the `docs-site` check refuses to run without it.
   step(join(root, 'delo', 'apps'), 'pnpm', ['--dir', 'docs', 'install', '--frozen-lockfile'])
+  // The product website is a workspace of its own too; the `website-site` check refuses to run without it.
+  step(join(root, 'delo', 'apps'), 'pnpm', ['--dir', 'website', 'install', '--frozen-lockfile'])
   step(root, 'node', ['scripts/install-lefthook.mjs'])
   step(root, 'git', ['config', 'merge.delo-ledger.driver', LEDGER_DRIVER])
-  console.log('setup-worktree: done: hooks file, install, documentation site install, hooks and ledger merge driver are in place; `pnpm check` runs the checks a change reaches')
+  console.log('setup-worktree: done: hooks file, install, documentation site and product website installs, hooks and ledger merge driver are in place; `pnpm check` runs the checks a change reaches')
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

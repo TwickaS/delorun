@@ -50,7 +50,7 @@ node_modules/.bin/tsx delo/apps/docs/scripts/preview-record.ts 0.1.0 /tmp/docs-p
 
 ## 主题
 
-站点的外观位于 `src/theme/`：设计令牌在 [`tokens.css`](src/theme/tokens.css) 中，页眉在 [`header.ts`](src/theme/header.ts) 中，页面页脚在 [`footer.tsx`](src/theme/footer.tsx) 中。这些文件不读取任何页面、标签或站点设置；站点把自己的文本和链接传给它们，因此其他站点可以用自己的内容采用同一主题。
+站点的外观来自 [`delo/packages/site-design`](../../packages/site-design/src/tokens.css)，本站点和[产品网站](../website/README.zh.md)按路径以 `@design/*` 导入：设计令牌、页脚、Delorun 标志和变更记录视图。其文件不读取任何页面、标签或站点设置；每个站点传入自己的文本和链接。[`src/theme/header.ts`](src/theme/header.ts) 中的页眉留在本站点，因为它适配 Fumadocs 的布局选项。
 
 ## 命令
 

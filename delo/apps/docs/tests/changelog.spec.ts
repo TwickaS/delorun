@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildEntry, CHANGELOG_SCHEMA, renderChangelog, type ChangelogData } from '../../release/src/changelog/data.ts'
 import type { Fragment } from '../../release/src/changelog/fragment.ts'
-import { buildView, firstSentence, loadView, PREVIEW_ENV, RECORD_PATH } from '../src/site/changelog.ts'
+import { buildView, firstSentence, loadView, PREVIEW_ENV, RECORD_PATH } from '@design/changelog.ts'
 import { prerenderPaths } from '../src/site/pages.ts'
 
 const REPOSITORY = fileURLToPath(new URL('../../../..', import.meta.url))

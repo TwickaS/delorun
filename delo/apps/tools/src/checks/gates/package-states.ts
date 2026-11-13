@@ -41,6 +41,7 @@ export const ROOT_DIRS = [
   'delo/apps/release-channel',
   'delo/apps/tools',
   'delo/apps/docs',
+  'delo/apps/website',
 ] as const
 
 const stateField = z.strictObject({

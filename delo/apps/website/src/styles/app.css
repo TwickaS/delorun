@@ -1,0 +1,15 @@
+@import 'tailwindcss' source(none);
+@import '../../../../packages/site-design/src/tokens.css';
+/* Both builds (browser and prerender) must generate the same stylesheet, so the class sources are listed rather than discovered from each build's modules. */
+@source '../';
+/* Tailwind scans only this site's directory, so the shared design's classes need their own source. */
+@source '../../../../packages/site-design/src';
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+
+body { background: var(--color-fd-background); color: var(--color-fd-foreground); font-family: ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+@media (prefers-reduced-motion: no-preference) {
+  a { transition: color 0.15s ease, text-decoration-color 0.15s ease; }
+}
