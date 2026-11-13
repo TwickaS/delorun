@@ -2155,6 +2155,12 @@
       "class": "security",
       "reason": "Security entry (per-workspace full access, A307). The composer permission control skips its built-in `RiskConfirmation` for full access or auto review only when the injected `ownsConfirmation(preset)` is true, i.e. the composition's `permissionSwitchConsent` asks its own risk question before the switch is submitted; otherwise unchanged. Lead verdict (2026-11-13): approved after the lead review of the diff; every switch to full access still asks exactly one question. A308 follow-up: the composer chip shows a pick only after an owning `permissionSwitchConsent` confirmed it, so a cancelled or refused full-access consent never shows Full access. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
       "sha256": "b9176ff50c96e4ae1f772374aac561a774701467a2db30a927164477a4c487cc"
+    },
+    {
+      "path": "scripts/no-unknown-casts.baseline.json",
+      "class": "delo-feature",
+      "feature": "permission-defaults",
+      "reason": "Drops the baseline entry of packages/client/ui-permission-presets/tests/permission-select.client.spec.tsx, whose `as unknown` cast the Allow for this chat change replaced with typed props, so the no-unknown-casts gate keeps the baseline exact. Only that entry is removed."
     }
   ],
   "retired": []
