@@ -220,6 +220,8 @@ describe('the homeAuth service', () => {
     expect(service.arrivalOf({ headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '127.0.0.1', localAddress: '127.0.0.1', localPort: 3080 } }))
       .toEqual({ listener: undefined, host: '127.0.0.1:3080', source: 'unknown' })
     expect(service.servedListener('reach-tailscale-private')).toBeUndefined()
+    // The terminal switch only lowers protection, so it reads off until the home started.
+    expect(service.terminalWithoutUnlock()).toBe(false)
     expect(() => service.owner()).toThrow(/has not started/)
     expect(() => service.cancelApproval('request')).toThrow(/has not started/)
   })

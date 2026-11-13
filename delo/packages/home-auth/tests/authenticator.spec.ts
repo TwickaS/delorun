@@ -212,7 +212,9 @@ describe('the authenticator provider', () => {
     expect(() => { check(admitted.peer, { request: {} }) }).not.toThrow()
     expect(() => { check(admitted.peer, { request: { grants: 'other' } }) }).not.toThrow()
     expect(() => { check(admitted.peer, { event: 'question/ask' }) }).not.toThrow()
-    expect(ctx.get('remoteAnswerGuard')).toBeDefined()
+    // Pins the guard the Gateway calls: it is the same check.
+    expect(() => { ctx.get('remoteAnswerGuard')?.check({ peer: admitted.peer, event: 'approval/request', request: { grants: 'full-access' }, value: 'allowed-once' } as never) })
+      .toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
   it('sets the rolled cookie on a plain request and never on an upgrade', async () => {
@@ -387,6 +389,41 @@ describe('the authenticator provider', () => {
         expect(read('s-live', 'b.txt')).toMatchObject({ kind: 'deny' })
         expect(read('s-stored', 'b.txt')).toEqual({ kind: 'allow' })
         expect(read('s-unknown', 'b.txt')).toMatchObject({ kind: 'deny' })
+      } finally {
+        await rm(outside, { recursive: true, force: true })
+      }
+    })
+
+    it('opens a terminal from the Session\'s folders, the granted workspaces and the switch, and recomputes the snapshot on a switch change', async () => {
+      const access = await fakeRemoteAccess()
+      const outside = await mkdtemp(join(tmpdir(), 'delo-home-auth-terminal-'))
+      try {
+        const granted = join(outside, 'granted')
+        const moved = join(granted, 'inner')
+        const other = join(outside, 'other')
+        await mkdir(moved, { recursive: true })
+        await mkdir(other)
+        ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+        provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+        const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
+        const live = { 's-in': { header: { cwd: granted } }, 's-out': { header: { cwd: other } } } as Record<string, { readonly header: { readonly cwd: string } }>
+        ctx.provide('sessions', { list: () => [{ id: 's-in' }, { id: 's-out' }, { id: 's-gone' }], get: (id: string) => live[id] } as never)
+        ctx.provide('workingDirectory', { get: (session: { readonly header: { readonly cwd: string } }) => (session === live['s-in'] ? moved : session.header.cwd) } as never)
+        const binding = access.policy().bindings(device)
+          .find((candidate): candidate is Extract<RemoteAccessBinding, { readonly resource: { readonly kind: 'session' } }> => candidate.resource.kind === 'session')
+        const open = (id: string) => binding?.condition?.({ action: 'terminal/create', resource: { kind: 'session', id: id as SessionId }, args: {} } as never)
+        // Without a grant provider no workspace counts as granted.
+        expect(open('s-in')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+        ctx.provide('reachFullAccessGrants', { grantedFolders: () => [granted] } as never)
+        // Pins the folder facts: a live Session's current and original folders, checked against the granted workspaces.
+        expect(open('s-in')).toEqual({ kind: 'allow' })
+        expect(open('s-out')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+        expect(open('s-gone')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+        const before = access.invalidated.length
+        await ctx.homeAuth.setTerminalWithoutUnlock(true, 'computer')
+        // Pins the switch fact and its invalidation: the device's snapshot is recomputed when the switch changes.
+        expect(open('s-out')).toEqual({ kind: 'allow' })
+        expect(access.invalidated.slice(before)).toEqual([device])
       } finally {
         await rm(outside, { recursive: true, force: true })
       }

@@ -84,10 +84,10 @@ afterEach(async () => {
  * @param method - the method.
  * @param path - the path, with `?reach` for the device.
  * @param body - the JSON body.
- * @param headers - extra headers, which replace the defaults.
+ * @param headers - extra headers, which replace the defaults; an undefined one leaves the header out.
  * @returns the status and the parsed body.
  */
-function send(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Reply> {
+function send(method: string, path: string, body?: unknown, headers: Record<string, string | undefined> = {}): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const text = body === undefined ? undefined : JSON.stringify(body)
     const host = `127.0.0.1:${String(port)}`
@@ -96,7 +96,8 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
       : { cookie: STUDIO_COOKIE, origin: `http://${host}` }
     const request = httpRequest({
       host: '127.0.0.1', port, method, path, setHost: false, agent: false,
-      headers: { host, ...defaults, ...headers, ...(text === undefined ? {} : { 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(text)) }) },
+      headers: Object.fromEntries(Object.entries({ host, ...defaults, ...headers, ...(text === undefined ? {} : { 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(text)) }) })
+        .filter((entry): entry is [string, string] => entry[1] !== undefined)),
     }, (response) => {
       let received = ''
       response.setEncoding('utf8')
@@ -202,6 +203,7 @@ describe('the terminal switch', () => {
 
   it('answers a device with a live session and the studio\'s own page only, and the computer with its credential only', async () => {
     expect(await send('GET', `${ELEVATION_PATHS.terminal}?reach`, undefined, { cookie: 'other=1' })).toMatchObject({ status: 401 })
+    expect(await send('GET', `${ELEVATION_PATHS.terminal}?reach`, undefined, { cookie: undefined })).toMatchObject({ status: 401 })
     expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: false }, { 'sec-fetch-site': 'cross-site' })).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
     // Pins the computer's credential: a local program without the studio's cookie cannot turn it on.
     expect(await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true }, { cookie: 'other=1' })).toMatchObject({ status: 401 })
@@ -213,6 +215,7 @@ describe('the terminal switch', () => {
     for (const body of [{ withoutUnlock: 'true' }, { withoutUnlock: 1 }, {}]) {
       expect(await send('POST', ELEVATION_PATHS.terminal, body), JSON.stringify(body)).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } })
     }
+    expect(await send('POST', ELEVATION_PATHS.terminal)).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } })
     expect(await send('PUT', ELEVATION_PATHS.terminal)).toMatchObject({ status: 405 })
     expect(await send('PUT', `${ELEVATION_PATHS.terminal}?reach`)).toMatchObject({ status: 405 })
     expect(home.auth.terminalWithoutUnlock()).toBe(false)
