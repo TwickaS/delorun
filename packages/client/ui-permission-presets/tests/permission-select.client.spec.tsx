@@ -53,7 +53,7 @@ function setup(options: {
     select,
     ownsConfirmation: options.ownsConfirmation ?? (() => false),
     t,
-  } as unknown as PermissionSelectProps
+  } as PermissionSelectProps
   const view = render(<PermissionSelect {...props} />)
   return { catalog, props, select, selection, view }
 }

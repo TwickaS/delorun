@@ -233,7 +233,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     kind: 'list',
     scope: 'session',
     summary: 'Persistent choices on a card whose request carries `escalatesTo`; rendered in the decision row after Allow once, which draws as a secondary button while an entry reports a shown button through `offer`.',
-    doc: 'Persistent choices on a card whose request carries `escalatesTo`; rendered in the decision row after Allow once,\nwhich draws as a secondary button while an entry reports a shown button through `offer`. An entry that offers nothing for the request renders nothing.',
+    doc: 'Persistent choices on a card whose request carries `escalatesTo`; rendered in the decision row after Allow once,\nwhich draws as a secondary button while an entry reports a shown button through `offer`. An entry that offers\nnothing for the request renders nothing.',
     registerOptions: [
       {
         name: 'id',
@@ -288,7 +288,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.approval.choice\', () => ctx.slots.register(\n      { name: \'conversation.approval.choice\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-approval/src/client/contract/slots.ts:66',
+    source: 'packages/client/ui-approval/src/client/contract/slots.ts:67',
   },
   {
     key: 'conversation.approval.detail',
