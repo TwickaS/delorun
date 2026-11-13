@@ -155,6 +155,11 @@
       config:
         enabled: true
 
+    - id: delo-delegation-consent
+      name: '@delo/plugin-delegation-consent'
+      config:
+        enabled: true
+
     - id: delo-plugin-changes
       name: '@delo/plugin-changes'
       config:
@@ -166,11 +171,6 @@
           - '@deepseek-ai/dsh-web-app'
           - '@delo/bundle-local'
           - '@delo/bundle-studio'
-
-    - id: delo-delegation-consent
-      name: '@delo/plugin-delegation-consent'
-      config:
-        enabled: true
 
 # The update gate (C16 switch `update_turn_refusal`): while `delorun update` or
 # a stop waits for running chats (C19's `waiting` phase), the first step of
