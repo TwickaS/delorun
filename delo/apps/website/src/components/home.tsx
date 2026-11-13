@@ -6,6 +6,7 @@
 import view from 'virtual:delo-changelog'
 import { DOCS_URL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
+import { CopyButton } from '@/components/copy-button.tsx'
 import { Frame, LINK } from '@/components/layout.tsx'
 import { SignupSection } from '@/components/signup.tsx'
 
@@ -54,8 +55,9 @@ export function Home() {
             <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">{COPY.heroTitle}</h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-fd-muted-foreground">{COPY.heroText}</p>
             <p className="mt-8 text-sm font-medium">{COPY.installLabel}</p>
-            <p className="mt-2"><code className="inline-block max-w-full rounded-lg bg-fd-foreground px-4 py-2.5 font-mono text-base text-fd-background">{COPY.installCommand}</code></p>
+            <p className="mt-2"><CopyButton text={COPY.installCommand} /></p>
             <p className="mt-3 max-w-md text-sm text-fd-muted-foreground">{COPY.installNote}</p>
+            <p className="mt-2 max-w-md text-sm text-fd-muted-foreground">{COPY.platformNote.before}<a href={COPY.platformNote.href} className={LINK}>{COPY.platformNote.linkText}</a>{COPY.platformNote.after}</p>
             <p className="mt-5"><a href={`${DOCS_URL}/guide/install`} className={`font-medium ${LINK}`}>{COPY.guideLink}</a></p>
           </div>
           <Terminal />

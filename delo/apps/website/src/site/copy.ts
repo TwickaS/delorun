@@ -22,6 +22,15 @@ export const COPY = {
   heroText: 'Delorun is an open-source agent harness on your own computer. Theme it, extend it with your own plugins, use it from your phone, and go back whenever a change is not right. One command installs it and checks that the download is genuine.',
   installLabel: 'Install and first run',
   installCommand: 'npx delorun',
+  copyLabel: 'Copy command',
+  copiedLabel: 'Copied',
+  /** Shown beside the install command; `linkText` is the part that links to `href`. */
+  platformNote: {
+    before: 'For now, Delorun runs on Linux and on ',
+    linkText: 'Windows through WSL2',
+    href: `${DOCS_URL}/guide/install#windows-through-wsl2`,
+    after: '. macOS and native Windows come in a later release.',
+  },
   installNote: 'Needs Node.js 24.9 or newer and a key for the model you want to talk to.',
   terminalLabel: 'What the command prints',
   /** What `npx delorun` asks first on a new home, as the setup prints it. */
