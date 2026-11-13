@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@effect/platform-node-shared': 4.0.7
+
 importers:
 
   .:
@@ -294,11 +297,11 @@ packages:
     peerDependencies:
       effect: ^4.0.5
 
-  '@effect/platform-node-shared@4.1.0':
-    resolution: {integrity: sha512-uYQfFRoxWLo8fIhiSeBcmz/R1ooOfE3HF3cWHFgxz82tZMk2Wn02BGABcdLmaAch9VpDLbtWnuhSxNyBsGMUFg==}
-    engines: {node: '>=22.19.0'}
+  '@effect/platform-node-shared@4.0.7':
+    resolution: {integrity: sha512-uCeBJ00hliKQsb7gMfvyEXUL1XmUKQcRzKi1X8ISG0UxTDMAdPRigOyKDnKxUTxE5PoT4kxLHQvOxo6U405FGg==}
+    engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.1.0
+      effect: ^4.0.7
 
   '@effect/platform-node@4.0.7':
     resolution: {integrity: sha512-YXUh0A4ZjuPAONt/yXb5zBM7zPR6eUPYUBtyj1374zq0P5SUpdcz8Lf54JSavXb8mdrc1glsXWHFVINpJyrlWA==}
@@ -2883,7 +2886,7 @@ snapshots:
       '@distilled.cloud/core': 1.0.0-rc.17(effect@4.0.7)
       effect: 4.0.7
 
-  '@effect/platform-node-shared@4.1.0(effect@4.0.7)':
+  '@effect/platform-node-shared@4.0.7(effect@4.0.7)':
     dependencies:
       '@types/ws': 8.18.2
       effect: 4.0.7
@@ -2894,7 +2897,7 @@ snapshots:
 
   '@effect/platform-node@4.0.7(effect@4.0.7)(redis@6.3.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.1.0(effect@4.0.7)
+      '@effect/platform-node-shared': 4.0.7(effect@4.0.7)
       effect: 4.0.7
       redis: 6.3.1
       undici: 8.12.3
