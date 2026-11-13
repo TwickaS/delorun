@@ -97,4 +97,4 @@ No confined command can write the record on any dialect: it lies under the home,
 
 ## What is built so far
 
-Everything on this page is built for the CLI launcher, `delorun verify`, an update's prepare, the check before a successor starts and the H1 health check. Not built: macOS keeps the full hash until a test on APFS runs; the interval is an environment variable until the launcher reads a setting.
+Everything on this page is built for the CLI launcher, `delorun verify`, an update's prepare, the check before a successor starts and the H1 health check. Not built: macOS keeps the full hash until a test on APFS runs; the interval is an environment variable until the launcher reads a setting, which it does not.

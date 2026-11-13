@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-A contract is a specification that work packages consume as written: the types, wire formats, limits, errors and security requirements that code consumes, with the denial tests that prove the requirements. Each contract page has a Status section that names what is built and reached, what is built and reached by nothing, and what is not built, a Security section that states its requirements and the denial tests for them, and a "What this does not prove" subsection where the page's claims have limits. A requirement the Status section names as not built protects no one; the [designs](../design/README.md) hold the rules of features that are not built. Contract C12 (telemetry) is not part of the first release, so no page covers it.
+A contract is a specification that work packages consume as written: the types, wire formats, limits, errors and security requirements that code consumes, with the denial tests that prove the requirements. Each contract page has a Status section that names what is built and reached, what is built and reached by nothing, and what is not built, a Security section that states its requirements and the denial tests for them, and a "What this does not prove" subsection where the page's claims have limits. A requirement the Status section names as not built protects no one; the [designs](../design/README.md) hold the rules of features that are not built. Contract C12 (telemetry) is not part of Delorun, so no page covers it.
 
 ## The contracts
 

@@ -20,7 +20,7 @@ This package is the Docker supervisor of [contract C9](../../docs/contracts/c09-
 - [The capability report](#the-capability-report)
 - [Workspace containers](#workspace-containers)
 - [The operational log](#the-operational-log)
-- [Not yet implemented](#not-yet-implemented)
+- [Not implemented](#not-implemented)
 - [Tests](#tests)
 
 ## Launching the supervisor
@@ -57,7 +57,7 @@ The token reaches the supervisor only through the pipe, never a command line or 
 | --- | --- |
 | `capabilities` | the Docker part of the report and the availability of each shape; `refresh: true` inspects again |
 | `workspace.create`, `.start`, `.stop`, `.remove`, `.inspect`, `.list`, `.egress` | S2 workspace containers, their networks and their egress proxy |
-| `helper.start`, `s3.create`, `s3.start`, `s3.stop`, `s3.inspect` | refused with `SHAPE_UNAVAILABLE`: the S2 helper and the S3 container arrive with their shapes |
+| `helper.start`, `s3.create`, `s3.start`, `s3.stop`, `s3.inspect` | refused with `SHAPE_UNAVAILABLE`: the S2 helper and the S3 container exist only with their shapes |
 
 ## Supervisor roots
 
@@ -109,7 +109,7 @@ Every Engine API call has the deadline `engineCallMs` and every pull `pullMs`; a
 
 `openSupervisorLog` opens `logs/supervisor-<profile>/supervisor.log` with the start id, and the process registers its token with the log's redactor before anything is logged. Each request writes one record with the operation, the workspace id and the outcome; a refused authentication is logged without the presented value, and no record carries a request body, a credential or an environment value. `captureSupervisorOutput` routes the process's own standard output and standard error into the same log. C20's cross-surface denial suite runs over this surface through the driver in `tests/log-driver.ts`.
 
-## Not yet implemented
+## Not implemented
 
 - A launch by a shipped command: `delorun start` passes no supervisor setup, and no setup step writes the roots file.
 - The S2 helper (`helper.start`), the S3 container (`s3.*`) and credential forwarding are refused with `SHAPE_UNAVAILABLE` until their shapes add them.
@@ -120,4 +120,4 @@ Every Engine API call has the deadline `engineCallMs` and every pull `pullMs`; a
 
 `node_modules/.bin/vitest run --config delo/vitest.config.ts delo/packages/supervisor` runs the specs that need no Docker engine: the socket, framing and token checks, the closed schema, the root refusals, the launched process, the pure parts, and the confinement specs. `node_modules/.bin/vitest run --config delo/vitest.docker.config.ts delo/packages/supervisor` runs the Docker specs (`*.docker.spec.ts`) against the active context's engine with a stand-in S2 image built from `tests/fixtures/s2-image` and tagged under C9's repository name for the run; every container, network and tag they create is removed afterwards.
 
-The confinement specs run each sandbox dialect the host provides through upstream's sandbox provider. A dialect whose profile does not yet express C1's `home-read` rule, found by a probe that reads a fixture under the home, is reported skipped with that reason, as is Landlock where its launcher is not usable. One spec applies C1's bwrap mechanism as the contract states it, to show that the socket and the token file lie where that mechanism hides them.
+The confinement specs run each sandbox dialect the host provides through upstream's sandbox provider. A dialect whose profile does not express C1's `home-read` rule, found by a probe that reads a fixture under the home, is reported skipped with that reason, as is Landlock where its launcher is not usable. One spec applies C1's bwrap mechanism as the contract states it, to show that the socket and the token file lie where that mechanism hides them.

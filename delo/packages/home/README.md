@@ -19,7 +19,7 @@ This package is the one implementation of [contract C1](../../docs/contracts/c01
 - [The home lock](#the-home-lock)
 - [The start token](#the-start-token)
 - [The token channels](#the-token-channels)
-- [Not yet implemented](#not-yet-implemented)
+- [Not implemented](#not-implemented)
 - [Development](#development)
 
 ## Use this package
@@ -36,7 +36,7 @@ Every failure the contract defines is a `HomeLayoutError` with C1's `code`, the 
 
 ## The tree and its modes
 
-`ensureHomeTree(home, profile)` creates the home, each of Delo's top-level entries (`runtimes/`, `staging/`, `trust/`, `status/`, `catalogue/`, `secrets/`, `run/`, `supervisor/`, `bin/`, `alerts/`) and `run/<profile>/` at mode 0700 through `mkdir` with that mode, so the umask can only narrow it. It then checks the home, `secrets/` and `run/<profile>/` with `checkPrivateDirectory`, which refuses a symbolic link, another user's directory or one with a group or other bit set with `HOME_MODE` and the fix `chmod 700 <path>`. `checkPrivateDirectorySync(path)` runs the same check synchronously, for a caller on a synchronous path such as the log writer of [`@delo/logs`](../logs/README.md). An existing directory keeps its mode: nothing here changes a mode. On Windows, which has no mode bits, neither check refuses anything ([not yet implemented](#not-yet-implemented)). Upstream's entries keep upstream's layout and modes, and this package creates none of them.
+`ensureHomeTree(home, profile)` creates the home, each of Delo's top-level entries (`runtimes/`, `staging/`, `trust/`, `status/`, `catalogue/`, `secrets/`, `run/`, `supervisor/`, `bin/`, `alerts/`) and `run/<profile>/` at mode 0700 through `mkdir` with that mode, so the umask can only narrow it. It then checks the home, `secrets/` and `run/<profile>/` with `checkPrivateDirectory`, which refuses a symbolic link, another user's directory or one with a group or other bit set with `HOME_MODE` and the fix `chmod 700 <path>`. `checkPrivateDirectorySync(path)` runs the same check synchronously, for a caller on a synchronous path such as the log writer of [`@delo/logs`](../logs/README.md). An existing directory keeps its mode: nothing here changes a mode. On Windows, which has no mode bits, neither check refuses anything ([Not implemented](#not-implemented)). Upstream's entries keep upstream's layout and modes, and this package creates none of them.
 
 ## Protected files
 
@@ -70,7 +70,7 @@ C1's protected files are every file under `secrets/`, `trust/`, `status/` and `c
 - **Requests.** Each connection carries one request line within the channel's size limit and deadline, and a connection beyond the channel's limit is answered at once. `authenticateLine` checks the line's `token` before anything else is read, so a caller without the token learns nothing about the schema; a refused authentication is logged without the presented value at most once per interval, with a count.
 - **Responses.** A request may write progress lines before its final line; the connection closes after the final line, and a caller that has not closed its side by the first-byte deadline is cut off. A request whose caller disconnects runs on, and that connection no longer counts towards the limit. `answered` runs once the final line is written, so a request that ends the channel closes it only after its caller has the answer.
 
-## Not yet implemented
+## Not implemented
 
 - The Windows DACL check of C1's Windows rule ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory check returns without checking anything, and the protected-file check looks only at the file type, so a home or a secret file that other users can read is not refused there.
 - The Windows named pipes with C1's DACL: the token channels listen only on Unix sockets.

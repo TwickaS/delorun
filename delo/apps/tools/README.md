@@ -5,7 +5,7 @@ English | [中文](README.zh.md)
 `@delo/tools` is Delo's fork tooling, a private package in `delo/apps/tools`.
 It holds the divergence-ledger checker, which keeps every difference between this tree and its pinned upstream commit recorded, and the count of that difference.
 It also holds the gates that check each change, the commit standard, and the inventory of upstream's workflows.
-The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs those gates and the other local checks described below; the stand-in stack serves the reach and sign-in tests, and the other fork tools arrive with later work packages.
+The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs those gates and the other local checks described below; the stand-in stack serves the reach and sign-in tests, and the repository holds no other fork tools.
 
 ## Modules
 
@@ -131,7 +131,7 @@ The [gates workflow](../../../.github/workflows/gates.yml) runs each gate on pul
 
 Authoring is English-only. A page's Chinese counterpart (`*.zh.md`) and its consistency record (`*.i18n.yaml`) are written in one translation pass, so the bilingual-pair check of `gates:docs` reports a missing or out-of-date pair without failing the gate.
 
-The command is `node_modules/.bin/tsx delo/apps/tools/src/translate-docs.ts [--check] [path…]`. It is not in the repository yet.
+The command is `node_modules/.bin/tsx delo/apps/tools/src/translate-docs.ts [--check] [path…]`. It is not in the repository.
 
 - It finds every in-scope source whose `.zh.md` is missing or whose record is out of date, using the same discovery as upstream's pairing check.
 - For each source, it writes the Chinese counterpart with a model, line-aligned as [docs/i18n/README.md](../../../docs/i18n/README.md) requires, and then records the pair with `scripts/verify-translation-pairing.ts --write`.

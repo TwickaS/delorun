@@ -23,7 +23,7 @@ English
 - `delorun import` publishes each imported workspace's manifest documents and objects under `archive/imported/<id>/` in the home. It creates no session, and no row of the CLI profile reads `archive/imported/`, so no imported chat reaches the studio, a Host plugin or a model request.
 - An imported chat has no trust state, no banner and no action that marks it trusted, and it has no path to the trash or to a purge.
 - `delorun import` prints each customisation row's kind and target and applies none of them: no bundle, profile row, preset, skill, theme or plugin declaration from an archive is written. `delorun export` writes no customisation rows.
-- `delorun import-home` and setup's `import` section import a stock DeepSeek Harness home ([C8](../contracts/c08-archive-and-trash.md#the-stock-home-import)). Its chats land in `sessions/` and the studio opens them as the person's own: they have no trust state or banner yet. Each copied chat is recorded in `archive/stock-import/imports.json`, which `readImportedChats` of `@delo/archive/dsh-import` reads back, and no chat that stopped inside a turn is carried.
+- `delorun import-home` and setup's `import` section import a stock DeepSeek Harness home ([C8](../contracts/c08-archive-and-trash.md#the-stock-home-import)). Its chats land in `sessions/` and the studio opens them as the person's own: they have no trust state or banner. Each copied chat is recorded in `archive/stock-import/imports.json`, which `readImportedChats` of `@delo/archive/dsh-import` reads back, and no chat that stopped inside a turn is carried.
 
 ## The rules
 

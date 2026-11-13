@@ -14,12 +14,12 @@ English | [中文](README.zh.md)
 ## Contents
 
 - [Use this package](#use-this-package)
-- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Known limitations](#known-limitations)
 
 ## Use this package
 
 The release workflow writes bundles; the install script, the npm launcher, the CLI launcher and home process, `delorun verify` and the desktop updater read them and record the check state. Import the types with `import type` and the constants with a value import from `@delo/contract-release-log`; a package that reads or writes the files this contract defines still validates them at its parser, because these types describe valid files and do not check them.
 
-## Known Limitations and Deferred Work
+## Known limitations
 
 - Checkpoint, cosignature and proof formats are the C2SP and RFC 6962 formats the page names; the package types them as strings and hex lists and does not parse them.

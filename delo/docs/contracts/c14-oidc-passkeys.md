@@ -254,7 +254,7 @@ An elevation, an unlock in the studio's words ("sudo mode"), lets one device tak
 <a id="delo-run-issuer"></a>
 ### Delo Run issuer
 
-The Delo Run issuer, which lets a person sign in with a Delo Run account, is a fast-follow and comes with the Delo relay: Delo 1.0 configures no Delo Run issuer. When it is added, it follows every rule of this page as a second issuer, and also these:
+The Delo Run issuer, which lets a person sign in with a Delo Run account, is not part of Delorun, which configures no Delo Run issuer ([roadmap](../guide/roadmap.md)). Such an issuer follows every rule of this page as a second issuer, and also these:
 
 - Its redirect URI is `https://<address>/auth/oidc/callback/delo-run`, so it never shares a redirect URI with the person's provider.
 - It signs ID tokens with asymmetric keys only, every token header carries `kid`, and it publishes a key set.

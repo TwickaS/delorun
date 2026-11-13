@@ -144,7 +144,7 @@ The inventory lists every `interface Context` member (`service`) and `interface 
 
 ### Release tag signers
 
-`delo/release/allowed-signers` lists the SSH keys allowed to sign release tags, one `<principal> namespaces="git" <key type> <base64 key>` line each, in git's `gpg.ssh.allowedSignersFile` format ("ALLOWED SIGNERS" in `man ssh-keygen`). It lists no key yet, so `sign-release.ts` refuses every tag until the owner adds the public half of each release signer's SSH signing key; a change to the file needs CODEOWNERS review. A signer tags the release commit with `git -c gpg.format=ssh -c user.signingkey=<private key file> tag -s -m "Delo <version>" v<version>`.
+`delo/release/allowed-signers` lists the SSH keys allowed to sign release tags, one `<principal> namespaces="git" <key type> <base64 key>` line each, in git's `gpg.ssh.allowedSignersFile` format ("ALLOWED SIGNERS" in `man ssh-keygen`). It lists no key, so `sign-release.ts` refuses every tag until the owner adds the public half of each release signer's SSH signing key; a change to the file needs CODEOWNERS review. A signer tags the release commit with `git -c gpg.format=ssh -c user.signingkey=<private key file> tag -s -m "Delo <version>" v<version>`.
 
 ### Production keys
 
@@ -194,7 +194,7 @@ The state file (`delo.release-timestamp-state/1`) holds the root the signer trus
 
 `node_modules/.bin/tsx delo/apps/release/src/build-images.ts --version <version> --out <dir> --oci <dir> [--attestation-key <file> --attestation <file>]` runs after `build-closure.ts` on the same output. It builds the images `images.json` names, each for `linux/amd64` and `linux/arm64` from the Debian base it pins by digest, with BuildKit's `rewrite-timestamp` at the closures' `SOURCE_DATE_EPOCH`, no cache and no SLSA build or SBOM attestation, whose build times and invocation ids would differ between builds. The Dockerfiles pin their frontend by digest.
 
-- The S2 workspace image (`images/s2/`) adds the empty helper socket directory `/run/delo-helper`. The S2 helper and the egress proxy are not in it yet.
+- The S2 workspace image (`images/s2/`) adds the empty helper socket directory `/run/delo-helper`. The S2 helper and the egress proxy are not in it.
 - The S3 harness image (`images/s3/`) adds the users `delo` (uid 1000) and `delo-harness` (uid 1001) and each architecture's Linux runtime closure, read-only, at `/opt/delo/runtime`, and runs as `delo-harness`.
 
 The command writes the OCI layout of each image to `--oci` and `delorun-<version>.images.json` to `--out`: each image's repository with its index and per-platform manifest digests, the Docker Engine and BuildKit versions that built them, and each image's installed Debian packages per platform, read from the dpkg status of the topmost layer that carries one. The rebuild comparison compares the file byte for byte, so a rebuild by another Docker or BuildKit version, or with other packages, differs; the command also refuses to build with versions other than `toolchain.json`'s `images` pins. When `--out` holds every platform's closure, it rewrites the SBOM to describe both images, the base and their Debian packages as `pkg:deb/debian` purls. The release workflow pushes the layouts by digest, and the manifest's `images` copies the file's image references. The images file is one of the files every rebuild and signing comparison must cover, signing refuses a draft whose `images` differ from it, and signing derives the SBOM's image entries with the base that `images.json` names at the release's commit.
@@ -209,9 +209,9 @@ Each image's entry in `images.json` also names its seccomp profile and the profi
 
 ## Open items
 
-These parts of the release are not built here yet; each belongs to the work package named.
+These parts of the release are not built here; each belongs to the work package named.
 
-- The SBOM does not describe the desktop installers, which wait for the desktop app (P6, deferred).
+- The SBOM does not describe the desktop installers, which Delorun does not build because it has no desktop app ([roadmap](../../docs/guide/roadmap.md)).
 - The recipe has no pinned toolchain for the macOS binaries of upstream's native system addon, so `darwin-x64` and `darwin-arm64` are not release platforms ([Native code](#native-code)).
 - The S2 image does not carry the S2 helper or the egress proxy (WP4.4), and the S3 image does not carry the egress proxy at `/usr/local/bin/delo-egress-proxy`, the path C9 names (WP4.3).
 - The release-log specs use local stand-ins; a first submission to the live log (`log2025-1.rekor.sigstore.dev`) is an owner action, because it publishes. Read-only requests to that log show its layout: `GET https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint` answers a C2SP signed note whose origin line is `log2025-1.rekor.sigstore.dev`, signed by the log and cosigned by several witnesses, and `GET https://log2025-1.rekor.sigstore.dev/api/v2/tile/<L>/<N>` answers 8,192-byte hash tiles (`/api/v2/tile/entries/<N>` the entry bundles), while `/checkpoint` and `/proof/consistency` at the host's root answer `404`. The launcher reads that layout from the host in the root's `log.origin`. The `--submit`, `--checkpoint` and `--tiles` values for the live log are therefore `https://log2025-1.rekor.sigstore.dev/api/v2/log/entries`, `https://log2025-1.rekor.sigstore.dev/api/v2/checkpoint` and `https://log2025-1.rekor.sigstore.dev/api/v2/`; the submission path is C18's and has not been exercised.
