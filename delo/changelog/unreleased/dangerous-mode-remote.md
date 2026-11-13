@@ -1,5 +1,5 @@
 ---
-area: Permissions
+area: Safety and privacy
 section: Added
 ---
 
