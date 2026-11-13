@@ -17,6 +17,7 @@
     { "kind": "event", "name": "reach/state", "side": "host", "source": "delo/packages/reach/src/service.ts" },
     { "kind": "service", "name": "deloSidebar", "side": "browser", "source": "delo/packages/plugin-sidebar/src/client/index.ts" },
     { "kind": "service", "name": "mcpReviews", "side": "host", "source": "delo/packages/plugin-mcp-consent/src/review.ts" },
-    { "kind": "service", "name": "permissionDefaults", "side": "host", "source": "delo/packages/plugin-permission-defaults/src/index.ts" }
+    { "kind": "service", "name": "permissionDefaults", "side": "host", "source": "delo/packages/plugin-permission-defaults/src/index.ts" },
+    { "kind": "service", "name": "settingsPluginGroups", "side": "browser", "source": "delo/packages/plugin-settings-layout/src/client/index.ts" }
   ]
 }
