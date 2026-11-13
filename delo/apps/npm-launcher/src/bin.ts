@@ -22,7 +22,8 @@ import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
 import { FULL_CHECK_DAYS_ENV, parseRuntimeVersion, resolveFullCheckDays, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
 import { createInterface } from 'node:readline/promises'
-import { parseRepairLine, repairUnconfirmed, runRepair, type RepairLine } from './repair.ts'
+import { REPAIR_MARK_GRACE_ENV, resolveRepairMarkGraceSeconds } from './repair-record.ts'
+import { installedChannel, parseRepairLine, repairUnconfirmed, runRepair, type RepairLine } from './repair.ts'
 import { runLauncher, launcherProfile, runtimeCommand, type LauncherOutput, type LauncherStartCheck, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
@@ -158,6 +159,7 @@ export function usage(): string {
     '',
     'Every start checks the installed runtime against its signed file list, and hashes every file at least',
     `every 7 days; ${FULL_CHECK_DAYS_ENV} sets that interval from 0 (every start) to 30 days.`,
+    `A repair mark that does not parse counts as a running repair for 5 seconds; ${REPAIR_MARK_GRACE_ENV} sets that from 1 to 60.`,
     '',
   ].join('\n')
 }
@@ -319,6 +321,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
   let platform: ReturnType<typeof platformOf>
   let target: RuntimeVersion | undefined
   let fullCheckDays: number
+  let repairMarkGraceSeconds: number
   let repairLine: RepairLine | undefined
   try {
     line = parseCommandLine(argv)
@@ -331,6 +334,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     target = line.release === undefined ? undefined : parseRuntimeVersion(line.release)
     if (line.release !== undefined && target === undefined) throw new Error(`--release names ${line.release}, which is not a Delo release version`)
     fullCheckDays = resolveFullCheckDays(context.env[FULL_CHECK_DAYS_ENV])
+    repairMarkGraceSeconds = resolveRepairMarkGraceSeconds(context.env[REPAIR_MARK_GRACE_ENV])
     if (line.passedThrough.length === 0 && runtimeCommand(line.runtimeArgs) === 'repair') repairLine = parseRepairLine(line.runtimeArgs, target)
   } catch (error) {
     const refusal = refusalFor(error, { home: '~/.delo', profile: CLI_PROFILE })
@@ -364,14 +368,16 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       const manual = repairLine.from === undefined ? undefined : manualSource(repairLine.from)
       const confirm = context.confirm ?? terminalConfirm
       const unconfirmed = await repairUnconfirmed(repairLine, confirm)
+      const releaseChannel = await installedChannel(home.path, store, roots)
       return await runRepair({
         belowFloorAsked: unconfirmed?.asked ?? (() => false),
+        releaseChannel,
         home: home.path,
         profile,
         line: repairLine,
         roots,
         store,
-        channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, { home: home.path, platform, roots, channel: 'stable', log: transportFor, source: manual?.source ?? channel.source, downloader: manual?.downloader ?? downloader, progress: report, ...unconfirmed === undefined ? {} : { unconfirmed: unconfirmed.install } }),
+        channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, { home: home.path, platform, roots, channel: releaseChannel, productionRoot: (context.constants ?? BUILD_CONSTANTS).channelOrigin === undefined, log: transportFor, source: manual?.source ?? channel.source, downloader: manual?.downloader ?? downloader, progress: report, ...unconfirmed === undefined ? {} : { unconfirmed: unconfirmed.install } }),
         confirm,
         startCheck: async (version, root) => {
           await store.checkRuntime(version, root)
@@ -380,6 +386,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
         },
         output: context.output,
         now: () => new Date((context.now ?? Date.now)()),
+        repairMarkGraceSeconds,
       })
     }
     return await runLauncher({
@@ -390,6 +397,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       passedThrough: line.passedThrough,
       mode: LAUNCHER_MODE,
       fullCheckDays,
+      repairMarkGraceSeconds,
       store,
       channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, {
         home: home.path,

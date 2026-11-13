@@ -84,6 +84,11 @@ export interface LauncherChannelOptions {
    * derives from the root's `log.origin`, which a root rotation can change, so a launcher passes the function.
    */
   readonly log: ReleaseLogTransport | ((root: RootMetadata) => ReleaseLogTransport)
+  /**
+   * Whether the launcher's roots are a production build's, so a release signed by a local release build is refused
+   * whatever the source. A source on the production publication is always refused.
+   */
+  readonly productionRoot?: boolean
   /** Where the files are published; {@link RELEASE_SOURCE} by default. */
   readonly source?: ReleaseSource
   /** The downloader; contract C1's rule over this process's `fetch` by default. */
@@ -325,9 +330,7 @@ export class LauncherChannel implements RuntimeChannel {
       if (unconfirmed && isInstallError(error, 'RELEASE_NOT_OFFERED')) throw new Unconfirmable(`release ${String(target)} is not the one the ${this.options.channel} channel currently names`, error, pointer.release)
       throw error
     }
-    if (this.source.metadata === RELEASE_METADATA_ORIGIN && verified.manifest.rebuild.builders.some(builder => builder.name === LOCAL_RELEASE_BUILDER)) {
-      throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${pointer.release} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs no such release`)
-    }
+    this.refuseLocalRelease(verified.manifest, pointer.release)
     if (record) this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
     return { root, timestamp, pointer, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
   }
@@ -395,12 +398,28 @@ export class LauncherChannel implements RuntimeChannel {
     const manifest = await this.downloader.bytes(this.source.files(version, manifestFileName(version)), RELEASE_FILE_SIZE_LIMITS.manifest)
     const bundle = await this.bundleOf(version)
     const verified = verifyUnconfirmedRelease({ root: root.metadata, channel: this.options.channel, manifest: manifest.bytes, bundle: bundle.bytes, version })
+    this.refuseLocalRelease(verified.manifest, version)
     const agreed = await unconfirmed.allow({ version, reason, ...below === undefined ? {} : { belowFloor: below } })
     if (!agreed) throw new InstallError('RELEASE_NOT_OFFERED', `release ${version}`, `you did not agree to install release ${version} without the channel confirming it, so nothing was installed`)
     // The roots verified; the stale timestamp is never stored, so the stored one never goes back.
     await writeTrustedRoot(this.options.home, roots.at(-1)!)
     await writeStoredRootChain(this.options.home, roots)
     return { root, release: version, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
+  }
+
+  /**
+   * Refuse a release the local release build signed when the verifying root is a production root: the channel fetches
+   * from the production publication, or the options say the launcher's roots are production roots, as they do for a
+   * `--from` folder.
+   * @param manifest - the verified manifest.
+   * @param version - the release, for the message.
+   * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the manifest names {@link LOCAL_RELEASE_BUILDER}.
+   */
+  private refuseLocalRelease(manifest: ReleaseManifest, version: string): void {
+    const production = this.options.productionRoot === true || this.source.metadata === RELEASE_METADATA_ORIGIN
+    if (production && manifest.rebuild.builders.some(builder => builder.name === LOCAL_RELEASE_BUILDER)) {
+      throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${version} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs no such release`)
+    }
   }
 
   /**
@@ -412,7 +431,8 @@ export class LauncherChannel implements RuntimeChannel {
    */
   private async availableRoots(): Promise<readonly Uint8Array[]> {
     const roots = [...await this.anchor()]
-    for (let version = newestRootVersion(roots) + 1; version <= newestRootVersion(roots) + MAX_ROOT_ROTATIONS; version++) {
+    const last = newestRootVersion(roots) + MAX_ROOT_ROTATIONS
+    for (let version = newestRootVersion(roots) + 1; version <= last; version++) {
       const source = `${this.source.metadata}/root/${String(version)}.root.json`
       const root = await this.downloader.bytes(source, RELEASE_FILE_SIZE_LIMITS.root).catch((error: unknown) => {
         if (isInstallError(error, 'DOWNLOAD_FAILED')) return undefined

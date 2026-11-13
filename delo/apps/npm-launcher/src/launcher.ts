@@ -111,6 +111,8 @@ export interface LauncherOptions {
   readonly mode: VerificationMode
   /** The interval of the start check's full hash in days, as `resolveFullCheckDays` resolves it. */
   readonly fullCheckDays: number
+  /** The seconds a repair mark that does not parse still counts as a running repair, as `resolveRepairMarkGraceSeconds` resolves it. */
+  readonly repairMarkGraceSeconds: number
   /** The store, this home's `RuntimeStore` in a real run. */
   readonly store: LauncherStore
   /**
@@ -168,8 +170,16 @@ export async function runLauncher(options: LauncherOptions): Promise<number> {
  * @returns whether the start was refused, with the refusal already printed.
  */
 async function refuseDuringRepair(options: LauncherOptions): Promise<boolean> {
-  const state = await checkRepairRecord(options.home)
+  const state = await checkRepairRecord(options.home, options.repairMarkGraceSeconds)
   if (state.kind === 'stale') options.output.stderr(`${staleRepairText(state.record)}\n`)
+  if (state.kind === 'writing') {
+    options.output.stderr(renderLauncherRefusal({
+      lead: 'Delorun is being repaired; wait for it to finish.',
+      reason: 'REPAIR_RUNNING: a repair is writing its mark',
+      remedies: [`Run the same command again when delorun repair has finished. If no repair is running, remove ${REPAIR_RECORD_FILE} from the home's run folder.`],
+    }))
+    return true
+  }
   if (state.kind !== 'running') return false
   options.output.stderr(renderLauncherRefusal({
     lead: 'Delorun is being repaired; wait for it to finish.',

@@ -73,6 +73,7 @@ export async function installFrom(options: InstallFromOptions): Promise<RuntimeV
       roots: await options.anchor.shipped(),
       channel: running.manifest.channel,
       log: root => recordedLogTransport(origins, root, fetch),
+      productionRoot: origins.channelOrigin === undefined,
       source: manual.source,
       downloader: manual.downloader,
       progress: installLines(options.line),

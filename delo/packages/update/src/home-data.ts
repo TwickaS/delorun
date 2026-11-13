@@ -7,4 +7,4 @@
  */
 export { readCopyRecord, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX, type CopyRecord } from './data-copy.ts'
 export { readDataFormats } from './data-formats.ts'
-export { readHomeDataFormat, relateHomeData, type HomeDataRelation } from './home-data-format.ts'
+export { readHomeDataFormat, relateHomeData, writeHomeDataFormat, type HomeDataRelation } from './home-data-format.ts'

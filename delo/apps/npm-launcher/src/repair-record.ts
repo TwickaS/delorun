@@ -9,13 +9,36 @@
  *
  * @module @delo/npm-launcher/repair-record
  */
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { link, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { currentHolder, holderAlive, parseHolder, type ProcessHolder } from '@delo/home'
 
 /** The record's file name under the home's `run/`. */
 export const REPAIR_RECORD_FILE = 'repair.json'
+
+/** The environment variable that sets the grace in whole seconds. */
+export const REPAIR_MARK_GRACE_ENV = 'DELORUN_REPAIR_MARK_GRACE_SECONDS'
+
+/** The seconds an unparsable mark counts as a repair that is writing it, unless {@link REPAIR_MARK_GRACE_ENV} sets another. */
+const DEFAULT_MARK_GRACE_SECONDS = 5
+
+/** The longest {@link REPAIR_MARK_GRACE_ENV} may set. */
+const MAX_MARK_GRACE_SECONDS = 60
+
+/**
+ * Resolve how long an unparsable mark counts as running.
+ * @param raw - the environment variable's value; `undefined` or empty for the default of 5 seconds.
+ * @returns whole seconds, 1 to 60.
+ * @throws {Error} when the value is not a whole number of seconds in that range.
+ */
+export function resolveRepairMarkGraceSeconds(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_MARK_GRACE_SECONDS
+  const seconds = Number(raw)
+  if (!Number.isInteger(seconds) || seconds < 1 || seconds > MAX_MARK_GRACE_SECONDS) throw new Error(`${REPAIR_MARK_GRACE_ENV} must be a whole number of seconds from 1 to ${String(MAX_MARK_GRACE_SECONDS)}, not ${raw}`)
+  return seconds
+}
 
 /** What a repair record names. */
 export interface RepairRecord extends ProcessHolder {
@@ -29,6 +52,8 @@ export type RepairRecordState =
   | { readonly kind: 'none' }
   /** A repair runs: its process exists. */
   | { readonly kind: 'running', readonly record: RepairRecord }
+  /** A file that is not a record yet and is younger than the grace: a repair is writing it, so it counts as running. */
+  | { readonly kind: 'writing' }
   /** A record from a repair that no longer runs, which the check removed. */
   | { readonly kind: 'stale', readonly record: RepairRecord | undefined }
 
@@ -68,14 +93,34 @@ async function readRecord(home: string): Promise<RepairRecord | undefined | null
 }
 
 /**
- * Look at the record and remove it when its repair no longer runs.
+ * Whether the file is younger than the grace.
  * @param home - the resolved Delo home.
+ * @param graceSeconds - the grace, from {@link resolveRepairMarkGraceSeconds}.
+ * @param nowMs - the clock, in milliseconds.
+ * @returns `false` when the file is gone.
+ */
+async function youngerThan(home: string, graceSeconds: number, nowMs: number): Promise<boolean> {
+  try {
+    return nowMs - (await stat(repairRecordPath(home))).mtimeMs < graceSeconds * 1000
+  } catch (_gone) {
+    // Removed between the read and the stat: nothing marks a repair.
+    return false
+  }
+}
+
+/**
+ * Look at the record and remove it when its repair no longer runs. A file that does not parse and is younger than the
+ * grace is not removed: a repair that wrote it may be mid-write.
+ * @param home - the resolved Delo home.
+ * @param graceSeconds - how long an unparsable file counts as running.
+ * @param nowMs - the clock, in milliseconds; this process's by default.
  * @returns what was found; a `stale` record is already removed.
  */
-export async function checkRepairRecord(home: string): Promise<RepairRecordState> {
+export async function checkRepairRecord(home: string, graceSeconds: number, nowMs: number = Date.now()): Promise<RepairRecordState> {
   const record = await readRecord(home)
   if (record === undefined) return { kind: 'none' }
   if (record !== null && holderAlive(record)) return { kind: 'running', record }
+  if (record === null && await youngerThan(home, graceSeconds, nowMs)) return { kind: 'writing' }
   await rm(repairRecordPath(home), { force: true })
   return { kind: 'stale', record: record ?? undefined }
 }
@@ -84,16 +129,25 @@ export async function checkRepairRecord(home: string): Promise<RepairRecordState
  * Record that this process repairs the home, for as long as the returned function has not been called.
  * @param home - the resolved Delo home.
  * @param now - the clock.
+ * @param graceSeconds - how long an unparsable file counts as running.
  * @returns the state of a record found before this one (`stale` was removed) and the function that removes this record.
- * @throws {Error} when another repair runs; the record it wrote stays.
+ * @throws {Error} when another repair runs or is writing its mark.
  */
-export async function beginRepairRecord(home: string, now: Date): Promise<{ readonly found: RepairRecordState, readonly end: () => Promise<void> }> {
-  const found = await checkRepairRecord(home)
+export async function beginRepairRecord(home: string, now: Date, graceSeconds: number): Promise<{ readonly found: RepairRecordState, readonly end: () => Promise<void> }> {
+  const found = await checkRepairRecord(home, graceSeconds, now.getTime())
   if (found.kind === 'running') throw new Error(`another repair runs (process ${String(found.record.pid)})`)
+  if (found.kind === 'writing') throw new Error('another repair is writing its mark')
   await mkdir(join(home, DELO_HOME_ENTRIES.run), { recursive: true, mode: 0o700 })
   const record: RepairRecord = { ...currentHolder(), startedAt: now.toISOString() }
-  // `wx` fails when a repair that started after the check wrote its record first.
-  await writeFile(repairRecordPath(home), `${JSON.stringify(record)}\n`, { flag: 'wx', mode: 0o600 })
+  // Written whole under a temporary name, then linked: the mark's name is never a partial file, and `link` fails when a
+  // repair that started after the check linked its own first.
+  const temporary = `${repairRecordPath(home)}.tmp-${randomBytes(8).toString('hex')}`
+  try {
+    await writeFile(temporary, `${JSON.stringify(record)}\n`, { flag: 'wx', mode: 0o600 })
+    await link(temporary, repairRecordPath(home))
+  } finally {
+    await rm(temporary, { force: true })
+  }
   return { found, end: () => rm(repairRecordPath(home), { force: true }) }
 }
 

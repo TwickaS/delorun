@@ -156,6 +156,8 @@ Run it in a terminal. Delorun checks the release it installs the way an update d
 <summary>Edge cases</summary>
 
 - **`DATA_NEWER`.** A newer Delorun wrote your chats, and the release you asked for may not read them. Install the newer release (`npx delorun@latest repair`), or put back the copy the update took with `npx delorun@latest repair --release <old version> --restore-copy`. Today's chats are set aside, never deleted.
+- **`DATA_UNREADABLE`.** The home records which release wrote your chats, and Delorun cannot compare that with the release you asked for because the release's data formats or a version cannot be read. Nothing is changed. Install the release that wrote your chats or a newer one (`npx delorun@latest repair`).
+- **`DATA_COPY_NEWER`.** The copy for `--restore-copy` is not in a format the release reads, or its formats cannot be read. Nothing is changed. Install the newer release instead.
 - **`TARGET_LOWER`.** The release is older than one this home already installed. Go back with `delorun recover rollback`.
 - **`NO_TERMINAL`.** Run the command in a terminal, because Delorun must ask you.
 - **`RESET_TRUST_REFUSED`.** `--reset-trust` works only when the launcher you run ships release keys newer than the ones this home trusts. Install the newest launcher from npm and try again.

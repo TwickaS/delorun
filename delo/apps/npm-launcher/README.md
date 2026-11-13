@@ -34,6 +34,7 @@ This app is what `npx delorun` runs. It starts the runtime this computer has ins
 | `--` | Ends the launcher's own options: every argument after it is passed to the runtime unchanged, so the runtime keeps its own `--release` and `--profile` |
 | Every other argument | Passed to the runtime unchanged, because the runtime owns `delorun`'s commands |
 | `DELO_RUNTIME_FULL_CHECK_DAYS` | The interval after which a start hashes every runtime file instead of comparing the identities recorded after the last hash: whole days from 0, which hashes at every start, to 30; 7 when unset. Any other value is refused with the usage text before the home is read |
+| `DELORUN_REPAIR_MARK_GRACE_SECONDS` | The seconds a `run/repair.json` that does not parse still counts as a running repair, because the repair that writes it may be mid-write: whole seconds from 1 to 60; 5 when unset. Any other value is refused with the usage text before the home is read |
 
 <a id="the-launch-flow"></a>
 

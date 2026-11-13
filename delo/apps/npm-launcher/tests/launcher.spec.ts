@@ -230,6 +230,7 @@ function launch(options: {
     passedThrough: options.passedThrough ?? [],
     mode: 'enforce',
     fullCheckDays: 7,
+    repairMarkGraceSeconds: 5,
     store: options.store,
     channel: options.channel,
     roots: options.roots,

@@ -18,20 +18,20 @@
  *
  * @module @delo/npm-launcher/repair
  */
-import { appendFile, mkdir, readdir, rename, rm } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
-import type { RootMetadata } from '@delo/contract-release-manifest'
-import { HOME_DATA_FORMAT_FILE } from '@delo/contract-update-report'
+import type { ReleaseChannel, RootMetadata } from '@delo/contract-release-manifest'
+import { HOME_DATA_FORMAT_SCHEMA } from '@delo/contract-update-report'
 import { acquireHomeLock, holderAlive, newStartId, profileOption, readHomeLock, runDirectory, type HomeLock, type Refusal } from '@delo/home'
-import { messageOf, newestManifestVersion, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, verifyStoredRoot, type UnconfirmedInstall } from '@delo/install'
+import { isInstallError, messageOf, newestManifestVersion, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, verifyStoredRoot, type UnconfirmedInstall } from '@delo/install'
 import { Redactor } from '@delo/logs'
-import { readRoot } from '@delo/release-formats/sign/verify'
+import { readRoot, verifySignedManifest } from '@delo/release-formats/sign/verify'
 import { parseRuntimeVersion, type ChannelRelease, type StorePaths, type VerifiedRuntime, type InstallRequest } from '@delo/runtime-store'
-import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX } from '@delo/update/home-data'
+import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX, writeHomeDataFormat } from '@delo/update/home-data'
 import semver from 'semver'
 import type { LauncherOutput } from './launcher.ts'
-import { beginRepairRecord, REPAIR_RECORD_FILE, staleRepairText } from './repair-record.ts'
+import { beginRepairRecord, REPAIR_RECORD_FILE, staleRepairText, type resolveRepairMarkGraceSeconds } from './repair-record.ts'
 import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal } from './refusals.ts'
 
 /** The flags `delorun repair` reads, beside `--profile`. */
@@ -95,6 +95,8 @@ export interface RepairOptions {
   readonly line: RepairLine
   /** The root files this launcher ships, oldest first. */
   readonly roots: readonly Uint8Array[]
+  /** The release channel of this home, as {@link installedChannel} reads it. */
+  readonly releaseChannel: ReleaseChannel
   /** The store of this home. */
   readonly store: RepairStore
   /** The channel to resolve through: the production channel, or the source `--from` names. */
@@ -116,6 +118,8 @@ export interface RepairOptions {
   readonly output: LauncherOutput
   /** The clock. */
   readonly now: () => Date
+  /** The seconds a repair mark that does not parse still counts as a running repair; see {@link resolveRepairMarkGraceSeconds}. */
+  readonly repairMarkGraceSeconds: number
   /** Whether the channel already asked the person about a release below the floor; {@link repairUnconfirmed}'s `asked`. */
   readonly belowFloorAsked?: () => boolean
 }
@@ -227,12 +231,31 @@ async function holdHomeLocks(options: RepairOptions, entries: readonly string[])
   return held
 }
 
-/** The release the stored timestamp names for the stable channel, which is the lowest a repair installs. */
-async function storedFloor(home: string): Promise<string | undefined> {
+/**
+ * The release channel this home updates from: the channel its installed release's signed manifest names. A home whose
+ * installed manifest is missing or does not verify has no readable channel and repairs from `stable`.
+ * @param home - the resolved Delo home.
+ * @param store - the home's store.
+ * @param roots - the root files this launcher ships, which verify the manifest when the home stores no root.
+ * @returns the channel.
+ */
+export async function installedChannel(home: string, store: Pick<RepairStore, 'paths' | 'pointers'>, roots: readonly Uint8Array[]): Promise<ReleaseChannel> {
+  try {
+    const current = (await store.pointers()).current
+    const root = readRoot(await readStoredRootBytes(home) ?? roots.at(-1)!).metadata
+    return verifySignedManifest(root, await readFile(store.paths.releaseFiles(current).manifest)).channel
+  } catch (_unreadable) {
+    // No installed release, or its manifest does not verify: the home has no readable channel.
+    return 'stable'
+  }
+}
+
+/** The release the stored timestamp names for the home's channel, which is the lowest a repair installs. */
+async function storedFloor(home: string, channel: ReleaseChannel): Promise<string | undefined> {
   const stored = await readStoredTimestamp(home)
   if (stored === undefined) return undefined
   const envelope = JSON.parse(Buffer.from(stored.bytes).toString('utf8')) as { signed?: { channels?: Record<string, { release?: unknown }> } }
-  const release = envelope.signed?.channels?.stable?.release
+  const release = envelope.signed?.channels?.[channel]?.release
   return typeof release === 'string' ? release : undefined
 }
 
@@ -253,11 +276,24 @@ async function assertResetTrustAllowed(options: RepairOptions): Promise<void> {
   const shipped = options.roots.map(bytes => readRoot(bytes).metadata.version)
   const newestShipped = Math.max(...shipped)
   if (newestShipped <= readRoot(stored).metadata.version) throw refuse(`this launcher ships root ${String(newestShipped)}, and the home's stored root is root ${String(readRoot(stored).metadata.version)}`)
+  let walked: readonly Uint8Array[]
   try {
-    verifyStoredRoot({ stored, shipped: options.roots, walked: await readStoredRootChain(options.home), source: 'trust/root.json' })
-  } catch (_notChained) {
-    // The stored root does not chain from a shipped root: the case --reset-trust exists for.
-    return
+    walked = await readStoredRootChain(options.home)
+    for (const bytes of walked) readRoot(bytes)
+  } catch (error) {
+    // A chain that cannot be read says nothing about whether the stored root chains, so the gate stays shut.
+    throw new RepairRefusal({
+      lead: 'Delo did not reset the trust records: the chain of release keys stored in this home cannot be read.',
+      reason: `RESET_TRUST_REFUSED: ${messageOf(error)}`,
+      remedies: ['Follow the steps by hand in the troubleshooting guide to move trust/ aside.'],
+    })
+  }
+  try {
+    verifyStoredRoot({ stored, shipped: options.roots, walked, source: 'trust/root.json' })
+  } catch (error) {
+    // Only the stored root's failure to chain from a shipped root opens the gate; any other failure leaves it shut.
+    if (isInstallError(error, 'INSTALL_VERIFY_FAILED')) return
+    throw error
   }
   throw refuse('the stored root chains from a root this launcher ships, so the home still trusts the same keys')
 }
@@ -305,7 +341,7 @@ export async function runRepair(options: RepairOptions): Promise<number> {
 async function recordRepair(options: RepairOptions, log: Record<string, unknown>): Promise<() => Promise<void>> {
   let begun
   try {
-    begun = await beginRepairRecord(options.home, options.now())
+    begun = await beginRepairRecord(options.home, options.now(), options.repairMarkGraceSeconds)
   } catch (error) {
     throw new RepairRefusal({
       lead: 'Delo did not repair: another repair of this home is running.',
@@ -355,7 +391,7 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
   const trust = join(home, DELO_HOME_ENTRIES.trust)
   const stampNow = stamp(options.now())
   const installed = await store.pointers().then(pointers => pointers.current, () => undefined)
-  const floorFromTimestamp = await storedFloor(home)
+  const floorFromTimestamp = await storedFloor(home, options.releaseChannel)
 
   if (line.resetTrust) {
     await assertResetTrustAllowed(options)
@@ -402,12 +438,13 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
   await options.channel.recordInstalled(release)
   say(options, log, `Installed release ${release.version}, verified against its signed manifest and the release log.`)
 
-  const copy = await dataGuard(options, release.version, runtime, log)
+  const copy = await dataGuard(options, release.version, runtime, below, log)
   await options.startCheck(release.version, release.root)
   say(options, log, `Release ${release.version} passed its start check.`)
   if (copy !== undefined) {
     const restored = await restoreDataCopy(home, copy, options.now())
-    await rm(join(home, HOME_DATA_FORMAT_FILE), { force: true })
+    // The data guard accepted the copy, so its formats are readable; the home's record now names the copy's facts.
+    if (copy.formats.from !== null) await writeHomeDataFormat(home, { schema: HOME_DATA_FORMAT_SCHEMA, delo: copy.from, dsh: runtime.manifest.dsh, formats: copy.formats.from })
     ;(log.moved as string[]).push(`sessions and storages -> ${restored.setAside}`)
     say(options, log, `Put back the chat-data copy taken before Delo ${copy.to}. Today's chats are kept in ${restored.setAside}.`)
   }
@@ -433,7 +470,7 @@ function assertAnswered(answer: boolean | undefined): void {
  * @returns the session-data copy to put back, when `--restore-copy` was asked and the guard needs it.
  * @throws {RepairRefusal} `DATA_NEWER` when a newer or unordered format wrote the home's data and no restore was asked.
  */
-async function dataGuard(options: RepairOptions, version: RuntimeVersion, runtime: VerifiedRuntime, log: Record<string, unknown>): Promise<Awaited<ReturnType<typeof readCopyRecord>>> {
+async function dataGuard(options: RepairOptions, version: RuntimeVersion, runtime: VerifiedRuntime, below: boolean, log: Record<string, unknown>): Promise<Awaited<ReturnType<typeof readCopyRecord>>> {
   const record = await readHomeDataFormat(options.home)
   const formats = await readDataFormats(options.store.paths.version(version))
   const relation = relateHomeData(record, { dsh: runtime.manifest.dsh, formats })
@@ -442,21 +479,50 @@ async function dataGuard(options: RepairOptions, version: RuntimeVersion, runtim
     say(options, log, `The home's data was written by Delo ${record?.delo ?? 'unknown'}, which release ${version} reads.`)
     return undefined
   }
-  if (relation === 'unknown') {
+  if (record === undefined) {
     say(options, log, `This home has no data-format record, as a home made before the record existed has none, so Delo cannot tell which release wrote its chats. It assumes they are in the formats release ${version} reads, and continued.`)
     return undefined
   }
-  const writer = record?.delo ?? 'a newer release'
-  const copy = options.line.restoreCopy && record !== undefined ? await readCopyRecord(options.home, record.delo) : undefined
-  if (options.line.restoreCopy && copy !== undefined) return copy
+  if (relation === 'unknown') {
+    throw new RepairRefusal({
+      lead: `Delo did not repair: Delo cannot tell whether release ${version} reads this home's chats, which Delo ${record.delo} wrote.`,
+      reason: `DATA_UNREADABLE: ${unreadableFacts(record.dsh, runtime.manifest.dsh, formats, version)}`,
+      remedies: [`Install ${record.delo} or newer instead: npx delorun@latest repair`],
+    })
+  }
+  const writer = record.delo
+  const copy = options.line.restoreCopy ? await readCopyRecord(options.home, writer) : undefined
+  if (copy !== undefined) {
+    // The copy records no DSH version, so only its data formats are ordered against the release's.
+    const copyRelation = copy.formats.from === null ? 'unknown' : relateHomeData({ ...record, delo: copy.from, formats: copy.formats.from }, { dsh: record.dsh, formats })
+    if (copyRelation !== 'same' && copyRelation !== 'older') {
+      throw new RepairRefusal({
+        lead: `Delo did not repair: the chat-data copy taken before Delo ${writer} is not in a format release ${version} reads.`,
+        reason: `DATA_COPY_NEWER: the copy's data formats are ${copyRelation === 'unknown' ? 'unreadable' : `${copyRelation} than release ${version} reads`}`,
+        remedies: [`Install ${writer} or newer instead: npx delorun@latest repair`],
+      })
+    }
+    log.dataGuard = `${relation}; restoring a copy that is ${copyRelation}`
+    return copy
+  }
+  const fromFlag = below ? ` --from ${options.line.from ?? '<folder or https: address>'}` : ''
   throw new RepairRefusal({
     lead: `Delo did not repair: release ${version} may not read this home's chats, which Delo ${writer} wrote.`,
     reason: `DATA_NEWER: the home's data-format record shows ${relation} data than release ${version} reads${options.line.restoreCopy ? `, and the home keeps no chat-data copy for Delo ${writer}` : ''}`,
     remedies: [
       `Install ${writer} or newer instead: npx delorun@latest repair`,
-      `Put back the copy taken before ${writer} (data-copies/${writer}/) and keep today's chats aside: npx delorun@latest repair --release ${version} --restore-copy`,
+      `Put back the copy taken before ${writer} (data-copies/${writer}/) and keep today's chats aside: npx delorun@latest repair --release ${version} --restore-copy${fromFlag}`,
     ],
   })
+}
+
+/** What the data guard could not read, for its refusal. */
+function unreadableFacts(homeDsh: string, releaseDsh: string, formats: unknown, version: RuntimeVersion): string {
+  const missing: string[] = []
+  if (formats === undefined) missing.push(`release ${version} has no readable data-formats.json`)
+  if (semver.valid(homeDsh) === null) missing.push(`the home's record names DSH version ${homeDsh}, which is not a version`)
+  if (semver.valid(releaseDsh) === null) missing.push(`release ${version} names DSH version ${releaseDsh}, which is not a version`)
+  return missing.join('; ')
 }
 
 /**

@@ -83,7 +83,7 @@ describe('delorun repair', () => {
       confirm: (question) => { asked.push(question); return Promise.resolve('answer' in overrides ? overrides.answer : true) },
       startCheck: overrides.startCheck ?? (() => Promise.resolve()),
       output: { stdout: text => void out.push(text), stderr: text => void err.push(text) },
-      now: () => NOW,
+      now: () => NOW, releaseChannel: 'stable', repairMarkGraceSeconds: 5,
     }
   }
 
@@ -213,6 +213,7 @@ describe('delorun repair', () => {
     expect(asides).toHaveLength(1)
     expect(await readFile(join(home, 'data-set-aside', asides[0]!, 'sessions/chat-1/log.jsonl'), 'utf8')).toBe('a chat, continued under 0.2.0')
     expect(asked[0]).toContain("today's chats are set aside")
+    expect(JSON.parse(await readFile(join(home, 'data-format.json'), 'utf8'))).toMatchObject({ delo: '0.1.0', dsh: '0.2.2' })
   })
 
   it('refuses --restore-copy when the home keeps no copy for the release that wrote the data', async () => {
@@ -220,6 +221,55 @@ describe('delorun repair', () => {
     expect(await runRepair(options({ line: { ...PLAIN, restoreCopy: true } }))).toBe(1)
     expect(err.join('')).toContain('keeps no chat-data copy for Delo 0.2.0')
     expect(await readFile(join(home, 'sessions/chat-1/log.jsonl'), 'utf8')).toBe('a chat')
+  })
+
+  it('refuses when the home has a record and the release\'s data formats cannot be read, naming what could not be read', async () => {
+    const oldStore = await tree(join(home, 'runtimes'))
+    expect(await runRepair(options({ formats: undefined }))).toBe(1)
+    expect(err.join('')).toContain('DATA_UNREADABLE')
+    expect(err.join('')).toContain('release 0.1.1 has no readable data-formats.json')
+    expect(await tree(join(home, 'runtimes'))).toEqual(oldStore)
+  })
+
+  it('refuses when the release names a DSH version that is not a version, and when the home\'s record does', async () => {
+    expect(await runRepair(options({ dsh: 'next' }))).toBe(1)
+    expect(err.join('')).toMatch(/DATA_UNREADABLE.*release 0\.1\.1 names DSH version next/su)
+    err.length = 0
+    await writeHomeDataFormat(home, record({ dsh: 'latest' }))
+    expect(await runRepair(options())).toBe(1)
+    expect(err.join('')).toMatch(/DATA_UNREADABLE.*the home's record names DSH version latest/su)
+  })
+
+  it('names --from in the copy remedy when the named release is below the floor', async () => {
+    await writeHomeDataFormat(home, record({ delo: '0.2.0', dsh: '0.3.0' }))
+    const line = { ...PLAIN, release: version('0.1.0'), from: '/downloads/delorun-0.1.0' }
+    expect(await runRepair(options({ release: '0.1.0', installed: '0.2.0', line }))).toBe(1)
+    expect(err.join('')).toContain('--release 0.1.0 --restore-copy --from /downloads/delorun-0.1.0')
+  })
+
+  it('refuses --restore-copy when the copy holds formats newer than the release reads, and puts the old store back', async () => {
+    const newer: DataFormats = { ...FORMATS, deloRecords: { 'update-record': 2 } }
+    await saveDataCopy({ home, from: '0.2.0', to: '0.3.0', formats: { from: newer, to: newer }, now: new Date('2026-11-01T00:00:00Z') })
+    await writeHomeDataFormat(home, record({ delo: '0.3.0', dsh: '0.4.0', formats: newer }))
+    const oldStore = await tree(join(home, 'runtimes'))
+    expect(await runRepair(options({ line: { ...PLAIN, restoreCopy: true } }))).toBe(1)
+    expect(err.join('')).toContain('DATA_COPY_NEWER')
+    expect(await tree(join(home, 'runtimes'))).toEqual(oldStore)
+    expect(await readFile(join(home, 'sessions/chat-1/log.jsonl'), 'utf8')).toBe('a chat')
+    expect(JSON.parse(await readFile(join(home, 'data-format.json'), 'utf8'))).toMatchObject({ delo: '0.3.0' })
+  })
+
+  it('refuses --restore-copy when the copy\'s own formats were unreadable', async () => {
+    await saveDataCopy({ home, from: '0.1.0', to: '0.2.0', formats: { from: undefined, to: FORMATS }, now: new Date('2026-11-01T00:00:00Z') })
+    await writeHomeDataFormat(home, record({ delo: '0.2.0', dsh: '0.3.0' }))
+    expect(await runRepair(options({ line: { ...PLAIN, restoreCopy: true } }))).toBe(1)
+    expect(err.join('')).toContain('DATA_COPY_NEWER')
+  })
+
+  it('refuses a release below the floor that only the stored timestamp sets', async () => {
+    expect(await runRepair(options({ release: '0.0.9', installed: '0.0.5' }))).toBe(1)
+    expect(err.join('')).toContain('TARGET_LOWER')
+    expect(err.join('')).toContain('release 0.1.0')
   })
 
   it('installs a release the person named below the floor from --from only after an extra yes, and refuses without a terminal', async () => {
@@ -274,6 +324,23 @@ describe('delorun repair', () => {
       expect(asked[0]).toContain('installed it with npx delorun@latest from npm yourself')
       expect(await tree(join(home, 'trust.set-aside-20261113T120000Z'))).toEqual(stored)
       expect(existsSync(join(home, 'trust'))).toBe(true)
+    })
+  })
+
+  describe('--reset-trust with a stored chain that cannot be read', () => {
+    it('keeps the gate shut and moves nothing, naming the by-hand steps', async () => {
+      const other = await fixtureRelease()
+      const shipped = [fixture.roots[0]!, nextRoot(fixture.rootMetadata, fixture.keys, [fixture.keys.root])]
+      await writeFile(join(home, 'trust/root.json'), other.roots[0]!, { mode: 0o600 })
+      await mkdir(join(home, 'trust/roots'), { mode: 0o700 })
+      await writeFile(join(home, 'trust/roots/2.root.json'), 'not a root', { mode: 0o600 })
+      const before = await tree(join(home, 'trust'))
+      expect(await runRepair(options({ line: { ...PLAIN, resetTrust: true }, roots: shipped }))).toBe(1)
+      expect(err.join('')).toContain('RESET_TRUST_REFUSED')
+      expect(err.join('')).toContain('by hand')
+      expect(asked).toEqual([])
+      expect(await tree(join(home, 'trust'))).toEqual(before)
+      expect(existsSync(join(home, 'trust.set-aside-20261113T120000Z'))).toBe(false)
     })
   })
 
