@@ -1733,14 +1733,14 @@
     {
       "path": "packages/host/frontend-static/src/index.ts",
       "class": "security",
-      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. A manifest icon `src` is percent-decoded as a request path is, and the parsed icon list is kept until the manifest file changes. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict (2026-11-11): kept; a manifest icon `src` is resolved against the manifest's URL and percent-decoded once, as a request path is, and makes a file public only when the decoded name has no `/` and the requested file lies directly in the dist root, so decoding cannot make public anything but root files the manifest names; a malformed escape names nothing. The parsed list is cached per version of the manifest (inode, size, modification and change times) and read again when the file changes; an absent or unreadable manifest lists no icon and clears the cache.",
-      "sha256": "1a8a0c64dadb68b4a99e60813d07ea0beeb5fae575835a34cb8e885f1c53a40f"
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. `/recovery` also renders the index, behind the same fence, while an index injection row names a distribution's recovery routes (the `dshRecoveryRoutes` global `@delo/plugin-changes` adds), so the boot page can show C21's recovery screen there; without such a row it is an ordinary missing path. It moves no refusal. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict on the `/recovery` route: pending; no lead review of this change is recorded yet.",
+      "sha256": "993bdb8b1111dacbbcb258eec41cfd8b042f28206229c598e4b285cd8a60c5b4"
     },
     {
       "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
       "class": "security",
-      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. They also prove a percent-encoded icon `src` is served and that the manifest is parsed once per version of the file. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public. Lead verdict (2026-11-11): kept; through the real Loader composition, a percent-encoded icon `src` serves the decoded file before sign-in while a malformed one is ignored, three requests parse the manifest once, and a rewritten manifest is read again and its new list decides, so a dropped icon answers 401.",
-      "sha256": "a437c80adbaa0e91064e1744e1acec76ef3fe45b206253993d35a5eb32e3e12b"
+      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. `/recovery` renders the index for a signed-in browser only while an index row names the recovery routes, is a 404 otherwise, and is refused without the credential. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public. Lead verdict on the `/recovery` specs: pending; no lead review of this change is recorded yet.",
+      "sha256": "f12bbb4059323bfd9506d413c8495fa4d6fc37534226bd6514003d0874de54f1"
     },
     {
       "path": "packages/web/web-fetch-http/package.json",
@@ -2097,6 +2097,12 @@
       "reason": "Bundles `args.js` and `plugin.js` as entries of their own, which Delo's launcher imports to run `dsh plugin` in its own process; the existing entries are unchanged."
     },
     {
+      "path": "packages/boot/hmr/src/index.ts",
+      "class": "security",
+      "reason": "Changes (C21): the optional `profileReconcileCheck` service, which `reconcileProfile` awaits inside `runExclusive` before any plugin stops or module is evicted, so every recomposition (Plugin Manager's restore, undo and settings changes, the profile's own file watch, `changes.reload`) can be refused; `@delo/plugin-changes` provides it to move folder links to their active directories and refuse content the person did not approve. Without the service HMR behaves as stock. It decides what code loads.",
+      "sha256": "14650214b5b7ff16b4fdbd9508de2c7a200ab5d94cdab2336442d4bd95ad5aad"
+    },
+    {
       "path": "packages/boot/plugin-manager/src/operations.ts",
       "class": "security",
       "reason": "The optional `baseline` of `PackageOperationOptions` holds the profile's `package.json` and lockfile from before an earlier resolution-only run of the same operation; a rejection then restores those files, and the dependencies the earlier manifest lacks count as new for compatibility checks and activation. Upstream callers pass none and are unchanged. Lead verdict (2026-11-13): approved; the existing refusals are kept.",
@@ -2155,6 +2161,18 @@
       "class": "security",
       "reason": "Security entry (per-workspace full access, A307). The composer permission control skips its built-in `RiskConfirmation` for full access or auto review only when the injected `ownsConfirmation(preset)` is true, i.e. the composition's `permissionSwitchConsent` asks its own risk question before the switch is submitted; otherwise unchanged. Lead verdict (2026-11-13): approved after the lead review of the diff; every switch to full access still asks exactly one question. A308 follow-up: the composer chip shows a pick only after an owning `permissionSwitchConsent` confirmed it, so a cancelled or refused full-access consent never shows Full access. Lead verdict (2026-11-13, A308): approved after an independent Opus review of the card answer path and the lead review; the choice answers the card through the same one-shot `answer()` as Allow once, only after the chat's permission projection shows the requested preset and while the card still accepts answers, and never lowers a chat raised meanwhile, and `escalatesTo` never reaches a logged event.",
       "sha256": "b9176ff50c96e4ae1f772374aac561a774701467a2db30a927164477a4c487cc"
+    },
+    {
+      "path": "packages/client/web/src/boot-page.module.css",
+      "class": "delo-feature",
+      "feature": "changes",
+      "reason": "Styles of C21's recovery screen on the boot page: its region, title, notice, status, rows and buttons, with the boot page's own fallback colours."
+    },
+    {
+      "path": "packages/client/web/src/boot.ts",
+      "class": "delo-feature",
+      "feature": "changes",
+      "reason": "On a page that names recovery routes, the boot shows C21's recovery screen at /recovery without loading any client plugin, and offers it when the studio has not mounted 30 seconds after the boot began; without the global the boot runs as in stock."
     },
     {
       "path": "scripts/no-unknown-casts.baseline.json",

@@ -207,7 +207,7 @@ async function operatePlugin(home: string, profile: string, taken: ReturnType<ty
   const { allowed, rest } = taken
   const profileDir = profileDirectory(home, profile)
   await ensureCopyImport(profileDir)
-  const check = await dependencies.checkSettings(home.path, profileDir)
+  const check = await dependencies.checkSettings(home, profileDir)
   if (check === undefined || !installsPackages(rest)) {
     const code = await dependencies.runUpstream(['plugin', ...withProfile(rest, profile)])
     if (code === 0 && check !== undefined) await forgetRemovedPlugins(profileDir, context)
