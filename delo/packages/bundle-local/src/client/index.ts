@@ -65,7 +65,7 @@ import { en as consentsEn, zh as consentsZh, type ConsentsLocaleKey } from './co
 import { ConsentToast, createConsentToastSource } from './ConsentToast.tsx'
 import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAction.tsx'
 import { ExternalAgentAction, type ExternalAgentActionInjected } from './ExternalAgentAction.tsx'
-import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent } from './FullAccessConsent.tsx'
+import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation } from './FullAccessConsent.tsx'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
@@ -386,6 +386,7 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
   const consent = createFullAccessConsentSource(fetch)
   ctx.provide('permissionSwitchConsent', {
     confirm: (sessionId, preset) => confirmPermissionSwitch(fetch, consent, sessionId, preset),
+    ownsConfirmation: ownsPermissionConfirmation,
   } satisfies PermissionSwitchConsent)
   ctx.effect(() => () => { consent.cancel() }, 'delo-consents: an open consent answers no once the plugin unloads')
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({

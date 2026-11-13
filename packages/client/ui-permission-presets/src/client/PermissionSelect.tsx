@@ -66,6 +66,8 @@ export interface PermissionSelectInjected {
   }
   /** Submit one current-session preset through the existing command writer. */
   select: (preset: string) => Promise<boolean>
+  /** Whether the composition's switch consent asks the preset's risk question itself, so no built-in confirmation shows. */
+  ownsConfirmation: (preset: string) => boolean
 }
 
 /** Complete props derived from the conversation slot, injected hooks, and locale. */
@@ -75,7 +77,7 @@ export type PermissionSelectProps =
   & PropsLocale<typeof PERMISSION_ACCESS_NS>
 
 export function PermissionSelect({
-  locked, select, usePermissionCatalog, useProjection, t,
+  locked, select, ownsConfirmation, usePermissionCatalog, useProjection, t,
 }: PermissionSelectProps) {
   const selection = useProjection('permissions')
   const catalog = usePermissionCatalog(state => state.value)
@@ -130,7 +132,7 @@ export function PermissionSelect({
   const choose = (id: string): void => {
     setOpen(false)
     if (id === selection.currentValue) return
-    if (id === FULL_ACCESS || id === AUTO_REVIEW) {
+    if ((id === FULL_ACCESS || id === AUTO_REVIEW) && !ownsConfirmation(id)) {
       setAcknowledged(false)
       setConfirmation(id)
       return

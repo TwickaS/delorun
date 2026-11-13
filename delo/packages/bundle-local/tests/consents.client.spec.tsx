@@ -19,7 +19,7 @@ import { en, zh } from '../src/client/consents-locales.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
 import {
-  confirmPermissionSwitch, consentFailureText, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
+  confirmPermissionSwitch, consentFailureText, ownsPermissionConfirmation, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
   workspaceName, type FullAccessConsentProps, type FullAccessConsentSource,
 } from '../src/client/FullAccessConsent.tsx'
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
@@ -76,34 +76,28 @@ describe('the question upstream\'s permission control asks', () => {
   it('submits every switch but full access at once, without asking the home', async () => {
     const host = fakeHost()
     const ask = vi.fn(async () => true)
-    await expect(confirmPermissionSwitch(host.fetch, { ask }, 'chat-1', 'workspace-write')).resolves.toBe(true)
+    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: ask }, 'chat-1', 'workspace-write')).resolves.toBe(true)
     expect(host.received).toEqual([])
     expect(ask).not.toHaveBeenCalled()
   })
 
-  it('submits at once in a profile without the per-workspace consent, as upstream does', async () => {
-    const host = fakeHost()
-    const ask = vi.fn(async () => true)
-    await expect(confirmPermissionSwitch(host.fetch, { ask }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
-    expect(host.received.map(request => request.key)).toEqual([`POST ${PERMISSION_ROUTES.review}`])
-    expect(ask).not.toHaveBeenCalled()
-  })
-
-  it('submits at once in a workspace that holds a grant, and in a chat with no folder', async () => {
-    const ask = vi.fn(async () => true)
+  it('asks the short form when the profile has no per-workspace consent, the workspace holds a grant, or the chat has no folder', async () => {
+    const unmounted = fakeHost()
     const granted = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } } })
-    await expect(confirmPermissionSwitch(granted.fetch, { ask }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
     const nowhere = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(422, 'NO_WORKSPACE') })
-    await expect(confirmPermissionSwitch(nowhere.fetch, { ask }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
-    expect(ask).not.toHaveBeenCalled()
+    for (const [host, access] of [[unmounted, undefined], [granted, ON], [nowhere, undefined]] as const) {
+      const askSwitch = vi.fn(async () => true)
+      await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
+      expect(askSwitch).toHaveBeenCalledWith(access)
+    }
   })
 
-  it('shows the consent for a workspace without a grant, and submits only what the person grants', async () => {
+  it('shows the grant form for a workspace without a grant, and submits only what the person confirms', async () => {
     const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
-    for (const granted of [true, false]) {
-      const ask = vi.fn(async () => granted)
-      await expect(confirmPermissionSwitch(host.fetch, { ask }, 'chat-1', 'danger-full-access')).resolves.toBe(granted)
-      expect(ask).toHaveBeenCalledWith(OFF)
+    for (const confirmed of [true, false]) {
+      const askSwitch = vi.fn(async () => confirmed)
+      await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe(confirmed)
+      expect(askSwitch).toHaveBeenCalledWith(OFF)
     }
     expect(host.received[0]?.body).toEqual({ sessionId: 'chat-1' })
   })
@@ -111,13 +105,13 @@ describe('the question upstream\'s permission control asks', () => {
   it('shows a remote studio the consent without a way to grant, and submits nothing', async () => {
     const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE })
     const ask = vi.fn(async () => false)
-    await expect(confirmPermissionSwitch(host.fetch, { ask }, 'chat-1', 'danger-full-access')).resolves.toBe(false)
+    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: vi.fn() }, 'chat-1', 'danger-full-access')).resolves.toBe(false)
     expect(ask).toHaveBeenCalledWith(undefined)
   })
 
   it('submits nothing when the home cannot answer the review', async () => {
     const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(500, 'STORE_REFUSED') })
-    await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(async () => true) }, 'chat-1', 'danger-full-access')).rejects.toThrow('STORE_REFUSED')
+    await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch: vi.fn() }, 'chat-1', 'danger-full-access')).rejects.toThrow('STORE_REFUSED')
   })
 })
 
@@ -150,6 +144,42 @@ describe('the full-access consent', () => {
       expect(within(details).getByText(en[key])).toBeTruthy()
     }
     expect(within(dialog).getByRole('button', { name: en['consent.confirm'] })).toBeTruthy()
+  })
+
+  it('claims the question for full access only', () => {
+    expect([ownsPermissionConfirmation('danger-full-access'), ownsPermissionConfirmation('workspace-write'), ownsPermissionConfirmation('auto')]).toEqual([true, false, false])
+  })
+
+  it('asks the composer\'s switch with an acknowledgement that gates the button, and records the grant before it answers', async () => {
+    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 0 } } })
+    const source = createFullAccessConsentSource(host.fetch)
+    const answered = source.askSwitch(OFF)
+    renderConsent(source)
+    const confirm = screen.getByRole<HTMLButtonElement>('button', { name: en['consent.confirm'] })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox', { name: en['consent.acknowledge'] }))
+    expect(confirm.disabled).toBe(false)
+    fireEvent.click(confirm)
+    await expect(answered).resolves.toBe(true)
+    expect(host.received).toEqual([{ key: `POST ${PERMISSION_ROUTES.setFullAccess}`, body: { workspace: OFF.workspace, reviewId: OFF.reviewId, on: true, confirmed: true } }])
+  })
+
+  it('asks the short form without recording anything, and answers no when cancelled', async () => {
+    const host = fakeHost()
+    const source = createFullAccessConsentSource(host.fetch)
+    const confirmed = source.askSwitch(ON)
+    renderConsent(source)
+    expect(screen.getByRole('dialog', { name: en['switch.title'] })).toBeTruthy()
+    expect(screen.getByText(en['switch.risk'])).toBeTruthy()
+    const confirm = screen.getByRole<HTMLButtonElement>('button', { name: en['switch.confirm'] })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(confirm)
+    await expect(confirmed).resolves.toBe(true)
+    const cancelled = source.askSwitch(undefined)
+    source.cancel()
+    await expect(cancelled).resolves.toBe(false)
+    expect(host.received).toEqual([])
   })
 
   it('switches the chat it was asked from along with the grant', async () => {
@@ -271,11 +301,11 @@ describe('the full-access consent', () => {
     const closed = open(null)
     expect(closed.container.innerHTML).toBe('')
     closed.unmount()
-    const busy = open({ seq: 1, access: OFF, busy: true })
+    const busy = open({ seq: 1, form: 'grant', access: OFF, acknowledge: false, busy: true })
     fireEvent.click(screen.getByRole('button', { name: en['consent.close'] }))
     expect(cancel).not.toHaveBeenCalled()
     busy.unmount()
-    open({ seq: 2, access: OFF, busy: false })
+    open({ seq: 2, form: 'grant', access: OFF, acknowledge: false, busy: false })
     fireEvent.click(screen.getByRole('button', { name: en['consent.close'] }))
     expect(cancel).toHaveBeenCalledTimes(1)
   })

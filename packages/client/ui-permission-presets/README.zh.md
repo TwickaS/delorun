@@ -33,7 +33,7 @@ kind: "package-reference"
 
 选中即提交 `/permission <preset>` 命令行。带参形式（直接键入 `/permission <preset>`）仍直接切换；装饰只替换裸调用。内置标签在英文界面中是 `Read Only`、`Workspace Write`、`Full access` 和 `Auto review`，在中文界面中是「仅可查看」「工作区内修改」「完全权限」和「自动审查」。显式 host 标签保持原样，未知 kebab-case 名称渲染为 Title Case；`auto` 在菜单选项中带有 `EXP` 标记，并在可见选择时要求实验风险确认。选中后的 composer 控件显示模式，不展示该标记。`custom` 只是显示状态，绝非目标。
 
-组合可以挂载可选的 `permissionSwitchConsent` 客户端服务。两个选择器在各自的风险确认之后、提交之前调用它的 `confirm(sessionId, preset)`；返回 `false` 时不提交任何内容，Session 的预设保持不变。未挂载该服务时选中即提交；直接键入的 `/permission <preset>` 从不询问它。
+组合可以挂载可选的 `permissionSwitchConsent` 客户端服务。两个选择器在提交之前调用它的 `confirm(sessionId, preset)`，并先做各自的风险确认，除非服务的可选方法 `ownsConfirmation(preset)` 返回 true（表示 `confirm` 自行询问风险，选择器跳过内置确认）；返回 `false` 时不提交任何内容，Session 的预设保持不变。未挂载该服务时选中即提交；直接键入的 `/permission <preset>` 从不询问它。
 
 实时目录撤销某个预设时，composer 关闭对应的待确认对话框，并用 Session 的当前值替代已不可用的乐观选择。每次目录失效（无 payload 的通知或连接代际变更）会关闭已打开的 slash 选择器或其确认对话框，不消费草稿；而发布某个 picker 正在等待的读取结果时，该 picker 保持打开并保留失败与重试状态；重新打开时读取当前目录。已经提交的命令在响应结束前继续保持忙碌状态。
 

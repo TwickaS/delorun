@@ -35,6 +35,7 @@ function setup(options: {
   catalog?: PermissionCatalog | null
   locked?: boolean
   select?: (preset: string) => Promise<boolean>
+  ownsConfirmation?: (preset: string) => boolean
 } = {}) {
   const selection = createSnapshotStore<{ value: PermissionSelection | undefined }>({
     value: 'selection' in options ? options.selection : { currentValue: 'workspace-write' },
@@ -50,6 +51,7 @@ function setup(options: {
     useProjection,
     usePermissionCatalog: bindSnapshotSelector(catalog),
     select,
+    ownsConfirmation: options.ownsConfirmation ?? (() => false),
     t,
   } as unknown as PermissionSelectProps
   const view = render(<PermissionSelect {...props} />)
@@ -138,6 +140,18 @@ describe('PermissionSelect', () => {
     fireEvent.click(screen.getByRole('button', { name: '启用完全权限' }))
     expect(select).toHaveBeenCalledExactlyOnceWith('danger-full-access')
     await act(async () => {})
+  })
+
+  it('selects at once when the consent service owns the preset question, and keeps the built-in one for the rest', async () => {
+    const { select } = setup({ ownsConfirmation: preset => preset === 'danger-full-access' })
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: '完全权限' }))
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(select).toHaveBeenCalledExactlyOnceWith('danger-full-access')
+    await act(async () => {})
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: /自动审查/ }))
+    expect(screen.getByRole('checkbox')).toBeTruthy()
   })
 
   it('marks Auto experimental and uses the current-session risk copy', async () => {

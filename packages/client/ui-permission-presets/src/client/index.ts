@@ -61,9 +61,10 @@ export type {
  * Optional client service a composition mounts as `permissionSwitchConsent` to
  * ask its own question before a current-session preset switch is submitted,
  * such as a consent the host requires before it accepts the switch. Both the
- * composer control and the `/permission` picker ask it after their own risk
- * confirmation, at the moment of submission; without a mounted service they
- * submit at once. An argument-bearing `/permission <preset>` typed in the
+ * composer control and the `/permission` picker ask it at the moment of
+ * submission, after their own risk confirmation unless the service
+ * {@link PermissionSwitchConsent.ownsConfirmation | owns} the preset's; without
+ * a mounted service they submit at once. An argument-bearing `/permission <preset>` typed in the
  * composer does not pass through it.
  */
 export interface PermissionSwitchConsent {
@@ -75,6 +76,13 @@ export interface PermissionSwitchConsent {
    *   unchanged, which the surfaces treat as a cancelled pick.
    */
   confirm(sessionId: SessionId, preset: string): Promise<boolean>
+  /**
+   * Whether {@link confirm} asks its own risk question for one preset.
+   * @param preset - the preset the person picked.
+   * @returns true when the composer control and the `/permission` picker skip
+   *   their built-in confirmation for the preset; omitted or false keeps it.
+   */
+  ownsConfirmation?(preset: string): boolean
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -108,6 +116,7 @@ function optionsOf(
   catalog: PermissionCatalog,
   currentValue: string,
   t: TranslateNS<typeof PERMISSION_ACCESS_NS>,
+  owned: (preset: string) => boolean,
 ): SelectOption[] {
   return catalog.options
     .map(option => ({
@@ -120,7 +129,7 @@ function optionsOf(
         ? { detail: t('auto.description') }
         : option.description !== undefined ? { detail: option.description } : {}),
       ...(option.value === currentValue ? { active: true } : {}),
-      ...(option.value === FULL_ACCESS_PRESET || option.value === AUTO_REVIEW_PRESET
+      ...((option.value === FULL_ACCESS_PRESET || option.value === AUTO_REVIEW_PRESET) && !owned(option.value)
         ? {
           confirmation: {
             title: t(option.value === AUTO_REVIEW_PRESET ? 'auto.confirm.title' : 'confirm.title'),
@@ -172,6 +181,8 @@ export function apply(ctx: ClientContext): void {
     return true
   }
 
+  const owned = (preset: string): boolean => ctx.get('permissionSwitchConsent')?.ownsConfirmation?.(preset) === true
+
   const catalog = new PermissionCatalogDirectory(ctx)
   ctx.effect(() => () => { catalog.dispose() }, 'ui-permission: process catalog directory')
   ctx.effect(
@@ -211,6 +222,7 @@ export function apply(ctx: ClientContext): void {
     inject: (sessionId: SessionId): PermissionSelectInjected => ({
       hooks: { permissionCatalog: catalog.store },
       select: preset => submit(sessionId, preset),
+      ownsConfirmation: owned,
     }),
   }, PermissionSelect))
 
@@ -225,7 +237,7 @@ export function apply(ctx: ClientContext): void {
       options: async (session) => {
         const selection = selectionOf(sessionFor(session))
         if (selection === undefined) throw new Error('permission presets are not available on this host')
-        return optionsOf(await catalog.load(), selection.currentValue, t)
+        return optionsOf(await catalog.load(), selection.currentValue, t, owned)
       },
       onSelect: (option, session) => submit(session.sessionId, option.id).then(() => undefined),
     },
