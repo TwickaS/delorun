@@ -55,7 +55,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   OwnerNotesError: PLUGIN,
   MainChatToolError: PLUGIN,
   AcceptanceStoreError: PLUGIN,
-  SupersededStoreError: PLUGIN,
+  FilePinError: PLUGIN,
   BuildRootBusyError: 'raised by the release tooling\'s closure build, which no runtime carries',
   HomeAuthError: 'raised by the home process\'s Web sign-in, which answers the browser over HTTP',
   RelayError: 'raised by the relay server under delo/apps/relay, which delorun does not run',

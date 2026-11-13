@@ -39,14 +39,15 @@ const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime })
 const isServerChange: Check = value => SERVER_CHANGES.some(change => change === value)
 const isServerState: Check = value => SERVER_STATES.some(state => state === value)
 const isEnv: Check = listOf(fields({ name: isString, value: optional(isString) }))
+const isFiles: Check = listOf(fields({ argument: optional(value => Number.isSafeInteger(value) && Number(value) >= 0), path: isString, sha256: isString }))
 const isPendingServers: Check = fields({
   servers: listOf(fields({
     serverName: isString, reviewId: isString, command: isString, args: listOf(isString), cwd: isString,
-    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
+    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, files: isFiles, writableByChats: listOf(isString), reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
   })),
   accepted: listOf(fields({
     acceptanceId: isString, serverName: isString, command: isString, args: listOf(isString), cwd: isString,
-    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv,
+    resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, files: isFiles,
     acceptedAt: isTime, configured: value => typeof value === 'boolean',
   })),
 })

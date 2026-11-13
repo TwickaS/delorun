@@ -11,7 +11,8 @@
  * absolute executable path and canonical working directory the configured
  * command and directory resolve to when the review runs, and on Windows the
  * command shell that runs a batch file. The server is
- * spawned with those resolved paths, so it runs what was reviewed.
+ * spawned with those resolved paths, or with the executable path an allowing
+ * decision names, so it runs what was reviewed.
  *
  * A provider implements {@link McpAddConsent} and is loaded as a plugin whose
  * module exports {@link MCP_ADD_CONSENT_PROVIDER_EXPORT} set to `true`. The
@@ -19,7 +20,7 @@
  * depend on the order of the loader's rows: when the service is not yet
  * registered, it waits until every row's module is imported and every row that
  * declares a provider has settled. The service sees the configured start at
- * every boot, so a provider that remembers an accepted start lets the same
+ * every boot and before every reconnect, so a provider that remembers an accepted start lets the same
  * grant start without asking again, and a changed start reaches the provider
  * as a new review.
  *
@@ -47,7 +48,8 @@ export interface McpServerCommand {
   /** The configured working directory; the empty string runs the server in the Host's working directory. */
   readonly cwd: string
   /**
-   * The absolute path of the executable the server is spawned with: `command`
+   * The absolute path of the executable the server is spawned with, unless the
+   * allowing decision names another ({@link McpConsentDecision}): `command`
    * itself when it contains `/`, resolved against {@link resolvedCwd}, or the
    * first executable file named `command` in the `PATH` of the child's
    * environment. Symbolic links are kept; the review covers this path, not the
@@ -70,7 +72,16 @@ export interface McpServerCommand {
 
 /** The decision a consent review returns. */
 export type McpConsentDecision =
-  | { readonly allow: true }
+  | {
+    readonly allow: true
+    /**
+     * The absolute path the server is spawned with instead of the reviewed
+     * `resolvedCommand`, such as the canonical file the provider checked, so
+     * a symbolic link retargeted after the review cannot change the file that
+     * runs. Absent, the server is spawned with `resolvedCommand`.
+     */
+    readonly spawnCommand?: string
+  }
   | { readonly allow: false; readonly reason: string }
 
 /**
@@ -220,7 +231,11 @@ export abstract class McpAddConsent extends Service {
   /**
    * Review one configured server start before the mcp-client plugin starts
    * that server. The review runs at every boot of the server row, before any
-   * child process starts, so the provider can let an accepted start through
+   * child process starts, and again before every reconnect spawns the server
+   * after its connection dropped, where a refusal ends the reconnect loop and
+   * leaves the server stopped until its row starts again. The provider can
+   * therefore compare what the start names, such as the contents of its
+   * executable, with what it accepted each time, and let an accepted start through
    * at once and ask again when the command, arguments, working directory,
    * environment, resolved executable path, resolved command shell or resolved
    * working directory it is shown differ from the ones it accepted before.

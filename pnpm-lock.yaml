@@ -2562,6 +2562,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:*
+        version: link:../../../packages/workspace/workspace
       '@modelcontextprotocol/client':
         specifier: 2.2.0
         version: 2.2.0

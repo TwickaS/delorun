@@ -17,7 +17,7 @@ import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
 import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView } from '@delo/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
-import type { WorkspaceAccess } from '../src/client/consents-api.ts'
+import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
 import {
   confirmPermissionSwitch, consentFailureText, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
   workspaceName, type FullAccessConsentProps, type FullAccessConsentSource,
@@ -294,12 +294,13 @@ describe('the full-access consent', () => {
 const SERVER = {
   serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
   resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person',
-  env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], changedVariables: [] as string[], state: 'waiting' as const,
+  env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], files: [] as { argument?: number, path: string, sha256: string }[],
+  writableByChats: [] as string[], changedVariables: [] as string[], state: 'waiting' as const,
   reason: 'the acceptance store holds no acceptance for this command', change: 'new' as const, reviewedAt: NOW - 60_000,
 }
 const ACCEPTED = {
   acceptanceId: 'e'.repeat(32), serverName: 'git', command: 'uvx', args: ['mcp-server-git'], cwd: '/srv/git',
-  resolvedCommand: '/opt/uv/uvx.cmd', resolvedCwd: '/srv/git', resolvedShell: '/Windows/System32/cmd.exe', env: [], acceptedAt: NOW - 86_400_000, configured: true,
+  resolvedCommand: '/opt/uv/uvx.cmd', resolvedCwd: '/srv/git', resolvedShell: '/Windows/System32/cmd.exe', env: [], files: [], acceptedAt: NOW - 86_400_000, configured: true,
 }
 const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): Answer => ({ status: 200, body: { servers, accepted } })
 
@@ -682,6 +683,44 @@ describe('the MCP server review', () => {
     expect(within(details).queryByText(en['mcp.resolvedShell'])).toBeNull()
   })
 
+  it('says a file it runs changed, and lists the files it runs under Details', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    const files = [{ path: '/opt/node/bin/node', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 0, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    void source.ask({ ...SERVER, change: 'contents', files })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText(en['mcp.change.contents'])).toBeTruthy()
+    expect(within(dialog).getByText(en['mcp.files'])).toBeTruthy()
+    expect(within(dialog).getByText((_content, element) => element?.tagName === 'CODE' && element.textContent === '/opt/node/bin/node\n/work/server.js')).toBeTruthy()
+  })
+
+  it('names the file the command links to, which is the file that starts, and the paths chats can write', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    const files = [{ path: '/usr/local/lib/npx-cli.js', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 1, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    void source.ask({ ...SERVER, files, writableByChats: ['/work', '/work/server.js'] })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(within(dialog).getByText('/usr/local/bin/npx links to /usr/local/lib/npx-cli.js, which is the file Delorun starts.')).toBeTruthy()
+    expect(within(dialog).getByText('Chats can write to /work, /work/server.js, so a chat can change what this server runs.')).toBeTruthy()
+  })
+
+  it('says nothing about a link or about what chats can write when the command is the file itself and none is writable', () => {
+    const source = createMcpReviewSource(fakeHost().fetch)
+    void source.ask({ ...SERVER, files: [{ path: '/usr/local/bin/npx', sha256: `sha256:${'a'.repeat(64)}` }] })
+    renderReview(source)
+    const dialog = screen.getByRole('dialog', { name: 'Allow files to start?' })
+    expect(dialog.querySelector('[data-links]')).toBeNull()
+    expect(dialog.querySelector('[data-writable]')).toBeNull()
+  })
+
+  it('reads the pinned files of each waiting server, and refuses an answer whose file names an argument by no index', async () => {
+    const files = [{ path: '/opt/node/bin/node', sha256: `sha256:${'a'.repeat(64)}` }, { argument: 0, path: '/work/server.js', sha256: `sha256:${'b'.repeat(64)}` }]
+    const good = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, files }]) })
+    await expect(readServers(good.fetch)).resolves.toMatchObject({ servers: [{ files }] })
+    const bad = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, files: [files[0], { ...files[1], argument: -1 }] }]) })
+    await expect(readServers(bad.fetch)).rejects.toThrow()
+  })
+
   it('names the command shell that runs a batch file', () => {
     const source = createMcpReviewSource(fakeHost().fetch)
     void source.ask({ ...SERVER, resolvedCommand: '/nodejs/npx.cmd', resolvedShell: '/Windows/System32/cmd.exe' })
@@ -701,7 +740,7 @@ describe('the MCP server review', () => {
 
   it('says in its own words what each review asks about', () => {
     const t = makeTranslate(en)
-    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'unreadable', 'upgraded'] as const) {
+    for (const change of ['new', 'command', 'arguments', 'directory', 'resolved', 'contents', 'unreadable'] as const) {
       expect(serverChangeText(t, { change, changedVariables: [] })).toBe(en[`mcp.change.${change}`])
     }
   })

@@ -1,6 +1,7 @@
 /**
  * The review the studio shows before a waiting stdio MCP server starts: one sentence on what allowing it lets the
- * server do, one naming the file that runs and the folder it runs in, one on its risk, what changed since the person
+ * server do, one naming the file that runs and the folder it runs in, one naming the file the command links to when
+ * that differs, one naming the paths of the start that chats can write when there are any, one on its risk, what changed since the person
  * last allowed it, and, behind Details, the command, its arguments, its folder, the file, command shell and folder they
  * resolve to, and the names of its environment variables, with a value only for a variable that changes what runs. The Permissions section and
  * the waiting-server notice both open it. One store behind one `shell.overlay` entry holds the open review, so it
@@ -112,8 +113,8 @@ export function serverChangeText(t: Translate, server: Pick<PendingServer, 'chan
     case 'directory': return t('mcp.change.directory')
     case 'environment': return t('mcp.change.environment', { names: server.changedVariables.join(', ') })
     case 'resolved': return t('mcp.change.resolved')
+    case 'contents': return t('mcp.change.contents')
     case 'unreadable': return t('mcp.change.unreadable')
-    case 'upgraded': return t('mcp.change.upgraded')
     /* v8 ignore next 2 -- ServerChange is a closed union. */
     default:
       return change satisfies never
@@ -141,12 +142,26 @@ export function ServerStart({ t, start }: { t: Translate; start: PendingServer |
     </>}
     <dt>{t('mcp.resolvedCwd')}</dt>
     <dd><code className={css.command}>{start.resolvedCwd}</code></dd>
+    {start.files.length === 0 ? null : <>
+      <dt>{t('mcp.files')}</dt>
+      <dd><code className={css.command}>{start.files.map(file => file.path).join('\n')}</code></dd>
+    </>}
     <dt>{t('mcp.env')}</dt>
     <dd>{start.env.length === 0 ? t('mcp.envNone') : <>
       <code className={css.command}>{start.env.map(variable => variable.value === undefined ? variable.name : `${variable.name}=${variable.value}`).join('\n')}</code>
       <div className={css.hint}>{t('mcp.envHidden')}</div>
     </>}</dd>
   </dl>
+}
+
+/**
+ * The file a waiting server's command links to, which is the file the server is started with.
+ * @param server - the server as the home showed it.
+ * @returns the pinned executable's path when it differs from the resolved command; otherwise undefined.
+ */
+function linkedFile(server: PendingServer): string | undefined {
+  const executable = server.files[0]?.path
+  return executable === server.resolvedCommand ? undefined : executable
 }
 
 /**
@@ -158,6 +173,7 @@ export function McpServerReview({ useReview, confirm, cancel, t }: McpServerRevi
   const review = useReview(current => current)
   if (review === null) return null
   const { server } = review
+  const linked = linkedFile(server)
   // While the answer is recorded the review stays open, so its outcome is the one the person sees.
   const close = (): void => { if (!review.busy) cancel() }
   return <Modal open onClose={close} title={t('mcp.confirm.title', { server: server.serverName })} closeLabel={t('mcp.confirm.close')}
@@ -170,6 +186,8 @@ export function McpServerReview({ useReview, confirm, cancel, t }: McpServerRevi
       <p className={css.text} data-runs>{server.resolvedShell === undefined
         ? t('mcp.confirm.runs', { command: server.resolvedCommand, folder: server.resolvedCwd })
         : t('mcp.confirm.runsShell', { command: server.resolvedCommand, shell: server.resolvedShell, folder: server.resolvedCwd })}</p>
+      {linked === undefined ? null : <p className={css.text} data-links>{t('mcp.confirm.linksTo', { command: server.resolvedCommand, file: linked })}</p>}
+      {server.writableByChats.length === 0 ? null : <p className={css.text} data-writable>{t('mcp.confirm.writable', { paths: server.writableByChats.join(', ') })}</p>}
       <p className={css.text}>{t('mcp.confirm.risk')}</p>
       {server.change === 'new' ? null : <p className={css.text} data-change={server.change}>{serverChangeText(t, server)}</p>}
       <details className={css.disclosure}>

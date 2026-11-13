@@ -53,11 +53,11 @@ export type McpConsentRefusalCode = typeof MCP_CONSENT_REFUSAL_CODES[number]
  * working directory or environment differ from the one the person accepted for the server (`command`, `arguments`,
  * `directory`, `environment`, the first that differs in this order), a start configured as accepted whose command
  * now resolves to another executable, whose working directory resolves to another directory, or whose batch file runs
- * through another command shell (`resolved`), a store that cannot be read, which counts no acceptance
- * (`unreadable`), or a server whose exact start the person accepted before acceptances were kept per server name,
- * which the person reviews once (`upgraded`).
+ * through another command shell (`resolved`), a start whose executable or a file an argument names was rewritten,
+ * points elsewhere through a symbolic link, now exists or no longer exists, or could not be read (`contents`), a
+ * store that cannot be read, which counts no acceptance (`unreadable`).
  */
-export const SERVER_CHANGES = ['new', 'command', 'arguments', 'directory', 'environment', 'resolved', 'unreadable', 'upgraded'] as const
+export const SERVER_CHANGES = ['new', 'command', 'arguments', 'directory', 'environment', 'resolved', 'contents', 'unreadable'] as const
 
 /** One code of {@link SERVER_CHANGES}. */
 export type ServerChange = typeof SERVER_CHANGES[number]
@@ -95,6 +95,19 @@ export interface EnvVariable {
   readonly value?: string
 }
 
+/**
+ * One file a server start runs, pinned by its canonical path and the digest of its contents: the executable, or a file
+ * an argument names.
+ */
+export interface PinnedFile {
+  /** The index of the argument that names the file; absent for the executable. */
+  readonly argument?: number
+  /** The file's canonical path, every symbolic link resolved. */
+  readonly path: string
+  /** `sha256:` and the hexadecimal digest of the file's contents. */
+  readonly sha256: string
+}
+
 /** One stdio server whose start the consent refused, as a surface shows it before the person answers. */
 export interface PendingServer {
   /** The server's configured name. */
@@ -118,6 +131,19 @@ export interface PendingServer {
   readonly resolvedShell?: string
   /** The configured environment variables, sorted by name; a value only where {@link showsEnvValue} allows it. */
   readonly env: readonly EnvVariable[]
+  /**
+   * The files the start runs, as the review pinned them: the executable first, then each argument that names a regular
+   * file; empty when a file could not be read. An acceptance covers these contents. The executable's pinned path is the
+   * file the server is spawned with; a surface says the command links to it when it differs from `resolvedCommand`.
+   */
+  readonly files: readonly PinnedFile[]
+  /**
+   * The canonical working directory and the pinned files that lie inside a place this profile's chats can write: one
+   * of its workspaces or a temporary directory. A chat can rewrite such a file or a module loaded from such a
+   * directory, so a surface warns before the person accepts; empty when none does. A chat with full access can write
+   * elsewhere too, which this list does not cover.
+   */
+  readonly writableByChats: readonly string[]
   /** Why the consent refused the start: no acceptance, or what changed since the last one. */
   readonly reason: string
   /** What the review asks about, for a surface's own words. */
@@ -159,6 +185,8 @@ export interface AcceptedServer {
    * server's configured row still sets that value, since the store keeps digests only.
    */
   readonly env: readonly EnvVariable[]
+  /** The files the accepted start runs, pinned when the person accepted it: the executable first, then each file an argument names. */
+  readonly files: readonly PinnedFile[]
   /** When the person accepted it, in milliseconds since the epoch. */
   readonly acceptedAt: number
   /** Whether a configured server row of this studio has the server name. */
