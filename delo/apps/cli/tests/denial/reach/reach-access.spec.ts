@@ -31,7 +31,7 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
-import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
+import { CONSENT_OFF_REFUSAL, CREATE_OUTSIDE_WORKSPACES, DELEGATION_CONSENT_NAMESPACE, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
 
@@ -171,8 +171,10 @@ describe('a reach device through the Gateway', () => {
     const events = (await ctx.typertGateway.wireStream.open('$events', { args: {} }, (async function* () {})(), peer, abort.signal))[Symbol.asyncIterator]()
     try {
       await expect(events.next()).resolves.toMatchObject({ value: { type: 'ready' } })
-      // The plugin manager declares this event's type; this package does not compile against it.
-      ctx.emit('cordis/dynamic-retract' as never, { id: 'reach-dynamic' } as never)
+      // The plugin manager declares this event's type; this package does not compile against it. The name is joined
+      // from parts because the vendor rescope gate reads a quoted `cordis/...` text as a package specifier.
+      const retract = ['cordis', 'dynamic-retract'].join('/')
+      ctx.emit(retract as never, { id: 'reach-dynamic' } as never)
       const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
       const seen: string[] = []
       for (;;) {
@@ -181,7 +183,7 @@ describe('a reach device through the Gateway', () => {
         if (frame.event === 'api-session/added' && frame.args[0]?.sessionId === created.sessionId) break
       }
       // Pins the event roles: a forwarded event reaches the device only when an allowed action names it.
-      expect(seen).not.toContain('cordis/dynamic-retract')
+      expect(seen).not.toContain(retract)
     } finally {
       abort.abort()
       await events.return?.()
@@ -409,7 +411,7 @@ describe('an elevated reach device through the Gateway', () => {
       // The switch is no setting: a generic settings save in any namespace, the home-auth and reach rows' included, leaves it off.
       for (const ns of ['delo-reach-access-probe', 'home-auth', 'reach', 'homeAuth']) {
         await call('settings/update', { ns, patch: { terminalWithoutUnlock: true, withoutUnlock: true } })
-        await call('settings/mutate', { ns, mutation: { op: 'set', path: ['withoutUnlock'], value: true } })
+        await call('settings/mutate', { ns, ops: [{ op: 'set', path: ['withoutUnlock'], value: true }] })
       }
       // A slash command runs as the device's call too, and no command writes the switch.
       await call('commands/execute', { agentId: created.sessionId, line: '/config set withoutUnlock true', submittedAttachments: [] })
@@ -419,6 +421,38 @@ describe('an elevated reach device through the Gateway', () => {
       expect(studio.ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
       await studio.ctx.homeAuth.setTerminalWithoutUnlock(false, 'device')
       expect(studio.ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(id)
+    }
+  })
+
+  it('never turns the external-agent consent off, and takes its run time limit and turning it on', async () => {
+    /**
+     * Assert that one settings write is refused as turning the consent off, which no unlock admits.
+     * @param endpoint - the settings write.
+     * @param args - its named wire arguments.
+     */
+    const expectConsentKept = async (endpoint: string, args: Record<string, unknown>): Promise<void> => {
+      expect(await call(endpoint, args), endpoint).toMatchObject({
+        ok: false,
+        error: { code: 'remote-access/denied', details: { action: endpoint, reason: CONSENT_OFF_REFUSAL } },
+      })
+    }
+    const ns = DELEGATION_CONSENT_NAMESPACE
+    const id = elevate()
+    try {
+      // Pins the argument check through the Gateway: each settings write that could turn it off is refused under an unlock.
+      await expectConsentKept('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: false }] })
+      await expectConsentKept('settings/mutate', { ns, ops: [{ op: 'unset', path: ['enabled'] }] })
+      await expectConsentKept('settings/update', { ns, patch: { enabled: false } })
+      await expectConsentKept('settings/replace', { ns, section: { enabled: false, runTimeoutMinutes: 30 } })
+      await expectConsentKept('settings/replace', { ns, section: { runTimeoutMinutes: 30 } })
+      // The run time limit and turning the consent on reach the settings service.
+      await expectAdmitted('settings/mutate', { ns, ops: [{ op: 'set', path: ['runTimeoutMinutes'], value: 45 }] })
+      await expectAdmitted('settings/update', { ns, patch: { runTimeoutMinutes: 45 } })
+      await expectAdmitted('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: true }] })
+      await expectAdmitted('settings/update', { ns, patch: { enabled: true } })
+      await expectAdmitted('settings/replace', { ns, section: { enabled: true, runTimeoutMinutes: 45 } })
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
     }

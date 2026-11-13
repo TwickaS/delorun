@@ -183,7 +183,7 @@ An elevation, an unlock in the studio's words ("sudo mode"), lets one device tak
 
 | Family | Actions | Why |
 | --- | --- | --- |
-| Settings writes | `settings/mutate`, `settings/replace`, `settings/update` | They change the home's settings. |
+| Settings writes | `settings/mutate`, `settings/replace`, `settings/update` | They change the home's settings. The condition refuses a write to the `delo-delegation-consent` namespace that could turn the external-agent consent off, with `loopback-required: turning the external-agent consent off`, under an unlock as well: `enabled` may only be written as a literal `true`, a `replace` must name it so, and arguments it cannot read are refused. |
 | Slash commands | `commands/execute` | A slash command can change settings, plugins or the profile. |
 | Plugins and profile history | `pluginManager/installBundle`, `updateBundle`, `removeBundle`, `setBundleEnabled`, `setPluginEnabled`, `setVersionExemption`, `cancelInstall`, `undo`, `restore` | They add or enable code that runs in the Host outside any sandbox. The plugin manager still refuses every change to a guard plugin's row, the reach and home-auth rows included, unlocked or not. |
 | Terminals | `terminal/*` of a Session whose terminal would open outside every workspace with a full-access grant, while the terminal switch is off | A terminal is a shell on the computer outside the sandbox. Inside a granted workspace the agent already runs commands outside the sandbox, so a terminal there adds nothing. |

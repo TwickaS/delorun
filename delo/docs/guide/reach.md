@@ -78,6 +78,7 @@ Never, even unlocked:
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
 - accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Permissions on the phone says the same;
 - read or change your keys and other credentials, or your account;
+- turn off **Ask before external agents run**; the phone can still turn it on and change its run time limit;
 - answer a prompt that would let the agent manage workspaces and their instructions;
 - open a file or folder in an application on your computer, or open the settings file in an editor there;
 - approve or remove devices, change remote access, unlock itself or make an unlock longer, or reset the home.

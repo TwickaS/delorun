@@ -465,6 +465,62 @@ function terminalWithoutUnlock(facts: Pick<ReachAccessFacts, 'terminalWithoutUnl
   })
 }
 
+/**
+ * The settings namespace of the external-agent consent's profile row, the same id as `DELEGATION_CONSENT_ROW` of
+ * `@delo/plugin-delegation-consent/wire`. Its `enabled` field only the home's own computer turns off (A299).
+ */
+export const DELEGATION_CONSENT_NAMESPACE = 'delo-delegation-consent'
+
+/** The reason a settings write that turns the external-agent consent off is refused to a device, unlocked or not. */
+export const CONSENT_OFF_REFUSAL = 'loopback-required: turning the external-agent consent off'
+
+/** The settings writes whose arguments the condition reads for a field only the computer lowers. */
+const SETTINGS_WRITES: ReadonlySet<string> = new Set(['settings/mutate', 'settings/update', 'settings/replace'])
+
+/**
+ * Whether a value is a JSON object.
+ * @param value - the value.
+ * @returns whether it is a non-array object.
+ */
+function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Whether one `settings/mutate` operation leaves the consent's `enabled` field on: an operation on another field, or
+ * a `set` that writes a literal `true` to it, directly or in the whole section.
+ * @param op - the operation, as the call sent it.
+ * @returns whether it keeps the consent on.
+ */
+function opKeepsConsent(op: unknown): boolean {
+  if (!isObject(op) || !Array.isArray(op.path)) return false
+  const [head, ...rest] = op.path as unknown[]
+  if (head === undefined) return op.op === 'set' && isObject(op.value) && op.value.enabled === true
+  if (head !== 'enabled') return true
+  return rest.length === 0 && op.op === 'set' && op.value === true
+}
+
+/**
+ * Whether a settings write could turn the external-agent consent off. A write to another namespace never does; a write
+ * to its namespace does unless its arguments name `enabled` only as a literal `true`, and a `replace`, which rebuilds
+ * the section, must name it so. Arguments the condition cannot read count as turning it off.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @returns whether the write is refused to a device.
+ */
+function turnsConsentOff(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
+  if (args.ns !== DELEGATION_CONSENT_NAMESPACE) return false
+  switch (action) {
+    case 'settings/mutate':
+      return !Array.isArray(args.ops) || !args.ops.every(opKeepsConsent)
+    case 'settings/update':
+      return !isObject(args.patch) || ('enabled' in args.patch && args.patch.enabled !== true)
+    default:
+      // `settings/replace`, the only other member of SETTINGS_WRITES.
+      return !isObject(args.section) || args.section.enabled !== true
+  }
+}
+
 /** The reason a `session/create` outside the known workspaces is refused without an unlock. */
 export const CREATE_OUTSIDE_WORKSPACES = 'elevation-required: session/create in a folder outside the known workspaces'
 
@@ -524,6 +580,8 @@ export function createCondition(
     return undefined
   }
   return ({ action, resource, args }) => {
+    // Turning the external-agent consent off stays at the computer, so no unlock admits it.
+    if (args !== undefined && SETTINGS_WRITES.has(action) && turnsConsentOff(action, args)) return { kind: 'deny', reason: CONSENT_OFF_REFUSAL }
     if (ELEVATED_SET.has(action) && !(action.startsWith(TERMINAL_PREFIX) && terminalWithoutUnlock(facts, resource))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused

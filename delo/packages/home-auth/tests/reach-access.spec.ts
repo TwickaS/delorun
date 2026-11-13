@@ -17,7 +17,9 @@ import {
   REACH_DENIED_ACTIONS,
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
+  CONSENT_OFF_REFUSAL,
   CREATE_OUTSIDE_WORKSPACES,
+  DELEGATION_CONSENT_NAMESPACE,
   assertDisjoint,
   createCondition,
   createReachAccessPolicy,
@@ -270,6 +272,50 @@ describe('a session/create', () => {
     expect(create({ cwd: other }, unlocked)).toEqual(ALLOW)
     expect(create({ workspaceId: 'w-1' }, unlocked)).toEqual(ALLOW)
     expect(lines).toEqual([`home-auth: elevated action: device=device-1 listener=${LISTENER} action=session/create elevation=elevation-1`])
+  })
+})
+
+describe('the external-agent consent\'s settings row', () => {
+  const ns = DELEGATION_CONSENT_NAMESPACE
+  const OFF = { kind: 'deny', reason: CONSENT_OFF_REFUSAL }
+  const ALLOW = { kind: 'allow' }
+  /** A device holding an unlock on its listener. */
+  const unlocked = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)
+  const write = (action: string, args: Record<string, unknown>) => unlocked({ action: action as RemoteAccessAction, resource: GLOBAL, args })
+
+  it('is never turned off from a device, even under an unlock, through any settings write', () => {
+    // Pins the argument check on each write: an unlock admits the action, never this value.
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: false }] })).toEqual(OFF)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'unset', path: ['enabled'] }] })).toEqual(OFF)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: [], value: { runTimeoutMinutes: 30 } }] })).toEqual(OFF)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'unset', path: [] }] })).toEqual(OFF)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled', 'x'], value: true }] })).toEqual(OFF)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['runTimeoutMinutes'], value: 30 }, { op: 'set', path: ['enabled'], value: 'false' }] })).toEqual(OFF)
+    expect(write('settings/update', { ns, patch: { enabled: false } })).toEqual(OFF)
+    expect(write('settings/update', { ns, patch: { enabled: null } })).toEqual(OFF)
+    expect(write('settings/replace', { ns, section: { enabled: false, runTimeoutMinutes: 30 } })).toEqual(OFF)
+    // A replace rebuilds the section, so one that leaves the field out turns it back to the profile's value.
+    expect(write('settings/replace', { ns, section: { runTimeoutMinutes: 30 } })).toEqual(OFF)
+    // Arguments the condition cannot read are refused rather than guessed.
+    for (const [action, args] of [['settings/mutate', { ns }], ['settings/mutate', { ns, ops: [null] }], ['settings/mutate', { ns, ops: [{ op: 'set', path: 'enabled', value: true }] }], ['settings/update', { ns, patch: [] }], ['settings/replace', { ns }]] as const) {
+      expect(write(action, args), JSON.stringify(args)).toEqual(OFF)
+    }
+    // Without an unlock it is refused the same way: no unlock would admit it.
+    expect(createCondition(facts(), DEVICE)({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { enabled: false } } })).toEqual(OFF)
+  })
+
+  it('takes the run time limit and turning the consent on from an unlocked device, and leaves other namespaces alone', () => {
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['runTimeoutMinutes'], value: 45 }] })).toEqual(ALLOW)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['enabled'], value: true }] })).toEqual(ALLOW)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: [], value: { enabled: true, runTimeoutMinutes: 45 } }] })).toEqual(ALLOW)
+    expect(write('settings/update', { ns, patch: { runTimeoutMinutes: 45 } })).toEqual(ALLOW)
+    expect(write('settings/update', { ns, patch: { enabled: true } })).toEqual(ALLOW)
+    expect(write('settings/replace', { ns, section: { enabled: true, runTimeoutMinutes: 45 } })).toEqual(ALLOW)
+    // The same values in another namespace are an ordinary unlocked settings write.
+    expect(write('settings/update', { ns: 'delo-mcp-consent', patch: { enabled: false } })).toEqual(ALLOW)
+    // Without an unlock, turning it on still needs one, like any settings write.
+    expect(createCondition(facts(), DEVICE)({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { enabled: true } } }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: settings/update' })
   })
 })
 
