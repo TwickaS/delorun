@@ -61,8 +61,13 @@ import { UnlockOverlay } from './UnlockOverlay.tsx'
 import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 // Type-only: the 'conversation.approval.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-approval/client'
+// Type-only: ctx.sessions, whose live sessions take the composer's `/permission <preset>` command.
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { PermissionSelection } from '@deepseek-ai/dsh-permission-presets/client'
 import { en as consentsEn, zh as consentsZh, type ConsentsLocaleKey } from './consents-locales.ts'
 import { ConsentToast, createConsentToastSource } from './ConsentToast.tsx'
+import { AllowForChat, ChatSwitchRefused, type AllowForChatInjected } from './AllowForChat.tsx'
 import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAction.tsx'
 import { ExternalAgentAction, type ExternalAgentActionInjected } from './ExternalAgentAction.tsx'
 import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation } from './FullAccessConsent.tsx'
@@ -234,11 +239,14 @@ export const CONSENT_TOAST_ID = 'delo-consents-toast'
 /** The `conversation.approval.action` id of the full-access action. */
 export const FULL_ACCESS_ACTION_ID = 'delo-full-access'
 
+/** The `conversation.approval.choice` id of the "Allow for this chat" choice. */
+export const ALLOW_FOR_CHAT_ID = 'delo-allow-for-chat'
+
 /** The `conversation.approval.action` id of the external-agent action. */
 export const EXTERNAL_AGENT_ACTION_ID = 'delo-external-agent'
 
-/** Required services. */
-export const inject = ['slots', 'locale', 'configForms']
+/** Required services; `sessions` is read by the "Allow for this chat" choice to switch a live chat. */
+export const inject = ['slots', 'locale', 'configForms', 'sessions']
 
 /**
  * Register the Privacy, About, Devices and Network sections, the release check's General row, the Delo sidebar brand, the
@@ -374,6 +382,21 @@ export function apply(ctx: Context): void {
 }
 
 /**
+ * Switch a live chat's permission preset as the composer does, so the switch is logged and announced as any other.
+ * @param ctx - the browser plugin context.
+ * @param sessionId - the chat.
+ * @param preset - the preset.
+ * @throws {ChatSwitchRefused} with the host's sentence when the switch is refused or the chat is not materialized.
+ */
+async function switchChat(ctx: Context, sessionId: SessionId, preset: string): Promise<void> {
+  const live = ctx.sessions.binding(sessionId)?.session
+  if (live === undefined) throw new ChatSwitchRefused('this session is not materialized yet')
+  const result = await live.command(`/permission ${preset}`)
+  if (!result.ok) throw new ChatSwitchRefused(result.error.message)
+  if (!result.value.matched) throw new ChatSwitchRefused('the host offers no /permission command')
+}
+
+/**
  * Register the consent surfaces: the full-access consent behind upstream's `permissionSwitchConsent` service and its
  * `shell.overlay` entry, the approval card's full-access action, the MCP server review and the notice that a server
  * waits, and the Permissions and External agents sections.
@@ -415,8 +438,23 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     name: 'conversation.approval.action',
     id: FULL_ACCESS_ACTION_ID,
     locale: CONSENTS_NS,
-    inject: (sessionId): FullAccessActionInjected => ({ sessionId, fetch, ask: consent.ask }),
+    inject: (sessionId): FullAccessActionInjected => ({ sessionId, fetch }),
   }, FullAccessAction))
+  ctx.slots.inject('conversation.approval.choice', () => ctx.slots.register({
+    name: 'conversation.approval.choice',
+    id: ALLOW_FOR_CHAT_ID,
+    locale: CONSENTS_NS,
+    inject: (chat: string): AllowForChatInjected => {
+      const sessionId = chat as SessionId
+      return {
+        sessionId,
+        fetch,
+        consent,
+        currentPreset: () => (ctx.sessions.binding(sessionId)?.session.projections.faceOf('permissions').getSnapshot() as PermissionSelection | undefined)?.currentValue,
+        switchTo: (preset) => switchChat(ctx, sessionId, preset),
+      }
+    },
+  }, AllowForChat))
   ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
     name: 'conversation.approval.action',
     id: EXTERNAL_AGENT_ACTION_ID,

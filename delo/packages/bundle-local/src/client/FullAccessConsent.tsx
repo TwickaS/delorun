@@ -60,9 +60,12 @@ export interface FullAccessConsentSource {
    * Show the consent the composer's permission control asks for a switch to full access, with a risk acknowledgement.
    * @param access - the workspace as the home showed it, whose missing grant the consent records; undefined, or a
    *   workspace that holds a grant, asks only to switch this chat.
-   * @returns true once the person confirmed and, for a missing grant, the grant is recorded; false when cancelled.
+   * @param wanted - whether the asker still wants the switch, read when the person confirms: false closes the consent
+   *   without recording anything, as an approval card that can no longer be answered does.
+   * @returns true once the person confirmed and, for a missing grant, the grant is recorded; false when cancelled or
+   *   the asker no longer wants the switch.
    */
-  readonly askSwitch: (access: WorkspaceAccess | undefined) => Promise<boolean>
+  readonly askSwitch: (access: WorkspaceAccess | undefined, wanted?: () => boolean) => Promise<boolean>
   /** Record the grant for the open consent, or accept the switch of the `switch` form; a refusal keeps the consent open with its failure. */
   readonly confirm: () => void
   /** Close the open consent without recording anything. */
@@ -129,9 +132,9 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
       publish({ seq: ++seq, form: access === undefined ? 'remote' : 'grant', ...access === undefined ? {} : { access }, acknowledge: false, ...chat === undefined ? {} : { chat }, busy: false })
       return new Promise<boolean>((resolve) => { settle = resolve })
     },
-    askSwitch(access) {
+    askSwitch(access, wanted) {
       close(false)
-      stillWanted = undefined
+      stillWanted = wanted
       const grant = access !== undefined && access.grantedAt === null
       publish({ seq: ++seq, form: grant ? 'grant' : 'switch', ...grant ? { access } : {}, acknowledge: true, busy: false })
       return new Promise<boolean>((resolve) => { settle = resolve })
@@ -139,15 +142,15 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
     confirm() {
       const open = state
       if (open === null || open.form === 'remote' || open.busy) return
+      if (stillWanted?.() === false) {
+        close(false)
+        return
+      }
       if (open.form === 'switch') {
         close(true)
         return
       }
       if (open.access === undefined) return
-      if (stillWanted?.() === false) {
-        close(false)
-        return
-      }
       publish({ ...open, busy: true })
       setFullAccess(fetch, open.access, true, open.chat).then(
         () => { if (state?.seq === open.seq) close(true) },
@@ -168,10 +171,11 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
  * @param consent - the consent's store.
  * @param sessionId - the chat the switch belongs to.
  * @param preset - the preset the person picked.
- * @returns whether the control submits the switch.
+ * @param wanted - whether the asker still wants the switch, read when the person confirms.
+ * @returns whether the surface submits the switch.
  * @throws {HostRequestError} when the home cannot answer the review; the control then submits nothing.
  */
-export async function confirmPermissionSwitch(fetch: HostFetch, consent: Pick<FullAccessConsentSource, 'ask' | 'askSwitch'>, sessionId: string, preset: string): Promise<boolean> {
+export async function confirmPermissionSwitch(fetch: HostFetch, consent: Pick<FullAccessConsentSource, 'ask' | 'askSwitch'>, sessionId: string, preset: string, wanted?: () => boolean): Promise<boolean> {
   if (preset !== FULL_ACCESS_PRESET) return true
   let access: WorkspaceAccess | undefined
   try {
@@ -179,11 +183,11 @@ export async function confirmPermissionSwitch(fetch: HostFetch, consent: Pick<Fu
   } catch (error) {
     if (isRefused(error, LOOPBACK_REQUIRED)) return consent.ask(undefined)
     // A chat with no folder has no per-workspace permission: it still asks, in the short form, and the home's guard answers the switch with its own reason.
-    if (isRefused(error, 'NO_WORKSPACE')) return consent.askSwitch(undefined)
+    if (isRefused(error, 'NO_WORKSPACE')) return wanted === undefined ? consent.askSwitch(undefined) : consent.askSwitch(undefined, wanted)
     throw error
   }
   // A profile without the per-workspace consent answers no review: the short form is then the only question the person sees.
-  return consent.askSwitch(access)
+  return wanted === undefined ? consent.askSwitch(access) : consent.askSwitch(access, wanted)
 }
 
 /**

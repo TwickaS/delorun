@@ -467,6 +467,8 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', new LocaleRuntime(ctx))
+      // Read only when the "Allow for this chat" choice switches a live chat.
+      ctx.provide('sessions', {})
       new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')

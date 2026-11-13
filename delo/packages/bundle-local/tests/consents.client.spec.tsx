@@ -16,12 +16,13 @@ import { MCP_CONSENT_ROUTES } from '@delo/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
 import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView } from '@delo/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
-import type { HostFetch } from '../src/client/host-api.ts'
+import { HostRequestError, type HostFetch } from '../src/client/host-api.ts'
 import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
 import {
   confirmPermissionSwitch, consentFailureText, ownsPermissionConfirmation, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
   workspaceName, type FullAccessConsentProps, type FullAccessConsentSource,
 } from '../src/client/FullAccessConsent.tsx'
+import { AllowForChat, ChatSwitchRefused, type AllowForChatProps } from '../src/client/AllowForChat.tsx'
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
 import { agentOfferFor, ExternalAgentAction, type ExternalAgentActionProps } from '../src/client/ExternalAgentAction.tsx'
 import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
@@ -162,6 +163,28 @@ describe('the full-access consent', () => {
     fireEvent.click(confirm)
     await expect(answered).resolves.toBe(true)
     expect(host.received).toEqual([{ key: `POST ${PERMISSION_ROUTES.setFullAccess}`, body: { workspace: OFF.workspace, reviewId: OFF.reviewId, on: true, confirmed: true } }])
+  })
+
+  it('answers no and records nothing when the asker no longer wants the switch at the confirm', async () => {
+    for (const access of [OFF, ON]) {
+      const host = fakeHost()
+      const source = createFullAccessConsentSource(host.fetch)
+      const answered = source.askSwitch(access, () => false)
+      renderConsent(source)
+      fireEvent.click(screen.getByRole('checkbox'))
+      fireEvent.click(screen.getByRole('button', { name: access === OFF ? en['consent.confirm'] : en['switch.confirm'] }))
+      await expect(answered).resolves.toBe(false)
+      expect(host.received).toEqual([])
+      cleanup()
+    }
+  })
+
+  it('hands the asker\'s wish to the consent it opens', async () => {
+    const wanted = () => true
+    const askSwitch = vi.fn(async () => true)
+    await confirmPermissionSwitch(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } }).fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access', wanted)
+    await confirmPermissionSwitch(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(422, 'NO_WORKSPACE') }).fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access', wanted)
+    expect(askSwitch.mock.calls).toEqual([[OFF, wanted], [undefined, wanted]])
   })
 
   it('asks the short form without recording anything, and answers no when cancelled', async () => {
@@ -336,7 +359,7 @@ const ACCEPTED = {
 const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): Answer => ({ status: 200, body: { servers, accepted } })
 
 /**
- * The approval card's owner props and the action's face, over a fake home.
+ * The approval card's owner props and the line's face, over a fake home.
  * @param host - the fake home.
  * @param overrides - the props a case changes.
  * @returns the props.
@@ -344,162 +367,27 @@ const SERVERS = (servers: readonly object[], accepted: readonly object[] = []): 
 function actionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<FullAccessActionProps> = {}): FullAccessActionProps {
   return {
     t: makeTranslate(en), grants: 'full-access', toolName: 'bash', callId: undefined, allow: vi.fn(async () => {}),
-    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, ask: vi.fn(async () => true), ...overrides,
+    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, ...overrides,
   } as FullAccessActionProps
 }
 
-describe('the approval card\'s full-access action', () => {
-  it('offers to allow full access for the workspace, asks the consent once, then answers the card', async () => {
-    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
-    const props = actionProps(host)
-    render(<FullAccessAction {...props} />)
-    await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
-    await settle()
-    expect(props.ask).toHaveBeenCalledWith(OFF, 'chat-1', props.canAnswer)
-    expect(props.allow).toHaveBeenCalledTimes(1)
-  })
-
-  it('is disabled once the card answered or no longer accepts an answer, so a click records nothing', async () => {
-    for (const overrides of [{ answered: true }, { canAnswer: () => false }]) {
-      const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } } })
-      const props = actionProps(host, overrides)
+describe('the approval card\'s full-access line', () => {
+  it('tells a phone to approve at the computer, with no button, also on the consent\'s own card', async () => {
+    for (const toolName of ['bash', 'permission']) {
+      const props = actionProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE }), { toolName })
       const { unmount } = render(<FullAccessAction {...props} />)
       await settle()
-      const button = screen.getByRole<HTMLButtonElement>('button', { name: en['action.allowFullAccess'] })
-      expect(button.disabled).toBe(true)
-      fireEvent.click(button)
-      await settle()
-      expect(host.received.map(request => request.key)).toEqual([`POST ${PERMISSION_ROUTES.review}`])
-      expect(props.allow).not.toHaveBeenCalled()
+      expect(screen.getByRole('status').textContent).toBe(en['action.atComputer'])
+      expect(screen.queryByRole('button')).toBeNull()
       unmount()
     }
   })
 
-  it('records nothing and reads nothing when the card no longer accepts an answer at the click', async () => {
-    const host = fakeHost({
-      [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
-    })
-    let answerable = true
-    const props = actionProps(host, { canAnswer: () => answerable })
-    render(<FullAccessAction {...props} />)
-    await settle()
-    // The request ended after the action rendered, so the card cannot answer, though no answer was sent from it.
-    answerable = false
-    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
-    await settle()
-    expect(host.received.map(request => request.key)).toEqual([`POST ${PERMISSION_ROUTES.review}`])
-    expect(props.ask).not.toHaveBeenCalled()
-    expect(props.allow).not.toHaveBeenCalled()
-  })
-
-  it('records nothing when the person answers the card while the click reads the workspace', async () => {
-    for (const access of [ON, OFF]) {
-      const host = fakeHost({
-        [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access } },
-        [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
-      })
-      let answerable = true
-      let clicked = false
-      const fetch: HostFetch = async (input, init) => {
-        const response = await host.fetch(input, init)
-        // The person rejects the card while the click's review is on its way.
-        if (clicked) answerable = false
-        return response
-      }
-      const props = actionProps(host, { fetch, canAnswer: () => answerable })
-      const { unmount } = render(<FullAccessAction {...props} />)
-      await settle()
-      clicked = true
-      fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
-      await settle()
-      expect(host.received.map(request => request.key)).toEqual([`POST ${PERMISSION_ROUTES.review}`, `POST ${PERMISSION_ROUTES.review}`])
-      expect(props.ask).not.toHaveBeenCalled()
-      expect(props.allow).not.toHaveBeenCalled()
-      unmount()
-    }
-  })
-
-  it('leaves the card unanswered when the person cancels the consent', async () => {
-    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
-    const props = actionProps(host, { ask: vi.fn(async () => false) })
-    render(<FullAccessAction {...props} />)
-    await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
-    await settle()
-    expect(props.allow).not.toHaveBeenCalled()
-  })
-
-  it('does not ask again in a workspace that holds a grant: it switches the chat and answers the card', async () => {
-    const host = fakeHost({
-      [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
-    })
-    const props = actionProps(host)
-    render(<FullAccessAction {...props} />)
-    await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
-    await settle()
-    expect(props.ask).not.toHaveBeenCalled()
-    expect(host.received.find(request => request.key === `POST ${PERMISSION_ROUTES.setFullAccess}`)?.body)
-      .toEqual({ workspace: ON.workspace, reviewId: ON.reviewId, on: true, confirmed: true, chat: 'chat-1' })
-    expect(props.allow).toHaveBeenCalledTimes(1)
-  })
-
-  it('answers the workspace\'s full access as the home holds it at the click, not as it was shown', async () => {
-    const host = fakeHost({
-      [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: ON, chats: 1 } },
-    })
-    const props = actionProps(host)
-    render(<FullAccessAction {...props} />)
-    await settle()
-    // Another surface granted full access after the card was shown.
-    host.script[`POST ${PERMISSION_ROUTES.review}`] = { status: 200, body: { access: ON } }
-    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
-    await settle()
-    expect(props.ask).not.toHaveBeenCalled()
-    expect(host.received.find(request => request.key === `POST ${PERMISSION_ROUTES.setFullAccess}`)?.body)
-      .toEqual({ workspace: ON.workspace, reviewId: ON.reviewId, on: true, confirmed: true, chat: 'chat-1' })
-    expect(props.allow).toHaveBeenCalledTimes(1)
-  })
-
-  it('names a grant the home refused, and leaves the card unanswered', async () => {
-    const host = fakeHost({
-      [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: ON } },
-      [`POST ${PERMISSION_ROUTES.setFullAccess}`]: refusal(409, 'STALE_REVIEW'),
-    })
-    const props = actionProps(host)
-    render(<FullAccessAction {...props} />)
-    await settle()
-    fireEvent.click(screen.getByRole('button', { name: en['action.allowFullAccess'] }))
-    await settle()
-    expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
-    expect(props.allow).not.toHaveBeenCalled()
-  })
-
-  it('shows nothing when the card goes away before the home answers its review', async () => {
-    const host = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
-    const { container, unmount } = render(<FullAccessAction {...actionProps(host)} />)
-    unmount()
-    await settle()
-    expect(container.innerHTML).toBe('')
-  })
-
-  it('tells a phone to approve at the computer, with no button', async () => {
-    const props = actionProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE }))
-    render(<FullAccessAction {...props} />)
-    await settle()
-    expect(screen.getByRole('status').textContent).toBe(en['action.atComputer'])
-    expect(screen.queryByRole('button')).toBeNull()
-  })
-
-  it('shows nothing for another grant, the consent\'s own card, a chat without a folder and a profile without the plugin', async () => {
+  it('shows nothing at the home\'s computer, for another grant, a chat without a folder and a profile without the plugin', async () => {
     const reviewed = fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } })
     const cases = [
+      actionProps(reviewed),
       actionProps(reviewed, { grants: 'workspace-management' }),
-      actionProps(reviewed, { toolName: 'permission' }),
       actionProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(422, 'NO_WORKSPACE') })),
       actionProps(fakeHost()),
     ]
@@ -509,6 +397,201 @@ describe('the approval card\'s full-access action', () => {
       expect(container.innerHTML).toBe('')
       unmount()
     }
+  })
+
+  it('shows nothing when the card goes away before the home answers its review', async () => {
+    const { container, unmount } = render(<FullAccessAction {...actionProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE }))} />)
+    unmount()
+    await settle()
+    expect(container.innerHTML).toBe('')
+  })
+})
+
+/**
+ * The approval card's owner props and the choice's face, over a fake home.
+ * @param host - the fake home.
+ * @param overrides - the props a case changes.
+ * @returns the props.
+ */
+function choiceProps(host: ReturnType<typeof fakeHost>, overrides: Partial<AllowForChatProps> = {}): AllowForChatProps {
+  return {
+    t: makeTranslate(en), escalatesTo: 'danger-full-access', toolName: 'bash', callId: undefined, allow: vi.fn(async () => {}), offer: vi.fn(),
+    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch,
+    consent: { ask: vi.fn(async () => true), askSwitch: vi.fn(async () => true) },
+    currentPreset: () => 'read-only', switchTo: vi.fn(async () => {}), ...overrides,
+  } as AllowForChatProps
+}
+
+const REVIEWED_OFF = { [`POST ${PERMISSION_ROUTES.review}`]: { status: 200, body: { access: OFF } } }
+const allowForChat = () => screen.getByRole<HTMLButtonElement>('button', { name: en['action.allowForChat'] })
+
+describe('the approval card\'s "Allow for this chat" choice', () => {
+  it('switches a workspace-write request at once, without a dialog, then answers the card', async () => {
+    const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write' })
+    render(<AllowForChat {...props} />)
+    expect(props.offer).toHaveBeenLastCalledWith(true)
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.switchTo).toHaveBeenCalledWith('workspace-write')
+    expect(props.consent.askSwitch).not.toHaveBeenCalled()
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks the one dialog for a full-access request, then switches and answers the card', async () => {
+    const host = fakeHost(REVIEWED_OFF)
+    const props = choiceProps(host)
+    render(<AllowForChat {...props} />)
+    await settle()
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.consent.askSwitch).toHaveBeenCalledWith(OFF, props.canAnswer)
+    expect(props.switchTo).toHaveBeenCalledWith('danger-full-access')
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the card waiting when the person cancels the dialog', async () => {
+    const props = choiceProps(fakeHost(REVIEWED_OFF), { consent: { ask: vi.fn(), askSwitch: vi.fn(async () => false) } })
+    render(<AllowForChat {...props} />)
+    await settle()
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.switchTo).not.toHaveBeenCalled()
+    expect(props.allow).not.toHaveBeenCalled()
+    expect(allowForChat().disabled).toBe(false)
+  })
+
+  it('is not offered to a chat already at or above the requested mode', async () => {
+    const cases: [AllowForChatProps['escalatesTo'], string][] = [['workspace-write', 'workspace-write'], ['workspace-write', 'danger-full-access'], ['danger-full-access', 'danger-full-access']]
+    for (const [escalatesTo, current] of cases) {
+      const props = choiceProps(fakeHost(REVIEWED_OFF), { escalatesTo, currentPreset: () => current })
+      const { container, unmount } = render(<AllowForChat {...props} />)
+      await settle()
+      expect(container.innerHTML).toBe('')
+      expect(props.offer).toHaveBeenLastCalledWith(false)
+      unmount()
+    }
+  })
+
+  it('is offered full access from workspace-write, and workspace-write from a preset that is neither', async () => {
+    const full = choiceProps(fakeHost(REVIEWED_OFF), { currentPreset: () => 'workspace-write' })
+    const { unmount } = render(<AllowForChat {...full} />)
+    await settle()
+    expect(allowForChat()).toBeTruthy()
+    unmount()
+    render(<AllowForChat {...choiceProps(fakeHost(), { escalatesTo: 'workspace-write', currentPreset: () => undefined })} />)
+    expect(allowForChat()).toBeTruthy()
+  })
+
+  it('shows no button for a full-access request on a remote studio', async () => {
+    const props = choiceProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: REMOTE }))
+    const { container } = render(<AllowForChat {...props} />)
+    await settle()
+    expect(container.innerHTML).toBe('')
+    expect(props.offer).not.toHaveBeenCalledWith(true)
+  })
+
+  it('offers a full-access request in a chat without a folder, which asks the short form', async () => {
+    const props = choiceProps(fakeHost({ [`POST ${PERMISSION_ROUTES.review}`]: refusal(422, 'NO_WORKSPACE') }))
+    render(<AllowForChat {...props} />)
+    await settle()
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.consent.askSwitch).toHaveBeenCalledWith(undefined, props.canAnswer)
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('is disabled once the card answered or no longer accepts an answer, so a click does nothing', async () => {
+    for (const overrides of [{ answered: true }, { canAnswer: () => false }]) {
+      const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write', ...overrides })
+      const { unmount } = render(<AllowForChat {...props} />)
+      expect(allowForChat().disabled).toBe(true)
+      fireEvent.click(allowForChat())
+      await settle()
+      expect(props.switchTo).not.toHaveBeenCalled()
+      expect(props.allow).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
+
+  it('does nothing when the card no longer accepts an answer at the click', async () => {
+    let answerable = true
+    const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write', canAnswer: () => answerable })
+    render(<AllowForChat {...props} />)
+    answerable = false
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.switchTo).not.toHaveBeenCalled()
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('does not switch a chat when the card stopped accepting an answer while the dialog was open', async () => {
+    let answerable = true
+    const askSwitch = vi.fn(async () => { answerable = false; return true })
+    const props = choiceProps(fakeHost(REVIEWED_OFF), { canAnswer: () => answerable, consent: { ask: vi.fn(), askSwitch } })
+    render(<AllowForChat {...props} />)
+    await settle()
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.switchTo).not.toHaveBeenCalled()
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('ignores a second click while the switch is under way and answers the card once', async () => {
+    let finish!: () => void
+    const switchTo = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write', switchTo })
+    render(<AllowForChat {...props} />)
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(allowForChat().disabled).toBe(true)
+    fireEvent.click(allowForChat())
+    await settle()
+    finish()
+    await settle()
+    expect(switchTo).toHaveBeenCalledTimes(1)
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the switched preset and does not answer a card that stopped accepting an answer during the switch', async () => {
+    let answerable = true
+    const switchTo = vi.fn(async () => { answerable = false })
+    const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write', switchTo, canAnswer: () => answerable })
+    render(<AllowForChat {...props} />)
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(switchTo).toHaveBeenCalledTimes(1)
+    expect(props.allow).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows the home\'s sentence under the button when the switch is refused, and leaves the card unanswered', async () => {
+    const props = choiceProps(fakeHost(), {
+      escalatesTo: 'workspace-write',
+      switchTo: vi.fn(async () => { throw new ChatSwitchRefused('Only the home\'s computer can change this.') }),
+    })
+    render(<AllowForChat {...props} />)
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe('Only the home\'s computer can change this.')
+    expect(props.allow).not.toHaveBeenCalled()
+    expect(allowForChat().disabled).toBe(false)
+  })
+
+  it('words a home failure while the dialog records the grant', async () => {
+    const props = choiceProps(fakeHost(REVIEWED_OFF), { consent: { ask: vi.fn(), askSwitch: vi.fn(async () => { throw new HostRequestError('/review', { kind: 'refused', status: 409, code: 'STALE_REVIEW', message: 'stale' }) }) } })
+    render(<AllowForChat {...props} />)
+    await settle()
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('reports no shown button once it unmounts', async () => {
+    const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write' })
+    const { unmount } = render(<AllowForChat {...props} />)
+    unmount()
+    expect(props.offer).toHaveBeenLastCalledWith(false)
   })
 })
 

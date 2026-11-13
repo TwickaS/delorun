@@ -35,7 +35,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 | 默认值 | stock DSH | Delo 的 CLI profile | 对安全的影响 |
 | --- | --- | --- | --- |
 | 原生命令的限制 | 沙箱限制文件写入；读取、Unix 套接字与网络保持开放 | 在 bwrap、Landlock 与 Seatbelt 上，沙箱还拒绝受限命令在 Delo 的 home 下写入、在其下读取（三个豁免除外）；在 bwrap 与 Seatbelt 上，还拒绝其连接更新通道的套接字与 Docker context 的套接字（[C1](../contracts/c01-home-layout.zh.md)）；在 Windows 上只限制写入 | 在 Linux 与 macOS 上更安全；没有任何东西按机器报告哪些规则成立 |
-| 完全访问 | 新工作区以 `workspace-write` 开始，完全访问无需同意 | 沿用 stock 的 `workspace-write` 默认值；把工作区的预设切换为完全访问会被拒绝，直到本人在 home 的电脑上为该工作区授权：通过 studio 的同意（它写明 Delo 的 home、其密钥与令牌以及其通道），或使用 `delorun workspace full-access`；按调用的提权经过上游的批准提示，该提示不提及 Delo 的 home | 对预设切换更安全；按调用的提权与 stock 相同；“与 stock 相同”会关闭该拒绝 |
+| 完全访问 | 新工作区以 `workspace-write` 开始，完全访问无需同意 | 沿用 stock 的 `workspace-write` 默认值；把工作区的预设切换为完全访问会被拒绝，直到本人在 home 的电脑上为该工作区授权：通过 studio 的同意（它写明 Delo 的 home、其密钥与令牌以及其通道），或使用 `delorun workspace full-access`；审批卡片上的“在此对话中允许”会切换该对话，并在卡片已无法答复时不记录任何内容；按调用的提权经过上游的批准提示，该提示不提及 Delo 的 home | 对预设切换更安全；按调用的提权与 stock 相同；“与 stock 相同”会关闭该拒绝 |
 | `web_fetch` 的目标 | 在所有模式下无需确认即抓取回环、链路本地与私有网络主机（[web-fetch-http](../../../packages/web/web-fetch-http/README.zh.md)） | 抓取防护在任何连接之前拒绝这些目标（包括云元数据地址），并给出模型可读的类型化原因 | 更安全；设置的提示答复会保持它开启 |
 | 计划任务 | 一次获批的调用就能创建无人值守、反复运行的轮次 | 创建或编辑任务时会写明重复规则、目标会话及其权限预设并询问；当目标 chat 的预设与获批的预设不同时，投递会被拒绝 | 在设置的默认提示答复下更安全；“与 stock 相同”会关闭它 |
 | 指令层文件 | 模型对 skill、预设或 `AGENTS.md` 的写入，即使需要批准，也只作为文件写入批准 | 通过文件工具的写入会询问，并写明其效果（该文本会作为指令加载到其范围内今后的每个 chat）与差异；shell 命令或 PTC 代码的写入不经询问。审查按目标已存在目录的设备号与 inode，将其与 skill 提供方和 profile 启动器读取的根目录比对，因此链接或不同的大小写会得到相同的答复，并在卷不区分大小写时对不存在的部分折叠大小写；硬链接只在它指向指令文件本身时才询问，指向其他位置的链接文件则不询问。这是针对文件工具写入的提示，而不是针对拥有 shell 的模型的边界 | 仅对文件工具更安全；“与 stock 相同”会关闭它 |
