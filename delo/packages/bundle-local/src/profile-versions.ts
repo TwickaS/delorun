@@ -13,17 +13,17 @@
 import type { IncomingMessage } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
-import type {} from '@deepseek-ai/dsh-client-connection'
+import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 // Type-only: the `plugin-manager/before-record` event the history's admission runs through.
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type { ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
-import { isForeignFetchSite, isSameLoopbackOrigin, requireComputer, routedPathname } from '@delo/home-auth'
+import { isForeignFetchSite, isSameLoopbackOrigin, REACH_DEVICE, requireComputer, routedPathname } from '@delo/home-auth'
 import {
   HOME_PATCH_COPY_FILENAME, isProfileSafetyError, listProfileVersions, openHistory, planRestore, saveProfileVersion, switchToVersion, UPDATE_REPORT_FILENAME,
   type RestorePlan,
 } from '@delo/profile-safety'
 import { z } from 'zod'
-import { PROFILE_VERSION_ROUTES, type VersionChanges } from './client/versions-api.ts'
+import { PROFILE_VERSION_ROUTES, type VersionChanges, type VersionEntry } from './client/versions-api.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'delo-profile-versions'
@@ -107,7 +107,7 @@ export class ProfileVersions {
    * The profile's versions, newest first.
    * @returns the listing, or `problem` when the history cannot be read.
    */
-  async list(): Promise<{ versions: readonly object[], unsaved: boolean, problem?: string }> {
+  async list(): Promise<{ versions: readonly VersionEntry[], unsaved: boolean, problem?: string }> {
     const where = this.located()
     try {
       const listing = await listProfileVersions({ profileDir: where.profileDir, homeDir: where.homeDir })
@@ -286,10 +286,12 @@ export function registerVersionRoutes(ctx: Context, service: ProfileVersions): v
   })
   ctx.connection.fetch.register({
     path: PROFILE_VERSION_ROUTES.list, methods: ['GET'], requestBody: 'buffered',
+    admitPeer: admitsReachReader,
     fetch: () => run(() => service.list()),
   })
   ctx.connection.fetch.register({
     path: PROFILE_VERSION_ROUTES.changes, methods: ['GET'], requestBody: 'buffered',
+    admitPeer: admitsReachReader,
     fetch: (request) => run(async () => ({ changes: await service.changes(new URL(request.url).searchParams.get('version') ?? '') })),
   })
   ctx.connection.fetch.register({
@@ -309,6 +311,9 @@ export function registerVersionRoutes(ctx: Context, service: ProfileVersions): v
     },
   })
 }
+
+/** Admits a signed-in reach device to the two read-only routes; saving and switching stay with the owner at the computer. */
+const admitsReachReader: NonNullable<ConnectionFetchRoute['admitPeer']> = (_request, peer) => peer.principal.kind === REACH_DEVICE
 
 /**
  * Where the running profile and its history are.
