@@ -21,6 +21,7 @@
  *
  * @module @delo/home-auth
  */
+import type { IncomingHttpHeaders } from 'node:http'
 import { mkdir } from 'node:fs/promises'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { join } from 'node:path'
@@ -33,7 +34,7 @@ import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delo/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
-import { PAIRING_DEFAULTS, type PairingSpec, type PairingView, type TailnetIdentity } from './pairing.ts'
+import { PAIRING_DEFAULTS, tailnetIdentityOf, type PairingSpec, type PairingView, type TailnetIdentity } from './pairing.ts'
 import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from './arrival.ts'
 import { DeviceStore } from './devices.ts'
 import { ReachTerminalStore } from './reach-terminal.ts'
@@ -149,6 +150,11 @@ export interface ServedListener {
    * request's identity with. Absent when the provider cannot read it, which lets no identity ask without a window.
    */
   readonly computerUser?: string
+  /**
+   * Whether the listener sits behind `tailscale serve`, which sets and overwrites the `Tailscale-User-*` headers. Any
+   * other listener ignores those headers, since a client there can send whatever it likes. Absent means false.
+   */
+  readonly readsTailscaleIdentity?: boolean
 }
 
 /** What `admit` reads for one session token: the admitted session, or the refusal C4 names. */
@@ -687,6 +693,16 @@ export class HomeAuth {
     await this.assertOwner()
     const served = this.servedOrRefuse(where.listener)
     return this.approvals.request(input, { listener: where.listener, address: served.address, source: where.source, identity: where.identity, computerUser: served.computerUser })
+  }
+
+  /**
+   * The Tailscale user a request's headers name, on a listener that reads them.
+   * @param listener - the reach listener the request arrived on.
+   * @param headers - the request's headers.
+   * @returns the identity, or undefined on any other listener, which ignores the headers.
+   */
+  identityOf(listener: ReachListenerId, headers: IncomingHttpHeaders): TailnetIdentity | undefined {
+    return this.served.get(listener)?.readsTailscaleIdentity === true ? tailnetIdentityOf(headers) : undefined
   }
 
   /**

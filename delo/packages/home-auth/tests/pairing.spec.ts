@@ -30,10 +30,11 @@ let home: Home
  * Build a claimed home that serves the reach listener, with the window closed.
  * @param pairing - the pairing values, Delorun's defaults when absent.
  * @param computerUser - the computer's Tailscale login the listener declares.
+ * @param readsTailscaleIdentity - whether the listener sits behind `tailscale serve` and reads the identity headers.
  */
-async function start(pairing: PairingSpec = PAIRING_DEFAULTS, computerUser: string | null = COMPUTER): Promise<void> {
+async function start(pairing: PairingSpec = PAIRING_DEFAULTS, computerUser: string | null = COMPUTER, readsTailscaleIdentity = true): Promise<void> {
   home = await homeFixture({ pairing })
-  home.auth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', ...(computerUser === null ? {} : { computerUser }) })
+  home.auth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership', ...(readsTailscaleIdentity ? { readsTailscaleIdentity } : {}), ...(computerUser === null ? {} : { computerUser }) })
   // A local claim owns the home; the window it opens is closed again, so the requests below arrive without one.
   await home.auth.openApprovalWindow()
   home.auth.approvals.closeWindow()
@@ -195,6 +196,18 @@ describe('the waiting requests of one identity', () => {
     await ask(1, ME)
     await expect(home.auth.approveLocally(home.auth.pendingApprovals()[0]?.requestId ?? '', '00000000')).rejects.toMatchObject({ code: 'APPROVAL_CODE_MISMATCH' })
     expect(home.auth.pendingApprovals()).toMatchObject([{ identity: ME, windowless: true, wrongCodes: 1, label: 'Device 1' }])
+  })
+})
+
+describe('the identity headers by listener', () => {
+  it('reads Tailscale-User-* only on a listener behind tailscale serve', async () => {
+    const headers = { 'tailscale-user-login': COMPUTER, 'tailscale-user-name': 'Me' }
+    await start(PAIRING_DEFAULTS, COMPUTER, true)
+    expect(home.auth.identityOf(LISTENER, headers)).toEqual(ME)
+    await home.dispose()
+    // Pins the per-listener flag: a client of any other listener could send these headers itself.
+    await start(PAIRING_DEFAULTS, COMPUTER, false)
+    expect(home.auth.identityOf(LISTENER, headers)).toBeUndefined()
   })
 })
 

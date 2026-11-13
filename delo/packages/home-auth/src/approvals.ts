@@ -179,7 +179,7 @@ export class Approvals {
     const windowless = this.windowOpenUntil() === undefined
     this.expire()
     const pending = [...this.requests.values()].filter(record => record.state === 'pending')
-    // The per-identity and global limits come first, so a request they refuse spends none of the source's budget and one
+    // The per-identity limit comes first, so a request it refuses spends none of the source's budget and one
     // identity's repeated asks cannot make the home refuse every other request (a person's open window included).
     if (windowless && where.identity !== undefined) {
       const login = where.identity.login
@@ -187,12 +187,12 @@ export class Approvals {
         throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This account already has a device request waiting at the home\'s computer. Finish or decline it there, then try again')
       }
     }
-    if (pending.length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome) {
-      throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This home has 5 device requests waiting. At the home\'s computer, run delorun devices approve to approve one or cancel one, then try again')
-    }
     // Window-less requests have their own budget per source: every reach request arrives from one address.
     if (!(windowless ? this.windowlessSources : this.sources).take(where.source)) {
       throw new HomeAuthError('APPROVAL_RATE_LIMITED', 'Too many device requests from this address in the last minute')
+    }
+    if (pending.length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome) {
+      throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This home has 5 device requests waiting. At the home\'s computer, run delorun devices approve to approve one or cancel one, then try again')
     }
     const nonceBytes = DEVICE_APPROVAL_LIMITS.nonceBytes
     const id = brandString<ApprovalRequestId>(newSecret(nonceBytes, this.options.random))

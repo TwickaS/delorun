@@ -279,9 +279,13 @@ export class ReachService extends Service {
    */
   private async startOption(provider: ReachProvider, spec: ReachSpec): Promise<void> {
     this.change({ option: spec.option, state: 'starting', address: spec.address })
-    const computerUser = await readComputerUser(this.tailscale())
+    // Only the private option sits behind `tailscale serve`, whose `Tailscale-User-*` headers name the person; another
+    // option's clients could send any value, so its listener neither reads them nor compares them with the computer's user.
+    const readsTailscaleIdentity = spec.option === 'tailscale-private'
+    const computerUser = readsTailscaleIdentity ? await readComputerUser(this.tailscale()) : undefined
     const unserve = this.ctx.homeAuth.serve({
       listener: spec.listener, address: spec.address, factor: provider.factor, elevationMinutes: spec.elevationMinutes,
+      ...(readsTailscaleIdentity ? { readsTailscaleIdentity } : {}),
       ...(computerUser === undefined ? {} : { computerUser }),
     })
     let front: LoopbackFront

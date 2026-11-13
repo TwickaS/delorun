@@ -34,7 +34,6 @@ import { HomeAuthError } from './errors.ts'
 import { claimLabelOf, deviceIdOf, devicePublicKeyOf, platformOf } from './records.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
 import { plainPathname } from './reach-paths.ts'
-import { tailnetIdentityOf } from './pairing.ts'
 
 /** The pre-login routes this package answers on every reach listener it serves, which is each listener's allowlist. */
 export const REACH_PRE_LOGIN_ROUTES: readonly PreLoginRoute[] = [
@@ -217,7 +216,7 @@ export function approvalRequestHandler(auth: HomeAuth): RouteHandler {
         if (!method(request, response, 'POST')) return
         // C5: outside a window, and for an identity that may not ask without one, the request is refused before its body
         // is read.
-        const identity = tailnetIdentityOf(request.headers)
+        const identity = auth.identityOf(listener, request.headers)
         auth.assertMayAsk(listener, identity)
         const message = await readMessage(request, response)
         if (message === undefined) return
