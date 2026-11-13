@@ -104,7 +104,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.status).toBe(0)
-    expect(result.stderr).toMatch(new RegExp(`^warn release-log: Release ${RUNNING.replaceAll('.', '\\.')} has not been checked against the release log; Delorun checks it at the next connection\\. It has stayed unchecked since \\S+Z \\(2 days\\); the last attempt, at \\S+Z, recorded: no network\\.$`, 'm'))
+    expect(result.stderr).toMatch(new RegExp(`^warn release-log: Release ${RUNNING.replaceAll('.', '\\.')} has not been checked against the release log; Delo checks it at the next connection\\. It has stayed unchecked since \\S+Z \\(2 days\\); the last attempt, at \\S+Z, recorded: no network\\.$`, 'm'))
   })
 
   it.runIf(POSIX)('passes an answering Docker engine and prints its version', async () => {

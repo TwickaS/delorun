@@ -184,8 +184,11 @@ describe('delorun reach', () => {
   it('reports the row, and the running home\'s state', async () => {
     await reach().run(['status'], context)
     expect(out.stdout).toContain('Remote access is off. Turn it on with delorun reach on tailscale.')
-    expect(out.stdout).toContain('Delorun is not running')
+    expect(out.stdout).not.toContain('is not running')
     await reach().run(['on', 'tailscale'], context)
+    out.stdout = ''
+    await reach().run(['status'], context)
+    expect(out.stdout).toContain('Delorun is not running, so the address does not work until you run delorun start.')
     out.stdout = ''
     // The live state answers only the studio's own page, so a running home is pointed to, never asked over HTTP.
     await reach({ running: () => true }).run(['status'], context)

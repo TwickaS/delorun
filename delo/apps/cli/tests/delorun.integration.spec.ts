@@ -121,11 +121,11 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(plugin.status).toBe(0)
     // Upstream initialised the profile it was asked about under the Delo home, not under the inherited DSH_HOME.
     expect(lstatSync(join(deloHome, 'profiles', 'probe', 'package.json')).isFile()).toBe(true)
-    const status = delorun(['status'])
+    const status = delorun(['status', '--verbose'])
     expect(status.status).toBe(EXIT.notRunning)
-    expect(status.stdout).toContain(`home: ${deloHome}\n`)
-    expect(status.stdout).toContain(`DSH_HOME is set to ${dshHome}; delorun ignores it and runs with DSH_HOME=${deloHome}`)
-    expect(status.stdout).toContain('state: not running')
+    expect(status.stdout).toContain(`Home: ${deloHome}\n`)
+    expect(status.stdout).toContain(`DSH_HOME is set to ${dshHome}; Delorun ignores it and uses DSH_HOME=${deloHome}`)
+    expect(status.stdout).toContain('Delorun is not running')
     expect(snapshot(dshHome)).toEqual(before)
   })
 
@@ -378,7 +378,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(lock.pid).toBe(process.pid)
     const printed: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
-    expect(printed.join('')).toContain(`Delorun is already running for the profile default (process ${String(process.pid)}`)
+    expect(printed.join('')).toContain('Delorun is already running for the profile default.')
     expect(printed.join('')).toContain('Run delorun open to open the studio in your browser.\n')
     const opening: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: { stdout: () => {}, stderr: text => void opening.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)

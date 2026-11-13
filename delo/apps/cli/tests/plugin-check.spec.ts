@@ -95,7 +95,7 @@ describe('delorun plugin check', () => {
     const { exit, out } = await check(plugin({ name: 'future', version: '2.0.0', engines: { delo: '>=0.2.0' } }))
     expect(exit).toBe(EXIT.failed)
     expect(out).toContain('Delorun axis: engines.delo ">=0.2.0" does not admit Delorun 0.1.3.')
-    expect(out).toContain('The installer refuses it on this release: future@2.0.0 requires Delorun >=0.2.0; this is Delorun 0.1.3 on DSH 0.2.2.')
+    expect(out).toContain('The installer refuses it on this release: future@2.0.0 requires Delo >=0.2.0; this is Delo 0.1.3 on DSH 0.2.2.')
   })
 
   it('reads the DSH peers when engines.dsh is absent, as upstream does', async () => {

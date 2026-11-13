@@ -193,7 +193,7 @@ async function listed(where: Where): Promise<Listed> {
     throw new CliError(EXIT.notRunning, 'delorun mcp: Delorun is not running. The studio reviews each MCP server as it starts it; start Delorun with delorun start, then run delorun mcp list')
   }
   const answer = final(await dependencies.send(home, profile, { op: 'mcp.list' }))
-  if (answer.ok !== true) throw new CliError(EXIT.failed, `delorun mcp: the home refused: ${refusal(answer)}`)
+  if (answer.ok !== true) throw new CliError(EXIT.failed, `delorun mcp: Delorun refused: ${refusal(answer)}`)
   const servers = entriesOf(answer.servers, pendingOf)
   const accepted = entriesOf(answer.accepted, acceptedOf)
   if (servers === undefined || accepted === undefined) throw new CliError(EXIT.failed, 'delorun mcp: the home answered with a list of servers this command cannot read')
@@ -461,7 +461,7 @@ async function revoke(where: Where, name: string): Promise<ExitCode> {
  */
 function answerRefusal(answer: ResponseLine, stale: string): string {
   if (answer.error === 'STALE_REVIEW') return `${stale}. Look at it again with delorun mcp list`
-  return `the home refused: ${refusal(answer)}`
+  return `Delorun refused: ${refusal(answer)}`
 }
 
 /**
