@@ -8,25 +8,30 @@ English
 
 ## Summary
 
-When `delorun` or its npm launcher cannot do what you asked, it prints a refusal: what Delorun did or did not do, why, with an error code, and what you can do. Most refusals change nothing, so you can fix the cause and run the same command again. This page shows how to read a refusal and lists the common ones by code, with their fixes.
+This page helps you get unstuck when `delorun` cannot do what you asked, or when a phone cannot sign in to your studio. When `delorun` cannot do something, it prints a refusal: what it did or did not do, why, with an error code, and what you can do. Most refusals change nothing, so you can fix the cause and run the same command again.
+
+Find yours by searching this page for the exact words or the code in the message. Every entry ends with a fix or says where to get help, and [When nothing here fits](#when-nothing-here-fits) says how to ask. You need nothing else first. Words such as [home](../reference/glossary.md#home), [profile](../reference/glossary.md#profile) and [sandbox](../reference/glossary.md#sandbox) link to the [glossary](../reference/glossary.md) the first time they appear.
 
 ## Contents
 
 - [Reading a refusal](#reading-a-refusal)
 - [The home and its files](#the-home-and-its-files)
 - [Starting and stopping](#starting-and-stopping)
+- [The studio port is busy](#the-studio-port-is-busy)
 - [Setup and the model key](#setup-and-the-model-key)
 - [Installs and release checks](#installs-and-release-checks)
 - [Updates and rollback](#updates-and-rollback)
 - [Protections and plugins](#protections-and-plugins)
 - [Remote access and devices](#remote-access-and-devices)
+- [What a phone shows when it cannot sign in](#what-a-phone-shows-when-it-cannot-sign-in)
 - [Archives, imports and the trash](#archives-imports-and-the-trash)
 - [When nothing here fits](#when-nothing-here-fits)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Reading a refusal
 
-A refusal goes to standard error in three parts: the first line says what happened, `Why:` names the error code and the path or value it concerns, and `What you can do:` lists the remedies in order. A refusal never shows a stack trace, and it passes the same redaction as Delorun's logs, so it shows no key or token. The messages call the product "Delo".
+A refusal appears in your terminal in three parts: the first line says what happened, `Why:` names the error code and the path or value it concerns, and `What you can do:` lists the fixes in order. A refusal never shows a stack trace, and it hides keys and tokens the same way Delorun's logs do. The messages call the product "Delo".
 
 ```text
 Delo stopped before using /home/you/.delo.
@@ -35,7 +40,7 @@ What you can do:
   Fix it with: chmod 700 /home/you/.delo
 ```
 
-A remedy that runs a `delorun` command repeats the `--profile <name>` you gave, so you can copy it as printed.
+A fix that runs a `delorun` command repeats the `--profile <name>` you gave, so you can copy it as printed. After you fix the cause, run the command that refused again; you should see it finish without a refusal.
 
 `delorun` exits with one of four codes, which scripts can rely on:
 
@@ -48,35 +53,75 @@ A remedy that runs a `delorun` command repeats the `--profile <name>` you gave, 
 
 A command that fails without a code of its own starts with `delorun <command>:` and says what to do in the same sentence.
 
+<details>
+<summary>Edge cases</summary>
+
+- If a refusal repeats after you fixed its cause, then run `delorun doctor` and read its lines before you try again.
+- If a refusal names a file you cannot find, then it is inside your Delorun home, `~/.delo` or the folder `DELO_HOME` names — list it with `ls -la` there.
+- If you run `delorun headless`, then a consent or full-access question that would ask you is refused instead; the refusal names what to allow first ([Protections and plugins](#protections-and-plugins)).
+- If the refusal says "Report this", then Delorun found something it cannot explain — see [When nothing here fits](#when-nothing-here-fits).
+
+</details>
+
 ## The home and its files
 
 | Code | What it means | What to do |
 | --- | --- | --- |
-| `HOME_MODE` | Your Delorun home, or one of its private folders, can be reached by other users, is a symbolic link, is not a folder, or belongs to another user. | Run the `chmod 700` command the refusal prints. For a link or another owner, move it away and let `delorun` create the folder again. |
-| `SECRET_FILE_MODE` | A secret file other users can read, a secret file that is a symbolic link or belongs to another user, or one replaced while Delorun read it. | Run the `chmod 600` command the refusal prints. Delorun never changes these permissions for you. |
-| `HOME_INVALID` | `DELO_HOME` is not an absolute path and does not start with `~`, or it names the filesystem root or your home folder itself. | Set `DELO_HOME` to a folder of its own, such as `~/.delo`. |
+| `HOME_MODE` | Your [Delorun home](../reference/glossary.md#home), or one of its private folders, can be reached by other users, is a shortcut to somewhere else (a symbolic link), is not a folder, or belongs to another user. | Run the `chmod 700` command the refusal prints. For a shortcut or another owner, move it away and let `delorun` create the folder again. |
+| `SECRET_FILE_MODE` | A secret file other users can read, a secret file that is a shortcut or belongs to another user, or one replaced while Delorun read it. | Run the `chmod 600` command the refusal prints. Delorun never changes these permissions for you. |
+| `HOME_INVALID` | `DELO_HOME` is not an absolute path and does not start with `~`, or it names the root of the disk or your user folder itself. | Set `DELO_HOME` to a folder of its own, such as `~/.delo`. |
 | `HOME_IS_DSH_HOME` | `DELO_HOME` names DeepSeek Harness's home `~/.dsh` or a folder inside it. | Choose another folder; Delorun keeps `~/.dsh` untouched. |
-| `SOCKET_PATH_TOO_LONG` | The home's path is too long for the local socket through which `delorun` commands talk to the running Delorun. | Choose a shorter home with `DELO_HOME`. |
+| `SOCKET_PATH_TOO_LONG` | The home's path is too long for the local channel through which `delorun` commands talk to the running Delorun. | Choose a shorter home with `DELO_HOME`. |
 
-On Windows, Delorun does not check these permissions yet. [Your Delorun home](home.md) explains the home and its permissions.
+You should see the command run without a refusal once the fix is in. On Windows, Delorun does not check these permissions. [Your Delorun home](home.md) explains the home and its permissions.
 
-A `.env` file in the folder you run `delorun` from, or in your Delorun home, may not set a name starting with `DELO_`, because those names decide which home, profile, releases and runtime Delorun trusts. The refusal names the file; remove the names from it, and export them in your shell instead if you need them.
+A `.env` file in the folder you run `delorun` from, or in your Delorun home, may not set a name that starts with `DELO_`, because those names decide which home, profile and releases Delorun trusts. The refusal names the file. Remove the names from it, and set them in your shell instead if you need them.
 
 ## Starting and stopping
 
 - **`Delo is already running for the profile default`.** `delorun start` found Delorun running and did nothing; this is not a failure. Open the studio with `delorun open`.
-- **`HOME_UNRESPONSIVE`.** A process holds the profile's lock but did not answer within 2 seconds. Stop that process, or remove the lock file the refusal names if the process is not `delorun`.
+- **`HOME_UNRESPONSIVE`.** A process claims to be running this profile (it holds the profile's lock file) but did not answer within 2 seconds. Stop that process, or, if it is not `delorun`, remove the lock file the refusal names, then run `delorun start` again.
 - **`Delo is running for the profile … and uses the stores this command changes`.** Commands such as `delorun trash`, `export` and `import` change chat data that the running Delorun uses. Run `delorun stop` first, as the refusal says.
 - **`another process … holds the home lock`, or `Delo did not go ahead: another process uses the chat data`.** Another `delorun` command is changing the same data. Wait for it to finish, then run your command again.
 - **`the CLI profile default is not set up`.** Run `delorun setup`.
 - **`Delo found no folder for the default workspace`.** None of the folders Delorun tries for the default workspace can be used; the refusal lists each with the reason. Name a folder of your own in your profile's `cordis.patch.yml`, as the refusal shows, and start again.
-- **`UNAUTHENTICATED`.** The running Delorun refused a command that did not carry the token of its current start. Run `delorun status` to see which Delorun runs for the profile.
-- **`STUDIO_UNAVAILABLE`.** `delorun open` could not get a sign-in link from the running Delorun. Run `delorun status` to see whether it runs and where the studio listens.
-- **`Delo started no new turn: its start check did not finish`.** Delorun's check of its release at start has not finished. Run `delorun status` and `delorun logs` to see what the start is doing.
+- **`UNAUTHENTICATED`.** The running Delorun refused a command that did not carry the token of its current start, which usually means another Delorun is running for the profile. Run `delorun status` to see which one.
+- **`STUDIO_UNAVAILABLE`.** `delorun open` could not get a sign-in link from the running Delorun. Run `delorun status` to see whether it runs and where the studio listens; if it does not run, start it with `delorun start`.
+- **`Delo started no new turn: its start check did not finish`.** Delorun's check of its release at start has not finished. `delorun status` and `delorun logs` show what the start is doing; start Delorun with `delorun start`, then send the message again.
+- **`delorun start: the home process exited with code 1 before it was running; see its log: …`.** The background process stopped while starting. A busy studio port is the most common cause; see [The studio port is busy](#the-studio-port-is-busy).
+- **`delorun start: the home process did not report running within … seconds; see its log: …`.** The background process is still starting or is stuck. Read the log the message names, or run `delorun logs home`, then run `delorun doctor`.
+
+### The studio port is busy
+
+The studio listens on one port on your own computer, 3080 unless your profile sets another. When another program already uses that port, the background process cannot start. You see:
+
+```text
+delorun start: the home process exited with code 1 before it was running; see its log: <path>
+```
+
+To confirm the cause, run `delorun doctor`. It prints a failing `port` line that ends with "is in use by another process, so the studio cannot listen on it; stop that process, or choose another port with delorun setup profile". If your own Delorun already runs for the profile, the line instead says the port is in use by Delo's studio and passes.
+
+To fix it, either stop the other program, or run `delorun setup profile` (add `--profile <name>` for another profile) and answer a free port from 1024 to 65535 at "Port for the studio". Then run `delorun start` again. You should see "Delo is running in the background for the profile default" with the studio's address, and `delorun doctor` shows `port` as passing.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the same message appears with the port free, then the process stopped for another reason — read the log the message names, or run `delorun logs home`.
+- If `delorun doctor` says the port "cannot be bound" with a code other than `EADDRINUSE`, then the system refuses to open that port (the code names why) — choose another port.
+- If you pass `--port` to `delorun doctor`, then it checks that port instead of the profile's.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- To let the system pick a free port at every start, set the studio's `port` to `0` in the `webserver` entry of `profiles/<profile>/cordis.patch.yml` in your Delorun home; `delorun setup profile` offers only ports from 1024 to 65535 and writes the entry for you. Keep the other keys of that entry. `delorun status` then shows the address, and `delorun doctor` reports that each start takes a free port.
+
+</details>
 
 ## Setup and the model key
 
-- **`the key in DEEPSEEK_API_KEY was not accepted`.** Setup checks the key with the provider before it saves it, and the provider refused it. Check the key and run `delorun setup` again.
+- **`the key in DEEPSEEK_API_KEY was not accepted`.** Setup checks the key with the [provider](../reference/glossary.md#provider) before it saves it, and the provider refused it. Check the key and run `delorun setup` again.
 - **`DEEPSEEK_BASE_URL is not a URL`.** Fix or unset `DEEPSEEK_BASE_URL`; setup cannot check the key without a valid address.
 - **`the setup run for default is unfinished and needs the model key`.** A setup started with `--yes` or `--config` stopped before it had a key. Run `delorun setup` in a terminal to finish it.
 - **`… holds …, which setup no longer asks`.** A `delorun setup --config` document names an answer setup no longer has. Remove it from the document.
@@ -84,7 +129,7 @@ A `.env` file in the folder you run `delorun` from, or in your Delorun home, may
 
 ## Installs and release checks
 
-The npm launcher and `delorun update` verify every release before they install it, and refuse one that does not verify; nothing is installed then. [Install and first run](install.md) explains what they check.
+The npm launcher and `delorun update` verify every [release](../reference/glossary.md#release) before they install it, and refuse one that does not verify; nothing is installed then. [Install and first run](install.md) explains what they check.
 
 | Code | What it means | What to do |
 | --- | --- | --- |
@@ -95,7 +140,7 @@ The npm launcher and `delorun update` verify every release before they install i
 | `PLATFORM_NOT_RELEASED` | The release has no runtime for this computer's system and processor. | Use a computer whose platform the release lists. |
 | `RELEASE_NOT_OFFERED` | You asked for a release your channel does not publish. | Name a published release, or leave the release out to install the current one. |
 | `NO_TRUSTED_ROOT` | This launcher holds no key it can verify a release with. | Install Delorun from the install script on its release page. |
-| `TRUST_STATE_INVALID` | The file in which Delorun stores what it learned about verified releases cannot be read. | Move the file the refusal names out of the way and run the command again. |
+| `TRUST_STATE_INVALID` | The file in which Delorun remembers which releases it has verified cannot be read. | Move the file the refusal names out of the way and run the command again. |
 | `NO_ACTIVE_RUNTIME` | No installed runtime is marked active, or the active one is missing. | Run `delorun update` to install the release again, or `delorun recover rollback`. |
 | `RUNTIME_INCOMPATIBLE` | The installed runtime needs a newer launcher, or the launcher a newer runtime. | Follow the remedy: update the runtime, or update the launcher. |
 | `STORE_BUSY` | Another `delorun` command is changing the installed runtimes. | Wait for it to finish. |
@@ -109,7 +154,7 @@ Two refusals come from the public release log itself. "Delo could not reach the 
 | Code | What it means | What to do |
 | --- | --- | --- |
 | `CHANNEL_UNREACHABLE` | The release channel could not be reached; nothing was downloaded. | Check the connection and try again. |
-| `GIT_UNAVAILABLE` | Delorun saves your profile's history with git before an update, so it can go back, and git cannot run here. | Install git and run `delorun update` again. |
+| `GIT_UNAVAILABLE` | Delorun saves your [profile](../reference/glossary.md#profile)'s history with git before an update, so it can go back, and git cannot run here. | Install git and run `delorun update` again. |
 | `REPORT_EXPIRED` | You confirmed a report that is older than ten minutes or unknown. | Run `delorun update` again to read a fresh report. |
 | `CHATS_RUNNING`, `DRAIN_TIMEOUT` | Chats are running, or did not finish in time, so the update did not start. | Wait for the chats to finish and run the command again. |
 | `UPDATE_IN_PROGRESS` | An update or rollback already runs. | Wait, then check with `delorun status`. |
@@ -122,11 +167,11 @@ Two refusals come from the public release log itself. "Delo could not reach the 
 
 `delorun update --yes` refuses a report that turns off or removes something, or holds an item Delorun cannot predict: run `delorun update` without `--yes` and decide each item. When an update is waiting for running chats to end, a new message gets "Delo started no new turn: an update is waiting for running chats"; send it again once Delorun is back.
 
-A refusal that starts "Delo refused the change and left the profile as it was" protects something you added to your profile. Its code names what would have been lost:
+A refusal that starts "Delo refused the change and left the profile as it was" protects something you added to your profile, so nothing was lost. Its code names what would have been lost:
 
 | Code | What would have been lost or changed |
 | --- | --- |
-| `ROW_NOT_CARRIED` | A plugin entry you added to your profile (a row). |
+| `ROW_NOT_CARRIED` | A [plugin](../reference/glossary.md#plugin) entry you added to your profile (a row). |
 | `CONFIGURATION_NOT_CARRIED` | A setting you wrote for a plugin. |
 | `LOCAL_PLUGIN_NOT_CARRIED` | A plugin you installed from a folder on this computer. |
 | `BUNDLE_LIST_NOT_CARRIED` | The order or the members of the profile's bundle list. |
@@ -135,7 +180,7 @@ A refusal that starts "Delo refused the change and left the profile as it was" p
 | `PROFILE_UNREADABLE` | A profile file cannot be read, so nothing can be checked; repair the file the refusal names. |
 | `RESTORE_REFUSED`, `RECOVER_REFUSED` | An undo, restore, rollback or `delorun recover` action cannot be done as asked. |
 
-Its remedies come from this list: do not take this update; keep the item and wait for a release that carries it; update the plugin; keep the plugin disabled; eject the plugin, which keeps its entries and settings in your profile; restore a profile history version with `delorun recover restore <version>`; go back with `delorun recover rollback`; or start in safe mode with `delorun recover safe-mode`. A refusal that starts "Delo could not write the profile snapshot it takes before a change" (`SNAPSHOT_FAILED`) means nothing changed because the snapshot that makes the change undoable could not be written.
+Its fixes come from this list: do not take this update; keep the item and wait for a release that carries it; update the plugin; keep the plugin disabled; [eject](../reference/glossary.md#eject) the plugin, which keeps its entries and settings in your profile; restore a profile history version with `delorun recover restore <version>`; go back with `delorun recover rollback`; or start in [safe mode](../reference/glossary.md#profile-history) with `delorun recover safe-mode`. Run `delorun recover status` first to see where the profile stands. A refusal that starts "Delo could not write the profile snapshot it takes before a change" (`SNAPSHOT_FAILED`) means nothing changed because the snapshot that makes the change undoable could not be written.
 
 ## Protections and plugins
 
@@ -143,7 +188,12 @@ Its remedies come from this list: do not take this update; keep the item and wai
 - **`the profile default could not load Delo's bundle`** or **`plugins of Delo's bundles did not start`.** Delorun stops rather than start without its guards and privacy settings, because the profile would otherwise run with DeepSeek Harness's own defaults. The refusal names each package, the cause and the fix.
 - **`the landlock sandbox cannot deny the sockets in "<directory>"`.** Your Linux system has no working bubblewrap, so commands would run under Landlock, which cannot hide the sockets of your login session, and Delorun refuses every sandboxed command while such a directory exists. If the refusal says to install bubblewrap, install the `bubblewrap` package and start again. If it says bubblewrap's check did not finish in time, your computer was busy when Delorun started: start it again. If it says bubblewrap is installed but could not create a sandbox, `delorun doctor` shows why on its `sandbox` line, or run `bwrap --ro-bind / / true` to see why; on Ubuntu the usual cause is its AppArmor restriction on user namespaces (`kernel.apparmor_restrict_unprivileged_userns`), which [a profile for `bwrap`](#letting-bubblewrap-run-under-ubuntus-apparmor-restriction) lifts for `bwrap` alone. Turning the restriction off for the whole system also works, but lowers its protection for every program.
 - **`the sandbox row sets the runner itself`** or **`is configured with expressions`.** Delorun adds its home protection to the sandbox's settings at start, so those settings must leave the choice of sandbox to Delorun and use plain YAML values. Remove what the refusal names.
-- **`delorun headless: … asks for full access in "<folder>", which you have not granted full access`.** A headless task asked to run outside the sandbox in a folder you have not put on full access. Open the folder as a workspace in the studio and choose Full access once, or run the task without full access.
+- **`delorun headless: … asks for full access in "<folder>", which you have not granted full access`.** A headless task asked to run outside the [sandbox](../reference/glossary.md#sandbox) in a folder you have not put on [full access](../reference/glossary.md#full-access), so it did not start. Run `delorun workspace full-access <folder> on` at your computer, or turn it on in the studio's Settings, Safety, Permissions, then run the task again. Or run the task without full access.
+- **`full access for the workspace "<folder>" needs one consent for that workspace first`.** The model tried to switch a chat to full access in a [workspace](../reference/glossary.md#workspace) you have not allowed. A [consent](../reference/glossary.md#consent) is a yes you give at your own computer. It stays on the safer preset. Allow it with the approval card's **Allow for this chat**, in Settings, Safety, Permissions, or with the `delorun workspace full-access <folder> on` command the message prints; see [Full access](safety.md#full-access).
+- **"Approve this at your computer".** You tried to allow full access, an [MCP server](../reference/glossary.md#mcp-server) or another permission change from a phone. These answers are accepted only at the computer that runs Delorun. Do it there; see [What an approved phone can and cannot do](reach.md#what-an-approved-phone-can-and-cannot-do).
+- **`This needs a quick unlock from your computer`.** You tried a sensitive action on a phone. Choose **Unlock** on the phone and approve the code at your computer ([Unlock sensitive actions for a while](reach.md#unlock-sensitive-actions-for-a-while)).
+- **`The network setting could not be read, so every workspace's commands have no network`.** The file that holds the network setting is damaged or other users can read it. Settings, Safety, Network names the problem. Repair or remove the file it names; the workspaces count as Off until you do.
+- **A command is refused because the workspace network is Allowlist or Off.** Your sandbox cannot enforce those settings (only bubblewrap on Linux can), so Delorun refuses the command rather than run it with your network. Set the workspace back to Open in Settings, Safety, Network ([The network setting](safety.md#the-network-setting)).
 - **`Delo could not use the Docker engine`.** Docker did not answer, or refused the request with the HTTP status the refusal names. Start Docker and run the command again.
 
 ### Letting bubblewrap run under Ubuntu's AppArmor restriction
@@ -171,7 +221,68 @@ Load it with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, check that `bwrap 
 | `REMOVAL_FAILED` | The device was not removed. | Check `delorun devices list`. |
 | `ELEVATION_FAILED` | Sensitive actions were not unlocked on the device, or the unlock did not end. | Run `delorun devices elevate` and look at the list again. |
 
-"Delo could not read or change what Tailscale serves for remote access" comes with Tailscale's own code and message. [Reach the studio from your phone](reach.md) explains what remote access needs.
+These entries come from `delorun reach` and `delorun devices` at your computer. [Reach the studio from your phone](reach.md) explains what remote access needs.
+
+`delorun reach on tailscale` and `delorun reach off` print Tailscale's problems as `delorun reach: <what happened> (<CODE>)`, and `reach on` adds "Remote access stays off." Nothing is turned on after such a refusal.
+
+| Code | Message starts | What to do |
+| --- | --- | --- |
+| `TAILSCALE_NOT_INSTALLED` | "Tailscale is not installed on this computer." | Install it from tailscale.com/download, sign in, and run the command again. |
+| `TAILSCALE_NOT_LOGGED_IN` | "Tailscale is not running and signed in to a tailnet on this computer." | Run `tailscale up`, sign in, and run the command again. The same code also reports other `tailscale serve` failures; the message then says "tailscale serve failed:" with Tailscale's own words. |
+| `TAILSCALE_HTTPS_DISABLED` | "Your tailnet does not have HTTPS certificates turned on." | Turn on HTTPS in the DNS page of the Tailscale admin console, then run the command again. |
+| `TAILSCALE_SERVE_NOT_PERMITTED` | "Your user may not configure tailscale serve yet." | Run the one command it prints, `sudo tailscale set --operator=$USER`, then run the command again. Delorun never runs it for you. |
+| `TAILSCALE_FUNNEL_ON` | "Tailscale Funnel is on for …, which would put this studio on the public internet, so remote access stays off." | Run the `tailscale funnel --https=<port> off` command it prints, then run `delorun reach on tailscale` again. |
+| `TAILSCALE_SERVE_CONFLICT` | "Tailscale still serves …" or "tailscale … failed (…), so Tailscale may still serve …" | Stop the `tailscale serve` or `tailscale funnel` that holds the port, or run the command the message prints, then run the command again. |
+| `TAILSCALE_ADDRESS_MISMATCH` | "The configured address … is not this machine's Tailscale address …" | Your computer's Tailscale name changed. Run `delorun reach on tailscale` again. |
+
+A refusal that starts "Delo could not read or change what Tailscale serves for remote access" carries the same codes in its `Why:` line.
+
+If `delorun reach on tailscale` says "the running Delo did not make the address ready. Fix what the line above names, then run delorun reach on tailscale again", read the line above it, fix that, and run the command again. If it says "the running Delo did not apply it" or "did not close its remote listener", restart Delorun with the command it prints.
+
+| Code | What it means | What to do |
+| --- | --- | --- |
+| `APPROVALS_UNAVAILABLE` | The running Delorun does not load remote access. | Run `delorun reach on tailscale`, then restart Delorun. |
+| `LOOPBACK_REQUIRED` | A device request did not come from your own `delorun` on this computer. | Approve devices at this computer with `delorun devices approve`. |
+| `APPROVAL_FAILED` | The approval or cancellation did not happen. | Run `delorun devices approve` and ask from the device again. |
+| `REMOVAL_FAILED` | The device was not removed. | Check `delorun devices list`. |
+| `ELEVATION_FAILED` | Sensitive actions were not unlocked on the device, or the unlock did not end. | Run `delorun devices elevate` and look at the list again. |
+
+These messages come from `delorun devices`:
+
+- **`delorun devices: Delo is not running. Start it with delorun start, then run delorun devices approve again`.** Approving needs the running Delorun. Run `delorun start`, then approve again. `delorun devices elevate` says the same with "so no device holds an unlock".
+- **`delorun devices: No device asked for approval before the window closed. Run delorun devices approve again`.** Nobody asked within 5 minutes. Run the command again, then open your address on the phone and choose **Ask for approval**.
+- **`That request is no longer waiting.`** The request ended on its own (it expired, or was cancelled on the phone). The command lists the waiting requests again; choose another, or ask again from the phone.
+- **`That code is not the one the device shows. Try again.`** You may type it again. After the third wrong code the request is cancelled; ask again from the phone for a new code.
+- **`Remote access is off for this profile, so a phone cannot reach this home yet`.** `delorun devices approve` waits, but no phone can reach you. Run `delorun reach on tailscale`.
+- **`DEVICE_NOT_TRUSTED`, "This home does not trust that device on this address. Ask for approval at the home's computer".** The home refused a sign-in from a device it does not trust at this address: it was removed, or it was approved for another address. Ask for approval from the phone again, and approve it at your computer ([Approve a device](reach.md#approve-a-device)).
+
+### What a phone shows when it cannot sign in
+
+The sign-in page on the phone names the problem in its title.
+
+| The phone shows | What to do |
+| --- | --- |
+| "Your computer isn’t ready yet" | The approval window is closed. At your computer run `delorun devices approve`, or choose **Add a device** in Settings → Devices, then choose **Try again**. |
+| "Too many devices waiting" | Five devices already wait. At your computer, cancel the ones you do not recognise, then ask again. |
+| "This code expired" | A code lasts 5 minutes. Choose **Ask again**; open approval at your computer first if it has closed. |
+| "Request cancelled" | Your computer cancelled it, or the code was typed wrong three times. Choose **Ask again** for a new code. |
+| "Too many tries" | Wait a minute, then try again. |
+| "This device has too many sign-ins" | At your computer, remove this device in Settings → Devices and approve it again. |
+| "Can’t reach your computer" | Check that the phone is connected in the Tailscale app and that Delorun runs on your computer (`delorun status`). |
+| "This browser can’t sign in" | Open the page in a current Safari, Chrome, Edge or Firefox, not in a private window. |
+| "Something went wrong" with "Error code: …" | Choose **Try again**. If it keeps happening, restart Delorun on your computer and report the code to support@delorun.com. |
+
+When an unlock request fails, the phone says one of: "The code expired before your computer approved it." (choose **Try again**), "Your computer declined the request, or it was cancelled there." (ask again if you meant to unlock), "Your computer can't be reached right now. Check that Delorun is running there.", or "Too many requests are waiting at your computer. Answer them there, then try again." (open Settings → Devices at your computer, or run `delorun devices elevate`).
+
+<details>
+<summary>Edge cases</summary>
+
+- If the phone cannot open the address at all, then check the phone's Tailscale app is connected, then run `delorun reach status` at your computer — it shows whether the address is ready.
+- If an approved phone stops signing in after you changed profile or address, then it is approved for the old address only — approve it again.
+- If you removed a phone by mistake, then approve it again; nothing else is lost.
+- If you lost power while remote access was on, then run `delorun reach off` if you share the computer ([Turn remote access off](reach.md#turn-remote-access-off)).
+
+</details>
 
 ## Archives, imports and the trash
 
@@ -181,8 +292,26 @@ Load it with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, check that `bwrap 
 
 ## When nothing here fits
 
-Run `delorun doctor` to check Docker, the model key's format, the home, the studio's port, the release-log check and the last update check, and `delorun logs home` to read the running Delorun's recent records. [Where Delorun keeps its logs](logs.md) explains each log. A refusal that says "Report this" means Delorun found something it cannot explain: report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
+Run `delorun doctor`. It checks Docker, the model key's format, your home, the studio's port, the release-log check and the last update check, and prints one line for each. Run `delorun logs home` to read the running Delorun's recent records; [Where Delorun keeps its logs](logs.md) explains each log.
+
+A refusal that says "Report this" means Delorun found something it cannot explain. Report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
+
+<details>
+<summary>Go further</summary>
+
+- `delorun verify` shows every release and setup check, and `delorun recover status` shows where the profile stands after an update ([Daily use](daily-use.md#check-the-release-and-your-setup)).
+- `delorun logs --follow` follows the running Delorun's log as it happens.
+- `delorun start` and the other commands accept `--profile <name>` to work on a profile other than `default`.
+
+</details>
+
+## Next
+
+- To check your setup after a fix, run `delorun doctor`, then `delorun status`.
+- To understand what Delorun protects, read [What Delorun protects](safety.md).
+- To read how logs help you, read [Where Delorun keeps its logs](logs.md).
+- To set up remote access, read [Reach the studio from your phone](reach.md).
 
 ## For the technically curious
 
-Each code belongs to a contract that defines when it is raised: the [home layout contract](../contracts/c01-home-layout.md) for the home and installs, the [home process contract](../contracts/c19-home-process.md) for starting, updates and devices, and the [update report contract](../contracts/c03-update-report.md) for the update report and rollback. The codes that protect your profile are listed in the [profile safety README](../../packages/profile-safety/README.md).
+Each code belongs to a contract that defines when it is raised: the [home layout contract](../contracts/c01-home-layout.md) for the home and installs, the [home process contract](../contracts/c19-home-process.md) for starting, updates and devices, the [reach providers contract](../contracts/c07-reach-providers.md) for the Tailscale codes, and the [update report contract](../contracts/c03-update-report.md) for the update report and rollback. The codes that protect your profile are listed in the [profile safety README](../../packages/profile-safety/README.md).

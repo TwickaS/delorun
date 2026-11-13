@@ -21,7 +21,7 @@ This package is the home process of [contract C19](../../docs/contracts/c19-home
 - [The supervisor](#the-supervisor)
 - [The operational log](#the-operational-log)
 - [Seams for other packages](#seams-for-other-packages)
-- [Not yet implemented](#not-yet-implemented)
+- [Not implemented](#not-implemented)
 - [Tests](#tests)
 
 ## Starting a home process
@@ -35,7 +35,7 @@ This package is the home process of [contract C19](../../docs/contracts/c19-home
 5. listen on the update channel, which answers `status` with `starting` from here;
 6. launch the supervisor when `options.supervisor` is set;
 7. boot the Host through `options.host`;
-8. the confinement probes are not run yet ([not yet implemented](#not-yet-implemented));
+8. the confinement probes are not run ([not implemented](#not-implemented));
 9. enter `running`.
 
 An `exit` listener removes this start's token file and socket and releases the lock while each is still this start's, however the process ends. Once the lock is held, the process registers its one `SIGTERM` and `SIGINT` listener through `options.onSignal` (`listenProcessSignals` in a real process): the first signal runs `HomeProcess.shutdown` with code 0 for `SIGTERM` or 130 for `SIGINT`, and a second one while that stop runs calls `options.exit` at once. The listener stays across every Host the process boots, so the Host's profile runner is booted without its own signal handlers. A start that fails once its Host booted stops that Host through `RunningHost.suspend`, which ends no process, waiting at most `REFUSED_HOST_STOP_S` (5 seconds), before the rest of its failure handling; `refuseBootedHost` gives a Host that a check refused inside `HostRunner.boot` the same wait. A teardown that fails or takes longer turns the failure into a `HostNotStoppedError` whose `cause` is the original failure: the Host may still use the data, so the start rolls nothing back, starts nothing again, removes its signal listener and keeps the lock until the process ends. A second start for the same profile finds the lock held and fails with `HOME_RUNNING`; the desktop app's `profiles/desktop/lock` is a different file, which the home process never reads or writes.
@@ -94,10 +94,10 @@ A requester that disconnects never changes a running update. Before step 3, the 
 
 The specs drive the handshake through a fixture store in `tests/support.ts`, which keeps C1's pointer files and starts successors from `tests/fixtures/home-entry.ts`.
 
-## Not yet implemented
+## Not implemented
 
 - The CLI's Host holds no scheduled delivery: a delivery that falls due while the gate is held is recorded as delivered and its turn is refused with `UPDATE_PENDING`. Work that began before the Host reported it is not counted.
-- Step 8's confinement probes and their results, and `delorun verify`'s report of a dialect that cannot enforce C1's rules. The home process wraps no confined command itself yet; the probes, when they land, retry once a Landlock wrap refused with exit code 125 because an entry on the path to the home changed between the wrap and the launch, before reporting it.
+- Step 8's confinement probes and their results, and `delorun verify`'s report of a dialect that cannot enforce C1's rules. The home process wraps no confined command itself; the probes, when they land, retry once a Landlock wrap refused with exit code 125 because an entry on the path to the home changed between the wrap and the launch, before reporting it.
 - A supervisor launched by `delorun start`, and the setup step that writes the supervisor's roots file.
 - The retry of an `unchecked` release-log check while the home process runs ([C18](../../docs/contracts/c18-release-log.md)).
 - Start at login (`--at-login`) and `delorun status --follow`.

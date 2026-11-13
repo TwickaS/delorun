@@ -49,9 +49,9 @@ No extension point lets a plugin add a check to reviewing a change, approving a 
 
 10. The registry is the only way to add a check at these points, and the combination is one pure function that receives the built-in results and the registered results separately. Each point's denial tests run every combination of a built-in refusal, confirmation and pass against registered results of every kind, and fail if any combination is less strict than the built-in result alone.
 
-### What could arrive this way
+### What the points make possible
 
-These are examples of what the points make possible. None is planned or promised.
+These are examples of what the points make possible. Delorun includes none of them ([roadmap](../guide/roadmap.md)).
 
 - A PIN, set at the computer, that the home asks for as a required confirmation before an action. Letting a remote session grant full access with a PIN would also change a fundamental, which needs the decision that [the fundamentals page](../security/fundamentals.md#changing-a-fundamental) describes.
 - Plugin signing: a refusal for a change whose plugin is not signed by a key the person trusts.

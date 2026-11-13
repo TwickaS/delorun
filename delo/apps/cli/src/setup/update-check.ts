@@ -8,7 +8,7 @@
 import { fileURLToPath } from 'node:url'
 import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { SETUP_UPDATE_CHECK_ROW } from '@delo/contract-setup-answers'
-import { setRowFields, type InheritedRow } from './writes.ts'
+import { readPatchRow, setRowFields, type InheritedRow } from './writes.ts'
 
 /**
  * The release-check row as `@delo/bundle-local` inserts it.
@@ -32,4 +32,17 @@ export function updateCheckRow(bundlePatch = fileURLToPath(import.meta.resolve('
  */
 export function writeUpdateCheckRow(patchPath: string, enabled: boolean): void {
   setRowFields(patchPath, updateCheckRow(), { enabled })
+}
+
+/**
+ * Read the release-check answer from a profile's patch, the row {@link writeUpdateCheckRow} and Settings → General →
+ * Updates write.
+ * @param patchPath - the profile's `cordis.patch.yml`.
+ * @param inherited - the row as the bundle inserts it; the installed bundle's by default.
+ * @returns the row's `enabled` value: the profile's, or the bundle's when the profile sets none.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list.
+ */
+export function readUpdateCheckRow(patchPath: string, inherited: InheritedRow = updateCheckRow()): boolean {
+  const config = { ...inherited.config, ...readPatchRow(patchPath, inherited.id, 'delorun setup') }
+  return config['enabled'] !== false
 }

@@ -8,9 +8,10 @@ This package builds Delo's documentation website: the user guide and the referen
 
 | Route | Serves |
 | --- | --- |
-| `/` | The home page, which links the two sections |
+| `/` | The home page, which links the two sections and, when a version is assembled, shows What's new with the latest version |
 | `/guide`, `/guide/<page>` | The user guide in English |
 | `/reference`, `/reference/<page>` | The references in English |
+| `/changelog` | The changelog: the standing comparison with the upstream release, then every assembled version, newest first; absent when no version is assembled |
 | `/zh/...` | The same routes in Chinese; a page without a Chinese pair shows its English text |
 | `/llms.mdx/<section>/<page>` and `/zh/llms.mdx/...` | Each page as Markdown. A section's index is `/llms.mdx/<section>/index`, and a directory's index page is `/llms.mdx/<section>/<directory>/index` |
 | `/llms.txt`, `/zh/llms.txt` | An index of each locale's pages, linking their Markdown |
@@ -33,6 +34,19 @@ The dead-link check runs after the build. It checks every internal link and frag
 ## Version
 
 Each page states the Delo version it describes. The version is read from [`delo/apps/release/package.json`](../release/package.json), the only source the site names.
+
+## Changelog
+
+The changelog page and the home page's What's new section are generated at build time from Delorun's changelog record, `delo/changelog/changelog.json`, which the release tooling writes when it assembles a version. The build reads the record with the types and functions of [`delo/apps/release/src/changelog/data.ts`](../release/src/changelog/data.ts), which also render `CHANGELOG.md` and the release notes, so the site and those files state the same entries. Unreleased fragments are never read: a version appears once it is assembled. The Chinese page has a Chinese title and labels and the English entries.
+
+With no record, the build still succeeds and leaves out the page, its prerendered files and the home section. To review the site before a version is assembled, write a preview record from the unreleased fragments to a file outside the repository and build with it; the first command runs from the repository root. Nothing is moved and the output is never committed:
+
+```sh
+node_modules/.bin/tsx delo/apps/docs/scripts/preview-record.ts 0.1.0 /tmp/docs-preview/changelog.json
+(cd delo/apps && DOCS_CHANGELOG_PREVIEW=/tmp/docs-preview/changelog.json pnpm --dir docs run build)
+```
+
+`DOCS_CHANGELOG_PREVIEW` names the record to publish instead of the repository's; the build fails when the file does not exist.
 
 ## Theme
 

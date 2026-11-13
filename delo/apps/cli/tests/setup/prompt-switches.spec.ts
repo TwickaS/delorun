@@ -8,7 +8,7 @@ const BUNDLE_PATCH = parse(readFileSync(new URL('../../../../packages/bundle-loc
 const BUNDLE_ROWS = new Map(BUNDLE_PATCH.flatMap(patch => patch.insert ?? []).map(row => [row.id, row]))
 
 describe('the prompts answer as switch values', () => {
-  it('sets each prompt switch to its Delo default for "Safer prompts" and to its parity value for "Same as stock"', () => {
+  it('sets each prompt switch to its Delo default for "Ask me first" and to its parity value for "Ask less (like DeepSeek Harness)"', () => {
     const safer = promptRows('safer')
     const stock = promptRows('stock')
     expect(safer).toHaveLength(Object.keys(PROMPT_SWITCH_ROWS).length)
@@ -16,10 +16,24 @@ describe('the prompts answer as switch values', () => {
       const entry = PARITY_SWITCHES.find(candidate => candidate.id === switchId)
       expect(entry?.state).toBe('built')
       if (entry?.state !== 'built') continue
-      expect(safer.find(row => row.id === rowId)?.config).toEqual({ [entry.field.key]: entry.defaultValue })
-      expect(stock.find(row => row.id === rowId)?.config).toEqual({ [entry.field.key]: entry.parityValue })
+      const everywhere = switchId === 'permission_defaults' ? { fullAccessEverywhere: false } : {}
+      expect(safer.find(row => row.id === rowId)?.config).toEqual({ [entry.field.key]: entry.defaultValue, ...everywhere })
+      expect(stock.find(row => row.id === rowId)?.config).toEqual({ [entry.field.key]: entry.parityValue, ...everywhere })
       expect(entry.defaultValue).not.toBe(entry.parityValue)
     }
+  })
+
+  it('sets "Dangerous" to the parity value of the three consents, keeps the permission defaults on and sets fullAccessEverywhere', () => {
+    const configOf = (id: string): Readonly<Record<string, boolean>> | undefined => promptRows('dangerous').find(row => row.id === id)?.config
+    const valueOf = (switchId: string, which: 'defaultValue' | 'parityValue'): boolean => {
+      const entry = PARITY_SWITCHES.find(candidate => candidate.id === switchId)
+      return entry?.state === 'built' ? entry[which] : false
+    }
+    expect(configOf('delo-permission-defaults')).toEqual({ enabled: valueOf('permission_defaults', 'defaultValue'), fullAccessEverywhere: true })
+    expect(valueOf('permission_defaults', 'defaultValue')).toBe(true)
+    expect(configOf('delo-instruction-consent')).toEqual({ enabled: valueOf('instruction_layer_consent', 'parityValue') })
+    expect(configOf('delo-mcp-consent')).toEqual({ enabled: valueOf('mcp_add_consent', 'parityValue') })
+    expect(configOf('delo-schedule-consent')).toEqual({ enabled: valueOf('scheduled_task_consent', 'parityValue') })
   })
 
   it('names rows that @delo/bundle-local inserts, for the plugin and config key the registry gives each switch', () => {
@@ -34,7 +48,7 @@ describe('the prompts answer as switch values', () => {
   })
 
   it('leaves the external-agent consent, the person\'s own switch in Settings, out of both answers', () => {
-    for (const answer of ['safer', 'stock'] as const) {
+    for (const answer of ['safer', 'stock', 'dangerous'] as const) {
       expect(promptRows(answer).map(row => row.id)).not.toContain('delo-delegation-consent')
     }
   })

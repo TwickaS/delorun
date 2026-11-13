@@ -14,12 +14,12 @@ English | [中文](README.zh.md)
 ## Contents
 
 - [Use this package](#use-this-package)
-- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Known limitations](#known-limitations)
 
 ## Use this package
 
 Upstream's app-boot compatibility hunk, `delo/apps/cli/src/version.ts`, the pre-update report and the catalogue corpus consume it. Import the types with `import type` and the constants with a value import from `@delo/contract-plugin-versions`; a package that reads or writes the files this contract defines still validates them at its parser, because these types describe valid files and do not check them.
 
-## Known Limitations and Deferred Work
+## Known limitations
 
 - Range matching itself is upstream's `evaluatePluginCompatibility` with `semver`; the package types its results for both axes and does not evaluate ranges.

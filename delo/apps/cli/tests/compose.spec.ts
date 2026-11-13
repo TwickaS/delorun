@@ -4,7 +4,7 @@
  * the composed and the booted rows to the invariants: a layer that disables a Delo row or the sandbox row, or turns a
  * prompt switch away from the recorded answer, refuses the start naming the file; a booted Host whose rows, sandbox
  * settings or services differ from the composition refuses; a required row that another layer inserts again, or that
- * runs another plugin, refuses; safe mode exempts no required row; the "Same as stock" answer is honoured; and the
+ * runs another plugin, refuses; safe mode exempts no required row; the "Ask less" answer is honoured; and the
  * approved plugin content slot applies before the sandbox overlay.
  */
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -149,22 +149,34 @@ describe('a set-up CLI profile', { timeout: 60_000 }, () => {
     expect(message).toContain('delo-update-gate is disabled')
   })
 
-  it('refuses a patch that turns a consent row to its parity value without the "Same as stock" answer, and accepts it with that answer', async () => {
+  it('refuses a patch that turns a consent row to its parity value without the "Ask less" answer, and accepts it with that answer', async () => {
     writePatch(join(deloHome, 'cordis.patch.yml'), [{ id: 'delo-mcp-consent', config: { enabled: false } }])
-    expect(await refused(compose)).toContain(`delo-mcp-consent has enabled false, not true, which the recorded prompts answer "Safer prompts" sets (set in ${join(deloHome, 'cordis.patch.yml')})`)
+    expect(await refused(compose)).toContain(`delo-mcp-consent has enabled false, not true, which the recorded prompts answer "Ask me first" sets (set in ${join(deloHome, 'cordis.patch.yml')})`)
     const answers = join(deloHome, 'profiles', 'default', 'setup-answers.json')
     writeFileSync(answers, JSON.stringify({ ...JSON.parse(readFileSync(answers, 'utf8')) as object, prompts: 'stock' }))
     rmSync(join(deloHome, 'cordis.patch.yml'))
-    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent', 'delo-delegation-consent']) appendToProfilePatch({ id, config: { enabled: false } })
+    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent', 'delo-delegation-consent']) appendToProfilePatch({ id, config: id === 'delo-permission-defaults' ? { enabled: false, fullAccessEverywhere: false } : { enabled: false } })
     const composed = await compose()
     expect(composed.prompts).toBe('stock')
     expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()
   })
 
-  it('refuses a consent row left on when the recorded answer is "Same as stock"', async () => {
+  it('refuses a patch that sets fullAccessEverywhere without the "Never ask (dangerous)" answer, naming the file, and accepts it with that answer', async () => {
+    const path = appendToProfilePatch({ id: 'delo-permission-defaults', config: { fullAccessEverywhere: true } })
+    expect(await refused(compose)).toContain(`delo-permission-defaults has fullAccessEverywhere true, not false, which the recorded prompts answer "Ask me first" sets (set in ${path})`)
+    const answers = join(deloHome, 'profiles', 'default', 'setup-answers.json')
+    writeFileSync(answers, JSON.stringify({ ...JSON.parse(readFileSync(answers, 'utf8')) as object, prompts: 'dangerous' }))
+    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent']) appendToProfilePatch({ id, config: { enabled: false } })
+    appendToProfilePatch({ id: 'delo-permission-defaults', config: { enabled: true, fullAccessEverywhere: true } })
+    const composed = await compose()
+    expect(composed.prompts).toBe('dangerous')
+    expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()
+  })
+
+  it('refuses a consent row left on when the recorded answer is "Ask less"', async () => {
     const answers = join(deloHome, 'profiles', 'default', 'setup-answers.json')
     writeFileSync(answers, JSON.stringify({ ...JSON.parse(readFileSync(answers, 'utf8')) as object, prompts: 'stock' }))
-    expect(await refused(compose)).toContain('which the recorded prompts answer "Same as stock" sets')
+    expect(await refused(compose)).toContain('which the recorded prompts answer "Ask less (like DeepSeek Harness)" sets')
   })
 
   it('reports a required row no layer inserts, and a profile preparation that throws a plain value', async () => {

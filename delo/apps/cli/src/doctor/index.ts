@@ -43,6 +43,7 @@ import { CliError, EXIT } from '../exit.ts'
 import { applyLaunchEnvironment, loadDeloEnvironment } from '../launch-environment.ts'
 import { profileDirectory, selectProfile } from '../profile.ts'
 import { isSetupProviderId, profileModelSelection, routeKeyReference, SETUP_PROVIDERS } from '../setup/providers.ts'
+import { dangerousModeState, dangerousStateLine } from '../setup/dangerous.ts'
 import { profileStudioPort } from '../setup/sections.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { studioAddress } from '../status.ts'
@@ -180,6 +181,18 @@ async function updateCheck(context: CommandContext, profile: string): Promise<Ch
 }
 
 /**
+ * The dangerous-mode check, shown only while the profile's prompts answer is `dangerous`.
+ * @param context - the command's environment.
+ * @param profile - the CLI profile.
+ * @returns a warning that states the mode, or `undefined` while it is off.
+ */
+export async function dangerousModeCheck(context: CommandContext, profile: string): Promise<CheckResult | undefined> {
+  const home = (await resolveDeloHome(context.env)).path
+  const line = dangerousStateLine(await dangerousModeState(home, profileDirectory(home, profile)))
+  return line === undefined ? undefined : { name: 'dangerous-mode', status: 'warn', message: line }
+}
+
+/**
  * Run one check. A failure inside the check becomes that check's failure
  * line, so the remaining checks still run.
  * @param name - the check's name.
@@ -303,6 +316,8 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
         await guarded('update', async () => updateCheck(context, profile)),
       ]
+      const dangerous = await dangerousModeCheck(context, profile).catch((error: unknown): CheckResult => ({ name: 'dangerous-mode', status: 'fail', message: `the check could not complete: ${error instanceof Error ? error.message.replace(/\s*\n\s*/g, ' ') : String(error)}` }))
+      if (dangerous !== undefined) results.push(dangerous)
       const { importRecord } = environment
       if (importRecord !== undefined) results.push(await guarded('import', async () => checkImportRecord((await resolveDeloHome(context.env)).path, importRecord)))
       for (const result of results) {

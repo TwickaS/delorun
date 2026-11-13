@@ -9,7 +9,7 @@ English | [中文](c14-oidc-passkeys.zh.md)
 <a id="summary"></a>
 ## Summary
 
-Reach asks for an identity factor in addition to device approval: a passkey, or a sign-in at the person's own OpenID Connect provider. The home is the relying party for both. This page defines which factors each reach address can use, the passkey relying-party ID of each address, how the home registers as a client at the person's provider, the authorization flow with its nonce, PKCE and issuer checks, the claims and audience the home requires, the owner identity it pins, how it fetches and rotates signing keys, and the rules that bind the Delo Run issuer, a fast-follow. A factor never replaces device approval ([C5](c05-device-approval.md)). The types package [`@delo/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.md) carries the rules, claims, codes and limits.
+Reach asks for an identity factor in addition to device approval: a passkey, or a sign-in at the person's own OpenID Connect provider. The home is the relying party for both. This page defines which factors each reach address can use, the passkey relying-party ID of each address, how the home registers as a client at the person's provider, the authorisation flow with its nonce, PKCE and issuer checks, the claims and audience the home requires, the owner identity it pins, how it fetches and rotates signing keys, and the rules that bind the Delo Run issuer, a fast-follow. A factor never replaces device approval ([C5](c05-device-approval.md)). The types package [`@delo/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.md) carries the rules, claims, codes and limits.
 
 <a id="status"></a>
 ## Status
@@ -17,7 +17,7 @@ Reach asks for an identity factor in addition to device approval: a passkey, or 
 The passkey and OpenID Connect factors on this page are not built: the home has no passkey relying party and no OpenID Connect client. The `tailnet-membership` factor of the Tailscale private route is built.
 
 - **Built and reached:** setup's answers schema names `reach.identityFactor` and refuses any value other than `null` in a `--config` document ([C11](c11-setup-answers.md)).
-- **Not built:** passkey enrolment and assertion with user verification and counters; client registration at the person's provider; the authorization flow with `state`, `nonce`, PKCE and issuer checks; ID token checks and signing-key rotation; the pinned owner subject; re-authentication; the Delo Run issuer.
+- **Not built:** passkey enrolment and assertion with user verification and counters; client registration at the person's provider; the authorisation flow with `state`, `nonce`, PKCE and issuer checks; ID token checks and signing-key rotation; the pinned owner subject; re-authentication; the Delo Run issuer.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them. The [reach design](../design/reach.md) states that the private tailnet route signs in with the approved device key alone, with no passkey or OpenID Connect; where this page lists an identity factor for `tailscale-private`, the design supersedes it.
 
@@ -31,7 +31,7 @@ The requirements and denial tests below that this list names as not built or rea
   - [Enrolment](#enrolment)
   - [Passkeys](#passkeys)
   - [Client registration](#client-registration)
-  - [Authorization flow](#authorization-flow)
+  - [Authorisation flow](#authorization-flow)
   - [ID token checks](#id-token-checks)
   - [Owner subject](#owner-subject)
   - [Re-authentication](#re-authentication)
@@ -96,7 +96,7 @@ During setup, or when the person turns reach on, the person registers Delo as a 
 - **Adding an address.** Adding an address adds its redirect URI at the provider: the person adds it, or the home updates a dynamic registration through its registration access token.
 
 <a id="authorization-flow"></a>
-### Authorization flow
+### Authorisation flow
 
 1. **Start.** `GET /auth/oidc/start` with `purpose` (`enrol`, `sign-in`, `recovery` or `reauth`) and the device id creates a flow bound to the listener's address: a 32-byte `state`, a 32-byte `nonce`, a 32-byte PKCE `code_verifier`, the issuer, the purpose, the device id and the creation time. The home holds the flow in memory, sets the cookie `__Host-delo-oidc` to a 32-byte random value whose hash the flow records, and redirects to the issuer's `authorization_endpoint` with `response_type=code`, `client_id`, the address's `redirect_uri`, `scope=openid`, `state`, `nonce`, `code_challenge` (the SHA-256 hash of the verifier) and `code_challenge_method=S256`. For `reauth`, it adds `prompt=login` and `max_age=0`, and `nonce` is the approval hash the device sends.
 2. **Callback.** `GET /auth/oidc/callback` is accepted only when `state` names a pending, unexpired flow of this address and the `__Host-delo-oidc` cookie matches the flow. When the provider's metadata sets `authorization_response_iss_parameter_supported`, the response must carry `iss` equal to the flow's issuer (RFC 9207); an `iss` that is present must equal it in every case. The flow is consumed at the callback, whatever its result.
@@ -171,7 +171,7 @@ An elevation, an unlock in the studio's words ("sudo mode"), lets one device tak
 | Family | Actions |
 | --- | --- |
 | Chats, read and write | `session/*` reads, `session/create` in a known workspace with any preset, `session/fork`, `session/prompt`, `session/updateQueue`, `session/cancel`, `session/rename`, `fileUploads/upload`, `userQuestions/*`, `subagents/*`, `job/*`, `toolResults/watch`, `sessionReferenceResolver/candidates`, `skills/list`, `commands/list` |
-| Chat and workspace organization | `workspace/follow`, `workspace/pinSession`, `workspace/unpinSession`, `workspace/archiveSession`, `workspace/unarchiveSession`, `workspace/insertSessionBefore`, `workspace/insertBefore`, `workspace/rename`, `workspace/delete` (to the trash), `workspace/initializeDefault` |
+| Chat and workspace organisation | `workspace/follow`, `workspace/pinSession`, `workspace/unpinSession`, `workspace/archiveSession`, `workspace/unarchiveSession`, `workspace/insertSessionBefore`, `workspace/insertBefore`, `workspace/rename`, `workspace/delete` (to the trash), `workspace/initializeDefault` |
 | Goals and scheduled follow-ups | `goals/*`, `schedule/*` |
 | Models and presets | `session/selectModel`, `session/initializeDefaultModel`, `session/modelCatalog`, `llm/listProviders`, `llm/listConfigurableProviders`, `llm/discoverModels`, `agentPresets/*`, `permissionPresets/catalog` |
 | Files of a chat's workspace | `workspaceFiles/list`, `read`, `readBytes`, `stat`, `changes`, `officeToPdf/*`, `fileReferences/list`, by the workspace-file rule |
@@ -254,7 +254,7 @@ An elevation, an unlock in the studio's words ("sudo mode"), lets one device tak
 <a id="delo-run-issuer"></a>
 ### Delo Run issuer
 
-The Delo Run issuer, which lets a person sign in with a Delo Run account, is a fast-follow and comes with the Delo relay: Delo 1.0 configures no Delo Run issuer. When it is added, it follows every rule of this page as a second issuer, and also these:
+The Delo Run issuer, which lets a person sign in with a Delo Run account, is not part of Delorun, which configures no Delo Run issuer ([roadmap](../guide/roadmap.md)). Such an issuer follows every rule of this page as a second issuer, and also these:
 
 - Its redirect URI is `https://<address>/auth/oidc/callback/delo-run`, so it never shares a redirect URI with the person's provider.
 - It signs ID tokens with asymmetric keys only, every token header carries `kid`, and it publishes a key set.

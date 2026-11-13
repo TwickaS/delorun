@@ -4,6 +4,7 @@
  * defaults, and the refusals that keep reach and credential forwarding off in
  * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, and
  * a document that carries a question setup no longer asks. A refusal names the field and never echoes a value.
+ * An answers record written before the use-case question reads as `local`, and a `mode` of `quick` or `full` in it is ignored.
  * A version-2 document, written before the release-check question, reads as the current version with the check on; a
  * version-2 or version-3 document, written before the provider question, reads with DeepSeek and the profile's default
  * model as its provider, which is what setup of those versions applied.
@@ -14,19 +15,23 @@ import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import {
   IDENTITY_FACTORS,
+  LEGACY_SETUP_MODE_KEY,
   PROMPTS_OPTIONS,
   REMOVED_ANSWER_KEYS,
   SECTION_STATUSES,
   SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS,
   SETUP_ANSWERS_SCHEMA_VERSION,
   SETUP_DEFAULT_PROVIDER_ID,
+  SETUP_DEFAULT_USE_CASE,
   SETUP_DEFAULTS,
   SETUP_PROVIDER_IDS,
+  SETUP_USE_CASES,
   type ModelProviderAnswer,
   type SetupAnswers,
 } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
 import { selectProfile } from '../profile.ts'
+import { refuseDangerousAsRoot } from './dangerous.ts'
 import { isSetupProviderId, SETUP_PROVIDERS, type ProviderCatalog } from './providers.ts'
 
 /** An environment variable name. A credential value never matches it, so one passed as a name is refused. */
@@ -99,19 +104,22 @@ const sections = z.array(z.strictObject({ id: z.string().min(1), status: z.enum(
  */
 const answersSchema = z.strictObject({
   schemaVersion: z.literal(SETUP_ANSWERS_SCHEMA_VERSION),
+  useCase: z.enum(SETUP_USE_CASES).default(SETUP_DEFAULT_USE_CASE),
   modelProvider: modelProvider.nullable(),
   ...answerFields,
   updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck),
   sections,
+  /** A `--config` document's statement that it has read what dangerous mode allows; {@link readAnswersDocument} requires it with `prompts: "dangerous"` and drops it. */
+  acceptDangerousMode: z.boolean().optional(),
 })
 
 /** The version-3 document, which has no provider question, read as the current version with DeepSeek as its provider. */
 const version3Schema = z.strictObject({ schemaVersion: z.literal(3), modelProvider: earlierModelProvider, ...answerFields, updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck), sections })
-  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, modelProvider: provider, ...answers, sections: record }))
+  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, useCase: SETUP_DEFAULT_USE_CASE, modelProvider: provider, ...answers, sections: record }))
 
 /** The version-2 document, which has no `updateCheck` either, read as the current version with the check on. */
 const version2Schema = z.strictObject({ schemaVersion: z.literal(2), modelProvider: earlierModelProvider, ...answerFields, sections })
-  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, modelProvider: provider, ...answers, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
+  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, useCase: SETUP_DEFAULT_USE_CASE, modelProvider: provider, ...answers, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
 
 /**
  * The schema of a document's declared version.
@@ -174,13 +182,29 @@ export function modelIdProblem(value: string): string | undefined {
   return MODEL_ID.test(value) ? undefined : 'Enter the model id: letters, digits and . _ : / @ ~ + -.'
 }
 
+/** A parsed answers document: the answers, and a `--config` document's `acceptDangerousMode`, which {@link readAnswersDocument} consumes. */
+export type ParsedAnswers = SetupAnswers & { readonly acceptDangerousMode?: boolean | undefined }
+
 /**
  * Check answers against the schema of their declared version; a version-2 document comes back as the current version.
  * @param document - a parsed JSON value: an answers document, or the answers of a setup record.
  * @returns zod's result, whose data is current-version answers.
  */
-export function parseAnswers(document: unknown): z.ZodSafeParseResult<SetupAnswers> {
-  return schemaFor(document).safeParse(document)
+export function parseAnswers(document: unknown): z.ZodSafeParseResult<ParsedAnswers> {
+  return schemaFor(document).safeParse(withoutLegacyMode(document))
+}
+
+/**
+ * Drop the Quick or Full choice that an answers record written before the use-case question may hold.
+ * @param document - a parsed JSON value.
+ * @returns the value without a `mode` of `quick` or `full`; any other value is returned as it is.
+ */
+function withoutLegacyMode(document: unknown): unknown {
+  if (typeof document !== 'object' || document === null || Array.isArray(document)) return document
+  const mode: unknown = Reflect.get(document, LEGACY_SETUP_MODE_KEY)
+  if (mode !== 'quick' && mode !== 'full') return document
+  const { [LEGACY_SETUP_MODE_KEY]: _mode, ...rest } = document as Record<string, unknown>
+  return rest
 }
 
 /**
@@ -233,7 +257,11 @@ export function readAnswersDocument(path: string): SetupAnswers {
     if (field === 'schemaVersion') throw refusal(field, `must be ${String(SETUP_ANSWERS_SCHEMA_VERSION)}, or ${SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS.join(' or ')} for an earlier document; setup refuses any other version`)
     throw refusal(field === '' ? 'the document' : field, 'is not a value the answers document accepts')
   }
-  const answers = checked.data
+  const { acceptDangerousMode, ...answers } = checked.data
+  // The two-step consent of the terminal is stood in for by this field, so a document cannot select dangerous mode without it.
+  if (answers.prompts === 'dangerous' && acceptDangerousMode !== true) throw refusal('acceptDangerousMode', 'must be true when prompts is "dangerous": dangerous mode lets any chat switch to full access without asking, so the document has to state that you accepted it (delorun setup prompts shows the warning)')
+  if (answers.prompts !== 'dangerous' && acceptDangerousMode !== undefined) throw refusal('acceptDangerousMode', 'applies to prompts "dangerous" only; remove it from the document')
+  refuseDangerousAsRoot(answers.prompts, 'delorun setup --config')
   // Reach is switched on in the interactive form only, so a document cannot enable it.
   if (answers.reach.option !== 'none') throw refusal('reach.option', 'must be "none" in --config: reach is set up in the studio, not by a document')
   if (answers.modelProvider?.credential.source === 'prompt') throw refusal('modelProvider.credential.source', 'must be "environment" in --config: a document cannot take the key at a prompt')

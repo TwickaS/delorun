@@ -34,7 +34,7 @@ A Delo plugin with a Settings face imports the controls from `@delo/settings-con
 - **Headings.** A card's heading reads upstream's `--dsh-settings-card-heading-*` properties, which `@delo/plugin-settings-layout` sets for the cards the Settings panel draws, so a Delo section's headings and the panel's match; without them the heading keeps the same sentence-case look.
 - **Choices are radios.** `ChoiceGroup` and `TileGroup` are controlled: they call `onChange` with a value other than the chosen one and never with the chosen one, and a disabled group refuses every choice.
 - **Spacing.** The card and tiles use the Delo look's `--delo-space-*` steps; `SettingRow` declares its own spacing, because the stock look's switch back to the Delo look uses it while those steps do not exist.
-- **Copy.** Every control takes localized text from its caller and holds none of its own.
+- **Copy.** Every control takes localised text from its caller and holds none of its own.
 
 ## Tests
 

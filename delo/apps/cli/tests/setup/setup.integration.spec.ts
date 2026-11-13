@@ -12,7 +12,7 @@ import { PROFILE_STEP, PROGRESS_FILENAME, readProgress, sectionStep, type SetupS
 import { runSetup, type SetupForm, type SetupHooks, type SetupRequest } from '../../src/setup/index.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { hasCliProfile, profileDirectory } from '../../src/profile.ts'
-import { fakeEnding, scriptedPrompter, type Answer, type EndingLog, type Recording } from './support.ts'
+import { scriptedPrompter, type Answer, type Recording } from './support.ts'
 
 const PROFILE = 'default'
 const KEY = 'fixture-key-value'
@@ -22,7 +22,6 @@ let home: string
 let lines: string[]
 let output: { stdout: (text: string) => void, stderr: (text: string) => void }
 let recording: Recording
-let ending: EndingLog
 
 /** Each setup run adds Delo's bundle to the profile with a pnpm install, which takes seconds on a loaded host. */
 const SETUP_TIMEOUT_MS = 60_000
@@ -74,7 +73,7 @@ function writesOf(root: string): string[] {
  * @returns the promise of the exit code.
  */
 function setup(form: SetupForm, env: Record<string, string | undefined> = { DEEPSEEK_API_KEY: KEY }, hooks?: SetupHooks, root: string = home, extra: Partial<SetupRequest> = {}) {
-  return runSetup({ home: root, profile: PROFILE, output, env, form, ending: fakeEnding(ending), keyCheck: () => Promise.resolve({ ok: true }), ...(hooks === undefined ? {} : { hooks }), ...extra })
+  return runSetup({ home: root, profile: PROFILE, output, env, form, keyCheck: () => Promise.resolve({ ok: true }), ...(hooks === undefined ? {} : { hooks }), ...extra })
 }
 
 /** The `--provider deepseek-official` flags. */
@@ -94,7 +93,6 @@ beforeEach(async () => {
   await ensureHomeTree(home, PROFILE)
   lines = []
   recording = { screen: [], asked: [] }
-  ending = { spawned: [], started: [], opened: 0 }
   output = { stdout: text => void lines.push(text), stderr: text => void lines.push(text) }
 })
 
@@ -102,7 +100,7 @@ afterEach(() => {
   rmSync(osHome, { recursive: true, force: true })
 })
 
-const QUICK_WITH_ENVIRONMENT_KEY: readonly Answer[] = ['quick', 'deepseek-official', 'environment', 'safer', 'save', false]
+const QUICK_WITH_ENVIRONMENT_KEY: readonly Answer[] = ['local', 'deepseek-official', 'environment', 'safer', 'save']
 
 describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('interactive and --yes runs produce identical profile writes', async () => {
@@ -170,7 +168,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
         if (step === sectionStep('key')) throw new Error('interrupted')
       },
     }
-    const typed: readonly Answer[] = ['quick', 'deepseek-official', 'prompt', 'typed-key-value', 'safer', 'save', false]
+    const typed: readonly Answer[] = ['local', 'deepseek-official', 'prompt', 'typed-key-value', 'safer', 'save']
     await expect(setup(asked(typed), {}, interrupt)).rejects.toThrow('interrupted')
     expect(steps).toEqual([PROFILE_STEP, sectionStep('privacy'), sectionStep('import'), sectionStep('key')])
     expect(readProgress(runDirectory(home, PROFILE))?.completed).toEqual(steps)
@@ -192,7 +190,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
 
   it('asks for the key again when the run stopped before the key section, and a non-terminal resume refuses', async () => {
     const interrupt: SetupHooks = { afterStep: (step) => { if (step === PROFILE_STEP) throw new Error('interrupted') } }
-    await expect(setup(asked(['quick', 'deepseek-official', 'prompt', 'typed-key-value', 'safer', 'save', false]), {}, interrupt)).rejects.toThrow('interrupted')
+    await expect(setup(asked(['local', 'deepseek-official', 'prompt', 'typed-key-value', 'safer', 'save']), {}, interrupt)).rejects.toThrow('interrupted')
     await expect(setup({ kind: 'yes' })).rejects.toThrow('needs the model key')
     recording.asked.length = 0
     expect(await setup(asked(['typed-key-value', false]), {})).toBe(EXIT.ok)
@@ -246,16 +244,15 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     }
   }
 
-  it('update-notice-off-at-first-start: a Full setup that turns the check off has the row off in the profile the first start composes, so no check mounts', async () => {
-    const atStart: { row?: ReturnType<typeof composedUpdateCheckRow> } = {}
+  it('update-notice-off-at-first-start: a setup that turns the check off under More settings has the row off in the profile the first start composes, so no check mounts', async () => {
     const run = runSetup({
-      home, profile: PROFILE, output, env: {}, form: asked(['full', 'off', 'deepseek-official', 'environment', 'deepseek-flash', 'safer', 'yes', 'no', 'default', '3080', 'save', false]),
+      home, profile: PROFILE, output, env: {}, form: asked(['local', 'deepseek-official', 'environment', 'safer', 'more', 'off', 'yes', 'no', 'default', '3080', 'save']),
       keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
-      ending: { ...fakeEnding(ending), start: () => { atStart.row = composedUpdateCheckRow(); return Promise.resolve(0) } },
     })
     expect(await run).toBe(EXIT.ok)
-    expect(atStart.row).toEqual({ id: 'delo-update-check', name: '@delo/bundle-local/update-check', config: { intervalHours: 24, timeoutSeconds: 15, enabled: false } })
-    expect(await mountsCheck(atStart.row?.config)).toBe(false)
+    const row = composedUpdateCheckRow()
+    expect(row).toEqual({ id: 'delo-update-check', name: '@delo/bundle-local/update-check', config: { intervalHours: 24, timeoutSeconds: 15, enabled: false } })
+    expect(await mountsCheck(row?.config)).toBe(false)
   })
 
   it('update-notice-off-at-first-start: --yes --no-update-check turns it off the same way, and a setup that keeps it on mounts the check', async () => {

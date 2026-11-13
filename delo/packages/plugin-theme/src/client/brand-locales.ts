@@ -2,7 +2,7 @@
 
 /** English dictionary. */
 export const en = {
-  'hero.mark': 'Delo',
+  'hero.mark': 'Delorun',
   'hero.headline': 'What are we working on?',
 }
 
@@ -10,6 +10,7 @@ export const en = {
 export type BrandLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
+// A309: the Chinese wordmark keeps Delo until the translation pass.
 export const zh: Record<BrandLocaleKey, string> = {
   'hero.mark': 'Delo',
   'hero.headline': '想做点什么？',

@@ -14,13 +14,13 @@ English | [中文](README.zh.md)
 ## Contents
 
 - [Use this package](#use-this-package)
-- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Known limitations](#known-limitations)
 
 ## Use this package
 
 The pre-update report in `delo/packages/update/`, the studio's update screens, `delo/packages/profile-safety/` and the desktop updater consume it. Import the types with `import type` and the constants with a value import from `@delo/contract-update-report`; a package that reads or writes the files this contract defines still validates them at its parser, because these types describe valid files and do not check them.
 
-## Known Limitations and Deferred Work
+## Known limitations
 
 - The report's reason list is closed for report format 2 (`delo.update-report/2`); a new reason needs a new format version, as the contract page states. Format 1 is retired: no release shipped it.
-- `UncheckedSource` has one value, `revocations`: no release publishes a revocation list yet, so a report names it in `notChecked`. The bundles' own layers and the bundles a target would skip are read, and are items rather than unchecked sources.
+- `UncheckedSource` has one value, `revocations`: no release publishes a revocation list, so a report names it in `notChecked`. The bundles' own layers and the bundles a target would skip are read, and are items rather than unchecked sources.

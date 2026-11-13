@@ -94,7 +94,7 @@ describe('a profile that has finished onboarding', () => {
     const notice = noticeFace()
     const { complete, progress } = await mountEntry({ settings: settings({ done: true }), explicit: true, notice })
     expect(heading().textContent).toBe(en['step.welcome'])
-    expect(screen.queryByText('Delo is a pre-release community fork.')).toBeNull()
+    expect(screen.queryByText('Delorun is a pre-release community fork.')).toBeNull()
     expect(titles()).toEqual(BASE)
     expect(complete).not.toHaveBeenCalled()
     expect(progress.set).not.toHaveBeenCalled()
@@ -126,7 +126,7 @@ describe('the first run', () => {
     const notice = noticeFace()
     await mountEntry({ notice })
     expect(heading().textContent).toBe(en['step.welcome'])
-    expect(screen.getByText('Delo is a pre-release community fork.')).toBeTruthy()
+    expect(screen.getByText('Delorun is a pre-release community fork.')).toBeTruthy()
     expect(titles()).toEqual(BASE)
     expect(screen.getByText('Step 1 of 5')).toBeTruthy()
     expect(screen.queryByRole('button', { name: en.back })).toBeNull()
@@ -137,7 +137,7 @@ describe('the first run', () => {
     expect(heading().textContent).toBe(en['step.look'])
     expect(button(en.skip)).toBeTruthy()
     await click(button(en.back))
-    expect(screen.getByText('Delo is a pre-release community fork.')).toBeTruthy()
+    expect(screen.getByText('Delorun is a pre-release community fork.')).toBeTruthy()
   })
 
   it('names the dialog by the step\'s heading and takes focus onto it, and again at each step', async () => {
@@ -151,7 +151,7 @@ describe('the first run', () => {
 
   it('offers Skip on Welcome where the notice is already acknowledged, and where there is no notice', async () => {
     await mountEntry({ notice: noticeFace(true) })
-    expect(screen.queryByText('Delo is a pre-release community fork.')).toBeNull()
+    expect(screen.queryByText('Delorun is a pre-release community fork.')).toBeNull()
     expect(button(en.skip)).toBeTruthy()
   })
 
@@ -263,6 +263,16 @@ describe('which steps apply', () => {
     expect(titles().slice(-3)).toEqual([en['step.reach'], en['step.workspace'], en['step.ready']])
     await forward(titles().indexOf(en['step.reach']))
     expect(heading().textContent).toBe(en['step.reach'])
+  })
+
+  it('swaps the computer\'s phone access step for a one-line note in a studio opened from a phone', async () => {
+    await mountEntry({ reach: 'remote', record: { reachSetUp: false } })
+    await forward(titles().indexOf(en['step.reach']))
+    expect(heading().textContent).toBe(en['step.reach'])
+    expect(screen.getByText(en['reach.remote'])).toBeTruthy()
+    expect(screen.queryByText(en['reach.then'])).toBeNull()
+    await click(button(en.continue))
+    expect(heading().textContent).toBe(en['step.workspace'])
   })
 
   it('counts phone access as on in Ready when the terminal setup set it up', async () => {

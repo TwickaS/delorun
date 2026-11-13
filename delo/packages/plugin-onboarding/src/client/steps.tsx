@@ -89,6 +89,7 @@ export function WelcomeStep({ services, guide, notice }: StepProps & { readonly 
   const paragraphs = notice?.paragraphs() ?? []
   return (
     <div className={css.stack}>
+      <p className={css.lead}>{t('welcome.lead')}</p>
       <Choices label={t('welcome.language')} options={locale.locales.map(each => ({
         key: each.id, checked: locale.active === each.id, onSelect: () => { language.setLocale(each.id) }, content: each.label,
       }))} />
@@ -502,6 +503,16 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
       <p className={css.hint}>{t('reach.limits')}</p>
     </div>
   )
+}
+
+/**
+ * Phone access, for a studio opened through reach: one line saying that the phone is connected and that approvals and
+ * full access are decided at the computer.
+ * @param props - the services.
+ * @returns the step body.
+ */
+export function RemoteReachStep({ services }: StepProps): ReactNode {
+  return <p className={css.lead}>{services.t('reach.remote')}</p>
 }
 
 /** One line of the Ready checklist. */

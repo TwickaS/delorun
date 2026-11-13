@@ -37,11 +37,18 @@ async function ask<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promi
   }
 }
 
+/** Whether a page's hostname names this computer's loopback interface. */
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+}
+
 /**
  * Read whether the reach step applies.
- * @returns `absent` when the route is absent or cannot be read, `set-up` when an option is ready, `off` otherwise.
+ * @returns `remote` when the page is not on this computer's loopback address, `absent` when the route is absent or cannot
+ *   be read, `set-up` when an option is ready, `off` otherwise.
  */
 export async function readReach(): Promise<ReachState> {
+  if (!isLoopbackHostname(location.hostname)) return 'remote'
   try {
     const response = await fetch(REACH_STATUS_PATH.slice(1), { headers: { accept: 'application/json' } })
     if (!response.ok) return 'absent'

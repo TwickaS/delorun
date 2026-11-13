@@ -764,4 +764,12 @@
   .lookGrid {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* Phone widths get 44px targets whatever the pointer reports, so a narrow desktop window matches a phone. */
+  .chip,
+  .folder,
+  .scroll button,
+  .footer button {
+    min-height: 44px;
+  }
 }

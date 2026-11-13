@@ -5,7 +5,7 @@
  * | Command | What it does |
  * | --- | --- |
  * | `delorun [--profile <name>] [--foreground \| --background]` | runs setup on a home without the CLI profile; otherwise starts the home process detached from the terminal, or in this terminal, as `--background`, `--foreground` or else setup's answer says, and opens the studio |
- * | `delorun setup [<section>] [--profile <name>] [--list]` | setup, Quick or Full, or one section again ([setup](./setup/index.ts)) |
+ * | `delorun setup [<section>] [--profile <name>] [--list]` | setup by how you use Delorun, or one section again ([setup](./setup/index.ts)) |
  * | `delorun start [--foreground \| --background] [--open] [--profile <name>]` | the home process detached from the terminal, or in this terminal ([start](./start.ts)) |
  * | `delorun open [--print] [--profile <name>]` | the studio in the browser with a link that signs in once, or that link printed ([open](./open/command.ts)) |
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
@@ -65,7 +65,7 @@ export interface CommandEntry {
  * release transpiler rewrites it to JavaScript.
  */
 export const COMMANDS: readonly CommandEntry[] = [
-  { name: 'setup', summary: 'Set up Delorun (Quick or Full), or run one section again: delorun setup <section>; --list lists them', load: async () => (await import('./setup/index.ts')).setupCommand },
+  { name: 'setup', summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them', load: async () => (await import('./setup/index.ts')).setupCommand },
   { name: 'start', summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses', load: async () => (await import('./start.ts')).startCommand },
   { name: 'open', summary: 'Open the studio in your browser, or print a link that signs in once with --print (--port for a forwarded port)', load: async () => (await import('./open/command.ts')).openCommand },
   { name: 'stop', summary: 'Stop the home process once running chats end, or at once with --now', load: async () => (await import('./stop.ts')).stopCommand },

@@ -42,6 +42,8 @@ function harness(options: {
   readonly studio?: boolean; readonly settings?: SidebarSettings | undefined; readonly served?: boolean; readonly set?: ConfigForm<SidebarSettings>['set']
   /** The page's remote media mode, as the connection service states it; no connection service without it. */
   readonly remoteMedia?: 'load' | 'placeholder'
+  /** The release check's row: `on` by default; `loading` until `checkChange` is called. */
+  readonly releaseCheck?: 'on' | 'off' | 'loading' | 'unavailable'
 } = {}) {
   const ctx = new Context()
   if (options.remoteMedia !== undefined) ctx.provide('connection', { remoteMedia: options.remoteMedia } as never)
@@ -73,8 +75,18 @@ function harness(options: {
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     set, unset: () => Promise.resolve(true), mutate: () => Promise.resolve(true),
   }
+  const checkListeners = new Set<() => void>()
+  const releaseCheck = options.releaseCheck ?? 'on'
+  let checkSnapshot: ConfigFormSnapshot<{ enabled: boolean }> = {
+    status: releaseCheck === 'unavailable' ? 'unavailable' : releaseCheck === 'loading' ? 'loading' : 'ready',
+    value: releaseCheck === 'on' || releaseCheck === 'off' ? { enabled: releaseCheck === 'on' } : undefined, base: undefined, user: undefined, revision: 1, writable: true,
+  }
+  const checkForm = {
+    getSnapshot: () => checkSnapshot,
+    subscribe: (listener: () => void) => { checkListeners.add(listener); return () => { checkListeners.delete(listener) } },
+  }
   ctx.provide('configForms', {
-    get: (id: string) => { forms.push(id); return form },
+    get: (id: string) => (id === 'delo-update-check' ? checkForm : (forms.push(id), form)),
     whileServed: (_: readonly string[], register: () => () => void) => (options.served === false ? () => {} : register()),
   } as never)
   const menuTarget = createSnapshotStore<null>(null)
@@ -96,6 +108,7 @@ function harness(options: {
   const fiber = ctx.plugin({ name: 'delo-sidebar', inject, apply })
   return {
     ctx, fiber, dictionaries, entries, forms, shown, rows, placements, widths, uiWorkspace, setCalls: defaultSet.mock.calls,
+    checkChange: (enabled: boolean) => { checkSnapshot = { ...checkSnapshot, status: 'ready', value: { enabled } }; for (const listener of [...checkListeners]) listener() },
     change: (value: SidebarSettings | undefined) => { snapshot = { ...snapshot, value, status: 'ready' }; for (const listener of [...listeners]) listener() },
     face: <T,>(key: string): T => {
       const entry = entries.get(key)
@@ -333,6 +346,30 @@ describe('the update notice in the studio', () => {
     h.ctx.emit('connection/reset')
     vi.advanceTimersByTime(24 * 60 * 60_000)
     expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not ask for the notice while the release check is off or unread, and asks once it is on', async () => {
+    const fetch = serve()
+    const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, releaseCheck: 'loading' })
+    await h.fiber.await()
+    expect(fetch).not.toHaveBeenCalled()
+    h.checkChange(false)
+    expect(fetch).not.toHaveBeenCalled()
+    h.checkChange(true)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const face = h.face<SidebarInjected>('sidebar.workspaces.list#').updateNotice
+    await vi.waitFor(() => { expect(face.notice.getSnapshot()?.release.delo).toBe('0.1.3') })
+    h.checkChange(false)
+    expect(face.notice.getSnapshot()).toBeNull()
+    h.ctx.emit('connection/reset')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for the notice on a page whose release check row is not exposed to it, such as a remote one', async () => {
+    const fetch = serve()
+    const h = harness({ settings: DEFAULT_SIDEBAR_SETTINGS, releaseCheck: 'unavailable' })
+    await h.fiber.await()
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it('hides the notice for the dismissed release on this computer, and keeps the dismissal in the browser', async () => {

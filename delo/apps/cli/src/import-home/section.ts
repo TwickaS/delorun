@@ -77,7 +77,7 @@ export function importSection(options: ImportSectionOptions): SetupSection {
   return {
     id: IMPORT_SECTION_ID,
     title: 'Import a DeepSeek Harness home',
-    mode: 'quick',
+    plan: { local: 'asked', remote: 'asked', automation: 'never' },
     asks: () => true,
     appliesTo(environment) {
       const source = stockHomeOf(environment.env)
@@ -99,7 +99,7 @@ export function importSection(options: ImportSectionOptions): SetupSection {
         io.note(planned.blockers.map(blocker => printable(blocker.message)).join('\n'), 'Import')
         return { answers: { importStockHome: false }, status: 'seen' }
       }
-      const answer = await io.confirm('Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.', false)
+      const answer = await io.confirm('Copy your DeepSeek Harness chats, attachments and workspace list? Your DeepSeek Harness folder is only read. You can also do this later with delorun import-home.', false)
       if (answer === BACK) return BACK
       if (answer) shown = planned
       return { answers: { importStockHome: answer }, status: 'answered' }

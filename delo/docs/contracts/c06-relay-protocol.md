@@ -199,7 +199,7 @@ A running home with own-domain reach watches public Certificate Transparency log
 <a id="delo-relay"></a>
 ### Delo relay
 
-The Delo relay, on `delo.run` names with relay control on Delo Run, is a fast-follow: Delo 1.0 contains no Delo relay client and no relay control. The relay data plane, the frames, SNI routing, the handshake and the limits above apply to it unchanged, with relay control as the token issuer. These rules also bind it:
+The Delo relay, on `delo.run` names with relay control on Delo Run, is not part of Delorun, which contains no Delo relay client and no relay control ([roadmap](../guide/roadmap.md)). The relay data plane, the frames, SNI routing, the handshake and the limits above apply to it unchanged, with relay control as the token issuer. These rules also bind it:
 
 - A name is never reassigned to another account, and a random name is never reused.
 - Rebinding needs the bound key's signature; there is no forced rebind.

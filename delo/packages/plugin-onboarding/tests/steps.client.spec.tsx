@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
-import { AGENT_BUNDLES, AgentsStep, APPROVE_COMMAND, Command, connectionName, LookStep, PluginsStep, REACH_COMMAND, ReachStep, ReadyStep, WelcomeStep } from '../src/client/steps.tsx'
+import { AGENT_BUNDLES, AgentsStep, APPROVE_COMMAND, Command, connectionName, LookStep, PluginsStep, REACH_COMMAND, ReachStep, ReadyStep, RemoteReachStep, WelcomeStep } from '../src/client/steps.tsx'
 import { createGuide, type Guide } from '../src/client/guide.ts'
 import { en } from '../src/client/locales.ts'
 import { ACCENT_PRESETS, PALETTE_CHOICES } from '../src/client/previews.ts'
@@ -51,6 +51,16 @@ describe('the look step', () => {
     expect(radio('Iris').getAttribute('aria-checked')).toBe('true')
   })
 
+  it('starts on the palette and mode saved in Settings when setup runs again, not on the defaults', () => {
+    const { face } = schemeFace('dark')
+    const services = stepServices({ scheme: face })
+    void services.look.settings.set('palette', 'ocean')
+    look(services)
+    expect(radio('Ocean').getAttribute('aria-checked')).toBe('true')
+    expect(radio('Soft').getAttribute('aria-checked')).toBe('false')
+    expect(radio('Dark').getAttribute('aria-checked')).toBe('true')
+  })
+
   it('offers the accent presets with the Soft palette, writes the one chosen, and replaces them with a note for a theme that brings its own', async () => {
     const services = stepServices()
     look(services)
@@ -79,7 +89,7 @@ describe('the look step', () => {
     look(stepServices({ look: { settings: liveForm<ThemeSettings>(THEME).form, useStockLook } }))
     const group = screen.getByRole('radiogroup', { name: en['look.studio'] })
     expect(within(group).getAllByRole('radio').map(each => [each.textContent, each.getAttribute('aria-checked')])).toEqual([['Delo', 'true'], ['Stock', 'false']])
-    expect(screen.getByText(/turns Delo's studio additions off and closes this guide/)).toBeTruthy()
+    expect(screen.getByText(/turns Delorun's studio additions off and closes this guide/)).toBeTruthy()
     expect(en['look.studio.lead']).toContain('Settings → General → Look switches between the two')
     expect(en['look.studio.lead']).toContain('with the stock look on, the Delorun look row in Settings → General')
     expect(useStockLook).not.toHaveBeenCalled()
@@ -145,10 +155,10 @@ describe('the welcome step', () => {
     const { face } = noticeFace()
     render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={face} />)
     expect(screen.getByRole('heading', { level: 3, name: 'Preview' })).toBeTruthy()
-    expect(screen.getAllByText(/Delo is a pre-release|no telemetry/)).toHaveLength(2)
+    expect(screen.getAllByText(/Delorun is a pre-release|no telemetry/)).toHaveLength(2)
     cleanup()
     render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
-    expect(screen.queryByText(/Delo is a pre-release/)).toBeNull()
+    expect(screen.queryByText(/Delorun is a pre-release/)).toBeNull()
   })
 
   it('says it is testing the keys, then each provider\'s result, worded for a person', async () => {
@@ -249,7 +259,7 @@ describe('the agents step', () => {
     expect(within(confirm).getAllByRole('listitem').map(each => each.textContent)).toEqual([
       en['agents.confirm.handoff'], en['agents.confirm.limits'], en['agents.confirm.outside'], en['agents.confirm.files'], en['agents.confirm.billing'],
     ])
-    expect(confirm.textContent).toContain('Delo asks here on this computer first')
+    expect(confirm.textContent).toContain('Delorun asks here on this computer first')
     await click(within(confirm).getByRole('button', { name: en['chooser.cancel'] }))
     expect(screen.queryByRole('group')).toBeNull()
     expect(fake.install).not.toHaveBeenCalled()
@@ -363,6 +373,14 @@ describe('the recommended plugins step', () => {
     const providers = new Map([['deepseek-official', 'DeepSeek']])
     expect(['agent:claude-code', 'agent:codex', 'tool:tailscale', 'provider:deepseek-official', 'provider:other', 'tool:other'].map(id => connectionName(id, t, providers)))
       .toEqual(['Claude Code', 'Codex', 'Tailscale', 'DeepSeek', 'other', 'other'])
+  })
+})
+
+describe('the phone access step on a phone', () => {
+  it('says the phone is connected and shows no terminal command', () => {
+    render(<RemoteReachStep services={stepServices()} guide={guideOf()} />)
+    expect(screen.getByText(en['reach.remote'])).toBeTruthy()
+    expect(screen.queryByText(REACH_COMMAND)).toBeNull()
   })
 })
 

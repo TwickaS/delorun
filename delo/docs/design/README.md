@@ -8,9 +8,9 @@ English
 
 ## Summary
 
-A design page states the rules Delo has adopted for a feature that is not built, or only partly built: what it will do, what it will refuse, what it will not protect against, and the denial tests that will prove it. The [contract pages](../contracts/README.md) describe only what is built. A design page lets a contributor see where Delo is going without a contract claiming what the code does not do.
+A design page states the rules Delo has adopted for a feature that is not built, or only partly built: what it does, what it refuses, what it does not protect against, and the denial tests that prove it. The [contract pages](../contracts/README.md) describe only what is built. A design page lets a contributor read the adopted rules of an unbuilt feature without a contract claiming what the code does not do.
 
-Every design page has the same sections: a summary; what exists today, checked against the code; the rules; what the design does not protect against; the denial tests it will have; and what is built so far. Statements under "What exists today" and "What is built so far" are about the code in this repository. Statements under the rules are the design, and none of them holds until a change builds it.
+Every design page has the same sections: a summary; what exists today, checked against the code; the rules; what the design does not protect against; the denial tests it has; and what is built so far. Statements under "What exists today" and "What is built so far" are about the code in this repository. Statements under the rules are the design, and none of them holds until a change builds it.
 
 ## How a design becomes a contract
 
@@ -23,7 +23,7 @@ A design changes through a pull request like any other document. A change to a d
 - [Update and rollback](update-and-rollback.md): the update report's data item, the copy of chat data taken by default, the one rollback table, why a rollback deletes nothing, the refusal of a lower version, and verified updates for the desktop app.
 - [The update notice](update-notice.md): the verified check for a newer release that sends nothing about the person, the terminal line and the sidebar notice, the switch that turns it off, the patch rule, and how a plugin targets Delo's version.
 - [Reach on your own tailnet](reach.md): opening the studio from your own devices, device approval only at the home's computer, what a remote session may and may not do, and records and limits for loopback credentials.
-- [The first run](first-run.md): one command from install to a first chat, the launcher's progress, Quick and Full setup, the background start and onboarding in the studio.
+- [The first run](first-run.md): one command from install to a first chat, the launcher's progress, setup by use case, the background start and onboarding in the studio.
 - [Changes to your harness](changes.md): your harness is the signed release plus the changes you approved; reviewing, applying and undoing a change, work sessions, the protection setting, and recovery when a change breaks something.
 - [Security extension points](security-extension-points.md): how a plugin can add a check, a warning, a confirmation or a refusal, and why it can never remove or override a built-in check.
 - [Repository settings inside a writable workspace](workspace-git-state.md): an open option to keep `.git/config`, hooks and `.git/info` read-only to confined commands, and its cost to a model's own `git config` and `git remote`.

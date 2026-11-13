@@ -53,7 +53,7 @@ One entry per signed manifest file, submitted by the release's `log-release` com
 | Key details | `PKIX_ED25519_PH` |
 | Public key | The active targets public key, DER-encoded PKIX |
 
-The `log-release` command submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialization of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
+The `log-release` command submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialisation of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
 
 A re-signed manifest after a targets-key revocation ([C2](c02-release-manifest.md#key-rotation)) gets its own entry. A release is "logged" when its manifest file's entry verifies as this page states.
 
@@ -102,7 +102,7 @@ A `trust/checkpoint.json` an earlier install wrote with only a tree size and a r
 | State | Meaning |
 | --- | --- |
 | `verified` | The bundle verifies and the online check passed at least once for this installation. |
-| `unchecked` | The online check has not passed yet: the log was not reachable, gave no checkpoint its key signed, or its witnesses had not cosigned its latest checkpoint within 24 hours; the bundle, if present, verifies. |
+| `unchecked` | The online check has not passed: the log was not reachable, gave no checkpoint its key signed, or its witnesses had not cosigned its latest checkpoint within 24 hours; the bundle, if present, verifies. |
 | `failed` | The bundle or the online check failed verifiably. |
 
 The state is stored per installed release in `trust/release-log.json` (schema `delo.release-log-state/1`, one entry per release with its `state`, `lastAttempt`, for `unchecked` the reason as `detail` and the first attempt of the current `unchecked` run as `uncheckedSince`, and the attempt's `notices`, such as a stored checkpoint that did not read), beside the checkpoint [C1](c01-home-layout.md) names. An install records `verified` or `unchecked` for the release it installs, and the start check updates the same entry. `delorun verify` shows it with the release's version ([C15](c15-verification-checks.md)); `delorun status` and the studio show no release-log state.

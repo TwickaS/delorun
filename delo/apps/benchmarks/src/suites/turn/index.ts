@@ -16,7 +16,7 @@
  * folder's `workspace-write` preset without asking, in both compositions; a call that fails or is refused fails the
  * repetition, so a refusal is never measured as a fast call.
  *
- * Scenarios: `delorun` runs the home as setup leaves it; `stock` is the same home after setup's "Same as stock" prompts
+ * Scenarios: `delorun` runs the home as setup leaves it; `stock` is the same home after setup's "Ask less (like DeepSeek Harness)" prompts
  * answer: the profile's patch restates the four prompt rows of `@delo/bundle-local` (instruction, MCP and schedule
  * consents, and permission defaults) with `enabled: false`, and the profile's `setup-answers.json` records `stock`, so
  * the home runs those rows as upstream's composition does and `delorun start` accepts it. The fetch guard, the update
@@ -76,10 +76,10 @@ export const TURN_ITEMS: Readonly<Record<string, string>> = {
 /** The suite's scenarios. */
 export const TURN_SCENARIOS: readonly { readonly id: 'delorun' | 'stock', readonly description: string }[] = [
   { id: 'delorun', description: 'Delo\'s composition, as setup leaves the home' },
-  { id: 'stock', description: 'The same home after setup\'s "Same as stock" prompts answer: the four prompt rows of @delo/bundle-local (consents and permission defaults) switched off, their C16 parity form' },
+  { id: 'stock', description: 'The same home after setup\'s "Ask less (like DeepSeek Harness)" prompts answer: the four prompt rows of @delo/bundle-local (consents and permission defaults) switched off, their C16 parity form' },
 ]
 
-/** The prompt rows of `@delo/bundle-local` that setup's "Same as stock" answer switches off (`PROMPT_SWITCH_ROWS` of `@delo/cli`). */
+/** The prompt rows of `@delo/bundle-local` that setup's "Ask less (like DeepSeek Harness)" answer switches off (`PROMPT_SWITCH_ROWS` of `@delo/cli`). */
 export const STOCK_PROMPT_ROWS: readonly string[] = ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent']
 
 /**
@@ -127,7 +127,7 @@ export function stockPatch(rows: readonly string[]): string {
 }
 
 /**
- * Record the "Same as stock" prompts answer in a profile's setup answers, which `delorun start` holds the prompt rows to.
+ * Record the "Ask less (like DeepSeek Harness)" prompts answer in a profile's setup answers, which `delorun start` holds the prompt rows to.
  * @param record - the text of `setup-answers.json`.
  * @returns the record with `prompts` set to `stock`.
  */

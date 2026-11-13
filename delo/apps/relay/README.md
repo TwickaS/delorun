@@ -47,7 +47,7 @@ The relay id is the base64url SHA-256 hash of the token public key's 32 raw byte
 
 ## Tunnel token
 
-`POST /v1/tunnel-token` takes `{ v, name, homePublicKey, timestamp, signature }`, where the signature is the Ed25519 signature by the home key over the RFC 8785 serialization of the object without `signature`.
+`POST /v1/tunnel-token` takes `{ v, name, homePublicKey, timestamp, signature }`, where the signature is the Ed25519 signature by the home key over the RFC 8785 serialisation of the object without `signature`.
 It answers `{ token }`, or one of these refusals:
 
 | Status | Code | When |
@@ -160,8 +160,8 @@ The app also registers a driver for C20's cross-surface denial suite (`delo/pack
 - `src/log.ts`: C20's `relay` surface.
 - `src/node/server.ts`, `src/node/main.ts`: the TCP listener, the tunnel host's TLS, the HTTP endpoints and the entry point.
 
-## Not in this app yet
+## Not in this app
 
 - **Rebinding's signature check, 60-second delay and announcement.** The configuration checks that a rebind statement names its binding's name and new key, and does not verify the old key's signature. A changed binding takes effect when the relay restarts with the edited configuration, with no delay and no `tunnel-rebound` announcement; those wait for the binding history in `stateDir`.
 - **Certificate monitoring.** C6 gives it to the home, and no home-side certificate monitoring is built.
-- **The Delo relay.** Relay control and `delo.run` names are C6's fast-follow, and the data plane serves the self-hosted relay only.
+- **The Delo relay.** Relay control and `delo.run` names are not part of Delorun ([roadmap](../../docs/guide/roadmap.md)), and the data plane serves the self-hosted relay only.

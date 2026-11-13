@@ -26,7 +26,7 @@ English
 | `update` | `delorun update` step by step, `update --check`, and rollbacks with and without a data copy to restore | [Update timings](update-timings.md) |
 | `cli` | The commands a person expects to answer at once, to first output and to exit, beside the cost of starting a process | [Commands and start](commands-and-start.md) |
 | `start` | `delorun start` cold and warm to the studio's first page, `delorun stop`, `stop --now`, a restart and a bare `delorun` | [Commands and start](commands-and-start.md) |
-| `install` | The launcher's first run, Quick setup and the first start to the studio | [Commands and start](commands-and-start.md) |
+| `install` | The launcher's first run, setup and the first start to the studio | [Commands and start](commands-and-start.md) |
 | `recovery` | `delorun recover status`, safe mode and restoring a profile history version | [Commands and start](commands-and-start.md) |
 | `data` | `delorun export` and `import` of small and large homes, and moving chats to the trash, restoring them and listing a large trash | [Commands and start](commands-and-start.md) |
 | `plugins` | Installing a plugin from a local package, turning it off, on and reloading it, and the start cost of 0, 5 and 20 installed plugins | [Commands and start](commands-and-start.md) |

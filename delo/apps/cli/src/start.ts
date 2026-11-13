@@ -53,6 +53,7 @@ import { computerOpener, profileFlag, type StudioOpener } from './open/studio.ts
 import { shippedPackageManager } from './package-manager.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
+import { dangerousModeLine } from './setup/dangerous.ts'
 import { openSetupLog, upstreamLinking } from './setup/index.ts'
 import { addStudioBundle } from './studio-bundle.ts'
 import { preStartSteps, runPreStartSteps, type PreStartStep } from './pre-start.ts'
@@ -534,7 +535,11 @@ export async function startForeground(request: StartRequest, dependencies: Start
     await announceStudio(request.home, request.profile, request.open, request.output, dependencies.opener)
     return EXIT.ok
   }
-  if (handover === undefined) await announceStudio(request.home, request.profile, request.open, request.output, dependencies.opener)
+  if (handover === undefined) {
+    const dangerous = await dangerousModeLine(request.home, profileDirectory(request.home, request.profile))
+    if (dangerous !== undefined) request.output.stdout(`${dangerous}\n`)
+    await announceStudio(request.home, request.profile, request.open, request.output, dependencies.opener)
+  }
   dependencies.onExit(() => {
     closeLog()
     rmSync(sandboxOverlayPath(request.home, request.profile), { force: true })
@@ -733,9 +738,11 @@ export async function startDetached(home: string, profile: string, output: Comma
     const status = await answeringStatus(home, profile)
     if (status?.state === 'running' && status.pid === child.pid) {
       const notice = await startNoticeLine(home, profile, process.env)
+      const dangerous = await dangerousModeLine(home, profileDirectory(home, profile))
       output.stdout([
         `Delo is running in the background for the profile ${profile} (process ${String(status.pid)})${status.studio === undefined ? '' : ` at ${status.studio}`}; it keeps running after this terminal closes.`,
         'See it with delorun status, follow its log with delorun logs --follow, and stop it with delorun stop.',
+        ...dangerous === undefined ? [] : [dangerous],
         ...notice === undefined ? [] : [notice],
         '',
       ].join('\n'))

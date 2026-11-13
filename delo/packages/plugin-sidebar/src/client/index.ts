@@ -37,6 +37,9 @@ import type { DeloChatStates } from '@delo/plugin-chat-states/client'
 // Type-only: the ctx.deloStudio merge.
 import type {} from '@delo/plugin-theme/client'
 import { DEFAULT_SIDEBAR_SETTINGS, SIDEBAR_ROW_ID, type SidebarSettings } from '../config.ts'
+
+/** The row of the release check, whose `enabled` switch mounts the notice route. */
+const UPDATE_CHECK_ROW_ID = 'delo-update-check'
 import { pruneWorkspaceIcons, withWorkspaceIcon } from '../workspace-icon.ts'
 import type { RowStateActions } from './ChatRow.tsx'
 import { FootLauncher } from './FootLauncher.tsx'
@@ -268,7 +271,27 @@ export function applyStudio(ctx: Context): void {
   const undoLine = createUndoLine()
   const updates = new UpdateNoticeStore(fetchUpdateNotice, preference)
   const refreshMinutes: HostObservable<number> = { getSnapshot: () => settings.getSnapshot().updateNoticeRefreshMinutes, subscribe: settings.subscribe }
-  ctx.effect(() => updates.start(refreshMinutes, listener => ctx.on('connection/reset', listener)), 'delo-sidebar: update notice reads')
+  // The notice route exists only while the release check is on; reading it with the check off or unread answers 404 on every page load.
+  const releaseCheck = ctx.configForms.get<{ readonly enabled?: boolean }>(UPDATE_CHECK_ROW_ID)
+  ctx.effect(() => {
+    let stop: (() => void) | undefined
+    const follow = (): void => {
+      const { status, value } = releaseCheck.getSnapshot()
+      const reads = status === 'unavailable' || (status === 'ready' && value?.enabled === true)
+      if (reads && stop === undefined) stop = updates.start(refreshMinutes, listener => ctx.on('connection/reset', listener))
+      if (!reads && stop !== undefined) {
+        stop()
+        stop = undefined
+        updates.answered.set(null)
+      }
+    }
+    follow()
+    const unsubscribe = releaseCheck.subscribe(follow)
+    return () => {
+      unsubscribe()
+      stop?.()
+    }
+  }, 'delo-sidebar: update notice reads')
   // A page a reach listener served, a remote session, shows the notice's text only, with no control.
   const remote = (ctx.get('connection') as ConnectionHandle | undefined)?.remoteMedia === 'placeholder'
   const updateNotice: UpdateNoticeFace = { notice: updates.visible, dismiss: remote ? null : (release) => { updates.dismiss(release) } }

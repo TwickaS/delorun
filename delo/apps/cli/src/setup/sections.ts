@@ -1,9 +1,10 @@
 /**
  * The sections of `delorun setup`. A section is one topic of the terminal flow with its question, its review line
- * and the writes it produces, and the registry lists them in order. Quick runs the sections marked `quick`; Full runs
- * every section. Each section is also `delorun setup <id>`. Later packages add their sections through
+ * and the writes it produces, and the registry lists them in order. The use case the person picks first decides, per
+ * section, whether it is asked in the main flow, left to the review screen's "More settings", or not asked at all.
+ * Each section is also `delorun setup <id>`. Later packages add their sections through
  * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, the model provider and key
- * ([provider section](./provider-section.ts)), prompts, background and profile. Privacy shows the note in both modes and asks about the release check in Full.
+ * ([provider section](./provider-section.ts)), prompts, background, remote access and profile. Privacy shows its note in the main flow and asks about the release check under "More settings".
  *
  * @module @delo/cli/setup/sections
  */
@@ -11,6 +12,7 @@ import { join } from 'node:path'
 import {
   SETUP_DEFAULT_PORT,
   type PromptsAnswer,
+  type SetupUseCase,
   type SectionRecord,
   type SectionStatus,
   type SetupAnswers,
@@ -23,25 +25,39 @@ import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
 import { providerSection } from './provider-section.ts'
 import { installedCatalog, type ProviderCatalog } from './providers.ts'
+import { askDangerousConsent, hasDangerousGrant, refuseDangerousAsRoot, removeDangerousGrant, writeDangerousGrant } from './dangerous.ts'
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
+import { choiceNote, RECOMMENDED, type ChoiceText } from './choices.ts'
 import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
 import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 
-/** The run's mode: Quick asks the `quick` sections, Full asks every section. */
-export type SetupMode = 'quick' | 'full'
+/**
+ * Where a section's question is asked: `main` is the flow every use case follows, `more` the review screen's "More
+ * settings", and `single` a section run again with `delorun setup <section>`.
+ */
+export type SetupPhase = 'main' | 'more' | 'single'
+
+/**
+ * What a use case does with a section: `asked` asks it in the main flow, `note` shows its note there and asks the
+ * question under "More settings", `more` asks it only under "More settings", and `never` leaves it out.
+ */
+export type SectionPlan = 'asked' | 'note' | 'more' | 'never'
 
 /** The answers collected so far in an interactive run. */
 export interface Draft {
-  readonly mode: SetupMode
+  /** Where the section that is asking is being asked. */
+  readonly phase: SetupPhase
   readonly answers: SetupAnswers
   /** The typed key, kept in memory until the key section's write; never in the answers. */
   readonly secret: string | undefined
   /** Why the live check of the key failed when the person continued without a successful check; never the key. */
   readonly keyCheckFailure?: string | undefined
+  /** Whether the key section kept the key saved in the home instead of taking a new one. */
+  readonly keepSavedKey?: boolean | undefined
 }
 
 /** What a section's question returns. */
@@ -52,6 +68,8 @@ export interface SectionAnswer {
   readonly secret?: string
   /** Why the live check of the key failed, when the person continued without a successful check. */
   readonly keyCheckFailure?: string
+  /** True when the section kept the key saved in the home; the key is not read, shown or stored again. */
+  readonly keepSavedKey?: boolean
   /** `answered` for a question asked, `seen` for a note shown. */
   readonly status: SectionStatus
 }
@@ -74,6 +92,8 @@ export interface SectionEnvironment {
   readonly checkEnvironmentKey: boolean
   /** Whether a local port is free to listen on. */
   readonly portIsFree: (port: number) => Promise<boolean>
+  /** Whether the home's credentials hold a key under a reference; the key itself is never read. */
+  readonly hasSavedKey: (name: string) => boolean
 }
 
 /** What a section's writes run against. */
@@ -86,6 +106,8 @@ export interface ApplyContext {
   readonly directory: string
   /** The typed key, when the run has one. */
   readonly secret: string | undefined
+  /** True when the run keeps the key already saved under the provider's reference. */
+  readonly keepSavedKey?: boolean
 }
 
 /** One section of the setup flow. */
@@ -94,14 +116,14 @@ export interface SetupSection {
   readonly id: string
   /** The heading shown by `delorun setup --list`. */
   readonly title: string
-  /** `quick` sections run in both modes, `full` sections only in Full. */
-  readonly mode: SetupMode
+  /** What each use case does with the section. */
+  readonly plan: Readonly<Record<SetupUseCase, SectionPlan>>
   /**
-   * Whether the section asks a question in a run of a mode; a section that only shows a note is passed over when going back.
-   * @param mode - the run's mode.
-   * @returns true when the section asks in that mode.
+   * Whether the section asks a question in a phase; a section that only shows a note is passed over when going back.
+   * @param phase - where the section is asked.
+   * @returns true when the section asks in that phase.
    */
-  asks(mode: SetupMode): boolean
+  asks(phase: SetupPhase): boolean
   /**
    * @param environment - what the section may look at.
    * @returns whether the section applies on this computer.
@@ -122,6 +144,15 @@ export interface SetupSection {
    */
   review?(answers: SetupAnswers, draft?: Draft): string
   /**
+   * Whether a re-run changes nothing the section writes, so the run reports it as kept and writes nothing.
+   * A section without the method always writes.
+   * @param before - the answers the profile holds now.
+   * @param after - the answers of the run.
+   * @param typedKey - whether the run took a new model key.
+   * @returns true when the section's answer is the one the profile holds.
+   */
+  unchanged?(before: SetupAnswers, after: SetupAnswers, typedKey: boolean): boolean
+  /**
    * Make the section's writes. A run that repeats a write leaves the same values.
    * @param context - the home, profile directory and typed key.
    * @param answers - the answers.
@@ -130,7 +161,7 @@ export interface SetupSection {
   apply(context: ApplyContext, answers: SetupAnswers): Promise<string | undefined>
 }
 
-/** Where a section sits in the flow, and for which mode. */
+/** Where a section sits in the flow. */
 export interface SectionPlacement {
   /** Sections run in ascending order; ties keep registration order. */
   readonly order: number
@@ -189,19 +220,22 @@ export function withRecord(records: readonly SectionRecord[], id: string, status
 }
 
 /**
- * The record of a run that asked nothing: a section that asks nothing in Quick shows only its note, which the run
- * printed, and every other section took its default.
+ * The record of a run that asked nothing: a section that asks nothing in the main flow shows only its note, which the
+ * run printed, and every other section took its default.
  * @param sections - every registered section.
  * @returns the record.
  */
 export function unattendedRecord(sections: readonly SetupSection[]): readonly SectionRecord[] {
-  return sections.map(section => ({ id: section.id, status: section.asks('quick') ? 'skipped' : 'seen' }))
+  return sections.map(section => ({ id: section.id, status: section.asks('main') ? 'skipped' : 'seen' }))
 }
 
 /**
- * @returns true: a section that asks in every mode it runs in.
+ * @returns true: a section that asks in every phase it runs in.
  */
 const asksWhenRun = (): boolean => true
+
+/** A section's plan for every use case. */
+const samePlan = (plan: SectionPlan): Readonly<Record<SetupUseCase, SectionPlan>> => ({ local: plan, remote: plan, automation: plan })
 
 /**
  * The statements setup makes about privacy, from the Privacy section's copy.
@@ -211,77 +245,123 @@ export function statementLines(): string[] {
   return [en['statement.delo'], en['statement.optIns'], en['statement.feedback'], en['statement.updateCheck']]
 }
 
-/** The line Quick adds to the privacy note, by the release-check answer: Quick does not ask, so the line says how to reach the question before Delorun starts. */
-export const QUICK_UPDATE_CHECK_LINES: Readonly<Record<'on' | 'off', string>> = {
-  on: 'Quick setup keeps the release check on. To turn it off before Delorun first starts, choose ← Back at the next question, then Full.',
+/** The line the privacy note ends with in the main flow, by the release-check answer: the main flow does not ask, so the line says where to change it. */
+export const MAIN_UPDATE_CHECK_LINES: Readonly<Record<'on' | 'off', string>> = {
+  on: 'Delorun checks for new releases once a day. To turn that off before Delorun first starts, choose More settings on the last screen, or run delorun setup privacy later.',
   off: 'This setup turns the release check off, so Delorun makes no release check request.',
 }
 
+/** What the release-check question's choices mean. */
+const UPDATE_CHECK_TEXT: readonly ChoiceText[] = [
+  { label: `Yes${RECOMMENDED}`, lines: ['Once a day Delorun asks releases.delorun.com whether a newer version exists. You hear about security fixes.', 'Change later: delorun setup privacy.'] },
+  { label: 'No', lines: ['Delorun makes no release check request. You update by hand with npx delorun.', 'Change later: delorun setup privacy.'] },
+]
+
 /**
- * The privacy section: the note, where the two upstream opt-ins are changed, and the update check. Full, and
- * `delorun setup privacy`, ask whether to check for new releases; turned off, the check's row is disabled before
- * Delorun first starts, so no check request is made.
+ * The privacy section: the note, where the two upstream opt-ins are changed, and the update check. The main flow shows
+ * the note; "More settings", and `delorun setup privacy`, ask whether to check for new releases. Turned off, the
+ * check's row is disabled before Delorun first starts, so no check request is made.
  */
 export const privacySection: SetupSection = {
   id: 'privacy',
   title: 'Privacy',
-  mode: 'quick',
-  asks: mode => mode === 'full',
+  plan: samePlan('note'),
+  asks: phase => phase !== 'main',
   appliesTo: () => true,
   async ask(io, draft) {
-    if (draft.mode === 'quick') {
-      io.note([...statementLines(), QUICK_UPDATE_CHECK_LINES[draft.answers.updateCheck ? 'on' : 'off']].join('\n'), en.title)
+    if (draft.phase === 'main') {
+      io.note([...statementLines(), MAIN_UPDATE_CHECK_LINES[draft.answers.updateCheck ? 'on' : 'off']].join('\n'), en.title)
       return { answers: {}, status: 'seen' }
     }
-    io.note(statementLines().join('\n'), en.title)
+    if (draft.phase === 'single') io.note(statementLines().join('\n'), en.title)
+    io.note(choiceNote(UPDATE_CHECK_TEXT), 'Release check')
     const check = await io.select('Check for new releases?', [
-      { value: 'on', label: 'Yes', hint: 'once a day Delo fetches signed release files from releases.delorun.com and GitHub; it sends nothing about this installation, and those hosts see this computer\'s address' },
-      { value: 'off', label: 'No', hint: 'no release check request is made; turn it on later in Settings → General → Updates or with delorun setup privacy' },
+      { value: 'on', label: `Yes${RECOMMENDED}` },
+      { value: 'off', label: 'No' },
     ], draft.answers.updateCheck ? 'on' : 'off')
     return check === BACK ? BACK : { answers: { updateCheck: check === 'on' }, status: 'answered' }
   },
-  review: answers => `Check for new releases: ${answers.updateCheck ? 'yes' : 'no'}`,
+  review: answers => `Release check: ${answers.updateCheck ? 'on, once a day' : 'off'}`,
+  unchanged: (before, after) => before.updateCheck === after.updateCheck,
   apply(context, answers) {
     writeUpdateCheckRow(join(context.directory, 'cordis.patch.yml'), answers.updateCheck)
     return Promise.resolve(undefined)
   },
 }
 
-const PROMPT_LABELS: Readonly<Record<PromptsAnswer, string>> = { safer: 'Safer prompts', stock: 'Same as stock' }
+/** The name of each prompts answer, in the question, the review and the notes. */
+export const PROMPT_LABELS: Readonly<Record<PromptsAnswer, string>> = { safer: 'Ask me first', stock: 'Ask less (like DeepSeek Harness)', dangerous: 'Never ask (dangerous)' }
+
+/** What each prompts answer does, in the order the question lists them. */
+const PROMPTS_TEXT: readonly ChoiceText[] = [
+  { label: `${PROMPT_LABELS.safer}${RECOMMENDED}`, lines: ['Delorun asks before a chat gets full access to a folder, adds a tool server, edits its own instructions or schedules work. You can allow each once.', 'Change later: delorun setup prompts.'] },
+  { label: PROMPT_LABELS.stock, lines: ['Behaves like DeepSeek Harness: few questions, and commands still run in a sandbox.', 'Change later: delorun setup prompts.'] },
+  { label: PROMPT_LABELS.dangerous, lines: ['Any chat can switch to full access with no question, from the studio, a phone, a scheduled task or a script. You confirm twice.', 'Change later: delorun setup prompts.'] },
+]
 
 /** The prompts section: Delo's consent and permission defaults, or upstream's. */
 export const promptsSection: SetupSection = {
   id: 'prompts',
   title: 'Prompts',
-  mode: 'quick',
+  plan: samePlan('asked'),
   asks: asksWhenRun,
   appliesTo: () => true,
-  async ask(io, draft) {
-    const choice = await io.select<PromptsAnswer>('How should Delorun ask before it changes things?', [
-      { value: 'safer', label: PROMPT_LABELS.safer, hint: 'asks before giving full access or starting a new MCP server, and before instruction edits and scheduled work' },
-      { value: 'stock', label: PROMPT_LABELS.stock, hint: 'behaves as DeepSeek Harness does' },
-    ], draft.answers.prompts)
-    return choice === BACK ? BACK : { answers: { prompts: choice }, status: 'answered' }
+  async ask(io, draft, environment) {
+    for (;;) {
+      io.note(choiceNote(PROMPTS_TEXT), 'How much Delorun asks')
+      const choice = await io.select<PromptsAnswer>('How much should Delorun ask before it changes things?', [
+        { value: 'safer', label: `${PROMPT_LABELS.safer}${RECOMMENDED}` },
+        { value: 'stock', label: PROMPT_LABELS.stock },
+        { value: 'dangerous', label: PROMPT_LABELS.dangerous },
+      ], draft.answers.prompts)
+      if (choice === BACK) return BACK
+      if (choice !== 'dangerous') return { answers: { prompts: choice }, status: 'answered' }
+      // Staying on dangerous mode needs no second consent while its grant is valid.
+      if (draft.answers.prompts === 'dangerous' && environment.profileExists && await hasDangerousGrant(environment.home)) return { answers: { prompts: choice }, status: 'answered' }
+      const accepted = await askDangerousConsent(io)
+      // Back from the confirmation returns to this question, not to the one before it.
+      if (accepted === BACK) continue
+      if (!accepted) {
+        io.note(`Dangerous mode is off: it was not confirmed. Prompts stay on ${PROMPT_LABELS[draft.answers.prompts]}.`, 'Prompts')
+        // A declined consent is no answer: `seen` lets `apply` leave a grant that an earlier consent wrote, and never write one.
+        return { answers: { prompts: draft.answers.prompts }, status: 'seen' }
+      }
+      return { answers: { prompts: choice }, status: 'answered' }
+    }
   },
   review: answers => `Prompts: ${PROMPT_LABELS[answers.prompts]}`,
-  apply(context, answers) {
+  unchanged: (before, after) => before.prompts === after.prompts,
+  async apply(context, answers) {
+    refuseDangerousAsRoot(answers.prompts, 'delorun setup')
     writePromptRows(join(context.directory, 'cordis.patch.yml'), answers.prompts)
-    return Promise.resolve(undefined)
+    // The grant follows the rows, so a failed row write never leaves a grant behind; any other answer withdraws it.
+    // A `seen` record on a dangerous answer is a declined consent, which keeps the earlier answer and writes no grant.
+    if (answers.prompts !== 'dangerous') await removeDangerousGrant(context.home)
+    else if (answers.sections.find(record => record.id === 'prompts')?.status !== 'seen' && !await hasDangerousGrant(context.home)) await writeDangerousGrant(context.home)
+    return undefined
   },
 }
+
+/** What the background question's choices mean. */
+const BACKGROUND_TEXT: readonly ChoiceText[] = [
+  { label: `Yes${RECOMMENDED}`, lines: ['Delorun keeps running after you close this terminal and starts again with delorun start.', 'Change later: delorun setup background.'] },
+  { label: 'No', lines: ['Delorun stops when you close the terminal.', 'Change later: delorun setup background.'] },
+]
 
 /** The background section: whether Delorun keeps running after the terminal closes. */
 export const backgroundSection: SetupSection = {
   id: 'background',
   title: 'Background',
-  mode: 'full',
+  plan: { local: 'more', remote: 'more', automation: 'never' },
   asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft) {
+    io.note(choiceNote(BACKGROUND_TEXT), 'Running in the background')
     const keep = await io.confirm('Keep Delorun running in the background after the terminal closes?', draft.answers.background)
     return keep === BACK ? BACK : { answers: { background: keep }, status: 'answered' }
   },
   review: answers => `Keep running in the background: ${answers.background ? 'yes' : 'no'}`,
+  unchanged: (before, after) => before.background === after.background,
   // The answer is read from the answers record that setup writes at its end.
   apply: () => Promise.resolve(undefined),
 }
@@ -306,7 +386,7 @@ function nameProblem(value: string, environment: SectionEnvironment): string | u
  */
 function portProblem(value: string): string | undefined {
   const port = Number(value)
-  return /^\d{1,5}$/u.test(value) && port >= 1024 && port <= 65535 ? undefined : 'Enter a port from 1024 to 65535.'
+  return /^\d{1,5}$/u.test(value) && port >= 1024 && port <= 65535 ? undefined : 'Enter a port from 1024 to 65535; ports under 1024 need administrator rights.'
 }
 
 /** The id of the Web bundle's web server row, whose `port` the profile section sets. */
@@ -333,16 +413,18 @@ export function profileStudioPort(directory: string, command: string): number | 
 export const profileSection: SetupSection = {
   id: 'profile',
   title: 'Profile name and port',
-  mode: 'full',
+  plan: samePlan('more'),
   asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft, environment) {
     let name: string | null = draft.answers.profile.name
     if (!environment.profileExists) {
-      const entered = await io.text('Profile name', name ?? environment.profile, value => nameProblem(value, environment))
+      io.note('Keep "default" unless you want a second, separate Delorun on this computer, for example for work. The name cannot change after setup.', 'Name for this setup')
+      const entered = await io.text('Name for this setup', name ?? environment.profile, value => nameProblem(value, environment))
       if (entered === BACK) return BACK
       name = entered === environment.profile ? null : entered
     }
+    io.note('The studio runs at 127.0.0.1 on this port. 3080 is fine unless another program uses it.\nChange later: delorun setup profile.', 'Port')
     for (;;) {
       const entered = await io.text('Port for the studio', String(draft.answers.profile.port ?? SETUP_DEFAULT_PORT), portProblem)
       if (entered === BACK) return BACK
@@ -351,7 +433,8 @@ export const profileSection: SetupSection = {
       io.note(`Port ${entered} is in use on this computer. Choose another.`, 'Port')
     }
   },
-  review: answers => `Profile: ${answers.profile.name ?? 'default name'}, port ${String(answers.profile.port ?? SETUP_DEFAULT_PORT)}`,
+  review: answers => `Setup name: ${answers.profile.name ?? 'default'}, studio port ${String(answers.profile.port ?? SETUP_DEFAULT_PORT)}`,
+  unchanged: (before, after) => before.profile.port === after.profile.port,
   apply(context, answers) {
     if (answers.profile.port !== null) {
       // The patch replaces the web server row's config, so its other keys are restated from the Web bundle.

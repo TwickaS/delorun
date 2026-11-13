@@ -46,6 +46,19 @@ export const SETUP_DEFAULT_PROVIDER_ID = 'deepseek-official' as const satisfies 
 /** Environment variable that holds DeepSeek's key; each provider's own variable is in setup's provider table. */
 export const SETUP_DEFAULT_CREDENTIAL_VARIABLE = 'DEEPSEEK_API_KEY' as const
 
+/**
+ * How the person uses Delorun, the first answer of the interactive setup: `local` is the studio on this computer alone,
+ * `remote` adds a phone or another device over the person's own network, `automation` runs scripts with no studio. The
+ * answer sets the defaults and decides which questions the interactive setup asks; every other answer is stored as given.
+ */
+export const SETUP_USE_CASES = ['local', 'remote', 'automation'] as const
+
+/** One use case of {@link SETUP_USE_CASES}. */
+export type SetupUseCase = (typeof SETUP_USE_CASES)[number]
+
+/** The use case a document without one reads as, and `--yes` keeps. */
+export const SETUP_DEFAULT_USE_CASE = 'local' as const satisfies SetupUseCase
+
 /** Reach options that setup offers. The Delo relay is not among them. */
 export const REACH_OPTIONS = ['none', 'tailscale-private', 'tailscale-funnel', 'self-hosted-relay'] as const
 
@@ -69,11 +82,21 @@ export interface ReachAnswer {
   readonly identityFactor: IdentityFactor | null
 }
 
-/** The prompts answers. `safer` keeps Delo's consent and permission defaults; `stock` sets them to upstream's behaviour. */
-export const PROMPTS_OPTIONS = ['safer', 'stock'] as const
+/**
+ * The prompts answers. `safer` keeps Delo's consent and permission defaults; `stock` sets them to upstream's behaviour;
+ * `dangerous` sets them to upstream's behaviour too and makes full access available to every chat without a
+ * per-workspace consent (see {@link DANGEROUS_PHRASE}). A reader that does not know an answer reads `safer`.
+ */
+export const PROMPTS_OPTIONS = ['safer', 'stock', 'dangerous'] as const
 
 /** One prompts answer of {@link PROMPTS_OPTIONS}. */
 export type PromptsAnswer = (typeof PROMPTS_OPTIONS)[number]
+
+/**
+ * The exact text a person types at the second step of the interactive `dangerous` answer; any other entry cancels and
+ * keeps the previous answer.
+ */
+export const DANGEROUS_PHRASE = 'full access everywhere' as const
 
 /** Port the studio listens on when the person does not choose one; upstream's Web profile default. */
 export const SETUP_DEFAULT_PORT = 3080 as const
@@ -111,6 +134,8 @@ export interface ModelProviderAnswer {
 /** The answers document read by the interactive setup and by `--config`. */
 export interface SetupAnswers {
   readonly schemaVersion: typeof SETUP_ANSWERS_SCHEMA_VERSION
+  /** How the person uses Delorun; a document may leave it out, which means `local`. */
+  readonly useCase: SetupUseCase
   /** The model provider, or `null` when none was chosen: the profile then keeps its bundles' provider rows unchanged. */
   readonly modelProvider: ModelProviderAnswer | null
   readonly prompts: PromptsAnswer
@@ -128,6 +153,7 @@ export interface SetupAnswers {
 /** The value setup applies to each question the person does not answer. */
 export const SETUP_DEFAULTS = {
   schemaVersion: 4,
+  useCase: SETUP_DEFAULT_USE_CASE,
   modelProvider: { id: SETUP_DEFAULT_PROVIDER_ID, credential: { source: 'prompt' }, baseURL: null, model: null },
   prompts: 'safer',
   background: true,
@@ -137,6 +163,12 @@ export const SETUP_DEFAULTS = {
   updateCheck: true,
   sections: [],
 } as const satisfies SetupAnswers
+
+/**
+ * The key an answers record written before the use-case question may hold: the interactive setup's Quick or Full
+ * choice. Readers accept it and ignore it.
+ */
+export const LEGACY_SETUP_MODE_KEY = 'mode' as const
 
 /** Keys that earlier answers documents carried and that setup no longer asks; a document holding one is refused. */
 export const REMOVED_ANSWER_KEYS = ['studioAdditions', 'runtime', 'helpSetUpModels', 'sessionLogUpload', 'desktopAnalytics'] as const

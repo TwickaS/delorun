@@ -4,7 +4,7 @@
  * switches to full access in a workspace without a grant, the approval card's full-access action, the MCP server review,
  * the notice that a server waits, the approval card's external-agent action, and the Permissions and External agents sections with their revokes. The denial cases prove that a remote
  * studio, an unanswered consent and a stale review record nothing, that a phone sees "Approve this at your computer"
- * instead of a button, and that a profile without the consent plugins (such as one set up with "Same as stock") keeps
+ * instead of a button, and that a profile without the consent plugins (such as one set up with "Ask less (like DeepSeek Harness)") keeps
  * upstream's behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

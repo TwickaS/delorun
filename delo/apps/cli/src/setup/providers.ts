@@ -49,6 +49,8 @@ export interface SetupProvider {
   readonly keyVariable: string
   /** How setup checks a key. */
   readonly check: KeyCheckSpec
+  /** The provider's page for creating a key; `undefined` when none is named. DeepSeek, OpenAI and xAI refuse automated requests, so their addresses are the ones their documentation gives. */
+  readonly keyPage: string | undefined
   /**
    * The model the model question starts on: a current general chat model of the provider's installed catalog, or for
    * DeepSeek the profile's default; `undefined` for the custom endpoint, whose models setup does not know.
@@ -58,17 +60,17 @@ export interface SetupProvider {
 
 /** The providers setup offers, by id. Each catalog provider's endpoint is read from pi-ai's installed catalog. */
 export const SETUP_PROVIDERS: Readonly<Record<SetupProviderId, SetupProvider>> = {
-  'anthropic': { id: 'anthropic', label: 'Anthropic', adapter: 'catalog', keyVariable: 'ANTHROPIC_API_KEY', check: { kind: 'anthropic', path: '/v1/models?limit=1' }, defaultModel: 'claude-sonnet-5-5' },
-  'deepseek-official': { id: 'deepseek-official', label: 'DeepSeek', adapter: 'deepseek', keyVariable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, check: { kind: 'deepseek', path: '/models' }, defaultModel: 'deepseek-flash' },
-  'google': { id: 'google', label: 'Google Gemini', adapter: 'catalog', keyVariable: 'GEMINI_API_KEY', check: { kind: 'google', path: '/models?pageSize=1' }, defaultModel: 'gemini-3.8-flash' },
-  'groq': { id: 'groq', label: 'Groq', adapter: 'catalog', keyVariable: 'GROQ_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'openai/gpt-oss-120b' },
-  'mistral': { id: 'mistral', label: 'Mistral', adapter: 'catalog', keyVariable: 'MISTRAL_API_KEY', check: { kind: 'bearer', path: '/v1/models' }, defaultModel: 'mistral-large-latest' },
-  'moonshotai': { id: 'moonshotai', label: 'Moonshot AI', adapter: 'catalog', keyVariable: 'MOONSHOT_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'kimi-k3' },
-  'openai': { id: 'openai', label: 'OpenAI', adapter: 'catalog', keyVariable: 'OPENAI_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'gpt-6.1-sol' },
-  'openai-compatible': { id: 'openai-compatible', label: 'OpenAI-compatible endpoint', adapter: 'custom', keyVariable: 'OPENAI_COMPATIBLE_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: undefined },
-  'openrouter': { id: 'openrouter', label: 'OpenRouter', adapter: 'catalog', keyVariable: 'OPENROUTER_API_KEY', check: { kind: 'bearer', path: '/key' }, defaultModel: 'anthropic/claude-sonnet-5.5' },
-  'together': { id: 'together', label: 'Together AI', adapter: 'catalog', keyVariable: 'TOGETHER_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'Qwen/Qwen3.7-Max' },
-  'xai': { id: 'xai', label: 'xAI', adapter: 'catalog', keyVariable: 'XAI_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'grok-4.7' },
+  'anthropic': { id: 'anthropic', label: 'Anthropic', adapter: 'catalog', keyVariable: 'ANTHROPIC_API_KEY', check: { kind: 'anthropic', path: '/v1/models?limit=1' }, keyPage: 'https://platform.claude.com/settings/keys', defaultModel: 'claude-sonnet-5-5' },
+  'deepseek-official': { id: 'deepseek-official', label: 'DeepSeek', adapter: 'deepseek', keyVariable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, check: { kind: 'deepseek', path: '/models' }, keyPage: 'https://platform.deepseek.com/api_keys', defaultModel: 'deepseek-flash' },
+  'google': { id: 'google', label: 'Google Gemini', adapter: 'catalog', keyVariable: 'GEMINI_API_KEY', check: { kind: 'google', path: '/models?pageSize=1' }, keyPage: 'https://aistudio.google.com/apikey', defaultModel: 'gemini-3.8-flash' },
+  'groq': { id: 'groq', label: 'Groq', adapter: 'catalog', keyVariable: 'GROQ_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://console.groq.com/keys', defaultModel: 'openai/gpt-oss-120b' },
+  'mistral': { id: 'mistral', label: 'Mistral', adapter: 'catalog', keyVariable: 'MISTRAL_API_KEY', check: { kind: 'bearer', path: '/v1/models' }, keyPage: 'https://console.mistral.ai/api-keys', defaultModel: 'mistral-large-latest' },
+  'moonshotai': { id: 'moonshotai', label: 'Moonshot AI', adapter: 'catalog', keyVariable: 'MOONSHOT_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://platform.kimi.ai/console/api-keys', defaultModel: 'kimi-k3' },
+  'openai': { id: 'openai', label: 'OpenAI', adapter: 'catalog', keyVariable: 'OPENAI_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://platform.openai.com/api-keys', defaultModel: 'gpt-6.1-sol' },
+  'openai-compatible': { id: 'openai-compatible', label: 'OpenAI-compatible endpoint', adapter: 'custom', keyVariable: 'OPENAI_COMPATIBLE_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: undefined, defaultModel: undefined },
+  'openrouter': { id: 'openrouter', label: 'OpenRouter', adapter: 'catalog', keyVariable: 'OPENROUTER_API_KEY', check: { kind: 'bearer', path: '/key' }, keyPage: 'https://openrouter.ai/keys', defaultModel: 'anthropic/claude-sonnet-5.5' },
+  'together': { id: 'together', label: 'Together AI', adapter: 'catalog', keyVariable: 'TOGETHER_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://api.together.ai/settings/api-keys', defaultModel: 'Qwen/Qwen3.7-Max' },
+  'xai': { id: 'xai', label: 'xAI', adapter: 'catalog', keyVariable: 'XAI_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://console.x.ai', defaultModel: 'grok-4.7' },
 }
 
 /** The providers in the order setup lists them: by label, so none is placed ahead of another. */
@@ -266,4 +268,29 @@ export function routeKeyReference(patchPath: string, route: string, command: str
     : recordOf(recordOf(readPatchRow(patchPath, PROVIDER_ROW_IDS.piAi, command)?.['providers'])[route])['apiKeyEnv']
   if (typeof named === 'string' && named !== '') return named
   return isSetupProviderId(route) ? SETUP_PROVIDERS[route].keyVariable : undefined
+}
+
+/**
+ * The provider answer a profile's patch holds, as {@link writeProviderRows} writes it: the provider and model of the
+ * `agent-default-model` row, the key reference of the provider's row, and a custom endpoint's base URL. The patch
+ * cannot tell a typed key from a variable of the same name, so that choice and a patch without a model row come from
+ * the recorded answer.
+ * @param patchPath - the profile's `cordis.patch.yml`.
+ * @param recorded - the answer in the answers record, or `null` for none.
+ * @param rows - the rows as the bundle inserts them; the installed base bundle's by default.
+ * @returns the answer, or `recorded` when the patch selects no model or a provider setup does not offer.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list.
+ */
+export function readProviderAnswer(patchPath: string, recorded: ModelProviderAnswer | null, rows: ProviderRows = baseProviderRows()): ModelProviderAnswer | null {
+  if (readPatchRow(patchPath, PROVIDER_ROW_IDS.defaultModel, 'delorun setup') === undefined) return recorded
+  const selection = profileModelSelection(patchPath, 'delorun setup', rows)
+  if (!isSetupProviderId(selection.provider)) return recorded
+  const provider = SETUP_PROVIDERS[selection.provider]
+  const reference = routeKeyReference(patchPath, provider.id, 'delorun setup') ?? provider.keyVariable
+  const sameKey = recorded?.id === provider.id && credentialReference(recorded) === reference
+  const credential = sameKey ? recorded.credential : reference === provider.keyVariable ? { source: 'prompt' as const } : { source: 'environment' as const, name: reference }
+  const baseURL = provider.adapter === 'custom' ? recordOf(recordOf(readPatchRow(patchPath, PROVIDER_ROW_IDS.piAi, 'delorun setup')?.['providers'])[provider.id])['baseURL'] : undefined
+  const inherited = rows.defaultModel.config
+  const isDefault = provider.adapter === 'deepseek' && selection.provider === inherited['provider'] && selection.model === inherited['model']
+  return { id: provider.id, credential, baseURL: typeof baseURL === 'string' ? baseURL : null, model: isDefault ? null : selection.model }
 }

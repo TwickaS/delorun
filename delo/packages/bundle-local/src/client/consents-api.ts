@@ -3,7 +3,7 @@
  * pending and accepted stdio MCP servers of `@delo/plugin-mcp-consent`, through the same-origin requests of
  * [`./host-api.ts`](./host-api.ts). Each route but the waiting servers' names answers only the studio on the home's own
  * computer; a remote studio receives `LOOPBACK_REQUIRED`, and a profile whose consent switch is off, such as one set up
- * with "Same as stock", mounts no route, so the request answers 404.
+ * with "Ask less (like DeepSeek Harness)", mounts no route, so the request answers 404.
  * @module @delo/bundle-local/client/consents-api
  */
 import {

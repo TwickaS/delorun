@@ -1,5 +1,5 @@
 /**
- * Setup's `reach` section, shown in Full setup and as `delorun setup reach`: whether the studio is reachable from the
+ * Setup's `reach` section, asked in the main flow of the remote use case, under "More settings" for the others, and as `delorun setup reach`: whether the studio is reachable from the
  * person's phone over their own tailnet. Turning it on runs the Tailscale checks of `delorun reach on tailscale`, Funnel,
  * the removal of a serve rule the home would not keep and the test that the person's user may configure
  * `tailscale serve` included (`checkServeAccess`), and shows the trust statement; a check that fails leaves remote
@@ -31,11 +31,12 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
   return {
     id: 'reach',
     title: 'Remote access',
-    mode: 'full',
+    plan: { local: 'more', remote: 'asked', automation: 'never' },
     asks: () => true,
     appliesTo: () => true,
     async ask(io, draft, environment) {
-      const on = await io.confirm('Reach this studio from your phone over your own tailnet (Tailscale)?', draft.answers.reach.option === 'tailscale-private')
+      io.note('Needs Tailscale installed and signed in. Delorun turns on a private https address; a device you approve here with a code can read and reply to chats, and can never grant full access or change settings.\nChange later: delorun setup reach, or delorun reach off.', 'Phone and other devices')
+      const on = await io.confirm('Open Delorun from your phone or another device over Tailscale?', draft.answers.reach.option === 'tailscale-private' || (draft.answers.useCase === 'remote' && draft.phase !== 'single' && !environment.profileExists))
       if (on === BACK) return BACK
       if (!on) return { answers: { reach: { option: 'none', identityFactor: null } }, status: 'answered' }
       try {
@@ -52,6 +53,7 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
       io.note(TRUST_STATEMENT.join('\n'), 'Remote access')
       return { answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } }, status: 'answered' }
     },
+    unchanged: (before, after) => before.reach.option === after.reach.option,
     review: answers => `Remote access: ${answers.reach.option === 'tailscale-private' ? 'from your phone over Tailscale' : 'off'}`,
     async apply(context, answers) {
       if (answers.reach.option !== 'tailscale-private') return undefined

@@ -1,5 +1,5 @@
 ---
-description: "The Delorun user guide index: installing and first run, switching from stock DeepSeek Harness, daily use, updates, reaching the studio from a phone, customising Delorun and its changes, safety and trust, and troubleshooting."
+description: "The Delorun user guide, as a map of what you want to do: installing and first run, switching from stock DeepSeek Harness, daily use, model providers, the cost meter, updates, reaching the studio from a phone, customising Delorun and its changes, safety and trust, and troubleshooting."
 ---
 
 # Delorun user guide
@@ -8,56 +8,62 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The user guide is for people who install and use Delorun, the community fork of DeepSeek Harness, whether new to both or switching from stock DeepSeek Harness. Delorun runs on your own computer, and you can reshape it to suit how you work: plugin settings, agent presets, skills, your own plugins and Delorun's own files. Updates carry your changes, and Delorun shows what an update would change before you confirm it. Read the pages in the order below, or go straight to the one you need.
+The user guide is for people who install and use Delorun, the community fork of DeepSeek Harness, whether new to both or switching from stock DeepSeek Harness. Delorun runs on your own computer. This page is a map: find what you want to do, and follow the link to the page and section. If you are new, read [Install and first run](install.md) first, then [Daily use](daily-use.md). Technical terms link to the [glossary](../reference/glossary.md).
 
 ## Contents
 
-- [Get started](#get-started)
-- [Every day](#every-day)
-- [Make it yours](#make-it-yours)
-- [Safety and trust](#safety-and-trust)
-- [When something goes wrong](#when-something-goes-wrong)
+- [I want to get started](#i-want-to-get-started)
+- [I want to use it every day](#i-want-to-use-it-every-day)
+- [I want to choose or change the model](#i-want-to-choose-or-change-the-model)
+- [I want to reach it from my phone](#i-want-to-reach-it-from-my-phone)
+- [I want to make it mine](#i-want-to-make-it-mine)
+- [I want to know what is safe](#i-want-to-know-what-is-safe)
+- [Something went wrong](#something-went-wrong)
 - [For the technically curious](#for-the-technically-curious)
 
-## Get started
+## I want to get started
 
-[Install and first run](install.md) installs Delorun with `npx delorun`, explains what the launcher verifies before it installs a release, walks through Quick and Full setup, and opens the studio, from a machine without a browser too.
+- **Install Delorun and have a first chat:** [Install and first run](install.md). It covers what you need first, [setup by how you will use Delorun](install.md#setup-how-you-will-use-delorun), [the studio and your first chat](install.md#the-studio-and-your-first-chat) and [a computer without a browser](install.md#a-computer-without-a-browser).
+- **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](switching.md). It explains what is copied, what is held back and [how to go back](switching.md#going-back).
+- **See how Delorun differs from stock DeepSeek Harness:** [Delorun and stock DeepSeek Harness](delo-vs-stock.md). It lists every difference and what Delorun does not include.
+- **See what Delorun is for and where it is going:** [Roadmap and vision](roadmap.md). It lists the planned work in order, and what is not planned.
 
-[Switching from DeepSeek Harness](switching.md) explains what `delorun import-home` and setup copy from `~/.dsh`, what you choose one by one, what is held back or stays behind and why, what changes when you switch, the switches that return a difference to stock, and how to go back.
+## I want to use it every day
 
-[Delorun and stock DeepSeek Harness](delo-vs-stock.md) covers why Delorun exists, what stays the same as stock, every difference, what is not available yet, and the roadmap.
+- **Start, open, stop or check Delorun:** [Start, open and stop](daily-use.md#start-open-and-stop) and [Check the release and your setup](daily-use.md#check-the-release-and-your-setup).
+- **Decide what the model may change in a folder:** [Workspaces and what the model may change](daily-use.md#workspaces-and-what-the-model-may-change).
+- **Recover from a plugin that stops Delorun starting:** [Safe mode and recovery](daily-use.md#safe-mode-and-recovery).
+- **Restore a deleted chat, or move chats between homes:** [Trash, export and import](daily-use.md#trash-export-and-import).
+- **Move to a new release, or back:** [Updates](updates.md) and [Going back](updates.md#going-back).
+- **Find where my data lives, move it, or use two profiles:** [Your Delorun home](home.md).
+- **Find out why something failed:** [Where Delorun keeps its logs](logs.md).
+- **See what a chat costs:** [See what a chat costs](cost-meter.md).
 
-## Every day
+## I want to choose or change the model
 
-[Daily use](daily-use.md) covers starting, opening, stopping and checking Delorun, workspaces and what the model may change in them, safe mode and recovery, the trash and archives, and the plugin and headless commands.
+- **Pick a provider and key, or run a model on my own computer:** [Model providers](providers.md). It lists every provider setup knows and how to [change the provider later](providers.md#change-the-provider-later).
 
-[Updates](updates.md) explains the update notice, `delorun update --check` and `--report`, what the update report shows, the health check and automatic rollback, the chat-data copy when a release changes the data format, and going back with `delorun recover`.
+## I want to reach it from my phone
 
-[Reach the studio from your phone](reach.md) explains remote access over your own tailnet: turning it on, approving a device at your computer, what an approved phone can and cannot do, and removing a device.
+- **Turn on remote access, approve a device, or remove one:** [Reach the studio from your phone](reach.md).
 
-[Your Delorun home](home.md) explains where `delorun` keeps your data, how to move it, how profiles work, and how to fix a home or secret file that other users can read.
+## I want to make it mine
 
-[Where Delorun keeps its logs](logs.md) lists every operational log's location, what a log holds and never holds, how long logs are kept and how `delorun logs` shows and clears them.
+- **Choose the right way to change Delorun:** [Where to customise what](https://docs.delorun.com/guide/customise) compares settings, the profile patch, agent presets, your own plugin, a renamed fork of a shipped plugin and editing Delorun itself, with what each costs you at every update.
+- **Write a plugin:** [Write a plugin for Delo](https://docs.delorun.com/guide/plugins) goes from `delorun plugin new` to a plugin that loads in your studio.
+- **See, protect or undo changes:** [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) explains what `delorun changes` records, protection, and undo.
 
-## Make it yours
+## I want to know what is safe
 
-[Where to customise what](https://docs.delorun.com/guide/customise) compares settings, the profile patch, agent presets, your own plugin, a renamed fork of a shipped plugin and editing Delorun itself, with what each costs you at every update.
+- **Understand the sandbox, full access and the consents:** [What Delorun protects](safety.md).
+- **Understand prompt injection and what leaves my computer:** [Prompt injection and data exfiltration](prompt-injection.md).
+- **Know what I trust when I use Delorun:** [What you trust when you use Delorun](trust.md).
 
-[Write a plugin for Delo](https://docs.delorun.com/guide/plugins) goes from `delorun plugin new` to a plugin that loads in your studio.
+## Something went wrong
 
-[Changing your harness](https://docs.delorun.com/guide/changing-your-harness) explains what `delorun changes` records when a plugin or Delorun's own files change, protection, which is off by default so changes load without review and stay undoable, turning protection on, editing Delorun itself, and undo.
-
-## Safety and trust
-
-[What Delorun protects](safety.md) explains, in plain language, the sandbox and the protected home on each platform, full access, the consents, the `web_fetch` guard, release checks, and what Delorun does not protect against.
-
-[Prompt injection and data exfiltration](prompt-injection.md) names the three things an attack needs, what each workspace network setting closes for sandboxed commands and `web_fetch`, and what stays open whatever you choose.
-
-[What you trust when you use Delorun](trust.md) states what runs on your computer, what Delo Run can and cannot do, what each reach option shows its provider and what leaves your machine.
-
-## When something goes wrong
-
-[Troubleshooting](troubleshooting.md) explains how to read a refusal and lists the common refusals by code, with their fixes.
+- **A message or code I do not understand:** [Troubleshooting](troubleshooting.md). It explains [how to read a refusal](troubleshooting.md#reading-a-refusal) and lists the common ones by code, with fixes.
+- **Delorun does not start:** [Starting and stopping](troubleshooting.md#starting-and-stopping), then `delorun doctor` ([Daily use](daily-use.md#check-the-release-and-your-setup)).
+- **An update failed:** [Updates and rollback](troubleshooting.md#updates-and-rollback).
 
 ## For the technically curious
 
