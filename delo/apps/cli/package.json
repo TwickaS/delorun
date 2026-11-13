@@ -31,6 +31,7 @@
     "@delo/bundle-headless": "workspace:*",
     "@delo/bundle-local": "workspace:*",
     "@delo/bundle-studio": "workspace:*",
+    "@delo/changes": "workspace:*",
     "@delo/contract-admission": "workspace:*",
     "@delo/contract-archive-and-trash": "workspace:*",
     "@delo/contract-device-approval": "workspace:*",

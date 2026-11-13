@@ -180,7 +180,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     const resumed: SetupStep[] = []
     // The key was stored before the interruption, so a resume that asks for it again fails on the empty script.
     expect(await setup(asked([false]), {}, { afterStep: step => void resumed.push(step) })).toBe(EXIT.ok)
-    expect(resumed).toEqual([sectionStep('prompts'), sectionStep('background'), sectionStep('reach'), sectionStep('profile')])
+    expect(resumed).toEqual([sectionStep('prompts'), sectionStep('background'), sectionStep('reach'), sectionStep('changes-protection'), sectionStep('profile')])
     expect(recording.asked.filter(question => question.startsWith('secret'))).toEqual([])
     expect(lines.join('')).toContain('Resuming the setup')
 
@@ -203,7 +203,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('records every step in order when nothing interrupts', async () => {
     const steps: SetupStep[] = []
     expect(await setup({ kind: 'yes' }, undefined, { afterStep: step => void steps.push(step) })).toBe(EXIT.ok)
-    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'import', 'key', 'prompts', 'background', 'reach', 'profile'].map(sectionStep)])
+    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'import', 'key', 'prompts', 'background', 'reach', 'changes-protection', 'profile'].map(sectionStep)])
     expect(existsSync(join(runDirectory(home, PROFILE), 'setup-progress.json'))).toBe(false)
     expect(statSync(join(profileDirectory(home, PROFILE), 'setup-answers.json')).mode & 0o777).toBe(0o600)
   })
@@ -249,7 +249,7 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('update-notice-off-at-first-start: a Full setup that turns the check off has the row off in the profile the first start composes, so no check mounts', async () => {
     const atStart: { row?: ReturnType<typeof composedUpdateCheckRow> } = {}
     const run = runSetup({
-      home, profile: PROFILE, output, env: {}, form: asked(['full', 'off', 'deepseek-official', 'environment', 'deepseek-flash', 'safer', 'yes', 'no', 'default', '3080', 'save', false]),
+      home, profile: PROFILE, output, env: {}, form: asked(['full', 'off', 'deepseek-official', 'environment', 'deepseek-flash', 'safer', 'yes', 'no', 'no', 'default', '3080', 'save', false]),
       keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
       ending: { ...fakeEnding(ending), start: () => { atStart.row = composedUpdateCheckRow(); return Promise.resolve(0) } },
     })

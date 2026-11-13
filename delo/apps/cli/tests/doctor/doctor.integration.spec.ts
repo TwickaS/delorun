@@ -195,12 +195,15 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
   it('runs against an empty environment: one line per check, no crash and no key', () => {
     // Without HOME the home resolves from the account database, so the verdicts of the home and key checks depend on the machine.
     const result = doctorWithEnvironment(['--port', '1'], {})
-    const lines = (result.stdout + result.stderr).split('\n').filter(line => line !== '')
+    const all = (result.stdout + result.stderr).split('\n').filter(line => line !== '')
+    // The `changes` lines report the home's Changes; their own specs are in changes.spec.ts.
+    const lines = all.filter(line => !/^(?:pass|warn|fail) changes: /.test(line))
+    expect(all.length - lines.length).toBeGreaterThan(0)
     expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(CHECK_NAMES)
     expect(lines.find(line => line.includes(' docker: '))).toMatch(/^(?:pass|warn) docker: /)
     expect(lines.find(line => line.includes(' port: '))).toMatch(/^(?:pass|fail) port: /)
     expect(lines.find(line => / update: /.test(line))).toMatch(/^pass update: this Delo does not run from the runtime store/)
-    expect(result.status).toBe(lines.some(line => line.startsWith('fail ')) ? 1 : 0)
+    expect(result.status).toBe(all.some(line => line.startsWith('fail ')) ? 1 : 0)
     expect(result.stderr).not.toMatch(/\n\s+at /)
     expect(result.stdout + result.stderr).not.toContain('sk-')
   })

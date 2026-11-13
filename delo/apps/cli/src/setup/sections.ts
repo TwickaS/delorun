@@ -3,7 +3,8 @@
  * and the writes it produces, and the registry lists them in order. Quick runs the sections marked `quick`; Full runs
  * every section. Each section is also `delorun setup <id>`. Later packages add their sections through
  * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, the model provider and key
- * ([provider section](./provider-section.ts)), prompts, background and profile. Privacy shows the note in both modes and asks about the release check in Full.
+ * ([provider section](./provider-section.ts)), prompts, background, remote access, changes protection and profile.
+ * Privacy shows the note in both modes and asks about the release check in Full.
  *
  * @module @delo/cli/setup/sections
  */
@@ -30,6 +31,7 @@ import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
 import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
+import { CHANGES_PROTECTION_SECTION_ORDER, changesProtectionSection } from '../changes/setup-section.ts'
 
 /** The run's mode: Quick asks the `quick` sections, Full asks every section. */
 export type SetupMode = 'quick' | 'full'
@@ -384,6 +386,7 @@ export function defaultRegistry(catalog: () => Promise<ProviderCatalog> = instal
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
   registry.register(reachSection(systemTailscale(), homeRuns), { order: REACH_SECTION_ORDER })
+  registry.register(changesProtectionSection(process), { order: CHANGES_PROTECTION_SECTION_ORDER })
   registry.register(profileSection, { order: 50 })
   return registry
 }

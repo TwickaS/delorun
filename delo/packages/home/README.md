@@ -19,6 +19,7 @@ This package is the one implementation of [contract C1](../../docs/contracts/c01
 - [The home lock](#the-home-lock)
 - [The start token](#the-start-token)
 - [The token channels](#the-token-channels)
+- [Where a request arrived](#where-a-request-arrived)
 - [Not yet implemented](#not-yet-implemented)
 - [Development](#development)
 
@@ -69,6 +70,10 @@ C1's protected files are every file under `secrets/`, `trust/`, `status/` and `c
 - **Binding.** The pathname socket is bound under a temporary name in the run directory, set to mode 0600 and renamed into place, replacing an earlier start's socket; any other file at the path is refused, and a path over 103 bytes is refused with `SOCKET_PATH_TOO_LONG`. A start removes temporary sockets an earlier one left. `close()` and the synchronous `removeSocketSync()` remove the path only while it is still this listener's socket, by device and inode.
 - **Requests.** Each connection carries one request line within the channel's size limit and deadline, and a connection beyond the channel's limit is answered at once. `authenticateLine` checks the line's `token` before anything else is read, so a caller without the token learns nothing about the schema; a refused authentication is logged without the presented value at most once per interval, with a count.
 - **Responses.** A request may write progress lines before its final line; the connection closes after the final line, and a caller that has not closed its side by the first-byte deadline is cut off. A request whose caller disconnects runs on, and that connection no longer counts towards the limit. `answered` runs once the final line is written, so a request that ends the channel closes it only after its caller has the answer.
+
+## Where a request arrived
+
+`listenerOf`, `isLoopbackHost`, `loopbackAddressOf`, `isSameLoopbackOrigin` and `isForeignFetchSite` decide, from the listener stamp and the request's `Host`, `Origin` and `Sec-Fetch-Site`, whether a request reached the Host on its loopback listener under a loopback address and from the same origin, before its body is read ([C4](../../docs/contracts/c04-admission.md)). `@delo/home-auth`'s routes and `@delo/plugin-changes`' routes both decide arrival with them, so the rule has one home.
 
 ## Not yet implemented
 

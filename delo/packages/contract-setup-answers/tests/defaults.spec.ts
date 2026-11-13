@@ -23,4 +23,8 @@ describe('setup answers defaults', () => {
     expect(SETUP_PROVIDER_IDS).toContain(SETUP_DEFAULT_PROVIDER_ID)
     expect([...SETUP_PROVIDER_IDS].sort()).toEqual(SETUP_PROVIDER_IDS)
   })
+
+  it('leaves the changes protection setting as it is', () => {
+    expect(SETUP_DEFAULTS.protectChanges).toBe(false)
+  })
 })

@@ -110,7 +110,7 @@ const QUICK_SCRIPT: readonly Answer[] = ['quick', DS, 'prompt', TYPED_KEY, 'safe
 
 const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
 > Quick (the model provider and its key, and how careful prompts are)
-  Full (also the release check, background running, the profile name and the port)
+  Full (also the release check, background running, changes protection, the profile name and the port)
 = Quick
 # Privacy
   Delo has no telemetry of its own.
@@ -174,7 +174,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: TYPED_KEY } })
     expect(patchOf()).toEqual([
       { id: 'delo-permission-defaults', config: { enabled: true } },
-      { id: 'delo-instruction-consent', config: { enabled: true } },
+      { id: 'delo-instruction-consent', config: { enabled: true, approvedPluginWrites: true } },
       { id: 'delo-mcp-consent', config: { enabled: true } },
       { id: 'delo-schedule-consent', config: { enabled: true } },
     ])
@@ -185,6 +185,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
       { id: 'prompts', status: 'answered' },
       { id: 'background', status: 'skipped' },
       { id: 'reach', status: 'skipped' },
+      { id: 'changes-protection', status: 'skipped' },
       { id: 'profile', status: 'skipped' },
     ])
     expect(ending.spawned).toEqual(['npm install -g delorun@0.1.0'])
@@ -202,14 +203,15 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     }
     expect(Object.fromEntries(byId)).toEqual({
       'delo-permission-defaults': { enabled: parityOf('permission_defaults') },
-      'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent') },
+      'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent'), approvedPluginWrites: parityOf('approved_plugin_write_consent') },
       'delo-mcp-consent': { enabled: parityOf('mcp_add_consent') },
       'delo-schedule-consent': { enabled: parityOf('scheduled_task_consent') },
     })
-    expect([...byId.values()].every(config => config['enabled'] === false)).toBe(true)
+    expect([...byId.values()].every(config => Object.values(config).every(value => value === false))).toBe(true)
     expect(byId.has('delo-fetch-guard')).toBe(false)
     // The external-agent consent is the person's switch in Settings: the stock answer leaves its row alone.
     expect(byId.has('delo-delegation-consent')).toBe(false)
+    expect(byId.has('delo-plugin-changes')).toBe(false)
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })
 
@@ -254,7 +256,7 @@ describe('the way back', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('lets the mode change after two steps back', async () => {
-    expect(await interactive(['quick', DS, 'environment', BACK_CHOICE, BACK_CHOICE, 'full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['quick', DS, 'environment', BACK_CHOICE, BACK_CHOICE, 'full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(recordOf().sections.find(record => record.id === 'profile')?.status).toBe('answered')
   })
 
@@ -347,7 +349,7 @@ describe('the key check', { timeout: TIMEOUT_MS }, () => {
 
 const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
 > Quick (the model provider and its key, and how careful prompts are)
-  Full (also the release check, background running, the profile name and the port)
+  Full (also the release check, background running, changes protection, the profile name and the port)
 = Full
 # Privacy
   Delo has no telemetry of its own.
@@ -399,6 +401,13 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
 > No
   ← Back
 = No
+# Changes protection
+  Off by default: changes load at once and are recorded, so you can undo them with delorun changes list.
+? Hold changes to your plugins and to Delo itself for your review before they load?
+  Yes
+> No
+  ← Back
+= No
 ? Profile name (leave empty to go back) [default]
 = work
 ? Port for the studio (leave empty to go back) [3080]
@@ -410,6 +419,7 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
   Prompts: Safer prompts
   Keep running in the background: no
   Remote access: off
+  Changes protection: unchanged
   Profile: work, port 4100
 ? Save these answers and set up Delorun?
 > Save and set up
@@ -426,9 +436,9 @@ Studio: http://127.0.0.1:4100/ (opened in your browser)
   delorun stop --profile work`
 
 describe('Full setup', { timeout: TIMEOUT_MS }, () => {
-  const FULL_SCRIPT: readonly Answer[] = ['full', 'on', DS, 'environment', MODEL, 'safer', 'no', 'no', 'work', '4100', 'save', true]
+  const FULL_SCRIPT: readonly Answer[] = ['full', 'on', DS, 'environment', MODEL, 'safer', 'no', 'no', 'no', 'work', '4100', 'save', true]
 
-  it('asks the background and profile sections after Quick\'s, and shows them on the review', async () => {
+  it('asks the background, remote access, changes protection and profile sections after Quick\'s, and shows them on the review', async () => {
     expect(await interactive(FULL_SCRIPT, { behaviour: { address: 'http://127.0.0.1:4100/' } })).toBe(EXIT.ok)
     expect(screen()).toBe(FULL_TRANSCRIPT)
   })
@@ -438,7 +448,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     expect(hasCliProfile(home, 'work')).toBe(true)
     expect(hasCliProfile(home, PROFILE)).toBe(false)
     expect(patchOf('work')).toContainEqual({ id: 'webserver', config: { host: '127.0.0.1', port: 4100, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
-    expect(recordOf('work').sections.map(record => record.status)).toEqual(['answered', 'skipped', 'answered', 'answered', 'answered', 'answered', 'answered'])
+    expect(recordOf('work').sections.map(record => record.status)).toEqual(['answered', 'skipped', 'answered', 'answered', 'answered', 'answered', 'answered', 'answered'])
     expect(readBackgroundAnswer(profileDirectory(home, 'work'))).toBe(false)
     expect(ending.started).toEqual(['foreground'])
     expect(ending.opened).toBe(1)
@@ -448,7 +458,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('keeps the default profile name and port without writing a port row', async () => {
-    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(patchOf().map(row => row.id)).not.toContain('webserver')
     expect(recordOf().profile).toEqual({ name: null, port: null })
     expect(ending.started).toEqual(['background'])
@@ -458,7 +468,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     mkdirSync(profileDirectory(home, 'taken'), { recursive: true })
     writeFileSync(join(profileDirectory(home, 'taken'), 'package.json'), '{}\n')
     const portIsFree = (port: number): Promise<boolean> => Promise.resolve(port !== 4100)
-    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'taken', 'desktop', 'headless', 'a/b', 'work', '80', '4100', '4101', 'save', false], { portIsFree })).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'no', 'taken', 'desktop', 'headless', 'a/b', 'work', '80', '4100', '4101', 'save', false], { portIsFree })).toBe(EXIT.ok)
     expect(screen()).toContain('! A profile named taken already exists.')
     expect(screen()).toContain('! Choose another name: "desktop" is reserved: it is the desktop app\'s own profile, which only the desktop app runs or changes.')
     expect(screen()).toContain('! Choose another name: "headless" is reserved: it is the profile `delorun headless` boots')
@@ -469,7 +479,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('goes back from the profile section to the background question', async () => {
-    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'work', '', BACK_CHOICE, 'no', 'no', 'other', '4200', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'no', 'work', '', BACK_CHOICE, BACK_CHOICE, 'no', 'no', 'no', 'other', '4200', 'save', false])).toBe(EXIT.ok)
     expect(recordOf('other').profile).toEqual({ name: 'other', port: 4200 })
     expect(recordOf('other').background).toBe(false)
   })
@@ -530,13 +540,14 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
   it('lists the sections with the modes that ask them', () => {
     expect(sectionList(defaultRegistry())).toBe([
       'Sections (delorun setup <section> runs one again):',
-      '  privacy     Privacy (Quick and Full)',
-      '  import      Import a DeepSeek Harness home (Quick and Full)',
-      '  key         Model provider and key (Quick and Full)',
-      '  prompts     Prompts (Quick and Full)',
-      '  background  Background (Full)',
-      '  reach       Remote access (Full)',
-      '  profile     Profile name and port (Full)',
+      '  privacy             Privacy (Quick and Full)',
+      '  import              Import a DeepSeek Harness home (Quick and Full)',
+      '  key                 Model provider and key (Quick and Full)',
+      '  prompts             Prompts (Quick and Full)',
+      '  background          Background (Full)',
+      '  reach               Remote access (Full)',
+      '  changes-protection  Changes protection (Full)',
+      '  profile             Profile name and port (Full)',
       '',
     ].join('\n'))
   })
@@ -636,7 +647,7 @@ describe('the section registry', () => {
     }, { order: 16 })
     expect(await interactive(['quick', 'yes', DS, 'environment', 'safer', 'save', false], { registry })).toBe(EXIT.ok)
     expect(recording.asked.slice(0, 3)).toEqual(['select: How do you want to set up Delorun?', 'select: Example question?', 'select: Which model provider should Delorun use?'])
-    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'import', 'example', 'key', 'prompts', 'background', 'reach', 'profile'])
+    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'import', 'example', 'key', 'prompts', 'background', 'reach', 'changes-protection', 'profile'])
     expect(screen()).toContain('  Example: yes')
   })
 })
@@ -663,6 +674,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
       { id: 'prompts', status: 'skipped' },
       { id: 'background', status: 'skipped' },
       { id: 'reach', status: 'skipped' },
+      { id: 'changes-protection', status: 'skipped' },
       { id: 'profile', status: 'skipped' },
     ])
     expect(screen()).toContain('Run delorun to start Delo and open the studio.')
@@ -807,7 +819,7 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
 
 describe('the way back inside the full sections', { timeout: TIMEOUT_MS }, () => {
   it('returns from the background question to the prompts question, and from the name to the background question', async () => {
-    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', BACK_CHOICE, 'stock', 'yes', 'no', '', BACK_CHOICE, 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', 'on', DS, 'environment', MODEL, 'safer', BACK_CHOICE, 'stock', 'yes', 'no', 'no', '', BACK_CHOICE, BACK_CHOICE, 'no', 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(recordOf().prompts).toBe('stock')
     expect(recordOf().background).toBe(false)
   })
@@ -818,14 +830,14 @@ describe('the release check', { timeout: TIMEOUT_MS }, () => {
   const OFF_ROW = { id: 'delo-update-check', name: '@delo/bundle-local/update-check', config: { intervalHours: 24, timeoutSeconds: 15, enabled: false } }
 
   it('Full asks whether to check, and No writes the row off as Settings → General → Updates would and shows it on the review', async () => {
-    expect(await interactive(['full', 'off', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', 'off', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(patchOf()).toContainEqual(OFF_ROW)
     expect(recordOf()).toMatchObject({ schemaVersion: 4, updateCheck: false })
     expect(screen()).toContain('# Review\n  Setup: Full\n  Check for new releases: no\n')
   })
 
   it('Yes, the default, writes no row, and the way back leads from the key question to the release check and from it to the mode', async () => {
-    expect(await interactive(['full', BACK_CHOICE, 'full', 'off', BACK_CHOICE, 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
+    expect(await interactive(['full', BACK_CHOICE, 'full', 'off', BACK_CHOICE, 'on', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'no', 'default', '3080', 'save', false])).toBe(EXIT.ok)
     expect(recording.asked.filter(question => question === 'select: How do you want to set up Delorun?')).toHaveLength(2)
     expect(recording.asked.filter(question => question === 'select: Check for new releases?')).toHaveLength(3)
     expect(patchOf().map(row => row.id)).not.toContain('delo-update-check')
@@ -861,7 +873,7 @@ describe('the release check', { timeout: TIMEOUT_MS }, () => {
     expect(patchOf()).toContainEqual(OFF_ROW)
     rmSync(profileDirectory(home, PROFILE), { recursive: true })
     recording.screen.length = 0
-    expect(await interactive(['full', 'off', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'default', '3080', 'save', false], { noUpdateCheck: true })).toBe(EXIT.ok)
+    expect(await interactive(['full', 'off', DS, 'environment', MODEL, 'safer', 'yes', 'no', 'no', 'default', '3080', 'save', false], { noUpdateCheck: true })).toBe(EXIT.ok)
     expect(screen()).toContain('  Yes (once a day')
     expect(screen()).toContain('> No (no release check request is made')
     for (const form of [{ kind: 'yes' }, { kind: 'config', path: join(osHome, 'on.json') }] as const) {

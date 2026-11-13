@@ -14,9 +14,9 @@ Setup answers are what `delorun setup` asks, the schema that stores each answer,
 <a id="status"></a>
 ## Status
 
-`delorun setup` with its Quick and Full flows, the `--yes` and `--config` forms and the profile writes below are built; the stock-home `import` section and the `reach` section for Tailscale on the person's own tailnet are built too; the other reach options, the passkey and OIDC identity factors and the runtime section are not, and the opt-ins stay off only in the CLI profile.
+`delorun setup` with its Quick and Full flows, the `--yes` and `--config` forms and the profile writes below are built; the stock-home `import` section, the `reach` section for Tailscale on the person's own tailnet and the `changes-protection` section are built too; the other reach options, the passkey and OIDC identity factors and the runtime section are not, and the opt-ins stay off only in the CLI profile.
 
-- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`, where `reach` offers only `none` or `tailscale-private` with the factor `tailnet-membership`; the eleven model providers of [Model providers](#model-providers), each with its live key check and its profile rows; the schema with its refusals of removed keys, of a provider setup does not offer, of a model the provider's installed catalog does not list, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile; the `updateCheck` answer, which Full setup asks and `delorun setup privacy` changes, written as the `delo-update-check` row's switch before the first start.
+- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background`, `reach`, `changes-protection` and `profile`, where `reach` offers only `none` or `tailscale-private` with the factor `tailnet-membership`; the eleven model providers of [Model providers](#model-providers), each with its live key check and its profile rows; the schema with its refusals of removed keys, of a provider setup does not offer, of a model the provider's installed catalog does not list, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile; the `updateCheck` answer, which Full setup asks and `delorun setup privacy` changes, written as the `delo-update-check` row's switch before the first start.
 - **Not built:** the reach options `tailscale-funnel` and `self-hosted-relay`, the `passkey`, `oidc` and `tailnet` identity factors and the enrolment request; the runtime section; the feedback dialog and its send, because the CLI profile disables upstream's feedback rows, while setup's privacy note still prints the feedback statement; the rule that a failed key check's reason is not printed, because setup prints it (the reason names the origin and the HTTP status and holds no part of the key).
 - **Not reached by Delo's writes:** `delorun headless` runs upstream's headless profile, which carries none of these writes, so DeepSeek's session-log upload is on there by upstream's default and the requirement that the opt-ins are off does not hold for it.
 
@@ -56,6 +56,7 @@ The first screen asks for **Quick** (preselected) or **Full**. Each topic is a r
 | `prompts` | Quick | Safer prompts or Same as stock. |
 | `background` | Full | Whether Delorun keeps running after the terminal closes. |
 | `reach` | Full | Whether the studio is reachable from the person's phone over their own tailnet. A yes runs the Tailscale checks of `delorun reach on tailscale`, Funnel included, and shows the trust statement; a failed check leaves remote access off and names what to fix. Applying it writes the reach row with a fixed listener port. |
+| `changes-protection` | Full | Shows one line on what changes protection ([C21](c21-changes.md)) means at its current setting, then asks whether changes to the person's plugins and to Delo itself wait for their review before they load. |
 | `profile` | Full | The profile's name and the studio's port. |
 
 Every question after the first can return to the one before it: a select or yes-or-no question offers "← Back", and a text or key question takes an empty entry as "go back". A review screen lists the answers before anything is written.
@@ -78,6 +79,7 @@ Setup asks these questions, in this order. The default applies when the person a
 | Prompts | `prompts` | Safer prompts, or Same as stock. | Safer prompts |
 | Keep running in the background | `background` | Yes or no. | Yes |
 | Reach this studio from your phone over your own tailnet (Tailscale)? | `reach` | Yes or no. | No |
+| Hold changes to your plugins and to Delo itself for your review before they load? | `changes-protection` | Yes or no. No leaves the home's setting as it is, and setup never turns protection off. | No; yes when protection is already on. |
 | Profile name and port | `profile` | A profile name and a free port from 1024 to 65535. | The selected profile, and 3080. |
 
 Reach beyond the person's tailnet, a passkey or OIDC identity factor and the runtime are not asked yet; their packages add them. Setup reads a stock home only to copy from it, and never modifies it. Setup's import copies the data alone: no profile, settings layer, instructions, skill or stored key, which can change what Delo runs or what the agent is told; `delorun import-home` copies each of those after its own yes.
@@ -123,6 +125,7 @@ An answers document is a JSON object with the fields below. The same schema is u
   "profile": { "name": null, "port": null },
   "reach": { "option": "none", "identityFactor": null },
   "importStockHome": false,
+  "protectChanges": false,
   "updateCheck": true,
   "sections": [{ "id": "privacy", "status": "seen" }, { "id": "key", "status": "answered" }]
 }
@@ -143,6 +146,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 | `reach.option` | `none`, `tailscale-private`, `tailscale-funnel` or `self-hosted-relay`. | `none` | Any value other than `none` is accepted only in the interactive form. |
 | `reach.identityFactor` | `passkey`, `oidc`, `tailnet`, `tailnet-membership` or `null`. | `null` | `null` when the option is `none`. The built `reach` section records `tailnet-membership` for `tailscale-private`. `passkey` or `oidc` for `tailscale-funnel` and `self-hosted-relay`. `passkey`, `oidc` or `tailnet` for `tailscale-private`. `tailnet` is available only under C7's socket variant ([C7](c07-reach-providers.md#tailscale-serve-target)); otherwise setup refuses it with `TAILNET_IDENTITY_UNAVAILABLE`. `passkey` on a `ts.net` address is available only where C14 makes passkeys available there ([C14](c14-oidc-passkeys.md#relying-party-ids)); otherwise setup refuses it with `PASSKEY_UNAVAILABLE`. |
 | `importStockHome` | Boolean. | `false` | Set by the import section. `--config` refuses `true`, because the import shows its preview before it asks. |
+| `protectChanges` | Boolean. | `false` | Set by the `changes-protection` section; an absent field reads as `false`. `--config` refuses `true`, because only a terminal proof changes the protection setting ([C21](c21-changes.md)). |
 | `updateCheck` | Boolean; optional. | `true` | Whether Delo checks the release channel for a newer release. `--no-update-check` sets it to `false` for a whole setup run in every form; `delorun setup <section>` refuses it, and `delorun setup privacy` asks the question instead. |
 | `sections` | A list of `{ "id", "status" }`, in flow order. | `[]` | Written by setup, never by a document. `seen` is a note shown, `answered` a question answered, `skipped` a section that took its default without being asked. The studio's onboarding leaves out what the terminal covered. |
 
@@ -159,13 +163,14 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | --- | --- | --- |
 | `modelProvider` | A typed key goes to upstream's credential store, `.credentials.yaml` under the home, at mode 0600, under the provider's key variable. A key read from the environment is stored nowhere. | The home. |
 | `modelProvider` | The rows in the form Settings → Models and the model picker save them: DeepSeek with `DEEPSEEK_API_KEY` and the profile's default model writes no row, as stock DeepSeek Harness composes the profile; another variable sets `apiKeyEnv` on `llm-deepseek`. A pi-ai provider sets its route under `llm-pi-ai`'s `providers`, keeping the routes already there: `apiKeyEnv` for a catalog route, and also `displayName`, `api: openai-completions`, `baseURL` and the model in `models` for `openai-compatible`. A named model sets `agent-default-model` to the provider and model without a reasoning effort. `null` writes none of these rows. | The profile's `cordis.patch.yml`. |
-| `prompts` | `config.enabled` of the rows `delo-permission-defaults`, `delo-instruction-consent`, `delo-mcp-consent` and `delo-schedule-consent`, set to each switch's Delo default (`safer`) or parity value (`stock`) in contract C16's registry. With `safer` the person allows a workspace's full access, and a new stdio MCP server, at the home's computer: in the studio's Settings, Permissions, or with `delorun workspace full-access` and `delorun mcp`; with `stock` neither consent is mounted and those surfaces say the profile does not ask. The fetch guard is a refusal, not a prompt, and no answer changes it; nor does any answer change the external-agent consent (`delo-delegation-consent`), which the person switches in Settings, Permissions. | The profile's `cordis.patch.yml`. |
+| `prompts` | `config.enabled` of the rows `delo-permission-defaults`, `delo-instruction-consent`, `delo-mcp-consent` and `delo-schedule-consent`, and `config.approvedPluginWrites` of `delo-instruction-consent`, set to each switch's Delo default (`safer`) or parity value (`stock`) in contract C16's registry. With `safer` the person allows a workspace's full access, and a new stdio MCP server, at the home's computer: in the studio's Settings, Permissions, or with `delorun workspace full-access` and `delorun mcp`; with `stock` neither consent is mounted and those surfaces say the profile does not ask. The fetch guard is a refusal and the plugin changes held for review are no prompt, so no answer changes either; nor does any answer change the external-agent consent (`delo-delegation-consent`), which the person switches in Settings, Permissions. | The profile's `cordis.patch.yml`. |
 | `background` | Recorded in the answers record `setup-answers.json`; the start commands read it. | The profile directory. |
 | `profile.name` | The CLI profile is created under this name. | The home. |
 | `profile.port` | The `webserver` row with the port, restating the Web bundle's other keys. Not written for the default port. | The profile's `cordis.patch.yml`. |
 | `reach.option` | The reach rows of the reach contracts. `none` writes none. | The profile. Written only in the interactive form. |
 | `reach.identityFactor` | An enrolment request for the reach address. No config row. | Home-auth state, under the identity contracts. |
 | `importStockHome` | The data of the stock-home import of [C8](c08-archive-and-trash.md#the-stock-home-import): exactly the plan the section's preview showed, under the home lock of every profile. A stock file that changed since, a Delo home that gained a chat since, or a run that did not show the preview refuses it. | The home. |
+| `protectChanges` | `true` writes `changes/protection.json` with the level `on`, at mode 0600 under a 0700 `changes/`, through the terminal proof `delorun changes protection on` uses, taken from setup's own standard input and output. Nothing is written when protection is already on or the answer is `false`. When either stream is not a terminal, setup stops before the write and names how to finish: `delorun setup` in a terminal resumes the step, or `delorun changes protection on` turns it on. | The home. |
 | `updateCheck` | `false` writes the `delo-update-check` row as Settings → General → Updates saves it: its id, its plugin name and the bundle's config with `enabled: false`. `true` leaves no config on that row, so the bundle's `enabled: true` applies. | The profile's `cordis.patch.yml`, before Delorun first starts. |
 | `sections` | Recorded in `setup-answers.json`. | The profile directory. |
 
@@ -176,7 +181,7 @@ Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In u
 
 `--yes` accepts every default but the provider, and applies no answer other than the defaults, the provider flags and `--no-update-check`. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
 
-`--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`; its provider is the one `modelProvider` names, and the provider flags are refused beside it; `--no-update-check` turns the release check off whatever the document says. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` is `true`. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
+`--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`; its provider is the one `modelProvider` names, and the provider flags are refused beside it; `--no-update-check` turns the release check off whatever the document says. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` or `protectChanges` is `true`. Neither form changes the protection setting. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
 
 For identical answers, the interactive form and the `--yes` or `--config` form write identical profile files.
 
@@ -215,6 +220,7 @@ A new upstream opt-in is added as a question with a default of off, in the same 
 Requirements:
 
 - `--yes` and `--config` never enable reach or credential forwarding.
+- Setup changes the protection setting only with a terminal proof, and only to turn it on.
 - Upstream's opt-ins are not asked by setup and are off by default. They take effect only when the person turns them on on the consent screen.
 - The live key check sends the key to the provider's origin only, and neither the key nor a check's reason is printed or logged.
 - Delo sends no telemetry of its own.
@@ -228,6 +234,8 @@ Denial tests:
 | `yes run leaves reach and credential forwarding off` | After `--yes`, the profile contains no reach row and no forwarding row. |
 | `config file cannot enable reach` | A document whose `reach.option` is not `none` is refused with a typed error that names `reach.option`. |
 | `refuses a document that asks for the stock-home import, which shows its preview in a terminal first` | A document whose `importStockHome` is `true` is refused with a typed error that names the field. |
+| `refuses a document that turns changes protection on, which only a terminal changes, and reads an absent answer as no` | A document whose `protectChanges` is `true` is refused with a typed error that names the field. |
+| `stops a yes before it writes, naming how to finish, and a run at a terminal resumes it` | A yes whose standard output is not a terminal writes no protection record. |
 | `config file with a removed key is refused` | A document that carries a removed key is refused with a typed error that names the removed keys and no value. |
 | `config file carrying a credential value is refused` | A document with a credential value in any field is refused, and the value is not echoed. |
 | `live key check sends the key to the provider origin only` | For every provider, the check's request goes to one origin, with redirects refused, and the key is in no URL, message or output; a redirect to another origin fails, and that origin receives nothing. |
@@ -256,7 +264,7 @@ Acceptance tests:
 
 - The answers schema version is `4`; setup also reads versions 2 and 3.
 - The provider question starts on `deepseek-official` in a terminal, and `--yes` sets up no provider unless `--provider` names one.
-- The defaults are safer prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
+- The defaults are safer prompts, background running on, port 3080, `none` for reach, no change to changes protection, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
 - Each provider's key variable is the one [Model providers](#model-providers) lists; DeepSeek's is `DEEPSEEK_API_KEY`.
 - The reach options of setup are `none`, `tailscale-private`, `tailscale-funnel` and `self-hosted-relay`.
 - The feedback send is not an answer, and setup states it.

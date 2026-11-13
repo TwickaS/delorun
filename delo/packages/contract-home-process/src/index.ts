@@ -337,6 +337,18 @@ export interface ReachOptionStatus {
 }
 
 /**
+ * The `changes.reload` request: the running Host loads what the profile's files now name, through upstream's hot
+ * reload. It carries nothing and changes no file; `delorun changes` sends it after it changed the profile's files.
+ */
+export interface ChangesReloadRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'changes.reload'
+}
+
+/** What the Host answered to `changes.reload`: loaded, or why not. */
+export type ChangesReloadOutcome = { readonly ok: true } | { readonly ok: false, readonly error: string }
+
+/**
  * Every request the update channel accepts. No request carries a path, an archive or a URL the home process opens or
  * fetches, or a command it runs; `mcp.revoke` names an accepted start only by its acceptance id.
  */
@@ -358,6 +370,7 @@ export type UpdateChannelRequest =
   | McpRevokeRequest
   | ReachStatusRequest
   | ReachApplyRequest
+  | ChangesReloadRequest
 
 /** Error codes of this contract. */
 export type HomeProcessErrorCode =
@@ -375,6 +388,9 @@ export type HomeProcessErrorCode =
   | 'VERIFY_FAILED'
   | 'CHANNEL_UNREACHABLE'
   | 'GIT_UNAVAILABLE'
+  | 'HARNESS_CHANGES_PENDING'
+  | 'HARNESS_COPY_UNREADABLE'
+  | 'HARNESS_REPORT_STALE'
   | 'NO_PREVIOUS'
   | 'NO_UPDATE_RECORD'
   | 'DATA_COPY_NO_SPACE'
@@ -444,6 +460,7 @@ export type UpdateChannelResponse =
   | { readonly ok: true, readonly reportId: string, readonly report: unknown }
   | { readonly ok: true, readonly outcome: UpdateOutcome, readonly reason?: HomeProcessErrorCode }
   | { readonly ok: true, readonly options: readonly ReachOptionStatus[] }
+  | { readonly ok: true, readonly reload: ChangesReloadOutcome }
   | { readonly ok: false, readonly error: HomeProcessErrorCode }
 
 /** What C3's health check holds an update's target to, from the update report, as the update record keeps it. */

@@ -20,7 +20,7 @@
  * records. The address a loopback claim records is the listener's own origin rather than the spelling the claim
  * happened to use, because a device is trusted on exactly one address (C5, "Binding to an address").
  *
- * @module @delo/home-auth/arrival
+ * @module @delo/home/arrival
  */
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { LOOPBACK_LISTENER_ADDRESS, type ListenerId, type StudioAddress } from '@delo/contract-admission'

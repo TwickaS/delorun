@@ -9,7 +9,7 @@ import { FSWatcher, watch, type ChokidarOptions } from 'chokidar'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import {
-  readProfileManifest, readProfilePatches, recomposeProfile, PROFILE_PATCH_FILENAME, type RuntimeResolution,
+  readProfileManifest, readProfilePatches, recomposeProfile, PROFILE_PATCH_FILENAME, type ProfileContext, type RuntimeResolution,
 } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-cmdline'
 import { handleError } from './error.ts'
@@ -25,6 +25,8 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Serialized plugin-code and configuration reloads. */
     hmr: Hmr
+    /** The distribution's check before each profile recomposition, which {@link Hmr.reconcileProfile} awaits; optional. */
+    profileReconcileCheck: ProfileReconcileCheck
   }
 
   interface Events {
@@ -50,6 +52,22 @@ function canonicalPath(filename: string): string {
     if (parent === filename) throw error
     return resolve(canonicalPath(parent), basename(filename))
   }
+}
+
+/**
+ * A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck`
+ * service. It runs inside {@link Hmr.runExclusive}, before any running plugin stops or any module is evicted, so it may
+ * rewrite the profile's files the recomposition reads; a caller such as the plugin manager may hold the profile's
+ * `package.json` file lock at that moment, so the check must not wait for that lock while its own process holds it.
+ */
+export interface ProfileReconcileCheck {
+  /**
+   * Check, and prepare, the profile's files before HMR recomposes the profile from them.
+   * @param profile The profile about to be recomposed.
+   * @throws Any error to refuse the recomposition: nothing stops, nothing loads, and {@link Hmr.reconcileProfile}
+   * rejects with that error.
+   */
+  check(profile: ProfileContext): Promise<void>
 }
 
 /** Module roots and watcher timing, with Chokidar deployment options. */
@@ -916,7 +934,9 @@ class Hmr extends Service {
 
   /**
    * Recompose the profile from its manifest and patch files, replacing running plugins whose loaded files below the
-   * profile directory or its linked package targets changed on disk, and publishing its runtime resolution. Changed
+   * profile directory or its linked package targets changed on disk, and publishing its runtime resolution. The
+   * distribution's {@link ProfileReconcileCheck}, when one is provided, runs first and refuses the recomposition by
+   * throwing before anything stops. Changed
    * modules are evicted and the Loader entries running them stop; app-boot's {@link recomposeProfile} then publishes the
    * resolution, applies the generation, starts the stopped entries with the current files and configuration,
    * imports entries whose import failed again, and judges activation. Afterwards the modules below the mappings the
@@ -925,12 +945,14 @@ class Hmr extends Service {
    * @param requiredIds Entry ids whose inactive state is reported as a failure even when it predates this call.
    * @returns Inactive-entry diagnostics, the changed modules that load after a restart, and a profile-wide restart reason.
    * @throws The patch read, publication, preparation, apply, or activation failure of the recomposition, including a
-   * replacement plugin that fails to load or start, whose previous code no longer runs.
+   * replacement plugin that fails to load or start, whose previous code no longer runs; the distribution check's
+   * refusal, with everything still running.
    */
   async reconcileProfile(requiredIds: readonly string[] = []): Promise<ProfileReconciliation> {
     if (this.executing.getStore() !== true) throw new Error('HMR profile reconciliation must run inside runExclusive')
     const profile = this.ownerContext.get('profileContext')
     if (profile === undefined) throw new Error('HMR profile reconciliation requires profileContext')
+    await this.ownerContext.get('profileReconcileCheck')?.check(profile)
     // Entries this recomposition stops start again, and fail it when they cannot.
     const running = [...this.ctx.loader.entries()].filter(entry => entry.fiber?.state === FiberState.ACTIVE)
     // Read while the packages are still on disk, so a removed link's target is known in its real spellings.

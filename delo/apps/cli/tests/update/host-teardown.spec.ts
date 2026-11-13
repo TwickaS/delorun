@@ -35,7 +35,7 @@ function slowProfile(): { readonly booted: BootedProfile, readonly exits: number
   }
   const shutdown = createProcessShutdown(dispose, (code) => { exits.push(code) }, () => undefined)
   return {
-    booted: { configSchemas: () => [], settleSecretValues: () => Promise.resolve({ moved: [], notices: [] }), rows: () => [], providerOf: () => undefined, releaseTurns: () => undefined, shutdown: code => shutdown.shutdown(code), dispose, watchChats: () => undefined, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) },
+    booted: { configSchemas: () => [], settleSecretValues: () => Promise.resolve({ moved: [], notices: [] }), rows: () => [], providerOf: () => undefined, releaseTurns: () => undefined, shutdown: code => shutdown.shutdown(code), dispose, watchChats: () => undefined, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), reload: async () => Promise.resolve({ ok: true }) },
     exits,
     disposed: () => disposed,
   }
@@ -46,7 +46,7 @@ describe('a Host whose teardown takes 8 seconds', () => {
     home = mkdtempSync(join(tmpdir(), 'delo-host-teardown-'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { booted, exits, disposed } = slowProfile()
-    const host = runningHost(booted, { home, profile: 'default' }, [], async () => undefined)
+    const host = runningHost(booted, { home, profile: 'default' }, [], async () => undefined, async () => undefined)
     let suspended = false
     const suspending = host.suspend().then(() => { suspended = true })
     await vi.advanceTimersByTimeAsync(7_999)

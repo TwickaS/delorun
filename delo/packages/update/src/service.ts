@@ -2,7 +2,8 @@
  * The report as a service of a Delo process: `ctx.updateReport` reads the profile, the staged target and both
  * installations' status records from {@link ReportSources} and returns C3's report with the plugin ids the health check
  * holds the target to. It is the `UpdateReporter` the runtime store's `prepare` and `reportRollback` call
- * (`delo/packages/runtime-store/src/seam.ts`), whose seam passes a version and receives `{ report, health, dataDiffers }`.
+ * (`delo/packages/runtime-store/src/seam.ts`), whose seam passes a version and the report's purpose and receives
+ * `{ report, health, dataDiffers }`.
  *
  * The service owns no reader and no clock: the caller passes the sources, so a spec answers from fixtures and the
  * launcher's real reads stay behind their owner. One report is built at a time, and a second request for the version
@@ -19,6 +20,7 @@ import type { Installation, ReportVersions, UpdateReport } from '@delo/contract-
 import { UpdateReportError } from './errors.ts'
 import type { DataFacts } from './data-formats.ts'
 import type { InstallationStatusFacts, ProfileFacts, ReportInput, TargetFacts } from './facts.ts'
+import type { HarnessFact } from './harness-items.ts'
 import { predictBundleList } from './items.ts'
 import { buildUpdateReport, disabledPluginNames } from './report.ts'
 
@@ -28,6 +30,12 @@ declare module '@deepseek-ai/cordis' {
     updateReport: UpdateReportService
   }
 }
+
+/**
+ * What a report is for: `update` for an update's prepare, `rollback` for the report of a rollback to the runtime the
+ * update replaced, which runs that runtime's own approved harness files and carries none.
+ */
+export type ReportPurpose = 'update' | 'rollback'
 
 /** Where one report's facts come from: the profile, the staged target and both status records. */
 export interface ReportSources {
@@ -58,6 +66,13 @@ export interface ReportSources {
    * @returns the facts.
    */
   data(version: string): Promise<DataFacts>
+  /**
+   * Each approved harness file of the running runtime and how it meets the staged target's verified file; read only
+   * for an update's report.
+   * @param version - the installed target's version.
+   * @returns the files, in path order; none when the running runtime has no approved harness file.
+   */
+  harness(version: string): Promise<readonly HarnessFact[]>
   /**
    * The current time.
    * @returns the time the report is stamped with.
@@ -90,23 +105,28 @@ export interface BuiltUpdateReport {
  * @param installation - the installation being updated.
  * @param sources - where the facts come from.
  * @param version - the installed target's version.
+ * @param purpose - whether the report is an update's or a rollback's.
  * @returns the report, what the health check holds the target to, and whether the data differs.
  * @throws {UpdateReportError} `REPORT_TARGET_UNVERIFIED` when the target did not pass every check.
  */
-export async function buildFromSources(installation: Installation, sources: ReportSources, version: string): Promise<BuiltUpdateReport> {
-  return builtReport(await readReportInput(installation, sources, version))
+export async function buildFromSources(installation: Installation, sources: ReportSources, version: string, purpose: ReportPurpose): Promise<BuiltUpdateReport> {
+  return builtReport(await readReportInput(installation, sources, version, purpose))
 }
 
 /**
- * Read every fact one report is built from; the reads run together.
+ * Read every fact one report is built from; the reads run together. A rollback's report reads no harness facts.
  * @param installation - the installation being updated.
  * @param sources - where the facts come from.
  * @param version - the installed target's version.
+ * @param purpose - whether the report is an update's or a rollback's.
  * @returns the report's input.
  */
-export async function readReportInput(installation: Installation, sources: ReportSources, version: string): Promise<ReportInput> {
-  const [from, statuses, profile, target, data] = await Promise.all([sources.running(), sources.statuses(), sources.profile(), sources.target(version), sources.data(version)])
-  return { installation, from, profile, target, statuses, data, generated: sources.now() }
+export async function readReportInput(installation: Installation, sources: ReportSources, version: string, purpose: ReportPurpose): Promise<ReportInput> {
+  const [from, statuses, profile, target, data, harness] = await Promise.all([
+    sources.running(), sources.statuses(), sources.profile(), sources.target(version), sources.data(version),
+    purpose === 'update' ? sources.harness(version) : [],
+  ])
+  return { installation, from, profile, target, statuses, data, harness, generated: sources.now() }
 }
 
 /**
@@ -137,9 +157,10 @@ export interface UpdateReportOptions {
   readonly sources: ReportSources
 }
 
-/** The report being built, so a second request for the same version joins it. */
+/** The report being built, so a second request for the same version and purpose joins it. */
 interface Building {
   readonly version: string
+  readonly purpose: ReportPurpose
   readonly done: Promise<BuiltUpdateReport>
 }
 
@@ -167,18 +188,19 @@ export class UpdateReportService extends Service {
   /**
    * Build the report for an installed, verified target.
    * @param version - the target's installed version.
+   * @param purpose - whether the report is an update's or a rollback's.
    * @returns the report and the plugin ids it disables.
    * @throws {UpdateReportError} `REPORT_VERSION_INVALID` when the version is not a semantic version;
    *   `REPORT_DISPOSED` when the context is disposed before the report is returned; `REPORT_TARGET_UNVERIFIED` when
    *   the target did not pass every check.
    */
-  async build(version: string): Promise<BuiltUpdateReport> {
+  async build(version: string, purpose: ReportPurpose): Promise<BuiltUpdateReport> {
     if (semver.valid(version) === null) throw new UpdateReportError('REPORT_VERSION_INVALID', `${JSON.stringify(version)} is not a semantic version`)
     this.assertLive()
-    if (this.building?.version === version) return this.building.done
-    const done = this.queue.then(async () => this.compute(version))
+    if (this.building?.version === version && this.building.purpose === purpose) return this.building.done
+    const done = this.queue.then(async () => this.compute(version, purpose))
     this.queue = done.then(() => undefined, () => undefined)
-    const building: Building = { version, done }
+    const building: Building = { version, purpose, done }
     this.building = building
     try {
       return await done
@@ -200,11 +222,12 @@ export class UpdateReportService extends Service {
   /**
    * Read every fact and build the report.
    * @param version - the installed target's version.
+   * @param purpose - whether the report is an update's or a rollback's.
    * @returns the report and the plugin ids it disables.
    * @throws {UpdateReportError} `REPORT_DISPOSED` when the context was disposed while a fact was read.
    */
-  private async compute(version: string): Promise<BuiltUpdateReport> {
-    const input = await readReportInput(this.options.installation, this.options.sources, version)
+  private async compute(version: string, purpose: ReportPurpose): Promise<BuiltUpdateReport> {
+    const input = await readReportInput(this.options.installation, this.options.sources, version, purpose)
     // The reads may have outlived the context that asked for them, and a report from it is not this context's answer.
     this.assertLive()
     return builtReport(input)

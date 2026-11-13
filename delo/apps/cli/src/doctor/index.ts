@@ -1,6 +1,6 @@
 /**
  * `delorun doctor [--port <n>]`: runs four checks in order, on Linux the
- * sandbox check, then reads the running release's release-log check state and
+ * sandbox check, then the `changes` lines of [changes](./changes.ts), then reads the running release's release-log check state and
  * the profile's last update check, then the CLI profile's plugins ([plugins](./plugins.ts),
  * [last-start](./last-start.ts); they read manifests, the exemption file, the safe-mode
  * marker and the home process's log, and import and run no plugin code), and prints one
@@ -53,6 +53,7 @@ import { studioAddress } from '../status.ts'
 import { escapeDirectories } from '../sandbox-protection.ts'
 import { printable } from '../terminal-text.ts'
 import { deloVersion, versions } from '../version.ts'
+import { checkChanges } from './changes.ts'
 import { appArmorRestrictsUserNamespaces, checkSandbox, firstExisting, runBwrapProbe } from './sandbox.ts'
 import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
 import { checkLastStart } from './last-start.ts'
@@ -68,8 +69,11 @@ const DOCTOR_USAGE = [
   'Usage: delorun doctor [--port <n>]',
   '',
   'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key), the studio\'s port (port) and,',
-  'on Linux, whether bubblewrap can sandbox commands (sandbox),',
-  'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
+  'on Linux, whether bubblewrap can sandbox commands (sandbox).',
+  'Then it reports your changes (changes): the protection setting, any work session, and for each plugin you link from a',
+  'folder whether it loaded at the last start, whether it runs the content you approved, its version requirements and what it',
+  'registers that changes a consent, a guard or the sandbox policy, with the change to undo when it did not load.',
+  'Then it reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
   'and the last check for a newer release (update), which sends no request.',
   'Then the CLI profile\'s plugins (plugins, and plugin <name> for each): the installed packages and the bundle list, where each',
   'package comes from and whether it is enabled, version ranges this Delo does not meet, packages a shipped package of the same',
@@ -358,7 +362,7 @@ export interface DoctorEnvironment {
 export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
   return {
     name: 'doctor',
-    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check and the plugins',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check, your changes and the plugins',
     async run(args, context) {
       if (args.includes('--help') || args.includes('-h')) {
         context.stdout(DOCTOR_USAGE)
@@ -373,6 +377,7 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         await guarded('key', () => keyCheck(context, profile)),
         await guarded('port', () => portCheck(context, profile, option)),
         ...process.platform === 'linux' ? [await guarded('sandbox', () => sandboxCheck(context))] : [],
+        ...await guardedLines('changes', () => checkChanges(context.env, profile)),
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
         await guarded('update', async () => updateCheck(context, profile)),
         ...await pluginLines(context, profile, environment),

@@ -112,14 +112,14 @@ export interface CompositionDraft {
  */
 export type ApprovedPluginContent = (draft: CompositionDraft) => Promise<readonly string[]>
 
-/** The step that adds nothing, which every real start passes until a start-path feature fills the slot. */
+/** The step that adds nothing and refuses nothing. */
 export const NO_APPROVED_CONTENT: ApprovedPluginContent = () => Promise.resolve([])
 
 /** What a composition calls outside this module; specs replace them. */
 export interface ComposeDependencies {
   /** Loads the profile and reports its skipped bundles, as upstream's boot does. */
   readonly prepareProfile: (profile: string) => Promise<ResolvedProfileRuntime>
-  /** The approved plugin content step; a real start passes {@link NO_APPROVED_CONTENT} until the slot is filled. */
+  /** The approved plugin content step; Changes' `changesApprovedContent` in a real start ([changes](./changes/start.ts)). */
   readonly approvedPluginContent: ApprovedPluginContent
 }
 
@@ -185,11 +185,12 @@ const GUARD_ROWS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = 
  * answer changes there.
  */
 export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
-  'delo-instruction-consent': { enabled: true },
+  'delo-instruction-consent': { enabled: true, approvedPluginWrites: true },
   'delo-mcp-consent': { enabled: true },
   'delo-schedule-consent': { enabled: true },
   'delo-permission-defaults': { enabled: true },
   'delo-delegation-consent': { enabled: true },
+  'delo-plugin-changes': { enabled: true },
   ...GUARD_ROWS,
 }
 

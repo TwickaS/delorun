@@ -5,6 +5,7 @@
  * status records, the data facts, and the target's bundle tables read by the target's own Node.
  */
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -13,6 +14,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { INSTALLATION_OWNED_PROFILE_TUPLES, PROFILE_TEMPLATES, RETIRED_BUNDLES } from '@deepseek-ai/dsh-official-bundles'
 import { DELO_HOME_ENTRIES, STATUS_FILES, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { EXEMPTION_FILES } from '@delo/contract-plugin-versions'
+import { HARNESS_RECORD_SCHEMA, harnessRuntimeDirectory, storeFileVersion, withHarnessLock, writeHarnessRecord, type ChangeId, type HarnessRecord } from '@delo/changes'
 import { ensureHomeTree } from '@delo/home'
 import { type DeloLogger } from '@delo/logs'
 import { recordResult } from '@delo/release-verify'
@@ -310,6 +312,48 @@ describe('storeReportSources', () => {
 
       expect(data.to.formats).toBeUndefined()
       expect(data.from.formats).toBeDefined()
+    })
+  })
+
+  describe('harness', () => {
+    const CLI_MANIFEST = 'app/node_modules/@delo/cli/package.json'
+    const CLOSURE_MANIFEST = 'app/package.json'
+    const GONE = 'app/node_modules/@delo/cli/src/gone.js'
+
+    /**
+     * Write runtime 1.0.0's harness record over three files: one 1.1.0 leaves as it was, one it changes on the line the
+     * person changed, and one it does not have.
+     */
+    async function writeRecord(): Promise<void> {
+      const stored = async (path: string, text: string): Promise<ReturnType<typeof storeFileVersion>> => storeFileVersion(home, path, Buffer.from(text), false)
+      const entry = async (path: string, signed: string, mine: string): Promise<HarnessRecord['files'][string]> => ({ version: await stored(path, mine), signed: await stored(path, signed), change: 'c0123456789' as ChangeId, approvedAt: '2026-11-11T00:00:00.000Z' })
+      const record: HarnessRecord = {
+        schema: HARNESS_RECORD_SCHEMA,
+        runtime: '1.0.0',
+        files: {
+          [CLI_MANIFEST]: await entry(CLI_MANIFEST, '{"name":"@delo/cli","type":"module"}\n', '{"name":"@delo/cli","type":"module","edited":true}\n'),
+          [CLOSURE_MANIFEST]: await entry(CLOSURE_MANIFEST, '{"name":"@delo/runtime-closure","version":"1.0.0","type":"module"}\n', '{"name":"@delo/runtime-closure","version":"1.0.0","type":"module","edited":true}\n'),
+          [GONE]: await entry(GONE, 'old\n', 'mine\n'),
+        },
+      }
+      await withHarnessLock(home, async () => writeHarnessRecord(home, record))
+    }
+
+    it('merges each approved file of the running runtime with the target\'s signed file, in path order', TIMEOUT, async () => {
+      await writeRecord()
+      try {
+        expect(await sources().harness('1.1.0')).toEqual([
+          { file: CLI_MANIFEST, merge: 'release-unchanged', result: { sha256: createHash('sha256').update('{"name":"@delo/cli","type":"module","edited":true}\n').digest('hex'), executable: false } },
+          { file: GONE, merge: 'release-removed' },
+          { file: CLOSURE_MANIFEST, merge: 'edits-overlap' },
+        ])
+      } finally {
+        rmSync(harnessRuntimeDirectory(home, '1.0.0'), { recursive: true, force: true })
+      }
+    })
+
+    it('has no harness fact, and does not read the target, when the running runtime has no record', async () => {
+      expect(await sources().harness('9.9.9')).toEqual([])
     })
   })
 

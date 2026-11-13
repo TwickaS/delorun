@@ -33,7 +33,7 @@ import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delo/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
-import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from './arrival.ts'
+import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from '@delo/home'
 import { DeviceStore } from './devices.ts'
 import { ReachTerminalStore } from './reach-terminal.ts'
 import { HomeAuthError } from './errors.ts'
