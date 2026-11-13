@@ -3,6 +3,7 @@
 .section {
   display: flex;
   flex-direction: column;
+  gap: 24px;
   max-width: var(--dsh-settings-section-max-width, 760px);
   color: var(--dsw-alias-label-primary);
 }
@@ -13,6 +14,13 @@
   font-weight: var(--dsh-settings-section-title-weight, 600);
   line-height: var(--dsh-settings-section-title-line-height, normal);
   display: var(--dsh-settings-section-title-display, block);
+}
+
+/* The section's gap spaces its own title, lines and groups. */
+.section > .heading,
+.section > .line,
+.section > .failed {
+  margin: 0;
 }
 
 .line {

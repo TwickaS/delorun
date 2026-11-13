@@ -67,9 +67,11 @@ const NS = 'settings.deloLayout'
  * 220 wide at most and no more than two fifths of a narrow window. Rows fill the
  * content column, so each control sits at its right edge. Upstream's own narrow
  * rule takes the panel to the full window below 768px. The card headings take
- * the sentence-case heading Delo's sections draw, from the same properties.
+ * the sentence-case heading Delo's sections draw, from the same properties. The
+ * rule sits on `body`, where the theme defines the `--dsw-alias-*` colours, so the
+ * heading colour resolves in light and dark.
  */
-export const PANEL_STYLE = ':root{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw);'
+export const PANEL_STYLE = 'body{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw);'
   + '--dsh-settings-card-heading-size:15px;--dsh-settings-card-heading-line-height:22px;--dsh-settings-card-heading-weight:600;'
   + '--dsh-settings-card-heading-letter-spacing:normal;--dsh-settings-card-heading-transform:none;--dsh-settings-card-heading-color:var(--dsw-alias-label-primary)}'
 

@@ -251,6 +251,7 @@ describe('the client plugin', () => {
   })
 
   it('styles the card headings as the sentence-case section headings', () => {
+    expect(PANEL_STYLE.startsWith('body{')).toBe(true)
     expect(PANEL_STYLE).toContain('--dsh-settings-card-heading-transform:none')
     expect(PANEL_STYLE).toContain('--dsh-settings-card-heading-color:var(--dsw-alias-label-primary)')
   })
