@@ -7,6 +7,7 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import ts from 'typescript'
 import { isEntryPoint, trackedDeloFiles } from './tracked-delo-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
@@ -127,6 +128,77 @@ function isPathLike(line: string, start: number, end: number): boolean {
   return after === '.' && /[A-Za-z0-9]/u.test(line.charAt(end + 1)) || before === '.' && /[A-Za-z0-9]/u.test(line.charAt(start - 2))
 }
 
+/** Source roots whose string literals are user-visible Delorun text. */
+const SOURCE_ROOT = /^delo\/(?:apps\/(?:cli|npm-launcher|install)|packages\/[^/]+)\/src\//u
+
+/**
+ * Whether the gate checks a file's string literals.
+ * @param file - repository-relative slash path.
+ * @returns true for non-test TypeScript under the Delorun CLI, launcher, installer and package `src` trees.
+ */
+export function isBritishEnglishSourceFile(file: string): boolean {
+  return SOURCE_ROOT.test(file)
+    && /\.tsx?$/u.test(file)
+    && !/\.(?:spec|test)\.tsx?$/u.test(file)
+    && !file.endsWith('.d.ts')
+    && !excludedSegments.some(segment => file.includes(segment))
+}
+
+/**
+ * Whole string literals that are wire values or HTTP header names and keep their spelling: the `catalog` adapter
+ * kind and the `authorization` header and key parts. A literal that only contains one of these words is still checked.
+ */
+export const SOURCE_ALLOWLIST: ReadonlySet<string> = new Set(['catalog', 'authorization', 'proxy-authorization'])
+
+/** Marker on the same line as a literal that quotes upstream or wire text and keeps its spelling. */
+export const SOURCE_US_MARKER = 'us-spelling: quoted output'
+
+/** CSS identifiers such as `color-mix` and `--focus-ring-color` name properties and functions, so they keep their spelling. */
+const CSS_COLOR_IDENTIFIER = /[\w-]*-colors?\b[\w-]*|\bcolors?-[\w-]+/giu
+
+function isNonProseLiteral(node: ts.Node): boolean {
+  const parent = node.parent
+  if (ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent) || ts.isExternalModuleReference(parent)) return true
+  if (ts.isLiteralTypeNode(parent) || ts.isPropertyAssignment(parent) && parent.name === node) return true
+  if (ts.isElementAccessExpression(parent) && parent.argumentExpression === node) return true
+  if (ts.isCallExpression(parent) && parent.expression.kind === ts.SyntaxKind.ImportKeyword) return true
+  if (ts.isCaseClause(parent)) return true
+  if (ts.isJsxAttribute(parent) && parent.name.getText() === 'type') return true
+  return ts.isBinaryExpression(parent) && (parent.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+    || parent.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken)
+}
+
+/**
+ * Locate US spellings in the string literals of a TypeScript source file.
+ * @param source - the TypeScript or TSX text.
+ * @param file - repository-relative path naming the diagnostics.
+ * @returns violations in string, template and JSX text, skipping module specifiers, property names, type literals,
+ * strict comparisons, case clauses, JSX `type` attributes, CSS `color-` identifiers, literals in {@link SOURCE_ALLOWLIST}
+ * and lines carrying {@link SOURCE_US_MARKER}.
+ */
+export function findUsSpellingsInSource(source: string, file = ''): BritishEnglishViolation[] {
+  const sourceFile = ts.createSourceFile(file || 'source.ts', source, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
+  const lines = source.split(/\r?\n/u)
+  const violations: BritishEnglishViolation[] = []
+  const visit = (node: ts.Node): void => {
+    const literal = ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
+      || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node) || ts.isJsxText(node)
+    if (literal && !isNonProseLiteral(node)) {
+      const start = node.getStart(sourceFile)
+      const base = sourceFile.getLineAndCharacterOfPosition(start).line
+      const text = node.getText(sourceFile).replace(CSS_COLOR_IDENTIFIER, match => ' '.repeat(match.length))
+      for (const found of SOURCE_ALLOWLIST.has(text.slice(1, -1)) ? [] : findUsSpellings(text, { file, markdown: false })) {
+        const line = base + found.line
+        if (lines[line - 1]?.includes(SOURCE_US_MARKER)) continue
+        violations.push({ ...found, line })
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return violations
+}
+
 /**
  * Locate US spellings in prose.
  * @param source - the text to scan.
@@ -163,11 +235,15 @@ export function findUsSpellings(source: string, options: { file?: string; markdo
 
 if (isEntryPoint(import.meta.url)) {
   const files = trackedDeloFiles(root, isBritishEnglishFile)
-  const violations = files.flatMap(file => findUsSpellings(readFileSync(resolve(root, file), 'utf8'), { file }))
+  const sources = trackedDeloFiles(root, isBritishEnglishSourceFile)
+  const violations = [
+    ...files.flatMap(file => findUsSpellings(readFileSync(resolve(root, file), 'utf8'), { file })),
+    ...sources.flatMap(file => findUsSpellingsInSource(readFileSync(resolve(root, file), 'utf8'), file)),
+  ]
   if (violations.length === 0) {
-    console.log(`verify-british-english: ${String(files.length)} file(s) checked, no US spellings.`)
+    console.log(`verify-british-english: ${String(files.length)} prose file(s) and ${String(sources.length)} source file(s) checked, no US spellings.`)
   } else {
-    console.error(`verify-british-english: Delorun prose uses British English; use the suggestion, or mark a line quoting program output with ${US_SPELLING_MARKER}:`)
+    console.error(`verify-british-english: Delorun prose uses British English; use the suggestion, or mark a Markdown line quoting program output with ${US_SPELLING_MARKER} (source: a // ${SOURCE_US_MARKER} comment):`)
     for (const violation of violations) console.error(`  ${violation.file}:${String(violation.line)}: "${violation.word}" -> "${violation.suggestion}"`)
     process.exitCode = 1
   }

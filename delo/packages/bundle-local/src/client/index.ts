@@ -481,7 +481,7 @@ function presetOf(ctx: Context, sessionId: SessionId): string | undefined {
  * permission did not change.
  */
 export async function switchChat(live: Pick<ISession, 'command'> | undefined, currentPreset: () => string | undefined, preset: string): Promise<void> {
-  if (live === undefined) throw new ChatSwitchRefused('this session is not materialized yet')
+  if (live === undefined) throw new ChatSwitchRefused('this session is not materialised yet')
   const result = await live.command(`/permission ${preset}`)
   if (!result.ok) throw new ChatSwitchRefused(result.error.message)
   if (!result.value.matched) throw new ChatSwitchRefused('the host offers no /permission command')

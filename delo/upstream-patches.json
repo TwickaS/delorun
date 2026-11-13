@@ -2172,7 +2172,7 @@
       "path": "scripts/verify-british-english.ts",
       "class": "delo-feature",
       "feature": "fork-gates",
-      "reason": "Checks Delo's own Markdown under delo/ for American spellings from a curated list, so Delorun prose stays British English while upstream files keep theirs."
+      "reason": "Checks Delo's own Markdown and source string literals under delo/ for American spellings from a curated list, so Delorun prose stays British English while upstream files keep theirs."
     },
     {
       "path": "scripts/verify-release-tense.ts",

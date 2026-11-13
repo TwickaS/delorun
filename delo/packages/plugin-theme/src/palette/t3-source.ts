@@ -115,7 +115,7 @@ export function parseT3Themes(text: string): Readonly<Record<string, T3Theme>> {
     }
     const variants = node.variants
     const other = appearance === 'light' ? 'dark' : 'light'
-    const own = colorsOf(node.colors, constants, `${name}.colors`)
+    const own = colorsOf(node.colors, constants, `${name}.colors`) // us-spelling: quoted output (the theme source's property name)
     const variant = colorsOf(typeof variants === 'object' ? variants[other] : undefined, constants, `${name}.variants.${other}`)
     themes[id] = { label, light: appearance === 'light' ? own : variant, dark: appearance === 'dark' ? own : variant }
   }
