@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -315,6 +315,28 @@ describe('withFileLock', () => {
     await expect(withFileLock(target, async () => 'acquired', { waitMs: 0 })).resolves.toBe('acquired')
   })
 
+  it.each([
+    ['an empty record', ''],
+    ['a record without its newline', '12'],
+  ])('takes over a lock whose writer died with %s', async (_label, held) => {
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    await writeFile(`${target}.lock`, held)
+    const old = new Date(Date.now() - 60_000)
+    await utimes(`${target}.lock`, old, old)
+
+    await expect(withFileLock(target, async () => 'acquired', { waitMs: 0 })).resolves.toBe('acquired')
+    expect(await readdir(dir)).toEqual([])
+  })
+
+  it('names the record it saw, and says when it is this process, in the timeout', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    await writeFile(`${target}.lock`, record(process.pid))
+
+    await expect(withFileLock(target, async () => {}, { waitMs: 50 })).rejects.toThrow(`(record ${JSON.stringify(record(process.pid))}, this process)`)
+  })
+
   it('admits one contender at a time when several take over the same exited holder', async () => {
     probeExited()
     const dir = await scratch()
@@ -349,7 +371,7 @@ describe('withFileLock', () => {
     await writeFile(`${target}.lock`, held)
     const operation = vi.fn(async () => {})
 
-    await expect(withFileLock(target, operation, { waitMs: 50 })).rejects.toThrow(/timed out waiting for the writer lock/)
+    await expect(withFileLock(target, operation, { waitMs: 50 })).rejects.toThrow(/timed out waiting for the writer lock at .* \(record /)
     expect(operation).not.toHaveBeenCalled()
     expect(await readFile(`${target}.lock`, 'utf8')).toBe(held)
   })
@@ -405,7 +427,7 @@ describe('withFileLock', () => {
     state.lockRemovalFails = true
     const operation = vi.fn(async () => {})
 
-    await expect(withFileLock(target, operation, { waitMs: 50 })).rejects.toThrow(/timed out waiting for the writer lock/)
+    await expect(withFileLock(target, operation, { waitMs: 50 })).rejects.toThrow(/timed out waiting for the writer lock at .* \(record /)
     expect(operation).not.toHaveBeenCalled()
   })
 

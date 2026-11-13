@@ -2215,6 +2215,12 @@
       "class": "delo-feature",
       "feature": "fork-gates",
       "reason": "The tracked Markdown files under delo/ that Delo's prose gates read, shared by verify-british-english.ts and verify-release-tense.ts so the two gates list files one way."
+    },
+    {
+      "path": "packages/util/atomic-write/src/index.ts",
+      "class": "generic-fix",
+      "feature": "changes",
+      "reason": "A writer lock whose record is empty or lacks its newline for ten seconds is taken over, because only a writer killed between creating the file and writing its PID leaves one, and no PID probe can ever clear it. Offer upstream."
     }
   ],
   "retired": []

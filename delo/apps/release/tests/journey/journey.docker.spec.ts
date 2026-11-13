@@ -132,6 +132,17 @@ function delorun(args: readonly string[], env: Readonly<Record<string, string>> 
 }
 
 /**
+ * What holds the profile's writer lock: the lock file, then every process with its parent, group, state and command.
+ * `ps` is not in the machine image, so this reads `/proc`.
+ * @returns the lines, for a failed assertion's message.
+ */
+async function lockProbe(): Promise<string> {
+  const script = 'cat /home/person/.delo/profiles/default/package.json.lock; for p in /proc/[0-9]*; do read -r line < "$p/stat" 2>/dev/null || continue; printf "%s | %s\\n" "$line" "$(tr "\\0" " " < "$p/cmdline" 2>/dev/null)"; done'
+  const probed = await run(['sh', '-c', script])
+  return `${probed.stdout}\n${probed.stderr}`
+}
+
+/**
  * Parse a command's one-line JSON output.
  * @param finished - the command.
  * @returns the value.
@@ -581,7 +592,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     const updated = await interact(machine, 'delorun update', env, [{ when: new RegExp(`Apply the update to Delorun ${R2B.replaceAll('.', '\\.')}`, 'u'), send: 'y' }])
     const named = new RegExp(`Delorun ${R2B.replaceAll('.', '\\.')} failed its health check \\(H2-host-ready`, 'u')
     // A rollback that did not finish leaves the home process's log as the only record of why.
-    expect(updated.stdout, named.test(updated.stdout) ? '' : (await delorun(['logs', 'home'])).stdout).toMatch(named)
+    expect(updated.stdout, named.test(updated.stdout) ? '' : `${(await delorun(['logs', 'home'])).stdout}\n${await lockProbe()}`).toMatch(named)
     expect(updated.status).toBe(1)
     expect(await running()).toBe(R1)
     expect(inactive(await rows())).toEqual([])
