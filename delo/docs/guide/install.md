@@ -184,6 +184,7 @@ Step 1 appears only while the key variable you chose is not set. The steps diffe
 <summary>Go further</summary>
 
 - **More settings** on the review screen asks the rest: whether to check for new releases (Yes by default), whether Delorun keeps running in the background, remote access, and the [profile](../reference/glossary.md#profile) name and the studio's port (3080 by default). Setup says when the port is in use, and asks again. Run setup with another profile name for several setups side by side ([Your Delorun home](home.md#profiles)).
+- To change your mind, run `delorun setup` again. On a finished setup in a terminal it says what it will do, then asks every question again with your current choices selected. Your saved key stays: the key question offers **Keep the saved key** first and never shows it. The review marks the answers you changed, and only those are written; the rest are reported as kept. Turning dangerous mode on asks both confirmations again. Staying on it asks nothing more. With `--yes` or `--config`, a finished setup is left unchanged.
 - Change one answer later with `delorun setup <section>`. `delorun setup --list` lists the sections: `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`.
 - For scripts, `delorun setup --yes` takes every default and reads the key from `DEEPSEEK_API_KEY`. `delorun setup --config <file>` reads the answers from a JSON file, which may name `"useCase": "local" | "remote" | "automation"`. Neither turns on remote access or imports `~/.dsh`, and neither starts Delorun: run `delorun` afterwards. `--check-key` checks a key that comes from the environment ([Model providers](providers.md#set-up-without-questions)).
 
@@ -213,7 +214,7 @@ The first time, the studio shows a short first-run guide, one step at a time, en
 6. **Workspace.** Choose the [workspace](../reference/glossary.md#workspace) for your first chat: the default one, a folder on your computer, or a git address to clone.
 7. **Ready.** Choose **Start a chat**.
 
-Every step has Back, Continue and **Skip for now**. Skip opens no chat. You can reopen the guide in Settings → General → Getting started → Show again.
+Every step has Back, Continue and **Skip for now**. Skip opens no chat. To go through the steps again, choose Settings → General → Getting started → **Run setup again**. Each step starts on your current choices, such as the mode and theme saved in Settings, and a choice changes only when you change it. On a phone, the Phone access step says that Tailscale is set up on the computer that runs Delorun.
 
 A new chat starts in one of the agent [presets](../reference/glossary.md#preset), which the studio calls modes: Standard, PTC, Minimal and Creator. In Creator mode, the agent writes plugins and presets with you. Type a message to chat. If you set up no provider or key, the model cannot answer; add one in Settings → Agent → Models.
 

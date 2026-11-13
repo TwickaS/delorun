@@ -51,6 +51,16 @@ describe('the look step', () => {
     expect(radio('Iris').getAttribute('aria-checked')).toBe('true')
   })
 
+  it('starts on the palette and mode saved in Settings when setup runs again, not on the defaults', () => {
+    const { face } = schemeFace('dark')
+    const services = stepServices({ scheme: face })
+    void services.look.settings.set('palette', 'ocean')
+    look(services)
+    expect(radio('Ocean').getAttribute('aria-checked')).toBe('true')
+    expect(radio('Soft').getAttribute('aria-checked')).toBe('false')
+    expect(radio('Dark').getAttribute('aria-checked')).toBe('true')
+  })
+
   it('offers the accent presets with the Soft palette, writes the one chosen, and replaces them with a note for a theme that brings its own', async () => {
     const services = stepServices()
     look(services)

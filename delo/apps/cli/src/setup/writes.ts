@@ -50,6 +50,21 @@ export async function storeCredential(home: string, name: string, value: string)
   })
 }
 
+/**
+ * Whether upstream's credentials document holds a non-empty value under a reference. The value is never returned.
+ * @param home - the Delo home.
+ * @param name - the reference name.
+ * @returns true when the reference holds a key; false when the document is absent, unreadable or has none.
+ */
+export function hasStoredCredential(home: string, name: string): boolean {
+  const path = join(home, CREDENTIALS_FILENAME)
+  if (!existsSync(path)) return false
+  const document = parseDocument(readFileSync(path, 'utf8'))
+  if (document.errors.length > 0) return false
+  const value: unknown = document.getIn(['refs', name])
+  return typeof value === 'string' && value !== ''
+}
+
 /** Upstream's `!!js` tag, kept as a tagged string so a rewritten patch writes every expression back unchanged. */
 export const JS_TAG = { tag: 'tag:yaml.org,2002:js', resolve: (source: string) => source }
 

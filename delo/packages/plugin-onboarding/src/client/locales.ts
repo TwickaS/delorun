@@ -224,9 +224,9 @@ export const en = {
   'starter.files.3.label': 'Find something',
   'starter.files.3.prompt': 'Help me find something in these files. Ask me what I am looking for.',
 
-  'row.title': 'Onboarding',
-  'row.description': 'Go through the first-run guide again. Your settings stay as they are.',
-  'row.show': 'Show again',
+  'row.title': 'Setup',
+  'row.description': 'Go through the first-run steps again. Each step starts on your current choices, and a choice changes only when you change it.',
+  'row.show': 'Run setup again',
 } as const satisfies Record<string, string>
 
 /** A key of the dictionary. */
@@ -453,7 +453,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'starter.files.3.label': '查找内容',
   'starter.files.3.prompt': '帮我在这些文件中查找内容。先问我在找什么。',
 
-  'row.title': '新手引导',
-  'row.description': '重新查看首次使用引导。你的设置保持不变。',
-  'row.show': '再次显示',
+  'row.title': '设置向导',
+  'row.description': '重新走一遍首次使用步骤。每一步都从你当前的选择开始，只有你更改时才会改变。',
+  'row.show': '再次运行设置',
 }

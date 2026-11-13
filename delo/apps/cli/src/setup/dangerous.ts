@@ -191,6 +191,15 @@ async function readDangerousGrant(home: string): Promise<{ readonly grantedAt: s
 }
 
 /**
+ * Whether a valid dangerous-mode grant file exists, so a person who already confirmed does not confirm again.
+ * @param home - the resolved Delo home.
+ * @returns true when the grant file is present and in the format this version reads.
+ */
+export async function hasDangerousGrant(home: string): Promise<boolean> {
+  return !('problem' in await readDangerousGrant(home))
+}
+
+/**
  * Whether dangerous mode is on for a profile, for the start, `delorun status` and `delorun doctor`.
  * @param home - the resolved Delo home.
  * @param profileDirectory - the CLI profile's directory, whose answers record names the prompts answer.

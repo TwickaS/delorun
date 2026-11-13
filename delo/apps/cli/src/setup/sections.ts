@@ -25,7 +25,7 @@ import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
 import { providerSection } from './provider-section.ts'
 import { installedCatalog, type ProviderCatalog } from './providers.ts'
-import { askDangerousConsent, refuseDangerousAsRoot, removeDangerousGrant, writeDangerousGrant } from './dangerous.ts'
+import { askDangerousConsent, hasDangerousGrant, refuseDangerousAsRoot, removeDangerousGrant, writeDangerousGrant } from './dangerous.ts'
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
@@ -56,6 +56,8 @@ export interface Draft {
   readonly secret: string | undefined
   /** Why the live check of the key failed when the person continued without a successful check; never the key. */
   readonly keyCheckFailure?: string | undefined
+  /** Whether the key section kept the key saved in the home instead of taking a new one. */
+  readonly keepSavedKey?: boolean | undefined
 }
 
 /** What a section's question returns. */
@@ -66,6 +68,8 @@ export interface SectionAnswer {
   readonly secret?: string
   /** Why the live check of the key failed, when the person continued without a successful check. */
   readonly keyCheckFailure?: string
+  /** True when the section kept the key saved in the home; the key is not read, shown or stored again. */
+  readonly keepSavedKey?: boolean
   /** `answered` for a question asked, `seen` for a note shown. */
   readonly status: SectionStatus
 }
@@ -88,6 +92,8 @@ export interface SectionEnvironment {
   readonly checkEnvironmentKey: boolean
   /** Whether a local port is free to listen on. */
   readonly portIsFree: (port: number) => Promise<boolean>
+  /** Whether the home's credentials hold a key under a reference; the key itself is never read. */
+  readonly hasSavedKey: (name: string) => boolean
 }
 
 /** What a section's writes run against. */
@@ -100,6 +106,8 @@ export interface ApplyContext {
   readonly directory: string
   /** The typed key, when the run has one. */
   readonly secret: string | undefined
+  /** True when the run keeps the key already saved under the provider's reference. */
+  readonly keepSavedKey?: boolean
 }
 
 /** One section of the setup flow. */
@@ -135,6 +143,15 @@ export interface SetupSection {
    * @returns the section's line of the review screen. A section without one omits the method.
    */
   review?(answers: SetupAnswers, draft?: Draft): string
+  /**
+   * Whether a re-run changes nothing the section writes, so the run reports it as kept and writes nothing.
+   * A section without the method always writes.
+   * @param before - the answers the profile holds now.
+   * @param after - the answers of the run.
+   * @param typedKey - whether the run took a new model key.
+   * @returns true when the section's answer is the one the profile holds.
+   */
+  unchanged?(before: SetupAnswers, after: SetupAnswers, typedKey: boolean): boolean
   /**
    * Make the section's writes. A run that repeats a write leaves the same values.
    * @param context - the home, profile directory and typed key.
@@ -265,6 +282,7 @@ export const privacySection: SetupSection = {
     return check === BACK ? BACK : { answers: { updateCheck: check === 'on' }, status: 'answered' }
   },
   review: answers => `Release check: ${answers.updateCheck ? 'on, once a day' : 'off'}`,
+  unchanged: (before, after) => before.updateCheck === after.updateCheck,
   apply(context, answers) {
     writeUpdateCheckRow(join(context.directory, 'cordis.patch.yml'), answers.updateCheck)
     return Promise.resolve(undefined)
@@ -288,7 +306,7 @@ export const promptsSection: SetupSection = {
   plan: samePlan('asked'),
   asks: asksWhenRun,
   appliesTo: () => true,
-  async ask(io, draft) {
+  async ask(io, draft, environment) {
     for (;;) {
       io.note(choiceNote(PROMPTS_TEXT), 'How much Delorun asks')
       const choice = await io.select<PromptsAnswer>('How much should Delorun ask before it changes things?', [
@@ -298,6 +316,8 @@ export const promptsSection: SetupSection = {
       ], draft.answers.prompts)
       if (choice === BACK) return BACK
       if (choice !== 'dangerous') return { answers: { prompts: choice }, status: 'answered' }
+      // Staying on dangerous mode needs no second consent while its grant is valid.
+      if (draft.answers.prompts === 'dangerous' && environment.profileExists && await hasDangerousGrant(environment.home)) return { answers: { prompts: choice }, status: 'answered' }
       const accepted = await askDangerousConsent(io)
       // Back from the confirmation returns to this question, not to the one before it.
       if (accepted === BACK) continue
@@ -310,13 +330,14 @@ export const promptsSection: SetupSection = {
     }
   },
   review: answers => `Prompts: ${PROMPT_LABELS[answers.prompts]}`,
+  unchanged: (before, after) => before.prompts === after.prompts,
   async apply(context, answers) {
     refuseDangerousAsRoot(answers.prompts, 'delorun setup')
     writePromptRows(join(context.directory, 'cordis.patch.yml'), answers.prompts)
     // The grant follows the rows, so a failed row write never leaves a grant behind; any other answer withdraws it.
     // A `seen` record on a dangerous answer is a declined consent, which keeps the earlier answer and writes no grant.
     if (answers.prompts !== 'dangerous') await removeDangerousGrant(context.home)
-    else if (answers.sections.find(record => record.id === 'prompts')?.status !== 'seen') await writeDangerousGrant(context.home)
+    else if (answers.sections.find(record => record.id === 'prompts')?.status !== 'seen' && !await hasDangerousGrant(context.home)) await writeDangerousGrant(context.home)
     return undefined
   },
 }
@@ -340,6 +361,7 @@ export const backgroundSection: SetupSection = {
     return keep === BACK ? BACK : { answers: { background: keep }, status: 'answered' }
   },
   review: answers => `Keep running in the background: ${answers.background ? 'yes' : 'no'}`,
+  unchanged: (before, after) => before.background === after.background,
   // The answer is read from the answers record that setup writes at its end.
   apply: () => Promise.resolve(undefined),
 }
@@ -412,6 +434,7 @@ export const profileSection: SetupSection = {
     }
   },
   review: answers => `Setup name: ${answers.profile.name ?? 'default'}, studio port ${String(answers.profile.port ?? SETUP_DEFAULT_PORT)}`,
+  unchanged: (before, after) => before.profile.port === after.profile.port,
   apply(context, answers) {
     if (answers.profile.port !== null) {
       // The patch replaces the web server row's config, so its other keys are restated from the Web bundle.

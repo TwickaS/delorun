@@ -19,12 +19,17 @@ export interface InteractiveAnswers {
   readonly answers: SetupAnswers
   /** The typed key, when the key section took one; `undefined` otherwise. */
   readonly secret: string | undefined
+  /** True when the key section kept the key saved in the home. */
+  readonly keepSavedKey: boolean
 }
 
 /**
  * @returns true: a step that always asks.
  */
 const alwaysAsks = (): boolean => true
+
+/** What a review line ends with when a re-run changed its answer. */
+const CHANGED_MARK = ' (changed)'
 
 /** The sentence that ends the review: nothing has been written yet. */
 export const NOTHING_SAVED_LINE = 'Nothing is saved until you choose Save and set up.'
@@ -76,6 +81,7 @@ function askStep(section: SetupSection, phase: Exclude<SetupPhase, 'single'>, en
         answers: { ...draft.answers, ...given.answers, sections: withRecord(draft.answers.sections, section.id, given.status) },
         secret: given.secret ?? draft.secret,
         keyCheckFailure: given.keyCheckFailure ?? draft.keyCheckFailure,
+        keepSavedKey: given.keepSavedKey ?? draft.keepSavedKey,
       }
     },
   }
@@ -97,12 +103,14 @@ function listed(draft: Draft, sections: readonly SetupSection[], environment: Se
  * @param draft - the answers.
  * @param sections - every registered section.
  * @param environment - what the sections may look at.
+ * @param before - the answers a re-run started from; the lines of answers that differ from them end with a mark.
  * @returns the use case, then one line per section the use case keeps, with the answer or the default, and the line that says nothing is saved yet.
  */
-export function review(draft: Draft, sections: readonly SetupSection[], environment: SectionEnvironment): string {
+export function review(draft: Draft, sections: readonly SetupSection[], environment: SectionEnvironment, before?: SetupAnswers): string {
+  const mark = (section: SetupSection): string => (before !== undefined && section.unchanged?.(before, draft.answers, draft.secret !== undefined) === false ? CHANGED_MARK : '')
   return [
-    `How you use Delorun: ${USE_CASE_REVIEW[draft.answers.useCase]}`,
-    ...listed(draft, sections, environment).flatMap(section => section.review?.(draft.answers, draft) ?? []),
+    `How you use Delorun: ${USE_CASE_REVIEW[draft.answers.useCase]}${before !== undefined && before.useCase !== draft.answers.useCase ? CHANGED_MARK : ''}`,
+    ...listed(draft, sections, environment).flatMap(section => (section.review === undefined ? [] : [`${section.review(draft.answers, draft)}${mark(section)}`])),
     '',
     NOTHING_SAVED_LINE,
   ].join('\n')
@@ -114,10 +122,11 @@ export function review(draft: Draft, sections: readonly SetupSection[], environm
  * @param registry - the sections.
  * @param environment - what the sections may look at.
  * @param defaults - the answers each question starts from; setup's defaults unless a command-line flag changed one.
+ * @param before - the answers of a finished setup that this run asks again: the use case keeps its other defaults when unchanged, and the review marks changed answers.
  * @returns the answers and the typed key.
  * @throws {SetupCancelled} when the person cancels a question or declines the review.
  */
-export async function askAnswers(prompter: Prompter, registry: SectionRegistry, environment: SectionEnvironment, defaults: SetupAnswers = SETUP_DEFAULTS): Promise<InteractiveAnswers> {
+export async function askAnswers(prompter: Prompter, registry: SectionRegistry, environment: SectionEnvironment, defaults: SetupAnswers = SETUP_DEFAULTS, before?: SetupAnswers): Promise<InteractiveAnswers> {
   const sections = registry.all()
   const useCaseStep: RunStep<Draft> = {
     asks: alwaysAsks,
@@ -125,14 +134,14 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
       io.note(choiceNote(USE_CASE_ORDER.map(useCase => USE_CASE_TEXT[useCase])), 'Delorun runs on your computer')
       const useCase = await io.select<SetupUseCase>(USE_CASE_QUESTION, USE_CASE_ORDER.map(each => ({ value: each, label: USE_CASE_TEXT[each].label })), draft.answers.useCase)
       // The use-case question is the first step, so it offers no back choice.
-      return { ...draft, answers: useCaseAnswers(useCase as SetupUseCase, defaults) }
+      return { ...draft, answers: before !== undefined && useCase === before.useCase ? defaults : useCaseAnswers(useCase as SetupUseCase, defaults) }
     },
   }
   const reviewStep = (final: boolean): RunStep<Draft> => ({
     asks: draft => (final ? draft.phase === 'more' : true),
     async run(io, draft): Promise<Draft | Back> {
       if (final && draft.phase !== 'more') return draft
-      io.note(review(draft, sections, environment), 'Review')
+      io.note(review(draft, sections, environment, before), 'Review')
       const more = final ? [] : sections.filter(section => section.plan[draft.answers.useCase] !== 'asked' && section.plan[draft.answers.useCase] !== 'never' && section.appliesTo(environment))
       const next = await io.select('Save these answers and set up Delorun?', [
         { value: 'save', label: 'Save and set up' },
@@ -144,7 +153,7 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
       return next === 'more' ? { ...draft, phase: 'more' } : draft
     },
   })
-  const initial: Draft = { phase: 'main', answers: defaults, secret: undefined, keyCheckFailure: undefined }
+  const initial: Draft = { phase: 'main', answers: defaults, secret: undefined, keyCheckFailure: undefined, keepSavedKey: false }
   const steps = [
     useCaseStep,
     ...sections.map(section => askStep(section, 'main', environment)),
@@ -153,5 +162,5 @@ export async function askAnswers(prompter: Prompter, registry: SectionRegistry, 
     reviewStep(true),
   ]
   const done = await runSteps(steps, initial, prompter)
-  return { answers: done.answers, secret: done.secret }
+  return { answers: done.answers, secret: done.secret, keepSavedKey: done.keepSavedKey === true }
 }

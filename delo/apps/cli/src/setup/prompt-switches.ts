@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { PARITY_SWITCHES, type ParitySwitchEntry } from '@delo/contract-parity-composition'
 import { PROMPTS_OPTIONS, SETUP_DEFAULTS, type PromptsAnswer } from '@delo/contract-setup-answers'
 import { ANSWERS_FILENAME } from './progress.ts'
-import { setPatchRow } from './writes.ts'
+import { readPatchRow, setPatchRow } from './writes.ts'
 
 /**
  * The switches whose behaviour is a prompt or a permission default, with the row of `@delo/bundle-local` that
@@ -55,6 +55,20 @@ export function promptRows(answer: PromptsAnswer, registry: readonly ParitySwitc
  */
 export function writePromptRows(patchPath: string, answer: PromptsAnswer): void {
   for (const row of promptRows(answer)) setPatchRow(patchPath, row)
+}
+
+/**
+ * The prompts answer a profile's patch rows hold, as {@link writePromptRows} writes them.
+ * @param patchPath - the profile's `cordis.patch.yml`.
+ * @param registry - the switch registry; the parity registry by default.
+ * @returns the answer whose rows the patch holds, or `undefined` when the patch holds none of the three answers' rows.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list.
+ */
+export function readPromptsRows(patchPath: string, registry: readonly ParitySwitchEntry[] = PARITY_SWITCHES): PromptsAnswer | undefined {
+  return PROMPTS_OPTIONS.find(answer => promptRows(answer, registry).every((row) => {
+    const held = readPatchRow(patchPath, row.id, 'delorun setup')
+    return held !== undefined && Object.entries(row.config).every(([key, value]) => held[key] === value)
+  }))
 }
 
 /**

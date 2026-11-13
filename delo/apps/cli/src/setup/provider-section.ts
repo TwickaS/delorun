@@ -10,6 +10,7 @@
  * @module @delo/cli/setup/provider-section
  */
 import { join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { SETUP_DEFAULT_PROVIDER_ID, type ModelCredential, type ModelProviderAnswer, type SetupAnswers } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
 import { choiceNote, ENVIRONMENT_VARIABLE_LINE, RECOMMENDED } from './choices.ts'
@@ -18,7 +19,7 @@ import type { KeyTarget } from './key-check.ts'
 import { isSetupProviderId, profileModelSelection, PROVIDERS_BY_LABEL, SETUP_PROVIDERS, writeProviderRows, type ModelSelection, type ProviderCatalog, type SetupProvider } from './providers.ts'
 import type { Draft, SectionAnswer, SectionEnvironment, SetupSection } from './sections.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
-import { storeCredential } from './writes.ts'
+import { hasStoredCredential, storeCredential } from './writes.ts'
 
 /** The value of the provider question's "Choose later" choice; no provider id uses it. */
 const NO_PROVIDER = 'none'
@@ -49,6 +50,8 @@ interface Choice {
   readonly secret: string | undefined
   /** Why the key's check failed when the person continued without a successful one. */
   readonly failure: string | undefined
+  /** True when the person kept the key saved in the home. */
+  readonly keep?: boolean
 }
 
 /** The section's questions, in the order they can be asked. */
@@ -135,12 +138,13 @@ async function askTypedKey(io: StepIO, provider: SetupProvider, target: KeyTarge
 /**
  * The choice after a provider is picked.
  * @param next - the picked provider.
- * @param earlier - the earlier answer, whose endpoint, model and key source are offered again for the same provider when the section runs on its own.
+ * @param earlier - the earlier answer, whose endpoint, model and key source are offered again for the same provider.
  * @param draft - the run's answers, whose use case sets where the key comes from at first.
+ * @param profileExists - whether the profile is set up already, which keeps the earlier answer's endpoint, model and key source for the same provider.
  * @returns the choice and the next question.
  */
-function pickProvider(next: SetupProvider, earlier: ModelProviderAnswer | null, draft: Draft): { readonly choice: Choice, readonly next: Question } {
-  const kept = draft.phase === 'single' && earlier !== null && earlier.id === next.id ? earlier : undefined
+function pickProvider(next: SetupProvider, earlier: ModelProviderAnswer | null, draft: Draft, profileExists: boolean): { readonly choice: Choice, readonly next: Question } {
+  const kept = profileExists && earlier !== null && earlier.id === next.id ? earlier : undefined
   const fresh: ModelCredential = draft.answers.useCase === 'automation' ? { source: 'environment', name: next.keyVariable } : { source: 'prompt' }
   return {
     choice: { provider: next, baseURL: kept?.baseURL ?? null, model: kept?.model ?? null, credential: kept?.credential ?? fresh, secret: undefined, failure: undefined },
@@ -178,13 +182,13 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
       if (picked === BACK) return BACK
       if (picked === NO_PROVIDER) return { choice: { ...choice, provider: undefined }, next: 'done' }
       if (picked === MORE_PROVIDERS) return { choice, next: 'more-providers' }
-      return pickProvider(SETUP_PROVIDERS[picked], earlier, draft)
+      return pickProvider(SETUP_PROVIDERS[picked], earlier, draft, environment.profileExists)
     }
     case 'more-providers': {
       const others = PROVIDERS_BY_LABEL.filter(each => each.id !== SETUP_DEFAULT_PROVIDER_ID)
       const [first] = others as [SetupProvider, ...SetupProvider[]]
       const picked = await io.select('Which provider?', others.map(each => ({ value: each.id, label: each.label, hint: each.adapter === 'custom' ? 'a server that speaks OpenAI\'s Chat Completions API; asks its base URL and model' : undefined })), earlier !== null && earlier.id !== SETUP_DEFAULT_PROVIDER_ID ? earlier.id : first.id)
-      return picked === BACK ? BACK : pickProvider(SETUP_PROVIDERS[picked], earlier, draft)
+      return picked === BACK ? BACK : pickProvider(SETUP_PROVIDERS[picked], earlier, draft, environment.profileExists)
     }
     case 'endpoint': {
       const entered = await io.text('Base URL of the endpoint', choice.baseURL ?? '', baseURLProblem)
@@ -201,12 +205,15 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
     case 'source': {
       const automation = draft.answers.useCase === 'automation'
       io.note(keySourceNote(provider), `${provider.label} API key`)
+      const saved = environment.profileExists && earlier?.id === provider.id && earlier.credential.source === 'prompt' && environment.hasSavedKey(provider.keyVariable)
       const source = await io.select(`How should Delorun get the ${provider.label} API key?`, [
+        ...saved ? [{ value: 'keep', label: 'Keep the saved key' }] : [],
         { value: 'prompt', label: `Paste it now${automation ? '' : RECOMMENDED}` },
         { value: 'environment', label: `Use ${provider.keyVariable}${automation ? RECOMMENDED : ''}` },
-      ], choice.credential.source)
+      ], saved && choice.credential.source === 'prompt' ? 'keep' : choice.credential.source)
       if (source === BACK) return BACK
-      if (source === 'prompt') return { choice: { ...choice, credential: { source: 'prompt' } }, next: 'key' }
+      if (source === 'keep') return { choice: { ...choice, credential: { source: 'prompt' }, secret: undefined, failure: undefined, keep: true }, next: afterKey() }
+      if (source === 'prompt') return { choice: { ...choice, credential: { source: 'prompt' }, keep: false }, next: 'key' }
       const credential = { source: 'environment', name: provider.keyVariable } as const
       const value = environment.env[provider.keyVariable] ?? ''
       if (value === '') io.note(unsetVariableNote(provider.keyVariable), 'Key variable')
@@ -214,14 +221,14 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
         const result = await environment.checkKey(keyTarget(provider, choice.baseURL, catalog), value)
         if (!result.ok) {
           io.note(`The key in ${provider.keyVariable} was not checked successfully: ${result.reason}`, 'Key check')
-          return { choice: { ...choice, credential, secret: undefined, failure: result.reason }, next: afterKey() }
+          return { choice: { ...choice, credential, secret: undefined, failure: result.reason, keep: false }, next: afterKey() }
         }
       }
-      return { choice: { ...choice, credential, secret: undefined, failure: undefined }, next: afterKey() }
+      return { choice: { ...choice, credential, secret: undefined, failure: undefined, keep: false }, next: afterKey() }
     }
     case 'key': {
       const typed = await askTypedKey(io, provider, keyTarget(provider, choice.baseURL, catalog), environment)
-      return typed === BACK ? BACK : { choice: { ...choice, secret: typed.key, failure: typed.failure }, next: afterKey() }
+      return typed === BACK ? BACK : { choice: { ...choice, secret: typed.key, failure: typed.failure, keep: false }, next: afterKey() }
     }
     case 'model': {
       const models = catalog.models(provider.id)
@@ -288,6 +295,7 @@ export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupS
         answers: { modelProvider: answerOf(choice) },
         ...choice.secret === undefined ? {} : { secret: choice.secret },
         ...choice.failure === undefined ? {} : { keyCheckFailure: choice.failure },
+        keepSavedKey: choice.keep === true,
         status: 'answered',
       }
     },
@@ -299,10 +307,11 @@ export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupS
       const model = answer.model === null ? 'default model' : answer.model
       return `Model: ${provider.label}${endpoint}, ${model}. Key: ${keySource(answer)}${draft?.keyCheckFailure === undefined ? '.' : `, not verified: ${draft.keyCheckFailure}`}`
     },
+    unchanged: (before, after, typedKey) => !typedKey && isDeepStrictEqual(before.modelProvider, after.modelProvider),
     async apply(context, answers) {
       const answer = answers.modelProvider
       if (answer === null) return noProviderNote(profileModelSelection(join(context.directory, 'cordis.patch.yml'), 'delorun setup'))
-      if (answer.credential.source === 'prompt') {
+      if (answer.credential.source === 'prompt' && !(context.secret === undefined && context.keepSavedKey === true && hasStoredCredential(context.home, SETUP_PROVIDERS[answer.id].keyVariable))) {
         if (context.secret === undefined) throw new CliError(EXIT.failed, 'delorun setup: the model key was not entered; run delorun setup in a terminal to finish')
         await storeCredential(context.home, SETUP_PROVIDERS[answer.id].keyVariable, context.secret)
       }

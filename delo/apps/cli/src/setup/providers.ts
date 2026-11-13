@@ -269,3 +269,28 @@ export function routeKeyReference(patchPath: string, route: string, command: str
   if (typeof named === 'string' && named !== '') return named
   return isSetupProviderId(route) ? SETUP_PROVIDERS[route].keyVariable : undefined
 }
+
+/**
+ * The provider answer a profile's patch holds, as {@link writeProviderRows} writes it: the provider and model of the
+ * `agent-default-model` row, the key reference of the provider's row, and a custom endpoint's base URL. The patch
+ * cannot tell a typed key from a variable of the same name, so that choice and a patch without a model row come from
+ * the recorded answer.
+ * @param patchPath - the profile's `cordis.patch.yml`.
+ * @param recorded - the answer in the answers record, or `null` for none.
+ * @param rows - the rows as the bundle inserts them; the installed base bundle's by default.
+ * @returns the answer, or `recorded` when the patch selects no model or a provider setup does not offer.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list.
+ */
+export function readProviderAnswer(patchPath: string, recorded: ModelProviderAnswer | null, rows: ProviderRows = baseProviderRows()): ModelProviderAnswer | null {
+  if (readPatchRow(patchPath, PROVIDER_ROW_IDS.defaultModel, 'delorun setup') === undefined) return recorded
+  const selection = profileModelSelection(patchPath, 'delorun setup', rows)
+  if (!isSetupProviderId(selection.provider)) return recorded
+  const provider = SETUP_PROVIDERS[selection.provider]
+  const reference = routeKeyReference(patchPath, provider.id, 'delorun setup') ?? provider.keyVariable
+  const sameKey = recorded?.id === provider.id && credentialReference(recorded) === reference
+  const credential = sameKey ? recorded.credential : reference === provider.keyVariable ? { source: 'prompt' as const } : { source: 'environment' as const, name: reference }
+  const baseURL = provider.adapter === 'custom' ? recordOf(recordOf(readPatchRow(patchPath, PROVIDER_ROW_IDS.piAi, 'delorun setup')?.['providers'])[provider.id])['baseURL'] : undefined
+  const inherited = rows.defaultModel.config
+  const isDefault = provider.adapter === 'deepseek' && selection.provider === inherited['provider'] && selection.model === inherited['model']
+  return { id: provider.id, credential, baseURL: typeof baseURL === 'string' ? baseURL : null, model: isDefault ? null : selection.model }
+}

@@ -36,7 +36,7 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
     appliesTo: () => true,
     async ask(io, draft, environment) {
       io.note('Needs Tailscale installed and signed in. Delorun turns on a private https address; a device you approve here with a code can read and reply to chats, and can never grant full access or change settings.\nChange later: delorun setup reach, or delorun reach off.', 'Phone and other devices')
-      const on = await io.confirm('Open Delorun from your phone or another device over Tailscale?', draft.answers.reach.option === 'tailscale-private' || (draft.answers.useCase === 'remote' && draft.phase !== 'single'))
+      const on = await io.confirm('Open Delorun from your phone or another device over Tailscale?', draft.answers.reach.option === 'tailscale-private' || (draft.answers.useCase === 'remote' && draft.phase !== 'single' && !environment.profileExists))
       if (on === BACK) return BACK
       if (!on) return { answers: { reach: { option: 'none', identityFactor: null } }, status: 'answered' }
       try {
@@ -53,6 +53,7 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
       io.note(TRUST_STATEMENT.join('\n'), 'Remote access')
       return { answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } }, status: 'answered' }
     },
+    unchanged: (before, after) => before.reach.option === after.reach.option,
     review: answers => `Remote access: ${answers.reach.option === 'tailscale-private' ? 'from your phone over Tailscale' : 'off'}`,
     async apply(context, answers) {
       if (answers.reach.option !== 'tailscale-private') return undefined

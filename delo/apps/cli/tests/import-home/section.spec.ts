@@ -49,7 +49,7 @@ const section = importSection({
  * @returns the environment of a first run.
  */
 function environment(env: Record<string, string | undefined> = { HOME: person }): SectionEnvironment {
-  return { env, home, profile: 'default', profileExists: false, profileNameTaken: () => false, checkKey: async () => ({ ok: true }), checkEnvironmentKey: false, portIsFree: async () => true }
+  return { env, home, profile: 'default', profileExists: false, profileNameTaken: () => false, checkKey: async () => ({ ok: true }), checkEnvironmentKey: false, portIsFree: async () => true, hasSavedKey: () => false }
 }
 
 /**
