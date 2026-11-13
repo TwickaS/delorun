@@ -2203,6 +2203,12 @@
       "class": "delo-feature",
       "feature": "changes",
       "reason": "On a page that names recovery routes, the boot shows C21's recovery screen at /recovery without loading any client plugin, and offers it when the studio has not mounted 30 seconds after the boot began; without the global the boot runs as in stock."
+    },
+    {
+      "path": "packages/util/atomic-write/src/index.ts",
+      "class": "generic-fix",
+      "feature": "changes",
+      "reason": "A writer lock whose record is empty or lacks its newline for ten seconds is taken over, because only a writer killed between creating the file and writing its PID leaves one, and no PID probe can ever clear it. Offer upstream."
     }
   ],
   "retired": []

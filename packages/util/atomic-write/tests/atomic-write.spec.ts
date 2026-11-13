@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -313,6 +313,20 @@ describe('withFileLock', () => {
     await writeFile(`${target}.lock`, record(child.pid as number))
 
     await expect(withFileLock(target, async () => 'acquired', { waitMs: 0 })).resolves.toBe('acquired')
+  })
+
+  it.each([
+    ['an empty record', ''],
+    ['a record without its newline', '12'],
+  ])('takes over a lock whose writer died with %s', async (_label, held) => {
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    await writeFile(`${target}.lock`, held)
+    const old = new Date(Date.now() - 60_000)
+    await utimes(`${target}.lock`, old, old)
+
+    await expect(withFileLock(target, async () => 'acquired', { waitMs: 0 })).resolves.toBe('acquired')
+    expect(await readdir(dir)).toEqual([])
   })
 
   it('admits one contender at a time when several take over the same exited holder', async () => {

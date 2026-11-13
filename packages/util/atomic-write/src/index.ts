@@ -7,12 +7,12 @@
  * writers of one file through a `wx`-created `<file>.lock` sibling, so a
  * read-modify-write cycle can never resurrect a state another writer just
  * replaced; readers stay lock-free because the rename commit is atomic. A lock
- * whose recorded holder process no longer exists is taken over.
+ * whose recorded holder process no longer exists, or whose record stayed incomplete for ten seconds, is taken over.
  * @module @deepseek-ai/dsh-atomic-write
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { setTimeout as wait } from 'node:timers/promises'
 
@@ -108,10 +108,8 @@ async function isLockContention(error: unknown, lockPath: string): Promise<boole
   }
 }
 
-/** Whether the holder a `<pid>\n` record names is proven gone: a signal probe finds no such process. */
+/** Whether the holder a complete `<pid>\n` record names is proven gone: a signal probe finds no such process. */
 function holderExited(record: string): boolean {
-  // Any other content is being written or was cut short, which proves nothing about its holder.
-  if (!/^\d+\n$/.test(record)) return false
   const pid = Number(record.trim())
   // PID 0 addresses the caller's process group, and the probe accepts only positive int32 PIDs.
   if (pid === 0 || pid > 0x7fffffff) return false
@@ -124,6 +122,31 @@ function holderExited(record: string): boolean {
     // EPERM means the process exists under another user.
     return (error as NodeJS.ErrnoException).code === 'ESRCH'
   }
+}
+
+/**
+ * How long a lock whose record is not a complete `<pid>\n` may stand before its writer is presumed to have died
+ * between creating the file and writing the record. A live writer finishes the write within microseconds.
+ */
+const INCOMPLETE_LOCK_GRACE_MS = 10_000
+
+/**
+ * Whether the lock's holder is proven gone: its recorded PID does not exist, or its record stayed incomplete past
+ * {@link INCOMPLETE_LOCK_GRACE_MS}, which only a writer killed between create and write leaves.
+ */
+async function holderGone(lockPath: string, record: string): Promise<boolean> {
+  if (/^\d+\n$/.test(record)) return holderExited(record)
+  // Only a write cut short leaves nothing, or digits without the newline; any other content is not this protocol's.
+  if (!/^\d*$/.test(record)) return false
+  try {
+    return Date.now() - (await stat(lockPath)).mtimeMs > INCOMPLETE_LOCK_GRACE_MS
+  /* v8 ignore start -- a lock removed between the read and this stat; no spec can time it. */
+  } catch (error) {
+    // A lock that vanished proves nothing about a holder.
+    void error
+    return false
+  }
+  /* v8 ignore stop */
 }
 
 /** The lock file's content, or undefined when it cannot be read. */
@@ -149,7 +172,7 @@ async function readLockRecord(lockPath: string): Promise<string | undefined> {
  */
 async function takeOverExitedLock(lockPath: string): Promise<boolean> {
   const record = await readLockRecord(lockPath)
-  if (record === undefined || !holderExited(record)) return false
+  if (record === undefined || !await holderGone(lockPath, record)) return false
   const claim = `${lockPath}.takeover-${createHash('sha256').update(record).digest('hex').slice(0, 16)}`
   try {
     await writeFile(claim, `${process.pid}\n`, { mode: 0o600, flag: 'wx' })
@@ -160,7 +183,7 @@ async function takeOverExitedLock(lockPath: string): Promise<boolean> {
     throw error
   }
   try {
-    if (await readLockRecord(lockPath) !== record || !holderExited(record)) return false
+    if (await readLockRecord(lockPath) !== record || !await holderGone(lockPath, record)) return false
     try {
       await rm(lockPath, { force: true })
     } catch (error) {
