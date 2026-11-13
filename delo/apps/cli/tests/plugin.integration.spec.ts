@@ -407,7 +407,7 @@ describe('delorun plugin with the real pnpm', { timeout: 120_000 }, () => {
     mkdirSync(repository)
     const env = { ...process.env, GIT_CONFIG_GLOBAL: join(osHome, 'git.config'), GIT_CONFIG_NOSYSTEM: '1' }
     writeFileSync(env.GIT_CONFIG_GLOBAL, '')
-    const git = (args: string[]): string => execFileSync('git', args, { cwd: repository, env, encoding: 'utf8' })
+    const git = (args: string[]): string => execFileSync('git', args, { cwd: repository, env, encoding: 'utf8', timeout: 30_000 })
     git(['init', '--initial-branch=main'])
     writeFileSync(join(repository, 'package.json'), JSON.stringify({ name: 'git-prepared', version: '1.0.0', scripts: { prepare: 'node build.cjs' } }))
     writeFileSync(join(repository, 'build.cjs'), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
