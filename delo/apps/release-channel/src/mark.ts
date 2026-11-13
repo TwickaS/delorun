@@ -69,6 +69,23 @@ export function kvMark(namespace: MarkNamespace): MarkStore {
 }
 
 /**
+ * Move the mark up to `next` without lowering it, tolerating a concurrent writer. Workers KV has no compare-and-swap,
+ * so the function reads first (a mark already higher is kept), writes, and reads again: a lower mark means a writer
+ * that read before this write replaced it, and the write is repeated. A writer that replaces the mark after the second
+ * read with a value it computed before this write is not caught; the next cron run or publish sees the higher
+ * timestamp in the bucket and moves the mark up again.
+ * @param store - the mark.
+ * @param next - the mark to keep at least.
+ */
+export async function raiseMark(store: MarkStore, next: HighWaterMark): Promise<void> {
+  const before = await store.read()
+  if (before !== undefined && before.version > next.version) return
+  await store.write(next)
+  const after = await store.read()
+  if (after !== undefined && after.version < next.version) await store.write(next)
+}
+
+/**
  * Refuse a timestamp that lies below the mark.
  * @param mark - the stored mark, if any.
  * @param seen - the verified current timestamp's version and channel releases.

@@ -25,7 +25,7 @@ export interface ResignEnv {
 
 /** The re-signing Worker: `fetch` answers the publisher's mark request ({@link handleMarkRequest}) and 404 otherwise; `scheduled` re-signs the timestamp and logs the outcome. */
 export default {
-  fetch: async (request: Request, env: ResignEnv): Promise<Response> => await handleMarkRequest(request, { secret: env.MARK_SECRET, bucket: r2Store(env.RELEASES), mark: kvMark(env.MARK) }),
+  fetch: async (request: Request, env: ResignEnv): Promise<Response> => await handleMarkRequest(request, { secret: env.MARK_SECRET, bucket: r2Store(env.RELEASES), mark: kvMark(env.MARK), now: () => Math.floor(Date.now() / 1000) }),
   scheduled: async (controller: { readonly scheduledTime: number }, env: ResignEnv): Promise<void> => {
     const result = await resignTimestamp({ store: r2Store(env.RELEASES), mark: kvMark(env.MARK), key: timestampKey(env.TIMESTAMP_KEY), now: Math.floor(controller.scheduledTime / 1000) })
     console.log(result.outcome === 'raced' ? 'resign: a publish replaced timestamp.json first; retrying next run' : `resign: version ${String(result.version)}, expires ${result.expires}`)

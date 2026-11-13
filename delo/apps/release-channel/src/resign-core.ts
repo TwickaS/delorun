@@ -15,9 +15,9 @@ import { createPrivateKey, type KeyObject } from 'node:crypto'
 import { signEnvelope } from '@delo/release-formats/sign/envelope'
 import type { JsonValue } from '@delo/release-formats/sign/json'
 import { readEnvelope } from '@delo/release-formats/sign/schemas'
-import { verifyTimestamp, walkRootChain } from '@delo/release-formats/sign/verify'
+import { verifyTimestamp, walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
 import { resignedTimestamp } from '@delo/release/sign/timestamp'
-import { checkAgainstMark, type HighWaterMark, type MarkStore } from './mark.ts'
+import { checkAgainstMark, raiseMark, type HighWaterMark, type MarkStore } from './mark.ts'
 import type { ReplaceStore } from './store.ts'
 
 /** The result of one re-signing attempt. */
@@ -25,6 +25,20 @@ export type ResignOutcome =
   | { readonly outcome: 'resigned', readonly version: number, readonly expires: string }
   /** Another writer replaced `timestamp.json` after it was read; that write stands and the next run retries. */
   | { readonly outcome: 'raced' }
+
+/**
+ * Walk the root chain the bucket stores.
+ * @param store - the bucket.
+ * @returns the newest root, after every root in the chain verified against the one before it.
+ * @throws Error when the bucket holds no root, a root disappears while it is read, or the roots do not chain.
+ */
+export async function newestRoot(store: Pick<ReplaceStore, 'read' | 'list'>): Promise<TrustedRoot> {
+  const numbered = (await store.list('root/')).map(name => /^root\/([1-9][0-9]*)\.root\.json$/u.exec(name)).filter(match => match !== null).map(match => ({ name: match[0], version: Number(match[1]) }))
+  if (numbered.length === 0) throw new Error('the bucket holds no root/<n>.root.json')
+  numbered.sort((a, b) => a.version - b.version)
+  const files = await Promise.all(numbered.map(async ({ name }) => (await store.read(name))?.bytes ?? Promise.reject(new Error(`${name} disappeared while it was read`))))
+  return walkRootChain(files).at(-1)!
+}
 
 /**
  * Re-sign the current timestamp.
@@ -39,12 +53,7 @@ export async function resignTimestamp(request: { readonly store: ReplaceStore, r
   const { store, mark, key, now } = request
   const current = await store.read('timestamp.json')
   if (current === undefined) throw new Error('the bucket holds no timestamp.json to re-sign; the first timestamp is signed with sign-timestamp.ts')
-  const numbered = (await store.list('root/')).map(name => /^root\/([1-9][0-9]*)\.root\.json$/u.exec(name)).filter(match => match !== null).map(match => ({ name: match[0], version: Number(match[1]) }))
-  if (numbered.length === 0) throw new Error('the bucket holds no root/<n>.root.json')
-  numbered.sort((a, b) => a.version - b.version)
-  const files = await Promise.all(numbered.map(async ({ name }) => (await store.read(name))?.bytes ?? Promise.reject(new Error(`${name} disappeared while it was read`))))
-  const chain = walkRootChain(files)
-  const root = chain.at(-1)!
+  const root = await newestRoot(store)
   // The re-signing writes one signature, so a higher threshold would make every file it writes fail verification.
   if (root.metadata.roles.timestamp.threshold !== 1) throw new Error(`root ${String(root.metadata.version)} requires ${String(root.metadata.roles.timestamp.threshold)} timestamp signatures; the re-signer writes one, so it refuses to sign instead of publishing a timestamp that fails verification`)
   // The current timestamp may be past its expiry after a missed run; its signature and lifetime still hold.
@@ -58,7 +67,7 @@ export async function resignTimestamp(request: { readonly store: ReplaceStore, r
   // Verifying the new file also proves the key is one of the root's timestamp keys.
   verifyTimestamp(root, bytes, now)
   if (!await store.putIfMatch('timestamp.json', bytes, current.etag)) return { outcome: 'raced' }
-  await mark.write({ version: content.version, channels: seen.channels })
+  await raiseMark(mark, { version: content.version, channels: seen.channels })
   return { outcome: 'resigned', version: content.version, expires: content.expires }
 }
 
