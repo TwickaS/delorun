@@ -13,7 +13,7 @@ import { scratch, writeTree } from '../support.ts'
 function stagedTree(root: string): void {
   writeTree(root, {
     'node_modules/@delo/lib/package.json': JSON.stringify({ name: '@delo/lib', version: '0.0.0', type: 'module', exports: { '.': './src/index.ts', './types': { types: './src/types.d.ts' }, './package.json': './package.json' } }),
-    'node_modules/@delo/lib/src/index.ts': "import { twice } from './math.ts'\nimport type { Shape } from './types.d.ts'\nexport const shape: Shape = { size: twice(21) }\nexport type { Shape }\n",
+    'node_modules/@delo/lib/src/index.ts': "import { twice } from './math.ts'\nimport type { Shape } from './types.d.ts'\nexport const shape: Shape = { size: twice(21) }\nexport const later = async (): Promise<number> => (await import('./math.ts')).twice(1)\nexport type { Shape }\n",
     'node_modules/@delo/lib/src/math.ts': 'export function twice(value: number): number {\n  return value * 2\n}\n',
     'node_modules/@delo/lib/src/types.d.ts': 'export interface Shape { readonly size: number }\n',
     'node_modules/@delo/lib/tests/lib.spec.ts': "import { shape } from '../src/index.ts'\n",
@@ -34,6 +34,7 @@ describe('Delo packages in a closure', () => {
     expect(existsSync(join(lib, 'src/index.ts'))).toBe(false)
     expect(existsSync(join(lib, 'tests'))).toBe(false)
     expect(readFileSync(join(lib, 'src/index.js'), 'utf8')).toContain('from "./math.js"')
+    expect(readFileSync(join(lib, 'src/index.js'), 'utf8')).toContain('import("./math.js")')
     expect(readFileSync(join(lib, 'src/types.d.ts'), 'utf8')).toContain('Shape')
     expect(JSON.parse(readFileSync(join(lib, 'package.json'), 'utf8')).exports).toEqual({ '.': './src/index.js', './types': { types: './src/types.d.ts' }, './package.json': './package.json' })
     expect(JSON.parse(readFileSync(join(root, 'node_modules/@delo/cli/package.json'), 'utf8')).bin).toEqual({ delorun: './src/bin.js' })
