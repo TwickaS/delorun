@@ -179,6 +179,12 @@ export const DELO_HOME_ENTRIES = {
   changes: 'changes',
 } as const
 
+/** Top-level files of the Delo home that Delo code writes, as opposed to the directories of {@link DELO_HOME_ENTRIES}. */
+export const DELO_HOME_FILES = {
+  /** The data-format record the running release keeps beside its chat data (C3). */
+  dataFormat: 'data-format.json',
+} as const
+
 /**
  * Paths below the home that confined commands may read and execute. None
  * holds a secret, and no component writes a secret under one.

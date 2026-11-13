@@ -23,6 +23,7 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "src/wire.ts",
     "locale/*.json",
     "cordis.patch.yml"
   ],

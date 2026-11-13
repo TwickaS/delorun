@@ -382,11 +382,33 @@ export async function runUpdate(args: readonly string[], context: CommandContext
       context.stderr(`delorun update: Delorun ${report.to.delo} failed its health check (${String(final.criterion ?? final.reason ?? 'no reason')}); Delorun ${report.from.delo} runs again with the profile from before. See delorun logs.\n`)
       return EXIT.failed
     case 'failed':
-      context.stderr(`delorun update: Delorun ${report.to.delo} failed its health check, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.\n`)
+      context.stderr(`${failedRollbackLine(report, final.reason)}\n`)
       return EXIT.failed
     default:
       context.stderr(`delorun update: the update ended ${String(final.outcome)}${typeof final.reason === 'string' ? ` (${final.reason})` : ''}; nothing changed.\n`)
       return EXIT.failed
+  }
+}
+
+/**
+ * The line for an update whose automatic rollback did not complete, by the reason the home process gave.
+ * @param report - the report the person confirmed.
+ * @param reason - the final line's `reason`, when it carries one.
+ * @returns the line, without its newline.
+ */
+function failedRollbackLine(report: UpdateReport, reason: unknown): string {
+  const lead = `delorun update: Delorun ${report.to.delo} failed its health check`
+  switch (reason) {
+    case 'ROLLBACK_NEEDS_DATA_COPY':
+      return `${lead}, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.`
+    case 'ROLLBACK_TARGET_UNUSABLE':
+      return `${lead}, and Delorun ${report.from.delo}, which it would go back to, is not installed or fails its start check. Run delorun recover status.`
+    case 'CHATS_RUNNING':
+      return `${lead}, and another process uses the chat data, so going back did not start. Stop that process; the next start completes the rollback.`
+    case 'GIT_UNAVAILABLE':
+      return `${lead}, and git, which restores the profile, cannot run, so going back did not start. Install git; the next start completes the rollback.`
+    default:
+      return `${lead}, and going back stopped after a step may have run. The next start completes the rollback; delorun logs home says why, and delorun recover status shows where it stands.`
   }
 }
 

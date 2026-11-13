@@ -503,11 +503,32 @@ describe('runUpdate', () => {
   })
 
   it('exits 1 and points at the recovery commands when going back needed a copy that was not taken', async () => {
-    await homeAnswering({ prepare: prepared(report()), apply: [{ ok: true, outcome: 'failed' }] })
+    await homeAnswering({ prepare: prepared(report()), apply: [{ ok: true, outcome: 'failed', reason: 'ROLLBACK_NEEDS_DATA_COPY' }] })
 
     expect(await update(['--yes'])).toBe(EXIT.failed)
 
     expect(output.stderr).toBe('delorun update: Delorun 1.1.0 failed its health check, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.\n')
+  })
+
+  it('does not blame a missing copy when the rollback stopped for another reason', async () => {
+    await homeAnswering({ prepare: prepared(report()), apply: [{ ok: true, outcome: 'failed' }] })
+
+    expect(await update(['--yes'])).toBe(EXIT.failed)
+
+    expect(output.stderr).not.toContain('chat-data copy')
+    expect(output.stderr).toContain('going back stopped after a step may have run')
+  })
+
+  it.each([
+    ['ROLLBACK_TARGET_UNUSABLE', 'fails its start check'],
+    ['CHATS_RUNNING', 'another process uses the chat data'],
+    ['GIT_UNAVAILABLE', 'git, which restores the profile, cannot run'],
+  ])('names %s when the rollback was refused for it', async (reason, text) => {
+    await homeAnswering({ prepare: prepared(report()), apply: [{ ok: true, outcome: 'failed', reason }] })
+
+    expect(await update(['--yes'])).toBe(EXIT.failed)
+
+    expect(output.stderr).toContain(text)
   })
 
   it('exits 1 and says nothing changed when the update was aborted, with the reason when there is one', async () => {

@@ -128,7 +128,7 @@ export function CreateSection(props: CreateSectionProps) {
       <div className={css.metaRow}>
         <Button variant="outline" size="sm" onClick={() => { void reveal(created.plugin, created.workspace) }}>{t('create.open')}</Button>
         <Button variant="outline" size="sm" disabled={requested}
-          onClick={() => { void request(created.plugin, created.workspace).then((outcome) => { if (outcome.kind === 'done') setRequested(true) }) }}>{t('create.turnOn')}</Button>
+          onClick={() => { void request(created.plugin, created.workspace).then((outcome) => { if (outcome.kind === 'done') setRequested(true) }) }}>{t('create.enable')}</Button>
         <Button variant="outline" size="sm" onClick={() => { setCreated(undefined); setRequested(false); setName('') }}>{t('create.another')}</Button>
       </div>
     </div>}

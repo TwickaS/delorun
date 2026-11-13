@@ -378,7 +378,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
       expect.stringMatching(new RegExp(`^Downloading ${closureFileNames(R1, 'linux-x64').archive.replaceAll('.', '\\.')} \\(\\d+(\\.\\d)? (kB|MB)\\)\\.$`, 'u')),
       `Installing release ${R1}.`,
     ])
-    expect(first.stdout).toMatch(new RegExp(`^Delo ${R1.replaceAll('.', '\\.')}\\nDSH \\d+\\.\\d+\\.\\d+`, 'u'))
+    expect(first.stdout).toMatch(new RegExp(`^Delorun ${R1.replaceAll('.', '\\.')}\\nDSH \\d+\\.\\d+\\.\\d+`, 'u'))
     expect(first.status).toBe(0)
     const record = await readJson<{ releases: Record<string, { state: string }> }>(`${HOME}/trust/release-log.json`)
     expect(record.releases[R1]?.state).toBe('verified')
@@ -392,7 +392,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     await writeInMachine(`${PERSON_HOME}/.local/bin/xdg-open`, BROWSER_SCRIPT)
     await run(['chmod', '755', `${PERSON_HOME}/.local/bin/xdg-open`])
     const started = await delorun([])
-    expect(started.stdout).toContain('Delo is running in the background for the profile default')
+    expect(started.stdout).toContain('Delorun is running in the background for the profile default')
     expect(started.status, started.stderr).toBe(0)
     await waitFor('the studio\'s address in the person\'s browser', async () => (await run(['test', '-s', `${PERSON_HOME}/.journey-browser/opened`])).status === 0)
     expect(await probe('index')).toEqual({ withCookie: 200, html: true, without: 401 })
@@ -544,14 +544,14 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     expect(refused.status).toBe(1)
     let atPrompt: Record<string, string> = {}
     const updated = await interact(parts().machine, 'delorun update', parts().env, [{
-      when: new RegExp(`Apply the update to Delo ${R2.replaceAll('.', '\\.')}`, 'u'),
+      when: new RegExp(`Apply the update to Delorun ${R2.replaceAll('.', '\\.')}`, 'u'),
       before: async () => { atPrompt = { ...await hashes(PROFILE), ...await stats(`${HOME}/runtimes`) } },
       send: 'y',
     }])
-    expect(updated.stdout).toContain(`${FIXTURE} requires Delo >=0.1.0 <0.2.0; the update installs Delo ${R2}.`)
+    expect(updated.stdout).toContain(`${FIXTURE} requires Delorun >=0.1.0 <0.2.0; the update installs Delorun ${R2}.`)
     // Before the confirmation the staged target is in the store (C3), and nothing that was there changed.
     for (const [path, digest] of Object.entries(before)) expect(atPrompt[path], `${path} changed before the person confirmed`).toBe(digest)
-    expect(updated.stdout).toContain(`Delo ${R2} runs now.`)
+    expect(updated.stdout).toContain(`Delorun ${R2} runs now.`)
     expect(updated.status).toBe(0)
     expect(await running()).toBe(R2)
     const listed = await rows()
@@ -578,8 +578,10 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     const { trust, log, channel, releases, machine, env } = parts()
     const closures = await releases
     await publish(trust, log, channel, R2B, closures[R2B]!)
-    const updated = await interact(machine, 'delorun update', env, [{ when: new RegExp(`Apply the update to Delo ${R2B.replaceAll('.', '\\.')}`, 'u'), send: 'y' }])
-    expect(updated.stdout).toMatch(new RegExp(`Delo ${R2B.replaceAll('.', '\\.')} failed its health check \\(H2-host-ready`, 'u'))
+    const updated = await interact(machine, 'delorun update', env, [{ when: new RegExp(`Apply the update to Delorun ${R2B.replaceAll('.', '\\.')}`, 'u'), send: 'y' }])
+    const named = new RegExp(`Delorun ${R2B.replaceAll('.', '\\.')} failed its health check \\(H2-host-ready`, 'u')
+    // A rollback that did not finish leaves the home process's log as the only record of why.
+    expect(updated.stdout, named.test(updated.stdout) ? '' : (await delorun(['logs', 'home'])).stdout).toMatch(named)
     expect(updated.status).toBe(1)
     expect(await running()).toBe(R1)
     expect(inactive(await rows())).toEqual([])
@@ -591,11 +593,11 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     const closures = await releases
     await publish(trust, log, channel, R3, closures[R3]!)
     const updated = await interact(machine, 'delorun update', env, [
-      { when: new RegExp(`Apply the update to Delo ${R3.replaceAll('.', '\\.')}`, 'u'), send: 'y' },
+      { when: new RegExp(`Apply the update to Delorun ${R3.replaceAll('.', '\\.')}`, 'u'), send: 'y' },
       { when: /Take a copy first\?/u, send: '\r' },
     ])
-    expect(updated.stdout).toContain(`Chat data: Delo ${R3} keeps chat data in a format Delo ${R1} may not read.`)
-    expect(updated.stdout).toContain(`Delo ${R3} runs now. The chat data from before is copied in data-copies/${R3}.`)
+    expect(updated.stdout).toContain(`Chat data: Delorun ${R3} keeps chat data in a format Delorun ${R1} may not read.`)
+    expect(updated.stdout).toContain(`Delorun ${R3} runs now. The chat data from before is copied in data-copies/${R3}.`)
     expect(updated.status).toBe(0)
     expect(await running()).toBe(R3)
     // Release 3 migrated the chat-states unit, which release 1 refuses to read.
@@ -616,7 +618,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     await ensureRunning()
     const { machine, env } = parts()
     const before = await customisations()
-    const updated = await interact(machine, 'delorun update --no-data-copy', env, [{ when: new RegExp(`Apply the update to Delo ${R3.replaceAll('.', '\\.')}`, 'u'), send: 'y' }])
+    const updated = await interact(machine, 'delorun update --no-data-copy', env, [{ when: new RegExp(`Apply the update to Delorun ${R3.replaceAll('.', '\\.')}`, 'u'), send: 'y' }])
     expect(updated.stdout).toContain('Continuing without the copy.')
     expect(updated.status).toBe(0)
     expect(await running()).toBe(R3)

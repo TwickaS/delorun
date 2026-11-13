@@ -45,8 +45,9 @@ const INTEGRATION_HOOK_TIMEOUT_MS = 120_000
 
 const SPEC_DIRS = ['apps/*/tests/**', 'packages/*/tests/**']
 
-/** The unit project: `*.spec.ts` specs that start no process. */
+/** The unit project: `*.spec.ts` specs that start no process; `@design` is the sites' shared design package, as in the docs and website tsconfigs. */
 export const forkUnitProject = {
+  resolve: { alias: { '@design': fileURLToPath(new URL('./packages/site-design/src', import.meta.url)) } },
   test: {
     name: 'fork',
     include: SPEC_DIRS.map(dir => `${dir}/*.spec.ts`),

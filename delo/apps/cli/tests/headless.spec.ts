@@ -191,7 +191,7 @@ describe('delorun headless', { timeout: 60_000 }, () => {
     const steps = upstreamDependencies().preStartSteps.map(step => ({ ...step, run: () => { ran.push(step.name); return Promise.resolve() } }))
     const seen: RunProfileOptions[] = []
     expect(await headless(['task'], context, { ...recording(seen, []), preStartSteps: steps }, () => undefined)).toBeUndefined()
-    expect(ran).toEqual(['stock-import-recovery', 'profile-migrations', 'changes', 'plugin-changes', 'update-notice'])
+    expect(ran).toEqual(['stock-import-recovery', 'data-format-record', 'profile-migrations', 'changes', 'plugin-changes', 'update-notice'])
     const refusal = new CliError(EXIT.failed, 'delorun: an import was interrupted')
     const refusing = steps.map(step => step.name === 'stock-import-recovery' ? { ...step, run: () => Promise.reject(refusal) } : step)
     await expect(headless(['task'], context, { ...recording(seen, []), preStartSteps: refusing }, () => undefined)).rejects.toBe(refusal)

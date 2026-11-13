@@ -21,7 +21,7 @@ import { DevicesSection, type DevicesSectionProps } from '../src/client/DevicesS
 import { applyUnlock, UNLOCK_OVERLAY_ID } from '../src/client/index.ts'
 import { createUnlockSource, type UnlockSource, type UnlockView } from '../src/client/unlock.ts'
 import { clockTime, ELEVATE_COMMAND, groupedCode, UnlockOverlay } from '../src/client/UnlockOverlay.tsx'
-import { AWAY, fakeHost, staticUnlock, type Answer } from './fake-host.ts'
+import { AWAY, fakeHost, staticPairing, staticUnlock, type Answer } from './fake-host.ts'
 
 const NOW = Date.UTC(2026, 10, 12, 14, 0, 0)
 const CODE = '12345678'
@@ -449,7 +449,7 @@ describe('the plugin\'s unlock', () => {
  */
 function renderSection(host: ReturnType<typeof fakeHost>, view: UnlockView = AWAY) {
   const unlock = staticUnlock(view)
-  const props = { t, close: () => {}, fetch: host.fetch, ...unlock } as DevicesSectionProps
+  const props = { t, close: () => {}, fetch: host.fetch, ...unlock, ...staticPairing() } as DevicesSectionProps
   return { ...render(<DevicesSection {...props} />), ...unlock }
 }
 
