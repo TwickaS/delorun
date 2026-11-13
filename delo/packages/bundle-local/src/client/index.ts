@@ -24,10 +24,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-// Type-only: the 'settings.section' SlotMap entry and the ctx.configForms Context merge.
+// Type-only: the 'settings.section' and 'settings.section.icon' SlotMap entries and the ctx.configForms Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the 'sidebar.brand.mark' and 'sidebar.brand.name' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SETUP_OPT_IN_ROWS, SETUP_UPDATE_CHECK_ROW } from '@delo/contract-setup-answers'
 import { DeloBrandMark, DeloBrandName } from './brand.tsx'
 import { acknowledgeNotice, DeloNotice, noticeAcknowledged, type DeloNoticeInjected } from './DeloNotice.tsx'
@@ -235,6 +236,8 @@ export function apply(ctx: Context): void {
     locale: DEVICES_NS,
     inject: devicesFace,
   }, DevicesSection))
+  // A link glyph stands in for a device glyph, which the icon library lacks; without this Settings draws the generic gear.
+  ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: DEVICES_SECTION_ID }, IconLinkOutlineRegular))
   applyRemoteNotice(ctx)
   applyConsents(ctx, browserFetch)
 }

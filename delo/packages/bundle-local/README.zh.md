@@ -77,7 +77,7 @@ kind: "package-bundle"
 
 初始设置流程与其他界面通过 `ctx.settingsShell.openSection('delo-privacy')` 打开该分区。上游自身的 **设置 → 通用** 中的会话日志上传开关编辑同一行，且不经对话框；[`@delo/plugin-settings-layout`](../plugin-settings-layout/README.md) 在 Delo 的外观中隐藏它，库存外观则显示它。该分区的文案同时提供英文与中文。
 
-同一行还注册 **设备** 分区（`delo-devices`，紧随“隐私”之后，[`src/client/DevicesSection.tsx`](src/client/DevicesSection.tsx)）：远程访问状态、带确认移除的已批准设备，以及“添加设备”——它打开 home 的批准窗口，并在窗口打开期间每两秒读取一次待处理的请求，全部通过同源请求进行（[`src/client/devices-api.ts`](src/client/devices-api.ts)，引导流程导入其中的 `readReachStatus`）。没有远程访问的 profile 改为显示一行说明；远程 studio 收到的每个 `LOOPBACK_REQUIRED` 拒绝都就地显示为“这需要你在自己的电脑上操作”并附带该操作。该行还注册一个 `shell.overlay` 提示（[`src/client/RemoteNotice.tsx`](src/client/RemoteNotice.tsx)），每当 home 以 `LOOPBACK_REQUIRED` 拒绝页面对转发提示的答复时显示，例如从远程 studio 答复的完全访问授权：上游的 Client Remote 服务把该拒绝报告为 `remote/answer-refused`，提示写明“这需要你在自己的电脑上操作”并附带被拒绝的操作。
+同一行还注册 **设备** 分区（`delo-devices`，紧随“隐私”之后，[`src/client/DevicesSection.tsx`](src/client/DevicesSection.tsx)，导航图标为链接字形，经 `settings.section.icon` 注册）：远程访问状态、带确认移除的已批准设备，以及“添加设备”——它打开 home 的批准窗口，并在窗口打开期间每两秒读取一次待处理的请求，全部通过同源请求进行（[`src/client/devices-api.ts`](src/client/devices-api.ts)，引导流程导入其中的 `readReachStatus`）。没有远程访问的 profile 改为显示一行说明；远程 studio 收到的每个 `LOOPBACK_REQUIRED` 拒绝都就地显示为“这需要你在自己的电脑上操作”并附带该操作。该行还注册一个 `shell.overlay` 提示（[`src/client/RemoteNotice.tsx`](src/client/RemoteNotice.tsx)），每当 home 以 `LOOPBACK_REQUIRED` 拒绝页面对转发提示的答复时显示，例如从远程 studio 答复的完全访问授权：上游的 Client Remote 服务把该拒绝报告为 `remote/answer-refused`，提示写明“这需要你在自己的电脑上操作”并附带被拒绝的操作。
 
 <a id="the-consent-surfaces"></a>
 ## 同意界面
