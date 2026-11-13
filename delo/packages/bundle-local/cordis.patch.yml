@@ -120,7 +120,8 @@
 # composition mounts any of them: a model-authored write to an instruction
 # layer, an added stdio MCP server, a full-access mode switch, a scheduled
 # delivery into a moved workspace and a fetch of a private address each ran
-# unguarded. The Loader starts rows concurrently, so row order does not order
+# unguarded, and an external agent such as Claude Code started without
+# asking. The Loader starts rows concurrently, so row order does not order
 # their startup: an mcp-client row waits for the `delo-mcp-consent` row, which
 # declares itself the `mcpAddConsent` provider, before it starts a stdio server.
 # `permission_defaults` alone provides the sandbox-mode guard (A135):
@@ -148,6 +149,11 @@
 
     - id: delo-fetch-guard
       name: '@delo/plugin-fetch-guard'
+      config:
+        enabled: true
+
+    - id: delo-delegation-consent
+      name: '@delo/plugin-delegation-consent'
       config:
         enabled: true
 
@@ -190,8 +196,9 @@
 # access, cannot disable a protected row, change its settings, or deselect or
 # remove a bundle that carries one, this bundle included, so no chat in one
 # workspace turns a guard off, or silences the update check, for every
-# workspace. Settings → Privacy writes the update check's switch through the
-# settings service, which this list does not govern. Upstream's base
+# workspace. Settings → Privacy writes the update check's switch, and
+# Settings → Permissions the external-agent consent's switch and run time limit,
+# through the settings service, which this list does not govern. Upstream's base
 # bundle gives the row no config, so `protectedPlugins` is the only key.
 - id: plugin-manager
   config:
@@ -201,6 +208,7 @@
       - '@delo/plugin-permission-defaults'
       - '@delo/plugin-schedule-consent'
       - '@delo/plugin-fetch-guard'
+      - '@delo/plugin-delegation-consent'
       - '@delo/bundle-local/update-gate'
       - '@delo/bundle-local/update-check'
       - '@delo/reach'

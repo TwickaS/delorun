@@ -2,16 +2,19 @@
 /**
  * The consent surfaces of the studio: the full-access consent that upstream's permission control asks before a chat
  * switches to full access in a workspace without a grant, the approval card's full-access action, the MCP server review,
- * the notice that a server waits, and the Permissions section with its revokes. The denial cases prove that a remote
+ * the notice that a server waits, the approval card's external-agent action, and the Permissions section with its revokes. The denial cases prove that a remote
  * studio, an unanswered consent and a stale review record nothing, that a phone sees "Approve this at your computer"
  * instead of a button, and that a profile without the consent plugins (such as one set up with "Same as stock") keeps
  * upstream's behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { MCP_CONSENT_ROUTES } from '@delo/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
+import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView } from '@delo/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import type { WorkspaceAccess } from '../src/client/consents-api.ts'
@@ -20,9 +23,11 @@ import {
   workspaceName, type FullAccessConsentProps, type FullAccessConsentSource,
 } from '../src/client/FullAccessConsent.tsx'
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
+import { agentOfferFor, ExternalAgentAction, type ExternalAgentActionProps } from '../src/client/ExternalAgentAction.tsx'
 import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
-import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
+import { AGENTS_COMMAND, MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
+import { OptIn } from '../src/client/opt-in.ts'
 
 afterEach(() => {
   cleanup()
@@ -475,6 +480,165 @@ describe('the approval card\'s full-access action', () => {
   })
 })
 
+const GRANT: GrantView = { workspace: '/home/person/projects/site', provider: 'claude-code', agent: 'Claude Code', grantedAt: NOW - 3_600_000 }
+const GRANTS = (grants: readonly GrantView[], storeProblem?: string): Answer => ({ status: 200, body: storeProblem === undefined ? { grants } : { grants, storeProblem } })
+
+/**
+ * The approval card's owner props and the external-agent action's face, over a fake home.
+ * @param host - the fake home.
+ * @param overrides - the props a case changes.
+ * @returns the props.
+ */
+function agentActionProps(host: ReturnType<typeof fakeHost>, overrides: Partial<ExternalAgentActionProps> = {}): ExternalAgentActionProps {
+  return {
+    t: makeTranslate(en), grants: 'external-agent', toolName: 'claude-code', callId: undefined, allow: vi.fn(async () => {}),
+    answered: false, canAnswer: () => true, sessionId: 'chat-1', fetch: host.fetch, ...overrides,
+  } as ExternalAgentActionProps
+}
+
+describe('the approval card\'s external-agent action', () => {
+  it('records the workspace grant first, then answers the card', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${DELEGATION_CONSENT_ROUTES.allow}`)?.body)
+      .toEqual({ sessionId: 'chat-1', provider: 'claude-code', confirmed: true })
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('is disabled once the card answered or no longer accepts an answer, so a click records nothing', async () => {
+    for (const overrides of [{ answered: true }, { canAnswer: () => false }]) {
+      const host = fakeHost({
+        [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+        [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+      })
+      const props = agentActionProps(host, overrides)
+      const { unmount } = render(<ExternalAgentAction {...props} />)
+      await settle()
+      const button = screen.getByRole<HTMLButtonElement>('button', { name: en['action.allowAgent'] })
+      expect(button.disabled).toBe(true)
+      fireEvent.click(button)
+      await settle()
+      expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+      expect(props.allow).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
+
+  it('records nothing when the card no longer accepts an answer at the click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    let answerable = true
+    const props = agentActionProps(host, { canAnswer: () => answerable })
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    // The request ended after the action rendered, so the card cannot answer, though no answer was sent from it.
+    answerable = false
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`])
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('does not answer a card that stopped accepting an answer while the grant was recorded', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: { status: 200, body: { grant: GRANT } },
+    })
+    let answerable = true
+    const fetch: HostFetch = async (input, init) => {
+      const response = await host.fetch(input, init)
+      // The person rejects the card while the grant is on its way.
+      if (init?.method === 'POST') answerable = false
+      return response
+    }
+    const props = agentActionProps(host, { fetch, canAnswer: () => answerable })
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(host.received.map(request => request.key)).toEqual([`GET ${DELEGATION_CONSENT_ROUTES.grants}`, `POST ${DELEGATION_CONSENT_ROUTES.allow}`])
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('leaves the card unanswered and names the reason when the home records nothing', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: refusal(500, 'STORE_REFUSED', 'The approvals file cannot be changed'),
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe('The approvals file cannot be changed')
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('leaves the card unanswered when the home refuses the grant as remote at the click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.allow}`]: REMOTE,
+    })
+    const props = agentActionProps(host)
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: en['action.allowAgent'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('loopback', { action: en['action.changeAgent'] }))
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('tells a phone to approve at the computer, with no button', async () => {
+    const props = agentActionProps(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }))
+    render(<ExternalAgentAction {...props} />)
+    await settle()
+    expect(screen.getByRole('status').textContent).toBe(en['action.atComputer'])
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('shows nothing for another grant, a card without a tool, a profile without the plugin and an unreadable home', async () => {
+    const mounted = fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) })
+    const cases = [
+      agentActionProps(mounted, { grants: 'full-access' }),
+      agentActionProps(mounted, { toolName: undefined }),
+      agentActionProps(fakeHost()),
+      agentActionProps(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: refusal(500, 'STORE_REFUSED') })),
+    ]
+    for (const props of cases) {
+      const { container, unmount } = render(<ExternalAgentAction {...props} />)
+      await settle()
+      expect(container.innerHTML).toBe('')
+      unmount()
+    }
+  })
+
+  it('reads its offer from the grants route', async () => {
+    await expect(agentOfferFor(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]) }).fetch)).resolves.toBe('allow')
+    await expect(agentOfferFor(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }).fetch)).resolves.toBe('remote')
+    await expect(agentOfferFor(fakeHost().fetch)).resolves.toBe('none')
+  })
+
+  it('ignores an offer that arrives after the card is gone', async () => {
+    let answer: ((response: Response) => void) | undefined
+    const fetch: HostFetch = async () => new Promise<Response>((resolve) => { answer = resolve })
+    const { container, unmount } = render(<ExternalAgentAction {...agentActionProps({ fetch, received: [], script: {} })} />)
+    unmount()
+    answer?.(new Response(JSON.stringify({ grants: [] }), { status: 200 }))
+    await settle()
+    expect(container.innerHTML).toBe('')
+  })
+})
+
 /**
  * Render the MCP server review over its store.
  * @param source - the store.
@@ -704,13 +868,38 @@ describe('the notice that an MCP server waits', () => {
 })
 
 /**
+ * The external-agent consent row's Host settings form, accepting each write as the Host would.
+ * @param value - the row's fields, or undefined for a profile that does not serve the row.
+ * @returns the form, its recorded writes and the writer the section uses.
+ */
+function agentSettingsForm(value?: DelegationConsentSettings) {
+  const state = createSnapshotStore<ConfigFormSnapshot<DelegationConsentSettings>>({
+    status: value === undefined ? 'unavailable' : 'ready', value, base: {}, user: {}, revision: 0, writable: true,
+  })
+  const set = vi.fn(async (field: string, next: unknown) => {
+    state.update((draft) => { if (draft.value !== undefined) draft.value = { ...draft.value, [field]: next } })
+    return true
+  })
+  const form: ConfigForm<DelegationConsentSettings> = {
+    getSnapshot: () => state.getSnapshot(), subscribe: listener => state.subscribe(listener), set, unset: vi.fn(), mutate: vi.fn(),
+  }
+  return { form, set, writer: new OptIn(form) }
+}
+
+/**
  * Render the Permissions section over a fake home.
  * @param host - the fake home.
  * @param faces - the consent's and the review's questions.
+ * @param settings - the external-agent consent row's form; by default a profile that does not serve the row.
  * @returns the render result.
  */
-function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}) {
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces } as PermissionsSectionProps
+function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}, settings = agentSettingsForm()) {
+  const props = {
+    t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces,
+    useAgentSettings: bindSnapshotSelector(settings.form),
+    useAgentSettingsMutation: bindSnapshotSelector(settings.writer.state),
+    setAgentSetting: (field: keyof DelegationConsentSettings, value: DelegationConsentSettings[keyof DelegationConsentSettings]) => settings.writer.set(field, value as never),
+  } as PermissionsSectionProps
   return render(<PermissionsSection {...props} />)
 }
 
@@ -816,12 +1005,48 @@ describe('the Permissions section', () => {
     expect(rowOf('git')).toBeTruthy()
   })
 
+  it('lists each external agent allowed per workspace and revokes it in one click', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.revoke}`]: { status: 200, body: { revoked: true } },
+    })
+    renderPermissions(host)
+    await settle()
+    const row = rowOf('Claude Code')
+    expect(within(row).getByText(GRANT.workspace)).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: en['agents.revoke'] }))
+    await settle()
+    expect(host.received.find(request => request.key === `POST ${DELEGATION_CONSENT_ROUTES.revoke}`)?.body).toEqual({ workspace: GRANT.workspace, provider: 'claude-code' })
+    expect(screen.getByRole('status').textContent).toBe(`Claude Code asks again before it starts in ${GRANT.workspace}.`)
+  })
+
+  it('says no agent starts without asking, and names a grants file it cannot read', async () => {
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([], 'not JSON') }))
+    await settle()
+    expect(screen.getByText(en['agents.none'])).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('agents.storeProblem', { problem: 'not JSON' }))
+  })
+
+  it('names a refused revoke and keeps the grant listed', async () => {
+    const host = fakeHost({
+      [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([GRANT]),
+      [`POST ${DELEGATION_CONSENT_ROUTES.revoke}`]: REMOTE,
+    })
+    renderPermissions(host)
+    await settle()
+    fireEvent.click(within(rowOf('Claude Code')).getByRole('button', { name: en['agents.revoke'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(makeTranslate(en)('loopback', { action: en['action.changeAgent'] }))
+    expect(rowOf('Claude Code')).toBeTruthy()
+  })
+
   it('tells a phone to approve at the computer, and offers no answer', async () => {
-    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE }))
+    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }))
     await settle()
     const line = screen.getByRole('status').textContent
     expect(line).toContain(FULL_ACCESS_COMMAND)
     expect(line).toContain(MCP_COMMAND)
+    expect(line).toContain(AGENTS_COMMAND)
     expect(screen.queryByRole('button')).toBeNull()
   })
 
@@ -865,10 +1090,64 @@ describe('the Permissions section', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
+  it('turns the external-agent consent off and on, and writes a whole run time limit within its bounds', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    await settle()
+    const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
+    expect(ask.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(ask)
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('enabled', false)
+    fireEvent.click(screen.getByRole('switch', { name: en['agents.ask.title'] }))
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('enabled', true)
+    const limit = screen.getByRole('spinbutton', { name: en['agents.limit.title'] })
+    for (const typed of ['0', '1441', '2.5', '', '30']) {
+      fireEvent.change(limit, { target: { value: typed } })
+      fireEvent.blur(limit)
+      await settle()
+    }
+    // An entry outside 1 to 1440 whole minutes, or the saved value, writes nothing and shows the saved value again.
+    expect(settings.set).toHaveBeenCalledTimes(2)
+    expect((limit as HTMLInputElement).value).toBe('30')
+    fireEvent.change(limit, { target: { value: '90' } })
+    fireEvent.keyDown(limit, { key: '0' })
+    expect(settings.set).toHaveBeenCalledTimes(2)
+    fireEvent.keyDown(limit, { key: 'Enter' })
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('runTimeoutMinutes', 90)
+    expect((limit as HTMLInputElement).value).toBe('90')
+  })
+
+  it('says a refused settings write was not saved and keeps the value the Host holds', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    settings.set.mockResolvedValueOnce(false)
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    await settle()
+    fireEvent.click(screen.getByRole('switch', { name: en['agents.ask.title'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(en['agents.settings.failed'])
+    expect(screen.getByRole('switch', { name: en['agents.ask.title'] }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('on a remote studio, disables the external-agent settings and says turning the consent off needs the computer', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), {}, settings)
+    await settle()
+    const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
+    expect(ask.hasAttribute('disabled') || ask.getAttribute('aria-disabled') === 'true').toBe(true)
+    expect((screen.getByRole('spinbutton', { name: en['agents.limit.title'] }) as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByText(en['agents.ask.computerOnly'])).toBeTruthy()
+    fireEvent.click(ask)
+    await settle()
+    expect(settings.set).not.toHaveBeenCalled()
+  })
+
   it('says it is loading until each list answers', async () => {
     renderPermissions({ fetch: async () => new Promise<Response>(() => {}), received: [], script: {} })
     await settle()
-    expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(2)
+    expect(screen.getAllByText(en['permissions.loading'])).toHaveLength(3)
   })
 
   it('says only that the profile does not ask, where the plugins are not mounted', async () => {
@@ -876,6 +1155,7 @@ describe('the Permissions section', () => {
     await settle()
     expect(screen.getByText(en['access.unavailable'])).toBeTruthy()
     expect(screen.getByText(en['mcp.unavailable'])).toBeTruthy()
+    expect(screen.getByText(en['agents.unavailable'])).toBeTruthy()
   })
 })
 

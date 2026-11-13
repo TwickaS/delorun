@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@delo/bundle-local": "workspace:*",
+    "@delo/plugin-delegation-consent": "workspace:*",
     "@delo/plugin-fetch-guard": "workspace:*",
     "@delo/plugin-instruction-consent": "workspace:*",
     "@delo/plugin-mcp-consent": "workspace:*",

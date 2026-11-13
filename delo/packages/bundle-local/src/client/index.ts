@@ -13,7 +13,8 @@
  * which upstream's permission control asks through the `permissionSwitchConsent` service before a chat switches to
  * full access in a workspace without a grant; the approval card's action for a request that asks for full access; the
  * review of a waiting stdio MCP server and the notice that one waits; and the Permissions section, which lists every
- * full-access grant and every waiting or allowed MCP server with a one-click revoke. Each reads its plugin's routes,
+ * full-access grant and every waiting or allowed MCP server with a one-click revoke, and holds the external-agent
+ * consent's switch and run time limit, written to `delo-delegation-consent`'s row through upstream's configuration form. Each reads its plugin's routes,
  * which answer only the home's own computer, but for the waiting servers' names, and are absent while the plugin's
  * switch is off.
  *
@@ -52,10 +53,12 @@ import type {} from '@deepseek-ai/dsh-client-ui-approval/client'
 import { en as consentsEn, zh as consentsZh, type ConsentsLocaleKey } from './consents-locales.ts'
 import { ConsentToast, createConsentToastSource } from './ConsentToast.tsx'
 import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAction.tsx'
+import { ExternalAgentAction, type ExternalAgentActionInjected } from './ExternalAgentAction.tsx'
 import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent } from './FullAccessConsent.tsx'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
 import { PermissionsSection, type PermissionsSectionInjected } from './PermissionsSection.tsx'
+import { DELEGATION_CONSENT_ROW, type DelegationConsentSettings } from '@delo/plugin-delegation-consent/wire'
 
 export type { PrivacyLocaleKey } from './locales.ts'
 export type { DevicesLocaleKey } from './devices-locales.ts'
@@ -63,6 +66,7 @@ export type { ConsentsLocaleKey } from './consents-locales.ts'
 export type { PermissionsSectionInjected, PermissionsSectionProps } from './PermissionsSection.tsx'
 export type { FullAccessConsentProps, FullAccessConsentSource, FullAccessConsentState } from './FullAccessConsent.tsx'
 export type { FullAccessActionInjected, FullAccessActionProps } from './FullAccessAction.tsx'
+export type { ExternalAgentActionInjected, ExternalAgentActionProps } from './ExternalAgentAction.tsx'
 export type { McpReviewSource, McpReviewState, McpServerReviewProps } from './McpServerReview.tsx'
 export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaitingNotice.tsx'
 export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
@@ -170,6 +174,9 @@ export const CONSENT_TOAST_ID = 'delo-consents-toast'
 
 /** The `conversation.approval.action` id of the full-access action. */
 export const FULL_ACCESS_ACTION_ID = 'delo-full-access'
+
+/** The `conversation.approval.action` id of the external-agent action. */
+export const EXTERNAL_AGENT_ACTION_ID = 'delo-external-agent'
 
 /** Required services. */
 export const inject = ['slots', 'locale', 'configForms']
@@ -292,13 +299,24 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: (sessionId): FullAccessActionInjected => ({ sessionId, fetch, ask: consent.ask }),
   }, FullAccessAction))
+  ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
+    name: 'conversation.approval.action',
+    id: EXTERNAL_AGENT_ACTION_ID,
+    locale: CONSENTS_NS,
+    inject: (sessionId): ExternalAgentActionInjected => ({ sessionId, fetch }),
+  }, ExternalAgentAction))
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: CONSENT_TOAST_ID,
     locale: CONSENTS_NS,
     inject: () => ({ hooks: toast.hooks, dismiss: toast.dismiss }),
   }, ConsentToast))
-  const permissionsFace = (): PermissionsSectionInjected => ({ fetch, ask: consent.ask, review: review.ask })
+  const agentSettings = new OptIn(ctx.configForms.get<DelegationConsentSettings>(DELEGATION_CONSENT_ROW))
+  const permissionsFace = (): PermissionsSectionInjected => ({
+    fetch, ask: consent.ask, review: review.ask,
+    hooks: { agentSettings: agentSettings.form, agentSettingsMutation: agentSettings.state },
+    setAgentSetting: (field, value) => agentSettings.set(field, value),
+  })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: PERMISSIONS_SECTION_ID,

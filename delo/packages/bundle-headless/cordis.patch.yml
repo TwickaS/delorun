@@ -54,6 +54,13 @@
       config:
         enabled: true
 
+    # An external agent such as Claude Code or Codex starts only with a grant
+    # recorded for the workspace: no one answers its ask in a one-shot run.
+    - id: delo-delegation-consent
+      name: '@delo/plugin-delegation-consent'
+      config:
+        enabled: true
+
     # The first step of every turn waits until `delorun headless` has checked
     # the booted Host's rows and services, so the task starts only after that
     # check. No update or stop waits on a headless run's chats.
@@ -78,6 +85,7 @@
       - '@delo/plugin-permission-defaults'
       - '@delo/plugin-schedule-consent'
       - '@delo/plugin-fetch-guard'
+      - '@delo/plugin-delegation-consent'
       - '@delo/bundle-local/update-gate'
       - '@deepseek-ai/dsh-sandbox-local'
       - '@deepseek-ai/dsh-sandbox-policy'

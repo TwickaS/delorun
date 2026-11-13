@@ -208,6 +208,8 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     })
     expect([...byId.values()].every(config => config['enabled'] === false)).toBe(true)
     expect(byId.has('delo-fetch-guard')).toBe(false)
+    // The external-agent consent is the person's switch in Settings: the stock answer leaves its row alone.
+    expect(byId.has('delo-delegation-consent')).toBe(false)
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })
 

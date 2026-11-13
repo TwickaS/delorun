@@ -12,8 +12,9 @@ import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID,
-  PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
+  apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID, FULL_ACCESS_ACTION_ID,
+  FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER,
+  PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -22,6 +23,8 @@ import {
 import { en, zh } from '../src/client/devices-locales.ts'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
 import { AWAY, fakeHost, staticUnlock } from './fake-host.ts'
+import type { PermissionsSectionInjected } from '../src/client/PermissionsSection.tsx'
+import { DELEGATION_CONSENT_ROW } from '@delo/plugin-delegation-consent/wire'
 
 afterEach(() => {
   cleanup()
@@ -482,9 +485,10 @@ describe('the plugin', () => {
       expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
       // Each overlay, each section and the approval card's action read their store's view and actions.
       for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section')]) expect(entry.inject?.()).toBeTypeOf('object')
-      // A session-scoped entry's inject takes the Session id, which the list's entry type does not carry.
-      const action = slots.entries('conversation.approval.action')[0]?.inject as ((sessionId: typeof SESSION) => object) | undefined
-      expect(action?.(SESSION)).toMatchObject({ sessionId: SESSION })
+      // Each approval card action is bound to the card's chat.
+      const actions = slots.entries('conversation.approval.action')
+      expect(actions.map(entry => entry.options.id)).toEqual([FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])
+      for (const action of actions) expect((action.inject as ((sessionId: typeof SESSION) => object) | undefined)?.(SESSION)).toMatchObject({ sessionId: SESSION })
       await expect(ctx.get('permissionSwitchConsent')?.confirm(SESSION, 'ask')).resolves.toBe(true)
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
@@ -494,6 +498,13 @@ describe('the plugin', () => {
       expect((devicesEntry?.inject?.() as { fetch: HostFetch }).fetch).toBe(face.fetch)
       expect(await readReachStatus(face.fetch)).toEqual(READY.body)
       expect(browserFetch).toHaveBeenCalledWith(DEVICE_ROUTES.reachStatus, expect.objectContaining({ credentials: 'same-origin' }))
+      // The Permissions section's external-agent settings read and write the consent row's Host form.
+      const permissionsInject = slots.entries('settings.section')[2]?.inject as (() => PermissionsSectionInjected) | undefined
+      const permissions = permissionsInject?.()
+      if (permissions === undefined) throw new Error('no Permissions section face')
+      expect(permissions.hooks.agentSettings).toBe(ctx.get('configForms')?.get(DELEGATION_CONSENT_ROW))
+      await permissions.setAgentSetting('runTimeoutMinutes', 45)
+      expect(permissions.hooks.agentSettingsMutation.getSnapshot()).toEqual({ busy: false, failed: true })
     } finally {
       await ctx.fiber.dispose()
     }

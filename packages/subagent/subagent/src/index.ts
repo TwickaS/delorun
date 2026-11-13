@@ -14,6 +14,9 @@
  * `startActivation` establishes every child under the activation manager, which
  * owns execution, result delivery, and resource release. Local providers seed
  * resumable Agents; external providers return a single execution handle.
+ * When a plugin provides the optional `delegationConsent` service
+ * ([consent](./consent.ts)), every external start waits for its review and
+ * starts only on its `allow`, bounded by the run time limit the review sets.
  * `sendMessage` steers between adjacent local Agents without exposing
  * whether a child is resident. Discovery combines real child Sessions with
  * parent-owned records for external executions.
@@ -76,9 +79,12 @@ import type { SubagentCatalogEntry } from './projection-types.ts'
 import { subagentIdentityProjectionDefinition, subagentTimingProjectionDefinition } from './projection.ts'
 import { subagentCatalogProjectionDefinition } from './catalog.ts'
 import { deliverSubagentPrompt } from './internal.ts'
+import { assertExternalDelegationConsent, limitExternalRunTime } from './consent.ts'
 
 export type {} from './catalog.ts'
 export * from './out-of-process.ts'
+export { assertExternalDelegationConsent, limitExternalRunTime } from './consent.ts'
+export type { DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict } from './consent.ts'
 export { AssistantOutputFold, finalAssistantOutput } from './assistant-output.ts'
 export { SubagentRunId } from './types.ts'
 export type {
@@ -211,9 +217,15 @@ export class SubagentRuntime extends TypertRemoteService {
     this.emitLifecycle = createLifecycleEmitter(this.ctx, parent => scopeTarget(this, parent))
     ctx.inject(['agents'], (childCtx: Context) => {
       const manager = new SubagentManager(childCtx, {
-        startExternal: (name, request) => {
+        startExternal: async (name, request) => {
+          const consent = this.ctx.get('delegationConsent')
+          const timeoutMs = consent === undefined ? undefined : await assertExternalDelegationConsent(consent, {
+            provider: name, parent: request.parent, cwd: request.cwd, label: request.label, signal: request.signal,
+          })
+          request.signal.throwIfAborted()
           const provider = this.expectProvider(name) as SubagentProvider & Required<Pick<SubagentProvider, 'start'>>
-          return provider.start(request)
+          const run = await provider.start(request)
+          return timeoutMs === undefined ? run : limitExternalRunTime(run, timeoutMs, name)
         },
         prepareContinuable: (name, request) => this.prepareContinuable(name, request),
         observeActivation: (provider, childId, parent) => this.observeActivation(provider, childId, parent),

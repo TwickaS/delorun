@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { ToolCallId, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tools'
@@ -108,6 +108,34 @@ describe('dsh-tool-subagent', () => {
       'prompt',
     ])
     expect(schema!.description).not.toContain('job_output')
+  })
+
+  it('takes an external provider\'s description from the consent seam and follows the seam appearing and leaving', async () => {
+    const ctx = await setup({ provider: 'mock' })
+    const description = (): string | undefined => ctx.tools.schemas().find(s => s.name === 'subagent')?.description
+    expect(description()).toMatch(/^Delegate a self-contained task to a subagent/)
+    class Consent extends Service {
+      constructor(scope: Context) { super(scope, 'delegationConsent') }
+      describe(provider: string): string { return `Start ${provider}, a separate program.` }
+      review(): Promise<{ kind: 'allow' }> { return Promise.resolve({ kind: 'allow' }) }
+    }
+    const fiber = ctx.plugin(Consent)
+    await fiber.await()
+    expect(description()).toMatch(/^Start mock, a separate program\. This tool starts/)
+    await fiber.dispose()
+    expect(description()).toMatch(/^Delegate a self-contained task to a subagent/)
+  })
+
+  it('keeps a local provider\'s description when a consent seam is composed', async () => {
+    const ctx = ownContext(new Context())
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await mountWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SubagentRuntime)
+    ctx.provide('delegationConsent', { describe: () => 'External agent.', review: () => Promise.resolve({ kind: 'allow' }) })
+    await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
+    await ctx.plugin(tool, { provider: 'spawn' })
+    expect(ctx.tools.schemas().find(s => s.name === 'subagent')?.description).toMatch(/^Delegate a self-contained task/)
   })
 
   it('classifies delegations as concurrency-safe', async () => {

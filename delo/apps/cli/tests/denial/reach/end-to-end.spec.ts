@@ -303,6 +303,17 @@ describe('reach on the Tailscale private address', () => {
       expect(() => { answer({ toolName: 'bash', grants: 'full-access' }, 'allowed-once', studio.ctx.connection.browserPeer) }).not.toThrow()
     })
 
+    it('a tailnet-route session cannot start an external agent', () => {
+      const peer = admittedPeer(phone)
+      const guard = studio.ctx.get('remoteAnswerGuard')
+      expect(guard).toBeDefined()
+      const answer = (request: object, value: unknown, by: PeerScope): void => { guard?.check({ peer: by, event: 'approval/request', request, value }) }
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', peer) }).toThrow(/needs you at your computer: starting an external agent/)
+      // Declining from the phone applies, and the studio on the home's computer can allow the start.
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'rejected', peer) }).not.toThrow()
+      expect(() => { answer({ toolName: 'claude-code', grants: 'external-agent' }, 'allowed-once', studio.ctx.connection.browserPeer) }).not.toThrow()
+    })
+
     it('removing the device ends its session at once', async () => {
       const deviceId = await phone.deviceId()
       const removed = await loopback('POST', '/auth/devices/remove', { v: 1, deviceId })

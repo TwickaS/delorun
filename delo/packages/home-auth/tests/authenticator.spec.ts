@@ -18,7 +18,7 @@ import type { RemoteAccessBinding, RemoteAccessPolicy } from '@deepseek-ai/dsh-a
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
-import { FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
+import { EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
 import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
 import { DeviceStore } from '../src/devices.ts'
@@ -188,7 +188,7 @@ describe('the authenticator provider', () => {
     expect(created.map(peer => peer.disposal.disposed)).toEqual([true, true])
   })
 
-  it('refuses a full-access or workspace-management grant answered from a reach Peer, and nothing else', async () => {
+  it('refuses a full-access, workspace-management or external-agent grant answered from a reach Peer, and nothing else', async () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
     const admitted = provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
     if (admitted.kind !== 'admitted') throw new Error('not admitted')
@@ -201,6 +201,10 @@ describe('the authenticator provider', () => {
     expect(() => { check(admitted.peer) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: FULL_ACCESS_REFUSAL, details: { action: 'full-access-escalation' } }))
     // Pins the workspace-management refusal, which names its own action.
     expect(() => { check(admitted.peer, { request: workspace }) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: WORKSPACE_MANAGEMENT_REFUSAL, details: { action: 'workspace-management' } }))
+    // Pins the external-agent refusal: a phone cannot allow an external agent to start.
+    expect(() => { check(admitted.peer, { request: { grants: 'external-agent' } }) }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED', message: EXTERNAL_AGENT_REFUSAL, details: { action: 'external-agent' } }))
+    expect(() => { check(local, { request: { grants: 'external-agent' } }) }).not.toThrow()
+    expect(() => { check(admitted.peer, { request: { grants: 'external-agent' }, value: 'rejected' }) }).not.toThrow()
     // Pins the granting test: an answer outside the closed outcomes counts as granting.
     expect(() => { check(admitted.peer, { request: workspace, value: 'allowed' }) }).toThrow(expect.objectContaining({ details: { action: 'workspace-management' } }))
     expect(() => { check(local) }).not.toThrow()

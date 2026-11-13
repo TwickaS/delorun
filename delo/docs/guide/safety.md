@@ -67,13 +67,19 @@ Setup's prompts question decides how Delorun asks before risky changes, and `del
 | A new MCP server that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
 | The model creates or edits a scheduled task | Asks with the task's prompt, its schedule, the chat it runs in and that chat's permission preset; a delivery is refused when that chat's preset has changed | Created as in DeepSeek Harness |
 
-The `web_fetch` guard and the update protections stay on with either answer. Plugin management cannot turn off, remove or reconfigure Delorun's consent and guard plugins or the sandbox, in any mode.
+The `web_fetch` guard, the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or reconfigure Delorun's consent and guard plugins or the sandbox, in any mode.
 
 A consent covers the tool it names. A shell command or code the model runs can still write `AGENTS.md` or a skill inside a writable workspace without asking.
 
 ### MCP servers
 
 An MCP server that runs a command runs it on your computer with your access, outside the sandbox. With Safer prompts, Delorun holds a new one stopped until you allow it in Settings, Permissions or with `delorun mcp accept <server>`. Before you answer you see its command, arguments, folder and environment variable names, and the exact file that will run and the folder it runs in, found the way the server would start. On Windows you also see the command shell that runs a `.cmd` or `.bat` file. Delorun asks again when any of these changes, including when the same command now finds a different file, for example after a folder earlier in `PATH` gains a program with that name. If the file changes between your look and your answer, your answer is refused and the review shows the new file. `delorun mcp revoke <server>` or Revoke in Settings, Permissions stops a server you allowed.
+
+### External agents
+
+Claude Code and Codex are optional delegation plugins: the model can hand a task to one of them. An external agent runs as its own program, outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home with its keys and tokens included, and it uses your own Claude Code or Codex sign-in and account, so any cost goes to that account.
+
+Delorun asks before each run on the home's own computer, whichever prompts answer you gave in setup; a phone signed in over remote access cannot answer. "Allow once" starts that run only. "Allow for this workspace" lets that agent start there without asking until you revoke it in Settings, Permissions, or with `delorun workspace external-agents <folder> <agent> off`; `delorun workspace external-agents` lists what you allowed. A chat on Read Only never starts an external agent, a run cannot start outside the chat's workspace, and each run stops after 30 minutes. A chat on Full access refuses every approval without asking you, so there an agent starts only in a workspace where you allowed it; a chat on Auto asks you, as on Workspace Write. `delorun headless` cannot ask anyone either, so it starts an agent only where you allowed it. A chat without a workspace folder never starts one, and the approval names the folder the agent will run in. The model cannot install or turn on these plugins, or another external-agent plugin such as the ACP one, which can run any program, through plugin management; you add them from the Plugins page or the first-run setup. A full-access chat can run any command anyway. Settings, Permissions turns this question off, so agents start without asking as in DeepSeek Harness, or changes the 30-minute limit, from 1 to 1440 minutes; a change applies from the next run. Only the home's own computer can turn the question off.
 
 ## The web_fetch guard
 

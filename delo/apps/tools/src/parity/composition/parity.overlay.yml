@@ -105,6 +105,12 @@
         enabled: true
       disabled: true
 
+    - id: delo-delegation-consent
+      name: '@delo/plugin-delegation-consent'
+      config:
+        enabled: true
+      disabled: true
+
 - insert:
     - id: delo-update-gate
       name: '@delo/bundle-local/update-gate'

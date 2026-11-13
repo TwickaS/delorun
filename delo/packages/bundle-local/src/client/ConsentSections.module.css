@@ -114,6 +114,11 @@
   line-height: 18px;
 }
 
+.minutes {
+  flex-shrink: 0;
+  width: 96px;
+}
+
 .buttons {
   display: flex;
   flex-shrink: 0;

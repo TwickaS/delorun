@@ -21,6 +21,7 @@
  * | `delorun reach status \| on tailscale \| off` | remote access to the studio over the person's tailnet (contract C7; [reach](./reach/command.ts)) |
  * | `delorun devices list \| approve \| remove <id> \| code` | the devices this home trusts, managed at this computer (contract C5; [devices](./devices/command.ts)) |
  * | `delorun workspace full-access [<folder> on \| off]` | a workspace's full access, turned on after a confirmation at this computer or off (contract C1; [workspace](./workspace/command.ts)) |
+ * | `delorun workspace external-agents [<folder> <agent> on \| off]` | the external agents, such as Claude Code, that start in a workspace without asking, allowed after a confirmation at this computer or revoked (contract C14; [external agents](./workspace/external-agents.ts)) |
  * | `delorun mcp list \| accept <server> \| decline <server> \| revoke <command>` | the stdio MCP servers the running studio holds stopped, answered at this computer, and the server commands it allows (contract C19; [mcp](./mcp/command.ts)) |
  * | `delorun --version [--json]` | Delo's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
  * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |

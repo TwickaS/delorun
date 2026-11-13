@@ -40,6 +40,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   FullAccessConsentRefusedError: PLUGIN,
   FullAccessChangeError: PLUGIN,
   McpReviewError: PLUGIN,
+  DelegationConsentError: PLUGIN,
   PermissionStoreError: PLUGIN,
   UnsupportedHostError: PLUGIN,
   InvalidPathError: PLUGIN,

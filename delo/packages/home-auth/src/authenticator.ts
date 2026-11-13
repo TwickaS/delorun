@@ -54,6 +54,9 @@ export const FULL_ACCESS_REFUSAL = 'This needs you at your computer: granting fu
 /** The sentence the remote studio shows for a refused workspace-management grant. */
 export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: managing workspaces and their instructions. Answer this prompt in the studio on the home\'s own computer'
 
+/** The sentence the remote studio shows for a refused external-agent start. */
+export const EXTERNAL_AGENT_REFUSAL = 'This needs you at your computer: starting an external agent such as Claude Code or Codex, which runs outside Delo\'s sandbox. Answer this prompt in the studio on the home\'s own computer'
+
 /**
  * The `LOOPBACK_REQUIRED` refusal of each grant a reach Peer may not give, by the approval request's `grants` marker
  * (`ApprovalGrant` of `@deepseek-ai/dsh-user-approval`).
@@ -61,6 +64,7 @@ export const WORKSPACE_MANAGEMENT_REFUSAL = 'This needs you at your computer: ma
 const REFUSED_GRANTS: ReadonlyMap<unknown, { readonly action: LoopbackRequiredAction; readonly message: string }> = new Map([
   ['full-access', { action: 'full-access-escalation', message: FULL_ACCESS_REFUSAL }],
   ['workspace-management', { action: 'workspace-management', message: WORKSPACE_MANAGEMENT_REFUSAL }],
+  ['external-agent', { action: 'external-agent', message: EXTERNAL_AGENT_REFUSAL }],
 ])
 
 /** The approval outcomes that grant nothing, which a reach Peer may answer to any prompt. */
@@ -212,7 +216,8 @@ export class HomeAuthAuthenticator extends Authenticator {
    * `LOOPBACK_REQUIRED`), to an approval prompt whose `grants` marker names a grant the home's own computer keeps:
    * `full-access` (an escalation to `danger-full-access`, `plugin_manager`'s included, and a workspace's full-access
    * consent) and `workspace-management` (creating, cloning, trashing or restoring a workspace, changing an
-   * instruction-layer file, and the main chat's commands and writes). Any answer but `rejected`, `cancelled` and
+   * instruction-layer file, and the main chat's commands and writes) and `external-agent` (starting an external
+   * agent program, such as Claude Code or Codex, outside the sandbox). Any answer but `rejected`, `cancelled` and
    * `unavailable` counts as granting. Every other answer, a refusal of the same prompt included, applies.
    * @param answer - the answer and the Peer that gave it.
    * @throws {RemoteError} `LOOPBACK_REQUIRED` naming the action for a refused grant.

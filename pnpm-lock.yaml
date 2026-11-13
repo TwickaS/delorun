@@ -1387,6 +1387,9 @@ importers:
       '@delo/npm-launcher':
         specifier: workspace:*
         version: link:../npm-launcher
+      '@delo/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../../packages/plugin-delegation-consent
       '@delo/plugin-mcp-consent':
         specifier: workspace:*
         version: link:../../packages/plugin-mcp-consent
@@ -1779,6 +1782,9 @@ importers:
       '@delo/bundle-local':
         specifier: workspace:*
         version: link:../bundle-local
+      '@delo/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../plugin-delegation-consent
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
@@ -1815,6 +1821,9 @@ importers:
       '@delo/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delo/plugin-delegation-consent':
+        specifier: workspace:*
+        version: link:../plugin-delegation-consent
       '@delo/plugin-fetch-guard':
         specifier: workspace:*
         version: link:../plugin-fetch-guard
@@ -2311,6 +2320,64 @@ importers:
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
+  delo/packages/plugin-delegation-consent:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
+      '@delo/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delo/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      '@delo/plugin-permission-defaults':
+        specifier: workspace:*
+        version: link:../plugin-permission-defaults
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../../packages/core/agent
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:*
+        version: link:../../../packages/client/connection
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../../packages/sandbox/sandbox-policy
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:*
+        version: link:../../../packages/subagent/subagent
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../../packages/core/tools
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/user-approval
 
   delo/packages/plugin-fetch-guard:
     dependencies:
