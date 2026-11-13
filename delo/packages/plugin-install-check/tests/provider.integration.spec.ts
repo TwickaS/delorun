@@ -7,7 +7,7 @@
 import { chmodSync, existsSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import type { PluginAuditResult } from '@deepseek-ai/dsh-plugin-manager'
+import type { PluginAuditResult, PluginOperationId } from '@deepseek-ai/dsh-plugin-manager'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apply, blockingDigest, checkFailedResult, Config, inject, name, resolveSettings, type PluginTrust } from '../src/index.ts'
 import { readInstallRecord, recordPath } from '../src/record.ts'
@@ -142,6 +142,35 @@ describe('the install check plugin', () => {
     expect(await audit(ctx)).toEqual(resolved)
     expect(standIn.advisoryRequests).toHaveLength(requests)
     expect(Object.keys((await readInstallRecord(dir, 'good-plugin'))?.packages[0]?.files ?? {})).toEqual(['built.js', 'index.js', 'package.json'])
+  })
+
+  it('checks another resolution afresh after a failed installation: its own findings and the comparison with its record', async () => {
+    standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'moderate', '1.0.0')] }
+    const ctx = await mount(true)
+    expect((await audit(ctx, [], 'install')).findings.map(finding => finding.excerpt)).toEqual(['good-plugin 1.0.0'])
+    // The installation failed; another resolution is installed and recorded through a second Host, then edited.
+    standIn.answers.times['good-plugin'] = { '1.0.1': OLD }
+    standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-5555-6666-7777', 'moderate', '1.0.1')] }
+    writeProfileFiles(dir, [{ name: 'good-plugin', version: '1.0.1', direct: true }])
+    await audit(await mount(true))
+    writeFileSync(join(dir, 'node_modules', 'good-plugin', 'index.js'), 'export default "edited"\n')
+    const enabled = await audit(ctx)
+    expect(enabled.findings.map(finding => finding.rule)).toEqual(['delo.advisory', 'delo.changed-files'])
+    expect(enabled.findings[0]).toMatchObject({ excerpt: 'good-plugin 1.0.1', title: expect.stringContaining('GHSA-5555-6666-7777') as string })
+  })
+
+  it('checks the same resolution afresh once the operation that resolved it ended without installing it', async () => {
+    const ctx = await mount(true)
+    rmSync(join(dir, 'node_modules'), { recursive: true })
+    await audit(ctx, [], 'install')
+    await ctx.parallel('plugin-manager/operation', {
+      id: 'operation-1' as PluginOperationId, time: new Date(0).toISOString(), reason: 'install', target: 'good-plugin', stage: 'install',
+      phase: 'settled', application: 'failed', changed: false, errorCode: 'operation-error',
+    })
+    writeProfileFiles(dir, [{ name: 'good-plugin', version: '1.0.0', direct: true }])
+    const requests = standIn.advisoryRequests.length
+    await audit(ctx)
+    expect(standIn.advisoryRequests).toHaveLength(requests + 1)
   })
 
   it('refuses a critical advisory while the installation is only resolved, and accepts the same set when it is installed', async () => {

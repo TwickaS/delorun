@@ -6,7 +6,9 @@
  * The manager asks it first with `pending: 'install'`, once pnpm has resolved the installation into the lockfile and
  * before any file is fetched or script runs, which is when the check runs; and again with nothing pending once the
  * package is installed and built, which is when its files are recorded, with the findings of the first answer. A
- * restore asks with `pending: 'scripts'` before its builds and again after them.
+ * restore asks with `pending: 'scripts'` before its builds and again after them. A first answer is kept for the package's
+ * lockfile reference and integrity, so a later question about another resolution is checked afresh, and every kept
+ * answer is dropped once a plugin-manager operation ends, so a failed or cancelled installation leaves none behind.
  *
  * Every finding is shown and none blocks, except a known critical advisory: the audit then answers
  * `needs-acceptance`, and the studio's Plugins page shows the findings with an "Install anyway" confirmation that
@@ -203,8 +205,13 @@ export function apply(ctx: Context, config: Config): void {
   const settings = resolveSettings(config)
   const profile: ProfileContext = ctx.profileContext
   let known: Set<string> | undefined
-  /** Checks that passed before their installation finished, recorded once the manager asks with nothing pending. */
+  /**
+   * Checks that passed before their installation finished, by plugin name and lockfile reference, recorded once the
+   * manager asks with nothing pending.
+   */
   const awaiting = new Map<string, PackageCheck>()
+  // An operation that ended without its last question, failed or cancelled, leaves no answer for a later one.
+  ctx.on('plugin-manager/operation', (operation) => { if (operation.phase !== 'started') awaiting.clear() })
   const registries = async (): Promise<string[]> => {
     const manager = ctx.get('pluginManager')
     if (manager === undefined) return []
@@ -223,7 +230,9 @@ export function apply(ctx: Context, config: Config): void {
       let met: string | undefined
       let check: PackageCheck
       try {
-        const earlier = target.pending === undefined ? awaiting.get(target.name) : undefined
+        const reference = await lockedReference(profile.dir, target.name)
+        const key = reference === undefined ? undefined : JSON.stringify([target.name, reference])
+        const earlier = target.pending === undefined && key !== undefined ? awaiting.get(key) : undefined
         check = earlier ?? await checkPackage({
           profileDir: profile.dir, name: target.name, allowedAdvisories: [], knownNames: known, registries: await registries(), now: Date.now, compareFiles: target.pending === undefined,
           acceptsBlocking: (blocking) => {
@@ -240,10 +249,10 @@ export function apply(ctx: Context, config: Config): void {
         }
         if (check.kind === 'checked' && check.pending !== undefined) {
           if (target.pending === undefined) {
-            awaiting.delete(target.name)
+            if (key !== undefined) awaiting.delete(key)
             await recordInstalled(profile.dir, check.pending, { now: Date.now, maxFiles: settings.maxFiles })
-          } else {
-            awaiting.set(target.name, check)
+          } else if (key !== undefined) {
+            awaiting.set(key, check)
           }
         }
       } catch (error) {
