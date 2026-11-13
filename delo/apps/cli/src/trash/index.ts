@@ -25,6 +25,7 @@ import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { DAY_MS, TrashError, TrashService, type DamagedItem, type PurgeReport, type TrashItem } from '@delo/trash'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseFailure } from '../command.ts'
+import { helpPointer } from '../help.ts'
 import { quoted } from '../terminal-text.ts'
 import { isYes } from './terminal.ts'
 
@@ -139,7 +140,7 @@ export async function runTrash(args: readonly string[], io: TrashIo): Promise<Ex
   }
   const [action, id, ...extra] = parsed.positionals
   const wants = (count: number): void => {
-    if ((count === 1 ? id === undefined : id !== undefined) || extra.length > 0) throw new CliError(EXIT.usage, TRASH_USAGE)
+    if ((count === 1 ? id === undefined : id !== undefined) || extra.length > 0) throw new CliError(EXIT.usage, `${TRASH_USAGE}\n${helpPointer('trash')}`)
   }
   const trash = homeTrash(io.home)
   if (action === 'list') {
@@ -159,7 +160,7 @@ export async function runTrash(args: readonly string[], io: TrashIo): Promise<Ex
       : `${items.map(item => itemLine(item, io.now())).join('\n')}\n`}${damagedLines(damaged)}`)
     return EXIT.ok
   }
-  if (action !== 'restore' && action !== 'purge' && action !== 'empty') throw new CliError(EXIT.usage, TRASH_USAGE)
+  if (action !== 'restore' && action !== 'purge' && action !== 'empty') throw new CliError(EXIT.usage, `${TRASH_USAGE}\n${helpPointer('trash')}`)
   wants(action === 'empty' ? 0 : 1)
   try {
     return await io.exclusive(async () => {

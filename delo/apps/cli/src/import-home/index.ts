@@ -131,12 +131,12 @@ export async function runImportHome(args: readonly string[], io: ImportHomeIo): 
   }
   const source = values.from === undefined ? stockHomeOf(io.env) : expandHomePath(values.from)
   if (source === undefined) throw new CliError(EXIT.usage, `delorun import-home: no home directory is set, so give the DeepSeek Harness home with --from\n${IMPORT_HOME_USAGE}`)
-  if (!existsSync(source)) {
-    throw new CliError(EXIT.failed, `delorun import-home: there is no DeepSeek Harness folder at ${source}, so there is nothing to copy. If yours is somewhere else, run delorun import-home --from <folder>.`)
-  }
   const maxSize = values['max-size']
   if (maxSize !== undefined && !(/^[1-9]\d{0,15}$/u.test(maxSize) && Number.isSafeInteger(Number(maxSize)))) {
     throw new CliError(EXIT.usage, `delorun import-home: --max-size takes a whole number of bytes, such as 8589934592 for 8 GiB\n${IMPORT_HOME_USAGE}`)
+  }
+  if (!existsSync(source)) {
+    throw new CliError(EXIT.failed, `delorun import-home: there is no DeepSeek Harness folder at ${source}, so there is nothing to copy. If yours is somewhere else, run delorun import-home --from <folder>.`)
   }
   const plan = (): Promise<DshHomeImportPlan> => planDshHomeImport({
     sourceHome: source,
