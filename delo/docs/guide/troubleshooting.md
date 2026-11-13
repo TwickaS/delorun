@@ -70,6 +70,7 @@ A `.env` file in the folder you run `delorun` from, or in your Delorun home, may
 - **`HOME_UNRESPONSIVE`.** A process holds the profile's lock but did not answer within 2 seconds. Stop that process, or remove the lock file the refusal names if the process is not `delorun`.
 - **`Delo is running for the profile … and uses the stores this command changes`.** Commands such as `delorun trash`, `export` and `import` change chat data that the running Delorun uses. Run `delorun stop` first, as the refusal says.
 - **`another process … holds the home lock`, or `Delo did not go ahead: another process uses the chat data`.** Another `delorun` command is changing the same data. Wait for it to finish, then run your command again.
+- **`Delorun is being repaired; wait for it to finish`.** `delorun repair` is running and replaces the program, so no start can run until it ends. Wait for it to finish, then run your command again. If no repair is running (it was killed), the next start reports the leftover mark, removes it and goes on.
 - **`the CLI profile default is not set up`.** Run `delorun setup`.
 - **`Delo found no folder for the default workspace`.** None of the folders Delorun tries for the default workspace can be used; the refusal lists each with the reason. Name a folder of your own in your profile's `cordis.patch.yml`, as the refusal shows, and start again.
 - **`UNAUTHENTICATED`.** The running Delorun refused a command that did not carry the token of its current start. Run `delorun status` to see which Delorun runs for the profile.

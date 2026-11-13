@@ -6,11 +6,13 @@
  * socket, the Connection routes and a remote device have no way to reach it: nothing in this module is imported by them
  * and no home-process request names it.
  *
- * A concurrent `delorun` start cannot launch the program being set aside: the repair holds the home lock of every profile
- * it can name from before the set-aside until the rename back or the fresh store's start check, and a start that finds
- * the lock held is refused by the runtime it launched. The fresh store's install takes that store's own lock.
+ * A concurrent `delorun` start cannot launch the program being set aside. The repair writes `run/repair.json` (see
+ * `repair-record.ts`) before it changes anything and removes it last, and every launcher start refuses while the process
+ * it names runs, which covers a profile that has no run directory yet. It also holds the home lock of every profile it
+ * can name from before the set-aside until the rename back or the fresh store's start check, and a start that finds the
+ * lock held is refused by the runtime it launched. The fresh store's install takes that store's own lock.
  *
- * Order: refuse a running home process; hold the home locks; resolve and verify the release; apply the downgrade floor; ask the person;
+ * Order: record the repair; refuse a running home process; hold the home locks; resolve and verify the release; apply the downgrade floor; ask the person;
  * set the store aside; install; run the data guard and the start check; put the session-data copy back last. A failure
  * before the last step renames the old store back.
  *
@@ -28,8 +30,9 @@ import { readRoot } from '@delo/release-formats/sign/verify'
 import { parseRuntimeVersion, type ChannelRelease, type StorePaths, type VerifiedRuntime, type InstallRequest } from '@delo/runtime-store'
 import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX } from '@delo/update/home-data'
 import semver from 'semver'
-import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal } from './refusals.ts'
 import type { LauncherOutput } from './launcher.ts'
+import { beginRepairRecord, REPAIR_RECORD_FILE, staleRepairText } from './repair-record.ts'
+import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal } from './refusals.ts'
 
 /** The flags `delorun repair` reads, beside `--profile`. */
 export interface RepairLine {
@@ -272,7 +275,9 @@ export async function runRepair(options: RepairOptions): Promise<number> {
   let outcome = 'refused'
   const undo: Undo[] = []
   const holds: HomeLock[] = []
+  let endRecord: (() => Promise<void>) | undefined
   try {
+    endRecord = await recordRepair(options, log)
     await repair(options, log, undo, holds)
     outcome = 'repaired'
     return LAUNCHER_EXIT.ok
@@ -284,9 +289,36 @@ export async function runRepair(options: RepairOptions): Promise<number> {
     return refusal.exit
   } finally {
     for (const hold of holds) hold.release()
+    await endRecord?.().catch((error: unknown) => options.output.stderr(`Delo could not remove run/${REPAIR_RECORD_FILE}, which makes every start refuse until it is removed: ${messageOf(error)}\n`))
     log.outcome = outcome
     await writeLog(options.home, log).catch((error: unknown) => options.output.stderr(`Delo could not write logs/repair.log: ${messageOf(error)}\n`))
   }
+}
+
+/**
+ * Mark the home as being repaired, reporting a record a dead repair left.
+ * @param options - the repair's inputs.
+ * @param log - the run's record.
+ * @returns the function that removes the mark.
+ * @throws {RepairRefusal} `REPAIR_RUNNING` when another repair of this home runs.
+ */
+async function recordRepair(options: RepairOptions, log: Record<string, unknown>): Promise<() => Promise<void>> {
+  let begun
+  try {
+    begun = await beginRepairRecord(options.home, options.now())
+  } catch (error) {
+    throw new RepairRefusal({
+      lead: 'Delo did not repair: another repair of this home is running.',
+      reason: `REPAIR_RUNNING: ${messageOf(error)}`,
+      remedies: ['Wait for it to finish, then run the repair again if it is still needed.'],
+    })
+  }
+  if (begun.found.kind === 'stale') {
+    const text = staleRepairText(begun.found.record)
+    options.output.stderr(`${text}\n`)
+    log.staleRepair = text
+  }
+  return begun.end
 }
 
 /**
