@@ -7,12 +7,13 @@
  * writers of one file through a `wx`-created `<file>.lock` sibling, so a
  * read-modify-write cycle can never resurrect a state another writer just
  * replaced; readers stay lock-free because the rename commit is atomic. A lock
- * whose recorded holder process no longer exists, or whose record stayed incomplete for ten seconds, is taken over.
+ * whose recorded holder process no longer exists, or whose record stayed incomplete for ten seconds, is taken over;
+ * a takeover claim left by a killed claimant is aged out the same way.
  * @module @deepseek-ai/dsh-atomic-write
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { link, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { setTimeout as wait } from 'node:timers/promises'
 
@@ -163,16 +164,28 @@ async function readLockRecord(lockPath: string): Promise<string | undefined> {
 /**
  * Remove a takeover claim older than {@link INCOMPLETE_LOCK_GRACE_MS}: its claimant was killed between creating it and
  * removing it, and the claim's name repeats for the same lock record, so it would block every later takeover. A
- * live claimant finishes well inside the grace.
+ * live claimant finishes well inside the grace. The claim is renamed to a name only this call knows before it is
+ * deleted, so two contenders that both found it stale cannot both delete: one rename moves the file, the other finds
+ * nothing. A rename that moved a fresh claim, one created after the age check, links it back; a claimant also
+ * re-checks that its claim is still its own before it takes over.
  */
 async function removeStaleClaim(claim: string): Promise<void> {
+  const aside = `${claim}.stale-${randomBytes(6).toString('hex')}`
   try {
-    if (Date.now() - (await stat(claim)).mtimeMs > INCOMPLETE_LOCK_GRACE_MS) await rm(claim, { force: true })
-  /* v8 ignore start -- a claim removed between the failed create and this stat; no spec can time it. */
+    if (Date.now() - (await stat(claim)).mtimeMs <= INCOMPLETE_LOCK_GRACE_MS) return
+    await rename(claim, aside)
+    if (Date.now() - (await stat(aside)).mtimeMs <= INCOMPLETE_LOCK_GRACE_MS) await link(aside, claim)
+  /* v8 ignore start -- a claim removed or recreated between the failed create and these calls, or a deletion Windows
+     refuses; no spec can time either. */
   } catch (error) {
-    // A claim that vanished or that Windows refuses to remove is not stale to this contender; the next attempt asks again.
+    // A claim that vanished, that another contender now holds, or that Windows refuses to move is not stale to this
+    // contender; the next attempt asks again.
     void error
   }
+  await rm(aside, { force: true }).catch((error: unknown) => {
+    // A moved-aside claim that Windows refuses to delete is a different name from every later claim, so it blocks nothing.
+    void error
+  })
   /* v8 ignore stop */
 }
 
@@ -190,8 +203,10 @@ async function takeOverExitedLock(lockPath: string): Promise<boolean> {
   const record = await readLockRecord(lockPath)
   if (record === undefined || !await holderGone(lockPath, record)) return false
   const claim = `${lockPath}.takeover-${createHash('sha256').update(record).digest('hex').slice(0, 16)}`
+  // The token tells this claim from one another contender created at the same name after taking this one over.
+  const claimRecord = `${process.pid}\n${randomBytes(8).toString('hex')}\n`
   try {
-    await writeFile(claim, `${process.pid}\n`, { mode: 0o600, flag: 'wx' })
+    await writeFile(claim, claimRecord, { mode: 0o600, flag: 'wx' })
   } catch (error) {
     // Another contender owns the claim for this record, or Windows still deletes the claim it released.
     const code = (error as NodeJS.ErrnoException).code
@@ -204,6 +219,8 @@ async function takeOverExitedLock(lockPath: string): Promise<boolean> {
   }
   try {
     if (await readLockRecord(lockPath) !== record || !await holderGone(lockPath, record)) return false
+    // Another contender that aged this claim out and created its own is the claimant now; this one steps aside.
+    if (await readLockRecord(claim) !== claimRecord) return false
     try {
       await rm(lockPath, { force: true })
     } catch (error) {
@@ -213,7 +230,7 @@ async function takeOverExitedLock(lockPath: string): Promise<boolean> {
     }
     return true
   } finally {
-    await rm(claim, { force: true }).catch((error: unknown) => {
+    if (await readLockRecord(claim) === claimRecord) await rm(claim, { force: true }).catch((error: unknown) => {
       // A claim left behind names a record that is no longer the lock, so it blocks no later takeover.
       void error
     })

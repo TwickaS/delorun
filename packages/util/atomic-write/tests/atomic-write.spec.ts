@@ -9,6 +9,7 @@ import { withFileLock, writeFileAtomic } from '../src/index.ts'
 
 const state = vi.hoisted(() => ({
   afterClaim: undefined as ((claim: string) => Promise<void>) | undefined,
+  beforeClaimRename: undefined as ((claim: string) => Promise<void>) | undefined,
   claimFailure: undefined as string | undefined,
   claimRemovalFails: false,
   lockRemovalFails: false,
@@ -23,6 +24,11 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   return {
     ...actual,
     rename: (async (...args: Parameters<typeof actual.rename>) => {
+      if (String(args[0]).includes('.lock.takeover-') && state.beforeClaimRename !== undefined) {
+        const hook = state.beforeClaimRename
+        state.beforeClaimRename = undefined
+        await hook(String(args[0]))
+      }
       state.renameAttempts += 1
       const code = state.renameFailures.shift()
       if (code !== undefined) {
@@ -65,6 +71,7 @@ afterEach(async () => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   state.afterClaim = undefined
+  state.beforeClaimRename = undefined
   state.claimFailure = undefined
   state.claimRemovalFails = false
   state.lockRemovalFails = false
@@ -465,6 +472,47 @@ describe('withFileLock', () => {
 
     await withFileLock(target, async () => {}, { waitMs: 2_000 })
     expect(await readdir(dir)).toEqual([])
+  })
+
+  it('does not take over when another contender replaced its claim after aging it out', async () => {
+    probeExited()
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    const held = record(EXITED_PID)
+    await writeFile(`${target}.lock`, held)
+    state.afterClaim = async (claim) => {
+      state.afterClaim = undefined
+      // The other contender found this claim stale, moved it away and created its own at the same name.
+      await rm(claim)
+      await writeFile(claim, '2\nother-contender\n')
+    }
+
+    // Pins the claimant's re-check: without it both contenders remove the lock and both think they hold it.
+    await expect(withFileLock(target, async () => {}, { waitMs: 50 })).rejects.toThrow(/timed out waiting for the writer lock/)
+    expect(await readFile(`${target}.lock`, 'utf8')).toBe(held)
+  })
+
+  it('puts back a fresh claim that its age check raced with, so two contenders cannot both take a stale claim over', async () => {
+    probeExited()
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    const held = record(EXITED_PID)
+    await writeFile(`${target}.lock`, held)
+    const claim = `${target}.lock.takeover-${createHash('sha256').update(held).digest('hex').slice(0, 16)}`
+    await writeFile(claim, '1\nstale\n')
+    const old = new Date(Date.now() - 60_000)
+    await utimes(claim, old, old)
+    state.beforeClaimRename = async (path) => {
+      // Another contender removed the stale claim and created a live one between the age check and the rename.
+      await rm(path)
+      await writeFile(path, '2\nlive-claimant\n')
+    }
+
+    // Pins the rename-then-check removal: a plain delete here removes the live claimant's claim and takes over beside it.
+    await expect(withFileLock(target, async () => {}, { waitMs: 50 })).rejects.toThrow(/timed out waiting for the writer lock/)
+    expect(await readFile(claim, 'utf8')).toBe('2\nlive-claimant\n')
+    expect(await readFile(`${target}.lock`, 'utf8')).toBe(held)
+    expect((await readdir(dir)).filter(name => name.includes('.stale-'))).toEqual([])
   })
 
   it('keeps a lock that another contender acquired while this one claimed the exited record', async () => {
