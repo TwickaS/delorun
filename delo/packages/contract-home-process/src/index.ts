@@ -234,10 +234,10 @@ export interface DevicesElevateRequest extends RequestBase {
 }
 
 /**
- * The `permission.reload` request: the per-workspace permission store of `@delo/plugin-permission-defaults` was changed
- * at the home's own computer by `delorun workspace full-access`, which writes the store itself; the running Host reads
- * it again, and sets the open chats of a workspace that lost its grant back to the safer preset. Accepted with either
- * token, because it changes nothing the store does not already hold.
+ * The `permission.reload` request: the running Host reads the per-workspace permission store of
+ * `@delo/plugin-permission-defaults` again, and sets the open chats of a workspace that lost its grant back to the safer
+ * preset. No Delo process sends it, because each Host watches the store; it stays for a caller holding the token.
+ * Accepted with either token, because it changes nothing the store does not already hold.
  */
 export interface PermissionReloadRequest extends RequestBase {
   /** The operation. */

@@ -30,7 +30,7 @@ import {
   fullAccessRefusal,
 } from '../src/index.ts'
 import { workspaceKey } from '../src/workspace.ts'
-import { serializePermissionStore } from '../src/store.ts'
+import { serializePermissionStore, withPermissionStoreLock } from '../src/store.ts'
 
 /** One mounted composition's fixtures, owned by the test that built it. */
 interface Mounted {
@@ -269,6 +269,63 @@ describe('the full-access consent', () => {
     const agent = await harness.create(SessionId('chat-refused-store'), {}, { cwd: workspace })
     expect(knobs(ctx, agent.session)).toMatchObject({ preset: SAFER_PRESET })
     await expect(defaults.select(agent, FULL_ACCESS_PRESET)).rejects.toThrow('the permission store is refused')
+  })
+})
+
+describe('a full-access selection after another process withdrew the grant', () => {
+  /**
+   * Write the store as another process at the home's computer does when it withdraws a workspace's grant.
+   * @param home - the Delo home.
+   * @param workspace - the workspace.
+   */
+  function withdrawElsewhere(home: string, workspace: string): void {
+    writeFileSync(permissionStorePath(home), serializePermissionStore(new Map([[workspaceKey(workspace), { preset: SAFER_PRESET, fullAccessGrantedAt: null }]])), { mode: 0o600 })
+  }
+
+  it('asks the person again rather than record the withdrawn grant anew', async () => {
+    const { ctx, harness, asks, workspace, home } = await mounted()
+    const defaults = ctx.get('permissionDefaults') as PermissionDefaults
+    const first = await harness.create(SessionId('chat-withdrawn-1'), {}, { cwd: workspace })
+    await defaults.select(first, FULL_ACCESS_PRESET)
+    expect(asks).toHaveLength(1)
+    const second = await harness.create(SessionId('chat-withdrawn-2'), {}, { cwd: workspace })
+    ctx.permissionPresets.set(second.session, SAFER_PRESET)
+    withdrawElsewhere(home, workspace)
+    await defaults.select(second, FULL_ACCESS_PRESET)
+    expect(asks).toHaveLength(2)
+    expect(knobs(ctx, second.session)).toMatchObject({ preset: FULL_ACCESS_PRESET })
+  })
+
+  it('records nothing when the grant is withdrawn after the selection read the store and before it records', async () => {
+    const { ctx, harness, asks, workspace, home } = await mounted()
+    const defaults = ctx.get('permissionDefaults') as PermissionDefaults
+    const agent = await harness.create(SessionId('chat-withdrawn-race'), {}, { cwd: workspace })
+    await defaults.select(agent, FULL_ACCESS_PRESET)
+    ctx.permissionPresets.set(agent.session, SAFER_PRESET)
+    let selected: Promise<void> | undefined
+    // Another process holds the store's lock and withdraws the grant after the selection read the store.
+    await withPermissionStoreLock(permissionStorePath(home), async () => {
+      selected = defaults.select(agent, FULL_ACCESS_PRESET)
+      withdrawElsewhere(home, workspace)
+      await Promise.resolve()
+    })
+    await expect(selected).rejects.toThrow(FullAccessConsentRefusedError)
+    await expect(selected).rejects.toThrow('was withdrawn while it was being selected')
+    expect(asks).toHaveLength(1)
+    const stored = JSON.parse(readFileSync(permissionStorePath(home), 'utf8')) as { workspaces: Record<string, { fullAccessGrantedAt: number | null }> }
+    expect(stored.workspaces[workspaceKey(workspace)]?.fullAccessGrantedAt).toBeNull()
+    expect(knobs(ctx, agent.session)).toMatchObject({ preset: SAFER_PRESET, sandbox: SAFER_PRESET })
+  })
+
+  it('sets the workspace\'s other open full-access chats back when the person goes back to the safer preset in one', async () => {
+    const { ctx, harness, workspace } = await mounted()
+    const defaults = ctx.get('permissionDefaults') as PermissionDefaults
+    const first = await harness.create(SessionId('chat-back-1'), {}, { cwd: workspace })
+    await defaults.select(first, FULL_ACCESS_PRESET)
+    const second = await harness.create(SessionId('chat-back-2'), {}, { cwd: workspace })
+    expect(ctx.sandboxPolicy.resolve({ session: second.session }).mode).toBe(FULL_ACCESS_PRESET)
+    await defaults.select(first, SAFER_PRESET)
+    expect(ctx.sandboxPolicy.resolve({ session: second.session }).mode).toBe(SAFER_PRESET)
   })
 })
 

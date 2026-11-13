@@ -1,7 +1,7 @@
 /**
- * The update channel's consent operations (contract C19): `permission.reload` after `delorun workspace full-access`
- * changed the per-workspace permission store, and `mcp.list`, `mcp.accept`, `mcp.decline` and `mcp.revoke`, through
- * which `delorun mcp` answers the stdio MCP servers the running Host's add-time consent holds stopped and withdraws the
+ * The update channel's consent operations (contract C19): `permission.reload`, which makes the Host read the
+ * per-workspace permission store again, and `mcp.list`, `mcp.accept`, `mcp.decline` and `mcp.revoke`, through which
+ * `delorun mcp` answers the stdio MCP servers the running Host's add-time consent holds stopped and withdraws the
  * acceptances it holds.
  *
  * - **The caller rule.** `mcp.accept`, `mcp.decline` and `mcp.revoke` are accepted only with the person's token; the

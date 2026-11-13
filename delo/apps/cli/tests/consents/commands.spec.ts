@@ -1,11 +1,11 @@
 /**
  * `delorun workspace full-access` and `delorun mcp` over a temporary home, a scripted home socket and a scripted prompt:
  * full access is recorded only after a yes at a terminal, a review that changed meanwhile records nothing, a folder Delo
- * never adds is refused, the running studio is asked to read the store again and a mismatch is reported; an MCP server
+ * never adds is refused, and turning full access off names the running profiles without sending them anything; an MCP server
  * is accepted only after a yes at a terminal and with the review id that was shown, an allowed server is revoked by its
  * name only after a yes at a terminal and with the acceptance id that was shown, and every action needs Delo to run.
  */
-import { randomLockId, shellQuote } from '@delo/home'
+import { shellQuote } from '@delo/home'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,8 +14,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const { clackConfirm } = vi.hoisted(() => ({ clackConfirm: vi.fn<() => Promise<boolean | symbol>>() }))
 vi.mock('@clack/prompts', () => ({ confirm: clackConfirm, isCancel: (value: unknown) => typeof value === 'symbol' }))
 import type { ResponseLine, UnsignedRequest } from '@delo/home-process'
+import { randomLockId } from '@delo/home'
 import { permissionStorePath, readPermissionStore, serializePermissionStore } from '@delo/plugin-permission-defaults/store'
-import { fullAccessNote, permissionEntriesDigest } from '@delo/plugin-permission-defaults/review'
+import { fullAccessNote } from '@delo/plugin-permission-defaults/review'
 import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
@@ -52,23 +53,15 @@ interface Scripted {
 }
 
 /**
- * `delorun workspace` over a scripted home socket and prompt.
- * @param overrides - the dependencies to replace, the socket's answers and the prompt's.
- * @returns the command, the requests sent and the questions asked.
+ * `delorun workspace` over a scripted prompt.
+ * @param overrides - the dependencies to replace, and the prompt's answers.
+ * @returns the command and the questions asked.
  */
-function workspace(overrides: Partial<WorkspaceDependencies> & Scripted = {}) {
-  const sent: UnsignedRequest[] = []
-  const reloaded: string[] = []
+function workspace(overrides: Partial<WorkspaceDependencies> & Pick<Scripted, 'answers'> = {}) {
   const asked: string[] = []
-  const lines = [...(overrides.lines ?? [])]
   const answers = [...(overrides.answers ?? [])]
   const command = createWorkspaceCommand({
     runningProfiles: () => [],
-    send: async (_home, profile, request) => {
-      sent.push(request)
-      reloaded.push(profile)
-      return Promise.resolve(lines.shift() ?? [])
-    },
     confirm: async (message) => {
       asked.push(message)
       return Promise.resolve(answers.shift())
@@ -78,7 +71,7 @@ function workspace(overrides: Partial<WorkspaceDependencies> & Scripted = {}) {
     now: () => NOW,
     ...overrides,
   })
-  return { command, sent, asked, reloaded }
+  return { command, asked }
 }
 
 /**
@@ -149,26 +142,21 @@ describe('delorun workspace full-access', () => {
     expect(out.stdout).toContain('Full access is already off')
   })
 
-  it('asks the studio of every running profile to read the store again, and names each that did not', async () => {
-    const written = permissionEntriesDigest(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: NOW }]]))
-    const matching = workspace({ runningProfiles: () => ['cli', 'work'], answers: [true], lines: [[{ ok: true, digest: written }], [{ ok: true, digest: written }]] })
-    await expect(matching.command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
-    expect(matching.sent).toEqual([{ op: 'permission.reload' }, { op: 'permission.reload' }])
-    expect(matching.reloaded).toEqual(['cli', 'work'])
-    out.stdout = ''
-    const off = permissionEntriesDigest(new Map([[workspaceKey(folder), { preset: 'workspace-write', fullAccessGrantedAt: null }]]))
-    const mixed = workspace({
-      runningProfiles: () => ['cli', 'stock', 'other', 'gone'],
-      lines: [[{ ok: true, digest: off }], [{ ok: false, error: 'CONSENT_UNAVAILABLE' }], [{ ok: true, digest: 'sha256:other' }], []],
-    })
-    await expect(mixed.command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stdout).toContain('The studio of profile stock does not ask for full access per workspace')
+  it('names the running profiles after turning full access off, without sending them anything', async () => {
+    mkdirSync(join(permissionStorePath(deloHome), '..'), { recursive: true, mode: 0o700 })
+    writeFileSync(permissionStorePath(deloHome), serializePermissionStore(new Map([[workspaceKey(folder), { preset: 'danger-full-access', fullAccessGrantedAt: 1 }]])), { mode: 0o600 })
+    const { command } = workspace({ runningProfiles: () => ['cli', 'work'] })
+    await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
+    expect(await grants()).toEqual({ [workspaceKey(folder)]: null })
     expect(out.stdout).toContain(`Full access is off for ${workspaceKey(folder)}`)
-    expect(out.stderr).toContain('the studio of profile other holds other grants than were written')
-    expect(out.stderr).toContain('profile gone did not read it (NO_ANSWER)')
-    expect(out.stderr).toContain('restart it with delorun stop and delorun start')
-    // The change is told only after the studios answered.
-    expect(out.stdout.indexOf('does not ask')).toBeLessThan(out.stdout.indexOf('Full access is off'))
+    expect(out.stdout).toContain('Delo runs in profile cli, work: running chats there switch to the safer preset within a second.')
+    expect(out.stderr).toBe('')
+    // Turning full access on, or off when it is already off, names no profile.
+    out.stdout = ''
+    await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
+    const on = workspace({ runningProfiles: () => ['cli'], answers: [true] })
+    await expect(on.command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).not.toContain('Delo runs in profile')
   })
 
   it('records nothing and says so when the record cannot be written or another command holds it', async () => {
@@ -224,14 +212,17 @@ describe('delorun workspace full-access', () => {
     await expect(confirmInTerminal('Turn on?')).resolves.toBeUndefined()
   })
 
-  it('lists the profiles whose home process runs', () => {
+  it('lists the profiles whose home process runs from their home locks, reading no token', () => {
     expect(runningProfiles(join(osHome, 'no-home'))).toEqual([])
-    for (const profile of ['work', 'cli', 'stopped']) mkdirSync(join(deloHome, 'run', profile), { recursive: true })
+    for (const profile of ['work', 'cli', 'stopped', 'damaged']) mkdirSync(join(deloHome, 'run', profile), { recursive: true })
     writeFileSync(join(deloHome, 'run', 'file'), '')
-    // This process holds the home lock of two profiles; the third has none.
+    // This process holds the home lock of two profiles; the third has none, and the fourth's is not a lock record.
     for (const profile of ['work', 'cli']) {
       writeFileSync(join(deloHome, 'run', profile, 'home.lock'), JSON.stringify({ v: 1, pid: process.pid, startId: randomLockId(), runtime: '0.0.0', startedAt: new Date(NOW).toISOString() }), { mode: 0o600 })
+      // A token the command must never read: unreadable, so a read would fail.
+      writeFileSync(join(deloHome, 'run', profile, 'token'), 'start-token', { mode: 0o000 })
     }
+    writeFileSync(join(deloHome, 'run', 'damaged', 'home.lock'), '{ not a lock', { mode: 0o600 })
     expect(runningProfiles(deloHome)).toEqual(['cli', 'work'])
   })
 

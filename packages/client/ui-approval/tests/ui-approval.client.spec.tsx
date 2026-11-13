@@ -600,6 +600,33 @@ describe('inline grant actions', () => {
     expect(answer).not.toHaveBeenCalled()
   })
 
+  it('tells an action that the card is answering, and that it no longer accepts an answer', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    // The answer never settles, so the request stays answerable while the card sends it.
+    vi.spyOn(pending, 'answer').mockImplementation(async () => new Promise<void>(() => {}))
+    const { owner } = renderGrantAction(pending)
+    expect(owner()).toMatchObject({ answered: false })
+    expect(owner()!.canAnswer()).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+
+    expect(pending.answerable).toBe(true)
+    expect(owner()).toMatchObject({ answered: true })
+    expect(owner()!.canAnswer()).toBe(false)
+    pending.abort(new Error('test cleanup'))
+    await pending.result.catch(() => {})
+  })
+
+  it('tells an action that a withdrawn request no longer accepts an answer', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'workspace', grants: 'full-access' })
+    const { owner } = renderGrantAction(pending)
+
+    pending.abort(new Error('request withdrawn'))
+    await expect(pending.result).rejects.toThrow('request withdrawn')
+
+    expect(owner()!.canAnswer()).toBe(false)
+  })
+
   it('renders no action list for a request without a grant', () => {
     const pending = new PendingApproval(id('s1'), { toolName: 'bash' })
     const { renderSlot } = renderGrantAction(pending)
