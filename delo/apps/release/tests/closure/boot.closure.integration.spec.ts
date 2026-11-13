@@ -212,6 +212,7 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
       logs: ['logs'],
       update: ['update', '--check'],
       recover: ['recover', 'status'],
+      changes: ['changes'],
       trash: ['trash', 'list'],
       export: ['export'],
       import: ['import'],
@@ -226,7 +227,7 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
       workspace: ['workspace', 'full-access'],
     }
     const help = run(['--help']).output
-    const listed = help.slice(help.indexOf('Commands:')).split('\n').slice(1).map(line => /^ {2}(\S+)/u.exec(line)?.[1]).filter(name => name !== undefined)
+    const listed = help.slice(help.indexOf('Commands:')).split('\n\n')[0]!.split('\n').slice(1).map(line => /^ {2}(\S+)/u.exec(line)?.[1]).filter(name => name !== undefined)
     expect(listed.sort()).toEqual(Object.keys(invocations).sort())
     const crashed = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)|^\s+at .+:\d+:\d+\)?$/mu
     const failures = Object.entries(invocations).flatMap(([command, args]) => {
