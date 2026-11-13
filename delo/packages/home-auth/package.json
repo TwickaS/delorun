@@ -30,7 +30,8 @@
     "@delo/contract-oidc-passkeys": "workspace:*",
     "@delo/contract-operational-logs": "workspace:*",
     "@delo/contract-reach-providers": "workspace:*",
-    "@delo/home": "workspace:*"
+    "@delo/home": "workspace:*",
+    "@delo/logs": "workspace:*"
   },
   "delo": {
     "state": "shipped"

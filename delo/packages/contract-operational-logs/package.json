@@ -13,11 +13,5 @@
   },
   "delo": {
     "state": "shipped"
-  },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:~"
-  },
-  "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:~"
   }
 }

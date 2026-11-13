@@ -14,6 +14,7 @@
 import type {} from './full-access-grants.ts'
 import { basename, dirname } from 'node:path'
 import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
+import type {} from '@delo/logs/cordis'
 import schema from '@deepseek-ai/schemastery'
 import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'

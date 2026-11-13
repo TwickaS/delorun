@@ -8,9 +8,16 @@
 import { Logger, type Context, type Exporter, type Message } from '@deepseek-ai/cordis'
 // Type-only: `ctx.agents`, the agent registry.
 import type {} from '@deepseek-ai/dsh-agent'
-import type { LogLevel } from '@delo/contract-operational-logs'
+import type { LogLevel, SecretSink } from '@delo/contract-operational-logs'
 import type { LogKeys } from './record.ts'
 import { LEVEL_RANK, type SurfaceLog } from './writer.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The home process's secret registry (C20, "Redaction", step 1); absent where no log redactor runs, such as in a plugin's own specs. */
+    deloSecrets?: SecretSink
+  }
+}
 
 /**
  * The keys of the agent driving the code running now: its session id, and the turn number while a turn is open.

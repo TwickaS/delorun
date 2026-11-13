@@ -2203,6 +2203,18 @@
       "class": "delo-feature",
       "feature": "changes",
       "reason": "On a page that names recovery routes, the boot shows C21's recovery screen at /recovery without loading any client plugin, and offers it when the studio has not mounted 30 seconds after the boot began; without the global the boot runs as in stock."
+    },
+    {
+      "path": "apps/desktop/scripts/runtime-patch-policy.ts",
+      "class": "delo-feature",
+      "feature": "mcp-add-consent",
+      "reason": "Lists the MCP SDK stdio `argv0` patch (`patches/@modelcontextprotocol__client@2.2.0.patch`, a security entry) as `shared`, so a desktop runtime carries the same patched MCP client as the CLI and a reviewed server start keeps its configured `argv[0]`. Upstream's other patch scopes are unchanged."
+    },
+    {
+      "path": "scripts/tracked-delo-files.ts",
+      "class": "delo-feature",
+      "feature": "fork-gates",
+      "reason": "The tracked Markdown files under delo/ that Delo's prose gates read, shared by verify-british-english.ts and verify-release-tense.ts so the two gates list files one way."
     }
   ],
   "retired": []

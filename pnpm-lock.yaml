@@ -2172,10 +2172,6 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:~
-        version: link:../../../vendor/cordis
 
   delo/packages/contract-parity-composition: {}
 
@@ -2308,6 +2304,9 @@ importers:
       '@delo/home':
         specifier: workspace:*
         version: link:../home
+      '@delo/logs':
+        specifier: workspace:*
+        version: link:../logs
 
   delo/packages/home-process:
     dependencies:

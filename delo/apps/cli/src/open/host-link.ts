@@ -12,6 +12,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import { isLoopbackHost } from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-web-app'
 import type { StudioLinkResult } from '@delo/home-process'
+import type {} from '@delo/logs/cordis'
 
 /**
  * Mint a studio link on a booted Host.

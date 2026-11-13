@@ -11,6 +11,8 @@
   "include": ["src", "tests"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../../../vendor/loader" },
+    { "path": "../../../packages/boot/app-boot" },
     { "path": "../../../packages/core/agent" },
     { "path": "../../../packages/core/session" },
     { "path": "../../../packages/core/tools" },

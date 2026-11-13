@@ -9,8 +9,6 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-// Type-only: the `deloSecrets` service augmentation below.
-import type {} from '@deepseek-ai/cordis'
 
 /** Upstream's session id; the same branded type as `SessionId` of `@deepseek-ai/dsh-session`. */
 export type SessionId = Branded<'SessionId'>
@@ -137,13 +135,6 @@ export interface SecretSink {
    * @returns a disposer that drops this registration, for a value that is dropped or rotated.
    */
   register(value: string, kind: SecretKind): () => void
-}
-
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** The home process's secret registry; absent where no log redactor runs, such as in a plugin's own specs. */
-    deloSecrets?: SecretSink
-  }
 }
 
 /** Records `delorun logs` prints by default. */
