@@ -2,8 +2,9 @@
  * The remote studio's unlock: the state of this device's short unlock of sensitive actions (C14, "Elevation"), which the
  * unlock dialog, the unlocked banner and the Devices section read from one store.
  *
- * - **Where it applies.** Only on a device: the first read of `GET /auth/elevation` answers the computer's own address
- *   with `HOST_MISMATCH`, and a profile without the routes with 404, and the store then stays `away` and shows nothing.
+ * - **Where it applies.** Only on a device: a page the studio serves on the computer's own address (loopback) is `away`
+ *   from the start and sends no request, because the route answers that address with `HOST_MISMATCH`; a profile without
+ *   the routes answers a device's first read with 404, and the store then stays `away` and shows nothing.
  * - **Asking.** An action remote access refused with `elevation-required:` opens the dialog with the reason; the
  *   Devices section opens it without one. Unlock posts the request and shows the code with its expiry; the store reads
  *   the state every {@link ELEVATION_POLL_MS} until the computer answers or the request expires.
@@ -76,10 +77,12 @@ const NONE: ElevationState = { kind: 'none' }
  * Create the unlock's store.
  * @param fetch - the request function.
  * @param now - the clock, in milliseconds since the epoch.
+ * @param onComputer - whether the page is on the home's own computer, where no device unlocks: the store is `away` and
+ *   reads nothing.
  * @returns the store.
  */
-export function createUnlockSource(fetch: HostFetch, now: () => number = Date.now): UnlockSource {
-  let view: UnlockView = { place: 'unknown', state: NONE, dialog: null, ended: 0, lockFailed: false }
+export function createUnlockSource(fetch: HostFetch, now: () => number = Date.now, onComputer = false): UnlockSource {
+  let view: UnlockView = { place: onComputer ? 'away' : 'unknown', state: NONE, dialog: null, ended: 0, lockFailed: false }
   let endings = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
@@ -123,6 +126,7 @@ export function createUnlockSource(fetch: HostFetch, now: () => number = Date.no
   }
 
   const refresh = async (): Promise<void> => {
+    if (onComputer) return
     const started = changes
     let state: ElevationState | undefined
     try {
