@@ -30,7 +30,7 @@ import {
 } from '@delo/contract-reach-providers'
 import { openFront, type LoopbackFront } from './front.ts'
 import { TailscalePrivateProvider, type ReachProvider, type ReachSpec } from './provider.ts'
-import { ReachError, systemTailscale, type TailscaleRunner } from './tailscale.ts'
+import { ReachError, readComputerUser, systemTailscale, type TailscaleRunner } from './tailscale.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -279,7 +279,11 @@ export class ReachService extends Service {
    */
   private async startOption(provider: ReachProvider, spec: ReachSpec): Promise<void> {
     this.change({ option: spec.option, state: 'starting', address: spec.address })
-    const unserve = this.ctx.homeAuth.serve({ listener: spec.listener, address: spec.address, factor: provider.factor, elevationMinutes: spec.elevationMinutes })
+    const computerUser = await readComputerUser(this.tailscale())
+    const unserve = this.ctx.homeAuth.serve({
+      listener: spec.listener, address: spec.address, factor: provider.factor, elevationMinutes: spec.elevationMinutes,
+      ...(computerUser === undefined ? {} : { computerUser }),
+    })
     let front: LoopbackFront
     try {
       front = await openFront(spec.listenerPort)

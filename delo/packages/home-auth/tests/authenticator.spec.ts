@@ -17,7 +17,7 @@ import type { PeerId, PeerScope, Principal } from '@deepseek-ai/dsh-typert-proto
 import type { RemoteAccessBinding, RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
-import { HomeAuthService } from '../src/service.ts'
+import { HomeAuthService, PAIRING_SWITCH } from '../src/service.ts'
 import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
 import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
@@ -445,7 +445,7 @@ describe('the authenticator provider', () => {
       expect(decide('settings/update', turnOff)).toEqual(NO_UNLOCK)
       // Pins the registry fact: a registered switch is kept on while its registration holds.
       const off = ctx.homeAuth.registerComputerOnlySwitch({ ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' })
-      expect(ctx.homeAuth.computerOnlySwitches()).toEqual([{ ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' }])
+      expect(ctx.homeAuth.computerOnlySwitches()).toEqual([PAIRING_SWITCH, { ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' }])
       expect(decide('settings/update', turnOff)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the external-agent consent off' })
       off()
       expect(decide('settings/update', turnOff)).toEqual(NO_UNLOCK)
@@ -465,6 +465,24 @@ describe('the authenticator provider', () => {
       entries[0] = { id: 'include:plugin-manager', options: { name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: 'all' } } } as never
       expect(protectedEntryIdsOf(ctx)).toBeUndefined()
       expect(enable('include:delo-trash')).toEqual({ kind: 'deny', reason: 'loopback-required: changing a protected plugin row' })
+    })
+
+    it('refuses a device every write to the pairing settings, unlocked or not, once the service registers its switch', async () => {
+      const access = await fakeRemoteAccess()
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
+      const condition = access.policy().bindings(device)[0]?.condition
+      const decide = (action: string, args: Record<string, unknown>) => condition?.({ action, resource: { kind: 'global' }, args } as never)
+      const REFUSED = { kind: 'deny', reason: 'loopback-required: turning the device pairing settings off' }
+      const off = ctx.homeAuth.registerComputerOnlySwitch(PAIRING_SWITCH)
+      // Pins the switch's field: each way of writing the section is refused, so a device cannot widen who may ask.
+      expect(decide('settings/update', { ns: 'delo-home-auth', patch: { pairing: { mayAskWithoutWindow: 'tailnet' } } })).toEqual(REFUSED)
+      expect(decide('settings/mutate', { ns: 'delo-home-auth', ops: [{ op: 'set', path: ['pairing', 'mayAskWithoutWindow'], value: 'tailnet' }] })).toEqual(REFUSED)
+      expect(decide('settings/replace', { ns: 'delo-home-auth', section: { secretsDirectory: '/x', pairing: { windowMinutes: 15 } } })).toEqual(REFUSED)
+      // The fixed field of the same row is unaffected: the switch guards the pairing section alone.
+      expect(decide('settings/update', { ns: 'delo-home-auth', patch: { secretsDirectory: '/x' } })).toEqual({ kind: 'deny', reason: 'elevation-required: settings/update' })
+      off()
     })
 
     it('reads the permission new chats start in from the running permission presets', async () => {

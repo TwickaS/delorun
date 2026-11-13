@@ -116,6 +116,25 @@ The new device reads its request's state with `GET /auth/device/request/<request
 
 On a listener whose identity factor is `tailnet-membership` ([C14](c14-oidc-passkeys.md#tailnet-membership)), the home accepts approval requests only while an approval window is open, which replaces the standing queue there: every request on that route has the source `127.0.0.1`, so any device on the tailnet could otherwise keep the 5 pending slots full. The person opens a window at the home's own computer only, with the loopback studio's "Add a device" (`POST /auth/devices/window` on the loopback listener, from the studio's own origin) or with `delorun devices approve`. A window lasts 5 minutes and closes at the first approval. Outside a window `POST /auth/device/request` answers `403 APPROVALS_CLOSED` without reading the body. A request accepted in a window keeps its own 5-minute expiry. The home cannot verify where a request comes from: any device on the tailnet can ask while a window is open, and the match code is what binds an approval to the device whose screen the person reads.
 
+<a id="pop-up-pairing"></a>
+### Pop-up pairing
+
+A device may ask to pair without an approval window, and the studio at the home's own computer then shows the request. The `pairing` configuration of `@delo/home-auth` decides who may ask; every field is validated at load and named with its bounds when it is out of range.
+
+| Field | Values | Delorun default |
+| --- | --- | --- |
+| `pairing.mayAskWithoutWindow` | `own-user`: devices signed in as the Tailscale user this computer is signed in as. `tailnet`: any device on the tailnet. `window-only`: no one (a window is needed). | `own-user` |
+| `pairing.showRequest` | `notice`: a notice with **Enter code** and **Decline**. `dialog`: the code box opens at once, never taking focus from a field being typed in. `none`: only Settings → Devices and `delorun devices approve` list it. | `notice` |
+| `pairing.windowMinutes` | 1 to 15 | 5 |
+| `pairing.requestExpiryMinutes` | 1 to 10 | 5 |
+| `pairing.pendingPerIdentity` | 1 to 5 requests waiting from one Tailscale user | 1 |
+
+Fixed, with no field: approval only at the home's own computer and never from a reach session, also in dangerous mode; the 8-digit match code, with no one-click approve; the cancel after 3 wrong codes; the global cap of 5 waiting requests; and the rotation of every session on approval. A reach session can neither list nor answer a request and never receives the notice's data, which only the loopback routes answer. A reach device cannot write the `pairing` section: the home registers it as a computer-only setting, and `delorun setup reach` and the CLI write it.
+
+**Identity.** `tailscale serve` sets `Tailscale-User-Login` and `Tailscale-User-Name` on each request it forwards from a user's device and replaces any copy the client sent (checked against Tailscale 1.104 on 2026-11-13, with a forged copy sent through the serve port). A tagged device has no user, so it sends none. The computer's own user is the `User` entry that `Self.UserID` of `tailscale status --json` names, read when the listener starts; when it cannot be read, `own-user` accepts no one. A request without a window is accepted only when it names an identity that the mode allows, and is otherwise answered `APPROVALS_CLOSED` without its body being read.
+
+**The identity headers are a quota and display hint, never authorisation.** Any local process can reach the loopback listener behind `tailscale serve` and send the headers itself. That gains it one waiting request, which still needs the 8-digit code from its own screen typed at the computer, and three wrong codes cancel it.
+
 <a id="match-code"></a>
 ### Match code
 

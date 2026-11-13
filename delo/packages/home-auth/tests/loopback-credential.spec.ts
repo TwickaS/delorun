@@ -151,8 +151,8 @@ describe('the loopback device routes', () => {
     const pending = await send('GET', REACH_PATHS.pending, { cookie: STUDIO_COOKIE })
     expect(pending.status).toBe(200)
     const entry = (pending.body.pending as Record<string, unknown>[])[0]
-    // Pins what the approval form reads: the request's label, platform and times, and nothing a code derives from.
-    expect(Object.keys(entry ?? {}).sort()).toEqual(['address', 'createdAt', 'expiresAt', 'label', 'platform', 'requestId'])
+    // Pins what the approval form reads: the request's label, platform, times, window-less mark, wrong-code count and Tailscale identity hint, and nothing a code derives from.
+    expect(Object.keys(entry ?? {}).sort()).toEqual(['address', 'createdAt', 'expiresAt', 'identity', 'label', 'platform', 'requestId', 'windowless', 'wrongCodes'])
     expect(JSON.stringify(pending.body)).not.toMatch(/\b\d{8}\b|\b\d{4} \d{4}\b|homeNonce|deviceNonce|homePublicKey/)
     const wrong = await send('POST', REACH_PATHS.approve, { cookie: STUDIO_COOKIE, origin: OWN() }, { requestId, typedCode: '00000000' })
     expect(wrong.body.error).toBe('APPROVAL_CODE_MISMATCH')

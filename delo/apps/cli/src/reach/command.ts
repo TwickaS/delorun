@@ -24,12 +24,14 @@ import type { ReachOptionStatus } from '@delo/contract-home-process'
 import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delo/reach'
 import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
+import type { PairingSpec } from '@delo/home-auth'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext } from '../command.ts'
 import { hasCliProfile, selectProfile } from '../profile.ts'
 import { profileFlag } from '../open/studio.ts'
 import { printable } from '../terminal-text.ts'
-import { listenerPortFor, readReachRow, signInAddress, writeReachRow } from './row.ts'
+import { readPairingAt } from './pairing-row.ts'
+import { listenerPortFor, profilePatchPath, readReachRow, signInAddress, writeReachRow } from './row.ts'
 import { TRUST_STATEMENT } from './trust.ts'
 
 /** What the command runs against. */
@@ -316,7 +318,21 @@ async function status(args: readonly string[], context: CommandContext, dependen
     if (answer.kind === 'options') lines.push(...answer.options.map(liveLine))
     else lines.push(`Delo is running, but its live state could not be read: ${answer.reason}. Settings → Devices in the studio on this computer shows it.`)
   }
-  if (row.enabled) lines.push(`Sign-in address: ${signInAddress(row.address)}`, ...addPhoneLines(row.address))
+  if (row.enabled) lines.push(`Sign-in address: ${signInAddress(row.address)}`, ...addPhoneLines(row.address), mayAskLine(readPairingAt(profilePatchPath(home, profile))))
   context.stdout(`${lines.join('\n')}\n`)
   return EXIT.ok
+}
+
+/**
+ * Say who may ask to pair a device without an approval window, and how the studio shows a request.
+ * @param pairing - the profile's resolved pairing values.
+ * @returns the sentence.
+ */
+function mayAskLine(pairing: PairingSpec): string {
+  const who = {
+    'own-user': 'Devices signed in as this computer\'s Tailscale user may ask to pair without an approval window',
+    tailnet: 'Any device on your tailnet may ask to pair without an approval window',
+    'window-only': 'A device may ask to pair only while an approval window is open (delorun devices approve)',
+  }[pairing.mayAskWithoutWindow]
+  return `${who}; every request needs the code from its screen, typed at this computer.`
 }

@@ -72,7 +72,7 @@ const UNLOCKS: ElevationsAtComputer = {
   running: [],
 }
 
-const PENDING: PendingDevice = { requestId: 'AAAAAAAAAAAAAAAAAAAAAA', label: 'Phone', platform: 'iOS', address: 'https://home.example.ts.net', createdAt: 0, expiresAt: 1 }
+const PENDING: PendingDevice = { requestId: 'AAAAAAAAAAAAAAAAAAAAAA', label: 'Phone', platform: 'iOS', address: 'https://home.example.ts.net', createdAt: 0, expiresAt: 1, identity: null, windowless: false }
 
 function request(args: DevicesApproveRequest['args'] = {}): DevicesApproveRequest {
   return { v: 1, token: newStartToken(), op: 'devices.approve', args }

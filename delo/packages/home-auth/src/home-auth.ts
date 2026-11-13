@@ -33,6 +33,7 @@ import { ELEVATION_LIMITS, TAILNET_MEMBERSHIP_OPTIONS, type ElevationState, type
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delo/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
+import { PAIRING_DEFAULTS, type PairingSpec, type PairingView, type TailnetIdentity } from './pairing.ts'
 import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from './arrival.ts'
 import { DeviceStore } from './devices.ts'
 import { ReachTerminalStore } from './reach-terminal.ts'
@@ -143,6 +144,11 @@ export interface ServedListener {
   readonly factor: IdentityFactor
   /** The minutes one elevation approved for a device on this listener lasts; C14's default when absent. */
   readonly elevationMinutes?: number
+  /**
+   * The Tailscale login of the user this computer is signed in as, which the `own-user` pairing mode compares a
+   * request's identity with. Absent when the provider cannot read it, which lets no identity ask without a window.
+   */
+  readonly computerUser?: string
 }
 
 /** What `admit` reads for one session token: the admitted session, or the refusal C4 names. */
@@ -196,6 +202,8 @@ export interface HomeAuthOptions {
    * a loopback request.
    */
   readonly loopbackPort?: LoopbackPort
+  /** The resolved pairing choices ({@link resolvePairing}); {@link PAIRING_DEFAULTS} when absent. */
+  readonly pairing?: PairingSpec
 }
 
 /**
@@ -222,6 +230,7 @@ export class HomeAuth {
   private readonly challenges: Challenges
   /** The approval window and its requests. */
   readonly approvals: Approvals
+  private readonly pairingSpec: PairingSpec
   private homeKey: HomeKey | undefined
   /** What `admit` reads; undefined until the stores were read, and after a read failed, so `admit` refuses. */
   private view: AdmissionView | undefined
@@ -254,7 +263,8 @@ export class HomeAuth {
     this.loopbackPort = options.loopbackPort ?? (() => undefined)
     this.random = options.random ?? systemRandom
     this.challenges = new Challenges(this.now, this.random)
-    this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key() })
+    this.pairingSpec = options.pairing ?? PAIRING_DEFAULTS
+    this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key(), pairing: this.pairingSpec })
     this.elevations = new Elevations({
       now: this.now,
       random: this.random,
@@ -667,16 +677,26 @@ export class HomeAuth {
   /**
    * Accept one approval request on a served reach listener.
    * @param input - the request's fields.
-   * @param where - the listener and the source the limit counts.
+   * @param where - the listener, the source the limit counts and the Tailscale user the request's headers name.
    * @returns C5's `201` answer.
-   * @throws {HomeAuthError} `APPROVALS_CLOSED` outside a window; `NO_OWNER`; `DEVICE_NOT_TRUSTED` for a listener no
-   *   provider serves; the limits of {@link Approvals.request}.
+   * @throws {HomeAuthError} `APPROVALS_CLOSED` outside a window for an identity that may not ask without one;
+   *   `NO_OWNER`; `DEVICE_NOT_TRUSTED` for a listener no provider serves; the limits of {@link Approvals.request}.
    */
-  async requestApproval(input: ApprovalRequestInput, where: { readonly listener: ReachListenerId; readonly source: string }): Promise<ApprovalRequestAccepted> {
-    this.approvals.assertWindowOpen()
+  async requestApproval(input: ApprovalRequestInput, where: { readonly listener: ReachListenerId; readonly source: string; readonly identity?: TailnetIdentity | undefined }): Promise<ApprovalRequestAccepted> {
+    this.assertMayAsk(where.listener, where.identity)
     await this.assertOwner()
     const served = this.servedOrRefuse(where.listener)
-    return this.approvals.request(input, { listener: where.listener, address: served.address, source: where.source })
+    return this.approvals.request(input, { listener: where.listener, address: served.address, source: where.source, identity: where.identity, computerUser: served.computerUser })
+  }
+
+  /**
+   * Refuse a request that may not be accepted now, before its body is read.
+   * @param listener - the reach listener it arrived on.
+   * @param identity - the Tailscale user its headers name.
+   * @throws {HomeAuthError} `APPROVALS_CLOSED` outside a window for an identity that may not ask without one.
+   */
+  assertMayAsk(listener: ReachListenerId, identity?: TailnetIdentity): void {
+    this.approvals.assertMayAsk(identity, this.served.get(listener)?.computerUser)
   }
 
   /**
@@ -687,6 +707,15 @@ export class HomeAuth {
    */
   approvalState(id: string, secret: string): ApprovalRequestState {
     return this.approvals.state(id, secret)
+  }
+
+  /**
+   * The resolved pairing choices, which the loopback studio's notice and the commands read.
+   * @returns who may ask without a window, how a request is shown and the window and expiry in minutes.
+   */
+  pairing(): PairingView {
+    const { mayAskWithoutWindow, showRequest, windowMs, requestExpiryMs, pendingPerIdentity } = this.pairingSpec
+    return { mayAskWithoutWindow, showRequest, windowMinutes: windowMs / 60_000, requestExpiryMinutes: requestExpiryMs / 60_000, pendingPerIdentity }
   }
 
   /**

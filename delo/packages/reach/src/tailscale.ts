@@ -94,6 +94,29 @@ export async function readTailscale(run: TailscaleRunner): Promise<TailscaleFact
 }
 
 /**
+ * The Tailscale login of the user this computer is signed in as: the `User` entry that `Self.UserID` of
+ * `tailscale status --json` names. Pairing compares a request's `Tailscale-User-Login` header with it.
+ * @param run - the runner.
+ * @returns the login, or undefined when Tailscale cannot answer or this node is tagged, which has no user.
+ */
+export async function readComputerUser(run: TailscaleRunner): Promise<string | undefined> {
+  let value: unknown
+  try {
+    value = JSON.parse((await run(['status', '--json'])).stdout)
+  } catch {
+    // Output that is not JSON is a Tailscale that cannot answer: no identity may then ask without a window.
+    return undefined
+  }
+  if (typeof value !== 'object' || value === null) return undefined
+  const self: unknown = Reflect.get(value, 'Self')
+  const users: unknown = Reflect.get(value, 'User')
+  const id: unknown = typeof self === 'object' && self !== null ? Reflect.get(self, 'UserID') : undefined
+  const user: unknown = typeof users === 'object' && users !== null && (typeof id === 'number' || typeof id === 'string') ? Reflect.get(users, String(id)) : undefined
+  const login: unknown = typeof user === 'object' && user !== null ? Reflect.get(user, 'LoginName') : undefined
+  return typeof login === 'string' && login !== '' ? login : undefined
+}
+
+/**
  * The serve target this home configures: its fixed listener port on `127.0.0.1`.
  * @param listenerPort - the fixed listener port.
  * @returns `http://127.0.0.1:<listenerPort>`.

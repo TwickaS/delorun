@@ -49,7 +49,7 @@ export function fakeTailscale(host: string, answers: FakeTailscale['answers'] = 
       if (answer !== undefined) return Promise.resolve(typeof answer === 'function' ? answer() : answer)
       switch (kind) {
         case 'version': return OK
-        case 'status': return { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: `${host}.` }, CertDomains: [host] }), stderr: '' }
+        case 'status': return { code: 0, stdout: JSON.stringify({ BackendState: 'Running', Self: { DNSName: `${host}.`, UserID: 7 }, User: { 7: { LoginName: 'me@example.com' } }, CertDomains: [host] }), stderr: '' }
         case 'serve status': return { code: 0, stdout: `${JSON.stringify(fake.config, null, 2)}\n`, stderr: '' }
         case 'serve set': {
           const port = (args[2] ?? '').replace('--https=', '')
