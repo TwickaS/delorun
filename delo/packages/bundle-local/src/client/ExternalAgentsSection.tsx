@@ -17,6 +17,7 @@ import { SettingsCard } from '@delo/settings-controls'
 import { readAgentGrants, revokeAgentGrant, type GrantsAnswer, type GrantView } from './consents-api.ts'
 import { formatTime, listLine, readListing, type GroupProps, type Listing, type Translate } from './ConsentListing.tsx'
 import { consentFailureOf, consentFailureText } from './FullAccessConsent.tsx'
+import { useDangerousMode } from './dangerous-mode.ts'
 import type { HostFetch } from './host-api.ts'
 import type { OptInMutation } from './opt-in.ts'
 import css from './ConsentSections.module.css'
@@ -77,14 +78,16 @@ export function ExternalAgentsSection({ t, fetch, useAgentSettings, useAgentSett
     await refresh()
   }
 
-  const remote = agents.kind === 'remote'
+  const dangerous = useDangerousMode(fetch)
+  // While dangerous mode holds, a remote studio offers the actions; the unlock the home asks for decides them.
+  const remote = agents.kind === 'remote' && !dangerous
 
   return <div className={css.section}>
     <h2 className={css.heading}>{t('agents.title')}</h2>
     {outcome === undefined ? null : <p className={outcome.failed ? css.failed : css.line} role={outcome.failed ? 'alert' : 'status'}>{outcome.text}</p>}
     {remote
       ? <p className={css.line} role="status">{t('agents.remote')} <code className={css.command}>{AGENTS_COMMAND}</code></p>
-      : null}
+      : agents.kind === 'remote' ? <p className={css.line} role="status">{t('unlockHere')}</p> : null}
     <AgentSettings t={t} form={agentSettings} mutation={agentSettingsMutation} remote={remote} set={setAgentSetting} />
     <SettingsCard title={t('agents.allowed.heading')} description={t('agents.allowed.description')} group="external-agents">
       <AgentsGroup t={t} listing={agents} busy={busy} revoke={revokeAgent} />

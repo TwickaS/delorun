@@ -44,10 +44,13 @@
  *
  * @module @delo/cli/compose
  */
-import { realpathSync } from 'node:fs'
+import { realpathSync, rmSync } from 'node:fs'
+import { runDirectory, writeProtectedFile } from '@delo/home'
+import { stringify } from 'yaml'
 import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import { homedir } from 'node:os'
 import { join, relative, sep } from 'node:path'
+import { CLI_PROFILE } from '@delo/contract-home-layout'
 import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delo/contract-setup-answers'
 import type { CommandOutput } from './command.ts'
@@ -191,7 +194,7 @@ export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string
   'delo-instruction-consent': { enabled: true, approvedPluginWrites: true },
   'delo-mcp-consent': { enabled: true },
   'delo-schedule-consent': { enabled: true },
-  'delo-permission-defaults': { enabled: true },
+  'delo-permission-defaults': { enabled: true, fullAccessEverywhere: false },
   'delo-delegation-consent': { enabled: true },
   'delo-plugin-changes': { enabled: true },
   ...GUARD_ROWS,
@@ -253,10 +256,14 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   const others = [...before, ...approved]
   const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile, others, protection)
   const startOnly = startOnlySockets(request.home, resolvedProfile.profile, others, protection)
-  const patchFiles = [...others, overlay]
+  const dangerousOverlay = request.kind === 'headless' ? await writeHeadlessDangerousOverlay(request.home, request.profile) : []
+  const patchFiles = [...others, overlay, ...dangerousOverlay]
   const prompts = request.kind === 'cli' ? readPromptsAnswer(join(request.home, 'profiles', request.profile)) : undefined
+  const headlessValues = dangerousOverlay.length > 0
+    ? { ...HEADLESS_ROW_VALUES, 'delo-permission-defaults': { enabled: true, fullAccessEverywhere: true } }
+    : HEADLESS_ROW_VALUES
   const values = new Map<string, Readonly<Record<string, unknown>>>(prompts === undefined
-    ? Object.entries(HEADLESS_ROW_VALUES)
+    ? Object.entries(headlessValues)
     : [...promptRows(prompts).map(row => [row.id, row.config] as const), ...Object.entries(GUARD_ROWS)])
   const layers = patchLayers(request.home, resolvedProfile.profile, patchFiles)
   const requiredIds = [SANDBOX_ROW, ...deloRows]
@@ -278,6 +285,24 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   }
   assertComposedInvariants(composed)
   return composed
+}
+
+/**
+ * The overlay that gives a `headless` run dangerous mode. The run has no setup answer of its own, so it takes the CLI
+ * profile's: the permission row gets `fullAccessEverywhere` only when that answer is `dangerous`, and the plugin still
+ * needs the grant file. Any other answer removes an overlay an earlier run left.
+ * @param home - the resolved Delo home.
+ * @param profile - the headless profile.
+ * @returns the overlay's path, or an empty list when the CLI profile's answer is not `dangerous`.
+ */
+async function writeHeadlessDangerousOverlay(home: string, profile: string): Promise<string[]> {
+  const path = join(runDirectory(home, profile), 'dangerous.patch.yml')
+  if (readPromptsAnswer(join(home, 'profiles', CLI_PROFILE)) !== 'dangerous') {
+    rmSync(path, { force: true })
+    return []
+  }
+  await writeProtectedFile(path, stringify([{ id: 'delo-permission-defaults', config: { enabled: true, fullAccessEverywhere: true } }]))
+  return [path]
 }
 
 /**

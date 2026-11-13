@@ -35,6 +35,7 @@ afterEach(async () => {
 interface Route {
   readonly path: string
   fetch(request: Request): Promise<Response>
+  admitPeer?: (request: Request, peer: { readonly principal: object }) => boolean
 }
 
 interface Mounted {
@@ -236,12 +237,36 @@ describe('the route hook', () => {
     return { request, response, writeHead, end }
   }
 
-  /** The service mounted with a `homeAuth` that places every request on one listener. */
-  async function withListener(listener: string): Promise<Context> {
+  /** The service mounted with a `homeAuth` that places every request on one listener and reports dangerous mode. */
+  async function withListener(listener: string, dangerous = false): Promise<Context> {
     const { ctx } = await mounted()
-    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }) } as never)
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener, host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
     return ctx
   }
+
+  it('lets an unlocked device through to either route only while dangerous mode holds, and refuses a locked one at the peer check', async () => {
+    const { ctx, routes } = await mounted()
+    let dangerous = false
+    ctx.provide('homeAuth', { arrivalOf: (request: IncomingMessage) => ({ listener: 'reach-tailscale-private', host: request.headers.host, source: 'test' }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } as never)
+    const device = (deviceId: string) => ({ principal: { kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' } })
+    for (const url of [NETWORK_LIST_PATH, NETWORK_SET_PATH]) {
+      // Pins the mode check: with the mode off the hook refuses the device before any route.
+      dangerous = false
+      const off = arrival(url, 'home.example.ts.net')
+      const refused = vi.fn(async () => {})
+      await ctx.waterfall('connection/request', off.request, off.response, refused)
+      expect([url, refused.mock.calls.length, off.writeHead.mock.calls[0]?.[0]]).toEqual([url, 0, 403])
+      dangerous = true
+      const { request, response, writeHead } = arrival(url, 'home.example.ts.net')
+      const next = vi.fn(async () => {})
+      await ctx.waterfall('connection/request', request, response, next)
+      expect([url, next.mock.calls.length, writeHead.mock.calls.length]).toEqual([url, 1, 0])
+      const admit = routes.get(url)?.admitPeer
+      expect(admit?.(new Request(`http://localhost${url}`), device('unlocked-phone'))).toBe(true)
+      expect(admit?.(new Request(`http://localhost${url}`), device('locked-phone'))).toBe(false)
+      expect(admit?.(new Request(`http://localhost${url}`), { principal: { kind: 'anonymous' } })).toBe(false)
+    }
+  })
 
   it('refuses a device\'s request and one under another Host for either route with LOOPBACK_REQUIRED, however its path is spelled', async () => {
     const spellings = [NETWORK_LIST_PATH, `${NETWORK_SET_PATH}?confirmed=1`, '/x/../api/deloNetwork.list', '/api/x/%2e%2e/deloNetwork.set', '/api\\deloNetwork.list', 'http://127.0.0.1:3080/api/deloNetwork.list']
@@ -286,7 +311,7 @@ describe('the route hook', () => {
 
 describe('the plugin\'s network configuration', () => {
   it('defaults to the parity value and an open network', () => {
-    expect(Config()).toEqual({ enabled: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000, proxyMaxConnections: 256, proxyIdleTimeoutMs: 300_000 })
+    expect(Config()).toEqual({ enabled: false, fullAccessEverywhere: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000, proxyMaxConnections: 256, proxyIdleTimeoutMs: 300_000 })
   })
 
   it('refuses an invalid default allowlist, a zero timeout and a second resolver at load', async () => {
@@ -296,7 +321,10 @@ describe('the plugin\'s network configuration', () => {
     await expect(apply(ctx, { ...Config(), enabled: true, proxyConnectTimeoutMs: 0 })).rejects.toThrow('proxyConnectTimeoutMs')
     await expect(apply(ctx, { ...Config(), enabled: true, proxyMaxConnections: 0 })).rejects.toThrow('proxyMaxConnections must be a positive number')
     await expect(apply(ctx, { ...Config(), enabled: true, proxyIdleTimeoutMs: 0 })).rejects.toThrow('proxyIdleTimeoutMs must be a positive number')
-    ctx.provide('sandboxNetwork', () => undefined)
-    await expect(apply(ctx, { ...Config(), enabled: true })).rejects.toThrow('another plugin already provides the sandbox network resolver')
+    // A failed start mounts a stand-in resolver on the root, so the other plugin's resolver is provided on a fresh root.
+    const other = new Context()
+    contexts.push(other)
+    other.provide('sandboxNetwork', () => undefined)
+    await expect(apply(other, { ...Config(), enabled: true })).rejects.toThrow('another plugin already provides the sandbox network resolver')
   })
 })

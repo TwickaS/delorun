@@ -4,8 +4,9 @@
  * and the run registered as a shared user of the chat data. Upstream's runner is replaced by one that mounts what
  * the composition composed.
  */
+import { CLI_PROFILE } from '@delo/contract-home-layout'
 import { shellQuote } from '@delo/home'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,7 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { HostNotStoppedError } from '@delo/home-process'
-import { permissionStorePath, writePermissionStore, type WorkspacePermission } from '@delo/plugin-permission-defaults/store'
+import { dangerousGrantPath, permissionStorePath, writeDangerousGrant, writePermissionStore, type WorkspacePermission } from '@delo/plugin-permission-defaults/store'
+import { ANSWERS_FILENAME } from '../src/setup/progress.ts'
 import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
 import { stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
@@ -274,6 +276,47 @@ describe('delorun headless asking for full access', { timeout: 60_000 }, () => {
     expect(await attempt(['--permission-mode', FULL, 'task'], { DSH_PERMISSION_MODE: FULL }, seen)).toBeUndefined()
     expect(seen).toHaveLength(1)
     expect(seen[0]?.args).toEqual(['--permission-mode', FULL, 'task'])
+  })
+
+  describe('in dangerous mode', () => {
+    /**
+     * Record the setup answer of the CLI profile, which `delorun headless` reads its dangerous mode from.
+     * @param prompts - the prompts answer.
+     */
+    function answer(prompts: string): void {
+      const directory = join(deloHome, 'profiles', CLI_PROFILE)
+      mkdirSync(directory, { recursive: true })
+      writeFileSync(join(directory, ANSWERS_FILENAME), JSON.stringify({ prompts }))
+    }
+
+    it.each([
+      ['the grant file is missing', 'dangerous', false],
+      ['the answer is stock', 'stock', true],
+      ['the answer is safer', 'safer', true],
+    ] as const)('still refuses full access in a workspace without a grant when %s', async (_name, prompts, withGrantFile) => {
+      answer(prompts)
+      if (withGrantFile) await writeDangerousGrant(deloHome)
+      const seen: RunProfileOptions[] = []
+      expect(await attempt(['--permission-mode', FULL, 'task'], {}, seen)).toBeInstanceOf(CliError)
+      expect(seen).toEqual([])
+    })
+
+    it('still refuses it when the grant file is a symbolic link', async () => {
+      answer('dangerous')
+      const path = dangerousGrantPath(deloHome)
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+      writeFileSync(join(osHome, 'real.json'), '{}', { mode: 0o600 })
+      symlinkSync(join(osHome, 'real.json'), path)
+      expect(await attempt(['--permission-mode', FULL, 'task'], {}, [])).toBeInstanceOf(CliError)
+    })
+
+    it('runs a full-access task in a workspace without its own grant when the answer is dangerous and the grant file is valid', async () => {
+      answer('dangerous')
+      await writeDangerousGrant(deloHome)
+      const seen: RunProfileOptions[] = []
+      expect(await attempt(['--permission-mode', FULL, 'task'], {}, seen)).toBeUndefined()
+      expect(seen).toHaveLength(1)
+    })
   })
 
   it('refuses it naming the store when the store cannot be read, even though a grant may be in it', async () => {

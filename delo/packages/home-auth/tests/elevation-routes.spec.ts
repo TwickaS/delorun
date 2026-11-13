@@ -22,8 +22,8 @@ import {
   elevationRequestHandler,
   elevationRevokeHandler,
   elevationStateHandler,
-  terminalSwitchHandler,
 } from '../src/elevation-routes.ts'
+import { terminalSwitchHandler } from '../src/terminal-switch.ts'
 import type { RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 import { DeviceStore } from '../src/devices.ts'
@@ -40,9 +40,12 @@ let home: Home
 let port = 0
 let token = ''
 let close: () => Promise<void> = () => Promise.resolve()
+/** Whether dangerous mode holds, which the terminal switch route reads per request. */
+let dangerous = false
 
 beforeEach(async () => {
-  home = await homeFixture()
+  dangerous = false
+  home = await homeFixture({ dangerousMode: () => dangerous })
   home.auth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   const issued = await home.auth.issueOwnerCode()
   const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
@@ -54,7 +57,7 @@ beforeEach(async () => {
     [ELEVATION_PATHS.pending]: elevationPendingHandler(home.auth, testCredential),
     [ELEVATION_PATHS.approve]: elevationApproveHandler(home.auth, testCredential),
     [ELEVATION_PATHS.revoke]: elevationRevokeHandler(home.auth, testCredential),
-    [ELEVATION_PATHS.terminal]: terminalSwitchHandler(home.auth, testCredential),
+    [ELEVATION_PATHS.terminal]: terminalSwitchHandler(home.auth, testCredential, () => dangerous),
   }
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? '/', 'http://server.invalid')
@@ -107,6 +110,12 @@ function send(method: string, path: string, body?: unknown, headers: Record<stri
     request.on('error', reject)
     request.end(text)
   })
+}
+
+/** Give the signed-in device a running unlock, approved at the computer. */
+async function unlockDevice(): Promise<void> {
+  const asked = await send('POST', `${ELEVATION_PATHS.request}?reach`)
+  await send('POST', ELEVATION_PATHS.approve, { requestId: asked.body.requestId, typedCode: asked.body.code })
 }
 
 describe('the device routes', () => {
@@ -192,13 +201,45 @@ describe('the terminal switch', () => {
     expect(await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: false })).toEqual({ status: 200, body: { withoutUnlock: false } })
   })
 
-  it('lets a device turn it off and never on', async () => {
+  it('lets a device turn it off and, outside dangerous mode, never on', async () => {
     await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true })
     // Pins the computer-only check: turning it on lowers protection, so a device is refused even while it is off.
     await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: false })
     expect(home.auth.terminalWithoutUnlock()).toBe(false)
     expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
     expect(home.auth.terminalWithoutUnlock()).toBe(false)
+    // Pins the unlock check: an unlock alone lifts nothing while the mode is off.
+    await unlockDevice()
+    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    expect(home.auth.terminalWithoutUnlock()).toBe(false)
+  })
+
+  it('refuses a locked device turning it on in dangerous mode, and lets an unlocked one', async () => {
+    dangerous = true
+    // Pins the unlock check: the mode alone does not admit a device that holds no unlock.
+    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
+    expect(home.auth.terminalWithoutUnlock()).toBe(false)
+    await unlockDevice()
+    // Pins the mode check in the route.
+    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toEqual({ status: 200, body: { withoutUnlock: true } })
+    expect(home.auth.terminalWithoutUnlock()).toBe(true)
+  })
+
+  it('turns off a switch a device turned on when dangerous mode ends, and keeps the computer\'s', async () => {
+    dangerous = true
+    await unlockDevice()
+    await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })
+    expect(home.auth.terminalWithoutUnlock()).toBe(true)
+    dangerous = false
+    // Pins the withdrawal: the mode ended, so no locked device opens a terminal without an unlock.
+    expect(home.auth.terminalWithoutUnlock()).toBe(false)
+    await home.auth.endDeviceTerminal()
+    expect(await send('GET', ELEVATION_PATHS.terminal)).toEqual({ status: 200, body: { withoutUnlock: false } })
+    dangerous = true
+    expect(home.auth.terminalWithoutUnlock()).toBe(false)
+    await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true })
+    dangerous = false
+    expect(home.auth.terminalWithoutUnlock()).toBe(true)
   })
 
   it('answers a device with a live session and the studio\'s own page only, and the computer with its credential only', async () => {

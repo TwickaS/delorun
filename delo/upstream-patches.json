@@ -936,19 +936,19 @@
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.tsx",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot and the backdrop slot. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state."
+      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot, the backdrop slot and the brand badge slot under the logo row. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/contract/slots.ts",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Declares the sidebar.backdrop slot and the sidebarLayout placement, lead panel, New Session button and foot row hooks."
+      "reason": "Declares the sidebar.backdrop and sidebar.brand.badge slots and the sidebarLayout placement, lead panel, New Session button and foot row hooks."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/index.ts",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Implements ctx.sidebarLayout for the panel placement, the lead panel, the New Session button and the foot row."
+      "reason": "Implements ctx.sidebarLayout for the panel placement, the lead panel, the New Session button and the foot row, and declares the sidebar.brand.badge child slot."
     },
     {
       "path": "packages/client/ui-theme/src/styles/base.css",

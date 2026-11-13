@@ -224,6 +224,24 @@ export const REACH_DENIED_ACTIONS = {
   'session/workspacePathApplications': OPEN_ON_COMPUTER,
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
+/**
+ * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock: the role
+ * lists them, and the condition refuses them with `loopback-required: <action>` while the mode is off and with
+ * `elevation-required: <action>` to a locked device while it holds. A saved credential is never sent to a device:
+ * `credentials/describe` answers presence and writability only. Each other action of the never table stays at the
+ * computer in every mode.
+ */
+export const REACH_DANGEROUS_ACTIONS = {
+  'credentials/describe': 'read whether a provider key is saved, never its value',
+  'credentials/set': 'save or change a provider key, which the device never reads back',
+  'credentials/unset': 'remove a saved provider key',
+  'event:credentials/record-updated': 'follow a change to a saved credential record, naming its key and never its value',
+  'event:credentials/reference-updated': 'follow a change to a saved provider key, naming it and never its value',
+  'session/openWorkspacePath': 'open a chat\'s folder in an application on the home\'s computer',
+  'session/workspacePathApplications': 'list the applications on the home\'s computer that open a chat\'s folder',
+} as const satisfies Partial<Readonly<Record<keyof typeof REACH_DENIED_ACTIONS, string>>>
+const DANGEROUS_SET: ReadonlySet<string> = new Set(Object.keys(REACH_DANGEROUS_ACTIONS))
+
 const PLUGIN_MANAGEMENT = 'install, enable, update or remove a plugin, code that runs in the Host outside any sandbox; the plugin manager still refuses every change to a guard plugin'
 const PROFILE_HISTORY = 'undo or restore a profile change; the plugin manager still refuses one that changes a guard plugin'
 const SETTINGS_WRITE = 'change a setting of the home'
@@ -308,8 +326,12 @@ assertDisjoint({ allowed: REACH_ALLOWED_ACTIONS, elevated: REACH_ELEVATED_ACTION
 const ALLOWED: readonly RemoteAccessAction[] = Object.freeze(Object.keys(REACH_ALLOWED_ACTIONS) as (keyof typeof REACH_ALLOWED_ACTIONS)[])
 const ALLOWED_SET: ReadonlySet<string> = new Set(ALLOWED)
 const ELEVATED_SET: ReadonlySet<string> = new Set(Object.keys(REACH_ELEVATED_ACTIONS))
-/** The actions every role lists: the allowed ones, and the elevated ones, which the condition refuses without one. */
-const ROLE_ACTIONS: readonly RemoteAccessAction[] = Object.freeze([...ALLOWED, ...(Object.keys(REACH_ELEVATED_ACTIONS) as (keyof typeof REACH_ELEVATED_ACTIONS)[])])
+/** The actions every role lists: the allowed ones, the elevated ones, which the condition refuses without an unlock, and the ones dangerous mode lifts. */
+const ROLE_ACTIONS: readonly RemoteAccessAction[] = Object.freeze([
+  ...ALLOWED,
+  ...(Object.keys(REACH_ELEVATED_ACTIONS) as (keyof typeof REACH_ELEVATED_ACTIONS)[]),
+  ...(Object.keys(REACH_DANGEROUS_ACTIONS) as (keyof typeof REACH_DANGEROUS_ACTIONS)[]),
+])
 
 /**
  * The role over one resource kind.
@@ -378,6 +400,8 @@ function within(parent: string, child: string): boolean {
 interface WorkspaceBounds {
   readonly root: string
   readonly deloHome: string
+  /** Whether a path must lie inside {@link root}; false only for an unlocked device while dangerous mode holds. */
+  readonly confined: boolean
 }
 
 /**
@@ -388,7 +412,7 @@ interface WorkspaceBounds {
  */
 function reachableReal(bounds: WorkspaceBounds, path: string): string | undefined {
   const real = realPathOf(path)
-  if (real === undefined || !within(bounds.root, real) || within(bounds.deloHome, real)) return undefined
+  if (real === undefined || (bounds.confined && !within(bounds.root, real)) || within(bounds.deloHome, real)) return undefined
   return real
 }
 
@@ -432,7 +456,7 @@ function boundsOf(facts: Pick<ReachAccessFacts, 'workspaceRootOf' | 'deloHome'>,
   const root = workspace === undefined ? undefined : realPathOf(workspace)
   const deloHome = realPathOf(facts.deloHome)
   if (root === undefined || deloHome === undefined) return undefined
-  return { root, deloHome }
+  return { root, deloHome, confined: true }
 }
 
 /** The condition every binding of a device carries: one call's action, the resource it is decided on and its arguments. */
@@ -479,6 +503,13 @@ export interface ComputerOnlySwitch {
   /** What the field turns on, as the refusal names it, such as `the external-agent consent`. */
   readonly label: string
 }
+
+/**
+ * The computer-only switches dangerous mode lifts for an unlocked device, by settings namespace. A switch not listed
+ * here, such as a remote-access setting (reach or pairing), stays at the computer in every mode, so registering a
+ * switch lifts nothing.
+ */
+export const DANGEROUS_LIFTABLE_SWITCHES: ReadonlySet<string> = new Set(['delo-delegation-consent'])
 
 /**
  * The reason a settings write that would turn a computer-only switch off is refused to a device, unlocked or not.
@@ -671,7 +702,7 @@ export const REACH_DEVICE_COMMANDS = {
   compact: 'compact the chat\'s older history',
   export: 'download the chat\'s log',
   goal: 'set or read the chat\'s goal',
-  permission: 'switch the chat\'s permission preset; a full-access preset still meets the workspace\'s consent, which only the computer grants',
+  permission: 'switch the chat\'s permission preset; a full-access preset meets the workspace\'s consent where the home asks for one, which only the computer grants, and with setup\'s stock or dangerous answer it does not',
   plan: 'enter or leave plan mode in the chat',
 } as const satisfies Readonly<Record<string, string>>
 
@@ -725,16 +756,19 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
  * device may reach (see {@link WORKSPACE_PATH_ACTIONS}), unlocked or not. Before the unlock check, and so unlocked or
- * not, it refuses a settings write that could turn a registered {@link ComputerOnlySwitch} off, a plugin-manager call
- * that names a protected row ({@link PROTECTED_ROW_REFUSAL}), and a slash command {@link REACH_DEVICE_COMMANDS} does not
- * list ({@link UNLISTED_COMMAND_REFUSAL}). Every other action is allowed as its role lists it, and so is every other
- * question asked without a call's arguments.
+ * not, it refuses a settings write that could turn a registered {@link ComputerOnlySwitch} off or loosen the
+ * permission new chats start in, a plugin-manager call that names a protected row ({@link PROTECTED_ROW_REFUSAL}), and
+ * a slash command {@link REACH_DEVICE_COMMANDS} does not list ({@link UNLISTED_COMMAND_REFUSAL}), except while
+ * dangerous mode holds ({@link ReachAccessFacts.dangerousMode}), when an unlock decides them. It refuses an action of
+ * {@link REACH_DANGEROUS_ACTIONS} with `loopback-required: <action>` unless the mode holds and the device is unlocked,
+ * and it lets an unlocked device outside the chat's workspace, though never into the Delo home, while the mode holds. Every other action is allowed as its role lists it, and so is every
+ * other question asked without a call's arguments.
  * @param facts - the Host state the policy reads.
  * @param principal - the device and the listener whose bindings carry the condition.
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener } = principal
@@ -752,16 +786,27 @@ export function createCondition(
     return undefined
   }
   return ({ action, resource, args }) => {
+    // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
+    // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
     if (args !== undefined) {
+      const dangerous = facts.dangerousMode()
       // A computer-only switch stays on, new chats' permission stays as loose as it is, a protected row stays as it is,
-      // and a command a device does not run stays unrun, so no unlock admits any of them.
+      // and a command a device does not run stays unrun, so no unlock admits any of them. The mode lifts a switch only
+      // when DANGEROUS_LIFTABLE_SWITCHES lists it: the remote-access settings stay at the computer.
       if (SETTINGS_WRITES.has(action)) {
-        const off = facts.computerOnlySwitches().find(target => turnsSwitchOff(action, args, target))
+        const off = facts.computerOnlySwitches().find(target => !(dangerous && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
-        if (loosensDefaultPermission(action, args, facts.defaultPermission())) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
+        if (!dangerous && loosensDefaultPermission(action, args, facts.defaultPermission())) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
       }
-      if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
-      if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
+      if (!dangerous) {
+        if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+        if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
+      }
+    }
+    if (DANGEROUS_SET.has(action)) {
+      if (!facts.dangerousMode()) return { kind: 'deny', reason: `loopback-required: ${action}` }
+      const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
+      if (refused !== undefined) return refused
     }
     if (ELEVATED_SET.has(action) && !(action.startsWith(TERMINAL_PREFIX) && terminalWithoutUnlock(facts, resource))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
@@ -774,9 +819,13 @@ export function createCondition(
     }
     if (WORKSPACE_PATH_ACTIONS.has(action)) {
       const bounds = boundsOf(facts, resource)
-      if (bounds === undefined || !workspacePathsReachable(bounds, args)) {
-        return { kind: 'deny', reason: `loopback-required: ${action} with a path outside the chat's workspace` }
+      if (bounds !== undefined && workspacePathsReachable(bounds, args)) return ALLOW
+      const outside = `loopback-required: ${action} with a path outside the chat's workspace`
+      // Dangerous mode moves the workspace bound for an unlocked device; the Delo home stays out of reach.
+      if (bounds !== undefined && facts.dangerousMode() && workspacePathsReachable({ ...bounds, confined: false }, args)) {
+        return unlocked(action, outside, true) ?? ALLOW
       }
+      return { kind: 'deny', reason: outside }
     }
     return ALLOW
   }
@@ -857,6 +906,13 @@ export interface ReachAccessFacts {
    * @returns it, or undefined while no permission presets run.
    */
   readonly defaultPermission: () => DefaultPermission | undefined
+  /**
+   * Whether dangerous mode holds: the computer-only refusals of a settings write, a protected plugin row, an unlisted
+   * command, the {@link REACH_DANGEROUS_ACTIONS} and a workspace-file path outside the chat's workspace are lifted for a
+   * device that holds an unlock. Approving a device and signing in stay at the computer.
+   * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
+   */
+  readonly dangerousMode: () => boolean
 }
 
 /**

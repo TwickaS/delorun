@@ -72,7 +72,7 @@ const START = Date.UTC(2026, 0, 1)
  *   as the fake `Date` of a spec whose timers must fire at the time the home reads.
  * @returns the fixture.
  */
-export async function homeFixture(options: { readonly fill?: number; readonly now?: () => number } = {}): Promise<Home> {
+export async function homeFixture(options: { readonly fill?: number; readonly now?: () => number; readonly dangerousMode?: () => boolean } = {}): Promise<Home> {
   const directory = await mkdtemp(join(tmpdir(), 'delo-home-auth-'))
   const clock = {
     now: START,
@@ -89,6 +89,7 @@ export async function homeFixture(options: { readonly fill?: number; readonly no
   const loopback: { port: number | undefined } = { port: undefined }
   const auth = new HomeAuth({
     loopbackPort: () => loopback.port,
+    ...(options.dangerousMode === undefined ? {} : { dangerousMode: options.dangerousMode }),
     directory,
     now: options.now ?? clock.read,
     random,

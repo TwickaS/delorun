@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ApprovalActionOwnerProps } from '@deepseek-ai/dsh-client-ui-approval/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { reviewChat } from './consents-api.ts'
+import { readEverywhere, reviewChat } from './consents-api.ts'
 import { isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -27,10 +27,12 @@ export type FullAccessActionProps = ApprovalActionOwnerProps & PropsLocale<'delo
  * Whether the home refuses the workspace review of one chat because the studio is remote.
  * @param fetch - the request function.
  * @param sessionId - the chat.
- * @returns true on a remote studio; false at the home's own computer, for a chat the home cannot review and when the
+ * @returns true on a remote studio while dangerous mode is off; false at the home's own computer, for a chat the home cannot review and when the
  *   home is unreachable.
  */
 export async function isRemoteStudio(fetch: HostFetch, sessionId: string): Promise<boolean> {
+  // While dangerous mode is on, a remote studio switches without the computer, so nothing there says to approve elsewhere.
+  if ((await readEverywhere(fetch)).on) return false
   try {
     await reviewChat(fetch, sessionId)
     return false

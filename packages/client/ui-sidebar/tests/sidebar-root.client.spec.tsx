@@ -52,13 +52,14 @@ function makeHeaderProps(): HeaderLeadingControlsProps {
   }
 }
 
-function mountShell({ collapsed = false, width = 300, drawer = false, shortcuts = [], content, backdrop = null }: {
+function mountShell({ collapsed = false, width = 300, drawer = false, shortcuts = [], content, backdrop = null, badge = null }: {
   collapsed?: boolean
   width?: number
   drawer?: boolean
   shortcuts?: readonly ShortcutCatalogEntry[]
   content?: ReactNode
   backdrop?: ReactNode
+  badge?: ReactNode
 } = {}) {
   const startSession = vi.fn()
   const toggleSidebar = vi.fn()
@@ -88,6 +89,7 @@ function mountShell({ collapsed = false, width = 300, drawer = false, shortcuts 
         if (key === 'sidebar.brand.name') return brandName
         if (key === 'sidebar.toggle.badge') return null
         if (key === 'sidebar.backdrop') return backdrop
+        if (key === 'sidebar.brand.badge') return badge
         if (key === 'sidebar.settings') {
           settingsOwner = owner
           return <div data-testid="settings-seat" data-wide={owner.wide} />
@@ -135,6 +137,15 @@ describe('SidebarRoot shell', () => {
     cleanup()
     mountShell({ collapsed: true, width: 56, backdrop: art })
     expect(screen.queryByTestId('backdrop-art')).toBeNull()
+  })
+
+  it('draws the brand badge under the logo row of the wide sidebar, and none in the rail', () => {
+    const badge = <button type="button" data-testid="brand-badge">Dangerous mode</button>
+    mountShell({ badge })
+    expect(screen.getByTestId('brand-badge').closest('button[aria-label]')).toBeNull()
+    cleanup()
+    mountShell({ collapsed: true, width: 56, badge })
+    expect(screen.queryByTestId('brand-badge')).toBeNull()
   })
 
   it('advertises the effective new-session binding', () => {

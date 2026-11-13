@@ -12,6 +12,7 @@
 import type { ServerResponse } from 'node:http'
 import { isLoopbackHost } from '@delo/home'
 import { refusalBody } from './errors.ts'
+import { REACH_DEVICE, type ReachDevicePrincipal } from './reach-access.ts'
 import type { HomeAuthService } from './service.ts'
 
 /** What {@link requireComputer} reads of a request: its headers and what the home's arrival check reads. */
@@ -32,6 +33,42 @@ export function requireComputer(request: ComputerRequest, response: ServerRespon
   response.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' })
   response.end(refusalBody('LOOPBACK_REQUIRED', `${action} needs you at your computer: open the studio on the home's own computer`))
   return false
+}
+
+/** What {@link requireComputerUnlessDangerous} and {@link admitUnlockedDevice} read of the home. */
+export type DangerousModeHome = Pick<HomeAuthService, 'arrivalOf' | 'dangerousMode' | 'elevationOf'>
+
+/**
+ * {@link requireComputer} for a route that an unlocked device may also use while dangerous mode holds: a request that
+ * arrived on a reach listener passes the hook then, and the route's `admitPeer` ({@link admitUnlockedDevice}) decides
+ * whether its device holds an unlock. Every other request is decided as {@link requireComputer} decides it, so a request
+ * the home cannot place, or that names a foreign `Host` on the loopback listener, is refused in both modes. A route that
+ * approves a device or signs one in keeps {@link requireComputer}.
+ * @param request - the request the Connection received.
+ * @param response - the response, answered with the refusal when the request is refused.
+ * @param homeAuth - the mounted `homeAuth` service, or `undefined` while none is mounted.
+ * @param action - the action's name as the refusal states it, in sentence case, such as `Turning on full access`.
+ * @returns whether the request may go on to the route.
+ */
+export function requireComputerUnlessDangerous(request: ComputerRequest, response: ServerResponse, homeAuth: DangerousModeHome | undefined, action: string): boolean {
+  const listener = homeAuth?.arrivalOf(request).listener
+  if (listener !== undefined && listener !== 'loopback' && homeAuth?.dangerousMode() === true) return true
+  return requireComputer(request, response, homeAuth, action)
+}
+
+/**
+ * The `admitPeer` of a route that uses {@link requireComputerUnlessDangerous}: it admits a reach device that holds a
+ * running unlock while dangerous mode holds, and no other Peer; the owner's Peer never reaches `admitPeer`.
+ * @param homeAuth - a way to the mounted `homeAuth` service, read when a request arrives.
+ * @returns the function for `ConnectionFetchRoute.admitPeer`.
+ */
+export function admitUnlockedDevice(homeAuth: () => DangerousModeHome | undefined): (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean {
+  return (_request, peer) => {
+    const home = homeAuth()
+    if (home === undefined || peer.principal.kind !== REACH_DEVICE || !home.dangerousMode()) return false
+    const { deviceId, listener } = peer.principal as ReachDevicePrincipal
+    return home.elevationOf(deviceId, listener) !== undefined
+  }
 }
 
 /**

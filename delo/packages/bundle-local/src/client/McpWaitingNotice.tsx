@@ -12,6 +12,7 @@ import type { ReactNode } from 'react'
 import { IconWarningOutlineRegular, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { readServers, readWaitingServers, type PendingServer, type WaitingServer } from './consents-api.ts'
+import { useDangerousMode } from './dangerous-mode.ts'
 import { isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import type { ConsentToastSource } from './ConsentToast.tsx'
 import type { McpReviewSource } from './McpServerReview.tsx'
@@ -75,6 +76,7 @@ export function McpWaitingNotice({ fetch, review, notify, t }: McpWaitingNoticeP
   const [waiting, setWaiting] = useState<Waiting>({ kind: 'computer', servers: [] })
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set())
   const [reviewing, setReviewing] = useState(false)
+  const dangerous = useDangerousMode(fetch)
   const refresh = useCallback(async (): Promise<void> => { setWaiting(await readWaiting(fetch)) }, [fetch])
   useEffect(() => {
     void refresh()
@@ -87,7 +89,7 @@ export function McpWaitingNotice({ fetch, review, notify, t }: McpWaitingNoticeP
   const names = shown.map(server => server.serverName).join(', ')
   const dismiss = (): void => { setDismissed(new Set([...dismissed, ...shown.map(dismissKey)])) }
   if (waiting.kind === 'remote') {
-    return <Toast key={names} text={t('mcp.notice.phone', { servers: names })} icon={<IconWarningOutlineRegular />} holdMs={NOTICE_HOLD_MS}
+    return <Toast key={names} text={t(dangerous ? 'mcp.notice.phoneUnlock' : 'mcp.notice.phone', { servers: names })} icon={<IconWarningOutlineRegular />} holdMs={NOTICE_HOLD_MS}
       actions={[{ label: t('mcp.notice.dismiss'), prefix: ' ', onClick: dismiss }]} onDone={dismiss} />
   }
   const first = waiting.servers.find(server => !dismissed.has(dismissKey(server)))

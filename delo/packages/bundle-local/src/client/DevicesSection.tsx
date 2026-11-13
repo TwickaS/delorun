@@ -18,6 +18,7 @@ import {
 } from './devices-api.ts'
 import type { UnlockSource, UnlockView } from './unlock.ts'
 import { clockTime, ELEVATE_COMMAND } from './UnlockOverlay.tsx'
+import { useDangerousMode } from './dangerous-mode.ts'
 import { failureSentence, type Loaded } from './host-api.ts'
 import css from './DevicesSection.module.css'
 
@@ -136,7 +137,8 @@ function DeviceUnlock({ t, view, open, lock }: { t: Translate; view: UnlockView;
 
 /**
  * The terminal switch: whether a device opens a terminal without an unlock in every folder. Any studio reads it and
- * turns it off; the home refuses a device that turns it on, and the refusal shows in place. A home without the switch
+ * turns it off; the home refuses a device that turns it on unless dangerous mode holds and the device is unlocked, and
+ * the refusal shows in place. A home without the switch
  * (404) shows nothing.
  * @param props - the copy and the request function.
  * @returns the block, or nothing.
@@ -145,6 +147,7 @@ function TerminalSwitch({ t, fetch }: { t: Translate; fetch: HostFetch }): React
   const [on, setOn] = useState<boolean | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  const dangerous = useDangerousMode(fetch)
   useEffect(() => {
     let current = true
     readTerminalSwitch(fetch).then(
@@ -168,7 +171,7 @@ function TerminalSwitch({ t, fetch }: { t: Translate; fetch: HostFetch }): React
   return <div className={css.unlock} data-terminal-switch={on === true ? 'on' : 'off'}>
     <h3 className={css.subheading}>{t('terminal.title')}</h3>
     {on === undefined ? null : <Switch checked={on} label={t('terminal.title')} disabled={busy} onChange={(next) => { void change(next) }} />}
-    <p className={css.line}>{t('terminal.explain')}</p>
+    <p className={css.line}>{t(dangerous ? 'terminal.explainDangerous' : 'terminal.explain')}</p>
     {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
   </div>
 }

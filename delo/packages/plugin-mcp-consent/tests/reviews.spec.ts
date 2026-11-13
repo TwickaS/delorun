@@ -324,15 +324,16 @@ describe('an answer to a pending review', () => {
 /**
  * Register the routes on a fake Connection with a `homeAuth` that places every request on the listener given.
  * @param listener - the listener `homeAuth` reports.
+ * @param dangerous - whether `homeAuth` reports dangerous mode.
  * @returns the captured hook and a caller of the captured routes.
  */
-function routesOver(listener: string) {
+function routesOver(listener: string, dangerous = false) {
   let hook: ((request: object, response: ServerResponse, next: () => Promise<void>) => Promise<void>) | undefined
   type Route = { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: object) => boolean }
   const routes = new Map<string, Route>()
   registerMcpConsentRoutes({
     on: (_name: string, registered: typeof hook) => { hook = registered },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }) } : undefined),
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), dangerousMode: () => dangerous, elevationOf: (deviceId: string) => (deviceId === 'unlocked-phone' ? { id: 'e' } : undefined) } : undefined),
     connection: { fetch: { register: (route: Route) => { routes.set(route.path, route) } } },
   } as never, consent)
   return {
@@ -462,6 +463,22 @@ describe('an accepted start', () => {
 })
 
 describe('the routes', () => {
+
+  it('lets an unlocked device through pending, accept, decline and revoke only while dangerous mode holds, and refuses a locked device at the peer check', async () => {
+    const guarded = [MCP_CONSENT_ROUTES.pending, MCP_CONSENT_ROUTES.accept, MCP_CONSENT_ROUTES.decline, MCP_CONSENT_ROUTES.revoke]
+    const device = (deviceId: string) => ({ kind: 'reach-device', deviceId, listener: 'reach-tailscale-private' })
+    for (const path of guarded) {
+      // Pins the mode check: the hook refuses the device before any route with the mode off.
+      const off = routesOver('tailscale-private', false)
+      expect(await off.hook(path, 'home.example.ts.net')).toMatchObject({ reached: false, status: 403 })
+      expect(off.admits(path, device('unlocked-phone'))).toBe(false)
+      const on = routesOver('tailscale-private', true)
+      expect(await on.hook(path, 'home.example.ts.net')).toMatchObject({ reached: true })
+      expect(on.admits(path, device('unlocked-phone'))).toBe(true)
+      expect(on.admits(path, device('locked-phone'))).toBe(false)
+      expect(on.admits(path, { kind: 'sdk' })).toBe(false)
+    }
+  })
   it('refuse every request from a reach device with LOOPBACK_REQUIRED before any route runs', async () => {
     const remote = routesOver('tailscale-private')
     const guarded = Object.values(MCP_CONSENT_ROUTES).filter(path => path !== MCP_CONSENT_ROUTES.waiting)

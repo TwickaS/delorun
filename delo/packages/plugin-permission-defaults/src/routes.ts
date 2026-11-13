@@ -12,7 +12,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type {} from '@deepseek-ai/dsh-client-connection'
-import { requireComputer, routedPathname } from '@delo/home-auth'
+import { REACH_DEVICE, admitUnlockedDevice, requireComputerUnlessDangerous, routedPathname, type ReachDevicePrincipal } from '@delo/home-auth'
+import { removeDangerousGrant } from './store.ts'
+import { resolveDeloHome } from '@delo/home'
 import { z } from 'zod'
 import { FullAccessChangeError, REVIEW_ID_PATTERN } from './review.ts'
 import { MAX_PERMISSION_REQUEST_BYTES, PERMISSION_ROUTES, type PermissionRefusalCode } from './wire.ts'
@@ -102,20 +104,60 @@ async function answered(call: () => object | Promise<object>): Promise<Response>
  */
 export function registerPermissionRoutes(ctx: Context): void {
   const paths: ReadonlySet<string> = new Set(Object.values(PERMISSION_ROUTES))
+  const deviceRoutes: ReadonlySet<string> = new Set([PERMISSION_ROUTES.everywhere, PERMISSION_ROUTES.everywhereOff])
   ctx.on('connection/request', async (request, response, next) => {
-    if (paths.has(routedPathname(request.url)) && !requireComputer(request, response, ctx.get('homeAuth'), ACTION)) return
+    const pathname = routedPathname(request.url)
+    if (paths.has(pathname)) {
+      const homeAuth = ctx.get('homeAuth')
+      const listener = homeAuth?.arrivalOf(request).listener
+      // The two routes that only tighten or read are decided for a reach device by `admitPeer`; the computer's own
+      // request keeps the loopback listener and Host check, and a request the home cannot place is refused here.
+      const toDevice = deviceRoutes.has(pathname) && listener !== undefined && listener !== 'loopback'
+      if (!toDevice && !requireComputerUnlessDangerous(request, response, homeAuth, ACTION)) return
+    }
     await next()
+  })
+  // Reading and turning off dangerous mode: the owner session at the computer, or a reach device with a running unlock.
+  const unlockedDevice = (_request: Request, peer: { readonly principal: { readonly kind: string } }): boolean => {
+    if (peer.principal.kind !== REACH_DEVICE) return false
+    const { deviceId, listener } = peer.principal as ReachDevicePrincipal
+    return ctx.get('homeAuth')?.elevationOf(deviceId, listener) !== undefined
+  }
+  // The routes that grant, read and review consent: the computer, or an unlocked device while dangerous mode holds.
+  const dangerousDevice = admitUnlockedDevice(() => ctx.get('homeAuth'))
+  const deviceRequests = new WeakSet<Request>()
+  ctx.connection.fetch.register({
+    path: PERMISSION_ROUTES.everywhere,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    admitPeer: unlockedDevice,
+    fetch: () => answered(() => ctx.permissionDefaults.everywhere()),
+  })
+  ctx.connection.fetch.register({
+    path: PERMISSION_ROUTES.everywhereOff,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    admitPeer: unlockedDevice,
+    fetch: () => answered(async () => {
+      const home = (await resolveDeloHome(process.env)).path
+      await removeDangerousGrant(home)
+      // The store's watch also reads the removal within a second; reading now answers the page with the result.
+      await ctx.permissionDefaults.reload()
+      return ctx.permissionDefaults.everywhere()
+    }),
   })
   ctx.connection.fetch.register({
     path: PERMISSION_ROUTES.workspaces,
     methods: ['GET'],
     requestBody: 'buffered',
+    admitPeer: dangerousDevice,
     fetch: () => answered(() => ctx.permissionDefaults.workspaces()),
   })
   ctx.connection.fetch.register({
     path: PERMISSION_ROUTES.review,
     methods: ['POST'],
     requestBody: 'buffered',
+    admitPeer: dangerousDevice,
     fetch: async (request) => {
       const body = await bodyOf(request, ReviewBody)
       if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with one session id')
@@ -126,10 +168,16 @@ export function registerPermissionRoutes(ctx: Context): void {
     path: PERMISSION_ROUTES.setFullAccess,
     methods: ['POST'],
     requestBody: 'buffered',
+    // Only a device reaches `admitPeer`; the owner's Peer is the computer. The request object is the one `fetch` receives.
+    admitPeer: (request, peer) => {
+      if (!dangerousDevice(request, peer)) return false
+      deviceRequests.add(request)
+      return true
+    },
     fetch: async (request) => {
       const body = await bodyOf(request, SetFullAccessBody)
       if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with the workspace, the review id, on and confirmed')
-      return answered(() => ctx.permissionDefaults.setFullAccess(body))
+      return answered(() => ctx.permissionDefaults.setFullAccess(body, deviceRequests.has(request) ? 'device' : 'computer'))
     },
   })
 }

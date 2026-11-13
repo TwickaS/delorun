@@ -26,7 +26,7 @@
  * @module @delo/plugin-permission-defaults/store
  */
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
+import { lstat, mkdir, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { DELO_HOME_ENTRIES, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
@@ -280,7 +280,21 @@ export function permissionStoreIdentity(path: string): string {
  * @returns what {@link readPermissionStore} returns for the same file.
  */
 export function readPermissionStoreSync(path: string): PermissionStoreRead {
-  let text: string
+  const read = readPermissionStoreSyncText(path)
+  if (read.kind !== 'text') return read
+  try {
+    return { kind: 'readable', entries: parsePermissionStore(read.text) }
+  } catch (error) {
+    return { kind: 'refused', problem: problemOf(error) }
+  }
+}
+
+/**
+ * The protected-file read both synchronous readers share.
+ * @param path - the file's absolute path.
+ * @returns the text, `absent`, or `refused` with the reason.
+ */
+function readPermissionStoreSyncText(path: string): { readonly kind: 'text', readonly text: string } | { readonly kind: 'absent' } | { readonly kind: 'refused', readonly problem: string } {
   try {
     const checked = checkProtectedFileSync(path)
     const fd = openSync(path, READ_FLAGS)
@@ -288,17 +302,12 @@ export function readPermissionStoreSync(path: string): PermissionStoreRead {
       const opened = fstatSync(fd)
       /* v8 ignore next -- a file renamed over the path between the check and the open; no test can order that. */
       if (opened.dev !== checked.dev || opened.ino !== checked.ino) throw new PermissionStoreError(`${path} was replaced while it was being read`)
-      text = readFileSync(fd, 'utf8')
+      return { kind: 'text', text: readFileSync(fd, 'utf8') }
     } finally {
       closeSync(fd)
     }
   } catch (error) {
     if (isMissing(error)) return { kind: 'absent' }
-    return { kind: 'refused', problem: problemOf(error) }
-  }
-  try {
-    return { kind: 'readable', entries: parsePermissionStore(text) }
-  } catch (error) {
     return { kind: 'refused', problem: problemOf(error) }
   }
 }
@@ -363,4 +372,176 @@ export async function withPermissionStoreLock<T>(path: string, change: () => Pro
   } finally {
     file.release(record.id)
   }
+}
+
+/** The version of the dangerous-mode warning text a person accepts in `delorun setup`, recorded in the grant file. */
+export const DANGEROUS_WARNING_VERSION = 1
+
+/** Format version of the dangerous-mode grant file. */
+const DANGEROUS_GRANT_VERSION = 1
+
+/** File name of the dangerous-mode grant file, beside the permission store. */
+export const DANGEROUS_GRANT_FILE = 'full-access-everywhere.json'
+
+/** What reading the dangerous-mode grant file found. */
+export type DangerousGrantRead =
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'valid', readonly grantedAt: string }
+  | { readonly kind: 'refused', readonly problem: string }
+
+/**
+ * The dangerous-mode grant file's path: `<home>/secrets/permission-defaults/full-access-everywhere.json`, next to the
+ * store and under the same lock. Only `delorun setup` writes it.
+ * @param home - the resolved Delo home.
+ * @returns the absolute path.
+ */
+export function dangerousGrantPath(home: string): string {
+  return join(dirname(permissionStorePath(home)), DANGEROUS_GRANT_FILE)
+}
+
+/**
+ * Parse the grant file's text.
+ * @param text - the file's text.
+ * @returns the grant time, or the reason the text is not this version's grant.
+ */
+export function parseDangerousGrant(text: string): DangerousGrantRead {
+  let document: unknown
+  try {
+    document = JSON.parse(text)
+  } catch {
+    // The parser's message quotes the text; the reason names the file only.
+    return { kind: 'refused', problem: 'the dangerous-mode grant file holds no JSON document' }
+  }
+  const grantedAt = isRecord(document) ? document['grantedAt'] : undefined
+  const known = isRecord(document) && Object.keys(document).length === 3 && document['v'] === DANGEROUS_GRANT_VERSION && document['warning'] === DANGEROUS_WARNING_VERSION
+  if (!known || typeof grantedAt !== 'string' || Number.isNaN(Date.parse(grantedAt))) {
+    return { kind: 'refused', problem: 'the dangerous-mode grant file is not in the format this version reads' }
+  }
+  return { kind: 'valid', grantedAt }
+}
+
+/**
+ * Read the grant file under contract C1's protected-file refusal rule: a symbolic link, a mode laxer than 0600 or
+ * another format counts as no grant and is named in the problem.
+ * @param path - the grant file's absolute path.
+ * @returns `absent` while no file exists, `valid` with the grant time, or `refused` with the reason.
+ */
+export async function readDangerousGrant(path: string): Promise<DangerousGrantRead> {
+  let bytes: Buffer
+  try {
+    bytes = await readProtectedFile(path)
+  } catch (error) {
+    if (isMissing(error)) return { kind: 'absent' }
+    return { kind: 'refused', problem: problemOf(error) }
+  }
+  return parseDangerousGrant(bytes.toString('utf8'))
+}
+
+/**
+ * Read the grant file synchronously, with the checks of {@link readPermissionStoreSync}.
+ * @param path - the grant file's absolute path.
+ * @returns what {@link readDangerousGrant} returns for the same file.
+ */
+export function readDangerousGrantSync(path: string): DangerousGrantRead {
+  const read = readPermissionStoreSyncText(path)
+  return read.kind === 'text' ? parseDangerousGrant(read.text) : read
+}
+
+/**
+ * Write the grant file while holding the store's lock, at mode 0600.
+ * @param home - the resolved Delo home.
+ * @param now - the grant time.
+ * @returns when the file is replaced.
+ */
+export async function writeDangerousGrant(home: string, now: Date = new Date()): Promise<void> {
+  const path = dangerousGrantPath(home)
+  const text = `${JSON.stringify({ v: DANGEROUS_GRANT_VERSION, grantedAt: now.toISOString(), warning: DANGEROUS_WARNING_VERSION }, null, 2)}\n`
+  await withPermissionStoreLock(permissionStorePath(home), async () => {
+    await mkdir(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
+    await writeProtectedFile(path, text)
+  })
+}
+
+/**
+ * Remove the grant file while holding the store's lock; a symbolic link is removed as a link.
+ * @param home - the resolved Delo home.
+ * @returns whether a file was removed.
+ */
+export async function removeDangerousGrant(home: string): Promise<boolean> {
+  const path = dangerousGrantPath(home)
+  try {
+    await lstat(path)
+  } catch (error) {
+    if (isMissing(error)) return false
+    throw error
+  }
+  return withPermissionStoreLock(permissionStorePath(home), async () => {
+    await rm(path, { force: true })
+    return true
+  })
+}
+
+/** File name of the record of grants a device minted under dangerous mode, beside the permission store. */
+export const DEVICE_GRANTS_FILE = 'device-grants.json'
+
+/** Format version of the device-grants record. */
+const DEVICE_GRANTS_VERSION = 1
+
+/**
+ * The device-grants record's path, next to the store and under the same lock.
+ * @param home - the resolved Delo home.
+ * @returns the absolute path.
+ */
+export function deviceGrantsPath(home: string): string {
+  return join(dirname(permissionStorePath(home)), DEVICE_GRANTS_FILE)
+}
+
+/** What reading the device-grants record found. */
+export interface DeviceGrantsRead {
+  /** The workspace keys whose full-access grant a device minted and dangerous mode's end withdraws. */
+  readonly workspaces: ReadonlySet<string>
+  /** Why a record that exists could not be read; its grants then count as the computer's, so none is withdrawn. */
+  readonly problem?: string
+}
+
+/**
+ * Read the device-grants record under contract C1's protected-file refusal rule.
+ * @param path - the record's absolute path.
+ * @returns the workspace keys; empty while the file is absent, with the problem when it is refused.
+ */
+export async function readDeviceGrants(path: string): Promise<DeviceGrantsRead> {
+  let bytes: Buffer
+  try {
+    bytes = await readProtectedFile(path)
+  } catch (error) {
+    if (isMissing(error)) return { workspaces: new Set() }
+    return { workspaces: new Set(), problem: problemOf(error) }
+  }
+  let document: unknown
+  try {
+    document = JSON.parse(bytes.toString('utf8'))
+  } catch {
+    // The parser's message quotes the text; the reason names the file only.
+    return { workspaces: new Set(), problem: 'the device-grants record holds no JSON document' }
+  }
+  const workspaces = isRecord(document) ? document['workspaces'] : undefined
+  if (!isRecord(document) || document['v'] !== DEVICE_GRANTS_VERSION || !Array.isArray(workspaces) || !workspaces.every(item => typeof item === 'string')) {
+    return { workspaces: new Set(), problem: 'the device-grants record is not in the format this version reads' }
+  }
+  return { workspaces: new Set(workspaces as string[]) }
+}
+
+/**
+ * Write the device-grants record, or remove it when it holds no workspace.
+ * @param path - the record's absolute path.
+ * @param workspaces - the workspace keys to record.
+ * @returns when the file is replaced or removed.
+ */
+export async function writeDeviceGrants(path: string, workspaces: ReadonlySet<string>): Promise<void> {
+  if (workspaces.size === 0) {
+    await rm(path, { force: true })
+    return
+  }
+  await mkdir(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
+  await writeProtectedFile(path, `${JSON.stringify({ v: DEVICE_GRANTS_VERSION, workspaces: [...workspaces].sort() }, null, 2)}\n`)
 }

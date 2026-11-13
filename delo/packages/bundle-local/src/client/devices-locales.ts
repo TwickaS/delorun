@@ -91,6 +91,7 @@ export const en = {
   'action.terminalSwitch': 'changing this switch',
   'terminal.title': 'Terminal from phone without unlock',
   'terminal.explain': 'A phone already opens a terminal without an unlock in a workspace with full access. Turn this on to skip the unlock in every folder. Only your computer can turn it on.',
+  'terminal.explainDangerous': 'A phone already opens a terminal without an unlock in a workspace with full access. Dangerous mode is on, so an unlocked device may also turn this on to skip the unlock in every folder.',
   'time.locale': 'en',
 }
 
@@ -188,5 +189,6 @@ export const zh: typeof en = {
   'action.terminalSwitch': '更改此开关',
   'terminal.title': '手机打开终端无需解锁',
   'terminal.explain': '在拥有完全访问权限的工作区中，手机打开终端本就无需解锁。开启此项后，在任何文件夹中都无需解锁。只能在你的电脑上开启。',
+  'terminal.explainDangerous': '在拥有完全访问权限的工作区中，手机打开终端本就无需解锁。危险模式已开启，已解锁的设备也可以开启此项，在任何文件夹中都无需解锁。',
   'time.locale': 'zh-CN',
 }

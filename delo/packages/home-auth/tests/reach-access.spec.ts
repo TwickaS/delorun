@@ -14,6 +14,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import {
   REACH_ALLOWED_ACTIONS,
+  REACH_DANGEROUS_ACTIONS,
   REACH_DENIED_ACTIONS,
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
@@ -74,6 +75,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
     defaultPermission: () => PERMISSION,
+    dangerousMode: () => false,
     ...overrides,
   }
 }
@@ -99,11 +101,11 @@ describe('the reach-device policy', () => {
     ])
   })
 
-  it('binds only the allowed and the elevated actions, on every role', () => {
+  it('binds only the allowed, the elevated and the dangerous-mode actions, on every role', () => {
     for (const binding of createReachAccessPolicy(facts()).bindings(DEVICE)) {
       // Pins the roles: a role listing a never action would allow it on every bound resource, and the condition alone
       // keeps an elevated one to a device that holds an elevation.
-      expect(binding.role.actions).toEqual([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS)])
+      expect(binding.role.actions).toEqual([...Object.keys(REACH_ALLOWED_ACTIONS), ...Object.keys(REACH_ELEVATED_ACTIONS), ...Object.keys(REACH_DANGEROUS_ACTIONS)])
       expect(binding.role.resource).toBe(binding.resource.kind)
       // Pins where the condition sits: on every role, because `session/create` names a global or Workspace resource
       // and a workspace-file read names a Session one.

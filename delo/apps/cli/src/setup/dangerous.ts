@@ -4,28 +4,18 @@
  * chat. The `delo-permission-defaults` row's `fullAccessEverywhere` setting alone grants nothing; the plugin honours
  * it only while this file is valid, and only `delorun setup` writes it.
  *
- * The grant file is `<home>/secrets/permission-defaults/full-access-everywhere.json`, `{ v: 1, grantedAt, warning }`
- * at mode 0600, written and removed while holding the permission store's lock.
+ * The grant file is `<home>/secrets/permission-defaults/full-access-everywhere.json`; the plugin's store module
+ * (`@delo/plugin-permission-defaults/store`) reads, writes and removes it.
  *
  * @module @delo/cli/setup/dangerous
  */
-import { lstat, mkdir, rm } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
+import { CLI_PROFILE } from '@delo/contract-home-layout'
 import { DANGEROUS_PHRASE, type PromptsAnswer } from '@delo/contract-setup-answers'
-import { readProtectedFile, writeProtectedFile } from '@delo/home'
-import { permissionStorePath, withPermissionStoreLock } from '@delo/plugin-permission-defaults/store'
+import { dangerousGrantPath, readDangerousGrant } from '@delo/plugin-permission-defaults/store'
 import { CliError, EXIT } from '../exit.ts'
 import { readPromptsAnswer } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
-
-/** The version of the warning text below, recorded in the grant file as the text the person accepted. */
-export const DANGEROUS_WARNING_VERSION = 1
-
-/** Format version of the grant file. */
-const GRANT_FILE_VERSION = 1
-
-/** File name of the grant file inside the permission store's directory. */
-export const DANGEROUS_GRANT_FILE = 'full-access-everywhere.json'
 
 /** The line `delorun` prints at start and `delorun status` prints while dangerous mode is on. */
 export const DANGEROUS_ON_LINE = 'Dangerous mode is on: any chat can switch to full access without asking. Turn it off with `delorun setup prompts`.'
@@ -33,6 +23,7 @@ export const DANGEROUS_ON_LINE = 'Dangerous mode is on: any chat can switch to f
 /** The warning of step 1, one paragraph per entry; {@link DANGEROUS_WARNING_VERSION} names this text. */
 export const DANGEROUS_WARNING_LINES: readonly string[] = [
   'Dangerous mode lets any chat switch to full access without asking: a chat at this computer, a phone signed in over remote access, a scheduled task, a bot, or delorun headless.',
+  'A phone or browser signed in over remote access can then also do everything this computer can, except turn this mode on and approve new devices.',
   'Commands then run outside the sandbox with everything your user can do, including reading and changing Delorun\'s home, its keys and the token that controls it.',
   'The questions before writing AGENTS.md or skills, adding MCP servers and creating scheduled tasks are off, as in DeepSeek Harness.',
   'Text the model reads (web pages, files, repositories) can tell it to do harmful things.',
@@ -109,50 +100,6 @@ export async function askDangerousConsent(io: StepIO): Promise<boolean | Back> {
   return typed === BACK ? BACK : typed === DANGEROUS_PHRASE
 }
 
-/**
- * The grant file's path.
- * @param home - the resolved Delo home.
- * @returns `<home>/secrets/permission-defaults/full-access-everywhere.json`.
- */
-export function dangerousGrantPath(home: string): string {
-  return join(dirname(permissionStorePath(home)), DANGEROUS_GRANT_FILE)
-}
-
-/**
- * Write the grant file while holding the permission store's lock, at mode 0600.
- * @param home - the resolved Delo home.
- * @param now - the grant time.
- * @returns when the file is replaced.
- */
-export async function writeDangerousGrant(home: string, now: Date = new Date()): Promise<void> {
-  const path = dangerousGrantPath(home)
-  const text = `${JSON.stringify({ v: GRANT_FILE_VERSION, grantedAt: now.toISOString(), warning: DANGEROUS_WARNING_VERSION }, null, 2)}\n`
-  await withPermissionStoreLock(permissionStorePath(home), async () => {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 })
-    await writeProtectedFile(path, text)
-  })
-}
-
-/**
- * Remove the grant file while holding the permission store's lock; a symbolic link is removed as a link. A home with
- * no grant file is left untouched.
- * @param home - the resolved Delo home.
- * @returns whether a file was removed.
- */
-export async function removeDangerousGrant(home: string): Promise<boolean> {
-  const path = dangerousGrantPath(home)
-  try {
-    await lstat(path)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
-    throw error
-  }
-  return withPermissionStoreLock(permissionStorePath(home), async () => {
-    await rm(path, { force: true })
-    return true
-  })
-}
-
 /** Whether dangerous mode is in force on a profile. */
 export type DangerousState =
   /** The profile's answer is not `dangerous`. */
@@ -163,40 +110,12 @@ export type DangerousState =
   | { readonly kind: 'inactive', readonly problem: string }
 
 /**
- * Read the grant file under the protected-file rule: a symbolic link, a mode laxer than 0600 or another format is a
- * problem, as for the permission store.
- * @param home - the resolved Delo home.
- * @returns the grant time, or the reason the file does not grant.
- */
-async function readDangerousGrant(home: string): Promise<{ readonly grantedAt: string } | { readonly problem: string }> {
-  let bytes: Buffer
-  try {
-    bytes = await readProtectedFile(dangerousGrantPath(home))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { problem: 'its grant file is missing' }
-    return { problem: `its grant file is refused: ${error instanceof Error ? error.message : 'it could not be read'}` }
-  }
-  let document: unknown
-  try {
-    document = JSON.parse(bytes.toString('utf8'))
-  } catch {
-    // The JSON parser's message quotes the text; the reason names the file only.
-    return { problem: 'its grant file holds no JSON document' }
-  }
-  const record = typeof document === 'object' && document !== null && !Array.isArray(document) ? document as Record<string, unknown> : undefined
-  const grantedAt = record?.['grantedAt']
-  const known = record !== undefined && Object.keys(record).length === 3 && record['v'] === GRANT_FILE_VERSION && record['warning'] === DANGEROUS_WARNING_VERSION
-  if (!known || typeof grantedAt !== 'string' || Number.isNaN(Date.parse(grantedAt))) return { problem: 'its grant file is not in the format this version reads' }
-  return { grantedAt }
-}
-
-/**
  * Whether a valid dangerous-mode grant file exists, so a person who already confirmed does not confirm again.
  * @param home - the resolved Delo home.
  * @returns true when the grant file is present and in the format this version reads.
  */
 export async function hasDangerousGrant(home: string): Promise<boolean> {
-  return !('problem' in await readDangerousGrant(home))
+  return (await readDangerousGrant(dangerousGrantPath(home))).kind === 'valid'
 }
 
 /**
@@ -207,8 +126,12 @@ export async function hasDangerousGrant(home: string): Promise<boolean> {
  */
 export async function dangerousModeState(home: string, profileDirectory: string): Promise<DangerousState> {
   if (readPromptsAnswer(profileDirectory) !== 'dangerous') return { kind: 'off' }
-  const grant = await readDangerousGrant(home)
-  return 'problem' in grant ? { kind: 'inactive', problem: grant.problem } : { kind: 'on', grantedAt: grant.grantedAt }
+  const grant = await readDangerousGrant(dangerousGrantPath(home))
+  if (grant.kind === 'valid') return { kind: 'on', grantedAt: grant.grantedAt }
+  const PARSED = 'the dangerous-mode grant file '
+  if (grant.kind === 'absent') return { kind: 'inactive', problem: 'its grant file is missing' }
+  // A file that was read but is not this version's grant keeps the plugin's words; a refused read names the refusal.
+  return { kind: 'inactive', problem: grant.problem.startsWith(PARSED) ? `its grant file ${grant.problem.slice(PARSED.length)}` : `its grant file is refused: ${grant.problem}` }
 }
 
 /**
@@ -230,4 +153,14 @@ export function dangerousStateLine(state: DangerousState): string | undefined {
  */
 export async function dangerousModeLine(home: string, profileDirectory: string): Promise<string | undefined> {
   return dangerousStateLine(await dangerousModeState(home, profileDirectory))
+}
+
+/**
+ * Whether dangerous mode holds for the whole home: the CLI profile's answer is `dangerous` and the grant file is valid.
+ * `delorun headless` reads its permission from the same answer record, because it has no setup of its own.
+ * @param home - the resolved Delo home.
+ * @returns whether the effective rule holds.
+ */
+export async function dangerousModeHolds(home: string): Promise<boolean> {
+  return (await dangerousModeState(home, join(home, 'profiles', CLI_PROFILE))).kind === 'on'
 }

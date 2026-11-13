@@ -11,6 +11,7 @@
  *
  * @module @delo/home-auth/service
  */
+import type {} from './full-access-grants.ts'
 import { basename, dirname } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import schema from '@deepseek-ai/schemastery'
@@ -39,9 +40,9 @@ import {
   elevationPendingHandler,
   elevationRequestHandler,
   elevationRevokeHandler,
-  terminalSwitchHandler,
   elevationStateHandler,
 } from './elevation-routes.ts'
+import { terminalSwitchHandler } from './terminal-switch.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -101,9 +102,13 @@ export class HomeAuthService extends Service {
       directory: this.config.secretsDirectory,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
+      dangerousMode: () => this.dangerousMode(),
     })
     await core.start()
     this.core = core
+    // A switch a device turned on under a mode that has ended is turned off before the first terminal opens; without the
+    // permission-defaults provider the mode cannot be read yet, and the switch's own reads end it.
+    if (this.ctx.get('reachFullAccessGrants') !== undefined) await core.endDeviceTerminal()
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
     // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
     // stays out, being the person's own text.
@@ -135,7 +140,7 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
-        server.register({ kind: 'exact', path: ELEVATION_PATHS.terminal, handler: terminalSwitchHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.terminal, handler: terminalSwitchHandler(core, credential, () => this.dangerousMode()) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -229,6 +234,20 @@ export class HomeAuthService extends Service {
    */
   terminalWithoutUnlock(): boolean {
     return this.core?.terminalWithoutUnlock() ?? false
+  }
+
+  /**
+   * Whether dangerous mode holds now, read from the permission-defaults service when asked. While it does, an unlocked
+   * device does what the computer does, except turn the mode on, approve a device and sign in.
+   * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
+   */
+  dangerousMode(): boolean {
+    try {
+      return this.ctx.get('reachFullAccessGrants')?.dangerousMode() ?? false
+    } catch (_unreadable) {
+      // An unreadable store cannot show the grant, so no refusal is lifted.
+      return false
+    }
   }
 
   /**

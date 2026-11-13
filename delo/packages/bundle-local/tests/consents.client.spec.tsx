@@ -101,7 +101,7 @@ describe('the question upstream\'s permission control asks', () => {
       await expect(confirmPermissionSwitch(host.fetch, { ask: vi.fn(), askSwitch }, 'chat-1', 'danger-full-access')).resolves.toBe(confirmed)
       expect(askSwitch).toHaveBeenCalledWith(OFF)
     }
-    expect(host.received[0]?.body).toEqual({ sessionId: 'chat-1' })
+    expect(host.received.find(entry => entry.key === `POST ${PERMISSION_ROUTES.review}`)?.body).toEqual({ sessionId: 'chat-1' })
   })
 
   it('shows a remote studio the consent without a way to grant, and submits nothing', async () => {
@@ -1125,7 +1125,7 @@ describe('the Permissions section', () => {
   it('lists the workspaces that hold full access, with the others behind a disclosure that asks the consent', async () => {
     const other = { ...OFF, workspace: '/home/person/projects/notes', title: 'notes' }
     const ask = vi.fn(async () => false)
-    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON, other] } } }), { ask })
+    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON, other], everywhere: { on: false } } } }), { ask })
     await settle()
     expect(within(rowOf('site')).getByRole('button', { name: en['access.revoke'] })).toBeTruthy()
     // A grant makes the workspace's new chats start with full access, which the row says.
@@ -1140,7 +1140,7 @@ describe('the Permissions section', () => {
 
   it('revokes full access in one click, and says how many chats went back', async () => {
     const host = fakeHost({
-      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON] } },
+      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [ON], everywhere: { on: false } } },
       [`POST ${PERMISSION_ROUTES.setFullAccess}`]: { status: 200, body: { access: { ...OFF, reviewId: 'c'.repeat(32) }, chats: 2 } },
     })
     renderPermissions(host)
@@ -1236,7 +1236,7 @@ describe('the Permissions section', () => {
 
   it('names a store it cannot read, and says when nothing is allowed or waiting', async () => {
     renderPermissions(fakeHost({
-      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [], storeProblem: 'the file is not JSON' } },
+      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [], everywhere: { on: false }, storeProblem: 'the file is not JSON' } },
       [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([]),
     }))
     await settle()
@@ -1270,7 +1270,7 @@ describe('the Permissions section', () => {
 
   it('says when no workspace has full access and no MCP server waits, and why no grant counts when the grants cannot be read', async () => {
     renderPermissions(fakeHost({
-      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF], storeProblem: 'unreadable' } },
+      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF], everywhere: { on: false }, storeProblem: 'unreadable' } },
       [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([]),
     }))
     await settle()
@@ -1398,5 +1398,95 @@ describe('the External agents section', () => {
 describe('the consents copy', () => {
   it('has the same keys in English and Chinese', () => {
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort())
+  })
+})
+
+describe('dangerous mode', () => {
+  const EVERYWHERE_ON = { status: 200, body: { on: true, grantedAt: '2026-11-13T09:00:00.000Z' } }
+  const EVERYWHERE_ROUTE: RouteKey = `GET ${PERMISSION_ROUTES.everywhere}`
+
+  it('asks the dialog as before while the home says it is off, and when a locked device cannot read the state', async () => {
+    for (const read of [{ status: 200, body: { on: false } }, refusal(403, 'LOOPBACK_REQUIRED'), undefined]) {
+      const host = fakeHost({ ...REVIEWED_OFF, ...read === undefined ? {} : { [EVERYWHERE_ROUTE]: read } })
+      const ask = vi.fn(async () => true)
+      await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: ask }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
+      expect(ask).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('submits the switch to full access with no dialog while it is on, also where the home refuses the review', async () => {
+    const host = fakeHost({ [EVERYWHERE_ROUTE]: EVERYWHERE_ON, [`POST ${PERMISSION_ROUTES.review}`]: REMOTE })
+    const ask = vi.fn(async () => true)
+    await expect(confirmPermissionSwitch(host.fetch, { ask, askSwitch: ask }, 'chat-1', 'danger-full-access')).resolves.toBe(true)
+    expect(ask).not.toHaveBeenCalled()
+  })
+
+  it('offers Allow for this chat on a remote studio and hides the approve-at-the-computer line while it is on', async () => {
+    const host = fakeHost({ [EVERYWHERE_ROUTE]: EVERYWHERE_ON, [`POST ${PERMISSION_ROUTES.review}`]: REMOTE })
+    const props = choiceProps(host)
+    render(<AllowForChat {...props} />)
+    await settle()
+    expect(allowForChat()).toBeTruthy()
+    cleanup()
+    render(<FullAccessAction {...actionProps(host)} />)
+    await settle()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('shows the Settings card with the date, the way to turn it off, and turns it off in one click', async () => {
+    const host = fakeHost({
+      [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF], everywhere: { on: true, grantedAt: '2026-11-13T09:00:00.000Z' } } },
+      [EVERYWHERE_ROUTE]: EVERYWHERE_ON,
+      [`POST ${PERMISSION_ROUTES.everywhereOff}`]: { status: 200, body: { on: false } },
+    })
+    renderPermissions(host, {})
+    await settle()
+    expect(screen.getByText(en['everywhere.on'])).toBeTruthy()
+    // The command is inline code, never text with literal backticks around it.
+    expect(screen.getByText('delorun setup prompts').tagName).toBe('CODE')
+    expect(document.body.textContent).not.toContain('`')
+    host.script[EVERYWHERE_ROUTE] = { status: 200, body: { on: false } }
+    fireEvent.click(screen.getByRole('button', { name: en['everywhere.off'] }))
+    await settle()
+    expect(host.received.some(entry => entry.key === `POST ${PERMISSION_ROUTES.everywhereOff}`)).toBe(true)
+    expect(screen.getByText(en['everywhere.turnedOff'])).toBeTruthy()
+    expect(screen.queryByText(en['everywhere.on'])).toBeNull()
+  })
+
+  it('shows the card on a remote studio, whose workspace listing is refused, from the state route alone', async () => {
+    const host = fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [EVERYWHERE_ROUTE]: EVERYWHERE_ON })
+    renderPermissions(host, {})
+    await settle()
+    expect(screen.getByText(en['everywhere.on'])).toBeTruthy()
+  })
+
+  it('offers the unlock, not the computer, on a remote studio that cannot list its workspaces while the mode is on', async () => {
+    const host = fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: REMOTE, [EVERYWHERE_ROUTE]: EVERYWHERE_ON })
+    renderPermissions(host, {})
+    await settle()
+    // Pins the mode check in the section: with the mode off the same refusal shows the computer line.
+    expect(screen.getByText(en.unlockHere)).toBeTruthy()
+    expect(screen.queryByText(en['permissions.remote'], { exact: false })).toBeNull()
+  })
+
+  it('offers the unlock in External agents and the MCP notice while the mode is on, and the computer line while it is off', async () => {
+    for (const mode of [true, false]) {
+      const everywhere = { status: 200, body: mode ? { on: true } : { on: false } }
+      const agents = renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE, [EVERYWHERE_ROUTE]: everywhere }))
+      await settle()
+      expect(screen.queryByText(en.unlockHere) !== null, `agents, mode ${String(mode)}`).toBe(mode)
+      expect(screen.queryByText(en['agents.remote'], { exact: false }) !== null, `agents, mode ${String(mode)}`).toBe(!mode)
+      agents.unmount()
+      const notice = renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } }, [EVERYWHERE_ROUTE]: everywhere }))
+      await settle()
+      expect(screen.queryByText('An MCP server is waiting for your OK: files. Unlock this device to review it here.') !== null, `notice, mode ${String(mode)}`).toBe(mode)
+      notice.unmount()
+    }
+  })
+
+  it('shows no card while it is off', async () => {
+    renderPermissions(fakeHost({ [`GET ${PERMISSION_ROUTES.workspaces}`]: { status: 200, body: { workspaces: [OFF], everywhere: { on: false } } } }), {})
+    await settle()
+    expect(screen.queryByText(en['everywhere.heading'])).toBeNull()
   })
 })

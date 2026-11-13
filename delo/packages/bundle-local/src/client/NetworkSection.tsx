@@ -8,6 +8,7 @@ import { useCallback, useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Modal, SegmentedControl } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { useDangerousMode } from './dangerous-mode.ts'
 import { failureSentence, isRefused, LOOPBACK_REQUIRED, type HostFetch, type Loaded } from './host-api.ts'
 import {
   addedHosts, COMMON_HOSTS, comparableHosts, hostLines, NETWORK_UNCONFIRMED, readNetworks,
@@ -34,12 +35,13 @@ type Translate = NetworkSectionProps['t']
  * The sentence for a failed request.
  * @param t - the section's copy.
  * @param error - the caught error.
+ * @param dangerous - whether dangerous mode holds, when the sentence says to unlock this device instead of going to the computer.
  * @returns the localized `LOOPBACK_REQUIRED` sentence, the Host's own sentence for another refusal, or the localized
  *   sentence for an unreachable Host or an unreadable answer.
  */
-export function networkFailureText(t: Translate, error: unknown): string {
+export function networkFailureText(t: Translate, error: unknown, dangerous = false): string {
   return failureSentence(error, {
-    refused: (code, message) => code === LOOPBACK_REQUIRED ? t('loopback') : message,
+    refused: (code, message) => code === LOOPBACK_REQUIRED ? t(dangerous ? 'loopbackUnlock' : 'loopback') : message,
     unreachable: t('failed.unreachable'),
     unreadable: t('failed.unreadable'),
   })
@@ -65,14 +67,15 @@ export function looseningText(t: Translate, workspace: string, previous: Workspa
  * @returns the section.
  */
 export function NetworkSection({ t, fetch }: NetworkSectionProps): ReactNode {
+  const dangerous = useDangerousMode(fetch)
   const [list, setList] = useState<Loaded<NetworkList | undefined>>({ kind: 'loading' })
   const refresh = useCallback(async (): Promise<void> => {
     try {
       setList({ kind: 'ready', value: await readNetworks(fetch) })
     } catch (error) {
-      setList({ kind: 'failed', text: networkFailureText(t, error) })
+      setList({ kind: 'failed', text: networkFailureText(t, error, dangerous) })
     }
-  }, [fetch, t])
+  }, [fetch, t, dangerous])
   useEffect(() => { void refresh() }, [refresh])
   return <div className={css.section}>
     <h2 className={css.heading}>{t('title')}</h2>
@@ -129,6 +132,7 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
   const [offering, setOffering] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
+  const dangerous = useDangerousMode(fetch)
   const [confirming, setConfirming] = useState<PendingLoosening | undefined>()
   const draft: WorkspaceNetwork = { access, hosts: hostLines(hostsText) }
   const id = useId()
@@ -142,7 +146,7 @@ function WorkspaceRow({ t, fetch, workspace, defaultNetwork, locked, onSaved }: 
       if (!confirmed && isRefused(error, NETWORK_UNCONFIRMED)) {
         setConfirming({ network, text: looseningText(t, workspace.title, workspace.network, network ?? defaultNetwork) })
       } else {
-        setFailure(networkFailureText(t, error))
+        setFailure(networkFailureText(t, error, dangerous))
       }
       return
     } finally {

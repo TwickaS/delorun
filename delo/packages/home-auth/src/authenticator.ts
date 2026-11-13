@@ -248,6 +248,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
         protectedEntryIds: () => protectedEntryIdsOf(ctx),
         defaultPermission: () => defaultPermissionOf(access),
+        dangerousMode: () => ctx.homeAuth.dangerousMode(),
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {
@@ -283,7 +284,10 @@ export class HomeAuthAuthenticator extends Authenticator {
     if (refusal === undefined) return
     // This provider creates every reach Peer, and every reach session this home builds has the factor
     // `tailnet-membership`.
-    if (!this.reachPeers.has(answer.peer.id)) return
+    const reach = this.reachPeers.get(answer.peer.id)
+    if (reach === undefined) return
+    // Dangerous mode lets a device that holds an unlock give what the computer gives.
+    if (this.ctx.homeAuth.dangerousMode() && this.ctx.homeAuth.elevationOf(reach.deviceId, reach.listener) !== undefined) return
     throw new RemoteError('LOOPBACK_REQUIRED', refusal.message, { action: refusal.action })
   }
 

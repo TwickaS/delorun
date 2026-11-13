@@ -17,6 +17,10 @@ export const PERMISSION_ROUTES = {
   review: '/api/deloPermission.review',
   /** `POST` {@link SetFullAccessRequest}: {@link SetFullAccessAnswer}, after the workspace's full access is turned on or off. */
   setFullAccess: '/api/deloPermission.setFullAccess',
+  /** `GET`: {@link EverywhereAnswer}, whether dangerous mode is on; an unlocked signed-in reach device may read it. */
+  everywhere: '/api/deloPermission.everywhere',
+  /** `POST` (no body): {@link EverywhereAnswer} after the grant file is removed; the computer or an unlocked signed-in reach device may call it, because turning it off only tightens. */
+  everywhereOff: '/api/deloPermission.everywhereOff',
 } as const
 
 /** The largest request body the routes read, in bytes: a path of 4096 characters, JSON-escaped, and the other fields. */
@@ -56,10 +60,22 @@ export interface WorkspaceAccess {
   readonly reviewId: string
 }
 
+/** Whether dangerous mode (any chat may switch to full access without asking) is on. */
+export interface EverywhereAnswer {
+  /** True only while the row sets `fullAccessEverywhere` and the grant file is valid. */
+  readonly on: boolean
+  /** When `delorun setup` wrote the grant, as an ISO time; present while `on`. */
+  readonly grantedAt?: string
+  /** Why the grant file does not count, when it is present and refused. */
+  readonly problem?: string
+}
+
 /** What `GET` {@link PERMISSION_ROUTES}`.workspaces` answers. */
 export interface WorkspacesAnswer {
   /** Every workspace the studio knows, sorted by key: registered, recorded in the store, or the folder of an open chat. */
   readonly workspaces: readonly WorkspaceAccess[]
+  /** Dangerous mode, so the studio switches to full access without a dialog while it is on. */
+  readonly everywhere: EverywhereAnswer
   /** Why the permission store cannot be read, when it cannot: no grant counts until the person fixes it. */
   readonly storeProblem?: string
 }
