@@ -174,9 +174,9 @@ describe('applyInstallChange', () => {
     expect((await rejection(applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run: refusing }), 'OPERATION_FAILED')).message).toBe(`Change ${entry.id} was not applied: scripted is no DSH plugin bundle`)
     expect(existsSync(join(fx.profileDir, 'pnpm-lock.yaml'))).toBe(false)
 
-    // pnpm settings that cannot be read record nothing, and the exit code reports the failure.
+    // pnpm settings that cannot be read are reported with the exit code, not swallowed.
     writeFileSync(join(fx.profileDir, 'pnpm-workspace.yaml'), '- not a mapping\n')
-    expect((await rejection(applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run: async () => ({ exitCode: 1, output: 'Ignored build scripts: scripted' }) }), 'OPERATION_FAILED')).message).toBe(`Change ${entry.id} was not applied: the plugin operation exited 1`)
+    expect((await rejection(applyInstallChange(context(fx), entry.id, terminal(), { reload: NOT_RUNNING, run: async () => ({ exitCode: 1, output: 'Ignored build scripts: scripted' }) }), 'OPERATION_FAILED')).message).toMatch(new RegExp(`^Change ${entry.id} was not applied: the plugin operation exited 1; the build scripts pnpm held back could not be recorded: .+`, 'u'))
     expect(await history(fx)).toEqual([])
   })
 

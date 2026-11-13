@@ -364,15 +364,14 @@ async function restoreFiles(files: ReadonlyMap<string, string | undefined>): Pro
 async function failureOf(profileDir: string, ran: PluginOperationResult): Promise<string> {
   const diagnostics = ran.logPath === undefined ? '' : `; diagnostics: ${ran.logPath}`
   if (ran.failure !== undefined) return `${ran.failure}${diagnostics}`
-  let pending: string[] = []
+  const exited = `the plugin operation exited ${String(ran.exitCode)}${diagnostics}`
+  let pending: string[]
   try {
     pending = await recordPendingBuilds(profileDir, ran.output ?? '')
   } catch (error) {
-    // An unreadable pnpm-workspace.yaml records nothing, and the plugin manager goes on after it the same way; the exit
-    // code still reports the failure.
-    void error
+    // The held-back build scripts are unknown, so the failure names that rather than a plain exit code.
+    return `${exited}; the build scripts pnpm held back could not be recorded: ${error instanceof Error ? error.message : String(error)}`
   }
-  const exited = `the plugin operation exited ${String(ran.exitCode)}${diagnostics}`
   if (pending.length === 0) return exited
   return `${exited}; nothing was installed, and pnpm holds back the build scripts of ${pending.join(', ')} until you decide under allowBuilds in ${join(profileDir, 'pnpm-workspace.yaml')}: true lets one run, false installs without it`
 }
