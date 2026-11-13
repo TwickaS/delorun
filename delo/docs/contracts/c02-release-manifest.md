@@ -51,7 +51,7 @@ A release with version `<version>` (Delo's semantic version, without a leading `
 | `delorun-<version>.manifest.json` | The release manifest in its signature envelope. |
 | `delorun-<version>.manifest.log.json` | The manifest's release-log bundle ([C18](c18-release-log.md)). |
 | `delorun-<version>-<platform>.tar.gz` | The runtime closure for a Linux or macOS platform. |
-| `delorun-<version>-win32-x64.zip` | The runtime closure for Windows. |
+| `delorun-<version>-win32-x64.zip` | The runtime closure for native Windows, which the recipe can build; releases up to and including 0.1.0 publish none, because Windows runs the Linux runtime in WSL2. |
 | `delorun-<version>-<platform>.files.json` | The runtime file list of that platform's archive. |
 | `delorun-<version>.spdx.json` | The SPDX 2.3 JSON SBOM of every archive, installer and image in the release, and of the pinned packages of the builder image that compiled the archives' native code. |
 | `delorun-<version>.rebuild.json` | The rebuild record of the targets-key holder's rebuild. |

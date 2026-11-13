@@ -75,7 +75,7 @@ describe('recipe files', () => {
   it('list each release platform once, and never one whose native addon the recipe does not build', (test) => {
     const directory = scratch(test)
     for (const file of RECIPE_FILES) copyFileSync(join(RECIPE_DIR, file), join(directory, file))
-    expect(readRecipe(directory).closure.platforms).toEqual(['linux-x64', 'linux-arm64', 'win32-x64'])
+    expect(readRecipe(directory).closure.platforms).toEqual(['linux-x64', 'linux-arm64'])
     const closure = JSON.parse(readFileSync(join(RECIPE_DIR, 'closure.json'), 'utf8')) as { platforms: string[] }
     const write = (platforms: readonly string[]): void => { writeFileSync(join(directory, 'closure.json'), JSON.stringify({ ...closure, platforms })) }
     write(['linux-x64', 'darwin-arm64', 'darwin-x64'])
@@ -97,7 +97,7 @@ describe('recipe files', () => {
     for (const file of RECIPE_FILES) copyFileSync(join(RECIPE_DIR, file), join(repository, RECIPE_PATH, file))
     git(['add', '-A'])
     git(['commit', '-q', '-m', 'recipe'])
-    expect(recipeAt(repository, git(['rev-parse', 'HEAD'])).closure.platforms).toEqual(['linux-x64', 'linux-arm64', 'win32-x64'])
+    expect(recipeAt(repository, git(['rev-parse', 'HEAD'])).closure.platforms).toEqual(['linux-x64', 'linux-arm64'])
     const closure = JSON.parse(readFileSync(join(RECIPE_DIR, 'closure.json'), 'utf8')) as { platforms: string[] }
     writeFileSync(join(repository, RECIPE_PATH, 'closure.json'), JSON.stringify({ ...closure, platforms: [...closure.platforms, 'darwin-arm64'] }))
     git(['commit', '-q', '-am', 'darwin'])
@@ -229,6 +229,6 @@ describe('the checked build', () => {
   it('refuses a platform that is not in this release before it exports the tree', async (test) => {
     const root = scratch(test)
     await expect(buildClosures(root, readRecipe(), { version: '0.1.0', commit: 'HEAD', out: join(root, 'out'), platforms: ['linux-x64', 'darwin-arm64', 'darwin-x64'], cache: join(root, 'cache'), writePins: false }))
-      .rejects.toThrow('darwin-arm64, darwin-x64 is not in this release; closure.json lists linux-x64, linux-arm64, win32-x64')
+      .rejects.toThrow('darwin-arm64, darwin-x64 is not in this release; closure.json lists linux-x64, linux-arm64')
   })
 })

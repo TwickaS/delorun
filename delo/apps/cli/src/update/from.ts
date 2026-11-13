@@ -11,6 +11,8 @@
  *
  * @module @delo/cli/update/from
  */
+import { stat } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import type { RuntimeVersion } from '@delo/contract-home-layout'
 import { isInstallError, LauncherChannel, manualSource, messageOf, newestManifestVersion, readChannelRecord } from '@delo/install'
 import type { RuntimeStore } from '@delo/runtime-store'
@@ -49,6 +51,21 @@ export interface InstallFromOptions {
 }
 
 /**
+ * Refuse a folder source that is not a folder, before any file is looked up in it.
+ * @param from - the folder or `https:` address.
+ * @throws {Error} when `from` is a path that does not exist or is not a folder.
+ */
+async function requireFolder(from: string): Promise<void> {
+  if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(from)) return
+  const path = resolve(from)
+  const found = await stat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') throw new Error(`the folder ${path} does not exist`, { cause: error })
+    throw error
+  })
+  if (!found.isDirectory()) throw new Error(`${path} is not a folder`)
+}
+
+/**
  * Verify and install a release from a person-supplied source.
  * @param options - the source, the store, the anchors and the question.
  * @returns the version to prepare: the release installed, or the version that runs when the source holds that one.
@@ -61,6 +78,7 @@ export async function installFrom(options: InstallFromOptions): Promise<RuntimeV
     ? `delorun update --from: ${error.code} (${error.source}): ${error.message}. Nothing was installed.`
     : `delorun update --from: ${messageOf(error)}. Nothing was installed.`)
   try {
+    await requireFolder(options.from)
     const manual = manualSource(options.from)
     const { current } = await options.store.pointers()
     const running = await options.store.startCheckRuntime(options.running, await options.anchor.root(), options.fullCheckDays)

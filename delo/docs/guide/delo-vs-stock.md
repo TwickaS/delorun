@@ -48,7 +48,7 @@ Delorun holds itself to these rules:
 
 | Area | Stock DSH | Delorun |
 | --- | --- | --- |
-| Install | npm package and desktop app | `npx delorun`, which checks each release's signatures and its entry in a public release log before it installs it. It runs on Linux x64 and arm64 and on Windows x64, WSL2 included ([Install and first run](install.md)) |
+| Install | npm package and desktop app | `npx delorun`, which checks each release's signatures and its entry in a public release log before it installs it. It runs on Linux x64 and arm64, and on Windows through WSL2 ([Install and first run](install.md)) |
 | Home | `~/.dsh` | `~/.delo`, readable only by you. Delorun never changes `~/.dsh`, and `delorun import-home` copies what you choose from it ([Your Delorun home](home.md)) |
 | Running | A command in a terminal, or the desktop app | `delorun` runs in the background and opens the studio; `delorun start`, `stop`, `status`, `open`, `doctor` and `logs` manage it ([Daily use](daily-use.md)) |
 | Setup | First-run dialogs | [Setup](../reference/glossary.md#setup) in the terminal: privacy, copying from `~/.dsh`, the model key, and how careful prompts are, and in the longer form also background running, remote access, the profile name and the port. `delorun setup --yes` is for scripts |
@@ -101,7 +101,7 @@ Other differences exist in the code but are off in the profile `delorun` runs, s
 
 Delorun does not include these, and this guide describes each only where it affects a choice:
 
-- a Delorun desktop app, and macOS releases;
+- a Delorun desktop app, and macOS and native Windows releases;
 - Docker workspaces, where a workspace's commands run in a container;
 - reach through Tailscale Funnel or your own relay on your own domain, and sign-in with a passkey or your own sign-in provider;
 - `delorun verify` checks of isolation, exposure, sign-in, plugins and data sharing, which the report lists as `not run`;

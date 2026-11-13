@@ -17,7 +17,7 @@
  */
 import { randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
-import { cp, lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, statfs, writeFile } from 'node:fs/promises'
+import { chmod, cp, lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, statfs, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { SESSION_DATA_DIRECTORIES, type DataCopySize, type DataFormats, type SessionDataDirectory } from '@delo/contract-update-report'
 import { z } from 'zod'
@@ -617,5 +617,18 @@ export async function discardKeptData(home: string, path: string, guard: Discard
   if (entry.kind === 'copy' && guard.referenced.includes(basename(entry.path))) {
     throw new DataSafetyError('DATA_IN_USE', `${path} is the copy an update record refers to; a rollback of that update needs it`)
   }
+  if (entry.kind === 'runtimes') await makeDirectoriesWritable(join(home, path))
   await rm(join(home, path), { recursive: true, force: true })
+}
+
+/**
+ * Give each directory below a tree the owner's write permission, which C1's installed runtime modes take away and
+ * `rm` needs to remove an entry. Symbolic links are not followed.
+ * @param directory - the tree's root.
+ */
+async function makeDirectoriesWritable(directory: string): Promise<void> {
+  await chmod(directory, 0o700)
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.isDirectory()) await makeDirectoriesWritable(join(directory, entry.name))
+  }
 }

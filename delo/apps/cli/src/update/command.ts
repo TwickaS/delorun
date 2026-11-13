@@ -32,6 +32,7 @@ import { UPDATE_CHECK_DEFAULTS } from '@delo/bundle-local/update-check'
 import semver from 'semver'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
+import { hostRefusal } from '@delo/npm-launcher'
 import { runtimePlatformOf } from './channel.ts'
 import { checkForUpdate, failureText, noticeLines, noticeOf, profileReader, runningRelease, type CheckOptions } from './notice.ts'
 import { installFrom, type InstallFromOptions } from './from.ts'
@@ -331,6 +332,8 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
  */
 export async function runUpdate(args: readonly string[], context: CommandContext, prompts: UpdatePrompts = TERMINAL_PROMPTS, checks: UpdateCheckDependencies = CHECK_DEPENDENCIES, manual: ManualInstall = MANUAL_INSTALL): Promise<CommandResult> {
   const values = parseOptions('update', args, UPDATE_OPTIONS)
+  const host = hostRefusal(process.platform)
+  if (host !== undefined) throw new CliError(EXIT.failed, `delorun update: ${host}`)
   const { home, profile } = await prepareHome(context, values.profile)
   if (values.from !== undefined && (values.check === true || values.report === true)) {
     throw new CliError(EXIT.usage, 'delorun update: --from installs a release, so it takes neither --check nor --report')

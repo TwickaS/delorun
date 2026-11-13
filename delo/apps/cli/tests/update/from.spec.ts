@@ -156,6 +156,14 @@ describe('delorun update --from', () => {
     expect(refusal(missingBundle.outcome)).toMatch(/delorun-0\.1\.0\.manifest\.log\.json/u)
   })
 
+  it('says a folder that does not exist does not exist, and a file is not a folder', async () => {
+    const missing = await run(await fixtureRelease(), { from: folder => join(folder, 'no', 'such', 'folder') })
+    expect(refusal(missing.outcome)).toMatch(/^delorun update --from: .*no[\\/]such[\\/]folder does not exist\. Nothing was installed\.$/u)
+    expect(missing.installed).toEqual([])
+    const file = await run(await fixtureRelease(), { from: folder => join(folder, 'timestamp.json') })
+    expect(refusal(file.outcome)).toMatch(/timestamp\.json is not a folder\. Nothing was installed\.$/u)
+  })
+
   it('refuses an http: address', async () => {
     const { outcome, installed } = await run(await fixtureRelease(), { from: () => 'http://mirror.example/release' })
     expect(refusal(outcome)).toMatch(/https:/u)
