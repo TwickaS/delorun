@@ -132,3 +132,22 @@ export {
 } from './secrets.ts'
 
 export { recover, recoverTarget, type RecoverAction, type RecoverReport, type RecoverRequest, type RecoverVersion } from './recover.ts'
+
+export {
+  listProfileVersions,
+  MAX_LISTED_VERSIONS,
+  MAX_VERSION_NAME,
+  originOf,
+  saveProfileVersion,
+  SAVED_SUMMARY,
+  savedSummary,
+  switchToVersion,
+  SWITCH_SUMMARY_PREFIX,
+  UPDATE_SUMMARY_PREFIX,
+  type ProfileVersionList,
+  type ProfileVersionView,
+  type SaveVersionRequest,
+  type SwitchVersionRequest,
+  type VersionOrigin,
+  type VersionsRequest,
+} from './versions.ts'

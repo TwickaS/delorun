@@ -19,6 +19,7 @@
     "./rows": "./src/rows.ts",
     "./update-gate": "./src/update-gate.ts",
     "./update-check": "./src/update-check.ts",
+    "./profile-versions": "./src/profile-versions.ts",
     "./statements": "./src/client/locales.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
@@ -34,6 +35,8 @@
     "src/rows.ts",
     "src/update-gate.ts",
     "src/update-check.ts",
+    "src/profile-versions.ts",
+    "src/client/versions-api.ts",
     "src/client/locales.ts"
   ],
   "dsh": {
@@ -55,6 +58,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
     "@delo/contract-setup-answers": "workspace:*",
     "@delo/contract-update-report": "workspace:*",
     "@delo/home-auth": "workspace:*",
@@ -66,8 +70,10 @@
     "@delo/plugin-permission-defaults": "workspace:*",
     "@delo/plugin-schedule-consent": "workspace:*",
     "@delo/plugin-trash": "workspace:*",
+    "@delo/profile-safety": "workspace:*",
     "@delo/reach": "workspace:*",
-    "@delo/settings-controls": "workspace:*"
+    "@delo/settings-controls": "workspace:*",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

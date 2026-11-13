@@ -1819,6 +1819,9 @@ importers:
       '@deepseek-ai/dsh-official-bundles':
         specifier: workspace:*
         version: link:../../../packages/util/official-bundles
+      '@deepseek-ai/dsh-plugin-manager':
+        specifier: workspace:*
+        version: link:../../../packages/boot/plugin-manager
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -1855,12 +1858,18 @@ importers:
       '@delo/plugin-trash':
         specifier: workspace:*
         version: link:../plugin-trash
+      '@delo/profile-safety':
+        specifier: workspace:*
+        version: link:../profile-safety
       '@delo/reach':
         specifier: workspace:*
         version: link:../reach
       '@delo/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

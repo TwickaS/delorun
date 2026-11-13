@@ -18,6 +18,7 @@ Delorun tells you when a newer release exists, shows what it would change before
 - [What happens during an update](#what-happens-during-an-update)
 - [Chat data that changes format](#chat-data-that-changes-format)
 - [Going back](#going-back)
+- [Try another setup in the studio](#try-another-setup-in-the-studio)
 - [Channels](#channels)
 - [For the technically curious](#for-the-technically-curious)
 
@@ -100,6 +101,16 @@ Delorun keeps one copy. `delorun recover status` lists it with its size, and `de
 `delorun recover rollback` works whether Delorun runs or not; a running Delorun first waits for running chats. The rollback completes when the older release starts and passes its check. Delorun keeps two releases installed, the running one and the one before, so it can go back one release.
 
 A rollback does not merge. When the data format changed, the chat data as the newer release left it, with the chats you started after the update, is set aside in `data-set-aside/` in your Delorun home, not deleted, and the copy taken before the update comes back in its place; `delorun recover discard <path>` removes the folder once you no longer need it. Secrets are never rolled back.
+
+## Try another setup in the studio
+
+Settings → Setup versions lists the versions Delorun keeps of your setup, which is your plugins, bundles and settings, newest first. The current one is marked, and each says what made it: an update, a save by you, or a switch. It is the same history that `delorun recover` uses, so a version saved here can be restored there and the other way round.
+
+- **Save this setup** keeps the setup as it is now, with a name if you give one. If the latest version already holds it, nothing new is saved and the page says so.
+- **What changes** on a version shows, in plain words, which plugins would come back, change version or be removed, which bundles would join or leave your bundle list, whether your plugin rows and settings change, and which version exemptions and build decisions change. It writes nothing.
+- **Switch to this version** saves your current setup as a version first, then brings the chosen one back. The page tells you what changed and that Delorun runs the switched setup after a restart: run `delorun stop`, then `delorun start`. Switching back is switching to the version saved before, so keeping a setup or going back is the same step.
+
+Saving and switching work only in the studio on the computer Delorun runs on. A phone or other device you reach the studio from sees the list and the changes, and each version shows **Do this at your computer** instead of a button; the home refuses a save or a switch from such a device even if its page is changed. Safe mode and the rollback after a failed update work as before ([Going back](#going-back)). A plugin version that a release has since revoked comes back turned off, with its reason, as it does with `delorun recover restore`.
 
 ## Channels
 
