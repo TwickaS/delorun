@@ -316,15 +316,15 @@ export const STUDIO_ROW_ID = 'webserver'
  * The studio port a profile's own patch sets, as the profile section writes it.
  * @param directory - the profile's directory.
  * @param command - the command that starts a refusal's message.
- * @returns the port, or `undefined` when the patch sets none.
- * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list, or its web server row's `port` is not a port number.
+ * @returns the port, 0 when the patch asks the system for a free port at each start, or `undefined` when the patch sets none.
+ * @throws {CliError} `EXIT.failed` when the patch is not a YAML patch list, or its web server row's `port` is not an integer from 0 to 65535.
  */
 export function profileStudioPort(directory: string, command: string): number | undefined {
   const path = join(directory, 'cordis.patch.yml')
   const port = readPatchRow(path, STUDIO_ROW_ID, command)?.['port']
   if (port === undefined) return undefined
-  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new CliError(EXIT.failed, `${command}: the ${STUDIO_ROW_ID} row of ${path} sets port to ${JSON.stringify(port)}, which is not a port number from 1 to 65535`)
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new CliError(EXIT.failed, `${command}: the ${STUDIO_ROW_ID} row of ${path} sets port to ${JSON.stringify(port)}, which is not a port number from 0 to 65535`)
   }
   return port
 }

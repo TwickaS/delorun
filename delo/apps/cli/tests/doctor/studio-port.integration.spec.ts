@@ -105,6 +105,13 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
     expect(await doctor()).toEqual({ code: EXIT.ok, port: `pass port: port ${String(port)} on 127.0.0.1, the studio port of the profile default, is free.` })
   })
 
+  it('passes a profile port of 0, which each start chooses, without binding anything', async () => {
+    const directory = profileDirectory(home, PROFILE)
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'cordis.patch.yml'), '- id: webserver\n  config:\n    port: 0\n')
+    expect(await doctor()).toEqual({ code: EXIT.ok, port: 'pass port: the studio port of the profile default is 0, so each start takes a free port the system chooses; `delorun status` shows the address.' })
+  })
+
   it('checks upstream\'s default port when the profile sets none', async () => {
     const result = await doctor()
     expect(result.port).toMatch(/^(?:pass|fail) port: port 3080 on 127\.0\.0\.1, the studio's default port, which the profile default does not change, is /u)
