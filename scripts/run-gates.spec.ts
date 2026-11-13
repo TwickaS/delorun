@@ -321,6 +321,12 @@ describe('gate graph validation', () => {
     expect(gates.find(gate => gate.id === 'cli-help')).toMatchObject({ env: { DSH_CLI_HELP_CONCURRENCY: raw } })
   })
 
+  it.each(['doc-sync', 'doc-quick'] as const)('keeps the release-tense policy in the %s aggregate', (mode) => {
+    const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(subject => subject.id))
+
+    expect(ids).toContain('release-tense')
+  })
+
   it('keeps the concrete terminology policy in the documentation gate', () => {
     const ids = withPnpmEntrypoint(() => gatesForMode('doc-sync').map(subject => subject.id))
 
