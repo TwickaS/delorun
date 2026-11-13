@@ -286,7 +286,8 @@ describe('a reach device through the Gateway', () => {
       // Pins the unlock check for each namespace the composition describes.
       await expectElevationRequired('settings/mutate', { ns, ops: [{ op: 'unset', path: ['delo'] }] })
       await expectElevationRequired('settings/update', { ns, patch: {} })
-      await expectElevationRequired('settings/replace', { ns, section: {} })
+      // A permission-preset section names the current default, since leaving it out could loosen new chats' permission.
+      await expectElevationRequired('settings/replace', { ns, section: ns === 'permission' ? { defaultPreset: 'workspace-write' } : {} })
     }
     await expectRefused('settings/openSettingsDocument', {})
   })
