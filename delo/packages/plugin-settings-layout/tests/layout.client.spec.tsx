@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Context } from '@deepseek-ai/cordis'
+import { Context, FiberState } from '@deepseek-ai/cordis'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { SettingsLayoutRegistry } from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import { projectLayout, searchNav, type SettingsNav } from '@deepseek-ai/dsh-client-ui-settings-general/src/client/layout.ts'
@@ -75,10 +75,10 @@ describe("Delo's layout", () => {
 })
 
 /** A stub for the services the plugin reads, recording what it registers. */
-function bench() {
+function bench(options: { readonly layout?: false } = {}) {
   const ctx = new Context()
   const registry = new SettingsLayoutRegistry()
-  ctx.provide('settingsLayout', registry)
+  if (options.layout !== false) ctx.provide('settingsLayout', registry)
   const dictionaries = new Map<string, unknown>()
   ctx.provide('locale', {
     bind: () => makeTranslate(en),
@@ -110,6 +110,24 @@ describe('the client plugin', () => {
     expect(style()?.textContent).toBe(PANEL_STYLE)
 
     await studio.dispose()
+    expect(registry.getSnapshot()).toBeUndefined()
+    expect([dictionaries.size, sections.size, style()]).toEqual([0, 0, null])
+  })
+
+  it('stays active and registers nothing without upstream\'s general Settings, as where a plugin draws its own Settings, and follows settingsLayout as it comes and goes', async () => {
+    const { ctx, registry, dictionaries, sections, style } = bench({ layout: false })
+    ctx.provide('deloStudio', {})
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    expect(fiber.state).toBe(FiberState.ACTIVE)
+    expect([dictionaries.size, sections.size, style()]).toEqual([0, 0, null])
+
+    const shell = ctx.plugin({ apply: (scope: Context) => { scope.provide('settingsLayout', registry) } })
+    await shell.await()
+    expect(registry.getSnapshot()?.groups.map(group => group.id)).toEqual(['you', 'agent', 'delo'])
+    expect([dictionaries.size, sections.size, style()?.textContent]).toEqual([1, 1, PANEL_STYLE])
+
+    await shell.dispose()
     expect(registry.getSnapshot()).toBeUndefined()
     expect([dictionaries.size, sections.size, style()]).toEqual([0, 0, null])
   })

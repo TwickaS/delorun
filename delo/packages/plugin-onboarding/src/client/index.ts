@@ -97,11 +97,12 @@ const UNAVAILABLE: FolderChoice = { kind: 'unavailable' }
 const FAILED: AddOutcome = { kind: 'failed' }
 
 /**
- * Services every registration needs. `settingsShell` is the Settings shell's, which also hosts the onboarding step and
- * is provided under every look. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on, is
- * injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
+ * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
+ * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
+ * The Settings shell (`settingsShell`) is looked up when Show again is pressed, so the entry also stays active where a
+ * plugin turns upstream's general Settings off and draws its own Settings.
  */
-export const inject = ['slots', 'locale', 'configForms', 'theme', 'settingsShell']
+export const inject = ['slots', 'locale', 'configForms', 'theme']
 
 /**
  * Read what the terminal setup recorded from the harness. Any failure leaves every step in the flow.
@@ -312,7 +313,8 @@ export function applyStudio(ctx: Context): void {
       // Unfinished from its first screen, so a reload shows the guide again, as the explicit opening does now.
       writeProgress('done', false)
       writeProgress('step', '')
-      ctx.settingsShell.openOnboarding(ONBOARDING_STEP.id)
+      // Without upstream's Settings shell the guide shows at the next reload, because the progress is now unfinished.
+      ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
     },
   }
   const starters: StarterInjected = {
