@@ -154,6 +154,35 @@ describe('PermissionSelect', () => {
     expect(screen.getByRole('checkbox')).toBeTruthy()
   })
 
+  it('keeps showing the current preset while the consent service asks its own question, and shows the switch once it lands', async () => {
+    const answered = Promise.withResolvers<boolean>()
+    const { select, selection } = setup({
+      ownsConfirmation: preset => preset === 'danger-full-access',
+      select: () => answered.promise,
+    })
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: '完全权限' }))
+    expect(select).toHaveBeenCalledExactlyOnceWith('danger-full-access')
+    expect(trigger().textContent).toBe('工作区内修改')
+
+    act(() => { selection.set({ value: { currentValue: 'danger-full-access' } }) })
+    answered.resolve(true)
+    await act(async () => {})
+    expect(trigger().textContent).toBe('完全权限')
+  })
+
+  it('keeps the current preset when the consent service is cancelled', async () => {
+    const { selection } = setup({
+      ownsConfirmation: preset => preset === 'danger-full-access',
+      select: () => Promise.resolve(false),
+    })
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: '完全权限' }))
+    await act(async () => {})
+    expect(trigger().textContent).toBe('工作区内修改')
+    expect(selection.getSnapshot().value?.currentValue).toBe('workspace-write')
+  })
+
   it('marks Auto experimental and uses the current-session risk copy', async () => {
     const { select, selection } = setup()
     fireEvent.click(trigger())

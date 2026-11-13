@@ -82,6 +82,8 @@ export function PermissionSelect({
   const selection = useProjection('permissions')
   const catalog = usePermissionCatalog(state => state.value)
   const [pick, setPick] = useState<string | null>(null)
+  // A pick whose consent service asks its own question stays unshown until the projection carries the switch.
+  const [pickAsks, setPickAsks] = useState(false)
   const [open, setOpen] = useState(false)
   const [confirmation, setConfirmation] = useState<string | null>(null)
   const [acknowledged, setAcknowledged] = useState(false)
@@ -96,7 +98,7 @@ export function PermissionSelect({
 
   if (selection === undefined || catalog === null) return null
 
-  const currentValue = pick !== null && catalog.options.some(option => option.value === pick)
+  const currentValue = pick !== null && !pickAsks && catalog.options.some(option => option.value === pick)
     ? pick : selection.currentValue
   const current = catalog.options.find(option => option.value === currentValue)
   const currentLabel = current === undefined
@@ -122,8 +124,9 @@ export function PermissionSelect({
     }
   })
 
-  const submit = (id: string): void => {
+  const submit = (id: string, asks = false): void => {
     setPick(id)
+    setPickAsks(asks)
     void select(id)
       .catch(() => false)
       .then(() => { setPick(null) })
@@ -137,7 +140,7 @@ export function PermissionSelect({
       setConfirmation(id)
       return
     }
-    submit(id)
+    submit(id, id === FULL_ACCESS || id === AUTO_REVIEW)
   }
 
   const closeConfirmation = (): void => {
