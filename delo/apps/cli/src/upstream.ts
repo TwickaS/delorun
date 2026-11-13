@@ -38,6 +38,7 @@ import { ensureCopyImport } from './pnpm-import.ts'
 import { profileDirectory, selectCommandProfile } from './profile.ts'
 import { runUpstreamProfile, upstreamDependencies } from './start.ts'
 import { shippedPackageManager } from './package-manager.ts'
+import { withBrandedStderr } from './upstream-output.ts'
 import { runPluginCheck } from './plugin-check.ts'
 
 /** What `delorun plugin` runs outside this module; specs replace it. */
@@ -91,7 +92,7 @@ async function runUpstreamPlugin(argv: readonly string[], operation?: UpstreamOp
   const { runPlugin } = await import('@deepseek-ai/dsh/lib/plugin.js')
   const invocation = parseDshArgs(argv, getDshRuntimeVersion())
   if (invocation.mode !== 'plugin') throw new Error(`delorun plugin: upstream read ${JSON.stringify(argv)} as a ${invocation.mode} command`)
-  return runPlugin(invocation.profile, invocation.args, shippedPackageManager(), operation)
+  return withBrandedStderr(() => runPlugin(invocation.profile, invocation.args, shippedPackageManager(), operation))
 }
 
 /** The time pnpm gets to name the profile's registry. */
