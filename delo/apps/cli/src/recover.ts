@@ -48,7 +48,7 @@ const RECOVER_OPTIONS = {
 } as const
 
 /** The store's retention reports nothing here: a rollback removes no installation. */
-const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
+export const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
 
 /** The actions, in usage order. */
 const ACTIONS = ['status', 'rollback', 'restore', 'safe-mode', 'exit-safe-mode', 'discard'] as const

@@ -23,7 +23,7 @@ import {
 } from '@delo/contract-release-manifest'
 import { LogVerificationError, readBundle, verifyBundle, type VerifiedBundle } from '@delo/release-formats/log/bundle'
 import { canonicalJson, toJsonValue } from '@delo/release-formats/sign/json'
-import { readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifyTimestamp, walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
+import { channelAccepts, readRoot, trustRootChain, verifyChannelManifest, verifyFileList, verifySignedManifest, verifyTimestamp, walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
 import { InstallError, messageOf } from './errors.ts'
 import type { StoredTimestamp } from './state.ts'
 
@@ -82,6 +82,8 @@ export interface TimestampRequest {
   readonly now: number
   /** The newest timestamp verified before, when the client stored one. */
   readonly stored?: StoredTimestamp
+  /** Accept a timestamp whose expiry has passed; its signature, lifetime, issue time, version and root still hold. */
+  readonly allowExpired?: boolean
 }
 
 /** A verified root chain and timestamp. */
@@ -112,7 +114,7 @@ export function verifyTimestampUnderRoots(request: TimestampRequest): RootAndTim
   const root = chain.at(-1)!
   let timestamp: TimestampMetadata
   try {
-    timestamp = verifyTimestamp(root, request.timestamp, request.now, request.stored)
+    timestamp = verifyTimestamp(root, request.timestamp, request.now, request.stored, { allowExpired: request.allowExpired === true })
   } catch (error) {
     throw refused('timestamp.json', error)
   }
@@ -163,19 +165,83 @@ export function verifyChannelRelease(request: ReleaseRequest): VerifiedChannelRe
   if (request.target !== undefined && manifest.version !== request.target) {
     throw new InstallError('RELEASE_NOT_OFFERED', `${request.channel} manifest`, `the ${request.channel} channel names release ${manifest.version}, not ${request.target}; a release the fresh timestamp does not name is not installed`)
   }
+  return { manifest, log: verifyReleaseBundle(request.root, request.manifest, manifest, request.bundle) }
+}
+
+/**
+ * Verify contract C18's bundle of a manifest: its entry, inclusion proof and witness cosignature.
+ * @param root - the trusted root.
+ * @param manifestBytes - the manifest file.
+ * @param manifest - the verified manifest.
+ * @param bundleBytes - the bundle file.
+ * @returns the bundle's checkpoint facts.
+ * @throws {InstallError} `RELEASE_LOG_FAILED` when the bundle does not read or fails C18's checks.
+ */
+function verifyReleaseBundle(root: RootMetadata, manifestBytes: Uint8Array, manifest: ReleaseManifest, bundleBytes: Uint8Array): VerifiedBundle {
   let bundle
   try {
-    bundle = readBundle(request.bundle)
+    bundle = readBundle(bundleBytes)
   } catch (error) {
     throw new InstallError('RELEASE_LOG_FAILED', 'release-log bundle', `the release-log bundle does not read: ${messageOf(error)}`, { cause: error })
   }
   try {
-    return { manifest, log: verifyBundle(request.root, request.manifest, manifest.version, bundle) }
+    return verifyBundle(root, manifestBytes, manifest.version, bundle)
   } catch (error) {
     if (error instanceof LogVerificationError) {
       throw new InstallError('RELEASE_LOG_FAILED', 'release-log bundle', `${error.failure}: ${error.message}`, { cause: error })
     }
     throw new InstallError('RELEASE_LOG_FAILED', 'release-log bundle', messageOf(error), { cause: error })
+  }
+}
+
+/** What verifying a release a person supplied, without a timestamp, needs. */
+export interface UnconfirmedReleaseRequest {
+  /** The trusted root. */
+  readonly root: RootMetadata
+  /** The channel whose releases are accepted. */
+  readonly channel: ReleaseChannel
+  /** The manifest file's bytes. */
+  readonly manifest: Uint8Array
+  /** The release-log bundle's bytes. */
+  readonly bundle: Uint8Array
+  /** The release the person asked for. */
+  readonly version: SemanticVersion
+}
+
+/**
+ * Verify a release no fresh timestamp names: the manifest's targets signature and contract C18's bundle (entry,
+ * inclusion proof and witness). Only the timestamp's freshness is missing; nothing else is relaxed.
+ * @param request - the root, the channel, the manifest, the bundle and the release.
+ * @returns the manifest and the bundle's checkpoint facts.
+ * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the manifest is not signed by the targets threshold, is not the
+ *   asked release or is of a channel this one does not accept; `RELEASE_LOG_FAILED` when the bundle fails.
+ */
+export function verifyUnconfirmedRelease(request: UnconfirmedReleaseRequest): VerifiedChannelRelease {
+  let manifest: ReleaseManifest
+  try {
+    manifest = verifySignedManifest(request.root, request.manifest)
+  } catch (error) {
+    throw refused(`${request.channel} manifest`, error)
+  }
+  if (manifest.version !== request.version || !channelAccepts(request.channel, manifest.channel)) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', `${request.channel} manifest`, `the manifest is release ${manifest.version} on ${manifest.channel}, not ${request.version} on ${request.channel}`)
+  }
+  return { manifest, log: verifyReleaseBundle(request.root, request.manifest, manifest, request.bundle) }
+}
+
+/**
+ * Trust the newest root of a chain: each root's signature by the one before it, and the newest root's expiry against the
+ * clock.
+ * @param roots - the root files, oldest first, contiguous.
+ * @param now - the clock in Unix seconds.
+ * @returns the chain, whose last entry is the trusted root.
+ * @throws {InstallError} `INSTALL_VERIFY_FAILED` for a broken, skipping or expired chain.
+ */
+export function trustedChain(roots: readonly Uint8Array[], now: number): TrustedRoot[] {
+  try {
+    return trustRootChain(roots, now)
+  } catch (error) {
+    throw refused('root', error)
   }
 }
 

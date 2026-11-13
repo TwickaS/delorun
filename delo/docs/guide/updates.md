@@ -15,6 +15,7 @@ Delorun tells you when a newer release exists, shows what it would change before
 - [The update notice](#the-update-notice)
 - [Check and read the report](#check-and-read-the-report)
 - [Apply an update](#apply-an-update)
+- [Update from files you downloaded](#update-from-files-you-downloaded)
 - [What happens during an update](#what-happens-during-an-update)
 - [Chat data that changes format](#chat-data-that-changes-format)
 - [Going back](#going-back)
@@ -60,6 +61,27 @@ Run `delorun update`. It prints the same report and asks `Apply the update to De
 - An update needs git, which saves your profile's history; without git, Delorun refuses before it fetches anything. `--check` and `--report` do not need git.
 
 Delorun never applies an update you have not confirmed, and the check applies nothing.
+
+## Update from files you downloaded
+
+When the release channel cannot be reached, for example behind a firewall, download the release's files from its release page into one folder and run:
+
+```sh
+delorun update --from ~/Downloads/delorun-0.2.0
+```
+
+The folder holds `delorun-<version>.manifest.json`, `delorun-<version>.manifest.log.json`, `delorun-<version>-<platform>.files.json`, the platform's archive, and optionally `timestamp.json` and `root/<n>.root.json`. An `https:` address that serves the same files also works; `http:` is refused. Delorun checks the files exactly as it checks a channel update: the signature, the release log, the file list and the archive digests. Then it shows the report and asks, and the rest of the update is unchanged, including the snapshot, the data copy, the health check and the automatic rollback.
+
+The one thing a folder can loosen is the channel's confirmation that this is the current release. If the timestamp is missing or out of date, Delorun asks `The release channel cannot confirm that 0.2.0 is current … Install 0.2.0 from … on its signature and release-log entry alone?`. Answer in a terminal; `--yes` never answers it, and without a terminal Delorun refuses. A release older than the one you run is refused (go back with `delorun recover rollback`), and so is a release with a wrong signature or a missing file; the refusal names the file. Delorun does not keep the out-of-date timestamp, and if it could not reach the release log, it records that the log was not checked.
+
+<details>
+<summary>Edge cases</summary>
+
+- `--from` cannot be combined with `--check` or `--report`.
+- A folder with several releases updates to the newest one.
+- A release that is already installed and intact is not fetched again.
+
+</details>
 
 ## What happens during an update
 

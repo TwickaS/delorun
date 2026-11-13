@@ -5,8 +5,11 @@
  *
  * @module @delo/install/manual-source
  */
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import type { SemanticVersion } from '@delo/contract-release-manifest'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import semver from 'semver'
 import { Downloader } from './download.ts'
 import type { ReleaseSource } from './channel.ts'
 import { InstallError } from './errors.ts'
@@ -68,4 +71,19 @@ export function manualSource(from: string): ManualSource {
     source: { metadata: origin, files: (_version, name) => `${origin}/${name}` },
     downloader: new Downloader({ hosts: { scheme: 'https:', hosts: [FOLDER_HOST], maxRedirects: 0 }, fetch: folderFetch(resolve(from)) }),
   }
+}
+
+/** The manifest files a folder holds: `delorun-<version>.manifest.json`, not the release-log bundle. */
+const MANIFEST_NAME = /^delorun-(.+)\.manifest\.json$/u
+
+/**
+ * The newest release a folder holds a manifest for, which a timestamp that cannot name a release does not.
+ * @param from - the folder, or an `https:` address.
+ * @returns the version, or `undefined` for an address or a folder with no manifest.
+ */
+export async function newestManifestVersion(from: string): Promise<SemanticVersion | undefined> {
+  if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(from)) return undefined
+  const names = await readdir(resolve(from)).catch(() => [] as string[])
+  const newest = names.flatMap(name => MANIFEST_NAME.exec(name)?.[1] ?? []).filter(version => semver.valid(version) !== null).sort(semver.compare).at(-1)
+  return newest === undefined ? undefined : brandString<SemanticVersion>(newest)
 }

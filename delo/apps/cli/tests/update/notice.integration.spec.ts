@@ -454,7 +454,7 @@ describe('in a running Host', { timeout: 60_000 }, () => {
 describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () => {
   const output = { stdout: '', stderr: '' }
   const context = () => ({ env: { ...process.env, ...launched, DELO_HOME: home, DELO_PROFILE: PROFILE }, stdout: (text: string) => { output.stdout += text }, stderr: (text: string) => { output.stderr += text } })
-  const noPrompts = { confirm: () => Promise.reject(new Error('asked')), copy: () => Promise.reject(new Error('asked')) }
+  const noPrompts = { confirm: () => Promise.reject(new Error('asked')), copy: () => Promise.reject(new Error('asked')), agree: () => Promise.reject(new Error('asked')) }
 
   beforeEach(() => {
     output.stdout = ''

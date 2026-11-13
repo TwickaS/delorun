@@ -159,7 +159,9 @@ Run it in a terminal. Delorun checks the release it installs the way an update d
 - **`NO_TERMINAL`.** Run the command in a terminal, because Delorun must ask you.
 - **`RESET_TRUST_REFUSED`.** `--reset-trust` works only when the launcher you run ships release keys newer than the ones this home trusts. Install the newest launcher from npm and try again.
 - **`--reset-trust`.** Moves the home's `trust/` to `trust.set-aside-<time>/` so that the home trusts only the keys in the launcher. Use it only with a launcher you installed yourself from npm.
-- **`--from <folder or https address>`.** Verifies the release from files you downloaded from its release page instead of the channel; the same signature, release-log and digest checks apply.
+- **`--from <folder or https address>`.** Verifies the release from files you downloaded from its release page instead of the channel; the same signature, release-log and digest checks apply. If the channel cannot confirm the release is current, or you name an older `--release` than this home has seen, Delorun asks you in a terminal first; nothing else is loosened. For the same option on `delorun update`, see [Update from files you downloaded](updates.md#update-from-files-you-downloaded).
+- **A repair and a start at the same time.** The repair holds the lock of each profile until it finishes, so a Delorun started meanwhile stops with a message that the profile is held; start it again once the repair ends. It never runs the program that was set aside.
+- **No data-format record.** A home made before Delorun recorded one has none. Repair says so, assumes your chats are in the formats of the release it installs, and carries on.
 - Every run adds one line to `logs/repair.log`.
 
 </details>

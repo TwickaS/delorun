@@ -10,6 +10,7 @@
  * @module @delo/install/channel
  */
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import semver from 'semver'
 import { dirname, join } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { ARCHIVE_MAX_BYTES, DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
@@ -36,12 +37,12 @@ import { HomeLayoutError } from '@delo/home'
 import { ReleaseLogInternalError, type ReleaseLogTransport } from '@delo/release-verify/online'
 import { checkAndStore, recordResult } from '@delo/release-verify/record'
 import type { StartCheckResult } from '@delo/release-verify/start'
-import { Downloader } from './download.ts'
+import { Downloader, type Downloaded } from './download.ts'
 import { InstallError, isInstallError, messageOf } from './errors.ts'
 import { extractArchive } from './extract.ts'
 import type { InstallProgress } from './progress.ts'
 import { readStoredRootBytes, readStoredRootChain, readStoredTimestamp, writeStoredRootChain, writeStoredTimestamp, writeTrustedRoot } from './state.ts'
-import { newestRootVersion, rootVersionOf, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyStoredRoot, verifyTimestampUnderRoots, type VerifiedChannelRelease } from './verify.ts'
+import { newestRootVersion, rootVersionOf, trustedChain, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyStoredRoot, verifyTimestampUnderRoots, verifyUnconfirmedRelease, type VerifiedChannelRelease } from './verify.ts'
 
 /**
  * Where a release's files are published: contract C2's metadata host for `root/<n>.root.json` and `timestamp.json`,
@@ -91,6 +92,56 @@ export interface LauncherChannelOptions {
   readonly now?: () => number
   /** Told of each step that finishes; nothing by default. */
   readonly progress?: (event: InstallProgress) => void
+  /**
+   * Install a release the channel's fresh timestamp does not confirm, after the person agrees. Absent by default: a
+   * timestamp that cannot be read, has expired, or names another release then refuses the install.
+   */
+  readonly unconfirmed?: UnconfirmedInstall
+}
+
+/** What a person-supplied release (`--from`) may relax, and who asks. Only timestamp freshness is relaxed. */
+export interface UnconfirmedInstall {
+  /** The release to install when the timestamp cannot name it, such as the newest one a folder holds. */
+  readonly version?: SemanticVersion
+  /**
+   * The lowest release this install may name, such as the version the home runs. The release the home's stored
+   * timestamp names is a floor too. Without `belowFloor`, a lower release is refused.
+   */
+  readonly floor?: string
+  /** Ask the person about a release below the floor too, as `repair --release` does; refused otherwise. */
+  readonly belowFloor?: boolean
+  /**
+   * Ask the person whether to install on the release's signature and release-log entry alone.
+   * @param question - the facts to show.
+   * @returns true to install; false when the person declined or no terminal could ask.
+   */
+  readonly allow: (question: UnconfirmedQuestion) => Promise<boolean>
+}
+
+/** The facts a person is shown before an unconfirmed install. */
+export interface UnconfirmedQuestion {
+  /** The release. */
+  readonly version: SemanticVersion
+  /** Why the channel cannot confirm it. */
+  readonly reason: string
+  /** The floor the release is below, when it is. */
+  readonly belowFloor?: string
+}
+
+/** A reason the fresh timestamp cannot confirm a release; the caller may ask the person about it. */
+class Unconfirmable extends Error {
+  /** The release the stale timestamp names, when it read. */
+  readonly release: SemanticVersion | undefined
+  /** The refusal to raise when nothing may be relaxed. */
+  readonly refusal: unknown
+
+  /** @param reason - why the channel cannot confirm the release. @param refusal - the original failure. @param release - the stale timestamp's release. */
+  constructor(reason: string, refusal: unknown, release?: SemanticVersion) {
+    super(reason)
+    this.name = 'Unconfirmable'
+    this.refusal = refusal
+    this.release = release
+  }
 }
 
 /** A release this channel resolved, kept for its install. */
@@ -118,6 +169,15 @@ interface Current {
   readonly root: TrustedRoot
   readonly timestamp: TimestampMetadata
   readonly pointer: ChannelPointer
+  readonly verified: VerifiedChannelRelease
+  readonly manifestBytes: Buffer
+  readonly bundleBytes: Buffer
+}
+
+/** The release {@link LauncherChannel.resolve} proved, by the fresh timestamp or by the person's agreement. */
+interface Proven {
+  readonly root: TrustedRoot
+  readonly release: SemanticVersion
   readonly verified: VerifiedChannelRelease
   readonly manifestBytes: Buffer
   readonly bundleBytes: Buffer
@@ -170,18 +230,18 @@ export class LauncherChannel implements RuntimeChannel {
    */
   async resolve(target?: RuntimeVersion): Promise<ChannelRelease> {
     const now = Math.floor(this.now() / 1000)
-    const current = await this.current(now, target, 'record')
-    const { pointer, root } = current
+    const current = await this.currentOrUnconfirmed(now, target)
+    const { release: named, root } = current
     const released = Object.keys(current.verified.manifest.runtime)
     if (!released.includes(this.options.platform)) {
-      throw new InstallError('PLATFORM_NOT_RELEASED', String(pointer.release), `${this.options.platform} is not in this release, which publishes a runtime for ${released.join(', ')} only`)
+      throw new InstallError('PLATFORM_NOT_RELEASED', String(named), `${this.options.platform} is not in this release, which publishes a runtime for ${released.join(', ')} only`)
     }
-    const log = await this.checkLog({ root: root.metadata, version: pointer.release, manifest: current.manifestBytes, bundle: current.bundleBytes, missingBundle: 'failed', now, transport: this.logFor(root.metadata), mode: 'enforce' })
+    const log = await this.checkLog({ root: root.metadata, version: named, manifest: current.manifestBytes, bundle: current.bundleBytes, missingBundle: 'failed', now, transport: this.logFor(root.metadata), mode: 'enforce' })
     if (log.state === 'failed') {
-      throw new InstallError('RELEASE_LOG_FAILED', `release ${pointer.release}`, `the release log failed its check (${String(log.refusal)}: ${String(log.detail)}); nothing was installed`)
+      throw new InstallError('RELEASE_LOG_FAILED', `release ${named}`, `the release log failed its check (${String(log.refusal)}: ${String(log.detail)}); nothing was installed`)
     }
-    this.options.progress?.({ step: 'log-checked', version: pointer.release, state: log.state, ...log.detail === undefined ? {} : { detail: log.detail } })
-    const version = asVersion(pointer.release)
+    this.options.progress?.({ step: 'log-checked', version: named, state: log.state, ...log.detail === undefined ? {} : { detail: log.detail } })
+    const version = asVersion(named)
     const release: ChannelRelease = { version, root: root.metadata }
     this.resolved.set(version, { release, verified: current.verified, manifestBytes: current.manifestBytes, bundleBytes: current.bundleBytes, log, checkedAt: now })
     return release
@@ -210,10 +270,30 @@ export class LauncherChannel implements RuntimeChannel {
    * @returns what verified, with the bytes an install keeps.
    */
   private async current(now: number, target: RuntimeVersion | undefined, trust: 'record' | 'read-only'): Promise<Current> {
-    const stamp = await this.downloader.bytes(`${this.source.metadata}/timestamp.json`, RELEASE_FILE_SIZE_LIMITS.timestamp)
+    const unconfirmed = this.options.unconfirmed !== undefined
+    const stamp = await this.downloader.bytes(`${this.source.metadata}/timestamp.json`, RELEASE_FILE_SIZE_LIMITS.timestamp).catch((error: unknown) => {
+      if (unconfirmed && isInstallError(error, 'DOWNLOAD_FAILED')) throw new Unconfirmable(`the release channel cannot be reached for timestamp.json (${messageOf(error)})`, error)
+      throw error
+    })
     const roots = await this.rootChain(rootVersionOf(stamp.bytes))
     const stored = await readStoredTimestamp(this.options.home)
-    const { root, timestamp } = verifyTimestampUnderRoots({ roots, timestamp: stamp.bytes, now, ...stored === undefined ? {} : { stored } })
+    const request = { roots, timestamp: stamp.bytes, now, ...stored === undefined ? {} : { stored } }
+    let verifiedStamp: ReturnType<typeof verifyTimestampUnderRoots>
+    try {
+      verifiedStamp = verifyTimestampUnderRoots(request)
+    } catch (error) {
+      if (!unconfirmed) throw error
+      // Only an expired timestamp may be waived: it must still verify in every other way.
+      let stale: ReturnType<typeof verifyTimestampUnderRoots>
+      try {
+        stale = verifyTimestampUnderRoots({ ...request, allowExpired: true })
+      } catch (_notOnlyExpired) {
+        // A signature, version or root failure beyond expiry: the original refusal stands.
+        throw error
+      }
+      throw new Unconfirmable(`its timestamp is out of date (${messageOf(error)})`, error, stale.timestamp.channels[this.options.channel].release)
+    }
+    const { root, timestamp } = verifiedStamp
     const record = trust === 'record'
     if (record) {
       await writeTrustedRoot(this.options.home, roots.at(-1)!)
@@ -230,26 +310,123 @@ export class LauncherChannel implements RuntimeChannel {
       this.options.progress?.({ step: 'resolved', channel: this.options.channel, version: pointer.release })
     }
     const manifest = await this.downloader.bytes(this.source.files(pointer.release, pointer.manifest.name), pointer.manifest.length)
-    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleFileName(pointer.release)), RELEASE_LOG_BUNDLE_SIZE_LIMIT).catch((error: unknown) => {
-      // A release that publishes no bundle has no log entry to verify, which is the log check's failure, not the network's.
-      if (isInstallError(error, 'DOWNLOAD_FAILED') && error.status === 404) {
-        throw new InstallError('RELEASE_LOG_FAILED', bundleFileName(pointer.release), `release ${pointer.release} publishes no release-log bundle (the host answered 404), so its log entry cannot be verified; nothing was installed`, { cause: error })
-      }
+    const bundle = await this.bundleOf(pointer.release)
+    let verified: VerifiedChannelRelease
+    try {
+      verified = verifyChannelRelease({
+        root: root.metadata,
+        timestamp,
+        channel: this.options.channel,
+        manifest: manifest.bytes,
+        bundle: bundle.bytes,
+        ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
+      })
+    } catch (error) {
+      if (unconfirmed && isInstallError(error, 'RELEASE_NOT_OFFERED')) throw new Unconfirmable(`release ${String(target)} is not the one the ${this.options.channel} channel currently names`, error, pointer.release)
       throw error
-    })
-    const verified = verifyChannelRelease({
-      root: root.metadata,
-      timestamp,
-      channel: this.options.channel,
-      manifest: manifest.bytes,
-      bundle: bundle.bytes,
-      ...target === undefined ? {} : { target: brandString<SemanticVersion>(String(target)) },
-    })
+    }
     if (this.source.metadata === RELEASE_METADATA_ORIGIN && verified.manifest.rebuild.builders.some(builder => builder.name === LOCAL_RELEASE_BUILDER)) {
       throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${pointer.release} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs no such release`)
     }
     if (record) this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
     return { root, timestamp, pointer, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
+  }
+
+  /**
+   * Download a release's release-log bundle.
+   * @param version - the release.
+   * @returns the bundle file.
+   * @throws {InstallError} `RELEASE_LOG_FAILED` naming the file when the release publishes no bundle (the host answered
+   *   404), which is the log check's failure, not the network's; `DOWNLOAD_FAILED` otherwise.
+   */
+  private async bundleOf(version: SemanticVersion): Promise<Downloaded> {
+    return this.downloader.bytes(this.source.files(version, bundleFileName(version)), RELEASE_LOG_BUNDLE_SIZE_LIMIT).catch((error: unknown) => {
+      if (isInstallError(error, 'DOWNLOAD_FAILED') && error.status === 404) {
+        throw new InstallError('RELEASE_LOG_FAILED', bundleFileName(version), `release ${version} publishes no release-log bundle (the host answered 404), so its log entry cannot be verified; nothing was installed`, { cause: error })
+      }
+      throw error
+    })
+  }
+
+  /**
+   * {@link LauncherChannel.current} with the person's agreement: when the fresh timestamp cannot confirm the release
+   * and the channel was given an {@link UnconfirmedInstall}, install the release named by the person on its targets
+   * signature and release-log bundle alone, if the person agrees. The root chain, the signature, the bundle, a failed
+   * online log check and the floor are never relaxed, and the stored timestamp is not replaced.
+   * @param now - the clock, in Unix seconds.
+   * @param target - the version a person asked for, if any.
+   * @returns what verified.
+   * @throws {InstallError} `RELEASE_NOT_OFFERED` when the release is below the floor or the person declined; the
+   *   failures of {@link LauncherChannel.current} otherwise.
+   */
+  private async currentOrUnconfirmed(now: number, target: RuntimeVersion | undefined): Promise<Proven> {
+    try {
+      const current = await this.current(now, target, 'record')
+      return { root: current.root, release: current.pointer.release, verified: current.verified, manifestBytes: current.manifestBytes, bundleBytes: current.bundleBytes }
+    } catch (error) {
+      const unconfirmed = this.options.unconfirmed
+      if (!(error instanceof Unconfirmable) || unconfirmed === undefined) throw error
+      const named = target === undefined ? unconfirmed.version ?? error.release : brandString<SemanticVersion>(String(target))
+      if (named === undefined) throw error.refusal
+      return this.unconfirmedRelease(now, named, error.message, unconfirmed)
+    }
+  }
+
+  /**
+   * Verify a release on its signature and release-log bundle alone, after the floor and the person's agreement.
+   * @param now - the clock, in Unix seconds.
+   * @param version - the release.
+   * @param reason - why the timestamp cannot confirm it.
+   * @param unconfirmed - the floor and the question.
+   * @returns what verified.
+   * @throws {InstallError} `RELEASE_NOT_OFFERED` below the floor (when not asked about) or when the person declined;
+   *   the verification failures otherwise.
+   */
+  private async unconfirmedRelease(now: number, version: SemanticVersion, reason: string, unconfirmed: UnconfirmedInstall): Promise<Proven> {
+    const floors = [unconfirmed.floor, await storedChannelRelease(this.options.home, this.options.channel)].filter((value): value is string => value !== undefined && semver.valid(value) !== null)
+    const floor = floors.sort(semver.compare).at(-1)
+    const below = floor !== undefined && semver.valid(version) !== null && semver.lt(version, floor) ? floor : undefined
+    if (below !== undefined && unconfirmed.belowFloor !== true) {
+      throw new InstallError('RELEASE_NOT_OFFERED', `release ${version}`, `TARGET_LOWER: release ${version} is older than release ${below}, which this home runs or has seen the channel offer; the release below it is reached only with delorun recover rollback`)
+    }
+    const roots = await this.availableRoots()
+    const chain = trustedChain(roots, now)
+    const root = chain.at(-1)!
+    const manifest = await this.downloader.bytes(this.source.files(version, manifestFileName(version)), RELEASE_FILE_SIZE_LIMITS.manifest)
+    const bundle = await this.bundleOf(version)
+    const verified = verifyUnconfirmedRelease({ root: root.metadata, channel: this.options.channel, manifest: manifest.bytes, bundle: bundle.bytes, version })
+    const agreed = await unconfirmed.allow({ version, reason, ...below === undefined ? {} : { belowFloor: below } })
+    if (!agreed) throw new InstallError('RELEASE_NOT_OFFERED', `release ${version}`, `you did not agree to install release ${version} without the channel confirming it, so nothing was installed`)
+    // The roots verified; the stale timestamp is never stored, so the stored one never goes back.
+    await writeTrustedRoot(this.options.home, roots.at(-1)!)
+    await writeStoredRootChain(this.options.home, roots)
+    return { root, release: version, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
+  }
+
+  /**
+   * The root chain from the root this home trusts through every later root the source holds, without a timestamp to
+   * say how far it goes: each file verifies as the next root before the one after it is asked for. A root the source
+   * lacks ends the walk.
+   * @returns the root files, oldest first.
+   * @throws {InstallError} `INSTALL_VERIFY_FAILED` when a root file does not follow the one before it.
+   */
+  private async availableRoots(): Promise<readonly Uint8Array[]> {
+    const roots = [...await this.anchor()]
+    for (let version = newestRootVersion(roots) + 1; version <= newestRootVersion(roots) + MAX_ROOT_ROTATIONS; version++) {
+      const source = `${this.source.metadata}/root/${String(version)}.root.json`
+      const root = await this.downloader.bytes(source, RELEASE_FILE_SIZE_LIMITS.root).catch((error: unknown) => {
+        if (isInstallError(error, 'DOWNLOAD_FAILED')) return undefined
+        throw error
+      })
+      if (root === undefined) break
+      try {
+        walkRootChain([...roots.slice(-1), root.bytes])
+      } catch (error) {
+        throw new InstallError('INSTALL_VERIFY_FAILED', source, `root ${String(version)} does not follow root ${String(version - 1)}: ${messageOf(error)}`, { cause: error })
+      }
+      roots.push(root.bytes)
+    }
+    return roots
   }
 
   /**
@@ -419,4 +596,28 @@ async function sweepDownloads(staging: string): Promise<void> {
   for (const name of await readdir(staging)) {
     if (name.startsWith(DOWNLOAD_PREFIX)) await rm(join(staging, name), { recursive: true, force: true })
   }
+}
+
+/**
+ * The manifest's name for a release (contract C2's release files).
+ * @param version - the release.
+ * @returns `delorun-<version>.manifest.json`.
+ */
+export function manifestFileName(version: SemanticVersion): string {
+  return `delorun-${version}.manifest.json`
+}
+
+/**
+ * The release the home's stored timestamp names for a channel, which is the lowest a release installs without a
+ * person's explicit downgrade.
+ * @param home - the resolved Delo home.
+ * @param channel - the person's channel.
+ * @returns the version, or `undefined` when the home stores no timestamp.
+ */
+export async function storedChannelRelease(home: string, channel: ChannelName): Promise<string | undefined> {
+  const stored = await readStoredTimestamp(home)
+  if (stored === undefined) return undefined
+  const envelope = JSON.parse(Buffer.from(stored.bytes).toString('utf8')) as { signed?: { channels?: Partial<Record<ChannelName, { release?: unknown }>> } }
+  const release = envelope.signed?.channels?.[channel]?.release
+  return typeof release === 'string' ? release : undefined
 }

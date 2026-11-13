@@ -6,7 +6,11 @@
  * socket, the Connection routes and a remote device have no way to reach it: nothing in this module is imported by them
  * and no home-process request names it.
  *
- * Order: refuse a running home process; resolve and verify the release; apply the downgrade floor; ask the person;
+ * A concurrent `delorun` start cannot launch the program being set aside: the repair holds the home lock of every profile
+ * it can name from before the set-aside until the rename back or the fresh store's start check, and a start that finds
+ * the lock held is refused by the runtime it launched. The fresh store's install takes that store's own lock.
+ *
+ * Order: refuse a running home process; hold the home locks; resolve and verify the release; apply the downgrade floor; ask the person;
  * set the store aside; install; run the data guard and the start check; put the session-data copy back last. A failure
  * before the last step renames the old store back.
  *
@@ -17,11 +21,11 @@ import { join } from 'node:path'
 import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata } from '@delo/contract-release-manifest'
 import { HOME_DATA_FORMAT_FILE } from '@delo/contract-update-report'
-import { holderAlive, profileOption, readHomeLock, type Refusal } from '@delo/home'
-import { messageOf, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, verifyStoredRoot } from '@delo/install'
+import { acquireHomeLock, holderAlive, newStartId, profileOption, readHomeLock, runDirectory, type HomeLock, type Refusal } from '@delo/home'
+import { messageOf, newestManifestVersion, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, verifyStoredRoot, type UnconfirmedInstall } from '@delo/install'
 import { Redactor } from '@delo/logs'
 import { readRoot } from '@delo/release-formats/sign/verify'
-import type { ChannelRelease, StorePaths, VerifiedRuntime, InstallRequest } from '@delo/runtime-store'
+import { parseRuntimeVersion, type ChannelRelease, type StorePaths, type VerifiedRuntime, type InstallRequest } from '@delo/runtime-store'
 import { readCopyRecord, readDataFormats, readHomeDataFormat, relateHomeData, restoreDataCopy, RUNTIMES_SET_ASIDE_PREFIX } from '@delo/update/home-data'
 import semver from 'semver'
 import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal } from './refusals.ts'
@@ -109,6 +113,33 @@ export interface RepairOptions {
   readonly output: LauncherOutput
   /** The clock. */
   readonly now: () => Date
+  /** Whether the channel already asked the person about a release below the floor; {@link repairUnconfirmed}'s `asked`. */
+  readonly belowFloorAsked?: () => boolean
+}
+
+/**
+ * What `--from` may relax in a repair, and the question that gates it: the timestamp's freshness, and a `--release` the
+ * person names below the floor. Both need the person's yes at a terminal; neither is relaxed for the channel's current
+ * release, and no signature, release-log or root check is.
+ * @param line - the parsed flags.
+ * @param confirm - asks the person; `undefined` when there is no terminal.
+ * @returns the channel's option and whether it asked about the floor; `undefined` without `--from`.
+ */
+export async function repairUnconfirmed(line: RepairLine, confirm: RepairOptions['confirm']): Promise<{ readonly install: UnconfirmedInstall, readonly asked: () => boolean } | undefined> {
+  if (line.from === undefined) return undefined
+  let askedFloor = false
+  const version = await newestManifestVersion(line.from)
+  const install: UnconfirmedInstall = {
+    ...version === undefined ? {} : { version },
+    belowFloor: line.release !== undefined,
+    allow: async ({ version: release, reason, belowFloor }) => {
+      if (belowFloor !== undefined) askedFloor = true
+      const answer = await confirm(`The release channel cannot confirm that ${release} is current (${reason}).${belowFloor === undefined ? '' : ` Release ${release} is older than release ${belowFloor}, which this home has installed or seen the channel offer.`} Install ${release} from ${line.from} on its signature and release-log entry alone? [y/N]`)
+      assertAnswered(answer)
+      return true
+    },
+  }
+  return { install, asked: () => askedFloor }
 }
 
 /** A refusal that stops a repair before it changes anything it cannot put back. */
@@ -154,6 +185,43 @@ function refuseWhileRunning(home: string, entries: readonly string[]): void {
       })
     }
   }
+}
+
+/**
+ * Take the home lock of the launcher's profile and of every other profile whose run directory holds a lock record, so
+ * no runtime starts while the program store is set aside. A profile whose lock a live process holds is refused as
+ * running; a stale lock is replaced.
+ * @param options - the repair's inputs.
+ * @param entries - the names under the home's `run/`.
+ * @returns the held locks, which the caller releases.
+ * @throws {RepairRefusal} `HOME_RUNNING` when a start took a lock after the check above.
+ */
+async function holdHomeLocks(options: RepairOptions, entries: readonly string[]): Promise<HomeLock[]> {
+  const profiles = new Set([options.profile])
+  for (const name of entries) {
+    try {
+      if (readHomeLock(join(options.home, DELO_HOME_ENTRIES.run, name)) !== undefined) profiles.add(name)
+    } catch (_notALock) {
+      // A directory under run/ that is not a profile's run directory.
+    }
+  }
+  const held: HomeLock[] = []
+  const runtime = await options.store.pointers().then(pointers => pointers.current, () => parseRuntimeVersion('0.0.0')!)
+  try {
+    for (const profile of profiles) {
+      const directory = runDirectory(options.home, profile)
+      await mkdir(directory, { recursive: true, mode: 0o700 })
+      held.push(await acquireHomeLock({ runDirectory: directory, runtime, probe: () => Promise.resolve('silent'), startId: newStartId() }))
+    }
+  } catch (error) {
+    for (const lock of held) lock.release()
+    throw new RepairRefusal({
+      lead: 'Delo did not repair: a Delo process started for a profile while the repair began, so the program cannot be replaced.',
+      reason: `HOME_RUNNING: ${messageOf(error)}`,
+      remedies: ['Stop it, then run the repair again: delorun stop'],
+    })
+  }
+  return held
 }
 
 /** The release the stored timestamp names for the stable channel, which is the lowest a repair installs. */
@@ -203,8 +271,9 @@ export async function runRepair(options: RepairOptions): Promise<number> {
   const log: Record<string, unknown> = { time: options.now().toISOString(), command: ['repair', ...options.line.release === undefined ? [] : ['--release', options.line.release], ...options.line.from === undefined ? [] : ['--from', options.line.from], ...options.line.restoreCopy ? ['--restore-copy'] : [], ...options.line.resetTrust ? ['--reset-trust'] : []].join(' '), moved: [] as string[], checks: [] as string[] }
   let outcome = 'refused'
   const undo: Undo[] = []
+  const holds: HomeLock[] = []
   try {
-    await repair(options, log, undo)
+    await repair(options, log, undo, holds)
     outcome = 'repaired'
     return LAUNCHER_EXIT.ok
   } catch (error) {
@@ -214,6 +283,7 @@ export async function runRepair(options: RepairOptions): Promise<number> {
     options.output.stderr(refusal.text)
     return refusal.exit
   } finally {
+    for (const hold of holds) hold.release()
     log.outcome = outcome
     await writeLog(options.home, log).catch((error: unknown) => options.output.stderr(`Delo could not write logs/repair.log: ${messageOf(error)}\n`))
   }
@@ -241,12 +311,14 @@ function say(options: RepairOptions, log: Record<string, unknown>, text: string)
  * @param options - the repair's inputs.
  * @param log - the run's record.
  * @param undo - collects the steps that put a change back.
+ * @param holds - collects the home locks, which the caller releases last.
  * @throws {RepairRefusal} for every refusal the repair itself makes; the store's and install's own errors otherwise.
  */
-async function repair(options: RepairOptions, log: Record<string, unknown>, undo: Undo[]): Promise<void> {
+async function repair(options: RepairOptions, log: Record<string, unknown>, undo: Undo[], holds: HomeLock[]): Promise<void> {
   const { home, line, store } = options
   const entries = await readdir(join(home, DELO_HOME_ENTRIES.run)).catch(() => [] as string[])
   refuseWhileRunning(home, entries)
+  holds.push(...await holdHomeLocks(options, entries))
   const runtimes = join(home, DELO_HOME_ENTRIES.runtimes)
   const trust = join(home, DELO_HOME_ENTRIES.trust)
   const stampNow = stamp(options.now())
@@ -266,7 +338,13 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
 
   const release = await options.channel.resolve(line.release)
   const floor = [installed, floorFromTimestamp].filter((value): value is string => value !== undefined && semver.valid(value) !== null).sort(semver.compare).at(-1)
-  if (floor !== undefined && semver.lt(release.version, floor)) {
+  const below = floor !== undefined && semver.lt(release.version, floor)
+  if (below && line.release !== undefined && line.from !== undefined) {
+    if (options.belowFloorAsked?.() !== true) {
+      const lower = await options.confirm(`Release ${release.version} is older than release ${floor}, which this home has installed or seen the channel offer, and you named it. Install ${release.version} from ${line.from} on its signature and release-log entry alone? [y/N]`)
+      assertAnswered(lower)
+    }
+  } else if (below) {
     throw new RepairRefusal({
       lead: `Delo did not repair: release ${release.version} is older than release ${floor}, which this home has already installed or seen the channel offer.`,
       reason: 'TARGET_LOWER',
@@ -333,7 +411,7 @@ async function dataGuard(options: RepairOptions, version: RuntimeVersion, runtim
     return undefined
   }
   if (relation === 'unknown') {
-    say(options, log, 'This home has no data-format record, as a home made before the record existed has none, so Delo cannot tell which release wrote its chats. Delo continued.')
+    say(options, log, `This home has no data-format record, as a home made before the record existed has none, so Delo cannot tell which release wrote its chats. It assumes they are in the formats release ${version} reads, and continued.`)
     return undefined
   }
   const writer = record?.delo ?? 'a newer release'

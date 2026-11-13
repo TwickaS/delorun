@@ -22,7 +22,7 @@ import { tilesTransport } from '@delo/release-verify/transport'
 import type { DeloLogger } from '@delo/logs'
 import { FULL_CHECK_DAYS_ENV, parseRuntimeVersion, resolveFullCheckDays, RuntimeStore, StorePaths, type ChannelRelease, type LaunchCommand } from '@delo/runtime-store'
 import { createInterface } from 'node:readline/promises'
-import { parseRepairLine, runRepair, type RepairLine } from './repair.ts'
+import { parseRepairLine, repairUnconfirmed, runRepair, type RepairLine } from './repair.ts'
 import { runLauncher, launcherProfile, runtimeCommand, type LauncherOutput, type LauncherStartCheck, type SpawnRuntime } from './launcher.ts'
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
@@ -362,14 +362,17 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     const store = new RuntimeStore({ home: home.path, platform, logger })
     if (repairLine !== undefined) {
       const manual = repairLine.from === undefined ? undefined : manualSource(repairLine.from)
+      const confirm = context.confirm ?? terminalConfirm
+      const unconfirmed = await repairUnconfirmed(repairLine, confirm)
       return await runRepair({
+        belowFloorAsked: unconfirmed?.asked ?? (() => false),
         home: home.path,
         profile,
         line: repairLine,
         roots,
         store,
-        channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, { home: home.path, platform, roots, channel: 'stable', log: transportFor, source: manual?.source ?? channel.source, downloader: manual?.downloader ?? downloader, progress: report }),
-        confirm: context.confirm ?? terminalConfirm,
+        channel: new RecordingChannel(context.constants ?? BUILD_CONSTANTS, { home: home.path, platform, roots, channel: 'stable', log: transportFor, source: manual?.source ?? channel.source, downloader: manual?.downloader ?? downloader, progress: report, ...unconfirmed === undefined ? {} : { unconfirmed: unconfirmed.install } }),
+        confirm,
         startCheck: async (version, root) => {
           await store.checkRuntime(version, root)
           const check = await startCheck({ home: home.path, platform, version, root, transport: transportFor(root), now: Math.floor((context.now ?? Date.now)() / 1000) })

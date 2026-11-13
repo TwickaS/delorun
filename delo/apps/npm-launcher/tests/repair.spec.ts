@@ -130,6 +130,37 @@ describe('delorun repair', () => {
     }
   })
 
+  it('holds the home lock from before the set-aside to the end, so a start racing the repair is refused and never reads the set-aside store', async () => {
+    await mkdir(join(home, 'run/default'), { recursive: true })
+    const attempts: string[] = []
+    const race = async (when: string): Promise<void> => {
+      const outcome = await acquireHomeLock({ runDirectory: join(home, 'run/default'), runtime: version('0.1.0'), probe: () => Promise.resolve('silent'), startId: newStartId() }).then(
+        (lock) => { lock.release(); return 'started' },
+        (error: unknown) => (error as { code?: string }).code ?? 'failed')
+      attempts.push(`${when}: ${outcome}`)
+    }
+    const base = options()
+    const confirm = base.confirm
+    expect(await runRepair({
+      ...base,
+      confirm: async (question) => { await race('before the set-aside'); return confirm(question) },
+      startCheck: async () => {
+        await race('after the set-aside')
+        expect((await readdir(home)).some(name => name.startsWith('runtimes.set-aside-'))).toBe(true)
+      },
+    })).toBe(0)
+    expect(attempts).toEqual(['before the set-aside: HOME_UNRESPONSIVE', 'after the set-aside: HOME_UNRESPONSIVE'])
+    await race('after the repair')
+    expect(attempts.at(-1)).toBe('after the repair: started')
+  })
+
+  it('releases the home lock when the repair refuses', async () => {
+    await mkdir(join(home, 'run/default'), { recursive: true })
+    expect(await runRepair(options({ answer: false }))).toBe(1)
+    const lock = await acquireHomeLock({ runDirectory: join(home, 'run/default'), runtime: version('0.1.0'), probe: () => Promise.resolve('silent'), startId: newStartId() })
+    lock.release()
+  })
+
   it('refuses without a terminal and when the person declines, moving nothing', async () => {
     const before = await tree(join(home, 'runtimes'))
     expect(await runRepair(options({ answer: undefined }))).toBe(1)
@@ -169,6 +200,7 @@ describe('delorun repair', () => {
     await rm(join(home, 'data-format.json'))
     expect(await runRepair(options())).toBe(0)
     expect(out.join('')).toContain('no data-format record')
+    expect(out.join('')).toContain('assumes they are in the formats release 0.1.1 reads')
   })
 
   it('puts the copy back with --restore-copy, setting today\'s chats aside', async () => {
@@ -188,6 +220,24 @@ describe('delorun repair', () => {
     expect(await runRepair(options({ line: { ...PLAIN, restoreCopy: true } }))).toBe(1)
     expect(err.join('')).toContain('keeps no chat-data copy for Delo 0.2.0')
     expect(await readFile(join(home, 'sessions/chat-1/log.jsonl'), 'utf8')).toBe('a chat')
+  })
+
+  it('installs a release the person named below the floor from --from only after an extra yes, and refuses without a terminal', async () => {
+    const line = { ...PLAIN, release: version('0.1.0'), from: '/downloads/delorun-0.1.0' }
+    expect(await runRepair(options({ release: '0.1.0', installed: '0.2.0', line, answer: undefined }))).toBe(1)
+    expect(err.join('')).toContain('NO_TERMINAL')
+    expect(await readFile(join(home, 'runtimes/store.json'), 'utf8')).toBe('old store')
+    asked.length = 0
+    err.length = 0
+    expect(await runRepair(options({ release: '0.1.0', installed: '0.2.0', line }))).toBe(0)
+    expect(asked[0]).toMatch(/Release 0\.1\.0 is older than release 0\.2\.0.*you named it/su)
+    expect(asked).toHaveLength(2)
+  })
+
+  it('does not ask twice when the channel already asked about the floor', async () => {
+    const line = { ...PLAIN, release: version('0.1.0'), from: '/downloads/delorun-0.1.0' }
+    expect(await runRepair({ ...options({ release: '0.1.0', installed: '0.2.0', line }), belowFloorAsked: () => true })).toBe(0)
+    expect(asked).toHaveLength(1)
   })
 
   it('refuses a release below the highest the home has installed, and points at rollback', async () => {

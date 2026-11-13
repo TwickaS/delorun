@@ -190,7 +190,7 @@ describe('runUpdate', () => {
    */
   async function update(args: readonly string[], prompts: Partial<UpdatePrompts> = {}): Promise<number | undefined> {
     const context = { env: { ...process.env, HOME: osHome, USERPROFILE: osHome, DELO_HOME: home }, stdout: (text: string) => { output.stdout += text }, stderr: (text: string) => { output.stderr += text } }
-    const answers: UpdatePrompts = { confirm: async () => Promise.reject(new Error('the command asked to confirm')), copy: async () => Promise.reject(new Error('the command asked about the copy')), ...prompts }
+    const answers: UpdatePrompts = { confirm: async () => Promise.reject(new Error('the command asked to confirm')), copy: async () => Promise.reject(new Error('the command asked about the copy')), agree: async () => Promise.reject(new Error('the command asked to agree')), ...prompts }
     return runUpdate(args, context, answers)
   }
 

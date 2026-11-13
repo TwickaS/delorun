@@ -6,10 +6,10 @@
  *
  * @module @delo/install
  */
-export { bundleFileName, LauncherChannel, RELEASE_SOURCE, type LauncherChannelOptions, type NewestRelease, type ReleaseSource } from './channel.ts'
+export { bundleFileName, LauncherChannel, manifestFileName, RELEASE_SOURCE, storedChannelRelease, type LauncherChannelOptions, type NewestRelease, type ReleaseSource, type UnconfirmedInstall, type UnconfirmedQuestion } from './channel.ts'
 export { Downloader, RELEASE_HOSTS, RELEASE_TIMINGS, type Downloaded, type DownloaderOptions, type DownloadTimings, type HostRule } from './download.ts'
 export { InstallError, isInstallError, messageOf, type InstallErrorCode, type InstallLayoutCode } from './errors.ts'
-export { manualSource, type ManualSource } from './manual-source.ts'
+export { manualSource, newestManifestVersion, type ManualSource } from './manual-source.ts'
 export { installDescriber, installRemedies } from './refusal.ts'
 export { formatSize, progressLines, type InstallerProgress, type InstallProgress } from './progress.ts'
 export { extractArchive, extractionPath, type ExtractRequest } from './extract.ts'
@@ -35,7 +35,10 @@ export {
   verifyDownloadedFile,
   verifyPlatformFiles,
   verifyStoredRoot,
+  trustedChain,
   verifyTimestampUnderRoots,
+  verifyUnconfirmedRelease,
+  type UnconfirmedReleaseRequest,
   type FileListRequest,
   type ReleaseRequest,
   type RootAndTimestamp,
