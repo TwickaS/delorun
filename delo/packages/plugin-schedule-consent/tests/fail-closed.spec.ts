@@ -38,6 +38,7 @@ describe('a schedule consent row whose service crashed', () => {
     const ctx = await mount(true)
     const consent = ctx.get('scheduleConsent')
     expect(consent).toBeDefined()
+    expect(Reflect.get(consent, Symbol.for('delo.fail-closed-stub'))).toBe(true)
     const verdict = consent?.reviewDelivery(delivery)
     expect(verdict?.kind).toBe('refuse')
     const reason = verdict?.kind === 'refuse' ? verdict.reason : ''

@@ -11,6 +11,7 @@
 export { HomeLayoutError } from './errors.ts'
 export { codedReason, describeFailure, homeLayoutDescriber, profileOption, refusalDescriber, renderRefusal, type ErrorClass, type Refusal, type RefusalContext, type RefusalDescriber, type TextRedactor } from './refusal.ts'
 export { claimFatalHandler, FATAL_EXIT, installLastResort, recordFatal, renderFatal, UNRECORDED_POINTER, type FatalEvent, type FatalProcess, type FatalRecord, type FatalReportOptions, type LastResortOptions } from './last-resort.ts'
+export { FAIL_CLOSED_STUB, FAIL_CLOSED_STUB_KEY, isFailClosedStub, type FailClosedStub } from './fail-closed.ts'
 export { resolveDeloHome, type DeloHome } from './resolve.ts'
 export { shellQuote } from './shell-quote.ts'
 export { checkPrivateDirectory, checkPrivateDirectorySync, ensureHomeTree, runDirectory } from './tree.ts'

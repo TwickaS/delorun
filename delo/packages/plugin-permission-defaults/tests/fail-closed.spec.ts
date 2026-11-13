@@ -79,6 +79,15 @@ describe('a permission-defaults row whose network service failed', () => {
     expect(ctx.sandboxNetwork({ workspaceRoot: '/elsewhere' })).toEqual({ mode: 'off' })
     expect(ctx.sandboxPolicy.resolve().network).toEqual({ mode: 'off' })
   })
+
+  it('refuses full access although the permission service started and its own guard went with the failed row', async () => {
+    crash(CommandNetwork)
+    const ctx = await mount(true)
+    const guard = ctx.get('sandboxModeGuard')
+    expect(guard?.(session, 'danger-full-access')).toContain(PERMISSION_DEFAULTS_ROW)
+    expect(guard?.(session, 'workspace-write')).toBeUndefined()
+    expect(Reflect.get(guard!, Symbol.for('delo.fail-closed-stub'))).toBe(true)
+  })
 })
 
 describe('a permission-defaults row whose permission service failed', () => {

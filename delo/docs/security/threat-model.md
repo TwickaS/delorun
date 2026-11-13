@@ -259,4 +259,4 @@ Each limit below is stated in the contract that owns it. `delorun verify` report
 
 ## Consent and network seams when their service fails
 
-A consent or network row that is on but whose service failed to start fails closed: the MCP client refuses every stdio server, the external-agent and scheduled-task consents mount a service that refuses every start or delivery, and the per-workspace network gives confined commands no network. With the row's switch off, the seam is absent and behaves as stock.
+A consent or network row that is on but whose service failed to start fails closed: the MCP client refuses every stdio server, the external-agent and scheduled-task consents mount a service that refuses every start or delivery, and the per-workspace network gives confined commands no network. With the row's switch off, the seam is absent and behaves as stock. A stand-in carries a marker that `delorun`'s boot check reads, so the check still reports the row as failed and the Host does not start as healthy. A scheduled task the stand-in refuses stays paused until the row works again.

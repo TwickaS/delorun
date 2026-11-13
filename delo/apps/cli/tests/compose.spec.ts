@@ -237,6 +237,19 @@ describe('the services of the required rows', { timeout: 60_000 }, () => {
   })
 })
 
+describe('a booted Host whose consent row mounted a fail-closed stand-in', { timeout: 60_000 }, () => {
+  it.each([
+    ['delo-delegation-consent', 'delegationConsent'],
+    ['delo-schedule-consent', 'scheduleConsent'],
+    ['delo-permission-defaults', 'sandboxModeGuard'],
+    ['delo-permission-defaults', 'sandboxNetwork'],
+  ])('refuses to report %s healthy when its %s is the stand-in', async (row, service) => {
+    const composed = await compose()
+    const message = await refused(() => { assertDeloInvariants(composed, booted(composed, [], { [service]: { row, failClosed: true } })) })
+    expect(message).toContain(`${service} is a fail-closed stand-in`)
+  })
+})
+
 describe('a booted Host', { timeout: 60_000 }, () => {
   it('refuses a Delo row that did not start or is disabled, and a missing turn gate', async () => {
     const composed = await compose()

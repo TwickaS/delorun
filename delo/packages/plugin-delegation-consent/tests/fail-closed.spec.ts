@@ -49,6 +49,7 @@ describe('a delegation consent row whose service crashed', () => {
     const running = await mount(true)
     const consent = running.get('delegationConsent') as DelegationConsentService | undefined
     expect(consent).toBeDefined()
+    expect(Reflect.get(consent!, Symbol.for('delo.fail-closed-stub'))).toBe(true)
     const verdict = await consent!.review(review)
     expect(verdict.kind).toBe('refuse')
     const reason = verdict.kind === 'refuse' ? verdict.reason : ''

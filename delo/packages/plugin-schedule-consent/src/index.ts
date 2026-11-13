@@ -141,6 +141,8 @@ export class ScheduleConsent extends Service implements ScheduleConsentService {
   }
 }
 
+const FAILED_STUB: unique symbol = Symbol.for('delo.fail-closed-stub') as typeof FAILED_STUB
+
 /** The row that mounts this plugin in Delo's composition, named in a refusal. */
 export const SCHEDULE_CONSENT_ROW = 'delo-schedule-consent'
 
@@ -149,6 +151,8 @@ export const SCHEDULE_CONSENT_ROW = 'delo-schedule-consent'
  * refuses every delivery, so a crashed consent never reads as a composition without one.
  */
 export class FailedScheduleConsent extends Service implements ScheduleConsentService {
+  /** Read by the CLI's boot invariant; the key is `FAIL_CLOSED_STUB_KEY` of `@delo/home`, which this package does not depend on. */
+  readonly [FAILED_STUB] = true as const
   private readonly failure: string
 
   /**

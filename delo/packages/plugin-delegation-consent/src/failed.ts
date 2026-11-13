@@ -4,6 +4,7 @@
  *
  * @module @delo/plugin-delegation-consent/failed
  */
+import { FAIL_CLOSED_STUB } from '@delo/home'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { DelegationConsentService, ExternalDelegationReview, ExternalDelegationVerdict } from '@deepseek-ai/dsh-subagent'
 
@@ -21,6 +22,8 @@ export function failedConsentRefusal(row: string, provider: string, reason: stri
 
 /** The `delegationConsent` service that refuses every start while the real service is down. */
 export class FailedDelegationConsent extends Service implements DelegationConsentService {
+  /** Read by the CLI's boot invariant. */
+  readonly [FAIL_CLOSED_STUB] = true as const
   private readonly row: string
   private readonly failure: string
 
