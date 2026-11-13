@@ -261,13 +261,14 @@ export function withProfile(args: readonly string[], profile: string): string[] 
 }
 
 /**
- * The arguments that resolve an installing operation into the lockfile without installing anything.
+ * The arguments that resolve an installing operation into the lockfile without installing anything or running any
+ * script: pnpm runs an approved git dependency's `prepare` while it resolves unless scripts are ignored.
  * @param args - the arguments after `plugin`.
- * @returns them with `--lockfile-only` added and `--frozen-lockfile` removed.
+ * @returns them with `--lockfile-only` and `--ignore-scripts` added and `--frozen-lockfile` removed.
  */
 export function resolveOnly(args: readonly string[]): string[] {
   const kept = args.filter(argument => argument !== '--frozen-lockfile')
-  return kept.includes('--lockfile-only') ? kept : [...kept, '--lockfile-only']
+  return [...kept, ...['--lockfile-only', '--ignore-scripts'].filter(flag => !kept.includes(flag))]
 }
 
 /**

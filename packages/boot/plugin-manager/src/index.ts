@@ -1277,8 +1277,9 @@ export class PluginManager extends TypertRemoteService {
           result.registries.push(registry)
           used = registry
           announce('installing', { registry, index: index + 1, total: plan.length })
-          // With an audit, resolution only: no file is fetched into the profile and no script runs until it answered.
-          const resolveOnly = audited ? ['--lockfile-only'] : []
+          // With an audit, resolution only: no file is fetched into the profile and no script runs until it answered;
+          // pnpm runs an approved git dependency's `prepare` even while it only resolves, unless scripts are ignored.
+          const resolveOnly = audited ? ['--lockfile-only', '--ignore-scripts'] : []
           run = await this.runPnpm(['add', installSpec, ...resolveOnly, ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)], control.abort.signal, requestId)
           result.packageResult = run
           if (stopped()) throw new InstallCancelledError()

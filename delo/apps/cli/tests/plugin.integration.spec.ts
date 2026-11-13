@@ -8,11 +8,11 @@
  * arguments and writes the profile files a package operation would; a loopback stand-in answers for the advisory feed
  * and the registry.
  */
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DATA_USERS_DIRECTORY } from '@delo/contract-home-layout'
 import { reconcileProfile, recordPath } from '@delo/plugin-install-check/check'
@@ -143,7 +143,7 @@ describe('delorun plugin', () => {
     const runs: Run[] = []
     const before = readFileSync(join(profileDir, 'package.json'), 'utf8')
     expect(await plugin(['add', 'good-plugin'], context, dependencies(runs))).toBe(0)
-    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only'], ['plugin', '--profile', 'default', 'install', '--frozen-lockfile']])
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only', '--ignore-scripts'], ['plugin', '--profile', 'default', 'install', '--frozen-lockfile']])
     // The resolution activates no bundle; the installation compares and restores against the profile before it.
     expect(runs.map(run => run.operation)).toEqual([{ activateNewBundles: false }, { baseline: { manifest: before, lockfile: undefined } }])
     expect(errors.join('')).toBe([
@@ -171,7 +171,7 @@ describe('delorun plugin', () => {
     standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'critical', '*')] }
     const runs: Run[] = []
     expect(await plugin(['add', 'good-plugin'], context, dependencies(runs))).toBe(EXIT.failed)
-    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only']])
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only', '--ignore-scripts']])
     expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(before)
     expect(existsSync(join(profileDir, 'pnpm-lock.yaml'))).toBe(false)
     expect(existsSync(join(profileDir, 'node_modules'))).toBe(false)
@@ -189,7 +189,7 @@ describe('delorun plugin', () => {
     const runs: Run[] = []
     expect(await plugin(['add', 'good-plugin', '--allow-advisory', 'GHSA-2222-3333-4444', '--registry=http://registry.example.test/'], context, dependencies(runs))).toBe(0)
     expect(runs.map(run => run.argv)).toEqual([
-      ['plugin', '--profile', 'default', 'add', 'good-plugin', '--registry=http://registry.example.test/', '--lockfile-only'],
+      ['plugin', '--profile', 'default', 'add', 'good-plugin', '--registry=http://registry.example.test/', '--lockfile-only', '--ignore-scripts'],
       ['plugin', '--profile', 'default', 'install', '--frozen-lockfile', '--registry=http://registry.example.test/'],
     ])
     expect(errors.join('')).toContain('  critical: GHSA-2222-3333-4444 (critical) affects good-plugin@1.0.0')
@@ -223,7 +223,7 @@ describe('delorun plugin', () => {
     vi.mocked(reconcileProfile).mockRejectedValueOnce(new Error('the advisory feed answered with garbage'))
     const runs: Run[] = []
     expect(await plugin(['add', 'good-plugin'], context, dependencies(runs))).toBe(EXIT.failed)
-    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only']])
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only', '--ignore-scripts']])
     expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(manifest)
     expect(readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')).toBe(lockfile)
     expect(errors.join('')).toContain('delorun: the plugins this command installs could not be checked, so they are refused: the advisory feed answered with garbage. Fix the cause, then run the command again.\n')
@@ -241,7 +241,7 @@ describe('delorun plugin', () => {
       return Promise.resolve(0)
     } }
     expect(await plugin(['add', 'good-plugin'], context, unreadable)).toBe(EXIT.failed)
-    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only']])
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only', '--ignore-scripts']])
     expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(manifest)
     expect(existsSync(join(profileDir, 'pnpm-lock.yaml'))).toBe(false)
     expect(errors.join('')).toContain('could not be checked, so they are refused: the lockfile is not YAML')
@@ -274,7 +274,7 @@ describe('delorun plugin', () => {
     const removing: PluginDependencies = { ...dependencies(runs), runUpstream: (argv) => { runs.push({ argv, registered: [] }); writeProfileFiles(profileDir, []); return Promise.resolve(0) } }
     expect(await plugin(['remove', 'good-plugin'], context, removing)).toBe(0)
     expect(runs.map(run => run.argv)).toEqual([
-      ['plugin', '--profile', 'default', 'remove', 'good-plugin', '--lockfile-only'],
+      ['plugin', '--profile', 'default', 'remove', 'good-plugin', '--lockfile-only', '--ignore-scripts'],
       ['plugin', '--profile', 'default', 'install', '--frozen-lockfile'],
     ])
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
@@ -285,7 +285,7 @@ describe('delorun plugin', () => {
     writeEmptyProfile()
     const runs: Run[] = []
     expect(await plugin(['add', 'good-plugin', '--lockfile-only'], context, dependencies(runs))).toBe(0)
-    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only']])
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only', '--ignore-scripts']])
     expect(errors.join('')).toBe('delorun: checked good-plugin 1.0.0: no warnings\n')
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
   })
@@ -399,6 +399,28 @@ describe('delorun plugin with the real pnpm', { timeout: 120_000 }, () => {
     expect(existsSync(join(profileDir, 'node_modules', 'evil-plugin'))).toBe(false)
     expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(before)
     expect(errors.join('')).toContain('delorun: refused evil-plugin 1.0.0: a known critical advisory affects it, so it was not installed:\n')
+  })
+
+  it('runs no approved git prepare script while it resolves: a lockfile-only run leaves no marker', async () => {
+    const repository = join(osHome, 'repository')
+    const marker = join(osHome, 'prepare-ran')
+    mkdirSync(repository)
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: join(osHome, 'git.config'), GIT_CONFIG_NOSYSTEM: '1' }
+    writeFileSync(env.GIT_CONFIG_GLOBAL, '')
+    const git = (args: string[]): string => execFileSync('git', args, { cwd: repository, env, encoding: 'utf8' })
+    git(['init', '--initial-branch=main'])
+    writeFileSync(join(repository, 'package.json'), JSON.stringify({ name: 'git-prepared', version: '1.0.0', scripts: { prepare: 'node build.cjs' } }))
+    writeFileSync(join(repository, 'build.cjs'), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
+    git(['add', '.'])
+    git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture'])
+    const spec = `git+${pathToFileURL(repository).href}`
+    // The prepare script is approved under its commit-exact key, so only the resolution's own flags keep it from running.
+    writeFileSync(join(profileDir, 'pnpm-workspace.yaml'), `packages:\n  - .\nnodeLinker: hoisted\nautoInstallPeers: false\nstoreDir: ${join(osHome, 'pnpm-store')}\nallowBuilds:\n  '${`git-prepared@${spec}#${git(['rev-parse', 'HEAD']).trim()}`}': true\n`)
+    vi.stubEnv('GIT_CONFIG_GLOBAL', env.GIT_CONFIG_GLOBAL)
+    vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1')
+    expect(await plugin(['add', spec, '--lockfile-only'], context, realPnpm())).toBe(0)
+    expect(readFileSync(join(profileDir, 'pnpm-lock.yaml'), 'utf8')).toContain('git-prepared')
+    expect(existsSync(marker)).toBe(false)
   })
 
   it('runs the approved postinstall only after the check passed, and records the installed files after it', async () => {

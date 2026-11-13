@@ -873,6 +873,39 @@ it('runs no allowed install script of a package the audit refuses once the lockf
   expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
 })
 
+it('runs no approved git prepare script while it resolves a package the audit then refuses', { timeout: 30_000 }, async () => {
+  // Both the fixture's Git and the manager's pnpm child read only this empty configuration.
+  const env = { GIT_CONFIG_GLOBAL: '', GIT_CONFIG_NOSYSTEM: '1' }
+  const pnpm = fileURLToPath(new URL('../../../../apps/desktop/node_modules/pnpm/bin/pnpm.mjs', import.meta.url))
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, profile } = await fixture('startup', false, auditing('refused', calls), {}, { command: process.execPath, args: ['--expose-internals', pnpm], env })
+  const repository = join(profile.cwd, 'repository')
+  const marker = join(profile.cwd, 'prepare-ran')
+  mkdirSync(repository)
+  env.GIT_CONFIG_GLOBAL = join(profile.cwd, 'git.config')
+  writeFileSync(env.GIT_CONFIG_GLOBAL, '')
+  const git = (args: string[]) => execa('git', args, { cwd: repository, env })
+  await git(['init', '--initial-branch=main'])
+  writeFileSync(join(repository, 'package.json'), JSON.stringify({ name: '@test/git-prepared', version: '1.0.0',
+    scripts: { prepare: 'node build.cjs' }, dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  writeFileSync(join(repository, 'build.cjs'), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
+  writeFileSync(join(repository, 'cordis.patch.yml'), '[]\n')
+  await git(['add', '.'])
+  await git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture bundle'])
+  const commit = (await git(['rev-parse', 'HEAD'])).stdout.trim()
+  const spec = `git+${pathToFileURL(repository).href}`
+  writeFileSync(join(dir, 'package.json'), '{"name":"git-prepare-fixture","private":true}\n')
+  const policy = parseDocument(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8'))
+  policy.set('storeDir', join(profile.cwd, 'store'))
+  // The prepare script is approved under its commit-exact key, so only the resolution's own flags keep it from running.
+  policy.set('allowBuilds', { [`@test/git-prepared@${spec}#${commit}`]: true })
+  writeFileSync(join(dir, 'pnpm-workspace.yaml'), String(policy))
+  const refused = await manager.installBundle(spec, { enabled: false })
+  expect(refused, JSON.stringify(refused)).toMatchObject({ application: 'failed', error: { code: 'audit-refused' } })
+  expect(calls.map(call => call.pending)).toEqual(['install'])
+  expect(existsSync(marker)).toBe(false)
+})
+
 it('offers approval for a real git-hosted package pnpm refused to prepare', async () => {
   // Both the fixture's Git and the manager's pnpm child read only this empty configuration.
   const env = { GIT_CONFIG_GLOBAL: '', GIT_CONFIG_NOSYSTEM: '1' }
@@ -1868,7 +1901,7 @@ it('resolves, audits, then installs when an audit is composed, and runs one pnpm
   const withAudit = await fixture('live', false, auditing('needs-acceptance', calls))
   const split = installsAudited(withAudit.dir, withAudit.bundle)
   expect(await withAudit.manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })).toMatchObject({ application: 'applied' })
-  expect(split.mock.calls.map(call => call[1])).toEqual([['add', 'audited', '--lockfile-only'], ['install', '--frozen-lockfile']])
+  expect(split.mock.calls.map(call => call[1])).toEqual([['add', 'audited', '--lockfile-only', '--ignore-scripts'], ['install', '--frozen-lockfile']])
   split.mockRestore()
   const stock = await fixture('live')
   const single = installsAudited(stock.dir, stock.bundle)
