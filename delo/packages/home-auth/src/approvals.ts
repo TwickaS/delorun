@@ -2,13 +2,19 @@
  * Approval requests on a route whose identity factor is `tailnet-membership`, and the approval window that admits them
  * (contract C5, "Approval request" and "Approval window").
  *
- * - **The window.** A request is accepted only while the person has opened a window at the home's own computer: the
- *   loopback studio's "Add a device" or `delorun devices approve`. A window lasts 5 minutes and closes at the first
- *   approval. Outside a window the route answers `APPROVALS_CLOSED` without reading the body, because every request on
- *   this route has the source `127.0.0.1` and a standing queue could be kept full by any device on the tailnet.
- * - **The request.** Bound to the listener's studio address, it expires 5 minutes after it was created; a home holds at
- *   most 5 pending, and a source makes at most 10 a minute. Its state is read with its request secret at most once
- *   every 2 seconds.
+ * - **The window.** A request is accepted while the person has opened a window at the home's own computer: the
+ *   loopback studio's "Add a device" or `delorun devices approve`. A window lasts the configured minutes (5 by default)
+ *   and closes at the first approval.
+ * - **Without a window.** A request is accepted only when it names a Tailscale identity that the `pairing`
+ *   configuration allows to ask: the computer's own user by default, any user on the tailnet, or none
+ *   ({@link mayAskWithoutWindow}); each identity has at most the configured number waiting. Any other request outside a
+ *   window is answered `APPROVALS_CLOSED` without reading the body, because every request on this route has the source
+ *   `127.0.0.1` and a standing queue could be kept full by any device on the tailnet. The identity is a quota and
+ *   display hint: a local process can send it too, and gains only a waiting request that needs the code from its own
+ *   screen.
+ * - **The request.** Bound to the listener's studio address, it expires after the configured minutes (5 by default); a
+ *   home holds at most 5 pending, and a source makes at most 10 a minute. Its state is read with its request secret at
+ *   most once every 2 seconds.
  * - **The local approval.** The person chooses one pending request and types the match code its device shows. A wrong
  *   code is refused with `APPROVAL_CODE_MISMATCH` and the third cancels that request only. The person may also cancel
  *   a pending request, which frees its place when 5 are pending: a request is never replaced without that choice.
@@ -27,6 +33,7 @@ import {
 import { HomeAuthError } from './errors.ts'
 import { AttemptLimiter } from './rate-limit.ts'
 import { matchCode, typedCodeMatches } from './match-code.ts'
+import { mayAskWithoutWindow, type PairingSpec, type TailnetIdentity } from './pairing.ts'
 import { hashSecret, newSecret, secretMatches, type RandomBytes } from './secret.ts'
 
 const MINUTE_MS = 60 * 1000
@@ -46,6 +53,10 @@ export interface ApprovalRecord {
   readonly source: string
   readonly createdAt: number
   readonly expiresAt: number
+  /** The Tailscale user the request named, as a quota and display hint; undefined when it named none. */
+  readonly identity: TailnetIdentity | undefined
+  /** Whether the request was accepted outside an approval window. */
+  readonly windowless: boolean
   /** The 8-digit match code, which only the person compares. */
   readonly code: string
   state: ApprovalRequestState
@@ -61,6 +72,12 @@ export interface PendingSummary {
   readonly address: StudioAddress
   readonly createdAt: number
   readonly expiresAt: number
+  /** The Tailscale user the request named, a hint the person compares with who they expect; null when it named none. */
+  readonly identity: TailnetIdentity | null
+  /** Whether the request arrived outside an approval window, which is what the studio's notice announces. */
+  readonly windowless: boolean
+  /** The wrong codes typed so far; the third cancels the request. */
+  readonly wrongCodes: number
 }
 
 /** A request message after its fields were read. */
@@ -78,6 +95,19 @@ export interface ApprovalsOptions {
   readonly random: RandomBytes
   /** The 32-byte raw home public key and its base64url text, read when a request is answered. */
   readonly homeKey: () => { readonly publicKey: Uint8Array; readonly publicKeyText: Base64Url }
+  /** The resolved pairing choices, read per call so a change in Settings applies without a restart. */
+  readonly pairing: () => PairingSpec
+}
+
+/** Where a request arrived and who it names. */
+export interface RequestOrigin {
+  readonly listener: ReachListenerId
+  readonly address: StudioAddress
+  readonly source: string
+  /** The Tailscale user the request's headers name, if any. */
+  readonly identity?: TailnetIdentity | undefined
+  /** The Tailscale login of the user this computer is signed in as, when the listener's provider knows it. */
+  readonly computerUser?: string | undefined
 }
 
 /** The approval window and the approval requests of one home. */
@@ -85,6 +115,7 @@ export class Approvals {
   private windowClosesAt: number | undefined
   private readonly requests = new Map<string, ApprovalRecord>()
   private readonly sources: AttemptLimiter
+  private readonly windowlessSources: AttemptLimiter
   /** The clock, the random source and the home key. */
   private readonly options: ApprovalsOptions
 
@@ -93,19 +124,17 @@ export class Approvals {
    */
   constructor(options: ApprovalsOptions) {
     this.options = options
-    this.sources = new AttemptLimiter({
-      limit: DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource,
-      windowMs: MINUTE_MS,
-      now: options.now,
-    })
+    const budget = { limit: DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource, windowMs: MINUTE_MS, now: options.now }
+    this.sources = new AttemptLimiter(budget)
+    this.windowlessSources = new AttemptLimiter(budget)
   }
 
   /**
-   * Open the approval window, or extend an open one to 5 minutes from now.
+   * Open the approval window, or extend an open one to the configured length from now.
    * @returns when it closes, in milliseconds since the epoch.
    */
   openWindow(): number {
-    this.windowClosesAt = this.options.now() + DEVICE_APPROVAL_LIMITS.approvalWindowMs
+    this.windowClosesAt = this.options.now() + this.options.pairing().windowMs
     return this.windowClosesAt
   }
 
@@ -124,31 +153,48 @@ export class Approvals {
   }
 
   /**
-   * Refuse a request outside an open window; the route calls this before it reads the body.
-   * @throws {HomeAuthError} `APPROVALS_CLOSED` when no window is open.
+   * Refuse a request that may not be accepted now; the route calls this before it reads the body. A request is
+   * accepted while a window is open, or outside one when its identity may ask without a window.
+   * @param identity - the Tailscale user the request's headers name.
+   * @param computerUser - the Tailscale login of the user this computer is signed in as.
+   * @throws {HomeAuthError} `APPROVALS_CLOSED` when no window is open and the identity may not ask without one.
    */
-  assertWindowOpen(): void {
-    if (this.windowOpenUntil() === undefined) {
-      throw new HomeAuthError('APPROVALS_CLOSED', 'This home is not accepting new devices now. On the home\'s computer, choose Add a device in the studio\'s settings, or run delorun devices approve, then try again within 5 minutes')
-    }
+  assertMayAsk(identity?: TailnetIdentity, computerUser?: string): void {
+    if (this.windowOpenUntil() !== undefined) return
+    if (mayAskWithoutWindow(this.options.pairing().mayAskWithoutWindow, identity, computerUser)) return
+    throw new HomeAuthError('APPROVALS_CLOSED', `This home is not accepting new devices now. On the home's computer, choose Add a device in the studio's settings, or run delorun devices approve, then try again within ${String(this.options.pairing().windowMs / MINUTE_MS)} minutes`)
   }
 
   /**
    * Accept one approval request.
    * @param input - the request's fields.
-   * @param where - the listener, its studio address and the source the limit counts.
+   * @param where - the listener, its studio address, the source the limit counts and the identity it names.
    * @returns C5's `201` answer.
-   * @throws {HomeAuthError} `APPROVALS_CLOSED` outside a window; `APPROVAL_RATE_LIMITED` past the source's limit;
-   *   `APPROVAL_PENDING_LIMIT` when 5 requests are pending.
+   * @throws {HomeAuthError} `APPROVALS_CLOSED` outside a window for an identity that may not ask without one;
+   *   `APPROVAL_RATE_LIMITED` past the source's limit; `APPROVAL_PENDING_LIMIT` when 5 requests are pending or the
+   *   identity has its limit waiting, or 4 window-less requests are.
    */
-  request(
-    input: ApprovalRequestInput,
-    where: { readonly listener: ReachListenerId; readonly address: StudioAddress; readonly source: string },
-  ): ApprovalRequestAccepted {
-    this.assertWindowOpen()
-    if (!this.sources.take(where.source)) throw new HomeAuthError('APPROVAL_RATE_LIMITED', 'Too many device requests from this address in the last minute')
+  request(input: ApprovalRequestInput, where: RequestOrigin): ApprovalRequestAccepted {
+    this.assertMayAsk(where.identity, where.computerUser)
+    const windowless = this.windowOpenUntil() === undefined
     this.expire()
     const pending = [...this.requests.values()].filter(record => record.state === 'pending')
+    // The per-identity limit comes first, so a request it refuses spends none of the source's budget and one
+    // identity's repeated asks cannot make the home refuse every other request (a person's open window included).
+    if (windowless && where.identity !== undefined) {
+      const login = where.identity.login
+      if (pending.filter(record => record.windowless && record.identity?.login === login).length >= this.options.pairing().pendingPerIdentity) {
+        throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This account already has a device request waiting at the home\'s computer. Finish or decline it there, then try again')
+      }
+    }
+    // Window-less requests never take the last slot, so a request through a window the person opened always has room.
+    if (windowless && pending.filter(record => record.windowless).length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome - 1) {
+      throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'Too many devices are asking to pair without an approval window. At the home\'s computer, run delorun devices approve to approve or cancel one, then try again')
+    }
+    // Window-less requests have their own budget per source: every reach request arrives from one address.
+    if (!(windowless ? this.windowlessSources : this.sources).take(where.source)) {
+      throw new HomeAuthError('APPROVAL_RATE_LIMITED', 'Too many device requests from this address in the last minute')
+    }
     if (pending.length >= DEVICE_APPROVAL_LIMITS.pendingRequestsPerHome) {
       throw new HomeAuthError('APPROVAL_PENDING_LIMIT', 'This home has 5 device requests waiting. At the home\'s computer, run delorun devices approve to approve one or cancel one, then try again')
     }
@@ -158,7 +204,7 @@ export class Approvals {
     const homeNonce = brandString<Base64Url>(newSecret(nonceBytes, this.options.random))
     const key = this.options.homeKey()
     const createdAt = this.options.now()
-    const expiresAt = createdAt + DEVICE_APPROVAL_LIMITS.approvalRequestExpiryMs
+    const expiresAt = createdAt + this.options.pairing().requestExpiryMs
     this.requests.set(id, {
       id,
       secretHash: hashSecret(secret),
@@ -171,6 +217,8 @@ export class Approvals {
       source: where.source,
       createdAt,
       expiresAt,
+      identity: where.identity,
+      windowless,
       code: matchCode({ homePublicKey: key.publicKey, deviceId: input.deviceId, homeNonce, deviceNonce: input.deviceNonce, address: where.address }),
       state: 'pending',
       wrongCodes: 0,
@@ -216,6 +264,9 @@ export class Approvals {
         address: record.address,
         createdAt: record.createdAt,
         expiresAt: record.expiresAt,
+        identity: record.identity ?? null,
+        windowless: record.windowless,
+        wrongCodes: record.wrongCodes,
       }))
   }
 
@@ -271,7 +322,7 @@ export class Approvals {
     for (const [id, record] of this.requests) {
       if (record.expiresAt > at) continue
       if (record.state === 'pending') record.state = 'expired'
-      if (record.expiresAt + DEVICE_APPROVAL_LIMITS.approvalRequestExpiryMs <= at) this.requests.delete(id)
+      if (record.expiresAt + this.options.pairing().requestExpiryMs <= at) this.requests.delete(id)
     }
   }
 }

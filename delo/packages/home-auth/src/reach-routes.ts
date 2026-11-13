@@ -7,7 +7,7 @@
  * - `GET /auth/sign-in` and `GET /auth/assets/<asset>`: the sign-in page and its two built assets, resolved against a
  *   fixed table of names.
  * - `POST /auth/device/request`: an approval request, refused with `APPROVALS_CLOSED` before its body is read while no
- *   approval window is open.
+ *   approval window is open and its Tailscale identity may not ask without one (`pairing.ts`).
  * - `GET /auth/device/request/<request id>`: the request's state, read with `Authorization: Delo-Request <secret>`.
  * - `POST /auth/device/challenge` and `POST /auth/session`: sign-in. A session cookie the request carries names the
  *   session a sign-in rotates.
@@ -17,7 +17,8 @@
  * action:
  *
  * - `POST /auth/devices/window`: "Add a device" opens the approval window.
- * - `GET /auth/devices/pending`: the window and the pending requests the approval form shows.
+ * - `GET /auth/devices/pending`: the window, the pending requests the approval form and the studio's notice show, and how
+ *   the person chose to have a request shown. Reach sessions never receive it.
  * - `POST /auth/devices/approve`: the local approval, with the match code the person typed.
  *
  * @module @delo/home-auth/reach-routes
@@ -213,8 +214,10 @@ export function approvalRequestHandler(auth: HomeAuth): RouteHandler {
     try {
       if (pathname === REACH_PATHS.request) {
         if (!method(request, response, 'POST')) return
-        // C5: outside a window the request is refused before its body is read.
-        auth.approvals.assertWindowOpen()
+        // C5: outside a window, and for an identity that may not ask without one, the request is refused before its body
+        // is read.
+        const identity = auth.identityOf(listener, request.headers)
+        auth.assertMayAsk(listener, identity)
         const message = await readMessage(request, response)
         if (message === undefined) return
         if (message.v !== DEVICE_APPROVAL_VERSION) throw new HomeAuthError('BAD_REQUEST', 'this home reads version 1 messages only')
@@ -229,7 +232,7 @@ export function approvalRequestHandler(auth: HomeAuth): RouteHandler {
           deviceNonce: brandString<Base64Url>(deviceNonce),
           label: claimLabelOf(message.label),
           platform: platformOf(message.platform),
-        }, { listener, source: auth.arrivalOf(request).source })
+        }, { listener, source: auth.arrivalOf(request).source, identity })
         sendJson(response, 201, accepted)
         return
       }
@@ -323,7 +326,7 @@ export function pendingHandler(auth: HomeAuth, credential: LoopbackCredential): 
   return async (request, response) => {
     if (!personAtComputer(auth, credential, request, response, 'Approving a device', false)) return
     if (!method(request, response, 'GET')) return
-    sendJson(response, 200, { windowClosesAt: auth.approvals.windowOpenUntil() ?? null, pending: auth.pendingApprovals() })
+    sendJson(response, 200, { windowClosesAt: auth.approvals.windowOpenUntil() ?? null, pending: auth.pendingApprovals(), pairing: auth.pairing() })
   }
 }
 

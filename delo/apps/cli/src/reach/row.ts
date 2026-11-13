@@ -39,7 +39,7 @@ export const REACH_OFF: TailscalePrivateRow = { enabled: false, address: '', ser
  * @param profile - the CLI profile.
  * @returns the path of its `cordis.patch.yml`.
  */
-function patchPath(home: string, profile: string): string {
+export function profilePatchPath(home: string, profile: string): string {
   return join(profileDirectory(home, profile), 'cordis.patch.yml')
 }
 
@@ -50,7 +50,7 @@ function patchPath(home: string, profile: string): string {
  * @returns the option, or {@link REACH_OFF} when the profile sets none.
  */
 export function readReachRow(home: string, profile: string): TailscalePrivateRow {
-  return readReachRowAt(patchPath(home, profile))
+  return readReachRowAt(profilePatchPath(home, profile))
 }
 
 /**
@@ -90,7 +90,7 @@ export function readReachRowAt(path: string): TailscalePrivateRow {
  * @param option - the option.
  */
 export function writeReachRow(home: string, profile: string, option: TailscalePrivateRow): void {
-  writeReachRowAt(patchPath(home, profile), option)
+  writeReachRowAt(profilePatchPath(home, profile), option)
 }
 
 /**

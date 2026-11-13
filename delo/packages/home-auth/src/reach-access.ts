@@ -498,11 +498,14 @@ function terminalWithoutUnlock(facts: Pick<ReachAccessFacts, 'terminalWithoutUnl
 export interface ComputerOnlySwitch {
   /** The settings namespace, the id of the plugin's profile row. */
   readonly ns: string
-  /** The boolean field of the row's configuration. */
+  /** The boolean field of the row's configuration, or {@link EVERY_FIELD} to refuse every settings write to the namespace. */
   readonly field: string
   /** What the field turns on, as the refusal names it, such as `the external-agent consent`. */
   readonly label: string
 }
+
+/** The {@link ComputerOnlySwitch.field} that makes the whole namespace computer-only: a device writes none of its fields. */
+export const EVERY_FIELD = '*'
 
 /**
  * The computer-only switches dangerous mode lifts for an unlocked device, by settings namespace. A switch not listed
@@ -559,6 +562,7 @@ function opKeepsSwitch(field: string, op: unknown): boolean {
 function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, target: ComputerOnlySwitch): boolean {
   if (args.ns !== target.ns) return false
   const { field } = target
+  if (field === EVERY_FIELD) return true
   switch (action) {
     case 'settings/mutate':
       return !Array.isArray(args.ops) || !args.ops.every(op => opKeepsSwitch(field, op))

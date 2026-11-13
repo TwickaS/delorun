@@ -16,6 +16,12 @@ import {
   type ApprovalRequestId, type Device, type DeviceList, type ElevationId, type ElevationRequestId, type ElevationsAtComputer,
   type HostFetch, type PendingDevice, type PendingElevation, type ReachOptionStatus, type ReachStatus,
 } from './devices-api.ts'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { OptInMutation } from './opt-in.ts'
+import type { PairingSource } from './pairing-source.ts'
+import type { PairingRowSettings } from './pairing-writer.ts'
+import { PairingSettings, type PairingSettingsProps } from './PairingSettings.tsx'
 import type { UnlockSource, UnlockView } from './unlock.ts'
 import { clockTime, ELEVATE_COMMAND } from './UnlockOverlay.tsx'
 import { useDangerousMode } from './dangerous-mode.ts'
@@ -32,12 +38,26 @@ export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | '
 export interface DevicesSectionInjected {
   /** Sends the section's same-origin requests: the browser's `fetch`, or a spec's fake. */
   fetch: HostFetch
-  /** The device's own unlock, which the section shows on a device. */
-  hooks: Pick<UnlockSource['hooks'], 'unlock'>
   /** Open the unlock dialog. */
   openUnlock: UnlockSource['open']
   /** End the device's unlock. */
   lockUnlock: UnlockSource['lock']
+  hooks: Pick<UnlockSource['hooks'], 'unlock'> & {
+    /** The requests that arrived without an approval window and the home's pairing choices. */
+    pairing: PairingSource['hooks']['pairing']
+    /** The home-auth row's Host settings form, whose `pairing` section the choices write. */
+    pairingForm: ObservableSnapshot<ConfigFormSnapshot<PairingRowSettings>>
+    /** The write state of that form. */
+    pairingMutation: ObservableSnapshot<OptInMutation>
+  }
+  /** Read the pairing requests while the section shows. */
+  startPairing: PairingSource['start']
+  /** Write one field of the `pairing` section. */
+  setPairing: PairingSettingsProps['set']
+  /** Open the code box of a request. */
+  openPairingCode: PairingSource['openCode']
+  /** Decline a request. */
+  declinePairing: PairingSource['decline']
 }
 
 /** Props the renderer binds for the section. */
@@ -88,8 +108,14 @@ const isCompleteCode = (typed: string): boolean => /^\d{8}$/.test(approvalCode(t
  * @param props - the section's copy and the request function.
  * @returns the section.
  */
-export function DevicesSection({ t, fetch, useUnlock, openUnlock, lockUnlock }: DevicesSectionProps): ReactNode {
+export function DevicesSection({
+  t, fetch, useUnlock, openUnlock, lockUnlock, usePairing, usePairingForm, usePairingMutation, startPairing, setPairing, openPairingCode, declinePairing,
+}: DevicesSectionProps): ReactNode {
   const unlock = useUnlock(current => current)
+  const pairing = usePairing(current => current)
+  const pairingForm = usePairingForm(current => current)
+  const pairingMutation = usePairingMutation(current => current)
+  useEffect(() => startPairing(), [startPairing])
   const [reach, setReach] = useState<Loaded<ReachStatus | undefined>>({ kind: 'loading' })
   useEffect(() => {
     let current = true
@@ -109,6 +135,8 @@ export function DevicesSection({ t, fetch, useUnlock, openUnlock, lockUnlock }: 
         {reach.kind === 'loading' || unlock.place === 'unknown' ? null : <TerminalSwitch t={t} fetch={fetch} />}
         {reach.kind === 'failed' ? <p className={css.failed} role="alert">{reach.text}</p> : null}
         {reach.kind === 'ready' ? reach.value?.options.map(option => <ReachLine key={option.option} t={t} status={option} />) : null}
+        {reach.kind === 'loading' ? null : <PairingSettings t={t} time={at => formatTime(t, at)} state={pairing} form={pairingForm}
+          mutation={pairingMutation} set={setPairing} openCode={openPairingCode} decline={declinePairing} />}
         {reach.kind === 'loading' ? null : <DeviceManager t={t} fetch={fetch} />}
       </>}
   </div>

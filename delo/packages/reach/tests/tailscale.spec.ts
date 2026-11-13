@@ -15,7 +15,7 @@ import type { StudioAddress } from '@delo/contract-admission'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delo/contract-reach-providers'
 import { checkServeAccess, TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachSpec } from '../src/provider.ts'
 import {
-  isPermissionRefusal, parseServeRules, readServeRules, readTailscale, removeServe, systemTailscale, type TailscaleResult, type TailscaleRunner,
+  isPermissionRefusal, parseServeRules, readComputerUser, readServeRules, readTailscale, removeServe, systemTailscale, type TailscaleResult, type TailscaleRunner,
 } from '../src/tailscale.ts'
 import { fakeTailscale, ownRule } from './fake-tailscale.ts'
 
@@ -235,6 +235,29 @@ describe('the Tailscale private provider', () => {
       await expect(systemTailscale(script)(['version'])).resolves.toEqual({ code: 0, stdout: 'ok\n', stderr: '' })
     } finally {
       await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the computer\'s Tailscale user', () => {
+  /** A runner that answers `status --json` with the given text. */
+  const answering = (stdout: string): TailscaleRunner => async () => ({ code: 0, stdout, stderr: '' })
+
+  it('is the login of the user that Self.UserID names', async () => {
+    // Pins the lookup: the own-user pairing mode compares a request's login with this one.
+    await expect(readComputerUser(answering(JSON.stringify({ Self: { UserID: 42 }, User: { 41: { LoginName: 'other@example.com' }, 42: { LoginName: 'me@example.com' } } })))).resolves.toBe('me@example.com')
+  })
+
+  it('is unknown for a tagged node, a missing entry, an empty login or output that is not the status', async () => {
+    for (const stdout of [
+      JSON.stringify({ Self: { Tags: ['tag:server'] }, User: {} }),
+      JSON.stringify({ Self: { UserID: 1 }, User: {} }),
+      JSON.stringify({ Self: { UserID: 1 }, User: { 1: { LoginName: '' } } }),
+      'null',
+      'not json',
+    ]) {
+      // Pins the fail-closed answer: with no own user, the own-user mode accepts no request without a window.
+      await expect(readComputerUser(answering(stdout))).resolves.toBeUndefined()
     }
   })
 })

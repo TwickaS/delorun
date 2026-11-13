@@ -29,6 +29,10 @@ export interface PendingDevice {
   readonly address: string
   readonly createdAt: number
   readonly expiresAt: number
+  /** The Tailscale user the request named, or null; a hint the person compares, never proof. */
+  readonly identity: { readonly login: string; readonly name: string } | null
+  /** Whether the request arrived without an approval window. */
+  readonly windowless: boolean
 }
 
 /** A device's waiting request to unlock sensitive actions, as the person's command shows it; never with its code. */

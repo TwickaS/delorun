@@ -25,6 +25,7 @@ import { localReach, reachRowsOf } from '../../src/reach/host.ts'
 import { createDevicesCommand, type DevicesDependencies } from '../../src/devices/command.ts'
 import { localDeviceApproval } from '../../src/devices/host.ts'
 import { listenerPortFor, readReachRow, REACH_OFF, writeReachRow } from '../../src/reach/row.ts'
+import { readPairingAt } from '../../src/reach/pairing-row.ts'
 import { reachSection } from '../../src/reach/setup-section.ts'
 import { TRUST_STATEMENT } from '../../src/reach/trust.ts'
 import { BACK } from '../../src/setup/steps.ts'
@@ -698,13 +699,18 @@ describe('setup\'s reach section', () => {
     const notes: string[] = []
     const section = reachSection(tailscale(), () => false)
     expect(section.appliesTo({} as never)).toBe(true)
-    const on = await section.ask(io([true], notes), draft, { home: deloHome, profile: 'default' } as never)
-    expect(on).toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } }, status: 'answered' })
+    const on = await section.ask(io([true, false], notes), draft, { home: deloHome, profile: 'default' } as never)
+    expect(on).toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'own-user' } }, status: 'answered' })
+    // Pins the second question: any device on the tailnet may ask only when the person says so, and going back returns.
+    await expect(section.ask(io([true, true], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } }, status: 'answered' })
+    await expect(section.ask(io([true, BACK], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toBe(BACK)
     expect(notes[0]).toContain(TRUST_STATEMENT[0])
     const directory = join(deloHome, 'profiles', 'default')
-    const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } } as never
-    expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale')
-    await expect(section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('delorun devices approve')
+    const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } } as never
+    expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale; any device on your tailnet may ask to pair')
+    expect(section.review?.({ reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } } as never)).toBe('Remote access: from your phone over Tailscale; only your own Tailscale user may ask to pair')
+    await expect(section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('ask to pair')
+    expect(readPairingAt(join(directory, 'cordis.patch.yml')).mayAskWithoutWindow).toBe('tailnet')
     const row = readReachRow(deloHome, 'default')
     expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000, elevationMinutes: 15 })
     // Applying again keeps the port chosen once.

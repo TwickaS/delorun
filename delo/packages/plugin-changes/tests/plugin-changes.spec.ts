@@ -298,6 +298,19 @@ describe('with protection off', () => {
     expect(approval).not.toHaveBeenCalled()
   })
 
+  it('keeps holding a chat\'s install and turn-on in dangerous mode: full access, every approval allowed and the default protection record change nothing (A330)', async () => {
+    // Dangerous mode gives the chat danger-full-access with approvals the person never answers; neither reaches the hold on a plugin that is not on yet.
+    const { manager, approval, profile, call } = await harness(true, true, false, 'none', 'danger-full-access')
+    for (const target of ['link:/work/plugins/new-plugin', 'registry-plugin@2.0.0']) {
+      expect((await call({ action: 'install_bundle', target })).error?.info, target).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
+    }
+    expect((await call({ action: 'set_plugin', target: 'new-plugin', enabled: true })).error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
+    expect(manager.installBundle).not.toHaveBeenCalled()
+    expect(manager.setPluginEnabled).not.toHaveBeenCalled()
+    expect(approval).not.toHaveBeenCalled()
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toHaveLength(2)
+  })
+
   it('leaves a turn-on to the person at the computer at protection off, and a turn-off to upstream', async () => {
     const { manager, call } = await harness(true, true, false, 'off')
     for (const action of ['set_bundle', 'set_plugin']) {

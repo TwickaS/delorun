@@ -70,8 +70,8 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
       host: request.headers.host,
       source: '127.0.0.1',
     }),
-    serve: (served: { readonly listener: string; readonly factor: string; readonly elevationMinutes?: number }) => {
-      events.push(`serve ${served.listener} ${served.factor}${served.elevationMinutes === 20 ? '' : ` minutes=${String(served.elevationMinutes)}`}`)
+    serve: (served: { readonly listener: string; readonly factor: string; readonly elevationMinutes?: number; readonly computerUser?: string }) => {
+      events.push(`serve ${served.listener} ${served.factor} user=${String(served.computerUser)}${served.elevationMinutes === 20 ? '' : ` minutes=${String(served.elevationMinutes)}`}`)
       return () => { events.push('unserve') }
     },
   } as never)
@@ -129,7 +129,7 @@ describe('the reach service', () => {
     await expect(isPortFree(port)).resolves.toBe(false)
     await fiber.dispose()
     expect(w.events).toEqual([
-      'serve reach-tailscale-private tailnet-membership', 'open', 'tailscale version', 'tailscale status --json', 'tailscale serve status --json',
+      'tailscale status --json', 'serve reach-tailscale-private tailnet-membership user=me@example.com', 'open', 'tailscale version', 'tailscale status --json', 'tailscale serve status --json',
       `tailscale serve --bg --https=443 http://127.0.0.1:${String(port)}`,
       'tailscale serve status --json', 'tailscale serve --https=443 off', 'tailscale serve status --json', 'close', 'unserve',
     ])
@@ -222,7 +222,7 @@ describe('the reach service', () => {
     await (await mount(opened, on(port))).dispose()
     expect(opened.ctx.get('reach')).toBeUndefined()
     expect(opened.states.at(-1)).toMatchObject({ state: 'failed' })
-    expect(opened.events).toEqual(['serve reach-tailscale-private tailnet-membership', 'open', 'tailscale serve status --json', 'unserve'])
+    expect(opened.events).toEqual(['tailscale status --json', 'serve reach-tailscale-private tailnet-membership user=me@example.com', 'open', 'tailscale serve status --json', 'unserve'])
     const unbound = world({ open: async () => Promise.resolve({ address: undefined }) })
     await (await mount(unbound, on(port))).dispose()
     expect(unbound.states.at(-1)).toMatchObject({ state: 'failed' })

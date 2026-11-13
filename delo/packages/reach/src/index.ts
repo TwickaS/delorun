@@ -10,7 +10,7 @@ export { REACH_STATUS_PATH, ReachService, Config as ReachConfig, type Config, ty
 export { checkServeAccess, funnelOn, TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachCheck, type ReachProvider, type ReachSpec, type ServeAccessRequest } from './provider.ts'
 export { chooseListenerPort, isPortFree, openFront, type LoopbackFront } from './front.ts'
 export {
-  isPermissionRefusal, parseServeRules, ReachError, readServeRules, readTailscale, removeServe, serve, serveTarget, systemTailscale,
+  isPermissionRefusal, parseServeRules, ReachError, readComputerUser, readServeRules, readTailscale, removeServe, serve, serveTarget, systemTailscale,
   type ServeRules, type TailscaleFacts, type TailscaleResult, type TailscaleRunner,
 } from './tailscale.ts'
 export { ReachService as default } from './service.ts'

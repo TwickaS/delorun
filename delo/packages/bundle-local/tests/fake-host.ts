@@ -4,6 +4,10 @@
  */
 import { vi } from 'vitest'
 import type { HostFetch } from '../src/client/devices-api.ts'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { OptInMutation } from '../src/client/opt-in.ts'
+import type { PairingState } from '../src/client/pairing-source.ts'
+import type { PairingRowSettings } from '../src/client/pairing-writer.ts'
 import type { UnlockView } from '../src/client/unlock.ts'
 
 /** One scripted Host answer: a JSON body, a raw text body, or a request that never completes. */
@@ -52,5 +56,30 @@ export function staticUnlock(view: UnlockView) {
     useUnlock: <T,>(select: (current: UnlockView) => T): T => select(view),
     openUnlock: vi.fn<() => void>(),
     lockUnlock: vi.fn<() => Promise<void>>(async () => {}),
+  }
+}
+
+/**
+ * The pairing props of the Devices section over one fixed state: a computer whose home runs Delorun's choices and has no
+ * request waiting.
+ * @param overrides - fields of the state and the row's form to replace.
+ * @returns the hooks and spies for the actions.
+ */
+export function staticPairing(overrides: { state?: Partial<PairingState>; form?: Partial<ConfigFormSnapshot<PairingRowSettings>>; mutation?: Partial<OptInMutation> } = {}) {
+  const state: PairingState = {
+    place: 'computer', requests: [], open: undefined, quieted: [],
+    view: { mayAskWithoutWindow: 'own-user', showRequest: 'notice', windowMinutes: 5, requestExpiryMinutes: 5, pendingPerIdentity: 1 },
+    ...overrides.state,
+  }
+  const form: ConfigFormSnapshot<PairingRowSettings> = { status: 'ready', value: {}, base: undefined, user: undefined, revision: 1, writable: true, ...overrides.form }
+  const mutation: OptInMutation = { busy: false, failed: false, ...overrides.mutation }
+  return {
+    usePairing: <T,>(select: (current: PairingState) => T): T => select(state),
+    usePairingForm: <T,>(select: (current: ConfigFormSnapshot<PairingRowSettings>) => T): T => select(form),
+    usePairingMutation: <T,>(select: (current: OptInMutation) => T): T => select(mutation),
+    startPairing: vi.fn(() => () => {}),
+    setPairing: vi.fn<(field: string, value: unknown) => Promise<void>>(async () => {}),
+    openPairingCode: vi.fn<(id: string) => void>(),
+    declinePairing: vi.fn(async () => ({ kind: 'done' as const })),
   }
 }

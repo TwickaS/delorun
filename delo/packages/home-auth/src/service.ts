@@ -13,18 +13,19 @@
  */
 import type {} from './full-access-grants.ts'
 import { basename, dirname } from 'node:path'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
 import schema from '@deepseek-ai/schemastery'
 import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import type { DeviceRecord } from './records.ts'
+import { PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, WINDOWLESS_MODES, type PairingConfig, type PairingView } from './pairing.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
   HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TerminalSwitchOrigin, type TokenAdmission,
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
-import type { ComputerOnlySwitch } from './reach-access.ts'
+import { EVERY_FIELD, type ComputerOnlySwitch } from './reach-access.ts'
 import type { ElevationState } from '@delo/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
@@ -51,19 +52,60 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/** The service's configuration as `cordis.yml` writes it. */
+export interface ConfigInput {
+  /** The absolute path of the secrets directory, `~/.delo/secrets/home-auth`, under the Delo home. */
+  readonly secretsDirectory?: string
+  /** The pairing choices, each optional; see {@link Config.pairing}. */
+  readonly pairing?: PairingConfig
+}
+
 /** The service's configuration: where the home keeps the sign-in records. */
 export interface Config {
   /** The absolute path of the secrets directory, `~/.delo/secrets/home-auth`, under the Delo home. */
-  readonly secretsDirectory: string
+  readonly secretsDirectory?: string
+  /**
+   * The pairing choices, read at each use: Settings changes them without a restart. The schema fills Delorun's defaults
+   * and fails the load for a value out of bounds. Approval only at the home's own computer, the 8-digit match code, the cancel after 3 wrong codes,
+   * the global cap of 5 waiting requests and session rotation on approval are fixed and have no field. A reach device
+   * cannot write this section.
+   */
+  readonly pairing: Volatile<PairingConfig>
+}
+
+const MINUTE_MS = 60 * 1000
+
+/**
+ * A whole-number pairing field with its bounds.
+ * @param field - the field, whose bounds {@link PAIRING_BOUNDS} holds.
+ * @param fallback - the default.
+ * @returns the schema.
+ */
+function pairingMinutes(field: keyof typeof PAIRING_BOUNDS, fallback: number): schema<number> {
+  const { min, max } = PAIRING_BOUNDS[field]
+  return schema.number().step(1).min(min).max(max).default(fallback)
 }
 
 /** The plugin's configuration schema. */
-export const Config: schema<Config> = schema.object({
+export const Config: schema<ConfigInput, Config> = schema.object({
   // The path check belongs to `[Service.init]`, which refuses a relative directory with a sentence naming the problem;
   // a pattern here would answer with the schema's own syntax instead.
-  secretsDirectory: schema.string().required()
-    .description('The absolute path of the home-auth secrets directory, ~/.delo/secrets/home-auth.'),
+  secretsDirectory: schema.string()
+    .description('The absolute path of the home-auth secrets directory, ~/.delo/secrets/home-auth; the bundle sets it, and a profile row that omits it (as the CLI\'s pairing writes do) takes the Delo home\'s own.'),
+  pairing: schema.object({
+    mayAskWithoutWindow: schema.union(WINDOWLESS_MODES).default(PAIRING_DEFAULTS.mayAskWithoutWindow).description('Who may ask to pair a device without an approval window: own-user (devices signed in as this computer\'s Tailscale user, the default), tailnet (any device on the tailnet) or window-only (no one).'),
+    showRequest: schema.union(REQUEST_DISPLAYS).default(PAIRING_DEFAULTS.showRequest).description('How the studio at this computer shows a request: notice (the default), dialog (opens the code box at once) or none (only the lists show it).'),
+    windowMinutes: pairingMinutes('windowMinutes', PAIRING_DEFAULTS.windowMs / MINUTE_MS).description('How long an approval window stays open, from 1 to 15 minutes; 5 by default.'),
+    requestExpiryMinutes: pairingMinutes('requestExpiryMinutes', PAIRING_DEFAULTS.requestExpiryMs / MINUTE_MS).description('How long a request waits before it expires, from 1 to 10 minutes; 5 by default.'),
+    pendingPerIdentity: pairingMinutes('pendingPerIdentity', PAIRING_DEFAULTS.pendingPerIdentity).description('How many requests one Tailscale user may have waiting without a window, from 1 to 5; 1 by default.'),
+  }).default({}).description('The pairing choices. Out-of-bounds values fail the load. The computer\'s Settings change them live; a reach device cannot.').volatile(),
 })
+
+/** The settings writes a reach device is refused: any write to the home-auth row, whose `pairing` and `secretsDirectory` decide who is admitted. */
+export const HOME_AUTH_SWITCH: ComputerOnlySwitch = { ns: 'delo-home-auth', field: EVERY_FIELD, label: 'the home-auth settings' }
+
+/** The settings writes a reach device is refused: any write to the reach row, whose options decide what the home exposes. */
+export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delo-reach', field: EVERY_FIELD, label: 'the remote-access settings' }
 
 /** The `homeAuth` service. */
 export class HomeAuthService extends Service {
@@ -75,8 +117,13 @@ export class HomeAuthService extends Service {
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
 
-  /** The secrets directory. */
+  /** The configuration. */
   private readonly config: Config
+
+  /** The absolute path of the secrets directory: the configured one, or the Delo home's own `secrets/home-auth`. */
+  private get secretsDirectory(): string {
+    return this.config.secretsDirectory ?? this.ctx.get('dshHomePath')?.('secrets', 'home-auth') ?? ''
+  }
 
   /**
    * @param ctx - the plugin context, which injects the web server.
@@ -92,14 +139,15 @@ export class HomeAuthService extends Service {
    * @throws Error when the secrets directory is not an absolute path; the filesystem failure of `mkdir`.
    */
   protected async [Service.init](): Promise<void> {
-    if (!this.config.secretsDirectory.startsWith('/')) {
-      throw new Error(`home-auth: the secrets directory must be an absolute path, got ${JSON.stringify(this.config.secretsDirectory)}`)
+    if (!this.secretsDirectory.startsWith('/')) {
+      throw new Error(`home-auth: the secrets directory must be an absolute path, got ${JSON.stringify(this.secretsDirectory)}`)
     }
-    if (basename(dirname(this.config.secretsDirectory)) !== DELO_HOME_ENTRIES.secrets) {
-      throw new Error(`home-auth: the secrets directory must lie in the Delo home's ${DELO_HOME_ENTRIES.secrets} directory, got ${JSON.stringify(this.config.secretsDirectory)}`)
+    if (basename(dirname(this.secretsDirectory)) !== DELO_HOME_ENTRIES.secrets) {
+      throw new Error(`home-auth: the secrets directory must lie in the Delo home's ${DELO_HOME_ENTRIES.secrets} directory, got ${JSON.stringify(this.secretsDirectory)}`)
     }
     const core = new HomeAuth({
-      directory: this.config.secretsDirectory,
+      pairing: () => resolvePairing(this.config.pairing.get()),
+      directory: this.secretsDirectory,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       dangerousMode: () => this.dangerousMode(),
@@ -117,6 +165,9 @@ export class HomeAuthService extends Service {
       const ending = change.kind === 'ended' ? `ended (${change.reason})` : `started until ${new Date(change.elevation.endsAt).toISOString()}`
       this.ctx.logger.info(`home-auth: elevation ${ending}: device=${deviceId} listener=${listener} elevation=${id}`)
     }), 'home-auth elevation log')
+    // A reach device never writes the home-auth or reach rows, unlocked or not, in any mode.
+    this.ctx.effect(() => this.registerComputerOnlySwitch(HOME_AUTH_SWITCH), 'home-auth: computer-only home-auth settings')
+    this.ctx.effect(() => this.registerComputerOnlySwitch(REACH_SWITCH), 'home-auth: computer-only reach settings')
     const credential = loopbackCredentialOf(this.ctx)
     this.ctx.effect(() => {
       const server = this.ctx.webServer
@@ -154,7 +205,7 @@ export class HomeAuthService extends Service {
    * @returns its absolute path.
    */
   get deloHome(): string {
-    return dirname(dirname(this.config.secretsDirectory))
+    return dirname(dirname(this.secretsDirectory))
   }
 
   /**
@@ -359,6 +410,14 @@ export class HomeAuthService extends Service {
    */
   approvalWindowOpenUntil(): number | undefined {
     return this.state().approvals.windowOpenUntil()
+  }
+
+  /**
+   * The resolved pairing choices.
+   * @returns who may ask without a window, how a request is shown and the limits.
+   */
+  pairing(): PairingView {
+    return this.state().pairing()
   }
 
   /**

@@ -17,6 +17,7 @@ import { z } from 'zod'
 import {
   IDENTITY_FACTORS,
   LEGACY_SETUP_MODE_KEY,
+  PAIRING_ASKERS,
   PROMPTS_OPTIONS,
   REMOVED_ANSWER_KEYS,
   SECTION_STATUSES,
@@ -86,6 +87,7 @@ const earlierModelProvider = z.strictObject({ id: z.string().min(1), credential:
 const reach = z.strictObject({
   option: z.enum(['none', 'tailscale-private', 'tailscale-funnel', 'self-hosted-relay']),
   identityFactor: z.enum(IDENTITY_FACTORS).nullable(),
+  pairing: z.enum(PAIRING_ASKERS).optional(),
 })
 
 /** The fields every schema version carries, but the provider, which comes first, and `sections`, which comes last. */
@@ -268,6 +270,7 @@ export function readAnswersDocument(path: string): SetupAnswers {
   if (answers.reach.option !== 'none') throw refusal('reach.option', 'must be "none" in --config: reach is set up in the studio, not by a document')
   if (answers.modelProvider?.credential.source === 'prompt') throw refusal('modelProvider.credential.source', 'must be "environment" in --config: a document cannot take the key at a prompt')
   if (answers.reach.identityFactor !== null) throw refusal('reach.identityFactor', 'must be null: reach is not set up by a document')
+  if (answers.reach.pairing !== undefined) throw refusal('reach.pairing', 'must be absent: who may ask to pair a device is chosen in delorun setup reach, not by a document')
   if (answers.sections.length > 0) throw refusal('sections', 'is written by setup; remove it from the document')
   // The stock-home import shows its preview before anything changes, which no document can stand in for.
   if (answers.importStockHome) throw refusal('importStockHome', 'must be false in --config: the import shows what it copies before it asks, so run delorun import-home in a terminal')

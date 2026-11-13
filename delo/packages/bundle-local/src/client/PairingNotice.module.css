@@ -1,0 +1,47 @@
+/* The pairing code box: who asks, which device, and one field for the eight digits. */
+
+.who {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.device {
+  margin: 0 0 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.explain {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.code {
+  width: 100%;
+  box-sizing: border-box;
+  /* 16px or more keeps a phone browser from zooming the page into the field. */
+  font-size: 20px;
+  letter-spacing: 0.25em;
+  font-variant-numeric: tabular-nums;
+}
+
+.line {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.failed {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}

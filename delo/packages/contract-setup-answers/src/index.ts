@@ -76,10 +76,20 @@ export type ModelCredential =
   | { readonly source: 'prompt' }
   | { readonly source: 'environment'; readonly name: string }
 
-/** The reach answer. `identityFactor` is `null` exactly when `option` is `none`. */
+/** Who may ask to pair a device without an approval window: the computer's own Tailscale user, or any device on the tailnet. */
+export const PAIRING_ASKERS = ['own-user', 'tailnet'] as const
+
+/** One asker of {@link PAIRING_ASKERS}. */
+export type PairingAsker = (typeof PAIRING_ASKERS)[number]
+
+/**
+ * The reach answer. `identityFactor` is `null` exactly when `option` is `none`. `pairing` is present only with a reach
+ * option and absent in an answer from before the choice existed, which setup applies as `own-user`.
+ */
 export interface ReachAnswer {
   readonly option: ReachOption
   readonly identityFactor: IdentityFactor | null
+  readonly pairing?: PairingAsker | undefined
 }
 
 /**

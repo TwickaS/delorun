@@ -16,7 +16,7 @@ import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/d
 import {
   ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, EXTERNAL_AGENT_ACTION_ID,
   EXTERNAL_AGENTS_SECTION_ID, EXTERNAL_AGENTS_SECTION_ORDER, FULL_ACCESS_ACTION_ID, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID,
-  MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
+  MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID, PAIRING_NOTICE_ID, NETWORK_SECTION_ORDER, SETUP_VERSIONS_SECTION_ID, SETUP_VERSIONS_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID,
   PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID, UNLOCK_OVERLAY_ID,
 } from '../src/client/index.ts'
 import {
@@ -25,7 +25,7 @@ import {
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
-import { AWAY, fakeHost, staticUnlock } from './fake-host.ts'
+import { AWAY, fakeHost, staticPairing, staticUnlock } from './fake-host.ts'
 import type { ExternalAgentsSectionInjected } from '../src/client/ExternalAgentsSection.tsx'
 import { DELEGATION_CONSENT_ROW } from '@delo/plugin-delegation-consent/wire'
 
@@ -53,7 +53,9 @@ const DEVICE_B = {
 const OWNER = { claimedAt: NOW - 259_200_000, firstDeviceId: DEVICE_A.id }
 const REQUEST = {
   requestId: 'request-1', label: 'iPad', platform: 'iPadOS', address: 'https://home.example.ts.net', createdAt: NOW - 10_000, expiresAt: NOW + 290_000,
+  identity: null, windowless: false, wrongCodes: 0,
 }
+const VIEW = { mayAskWithoutWindow: 'own-user', showRequest: 'notice', windowMinutes: 5, requestExpiryMinutes: 5, pendingPerIdentity: 1 } as const
 const READY = { status: 200, body: { available: true, options: [{ option: 'tailscale-private', state: 'ready', address: 'https://home.example.ts.net' }] } }
 const refusal = (status: number, error: string, message = `${error} sentence`) => ({ status, body: { error, message } })
 const loopbackRefusal = refusal(403, 'LOOPBACK_REQUIRED', 'Adding a device needs you at your computer: open the studio on the home\'s own computer')
@@ -65,7 +67,7 @@ const loopbackRefusal = refusal(403, 'LOOPBACK_REQUIRED', 'Adding a device needs
  */
 function renderSection(host: ReturnType<typeof fakeHost>) {
   // The renderer's standard props are absent: the section reads none of them.
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(AWAY) } as DevicesSectionProps
+  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ...staticUnlock(AWAY), ...staticPairing() } as DevicesSectionProps
   return render(<DevicesSection {...props} />)
 }
 
@@ -87,7 +89,7 @@ function standardHost() {
     [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
     [`GET ${DEVICE_ROUTES.devices}`]: { status: 200, body: { owner: OWNER, devices: [DEVICE_A, DEVICE_B] } },
     [`POST ${DEVICE_ROUTES.window}`]: { status: 200, body: { closesAt: NOW + 300_000 } },
-    [`GET ${DEVICE_ROUTES.pending}`]: { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [REQUEST] } },
+    [`GET ${DEVICE_ROUTES.pending}`]: { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [REQUEST], pairing: VIEW } },
   })
 }
 
@@ -174,7 +176,7 @@ describe('the Devices section', () => {
     await settle(PENDING_POLL_MS)
     expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(2)
     // The Host closes the window: the waiting statement goes and the reads stop.
-    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: null, pending: [] } }
+    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: null, pending: [], pairing: VIEW } }
     await settle(PENDING_POLL_MS)
     expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(3)
     expect(screen.queryByText(en.waiting)).toBeNull()
@@ -186,7 +188,7 @@ describe('the Devices section', () => {
     fakeClock()
     const host = standardHost()
     host.script[`POST ${DEVICE_ROUTES.window}`] = { status: 200, body: { closesAt: NOW + PENDING_POLL_MS * 1.5 } }
-    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: NOW + PENDING_POLL_MS * 1.5, pending: [] } }
+    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: NOW + PENDING_POLL_MS * 1.5, pending: [], pairing: VIEW } }
     renderSection(host)
     await settle()
     fireEvent.click(screen.getByRole('button', { name: en.add }))
@@ -244,7 +246,7 @@ describe('the Devices section', () => {
     expect(within(row).getByRole('alert').textContent).toBe(mismatch)
     expect(screen.getByText(en.waiting)).toBeTruthy()
     // A third wrong code cancels the request; the refusal stays in the waiting area.
-    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [] } }
+    host.script[`GET ${DEVICE_ROUTES.pending}`] = { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [], pairing: VIEW } }
     await settle(PENDING_POLL_MS)
     expect(screen.queryByText('iPad')).toBeNull()
     expect(screen.getByRole('alert').textContent).toBe(mismatch)
@@ -386,7 +388,7 @@ describe('the Devices section', () => {
     fireEvent.click(screen.getByRole('button', { name: en.add }))
     await settle()
     unmount()
-    late.resolve(outcome === 'answers' ? { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [REQUEST] } } : loopbackRefusal)
+    late.resolve(outcome === 'answers' ? { status: 200, body: { windowClosesAt: NOW + 300_000, pending: [REQUEST], pairing: VIEW } } : loopbackRefusal)
     await settle(PENDING_POLL_MS * 3)
     expect(host.count(`GET ${DEVICE_ROUTES.pending}`)).toBe(1)
   })
@@ -424,7 +426,7 @@ describe('the device requests', () => {
     const host = fakeHost({
       [`GET ${DEVICE_ROUTES.reachStatus}`]: READY,
       [`POST ${DEVICE_ROUTES.window}`]: { status: 200, body: { closesAt: NOW } },
-      [`GET ${DEVICE_ROUTES.pending}`]: { status: 200, body: { windowClosesAt: null, pending: [] } },
+      [`GET ${DEVICE_ROUTES.pending}`]: { status: 200, body: { windowClosesAt: null, pending: [], pairing: VIEW } },
       [`POST ${DEVICE_ROUTES.approve}`]: { status: 200, body: { device: { id: DEVICE_A.id, label: 'x', address: 'y' } } },
       [`POST ${DEVICE_ROUTES.remove}`]: { status: 200, body: { removed: false, sessions: 0, connections: 0 } },
       [`GET ${DEVICE_ROUTES.devices}`]: refusal(403, 'NO_OWNER'),
@@ -432,7 +434,7 @@ describe('the device requests', () => {
     expect(await readReachStatus(host.fetch)).toEqual(READY.body)
     expect(await readDevices(host.fetch)).toBeUndefined()
     expect(await openApprovalWindow(host.fetch)).toBe(NOW)
-    expect(await readPendingDevices(host.fetch)).toEqual({ windowClosesAt: null, pending: [] })
+    expect(await readPendingDevices(host.fetch)).toEqual({ windowClosesAt: null, pending: [], pairing: VIEW })
     expect((await approveDevice(host.fetch, 'r' as ApprovalRequestId, '12345678')).device.id).toBe(DEVICE_A.id)
     expect(await removeDevice(host.fetch, DEVICE_A.id as DeviceId)).toEqual({ removed: false, sessions: 0, connections: 0 })
     for (const { init } of host.received) expect(init?.credentials).toBe('same-origin')
@@ -491,7 +493,7 @@ describe('the plugin', () => {
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID, PAIRING_NOTICE_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
       // Each overlay and each section with a store (the About section has none) read their store's view and actions.
       for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section').filter(section => section.options.id !== ABOUT_SECTION_ID)]) expect(entry.inject?.()).toBeTypeOf('object')
       // Each approval card action is bound to the card's chat.

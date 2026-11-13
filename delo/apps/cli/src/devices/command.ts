@@ -180,6 +180,10 @@ interface PendingRequest {
   readonly label: string
   readonly platform: string
   readonly createdAt: number
+  /** The Tailscale user the request named, if any. */
+  readonly identity: string | undefined
+  /** Whether the request arrived without an approval window. */
+  readonly windowless: boolean
 }
 
 /** What the person chose: a request to approve or to cancel. */
@@ -231,7 +235,9 @@ function openLine(row: TailscalePrivateRow): string {
  * @returns its label, platform, time and short id.
  */
 function pendingLine(request: PendingRequest): string {
-  return `${deviceName(request)}, asked at ${new Date(request.createdAt).toISOString()}, request ${printable(request.requestId.slice(0, SHORT_REQUEST_ID))}`
+  const who = request.identity === undefined ? '' : `, from Tailscale user ${printable(request.identity)}`
+  const how = request.windowless ? ', asked without an approval window' : ''
+  return `${deviceName(request)}${who}, asked at ${new Date(request.createdAt).toISOString()}${how}, request ${printable(request.requestId.slice(0, SHORT_REQUEST_ID))}`
 }
 
 /**
@@ -252,7 +258,9 @@ function pendingOf(value: unknown): readonly PendingRequest[] | undefined {
     const createdAt: unknown = Reflect.get(entry, 'createdAt')
     if (typeof requestId !== 'string' || typeof label !== 'string' || typeof platform !== 'string') return undefined
     if (typeof createdAt !== 'number' || Number.isNaN(new Date(createdAt).getTime())) return undefined
-    requests.push({ requestId, label, platform, createdAt })
+    const identity: unknown = Reflect.get(entry, 'identity')
+    const login: unknown = typeof identity === 'object' && identity !== null ? Reflect.get(identity, 'login') : undefined
+    requests.push({ requestId, label, platform, createdAt, identity: typeof login === 'string' ? login : undefined, windowless: Reflect.get(entry, 'windowless') === true })
   }
   return requests
 }

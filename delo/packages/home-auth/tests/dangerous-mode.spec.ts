@@ -34,6 +34,7 @@ import {
   type PermissionLevel,
   type ReachAccessFacts,
 } from '../src/reach-access.ts'
+import { HOME_AUTH_SWITCH, REACH_SWITCH } from '../src/service.ts'
 
 const LISTENER = 'reach-tailscale-private'
 const DEVICE = reachDevicePrincipal('device-1', LISTENER)
@@ -98,14 +99,17 @@ describe('the reach policy in dangerous mode', () => {
     })
   }
 
-  it('lifts only the computer-only switches on the allow list: a reach or pairing switch stays refused in the mode', () => {
-    const REACH: ComputerOnlySwitch = { ns: 'delo-reach', field: 'enabled', label: 'remote access' }
-    const PAIRING: ComputerOnlySwitch = { ns: 'delo-pairing', field: 'enabled', label: 'pairing' }
-    for (const target of [REACH, PAIRING]) {
-      const state = { ...facts(true, true), computerOnlySwitches: () => [CONSENT, REACH, PAIRING] }
-      const call = { action: 'settings/update' as never, resource: GLOBAL, args: { ns: target.ns, patch: { [target.field]: false } } }
+  it('lifts only the computer-only switches on the allow list: the real reach and home-auth (pairing) switches stay refused in the mode', () => {
+    const state = { ...facts(true, true), computerOnlySwitches: () => [CONSENT, REACH_SWITCH, HOME_AUTH_SWITCH] }
+    const calls = [
+      { target: REACH_SWITCH, args: { ns: REACH_SWITCH.ns, patch: { [REACH_SWITCH.field]: false } } },
+      // The pairing choices live in the home-auth row, whose every write is computer-only.
+      { target: HOME_AUTH_SWITCH, args: { ns: HOME_AUTH_SWITCH.ns, ops: [{ op: 'set', path: ['pairing', 'mayAskWithoutWindow'], value: 'tailnet' }] } },
+    ]
+    for (const { target, args } of calls) {
+      const action = (args.ops === undefined ? 'settings/update' : 'settings/mutate') as never
       // Pins the allow list: the mode never lifts a switch that is not named in DANGEROUS_LIFTABLE_SWITCHES.
-      expect(createCondition(state, DEVICE)(call), target.ns).toEqual({ kind: 'deny', reason: switchOffRefusal(target.label) })
+      expect(createCondition(state, DEVICE)({ action, resource: GLOBAL, args }), target.ns).toEqual({ kind: 'deny', reason: switchOffRefusal(target.label) })
     }
     expect([...DANGEROUS_LIFTABLE_SWITCHES]).toEqual([CONSENT.ns])
   })
@@ -263,7 +267,7 @@ describe('admitUnlockedDevice', () => {
 describe('the routes that approve a device, sign one in, remove one or change remote access', () => {
   it('never read dangerous mode, so no mode lifts their refusal', () => {
     // Pins the split: these route files decide the arrival from the home's core, which has no dangerous-mode input.
-    for (const file of ['reach-routes.ts', 'routes.ts', 'elevation-routes.ts', 'sign-in.ts', 'approvals.ts', 'sessions.ts', '../../reach/src/service.ts', '../../reach/src/front.ts', '../../home-process/src/reach.ts', '../../home-process/src/devices-approve.ts']) {
+    for (const file of ['reach-routes.ts', 'routes.ts', 'elevation-routes.ts', 'sign-in.ts', 'approvals.ts', 'pairing.ts', 'sessions.ts', '../../reach/src/service.ts', '../../reach/src/front.ts', '../../home-process/src/reach.ts', '../../home-process/src/devices-approve.ts']) {
       const source = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), 'utf8')
       expect(source, file).not.toMatch(/dangerousMode|requireComputerUnlessDangerous|admitUnlockedDevice/)
     }
