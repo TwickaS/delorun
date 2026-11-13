@@ -67,8 +67,8 @@ In a workspace you put on full access, the phone opens a terminal without an unl
 With an unlock, the phone can also:
 
 - change settings;
-- run slash commands;
-- install, enable, update or remove plugins, and undo or restore a profile change. Delo's own guard plugins and remote access cannot be turned off or changed this way;
+- run the slash commands that change only the chat: `/compact`, `/export`, `/goal`, `/permission` and `/plan`; the phone runs no other slash command;
+- install, enable, update or remove plugins, and undo or restore a profile change. Delo's own guard plugins and remote access cannot be turned off or changed this way, and an undo or restore that would change one is refused;
 - open a terminal in a folder outside the workspaces you put on full access;
 - browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
 - run plugin code the agent wrote.

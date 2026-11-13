@@ -23,6 +23,7 @@
  * @module @delo/home-auth/authenticator
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
@@ -37,7 +38,7 @@ import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc
 import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie, signInLocation, targetOf } from './reach-routes.ts'
-import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal, type ReachDevicePrincipal } from './reach-access.ts'
+import { createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
 import { HOME_AUTH_HTTP_STATUS } from './errors.ts'
 
@@ -149,6 +150,26 @@ function sessionTokenOf(cookie: string): string | undefined {
   return undefined
 }
 
+/** The module of upstream's plugin manager, whose row's `protectedPlugins` names the rows plugin management keeps. */
+const PLUGIN_MANAGER_MODULE = '@deepseek-ai/dsh-plugin-manager'
+
+/**
+ * The Loader entry ids of the rows whose module a `plugin-manager` row's `protectedPlugins` names, read from the Loader
+ * when asked, so the profile's own list is the only one.
+ * @param ctx - a context of the running profile.
+ * @returns the ids, none without a Loader or a `plugin-manager` row, or undefined when a row's list cannot be read.
+ */
+export function protectedEntryIdsOf(ctx: Context): ReadonlySet<string> | undefined {
+  const entries = [...ctx.get('loader')?.entries() ?? []]
+  const modules = new Set<string>()
+  for (const entry of entries.filter(row => row.options.name === PLUGIN_MANAGER_MODULE)) {
+    const listed = protectedPluginsIn(entry.options.config)
+    if (listed === undefined) return undefined
+    for (const name of listed) modules.add(name)
+  }
+  return new Set(entries.filter(row => modules.has(row.options.name)).map(row => row.id))
+}
+
 /** The provider. */
 export class HomeAuthAuthenticator extends Authenticator {
   static inject = ['homeAuth', 'connection']
@@ -194,6 +215,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         grantedFolders: () => access.get('reachFullAccessGrants')?.grantedFolders() ?? [],
         terminalWithoutUnlock: () => ctx.homeAuth.terminalWithoutUnlock(),
         computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
+        protectedEntryIds: () => protectedEntryIdsOf(ctx),
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {

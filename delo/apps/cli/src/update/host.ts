@@ -17,6 +17,7 @@ import type { JobId } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@delo/bundle-local/update-gate'
+import { protectedPluginsIn } from '@delo/home-auth'
 import type { BootRow, CountingChatGate, HealthExpectations, HealthVerdict, HostProtection } from '@delo/home-process'
 import { bundleListOf } from '@delo/profile-safety'
 import type { BootedRow } from '../delo-bundles.ts'
@@ -189,12 +190,11 @@ export function isGeneratedRowId(id: string): boolean {
  * The plugins the CLI profile protects: the `protectedPlugins` of its `plugin-manager` row, whose guard, consent and
  * sandbox rows the `plugin_manager` tool may not disable or reconfigure.
  * @param rows - the Loader's rows.
- * @returns the plugin names; none when no `plugin-manager` row names any.
+ * @returns the plugin names, read as the reach policy reads them (`protectedPluginsIn`); none when no `plugin-manager`
+ * row names any or its list is not a list of names.
  */
 export function protectedPluginsOf(rows: readonly BootedRow[]): ReadonlySet<string> {
-  const config = rows.find(row => row.id === 'plugin-manager')?.config
-  const listed = config !== null && typeof config === 'object' && 'protectedPlugins' in config ? config.protectedPlugins : undefined
-  return new Set(Array.isArray(listed) ? listed.filter((name): name is string => typeof name === 'string') : [])
+  return protectedPluginsIn(rows.find(row => row.id === 'plugin-manager')?.config) ?? new Set()
 }
 
 /**

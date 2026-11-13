@@ -27,6 +27,7 @@ import type {
   RemoteAccessResourceKind,
   RemoteAccessRole,
 } from '@deepseek-ai/dsh-api-remote-access/types'
+import { parseCommand } from '@deepseek-ai/dsh-commands'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { Workspace } from '@deepseek-ai/dsh-workspace/types'
 import type { ReachListenerId } from '@delo/contract-admission'
@@ -538,6 +539,72 @@ function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string
   }
 }
 
+/**
+ * The plugin-manager calls whose arguments name one plugin row by its Loader entry id. Every other plugin-manager
+ * change (bundles, installs, version exemptions, undo and restore) changes rows the policy cannot see from the call's
+ * arguments, and the plugin manager itself refuses one that would disable, remove or reconfigure a row of a module its
+ * `protectedPlugins` names, or restore a profile state in which one differs (`management-required`).
+ */
+const ROW_CALLS: ReadonlySet<string> = new Set(['pluginManager/setPluginEnabled'])
+
+/** The reason a plugin-manager call that names a protected row is refused to a device, unlocked or not. */
+export const PROTECTED_ROW_REFUSAL = 'loopback-required: changing a protected plugin row'
+
+/**
+ * The module names a `plugin-manager` row's configuration protects: its `protectedPlugins`, the single list a profile
+ * keeps of the guard, consent and sandbox rows that plugin management may not change.
+ * @param config - the row's configuration, as the Loader holds it.
+ * @returns the module names, empty when the row names none, or undefined when `protectedPlugins` is not a list of
+ * strings.
+ */
+export function protectedPluginsIn(config: unknown): ReadonlySet<string> | undefined {
+  const listed: unknown = isObject(config) ? config.protectedPlugins : undefined
+  if (listed === undefined) return new Set()
+  if (!Array.isArray(listed) || !listed.every(name => typeof name === 'string')) return undefined
+  return new Set(listed as string[])
+}
+
+/**
+ * Whether a plugin-manager call names a protected row, or names its row in arguments the condition cannot read. While
+ * the protected rows cannot be read, every call that names a row counts.
+ * @param facts - the protected rows.
+ * @param args - the call's arguments.
+ * @returns whether the call is refused to a device.
+ */
+function namesProtectedRow(facts: Pick<ReachAccessFacts, 'protectedEntryIds'>, args: Readonly<Record<string, unknown>>): boolean {
+  const ids = facts.protectedEntryIds()
+  return ids === undefined || typeof args.id !== 'string' || ids.has(args.id)
+}
+
+/**
+ * The slash commands a device runs, by name, with what each changes; `commands/execute` of any other command, or of a
+ * line that names none, is refused to a device, unlocked or not. Each listed command changes only its own chat or
+ * reads it: none writes a setting, a plugin row or the profile, so a new command a plugin registers is refused until
+ * it is listed here.
+ */
+export const REACH_DEVICE_COMMANDS = {
+  compact: 'compact the chat\'s older history',
+  export: 'download the chat\'s log',
+  goal: 'set or read the chat\'s goal',
+  permission: 'switch the chat\'s permission preset; a full-access preset still meets the workspace\'s consent, which only the computer grants',
+  plan: 'enter or leave plan mode in the chat',
+} as const satisfies Readonly<Record<string, string>>
+
+/** The reason `commands/execute` of a command {@link REACH_DEVICE_COMMANDS} does not list is refused. */
+export const UNLISTED_COMMAND_REFUSAL = 'loopback-required: commands/execute of a command a device does not run'
+
+/**
+ * Whether `commands/execute` runs a command a device may run: its line parses, as the commands service parses it, to
+ * a name {@link REACH_DEVICE_COMMANDS} lists.
+ * @param args - the call's arguments.
+ * @returns whether it does.
+ */
+function runsDeviceCommand(args: Readonly<Record<string, unknown>>): boolean {
+  if (typeof args.line !== 'string') return false
+  const name = parseCommand(args.line)?.name
+  return name !== undefined && Object.hasOwn(REACH_DEVICE_COMMANDS, name)
+}
+
 /** The reason a `session/create` outside the known workspaces is refused without an unlock. */
 export const CREATE_OUTSIDE_WORKSPACES = 'elevation-required: session/create in a folder outside the known workspaces'
 
@@ -572,14 +639,17 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
  * decides where the chat's commands may write. It refuses a workspace-file call unless every path it names is one a
- * device may reach (see {@link WORKSPACE_PATH_ACTIONS}), unlocked or not. Every other action is allowed as its role
- * lists it, and so is every other question asked without a call's arguments.
+ * device may reach (see {@link WORKSPACE_PATH_ACTIONS}), unlocked or not. Before the unlock check, and so unlocked or
+ * not, it refuses a settings write that could turn a registered {@link ComputerOnlySwitch} off, a plugin-manager call
+ * that names a protected row ({@link PROTECTED_ROW_REFUSAL}), and a slash command {@link REACH_DEVICE_COMMANDS} does not
+ * list ({@link UNLISTED_COMMAND_REFUSAL}). Every other action is allowed as its role lists it, and so is every other
+ * question asked without a call's arguments.
  * @param facts - the Host state the policy reads.
  * @param principal - the device and the listener whose bindings carry the condition.
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches' | 'protectedEntryIds'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener } = principal
@@ -598,11 +668,14 @@ export function createCondition(
   }
   return ({ action, resource, args }) => {
     if (args !== undefined) {
-      // A computer-only switch stays on, so no unlock admits a write that could turn it off.
+      // A computer-only switch stays on, a protected row stays as it is, and a command a device does not run stays
+      // unrun, so no unlock admits any of them.
       if (SETTINGS_WRITES.has(action)) {
         const off = facts.computerOnlySwitches().find(target => turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
       }
+      if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+      if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
     }
     if (ELEVATED_SET.has(action) && !(action.startsWith(TERMINAL_PREFIX) && terminalWithoutUnlock(facts, resource))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
@@ -688,6 +761,11 @@ export interface ReachAccessFacts {
    * @returns the switches.
    */
   readonly computerOnlySwitches: () => readonly ComputerOnlySwitch[]
+  /**
+   * The Loader entry ids of the rows whose module the `plugin-manager` row's `protectedPlugins` names.
+   * @returns the ids, or undefined when the list cannot be read.
+   */
+  readonly protectedEntryIds: () => ReadonlySet<string> | undefined
 }
 
 /**

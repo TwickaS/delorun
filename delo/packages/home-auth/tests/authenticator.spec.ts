@@ -18,7 +18,7 @@ import type { RemoteAccessBinding, RemoteAccessPolicy } from '@deepseek-ai/dsh-a
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
-import { EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
+import { EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
 import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
 import { DeviceStore } from '../src/devices.ts'
@@ -307,7 +307,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [] })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [], protectedEntryIds: () => new Set() })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -433,7 +433,7 @@ describe('the authenticator provider', () => {
       }
     })
 
-    it('reads the computer-only switches registered now', async () => {
+    it('reads the computer-only switches registered now and the rows the plugin-manager row protects, from the Loader', async () => {
       const access = await fakeRemoteAccess()
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
@@ -449,6 +449,22 @@ describe('the authenticator provider', () => {
       expect(decide('settings/update', turnOff)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the external-agent consent off' })
       off()
       expect(decide('settings/update', turnOff)).toEqual(NO_UNLOCK)
+      // Pins the Loader fact: the rows whose module a plugin-manager row protects, by their entry ids.
+      const enable = (id: string) => decide('pluginManager/setPluginEnabled', { id, enabled: false })
+      const entries = [
+        { id: 'include:plugin-manager', options: { name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: ['@delo/plugin-mcp-consent'] } } },
+        { id: 'include:delo-mcp-consent', options: { name: '@delo/plugin-mcp-consent' } },
+        { id: 'include:delo-trash', options: { name: '@delo/plugin-trash' } },
+      ]
+      expect(protectedEntryIdsOf(ctx)).toEqual(new Set())
+      ctx.provide('loader', { entries: () => entries } as never)
+      expect(protectedEntryIdsOf(ctx)).toEqual(new Set(['include:delo-mcp-consent']))
+      expect(enable('include:delo-mcp-consent')).toEqual({ kind: 'deny', reason: 'loopback-required: changing a protected plugin row' })
+      expect(enable('include:delo-trash')).toEqual({ kind: 'deny', reason: 'elevation-required: pluginManager/setPluginEnabled' })
+      // A list that is not one of names protects every row.
+      entries[0] = { id: 'include:plugin-manager', options: { name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: 'all' } } } as never
+      expect(protectedEntryIdsOf(ctx)).toBeUndefined()
+      expect(enable('include:delo-trash')).toEqual({ kind: 'deny', reason: 'loopback-required: changing a protected plugin row' })
     })
 
     it('recomputes each admitted device\'s snapshot when a Session or a Workspace changes', async () => {

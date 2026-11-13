@@ -18,10 +18,14 @@ import {
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
   CREATE_OUTSIDE_WORKSPACES,
+  PROTECTED_ROW_REFUSAL,
+  REACH_DEVICE_COMMANDS,
+  UNLISTED_COMMAND_REFUSAL,
   assertDisjoint,
   createCondition,
   createReachAccessPolicy,
   reachDevicePrincipal,
+  protectedPluginsIn,
   reachRefusal,
   switchOffRefusal,
   type ComputerOnlySwitch,
@@ -36,6 +40,8 @@ const DEVICE = reachDevicePrincipal('device-1', LISTENER)
 const GLOBAL = { kind: 'global' } as const
 /** The switch `@delo/plugin-delegation-consent` registers while it is mounted. */
 const CONSENT: ComputerOnlySwitch = { ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' }
+/** The Loader entry id of a row whose module the `plugin-manager` row protects. */
+const PROTECTED_ROW = 'include:delo-permission-defaults'
 
 function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
   return {
@@ -53,6 +59,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     grantedFolders: () => [],
     terminalWithoutUnlock: () => false,
     computerOnlySwitches: () => [CONSENT],
+    protectedEntryIds: () => new Set([PROTECTED_ROW]),
     ...overrides,
   }
 }
@@ -336,6 +343,66 @@ describe('the external-agent consent\'s settings row', () => {
   })
 })
 
+describe('a plugin-manager call that names a protected row', () => {
+  const NEVER = { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
+  const unlocked = (overrides: Partial<ReachAccessFacts> = {}) => createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), ...overrides }), DEVICE)
+  const enable = (args: Record<string, unknown>, overrides: Partial<ReachAccessFacts> = {}) =>
+    unlocked(overrides)({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args })
+
+  it('is never allowed from a device, unlocked or not, whichever way it switches the row', () => {
+    // Pins the protected-row check: an unlock admits plugin management, never a change to a protected row.
+    expect(enable({ id: PROTECTED_ROW, enabled: false })).toEqual(NEVER)
+    expect(enable({ id: PROTECTED_ROW, enabled: true })).toEqual(NEVER)
+    expect(createCondition(facts(), DEVICE)({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: PROTECTED_ROW, enabled: false } })).toEqual(NEVER)
+  })
+
+  it('refuses arguments it cannot read, and every row while the protected list cannot be read', () => {
+    expect(enable({ enabled: false })).toEqual(NEVER)
+    expect(enable({ id: 7, enabled: false })).toEqual(NEVER)
+    expect(enable({ id: 'include:delo-trash', enabled: false }, { protectedEntryIds: () => undefined })).toEqual(NEVER)
+  })
+
+  it('leaves an unprotected row to the unlock', () => {
+    expect(enable({ id: 'include:delo-trash', enabled: false })).toEqual({ kind: 'allow' })
+    expect(createCondition(facts(), DEVICE)({ action: 'pluginManager/setPluginEnabled', resource: GLOBAL, args: { id: 'include:delo-trash', enabled: false } }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: pluginManager/setPluginEnabled' })
+  })
+})
+
+describe('the protected plugins of a plugin-manager row', () => {
+  it('are its protectedPlugins, none without the key, and unreadable when the key is not a list of names', () => {
+    expect(protectedPluginsIn({ protectedPlugins: ['@delo/plugin-mcp-consent'] })).toEqual(new Set(['@delo/plugin-mcp-consent']))
+    expect(protectedPluginsIn({})).toEqual(new Set())
+    expect(protectedPluginsIn(undefined)).toEqual(new Set())
+    expect(protectedPluginsIn({ protectedPlugins: '@delo/plugin-mcp-consent' })).toBeUndefined()
+    expect(protectedPluginsIn({ protectedPlugins: ['@delo/plugin-mcp-consent', 3] })).toBeUndefined()
+  })
+})
+
+describe('a slash command', () => {
+  const unlocked = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)
+  const run = (args: Record<string, unknown>) => unlocked({ action: 'commands/execute', resource: GLOBAL, args })
+  const NEVER = { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
+
+  it('runs under an unlock when the commands service parses its line to a listed name', () => {
+    for (const name of Object.keys(REACH_DEVICE_COMMANDS)) expect(run({ line: `/${name} now` }), name).toEqual({ kind: 'allow' })
+    expect(createCondition(facts(), DEVICE)({ action: 'commands/execute', resource: GLOBAL, args: { line: '/plan' } }))
+      .toEqual({ kind: 'deny', reason: 'elevation-required: commands/execute' })
+  })
+
+  it('is never run from a device when no list names it, or its line names no command', () => {
+    // Pins the command list: an unlock admits the listed commands, never another.
+    expect(run({ line: '/config set enabled false' })).toEqual(NEVER)
+    expect(run({ line: '/plugins' })).toEqual(NEVER)
+    expect(run({ line: '/toString' })).toEqual(NEVER)
+    expect(run({ line: '/constructor' })).toEqual(NEVER)
+    expect(run({ line: 'plan' })).toEqual(NEVER)
+    expect(run({ line: '/Plan' })).toEqual(NEVER)
+    expect(run({})).toEqual(NEVER)
+    expect(createCondition(facts(), DEVICE)({ action: 'commands/execute', resource: GLOBAL, args: { line: '/config' } })).toEqual(NEVER)
+  })
+})
+
 describe('a terminal', () => {
   const ALLOW = { kind: 'allow' }
   const OPEN = { action: 'terminal/create' as RemoteAccessAction, resource: { kind: 'session', id: session('s-1') } as const, args: {} }
@@ -415,9 +482,14 @@ describe('an elevated action', () => {
   it('is refused without an unlock, for a call and for an event, a snapshot or a list filter', () => {
     const condition = createCondition(facts(), DEVICE)
     // Pins the unlock check, and that it runs before a question without arguments is allowed.
+    // A call's arguments name the row or the command for two of them, which the never rules below read first.
+    const named: Partial<Record<string, Record<string, unknown>>> = {
+      'commands/execute': { line: '/plan' },
+      'pluginManager/setPluginEnabled': { id: 'include:delo-trash', enabled: false },
+    }
     for (const action of Object.keys(REACH_ELEVATED_ACTIONS) as RemoteAccessAction[]) {
       expect(condition({ action, resource: GLOBAL })).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
-      expect(condition({ action, resource: GLOBAL, args: {} })).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(condition({ action, resource: GLOBAL, args: named[action] ?? {} })).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
     }
   })
 

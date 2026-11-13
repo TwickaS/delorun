@@ -8,7 +8,8 @@
  *   profile history undo and restore, a settings write in every settings namespace, terminals, slash commands, dynamic
  *   plugin code, the directory picker, a new workspace, and a chat in a folder outside the known workspaces. Under an
  *   unlock each is admitted, and the never families (credentials, the account, the settings document) stay refused,
- *   as does a settings write that would turn a registered computer-only switch, the external-agent consent, off.
+ *   as do a slash command `REACH_DEVICE_COMMANDS` does not list and a settings write that would turn a registered
+ *   computer-only switch, the external-agent consent, off.
  * - The reads a device needs to work the way it works at the computer succeed: the installed plugins and their profile
  *   history, the files of a chat's own workspace, the office previews of those files, and the composer's file names.
  *   A workspace-file call whose real path lies outside the workspace or in the Delo home, a link's target included,
@@ -32,7 +33,7 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
-import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, switchOffRefusal } from '@delo/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, switchOffRefusal, UNLISTED_COMMAND_REFUSAL } from '@delo/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delo/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
@@ -349,7 +350,7 @@ describe('a reach device through the Gateway', () => {
   it('needs an unlock for slash commands, dynamic plugin code and a new workspace', async () => {
     const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
     // Pins the elevated table: without an unlock each is refused naming the unlock it needs.
-    await expectElevationRequired('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
+    await expectElevationRequired('commands/execute', { agentId: created.sessionId, line: '/plan', submittedAttachments: [] })
     await expectElevationRequired('dynamicCordisRunner/inventory', {})
     await expectElevationRequired('workspace/create', { request: { path: directory } })
   })
@@ -465,6 +466,26 @@ describe('an elevated reach device through the Gateway', () => {
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
       unregister()
+    }
+  })
+
+  it('never runs a slash command no list names, unlocked or not', async () => {
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    const line = '/config set enabled false'
+    const expectUnlisted = async (): Promise<void> => {
+      expect(await call('commands/execute', { agentId: created.sessionId, line, submittedAttachments: [] })).toMatchObject({
+        ok: false,
+        error: { code: 'remote-access/denied', details: { action: 'commands/execute', reason: UNLISTED_COMMAND_REFUSAL } },
+      })
+    }
+    // Pins the command list through the Gateway, before the unlock check and under an unlock.
+    await expectUnlisted()
+    const id = elevate()
+    try {
+      await expectUnlisted()
+      await expectAdmitted('commands/execute', { agentId: created.sessionId, line: '/plan', submittedAttachments: [] })
+    } finally {
+      studio.ctx.homeAuth.revokeElevation(id)
     }
   })
 
