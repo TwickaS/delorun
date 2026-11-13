@@ -6,6 +6,8 @@ import { generateKeyPairSync } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { TIMESTAMP_LIFETIME_SECONDS } from '@delo/contract-release-manifest'
 import { readEnvelope } from '@delo/release-formats/sign/schemas'
+import { publicKeyEntry } from '@delo/release-formats/sign/envelope'
+import { rootFile } from '@delo/release/tests/sign/fixture'
 import { trustRootChain, verifyTimestamp } from '@delo/release-formats/sign/verify'
 import { resignTimestamp, timestampKey } from '../src/resign-core.ts'
 import { FIRST, MemoryMark, signedChannel, storeWith } from './support.ts'
@@ -34,6 +36,16 @@ describe('timestamp re-signing', () => {
     const store = storeWith(channel)
     const result = await resignTimestamp({ store, mark: new MemoryMark(), key: channel.keys.timestamp, now: FIRST + 10 * DAY })
     expect(result).toMatchObject({ outcome: 'resigned', version: 2 })
+  })
+
+  it('refuses a root whose timestamp threshold is above 1, before it writes', async () => {
+    const channel = signedChannel()
+    const trusted = trustRootChain([channel.rootBytes], FIRST).at(-1)!.metadata
+    const second = publicKeyEntry(generateKeyPairSync('ed25519').privateKey)
+    const { bytes } = rootFile(channel.keys, { keys: { ...trusted.keys, [second.keyid]: second.entry }, roles: { ...trusted.roles, timestamp: { keyids: [...trusted.roles.timestamp.keyids, second.keyid], threshold: 2 } } })
+    const store = storeWith({ ...channel, rootBytes: bytes })
+    await expect(resignTimestamp({ store, mark: new MemoryMark(), key: channel.keys.timestamp, now: FIRST + DAY })).rejects.toThrow(/requires 2 timestamp signatures/u)
+    expect(store.writes).toEqual([])
   })
 
   it('refuses a current timestamp signed by another key and writes nothing', async () => {

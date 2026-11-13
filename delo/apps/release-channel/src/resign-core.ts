@@ -32,7 +32,7 @@ export type ResignOutcome =
  * @returns the outcome.
  * @throws Error when no timestamp or root is stored, the roots do not chain, the current timestamp does not verify
  * under the newest root (a bad signature, a root other than the newest, or a lifetime other than the contract's), or
- * the key is not one of the root's timestamp keys, or the current timestamp lies below the high-water mark (a lower
+ * the key is not one of the root's timestamp keys, the root's timestamp threshold is above 1, or the current timestamp lies below the high-water mark (a lower
  * version, or a channel on a lower release); nothing is written in these cases.
  */
 export async function resignTimestamp(request: { readonly store: ReplaceStore, readonly mark: MarkStore, readonly key: KeyObject, readonly now: number }): Promise<ResignOutcome> {
@@ -45,6 +45,8 @@ export async function resignTimestamp(request: { readonly store: ReplaceStore, r
   const files = await Promise.all(numbered.map(async ({ name }) => (await store.read(name))?.bytes ?? Promise.reject(new Error(`${name} disappeared while it was read`))))
   const chain = walkRootChain(files)
   const root = chain.at(-1)!
+  // The re-signing writes one signature, so a higher threshold would make every file it writes fail verification.
+  if (root.metadata.roles.timestamp.threshold !== 1) throw new Error(`root ${String(root.metadata.version)} requires ${String(root.metadata.roles.timestamp.threshold)} timestamp signatures; the re-signer writes one, so it refuses to sign instead of publishing a timestamp that fails verification`)
   // The current timestamp may be past its expiry after a missed run; its signature and lifetime still hold.
   const previous = verifyTimestamp(root, current.bytes, now, undefined, { allowExpired: true })
   const seen: HighWaterMark = { version: previous.version, channels: { stable: previous.channels.stable.release, beta: previous.channels.beta.release } }
