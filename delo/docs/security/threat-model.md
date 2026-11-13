@@ -256,3 +256,7 @@ Each limit below is stated in the contract that owns it. `delorun verify` report
 - Denial tests run against local stand-ins and never contact real services.
 - This page changes in the same change as a boundary, a party's access or a limit it states, and a defence that a change builds moves from not built to built here in that change.
 - Security reports go through [SECURITY.md](../../../SECURITY.md), never a public issue.
+
+## Consent and network seams when their service fails
+
+A consent or network row that is on but whose service failed to start fails closed: the MCP client refuses every stdio server, the external-agent and scheduled-task consents mount a service that refuses every start or delivery, and the per-workspace network gives confined commands no network. With the row's switch off, the seam is absent and behaves as stock.

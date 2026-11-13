@@ -15,6 +15,7 @@ import z from '@deepseek-ai/schemastery'
 import type { ComputerOnlySwitch } from '@delo/home-auth'
 import { guardProfile, pluginManagerVerdict, type GuardRow } from './guard.ts'
 import { registerDelegationRoutes } from './routes.ts'
+import { FailedDelegationConsent } from './failed.ts'
 import { DeloDelegationConsent } from './service.ts'
 import { DELEGATION_CONSENT_ROW, RUN_TIMEOUT_MINUTES, type DelegationConsentSettings } from './wire.ts'
 
@@ -67,11 +68,22 @@ function mountConsent(ctx: Context, config: Config): void {
   const rows = (): readonly GuardRow[] => [...ctx.get('loader')?.entries() ?? []].map(entry => ({
     id: entry.id, rowId: entry.options.id, name: entry.options.name,
   }))
+  let disposed = false
+  ctx.effect(() => () => { disposed = true })
   ctx.plugin(DeloDelegationConsent, { timeoutMs: () => config.runTimeoutMinutes.get() * 60_000, env: process.env, now: Date.now })
+    .await().catch((error: unknown) => {
+      // The row stays active, so the declaring-row check of the subagent runtime cannot see this failure; a refusing
+      // service takes the seam's slot, and every start is refused until the row starts again.
+      if (disposed) return
+      const reason = error instanceof Error ? error.message : 'no reason was given'
+      ctx.logger.error(`delegation-consent: the service of the row ${DELEGATION_CONSENT_ROW} failed to start, so every external agent start is refused until Delorun restarts: ${reason}`)
+      ctx.plugin(FailedDelegationConsent, { row: DELEGATION_CONSENT_ROW, reason })
+    })
   const profile = () => guardProfile(ctx.get('profileContext')?.dir)
   ctx.inject(['tools'], (scope) => { scope.tools.guard(exec => pluginManagerVerdict(exec, rows, profile)) })
   ctx.inject(['connection', 'delegationConsent'], (scope) => {
-    registerDelegationRoutes(scope, scope.delegationConsent as DeloDelegationConsent)
+    // The refusing service, mounted when the real one failed, has no grants to list.
+    if (scope.delegationConsent instanceof DeloDelegationConsent) registerDelegationRoutes(scope, scope.delegationConsent)
   })
   ctx.inject(['homeAuth'], (scope) => {
     scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(EXTERNAL_AGENT_CONSENT_SWITCH), 'delegation consent: computer-only switch')

@@ -48,3 +48,7 @@ English | [中文](README.zh.md)
 ## Tests
 
 [`tests/consent.spec.ts`](tests/consent.spec.ts) covers the preset matrix without a composition: the same preset delivers, a chat that moved to a wider preset refuses with its reason, the narrower, unnamed and unreadable readings refuse with theirs, a task and a chat without presets deliver, the naming states the title, the instruction, the recurrence, the chat by title or the new chat's directory, and the preset, the Workspace preset is read for a chat opened in a directory, the mounted service provides all three and a disabled mount provides nothing, and the configuration schema defaults `enabled` to false. The runtime's side of the seam is covered in the upstream schedule packages' `consent.spec.ts` files.
+
+## When the service fails
+
+If the consent's service fails to start while `enabled` is on, the row stays active and mounts a service that refuses every scheduled delivery. The refusal names the row `delo-schedule-consent` and the failure, and says to restart Delorun, read the logs or start in safe mode; the refused tasks are paused and need resuming. With `enabled` off nothing is mounted.

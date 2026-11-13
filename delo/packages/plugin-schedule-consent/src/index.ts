@@ -141,6 +141,38 @@ export class ScheduleConsent extends Service implements ScheduleConsentService {
   }
 }
 
+/** The row that mounts this plugin in Delo's composition, named in a refusal. */
+export const SCHEDULE_CONSENT_ROW = 'delo-schedule-consent'
+
+/**
+ * The `scheduleConsent` service mounted when {@link ScheduleConsent} failed to activate while the switch is on: it
+ * refuses every delivery, so a crashed consent never reads as a composition without one.
+ */
+export class FailedScheduleConsent extends Service implements ScheduleConsentService {
+  private readonly failure: string
+
+  /**
+   * @param ctx - the plugin context.
+   * @param reason - why the real service failed.
+   */
+  constructor(ctx: Context, reason: string) {
+    super(ctx, 'scheduleConsent')
+    this.failure = reason
+  }
+
+  nameEffect(): string | undefined {
+    return undefined
+  }
+
+  reviewDelivery(): ScheduleDeliveryVerdict {
+    return {
+      kind: 'refuse',
+      reason: `the scheduled-task consent row ${SCHEDULE_CONSENT_ROW} is on but its service failed to start (${this.failure}), so no scheduled task is delivered. `
+        + 'To recover, restart Delorun; if it fails again, read the Delo logs for the row\'s failure, or start in safe mode with `delorun recover safe-mode`, then resume the paused tasks.',
+    }
+  }
+}
+
 /**
  * Mount the plugin in the scope that loads it. With `enabled` off — the
  * schema's default, and the value the parity replay keeps — nothing is mounted
@@ -151,5 +183,13 @@ export class ScheduleConsent extends Service implements ScheduleConsentService {
 export function apply(ctx: Context, config?: unknown): void {
   const parsed = ConfigSchema.parse(config ?? {})
   if (!parsed.enabled) return
-  ctx.plugin(ScheduleConsent)
+  let disposed = false
+  ctx.effect(() => () => { disposed = true })
+  ctx.plugin(ScheduleConsent).await().catch((error: unknown) => {
+    // The row stays active, so nothing else shows the seam empty by a failure; a refusing service takes its slot.
+    if (disposed) return
+    const reason = error instanceof Error ? error.message : 'no reason was given'
+    ctx.logger.error(`schedule-consent: the service of the row ${SCHEDULE_CONSENT_ROW} failed to start, so every scheduled delivery is refused until Delorun restarts: ${reason}`)
+    ctx.plugin(FailedScheduleConsent, reason)
+  })
 }
