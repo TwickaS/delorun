@@ -45,7 +45,7 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
       newTitle: "I'm new: start here",
       newText: 'Install Delorun and open your first chat, step by step.',
       taskTitle: 'I want to do something',
-      taskText: 'The guide index lists every task by what you want to do: daily use, switching, updates, remote access, safety and troubleshooting.',
+      taskText: 'The guide index lists every task by what you want to do: daily use, switching, updates, remote access, safety, troubleshooting and the roadmap.',
       developerTitle: "I'm a developer",
       developerText: 'The developer reference: how Delorun differs from DeepSeek Harness, the parity checklist and the other pages for maintainers.',
     },

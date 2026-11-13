@@ -25,7 +25,8 @@ The user guide is for people who install and use Delorun, the community fork of 
 
 - **Install Delorun and have a first chat:** [Install and first run](install.md). It covers what you need first, [Quick or Full setup](install.md#setup-quick-or-full), [the studio and your first chat](install.md#the-studio-and-your-first-chat) and [a computer without a browser](install.md#a-computer-without-a-browser).
 - **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](switching.md). It explains what is copied, what is held back and [how to go back](switching.md#going-back).
-- **See how Delorun differs from stock DeepSeek Harness:** [Delorun and stock DeepSeek Harness](delo-vs-stock.md). It lists every difference, what is not available yet, and the roadmap.
+- **See how Delorun differs from stock DeepSeek Harness:** [Delorun and stock DeepSeek Harness](delo-vs-stock.md). It lists every difference and what Delorun does not include.
+- **See what Delorun is for and where it is going:** [Roadmap and vision](roadmap.md). It lists the planned work in order, and what is not planned.
 
 ## I want to use it every day
 

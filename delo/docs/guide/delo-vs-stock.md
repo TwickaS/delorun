@@ -1,18 +1,16 @@
 ---
-description: "How Delorun differs from stock DeepSeek Harness: why Delorun exists, what stays the same, every difference you will notice, the defaults it changes, what it removes, what is not available yet, how to move between the two, and the roadmap."
+description: "How Delorun differs from stock DeepSeek Harness: why Delorun exists, what stays the same, every difference you notice, the defaults it changes, what it removes, what it does not include, and how to move between the two."
 ---
 
 # Delorun and stock DeepSeek Harness
 
 English | [中文](delo-vs-stock.zh.md)
 
-Delorun has no release yet; this page describes the code that the first release is built from.
-
 ## Summary
 
 This page helps you decide whether Delorun suits you, and what changes if you come from stock DeepSeek Harness. You need nothing first. Stock DeepSeek Harness (DSH) is the harness as its own maintainers release it ([stock DSH](../reference/glossary.md#stock)).
 
-Delorun is a community fork of DSH. It runs DSH's own code, keeps DSH plugins and chats working, and installs and works like stock DSH: on your computer, with no account, and one command that opens the [studio](../reference/glossary.md#studio). On top of that it adds its own studio look, updates that show what they would change and can go back, protections around the commands the model runs, and remote access from your phone over your own [tailnet](../reference/glossary.md#tailnet). You can switch back to stock behaviour for each addition that changes what the model sees. This page lists what stays the same, every difference you will notice, what is not available yet, and what comes next.
+Delorun is a community fork of DSH. It runs DSH's own code, keeps DSH plugins and chats working, and installs and works like stock DSH: on your computer, with no account, and one command that opens the [studio](../reference/glossary.md#studio). On top of that it adds its own studio look, updates that show what they would change and can go back, protections around the commands the model runs, and remote access from your phone over your own [tailnet](../reference/glossary.md#tailnet). You can switch back to stock behaviour for each addition that changes what the model sees. This page lists what stays the same, every difference you notice, and what Delorun does not include. The [roadmap](roadmap.md) says what is planned.
 
 ## Contents
 
@@ -21,9 +19,9 @@ Delorun is a community fork of DSH. It runs DSH's own code, keeps DSH plugins an
 - [What is different](#what-is-different)
 - [Defaults that differ](#defaults-that-differ)
 - [What Delorun removes](#what-delorun-removes)
-- [Not available yet](#not-available-yet)
+- [What Delorun does not include](#what-delorun-does-not-include)
 - [Moving between DSH and Delorun](#moving-between-dsh-and-delorun)
-- [Roadmap](#roadmap)
+- [Roadmap and vision](#roadmap-and-vision)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Why Delorun exists
@@ -36,7 +34,7 @@ Delorun holds itself to these rules:
 - **Yours to change.** Configuration, plugins, presets, skills, themes and the studio are yours, and no hidden layer overrides them.
 - **Updates never take your work away.** Before an update you see what it would change, your [profile](../reference/glossary.md#profile) is saved first, and one command goes back ([Updates](updates.md)).
 - **Delorun cannot get in on its own.** Your studio runs on your computer, and every new device needs your approval at that computer ([Reach the studio from your phone](reach.md)).
-- **Honest claims.** A protection is called enforced only where a test proves it, and this guide marks what is not available yet.
+- **Honest claims.** A protection is called enforced only where a test proves it, and this guide states what Delorun does not include.
 
 ## What stays the same
 
@@ -99,9 +97,9 @@ Other differences exist in the code but are off in the profile `delorun` runs, s
 
 - DeepSeek's account and Platform integration: no Platform sign-in, Usage or Top-up page. Delorun works with any model provider DSH supports, DeepSeek's API with your own key included.
 
-## Not available yet
+## What Delorun does not include
 
-These are part of Delorun's plans and are not in the code yet:
+Delorun does not include these, and this guide describes each only where it affects a choice:
 
 - a Delorun desktop app, and macOS releases;
 - Docker workspaces, where a workspace's commands run in a container;
@@ -111,6 +109,8 @@ These are part of Delorun's plans and are not in the code yet:
 - ejecting a plugin while keeping its settings in your profile;
 - the main chat, importing a workspace with `git clone` and editing its `AGENTS.md` from the studio, which exist as plugins that no profile loads;
 - PTC as the default mode in the first-run guide.
+
+The [roadmap](roadmap.md) says which of these are planned.
 
 ## Moving between DSH and Delorun
 
@@ -134,25 +134,9 @@ These are part of Delorun's plans and are not in the code yet:
 
 </details>
 
-## Roadmap
+## Roadmap and vision
 
-The roadmap is ordered, not dated: each stage starts when the one before it is ready.
-
-1. **First release.** What [What is different](#what-is-different) lists: the studio, safe updates, customisation, native workspaces with Delorun's protections, reach through your tailnet, verification of the release, logs and this guide.
-2. **The Delo relay.** Studio addresses on `your-name.delo.run`, a Delo Run account and device approvals through Delo, first in beta releases. Delo Run passes encrypted traffic it cannot read, and the page that announces it states exactly what Delo can see.
-3. **Studio follow-ups.** Delorun's own phone sidebar.
-4. **Extra machines.** Run chats on a laptop, a server or a homelab machine from one studio: a small agent per machine, pairing, workspace copies, and continuing a chat on another machine.
-5. **Stage 5, in no fixed order.**
-   - The items under [Not available yet](#not-available-yet).
-   - Opt-in telemetry, off unless you say yes, with its exact payload shown.
-   - An optional plugin security review: an agent preset you can run on a plugin before installing it, which can share its findings with the community.
-   - An activity history over your chats and a live system-stats panel.
-   - The desktop app managing WSL2, a Linux AppImage, and one profile shared by the desktop app and the command line.
-   - A harness-and-workspaces Docker mode for hosted homes.
-   - Workspace checkpoints, scheduled local and off-site encrypted backups, and Delo Run Backup.
-   - An agent team, workspaces on other machines over SSH, hosted homes and machines, and teams.
-
-Not planned: managing other harnesses as products, splitting one chat across machines, and Delorun selling model access.
+What Delorun is for, what is planned and in what order, and what is not planned are on [Roadmap and vision](roadmap.md).
 
 **Next.** To install Delorun, read [Install and first run](install.md). To keep your DeepSeek Harness work, read [Switching from DeepSeek Harness](switching.md). If something went wrong, find its message in [Troubleshooting](troubleshooting.md).
 
