@@ -391,6 +391,21 @@ describe('plugin_manager undo and restore in danger-full-access with @delo/bundl
     expect(files()).toEqual(before)
   })
 
+  describe.each(['restore', 'undo'] as const)('%s back to a version that turns the external-agent consent off', (action) => {
+    it('is refused, and leaves the profile as it was', async () => {
+      const consent = '@delo/plugin-delegation-consent'
+      const { ctx, dir, call, files } = await fixture({ reload: 'startup' })
+      pnpmInstalls(dir, {})
+      const version = await outsideVersion(ctx, dir, (edited) => {
+        writeFileSync(join(edited, 'cordis.patch.yml'), JSON.stringify([{ id: rowId(consent), config: { enabled: false } }]))
+      })
+      const before = files()
+      const result = changeResult(await call(action === 'restore' ? { action, target: version } : { action }))
+      expect(result).toMatchObject({ ...GUARD_REFUSAL, error: { code: 'management-required', diagnostic: expect.stringContaining(consent) } })
+      expect(files()).toEqual(before)
+    })
+  })
+
   /** A version exemption of the guard's package for a fixture runtime. */
   const EXEMPTION = { [`${GUARD}@1.0.0`]: ['0.0.1'] }
 

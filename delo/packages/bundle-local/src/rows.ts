@@ -159,7 +159,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'delo-delegation-consent',
     kind: 'added',
-    reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the plugin\'s own default, off, is the parity value.',
+    reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the person turns it off in Settings, Permissions, which setup\'s prompts answer does not change, and the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the delegationConsent service is absent, so external providers start and describe themselves as upstream\'s do.' },
   },
   {

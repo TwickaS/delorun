@@ -15,14 +15,14 @@ import { setPatchRow } from './writes.ts'
 
 /**
  * The switches whose behaviour is a prompt or a permission default, with the row of `@delo/bundle-local` that
- * mounts each. `fetch_guard` is a refusal and stays on whichever answer the person gives.
+ * mounts each. `fetch_guard` is a refusal and stays on whichever answer the person gives, and `external_agent_consent`
+ * is the person's own switch in Settings, Permissions, which no answer changes.
  */
 export const PROMPT_SWITCH_ROWS = {
   permission_defaults: 'delo-permission-defaults',
   instruction_layer_consent: 'delo-instruction-consent',
   mcp_add_consent: 'delo-mcp-consent',
   scheduled_task_consent: 'delo-schedule-consent',
-  external_agent_consent: 'delo-delegation-consent',
 } as const
 
 /**

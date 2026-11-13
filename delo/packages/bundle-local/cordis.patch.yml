@@ -196,8 +196,9 @@
 # access, cannot disable a protected row, change its settings, or deselect or
 # remove a bundle that carries one, this bundle included, so no chat in one
 # workspace turns a guard off, or silences the update check, for every
-# workspace. Settings → Privacy writes the update check's switch through the
-# settings service, which this list does not govern. Upstream's base
+# workspace. Settings → Privacy writes the update check's switch, and
+# Settings → Permissions the external-agent consent's switch and run time limit,
+# through the settings service, which this list does not govern. Upstream's base
 # bundle gives the row no config, so `protectedPlugins` is the only key.
 - id: plugin-manager
   config:

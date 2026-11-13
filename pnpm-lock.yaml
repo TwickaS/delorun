@@ -2290,6 +2290,9 @@ importers:
 
   delo/packages/plugin-delegation-consent:
     dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
       '@delo/contract-home-layout':
         specifier: workspace:*
         version: link:../contract-home-layout

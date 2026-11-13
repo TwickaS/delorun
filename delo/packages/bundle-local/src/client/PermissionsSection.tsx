@@ -4,15 +4,20 @@
  * access is allowed through the consent; revoking drops the workspace and its open full-access chats back to the safer
  * preset. MCP servers lists the servers waiting for the person's OK, each opening the review or declined in place, the
  * servers the person declined or revoked, which stay stopped until allowed, and the allowed servers with their starts;
- * revoking one stops that server until the person allows it again. External agents lists each agent, such as Claude
- * Code, allowed to start in a workspace without asking; revoking one makes it ask again at its next start there. Every request goes to the home through the injected `fetch`; the home answers only its own
+ * revoking one stops that server until the person allows it again. External agents holds the switch that asks before
+ * an external agent such as Claude Code runs and its run time limit, both written to the plugin's row through its Host
+ * settings form, then lists each agent allowed to start in a workspace without asking; revoking one makes it ask again
+ * at its next start there. Every other request goes to the home through the injected `fetch`; the home answers only its own
  * computer, and the section says in place on a remote studio that the answer is given at the computer. Each answer's
  * outcome is one line under the section's introduction, which no list owns, so a list that changes after the answer
  * does not take it with it, and nothing covers the Settings dialog.
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { RUN_TIMEOUT_MINUTES, type DelegationConsentSettings } from '@delo/plugin-delegation-consent/wire'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   declineServer, FULL_ACCESS_PRESET, readAgentGrants, readServers, readWorkspaces, revokeAgentGrant, revokeServer, setFullAccess,
@@ -21,6 +26,7 @@ import {
 import { consentFailureOf, consentFailureText, FULL_ACCESS_COMMAND, workspaceName, type FullAccessConsentSource } from './FullAccessConsent.tsx'
 import { serverChangeText, ServerStart, type McpReviewSource } from './McpServerReview.tsx'
 import type { HostFetch } from './host-api.ts'
+import type { OptInMutation } from './opt-in.ts'
 import css from './ConsentSections.module.css'
 
 /** The command the remote line names for the home's own computer. */
@@ -37,6 +43,19 @@ export interface PermissionsSectionInjected {
   ask: FullAccessConsentSource['ask']
   /** Shows a waiting MCP server's review and waits for the person's answer. */
   review: McpReviewSource['ask']
+  hooks: {
+    /** The external-agent consent row's Host settings form. */
+    agentSettings: ObservableSnapshot<ConfigFormSnapshot<DelegationConsentSettings>>
+    /** The write state of that form's fields. */
+    agentSettingsMutation: ObservableSnapshot<OptInMutation>
+  }
+  /**
+   * Write one field of the external-agent consent row.
+   * @param field - the field.
+   * @param value - the value the person chose.
+   * @returns after the write settles.
+   */
+  setAgentSetting<K extends keyof DelegationConsentSettings>(field: K, value: DelegationConsentSettings[K]): Promise<void>
 }
 
 /** Props the renderer binds for the section. */
@@ -83,7 +102,9 @@ async function listing<T>(t: Translate, read: () => Promise<T | undefined>): Pro
  * @param props - the copy, the request function, the consent and the review.
  * @returns the section.
  */
-export function PermissionsSection({ t, fetch, ask, review }: PermissionsSectionProps): ReactNode {
+export function PermissionsSection({ t, fetch, ask, review, useAgentSettings, useAgentSettingsMutation, setAgentSetting }: PermissionsSectionProps): ReactNode {
+  const agentSettings = useAgentSettings(value => value)
+  const agentSettingsMutation = useAgentSettingsMutation(value => value)
   const [workspaces, setWorkspaces] = useState<Listing<WorkspacesAnswer>>({ kind: 'loading' })
   const [servers, setServers] = useState<Listing<PendingServersAnswer>>({ kind: 'loading' })
   const [agents, setAgents] = useState<Listing<GrantsAnswer>>({ kind: 'loading' })
@@ -158,6 +179,7 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
     </section>
     <section className={css.group} aria-label={t('agents.heading')} data-group="external-agents">
       <h3 className={css.subheading}>{t('agents.heading')}</h3>
+      <AgentSettings t={t} form={agentSettings} mutation={agentSettingsMutation} remote={remote} set={setAgentSetting} />
       <AgentsGroup t={t} listing={agents} busy={busy} revoke={revokeAgent} />
     </section>
   </div>
@@ -307,4 +329,57 @@ function AgentsGroup({ t, listing, busy, revoke }: GroupProps<GrantsAnswer> & { 
         </li>)}
       </ul>}
   </>
+}
+
+/**
+ * The external-agent consent's switch and run time limit, written to the plugin's row. A remote studio cannot write
+ * settings, so both are disabled there and the switch says that turning it off needs the home's own computer. The time
+ * limit is written once the field loses focus or Enter is pressed, and only as a whole number of minutes within
+ * {@link RUN_TIMEOUT_MINUTES}; any other entry goes back to the saved value.
+ * @param props - the copy, the row's form and write state, whether the studio is remote, and the writer.
+ * @returns the controls, or the reason they are absent.
+ */
+function AgentSettings({ t, form, mutation, remote, set }: {
+  readonly t: Translate
+  readonly form: ConfigFormSnapshot<DelegationConsentSettings>
+  readonly mutation: OptInMutation
+  readonly remote: boolean
+  readonly set: PermissionsSectionInjected['setAgentSetting']
+}): ReactNode {
+  const saved = form.value?.runTimeoutMinutes
+  const [draft, setDraft] = useState<string | undefined>()
+  if (form.status === 'unavailable' || form.value === undefined) return null
+  const disabled = remote || mutation.busy || form.status !== 'ready' || !form.writable
+  const commit = (): void => {
+    const minutes = Number(draft)
+    setDraft(undefined)
+    if (Number.isInteger(minutes) && minutes >= RUN_TIMEOUT_MINUTES.min && minutes <= RUN_TIMEOUT_MINUTES.max && minutes !== saved) {
+      void set('runTimeoutMinutes', minutes)
+    }
+  }
+  return <ul className={css.list} data-agent-settings="">
+    <li className={css.row}>
+      <div className={css.details}>
+        <div className={css.title}>{t('agents.ask.title')}</div>
+        <div className={css.description}>{t('agents.ask.description')}</div>
+        {remote && form.value.enabled ? <div className={css.description}>{t('agents.ask.computerOnly')}</div> : null}
+        {mutation.failed ? <p className={css.failed} role="alert">{t('agents.settings.failed')}</p> : null}
+      </div>
+      <Switch checked={form.value.enabled} label={t('agents.ask.title')} disabled={disabled}
+        onChange={(enabled) => { void set('enabled', enabled) }} />
+    </li>
+    <li className={css.row}>
+      <div className={css.details}>
+        <div className={css.title}>{t('agents.limit.title')}</div>
+        <div className={css.description}>{t('agents.limit.description', { min: String(RUN_TIMEOUT_MINUTES.min), max: String(RUN_TIMEOUT_MINUTES.max) })}</div>
+      </div>
+      <span className={css.minutes}>
+        <Input type="number" inputMode="numeric" aria-label={t('agents.limit.title')} disabled={disabled}
+          min={RUN_TIMEOUT_MINUTES.min} max={RUN_TIMEOUT_MINUTES.max} step={1} value={draft ?? String(saved)}
+          onChange={(event) => { setDraft(event.currentTarget.value) }}
+          onBlur={commit}
+          onKeyDown={(event) => { if (event.key === 'Enter') commit() }} />
+      </span>
+    </li>
+  </ul>
 }

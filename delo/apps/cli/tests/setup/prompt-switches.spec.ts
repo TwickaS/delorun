@@ -33,6 +33,12 @@ describe('the prompts answer as switch values', () => {
     }
   })
 
+  it('leaves the external-agent consent, the person\'s own switch in Settings, out of both answers', () => {
+    for (const answer of ['safer', 'stock'] as const) {
+      expect(promptRows(answer).map(row => row.id)).not.toContain('delo-delegation-consent')
+    }
+  })
+
   it('stops when a listed switch is not built in the registry', () => {
     const planned: ParitySwitchEntry = { id: 'permission_defaults', state: 'planned', registeredBy: 'x', defaultValue: true, parityValue: false, modelVisible: false, plannedBy: 'y' }
     expect(() => promptRows('safer', [planned])).toThrow('parity switch permission_defaults is not built')

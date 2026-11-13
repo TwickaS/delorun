@@ -20,6 +20,8 @@ import {
 } from '../src/client/devices-api.ts'
 import { en, zh } from '../src/client/devices-locales.ts'
 import { approvalCode, DevicesSection, failureText, REACH_ON_COMMAND, type DevicesSectionProps } from '../src/client/DevicesSection.tsx'
+import type { PermissionsSectionInjected } from '../src/client/PermissionsSection.tsx'
+import { DELEGATION_CONSENT_ROW } from '@delo/plugin-delegation-consent/wire'
 
 afterEach(() => {
   cleanup()
@@ -521,6 +523,13 @@ describe('the plugin', () => {
       expect((devicesEntry?.inject?.() as { fetch: HostFetch }).fetch).toBe(face.fetch)
       expect(await readReachStatus(face.fetch)).toEqual(READY.body)
       expect(browserFetch).toHaveBeenCalledWith(DEVICE_ROUTES.reachStatus, expect.objectContaining({ credentials: 'same-origin' }))
+      // The Permissions section's external-agent settings read and write the consent row's Host form.
+      const permissionsInject = slots.entries('settings.section')[2]?.inject as (() => PermissionsSectionInjected) | undefined
+      const permissions = permissionsInject?.()
+      if (permissions === undefined) throw new Error('no Permissions section face')
+      expect(permissions.hooks.agentSettings).toBe(ctx.get('configForms')?.get(DELEGATION_CONSENT_ROW))
+      await permissions.setAgentSetting('runTimeoutMinutes', 45)
+      expect(permissions.hooks.agentSettingsMutation.getSnapshot()).toEqual({ busy: false, failed: true })
     } finally {
       await ctx.fiber.dispose()
     }

@@ -9,10 +9,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { MCP_CONSENT_ROUTES } from '@delo/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delo/plugin-permission-defaults/wire'
-import { DELEGATION_CONSENT_ROUTES, type GrantView } from '@delo/plugin-delegation-consent/wire'
+import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView } from '@delo/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import type { WorkspaceAccess } from '../src/client/consents-api.ts'
@@ -25,6 +27,7 @@ import { agentOfferFor, ExternalAgentAction, type ExternalAgentActionProps } fro
 import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
 import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
 import { AGENTS_COMMAND, MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
+import { OptIn } from '../src/client/opt-in.ts'
 
 afterEach(() => {
   cleanup()
@@ -865,13 +868,38 @@ describe('the notice that an MCP server waits', () => {
 })
 
 /**
+ * The external-agent consent row's Host settings form, accepting each write as the Host would.
+ * @param value - the row's fields, or undefined for a profile that does not serve the row.
+ * @returns the form, its recorded writes and the writer the section uses.
+ */
+function agentSettingsForm(value?: DelegationConsentSettings) {
+  const state = createSnapshotStore<ConfigFormSnapshot<DelegationConsentSettings>>({
+    status: value === undefined ? 'unavailable' : 'ready', value, base: {}, user: {}, revision: 0, writable: true,
+  })
+  const set = vi.fn(async (field: string, next: unknown) => {
+    state.update((draft) => { if (draft.value !== undefined) draft.value = { ...draft.value, [field]: next } })
+    return true
+  })
+  const form: ConfigForm<DelegationConsentSettings> = {
+    getSnapshot: () => state.getSnapshot(), subscribe: listener => state.subscribe(listener), set, unset: vi.fn(), mutate: vi.fn(),
+  }
+  return { form, set, writer: new OptIn(form) }
+}
+
+/**
  * Render the Permissions section over a fake home.
  * @param host - the fake home.
  * @param faces - the consent's and the review's questions.
+ * @param settings - the external-agent consent row's form; by default a profile that does not serve the row.
  * @returns the render result.
  */
-function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}) {
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces } as PermissionsSectionProps
+function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}, settings = agentSettingsForm()) {
+  const props = {
+    t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces,
+    useAgentSettings: bindSnapshotSelector(settings.form),
+    useAgentSettingsMutation: bindSnapshotSelector(settings.writer.state),
+    setAgentSetting: (field: keyof DelegationConsentSettings, value: DelegationConsentSettings[keyof DelegationConsentSettings]) => settings.writer.set(field, value as never),
+  } as PermissionsSectionProps
   return render(<PermissionsSection {...props} />)
 }
 
@@ -1060,6 +1088,60 @@ describe('the Permissions section', () => {
     fireEvent.click(within(rowOf('files')).getByRole('button', { name: en['mcp.allow'] }))
     await settle()
     expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('turns the external-agent consent off and on, and writes a whole run time limit within its bounds', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    await settle()
+    const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
+    expect(ask.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(ask)
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('enabled', false)
+    fireEvent.click(screen.getByRole('switch', { name: en['agents.ask.title'] }))
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('enabled', true)
+    const limit = screen.getByRole('spinbutton', { name: en['agents.limit.title'] })
+    for (const typed of ['0', '1441', '2.5', '', '30']) {
+      fireEvent.change(limit, { target: { value: typed } })
+      fireEvent.blur(limit)
+      await settle()
+    }
+    // An entry outside 1 to 1440 whole minutes, or the saved value, writes nothing and shows the saved value again.
+    expect(settings.set).toHaveBeenCalledTimes(2)
+    expect((limit as HTMLInputElement).value).toBe('30')
+    fireEvent.change(limit, { target: { value: '90' } })
+    fireEvent.keyDown(limit, { key: '0' })
+    expect(settings.set).toHaveBeenCalledTimes(2)
+    fireEvent.keyDown(limit, { key: 'Enter' })
+    await settle()
+    expect(settings.set).toHaveBeenLastCalledWith('runTimeoutMinutes', 90)
+    expect((limit as HTMLInputElement).value).toBe('90')
+  })
+
+  it('says a refused settings write was not saved and keeps the value the Host holds', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    settings.set.mockResolvedValueOnce(false)
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    await settle()
+    fireEvent.click(screen.getByRole('switch', { name: en['agents.ask.title'] }))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe(en['agents.settings.failed'])
+    expect(screen.getByRole('switch', { name: en['agents.ask.title'] }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('on a remote studio, disables the external-agent settings and says turning the consent off needs the computer', async () => {
+    const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
+    renderPermissions(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), {}, settings)
+    await settle()
+    const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
+    expect(ask.hasAttribute('disabled') || ask.getAttribute('aria-disabled') === 'true').toBe(true)
+    expect((screen.getByRole('spinbutton', { name: en['agents.limit.title'] }) as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByText(en['agents.ask.computerOnly'])).toBeTruthy()
+    fireEvent.click(ask)
+    await settle()
+    expect(settings.set).not.toHaveBeenCalled()
   })
 
   it('says it is loading until each list answers', async () => {

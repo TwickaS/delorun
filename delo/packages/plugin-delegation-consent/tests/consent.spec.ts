@@ -17,7 +17,7 @@ import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, ConfigSchema, DeloDelegationConsent, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
+import { apply, Config, DeloDelegationConsent, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
 import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames, type GuardProfile } from '../src/guard.ts'
 import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
@@ -88,6 +88,13 @@ function review(parent: Agent, cwd: string, provider = 'claude-code') {
 async function grant(home: string, workspace: string, provider = 'claude-code'): Promise<void> {
   await changeGrantStore(grantStorePath(home), grants => [...grants, { workspace, provider, grantedAt: 5 }])
 }
+
+/**
+ * The row's configuration as the loader validates it.
+ * @param value - the row's fields.
+ * @returns the validated configuration.
+ */
+const configOf = (value: Partial<Parameters<typeof apply>[1]>): Parameters<typeof apply>[1] => Config(value as Parameters<typeof apply>[1])
 
 describe('the review', () => {
   it('asks with the external-agent grant marker and allows once, recording nothing', async () => {
@@ -365,11 +372,13 @@ describe('the plugin_manager guard', () => {
 
 describe('mounting', () => {
   it('mounts nothing with the switch off, its parity value', async () => {
-    expect(ConfigSchema.parse({})).toMatchObject({ enabled: false, runTimeoutMinutes: 30 })
+    expect(configOf({})).toMatchObject({ enabled: false, runTimeoutMinutes: 30 })
     const ctx = new Context()
-    apply(ctx)
+    apply(ctx, configOf({}))
     expect(ctx.get('delegationConsent')).toBeUndefined()
-    expect(() => ConfigSchema.parse({ enabled: true, runTimeoutMinutes: 0 })).toThrow()
+    expect(() => configOf({ enabled: true, runTimeoutMinutes: 0 })).toThrow()
+    expect(() => configOf({ enabled: true, runTimeoutMinutes: 1441 })).toThrow()
+    expect(() => configOf({ enabled: true, runTimeoutMinutes: 1.5 })).toThrow()
   })
 
   it('provides the service, the guard and the routes with the switch on', async () => {
@@ -411,7 +420,7 @@ describe('mounting', () => {
     const ctx = new Context()
     const guards: ((exec: object) => string | undefined)[] = []
     ctx.provide('tools', { guard: (guard: (exec: object) => string | undefined) => { guards.push(guard); return () => undefined } } as never)
-    apply(ctx, { enabled: true })
+    apply(ctx, configOf({ enabled: true }))
     await vi.waitFor(() => { expect(guards).toHaveLength(1) })
     expect(guards[0]?.({ name: 'plugin_manager', arguments: { action: 'set_plugin', target: 'e1', enabled: true } })).toBeUndefined()
   })

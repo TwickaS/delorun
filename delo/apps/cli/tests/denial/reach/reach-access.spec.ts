@@ -28,6 +28,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
 import { DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
+import { DELEGATION_CONSENT_ROW } from '@delo/plugin-delegation-consent/wire'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
 
@@ -198,6 +199,19 @@ describe('a reach device through the Gateway', () => {
     }
     await expectRefused('settings/openSettingsDocument', {})
     await expectRefused('session/initializeDefaultModel', {})
+  })
+
+  it('refuses turning the external-agent consent off from a device', async () => {
+    // Pins the settings-write refusal for the consent's own switch, which only the home's own computer turns off. Each
+    // refusal names `loopback-required`, the policy's reason, so a namespace this composition lacks cannot pass it.
+    await expectRefused('settings/mutate', { ns: DELEGATION_CONSENT_ROW, ops: [{ op: 'set', path: ['enabled'], value: false }] })
+    await expectRefused('settings/update', { ns: DELEGATION_CONSENT_ROW, patch: { enabled: false } })
+    await expectRefused('settings/replace', { ns: DELEGATION_CONSENT_ROW, section: { enabled: false, runTimeoutMinutes: 30 } })
+    // A slash command and plugin management, the other ways a studio changes a row, are refused to a device as well.
+    const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
+    await expectRefused('commands/execute', { agentId: created.sessionId, line: '/plugins', submittedAttachments: [] })
+    await expectRefused('pluginManager/undo', {})
+    await expectRefused('pluginManager/restore', { version: 'any' })
   })
 
   it('refuses credentials, account sign-in and model discovery with the stored credentials', async () => {

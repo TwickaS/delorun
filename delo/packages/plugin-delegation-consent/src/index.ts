@@ -11,40 +11,41 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-tools'
-import { z } from 'zod'
+import z from '@deepseek-ai/schemastery'
 import { guardProfile, pluginManagerVerdict, type GuardRow } from './guard.ts'
 import { registerDelegationRoutes } from './routes.ts'
 import { DeloDelegationConsent } from './service.ts'
+import { RUN_TIMEOUT_MINUTES, type DelegationConsentSettings } from './wire.ts'
 
 export { DeloDelegationConsent, DelegationConsentError } from './service.ts'
 export { isExternalAgentPackage, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict, targetPackageNames } from './guard.ts'
 
-/** The plugin's configuration. */
-export interface Config {
-  /** The C16 switch `external_agent_consent`: off, the plugin mounts nothing. */
+/** The plugin's configuration: the fields Settings, Permissions writes. */
+export interface Config extends DelegationConsentSettings {
+  /**
+   * The C16 switch `external_agent_consent`: off, the plugin mounts nothing. Delo's composition turns it on; the
+   * person turns it off in Settings, Permissions on the home's own computer.
+   */
   readonly enabled: boolean
-  /** How long one external agent run may take before it is stopped, in whole minutes. */
-  readonly runTimeoutMinutes: number
 }
 
 /** The schema of {@link Config}; `enabled` defaults to the switch's parity value, off. */
-export const ConfigSchema = z.strictObject({
+export const Config: z<Config> = z.object({
   enabled: z.boolean().default(false),
-  runTimeoutMinutes: z.number().int().min(1).max(24 * 60).default(30),
+  runTimeoutMinutes: z.natural().min(RUN_TIMEOUT_MINUTES.min).max(RUN_TIMEOUT_MINUTES.max).default(RUN_TIMEOUT_MINUTES.default),
 })
 
 /**
  * Mount the plugin in the scope that loads it.
  * @param ctx - the scope.
- * @param config - the row's configuration, or undefined for a bare mount.
+ * @param config - the row's validated configuration.
  */
-export function apply(ctx: Context, config?: unknown): void {
-  const parsed = ConfigSchema.parse(config ?? {})
-  if (!parsed.enabled) return
+export function apply(ctx: Context, config: Config): void {
+  if (!config.enabled) return
   const rows = (): readonly GuardRow[] => [...ctx.get('loader')?.entries() ?? []].map(entry => ({
     id: entry.id, rowId: entry.options.id, name: entry.options.name,
   }))
-  ctx.plugin(DeloDelegationConsent, { timeoutMs: parsed.runTimeoutMinutes * 60_000, env: process.env, now: Date.now })
+  ctx.plugin(DeloDelegationConsent, { timeoutMs: config.runTimeoutMinutes * 60_000, env: process.env, now: Date.now })
   const profile = () => guardProfile(ctx.get('profileContext')?.dir)
   ctx.inject(['tools'], (scope) => { scope.tools.guard(exec => pluginManagerVerdict(exec, rows, profile)) })
   ctx.inject(['connection', 'delegationConsent'], (scope) => {

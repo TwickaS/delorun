@@ -16,18 +16,18 @@ export interface OptInMutation {
 }
 
 /**
- * Writes one opt-in's `enabled` field through its Host form. The switch shows only the value the Host accepted, so a
+ * Writes the fields of one switch's row through its Host form. The switch shows only the value the Host accepted, so a
  * refused or failed write leaves the earlier value on screen and sets {@link OptInMutation.failed}.
  */
-export class OptIn {
+export class OptIn<T extends OptInSettings = OptInSettings> {
   /** Observable write state. */
   readonly state = createSnapshotStore<OptInMutation>({ busy: false, failed: false })
 
   /** The Host form of the opt-in's profile row. */
-  readonly form: ConfigForm<OptInSettings>
+  readonly form: ConfigForm<T>
 
   /** @param form - the Host form of the opt-in's profile row. */
-  constructor(form: ConfigForm<OptInSettings>) {
+  constructor(form: ConfigForm<T>) {
     this.form = form
   }
 
@@ -36,12 +36,22 @@ export class OptIn {
    * @param enabled - the value the person chose; `true` only after they confirmed the consent dialog.
    * @returns after the write settles.
    */
-  async setEnabled(enabled: boolean): Promise<void> {
+  setEnabled(enabled: boolean): Promise<void> {
+    return this.set('enabled', enabled)
+  }
+
+  /**
+   * Write one field of the row; this changes no other row or field. A write while another crosses the wire is dropped.
+   * @param field - the row's field.
+   * @param value - the value the person chose.
+   * @returns after the write settles.
+   */
+  async set<K extends keyof T & string>(field: K, value: T[K]): Promise<void> {
     if (this.state.getSnapshot().busy) return
     this.state.update((state) => { state.busy = true; state.failed = false })
     let accepted = false
     try {
-      accepted = await this.form.set('enabled', enabled)
+      accepted = await this.form.set(field, value)
     } catch (_error) {
       // A transport failure is reported as failed; the form keeps the accepted value.
     }

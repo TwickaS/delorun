@@ -1,6 +1,6 @@
 /**
- * The studio's routes to the external-agent grants and the messages they carry, free of Cordis and Node so the
- * browser imports them.
+ * The studio's routes to the external-agent grants, the messages they carry, and the fields of the plugin's row that
+ * Settings writes, free of Cordis and Node so the browser imports them.
  * @module @delo/plugin-delegation-consent/wire
  */
 
@@ -13,6 +13,20 @@ export const DELEGATION_CONSENT_ROUTES = {
   /** `POST` {@link RevokeRequest}: remove one grant, as {@link RevokeAnswer}. */
   revoke: '/api/deloDelegationConsent.revoke',
 } as const
+
+/** The row id `@delo/bundle-local` inserts for the plugin, whose fields Settings, Permissions writes. */
+export const DELEGATION_CONSENT_ROW = 'delo-delegation-consent'
+
+/** The fields of the plugin's row that Settings, Permissions writes. */
+export interface DelegationConsentSettings {
+  /** Whether the consent asks before each external agent run ([`Config`](./index.ts)). */
+  readonly enabled: boolean
+  /** How long one external agent run may take before it is stopped, in whole minutes; a change applies from the next run. */
+  readonly runTimeoutMinutes: number
+}
+
+/** The run time limit's bounds and default, in whole minutes: one minute to one day. */
+export const RUN_TIMEOUT_MINUTES = { min: 1, max: 24 * 60, default: 30 } as const
 
 /** The largest request body a route reads, in bytes. */
 export const MAX_DELEGATION_REQUEST_BYTES = 16_384
