@@ -320,7 +320,7 @@ describe('a reach device through the Gateway', () => {
     // The switch an earlier version kept in this file is obsolete: it is never read.
     const stale = join(directory, 'home', 'secrets', 'home-auth', 'reach-terminal.json')
     await writeFile(stale, JSON.stringify({ v: 1, withoutUnlock: true }), { mode: 0o600 })
-    const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { dangerousMode: () => true }), 'test dangerous mode')
+    const dispose = studio.ctx.effect(() => studio.ctx.provide('reachFullAccessGrants', { dangerousMode: () => true, onDangerousModeEnd: () => () => {} }), 'test dangerous mode')
     let unlock: string | undefined
     try {
       for (const agentId of [granted.sessionId, ungranted.sessionId]) {

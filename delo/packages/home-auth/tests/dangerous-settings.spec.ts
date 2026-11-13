@@ -114,6 +114,31 @@ describe('the dangerous-mode settings record', () => {
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ v: 1, lifts: [] })
   })
 
+  it('keeps a value the person set after a device unset the field, and unsets a field still left unset', async () => {
+    const values: Record<string, unknown> = { 'delo-delegation-consent.enabled': true }
+    const settings = fakeSettings(values)
+    const ledger = new DangerousSettingsLedger(file)
+    ledger.record([{ ...CONSENT, written: undefined, unset: true }], settings.read)
+    delete values['delo-delegation-consent.enabled']
+    // The person turns the consent on at the computer after the device unset it; the unset marker keeps it.
+    values['delo-delegation-consent.enabled'] = false
+    await ledger.revert(settings, () => false)
+    // Pins the unset marker: without it a field that differs from its previous value reverts, losing the person's choice.
+    expect(settings.writes).toEqual([])
+    expect(values['delo-delegation-consent.enabled']).toBe(false)
+    ledger.record([{ ...CONSENT, written: undefined, unset: true }], settings.read)
+    delete values['delo-delegation-consent.enabled']
+    await ledger.revert(settings, () => false)
+    expect(settings.writes).toEqual([['delo-delegation-consent', 'enabled', false]])
+  })
+
+  it('throws and keeps no lift when the record cannot be saved', () => {
+    const ledger = new DangerousSettingsLedger(join(directory, 'missing', 'record.json'))
+    // Pins the synchronous save: a failed save is raised before the device's write can proceed.
+    expect(() => { ledger.record([{ ...PRESET, written: 'danger-full-access' }], () => 'workspace-write') }).toThrow()
+    expect(ledger.pending()).toBe(false)
+  })
+
   it('refuses a record of another version', async () => {
     const { writeFile } = await import('node:fs/promises')
     await writeFile(file, JSON.stringify({ v: 2, lifts: [] }), { mode: 0o600 })
@@ -136,7 +161,7 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
   function facts(mode: boolean, unlocked: boolean, seen: unknown[]): ReachAccessFacts {
     return {
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere',
-      elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), logElevated: () => {}, liftedSettings: lifts => { seen.push(...lifts) },
+      elevationOf: () => (unlocked ? { id: 'elevation-1' } : undefined), logElevated: () => {}, liftedSettings: (lifts) => { seen.push(...lifts); return undefined },
       computerOnlySwitches: () => [SWITCH], protectedEntryIds: () => new Set(),
       defaultPermission: () => ({ namespaces: new Set(['permission']), current: LEVELS['workspace-write'], levelOf: name => LEVELS[name] }),
       dangerousMode: () => mode,
@@ -150,6 +175,20 @@ describe('the reach policy records what dangerous mode lets a device loosen', ()
     expect(condition(call({ ns: 'permission', patch: { defaultPreset: 'danger-full-access' } }))).toEqual({ kind: 'allow' })
     expect(condition(call({ ns: CONSENT.ns, patch: { enabled: false } }))).toEqual({ kind: 'allow' })
     expect(seen).toEqual([{ ...PRESET, written: 'danger-full-access' }, { ...CONSENT, written: false }])
+  })
+
+  it('records an unset of the consent as an unset lift', () => {
+    const seen: unknown[] = []
+    const condition = createCondition(facts(true, true, seen), device)
+    expect(condition({ action: 'settings/mutate' as never, resource: { kind: 'global' } as const, args: { ns: CONSENT.ns, ops: [{ op: 'unset', path: ['enabled'] }] } })).toEqual({ kind: 'allow' })
+    expect(seen).toEqual([{ ...CONSENT, written: undefined, unset: true }])
+  })
+
+  it('refuses the write when the record is not saved', () => {
+    const seen: unknown[] = []
+    const refusing: ReachAccessFacts = { ...facts(true, true, seen), liftedSettings: () => 'record-refused' }
+    // Pins the refusal: without it the write proceeds with nothing to set it back.
+    expect(createCondition(refusing, device)(call({ ns: CONSENT.ns, patch: { enabled: false } }))).toEqual({ kind: 'deny', reason: 'record-refused' })
   })
 
   it('records nothing for a locked device, with the mode off, or for a write that loosens nothing', () => {

@@ -157,6 +157,21 @@ describe('the dangerous-mode fact the reach policy reads', () => {
   })
 })
 
+describe('the mode-end notice the reach policy subscribes to', () => {
+  it('calls a listener once the grant file is removed, and not after it is disposed', async () => {
+    const { ctx, defaults, home } = await mounted({ everywhere: true, grant: 'valid' })
+    const ended: number[] = []
+    const off = ctx.get('reachFullAccessGrants')?.onDangerousModeEnd(() => { ended.push(1) })
+    const disposed = ctx.get('reachFullAccessGrants')?.onDangerousModeEnd(() => { ended.push(2) })
+    disposed?.()
+    await removeDangerousGrant(home)
+    await defaults.reload()
+    // Pins the notice: without it the mode ends silently and a device's loosened settings wait for the next read.
+    expect(ended).toEqual([1])
+    off?.()
+  })
+})
+
 describe('dangerous mode with the row and the grant file', () => {
   it('admits full access in any workspace, asks nothing and records the default without a grant time', async () => {
     const { ctx, harness, asks, defaults, workspace, home } = await mounted({ everywhere: true, grant: 'valid' })

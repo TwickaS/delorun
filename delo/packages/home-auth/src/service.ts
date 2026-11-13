@@ -116,6 +116,9 @@ export const HOME_AUTH_SWITCH: ComputerOnlySwitch = { ns: 'delo-home-auth', fiel
 /** The settings writes a reach device is refused: any write to the reach row, whose options decide what the home exposes. */
 export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delo-reach', field: EVERY_FIELD, label: 'the remote-access settings' }
 
+/** The refusal of a device's settings write whose dangerous-mode record could not be saved. */
+const RECORD_REFUSAL = 'loopback-required: the home could not record this change to be set back when dangerous mode ends; make it at the home\'s computer'
+
 /** The `homeAuth` service. */
 export class HomeAuthService extends Service {
   static inject = ['webServer']
@@ -171,6 +174,10 @@ export class HomeAuthService extends Service {
     // provider the mode cannot be read yet, and the first read of it ends the lift.
     if (this.ctx.get('reachFullAccessGrants') !== undefined) await this.endDangerousSettings()
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
+    // A mode that ends sets back at once what a device loosened under it, without waiting for a device call or a restart.
+    this.ctx.inject(['reachFullAccessGrants'], (grants) => {
+      grants.effect(() => grants.reachFullAccessGrants.onDangerousModeEnd(() => { void this.endDangerousSettings() }), 'home-auth: dangerous-mode settings set back')
+    })
     // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
     // stays out, being the person's own text.
     this.ctx.effect(() => core.onElevationChange((change) => {
@@ -315,9 +322,18 @@ export class HomeAuthService extends Service {
   /**
    * Record the settings a device is about to loosen while dangerous mode holds, with the values they have now.
    * @param lifts - the fields and the values the call sets.
+   * @returns undefined once the record is saved to disk, or the refusal the device's write meets when it cannot be (the
+   *   write must not proceed unrecorded).
    */
-  recordLifts(lifts: readonly SettingsLift[]): void {
-    this.lifts?.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
+  recordLifts(lifts: readonly SettingsLift[]): string | undefined {
+    if (this.lifts === undefined) return RECORD_REFUSAL
+    try {
+      this.lifts.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
+      return undefined
+    } catch (error) {
+      this.ctx.logger.warn(`home-auth: the record of dangerous-mode settings could not be saved, so a device's settings write was refused: ${error instanceof Error ? error.message : String(error)}`)
+      return RECORD_REFUSAL
+    }
   }
 
   /**

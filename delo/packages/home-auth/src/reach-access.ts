@@ -562,7 +562,9 @@ function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string
  */
 function liftsOf(facts: Pick<ReachAccessFacts, 'computerOnlySwitches'>, action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, loosens: boolean): SettingsLift[] {
   const ns = String(args.ns)
-  const lifted = (field: string): SettingsLift => ({ ns, field, written: fieldWritten(action, args, field).at(-1) })
+  const lifted = (field: string): SettingsLift => ({
+    ns, field, written: fieldWritten(action, args, field).at(-1), ...removesField(action, args, field) ? { unset: true } : {},
+  })
   const switches = facts.computerOnlySwitches().filter(target => DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && turnsSwitchOff(action, args, target))
   return [...switches.map(target => lifted(target.field)), ...loosens ? [lifted('defaultPreset')] : []]
 }
@@ -631,6 +633,26 @@ function fieldWritten(action: RemoteAccessAction, args: Readonly<Record<string, 
     default:
       // `settings/replace`, the only other member of SETTINGS_WRITES.
       return [isObject(args.section) ? args.section[field] : undefined]
+  }
+}
+
+/**
+ * Whether a settings write names the removal of a field: an `unset` operation on it, or a `replace` whose section does
+ * not hold it. Arguments the condition cannot read do not count; their value stays unknown.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @param field - the field.
+ * @returns whether the write leaves the field unset.
+ */
+function removesField(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, field: string): boolean {
+  switch (action) {
+    case 'settings/mutate':
+      return Array.isArray(args.ops) && args.ops.some((op: unknown) => isObject(op) && op.op === 'unset' && Array.isArray(op.path) && op.path.length === 1 && op.path[0] === field)
+    case 'settings/update':
+      return false
+    default:
+      // `settings/replace`, the only other member of SETTINGS_WRITES.
+      return isObject(args.section) && !(field in args.section)
   }
 }
 
@@ -813,7 +835,10 @@ export function createCondition(
       if (refused !== undefined) return refused
     }
     // The write proceeds once the unlock admitted it, so the mode's end can set the field back.
-    if (lifts.length > 0) facts.liftedSettings(lifts)
+    if (lifts.length > 0) {
+      const unrecorded = facts.liftedSettings(lifts)
+      if (unrecorded !== undefined) return { kind: 'deny', reason: unrecorded }
+    }
     if (args === undefined) return ALLOW
     if (action === 'session/create') {
       if (createsInKnownWorkspace(facts, args)) return ALLOW
@@ -878,10 +903,11 @@ export interface ReachAccessFacts {
   readonly logElevated: (line: string) => void
   /**
    * Record the settings a device is about to loosen while dangerous mode holds, so the mode's end sets them back.
-   * Called after the unlock admitted the call and before it proceeds.
+   * Called after the unlock admitted the call and before it proceeds; the record is saved to disk before it returns.
    * @param lifts - the fields and the values the call sets.
+   * @returns undefined once recorded, or the refusal reason when the record could not be saved, which refuses the write.
    */
-  readonly liftedSettings: (lifts: readonly SettingsLift[]) => void
+  readonly liftedSettings: (lifts: readonly SettingsLift[]) => string | undefined
   /**
    * The computer-only switches the mounted plugins registered.
    * @returns the switches.

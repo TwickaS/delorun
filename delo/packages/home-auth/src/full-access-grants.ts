@@ -15,6 +15,12 @@ export interface ReachFullAccessGrants {
    * @returns whether it holds; false while the store cannot be read.
    */
   dangerousMode(): boolean
+  /**
+   * Call a listener when the provider finds that dangerous mode, which held when it last looked, no longer does.
+   * @param listener - called with no arguments, after {@link dangerousMode} reads false.
+   * @returns the disposer.
+   */
+  onDangerousModeEnd(listener: () => void): () => void
 }
 
 declare module '@deepseek-ai/cordis' {

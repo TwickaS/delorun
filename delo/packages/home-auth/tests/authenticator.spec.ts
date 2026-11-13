@@ -335,7 +335,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, liftedSettings: () => {}, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, liftedSettings: () => undefined, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -447,7 +447,7 @@ describe('the authenticator provider', () => {
         const denied = { kind: 'deny', reason: 'elevation-required: terminal/create' }
         expect(open('s-in')).toEqual(denied)
         // Pins the lock: neither a workspace the home granted full access, nor dangerous mode, waives a locked device's unlock.
-        ctx.provide('reachFullAccessGrants', { dangerousMode: () => true } as never)
+        ctx.provide('reachFullAccessGrants', { dangerousMode: () => true, onDangerousModeEnd: () => () => {} } as never)
         for (const id of ['s-in', 's-out', 's-gone']) expect(open(id), id).toEqual(denied)
       } finally {
         await rm(outside, { recursive: true, force: true })

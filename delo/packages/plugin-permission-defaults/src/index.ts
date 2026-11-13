@@ -309,6 +309,9 @@ export class PermissionDefaults extends Service {
    */
   private relied: ReadonlyMap<string, WorkspacePermission> = new Map()
 
+  /** The listeners of `reachFullAccessGrants.onDangerousModeEnd`. */
+  private readonly modeEndListeners = new Set<() => void>()
+
   private readonly config: { readonly fullAccessEverywhere: boolean }
 
   /**
@@ -334,7 +337,13 @@ export class PermissionDefaults extends Service {
     this.watch()
     this.ctx.provide('sandboxModeGuard', this.guard())
     // A reach device opens a terminal without an unlock inside a workspace with a grant (`@delo/home-auth`, C14).
-    this.ctx.provide('reachFullAccessGrants', { dangerousMode: () => this.everywhere().on })
+    this.ctx.provide('reachFullAccessGrants', {
+      dangerousMode: () => this.everywhere().on,
+      onDangerousModeEnd: (listener) => {
+        this.modeEndListeners.add(listener)
+        return () => { this.modeEndListeners.delete(listener) }
+      },
+    })
     // Prepend: the seed must land before upstream's pin, which fills every
     // still-unset knob with the deployment default on the same event.
     this.ctx.on('agent/created', ({ agent }) => { this.seed(agent.session) }, { prepend: true })
@@ -551,7 +560,10 @@ export class PermissionDefaults extends Service {
   private reconcile(): GrantChanges {
     const changes = { added: grantChanges(this.applied, this.entries).added, lost: this.lost() }
     for (const workspace of changes.lost) this.withdrawOpenChats(workspace)
-    if (this.lostEverywhere()) this.withdrawUngrantedChats()
+    if (this.lostEverywhere()) {
+      this.withdrawUngrantedChats()
+      for (const listener of [...this.modeEndListeners]) listener()
+    }
     this.applied = this.entries
     this.appliedEverywhere = this.everywhereOn()
     this.reliedEverywhere = false

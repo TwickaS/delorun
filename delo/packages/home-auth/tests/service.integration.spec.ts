@@ -10,7 +10,7 @@ import { IncomingMessage } from 'node:http'
 import { Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
@@ -273,7 +273,7 @@ describe('the homeAuth service', () => {
       let mode = true
       const values: Record<string, unknown> = { enabled: true }
       const calls: unknown[] = []
-      ctx.provide('reachFullAccessGrants', { dangerousMode: () => mode } as never)
+      ctx.provide('reachFullAccessGrants', { dangerousMode: () => mode, onDangerousModeEnd: () => () => {} } as never)
       ctx.provide('settings', {
         describe: () => [{ ns: 'delo-delegation-consent', value: values }],
         update: (_ns: string, patch: Record<string, unknown>) => { calls.push(patch); Object.assign(values, patch); return Promise.resolve() },
@@ -289,6 +289,42 @@ describe('the homeAuth service', () => {
       await ctx.homeAuth.endDangerousSettings()
       expect(calls).toEqual([{ enabled: true }])
       expect(values.enabled).toBe(true)
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('sets back what a device loosened as soon as the mode ends, with no device call and no restart', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      let mode = true
+      const ended = new Set<() => void>()
+      const values: Record<string, unknown> = { enabled: true }
+      ctx.provide('reachFullAccessGrants', { dangerousMode: () => mode, onDangerousModeEnd: (listener: () => void) => { ended.add(listener); return () => { ended.delete(listener) } } } as never)
+      ctx.provide('settings', {
+        describe: () => [{ ns: 'delo-delegation-consent', value: values }],
+        update: (_ns: string, patch: Record<string, unknown>) => { Object.assign(values, patch); return Promise.resolve() },
+      } as never)
+      expect(ctx.homeAuth.recordLifts([{ ns: 'delo-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      // Pins the subscription: without it nothing reads the mode here, so the consent stays off.
+      await vi.waitFor(() => { expect(ended.size).toBe(1) })
+      mode = false
+      for (const listener of ended) listener()
+      await vi.waitFor(() => { expect(values.enabled).toBe(true) })
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to record a lift when the record cannot be saved', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      await rm(directory, { recursive: true, force: true })
+      // Pins the fail-closed save: without it the device's write would proceed unrecorded.
+      expect(ctx.homeAuth.recordLifts([{ ns: 'delo-delegation-consent', field: 'enabled', written: false }])).toMatch(/^loopback-required: the home could not record/)
     } finally {
       await fiber.dispose()
       await rm(directory, { recursive: true, force: true })

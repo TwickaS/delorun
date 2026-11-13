@@ -4,11 +4,14 @@
  * it proceeds; when the mode ends the home writes the recorded previous value back through the settings service,
  * unless the person changed the field at the computer since.
  *
- * The record is `~/.delo/secrets/home-auth/reach-dangerous-settings.json`, mode 0600. A lift is held in memory at once
- * and written to the file right after, so a restart still reverts it.
+ * The record is `~/.delo/secrets/home-auth/reach-dangerous-settings.json`, mode 0600. A lift is saved to the file
+ * before {@link DangerousSettingsLedger.record} returns, so a restart still reverts it and a device's write that could
+ * not be recorded is refused.
  *
  * @module @delo/home-auth/dangerous-settings
  */
+import { randomBytes } from 'node:crypto'
+import { renameSync, rmSync, writeFileSync } from 'node:fs'
 import { isDeepStrictEqual } from 'node:util'
 import { readStoreFile, writeStoreFile, isRecord } from './files.ts'
 
@@ -23,6 +26,8 @@ export interface SettingsLift {
   readonly field: string
   /** The value the write set, or undefined when the call's arguments do not name one. */
   readonly written: unknown
+  /** Whether the call removes the field, so that it reads as unset afterwards. */
+  readonly unset?: true
 }
 
 /** A recorded lift: the value before the first device write and the value the latest one set. */
@@ -33,6 +38,8 @@ interface RecordedLift {
   readonly previous?: unknown
   /** Absent when the write's value is unknown; the field then reverts whenever it differs from {@link previous}. */
   readonly set?: unknown
+  /** Set when the device's write left the field unset: the field reverts only while it is still unset. */
+  readonly unset?: true
 }
 
 /** How the ledger reads and writes a settings field. */
@@ -92,17 +99,37 @@ export class DangerousSettingsLedger {
    * Record the writes a device is about to make. A field already recorded keeps its first previous value.
    * @param lifts - the writes.
    * @param previousOf - the field's live value before the write.
+   * @throws the filesystem failure when the record cannot be saved; the lifts are then not recorded.
    */
   record(lifts: readonly SettingsLift[], previousOf: (ns: string, field: string) => unknown): void {
+    const before = this.lifts
     for (const lift of lifts) {
       const index = this.lifts.findIndex(entry => entry.ns === lift.ns && entry.field === lift.field)
       const previous = index >= 0 ? this.lifts[index]!.previous : previousOf(lift.ns, lift.field)
       const entry: RecordedLift = {
         ns: lift.ns, field: lift.field, ...previous === undefined ? {} : { previous }, ...lift.written === undefined ? {} : { set: lift.written },
+        ...lift.unset === true ? { unset: true as const } : {},
       }
       this.lifts = index >= 0 ? this.lifts.map((old, at) => (at === index ? entry : old)) : [...this.lifts, entry]
     }
-    this.persist()
+    try {
+      this.saveNow()
+    } catch (error) {
+      this.lifts = before
+      throw error
+    }
+  }
+
+  /** Write the record synchronously, so a caller returns only once it is on disk. */
+  private saveNow(): void {
+    const temp = `${this.file}.${randomBytes(6).toString('hex')}.tmp`
+    try {
+      writeFileSync(temp, `${JSON.stringify({ v: DANGEROUS_SETTINGS_VERSION, lifts: this.lifts }, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
+      renameSync(temp, this.file)
+    } catch (error) {
+      rmSync(temp, { force: true })
+      throw error
+    }
   }
 
   /**
@@ -121,7 +148,7 @@ export class DangerousSettingsLedger {
     for (const lift of [...this.lifts]) {
       if (dangerous()) return
       const current = access.read(lift.ns, lift.field)
-      const deviceOwned = 'set' in lift ? isDeepStrictEqual(current, lift.set) : !isDeepStrictEqual(current, lift.previous)
+      const deviceOwned = lift.unset === true ? current === undefined : 'set' in lift ? isDeepStrictEqual(current, lift.set) : !isDeepStrictEqual(current, lift.previous)
       try {
         if (deviceOwned) await access.write(lift.ns, lift.field, lift.previous)
       } catch (_unwritable: unknown) {
@@ -135,8 +162,8 @@ export class DangerousSettingsLedger {
   }
 
   private persist(): void {
-    const record = { v: DANGEROUS_SETTINGS_VERSION, lifts: this.lifts }
-    this.saving = this.saving.then(() => writeStoreFile(this.file, record)).catch((_unwritable: unknown) => {
+    // Read at write time, so a queued write never replaces a newer record saved by `record`.
+    this.saving = this.saving.then(() => writeStoreFile(this.file, { v: DANGEROUS_SETTINGS_VERSION, lifts: this.lifts })).catch((_unwritable: unknown) => {
       // The lift stays in memory and the next change writes the file again.
     })
   }
