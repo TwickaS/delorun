@@ -278,3 +278,7 @@ The host is shared with other agents' suites, so these results depend on the loa
 - The 26 files that passed alone were rerun while at least one other vitest process was running.
 - `packages/subagent/subagent/tests/continuation.spec.ts` and `packages/experimental/client-ui-forge/tests/local-diff-safety.host.spec.ts` each failed in the full run and in a rerun that started while other vitest processes were running. Run alone at `2eb9c53b03`, each passed three times out of three (164 and 17 tests); run alone at `0b651c0d32`, each passed once. The host's load average was between 7 and 15 during these runs. Neither commit fails, so there was nothing to bisect; no commit between the tag and `v5` touches either package, and both files are in class (c) at the tag.
 - `packages/experimental/client-ui-forge/tests/controller.host.spec.ts` had two failures in the full run, both of which passed alone, and one 90000 ms timeout in a rerun that started beside another vitest process. Run alone at `0b651c0d32`, with four other vitest processes on the host, it passed 118 tests of 118. It is in class (c) at the tag.
+
+## Where to go next
+
+The [parity checklist](parity.md) records the status of each difference from stock DeepSeek Harness. The [harness feedback log](harness-feedback.md) records problems met while running these suites. The [reference index](README.md) lists the other developer pages.
