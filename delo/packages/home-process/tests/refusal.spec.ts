@@ -1,5 +1,5 @@
 /**
- * How every contract C19 error code reads as a refusal: a lead naming what Delo did, the code with its detail, and the
+ * How every contract C19 error code reads as a refusal: a lead naming what Delorun did, the code with its detail, and the
  * commands that show or change where the profile stands, for the profile the command named.
  */
 import type { HomeProcessErrorCode } from '@delo/contract-home-process'
@@ -15,9 +15,9 @@ const CODES: readonly HomeProcessErrorCode[] = [
 ]
 
 describe('a home-process refusal', () => {
-  it.each(CODES)('leads with what Delo did for %s, and keeps the code and detail', (code) => {
+  it.each(CODES)('leads with what Delorun did for %s, and keeps the code and detail', (code) => {
     const refusal = describeFailure(new HomeProcessError(code, 'the detail'), [homeProcessDescriber], { profile: 'work' })
-    expect(refusal.lead).toMatch(/^(Delo|The home process|The new release) .+\.$/u)
+    expect(refusal.lead).toMatch(/^(Delorun|The home process|The new release) .+\.$/u)
     expect(refusal.reason).toBe(`${code}: the detail`)
     for (const remedy of refusal.remedies) expect(remedy).not.toContain('--profile default')
   })

@@ -34,7 +34,7 @@ async function emptyHome(): Promise<string> {
 }
 
 describe('runtimePlatformOf', () => {
-  it('names the platform of every operating system and architecture Delo publishes a runtime for', () => {
+  it('names the platform of every operating system and architecture Delorun publishes a runtime for', () => {
     expect(runtimePlatformOf('linux', 'x64')).toBe('linux-x64')
     expect(runtimePlatformOf('linux', 'arm64')).toBe('linux-arm64')
     expect(runtimePlatformOf('darwin', 'arm64')).toBe('darwin-arm64')
@@ -42,9 +42,9 @@ describe('runtimePlatformOf', () => {
     expect(runtimePlatformOf('win32', 'x64')).toBe('win32-x64')
   })
 
-  it('refuses a machine Delo publishes no runtime for, naming it', () => {
-    expect(() => runtimePlatformOf('freebsd', 'x64')).toThrow('Delo publishes no runtime for freebsd-x64')
-    expect(() => runtimePlatformOf('win32', 'arm64')).toThrow('Delo publishes no runtime for win32-arm64')
+  it('refuses a machine Delorun publishes no runtime for, naming it', () => {
+    expect(() => runtimePlatformOf('freebsd', 'x64')).toThrow('Delorun publishes no runtime for freebsd-x64')
+    expect(() => runtimePlatformOf('win32', 'arm64')).toThrow('Delorun publishes no runtime for win32-arm64')
   })
 })
 
@@ -114,7 +114,7 @@ describe('installLines', () => {
     expect(written).toEqual([
       'Resolving the release: the stable channel names 1.1.0.\n',
       'Checking the release log: not checked (the log did not answer).\n',
-      'Warning: Release 1.1.0 has not been checked against the release log; Delo checks it at the next connection.\n',
+      'Warning: Release 1.1.0 has not been checked against the release log; Delorun checks it at the next connection.\n',
     ])
   })
 })

@@ -76,7 +76,7 @@ export interface TextRedactor {
 
 /**
  * The refusal for any value a program caught. The first describer whose class the value is an instance of describes
- * it, so a subclass's describer comes before its base class's. Any other value reads as `Delo stopped: <message>`,
+ * it, so a subclass's describer comes before its base class's. Any other value reads as `Delorun stopped: <message>`,
  * with no stack and no remedy. The refusal holds the error's text as it is; {@link renderRefusal} redacts it.
  * @param error - the value thrown.
  * @param describers - the describers the program composes.
@@ -87,7 +87,7 @@ export function describeFailure(error: unknown, describers: readonly RefusalDesc
   for (const describer of describers) {
     if (error instanceof describer.type) return describer.describe(error, context)
   }
-  return { lead: `Delo stopped: ${error instanceof Error ? error.message : String(error)}`, remedies: [] }
+  return { lead: `Delorun stopped: ${error instanceof Error ? error.message : String(error)}`, remedies: [] }
 }
 
 /**
@@ -115,9 +115,9 @@ export function codedReason(code: string, detail: string | undefined): string {
   return detail === undefined ? code : `${code}: ${detail}`
 }
 
-/** How a {@link HomeLayoutError} reads: Delo stopped before using the path, C1's code and detail, and the fix when one exists. */
+/** How a {@link HomeLayoutError} reads: Delorun stopped before using the path, C1's code and detail, and the fix when one exists. */
 export const homeLayoutDescriber: RefusalDescriber<HomeLayoutError> = refusalDescriber(HomeLayoutError, error => ({
-  lead: `Delo stopped before using ${error.path}.`,
+  lead: `Delorun stopped before using ${error.path}.`,
   reason: codedReason(error.code, error.detail),
   remedies: error.fix === undefined ? [] : [`Fix it with: ${error.fix}`],
 }))

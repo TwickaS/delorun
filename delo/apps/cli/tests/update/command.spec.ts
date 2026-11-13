@@ -80,21 +80,21 @@ function dataItem(copy?: DataCopySize, verification: ItemVerification = 'verifie
 describe('reportLines', () => {
   it('states the versions, the release checks and both installations, and that no row changes', () => {
     expect(reportLines(report())).toEqual([
-      'Update from Delo 1.0.0 (DSH 0.2.2) to Delo 1.1.0 (DSH 0.2.2) on the stable channel.',
+      'Update from Delorun 1.0.0 (DSH 0.2.2) to Delorun 1.1.0 (DSH 0.2.2) on the stable channel.',
       'Release checks: signature passed, freshness passed, log passed.',
       'Installations: cli-home 1.0.0 current; desktop-host unknown.',
       'No plugin, bundle or profile row changes.',
     ])
   })
 
-  it('lists each change with its effect and reason, and marks an item Delo cannot predict', () => {
+  it('lists each change with its effect and reason, and marks an item Delorun cannot predict', () => {
     const lines = reportLines(report({ items: [CHANGED_BUNDLE, DISABLED_PLUGIN, UNVERIFIED_PLUGIN] }))
 
     expect(lines.slice(3)).toEqual([
       'Changes (3):',
       '  - changed: The bundle list matches an installation-owned list that DSH 0.2.2 replaces with its template.',
-      '  - disabled: plugin-a requires DSH ^9.0.0; Delo 1.1.0 runs DSH 0.2.2.',
-      '  - kept: Delo could not read plugin-b\'s package.json; it cannot predict what the update does to it. Delo cannot predict this item.',
+      '  - disabled: plugin-a requires DSH ^9.0.0; Delorun 1.1.0 runs DSH 0.2.2.',
+      '  - kept: Delorun could not read plugin-b\'s package.json; it cannot predict what the update does to it. Delorun cannot predict this item.',
     ])
   })
 
@@ -103,9 +103,9 @@ describe('reportLines', () => {
 
     expect(lines.slice(3)).toEqual([
       'No plugin, bundle or profile row changes.',
-      'Chat data: Delo 1.1.0 keeps chat data in a format Delo 1.0.0 may not read.',
+      'Chat data: Delorun 1.1.0 keeps chat data in a format Delorun 1.0.0 may not read.',
       '  A copy holds 12 file(s), 3.0 MiB; 512.0 MiB is free.',
-      '  Without the copy, Delo cannot go back to 1.0.0 after 1.1.0 first starts.',
+      '  Without the copy, Delorun cannot go back to 1.0.0 after 1.1.0 first starts.',
     ])
   })
 
@@ -120,8 +120,8 @@ describe('reportLines', () => {
     const lines = reportLines(report({ items: [dataItem(undefined, 'unverified')] }))
 
     expect(lines.slice(4)).toEqual([
-      'Chat data: Delo cannot tell whether Delo 1.0.0 reads the chat data Delo 1.1.0 writes. Delo cannot predict this item.',
-      '  Without the copy, Delo cannot go back to 1.0.0 after 1.1.0 first starts.',
+      'Chat data: Delorun cannot tell whether Delorun 1.0.0 reads the chat data Delorun 1.1.0 writes. Delorun cannot predict this item.',
+      '  Without the copy, Delorun cannot go back to 1.0.0 after 1.1.0 first starts.',
     ])
   })
 })
@@ -196,7 +196,7 @@ describe('runUpdate', () => {
 
   it('exits 3 and says to run delorun start when no home process answers', async () => {
     expect(await update([])).toBe(EXIT.notRunning)
-    expect(output.stderr).toBe(`delorun update: Delo is not running for the profile ${PROFILE}; run delorun start, then delorun update.\n`)
+    expect(output.stderr).toBe(`delorun update: Delorun is not running for the profile ${PROFILE}; run delorun start, then delorun update.\n`)
     expect(output.stdout).toBe('')
   })
 
@@ -214,7 +214,7 @@ describe('runUpdate', () => {
     try {
       await expect(update([])).rejects.toMatchObject({
         exit: EXIT.failed,
-        message: 'delorun update: Delo saves the profile\'s history with git before it updates, so it can go back, and git cannot run here: no git command is on PATH. Install git, then run delorun update again. Nothing was fetched or changed.',
+        message: 'delorun update: Delorun saves the profile\'s history with git before it updates, so it can go back, and git cannot run here: no git command is on PATH. Install git, then run delorun update again. Nothing was fetched or changed.',
       })
     } finally {
       rmSync(process.env.PATH, { recursive: true, force: true })
@@ -241,14 +241,14 @@ describe('runUpdate', () => {
 
     await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('an update never goes to a lower version') })
 
-    expect(output.stdout).not.toContain('Update from Delo')
+    expect(output.stdout).not.toContain('Update from Delorun')
     expect(sent('update.apply')).toHaveLength(0)
   })
 
   it('c03-yes-refuses-unchecked-log: --yes refuses a report whose release-log check did not complete, and applies nothing', async () => {
     await homeAnswering({ prepare: prepared(report({ release: { manifest: brandString<Sha256Hex>('c'.repeat(64)), signature: 'passed', freshness: 'passed', log: 'unchecked' } })) })
 
-    await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('the release-log check of Delo 1.1.0 did not complete') })
+    await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('the release-log check of Delorun 1.1.0 did not complete') })
 
     expect(sent('update.apply')).toHaveLength(0)
   })
@@ -269,7 +269,7 @@ describe('runUpdate', () => {
     expect(await update([], { confirm: async () => Promise.resolve(false) })).toBe(EXIT.ok)
 
     expect(output.stdout).toContain('… fetching\n')
-    expect(output.stdout).toContain('Update from Delo 1.0.0 (DSH 0.2.2) to Delo 1.1.0 (DSH 0.2.2) on the stable channel.\n')
+    expect(output.stdout).toContain('Update from Delorun 1.0.0 (DSH 0.2.2) to Delorun 1.1.0 (DSH 0.2.2) on the stable channel.\n')
     expect(output.stdout).toContain('Changes (1):\n')
     expect(sent('update.apply')).toHaveLength(0)
   })
@@ -279,7 +279,7 @@ describe('runUpdate', () => {
 
     expect(await update(['--report'], { confirm: async () => Promise.reject(new Error('asked')) })).toBe(EXIT.ok)
 
-    expect(output.stdout).toContain('Update from Delo 1.0.0 (DSH 0.2.2) to Delo 1.1.0 (DSH 0.2.2) on the stable channel.\n')
+    expect(output.stdout).toContain('Update from Delorun 1.0.0 (DSH 0.2.2) to Delorun 1.1.0 (DSH 0.2.2) on the stable channel.\n')
     expect(output.stdout.endsWith('Nothing changed. Run delorun update to apply it.\n')).toBe(true)
     expect(sent('update.apply')).toHaveLength(0)
   })
@@ -315,7 +315,7 @@ describe('runUpdate', () => {
     expect(sent('update.apply')).toHaveLength(0)
   })
 
-  it('refuses --yes when the report holds an item Delo cannot predict', async () => {
+  it('refuses --yes when the report holds an item Delorun cannot predict', async () => {
     await homeAnswering({ prepare: prepared(report({ items: [UNVERIFIED_PLUGIN] })) })
 
     await expect(update(['--yes'])).rejects.toMatchObject({ exit: EXIT.failed })
@@ -328,7 +328,7 @@ describe('runUpdate', () => {
 
     expect(await update([], { confirm })).toBe(EXIT.ok)
 
-    expect(confirm).toHaveBeenCalledWith('Apply the update to Delo 1.1.0?')
+    expect(confirm).toHaveBeenCalledWith('Apply the update to Delorun 1.1.0?')
     expect(output.stdout.endsWith('Nothing changed.\n')).toBe(true)
     expect(sent('update.apply')).toHaveLength(0)
   })
@@ -340,7 +340,7 @@ describe('runUpdate', () => {
 
     expect(sent('update.apply')[0]?.args).toEqual({ reportId: REPORT_ID, wait: 'drain', dataCopy: false })
     expect(output.stdout).toContain('… draining\n')
-    expect(output.stdout.endsWith('Delo 1.1.0 runs now.\n')).toBe(true)
+    expect(output.stdout.endsWith('Delorun 1.1.0 runs now.\n')).toBe(true)
   })
 
   it('takes the copy the person chooses, and says where the chat data from before is copied', async () => {
@@ -410,7 +410,7 @@ describe('runUpdate', () => {
 
     expect(await update(['--yes'])).toBe(EXIT.failed)
 
-    expect(output.stderr).toBe('delorun update: Delo 1.1.0 failed its health check (H2-host-ready); Delo 1.0.0 runs again with the profile from before. See delorun logs.\n')
+    expect(output.stderr).toBe('delorun update: Delorun 1.1.0 failed its health check (H2-host-ready); Delorun 1.0.0 runs again with the profile from before. See delorun logs.\n')
   })
 
   it('names the health criterion the new release failed, when the rollback reports one', async () => {
@@ -418,7 +418,7 @@ describe('runUpdate', () => {
 
     expect(await update(['--yes'])).toBe(EXIT.failed)
 
-    expect(output.stderr).toContain('Delo 1.1.0 failed its health check (H2-host-ready); Delo 1.0.0 runs again')
+    expect(output.stderr).toContain('Delorun 1.1.0 failed its health check (H2-host-ready); Delorun 1.0.0 runs again')
   })
 
   it('exits 1 with "no reason" when a rollback reports none', async () => {
@@ -434,7 +434,7 @@ describe('runUpdate', () => {
 
     expect(await update(['--yes'])).toBe(EXIT.failed)
 
-    expect(output.stderr).toBe('delorun update: Delo 1.1.0 failed its health check, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.\n')
+    expect(output.stderr).toBe('delorun update: Delorun 1.1.0 failed its health check, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.\n')
   })
 
   it('exits 1 and says nothing changed when the update was aborted, with the reason when there is one', async () => {
@@ -483,7 +483,7 @@ describe('runUpdate', () => {
   })
 
   it('shows a VERIFY_FAILED refusal\'s whole explanation, remedies included', async () => {
-    await homeAnswering({ prepare: [{ ok: true, phase: 'checking' }, { ok: false, error: 'VERIFY_FAILED', detail: 'Delo refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' }] })
+    await homeAnswering({ prepare: [{ ok: true, phase: 'checking' }, { ok: false, error: 'VERIFY_FAILED', detail: 'Delorun refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' }] })
 
     await expect(update([])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: VERIFY_FAILED\nDelo refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' })
   })

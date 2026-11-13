@@ -401,7 +401,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, watching)).toBeUndefined()
     expect(atBoot).toHaveLength(1)
     // The documents lookup runs on this host, so the base is its documents folder or the fixture home.
-    expect(atBoot[0]?.endsWith(join('Delorun', 'default-workspace'))).toBe(true)
+    expect(atBoot[0]?.endsWith(join('Delo', 'default-workspace'))).toBe(true)
     expect(existsSync(atBoot[0] ?? '')).toBe(false)
     rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
     vi.stubEnv(DEFAULT_WORKSPACE_ENV, undefined)
