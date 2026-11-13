@@ -5,6 +5,8 @@ kind: "package-library"
 
 # @delo/settings-controls
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 `@delo/settings-controls` holds the controls every Delo Settings section is drawn with, so the sections of different plugins look and behave alike: the card with its sentence-case heading, a setting's title and help, the frame of a General row, the radio segmented control and the preview tiles. Plugin-specific controls, such as the header-art strip or the contrast slider, stay in their plugin. The entry is `src/index.ts`, exported as `.` from source.

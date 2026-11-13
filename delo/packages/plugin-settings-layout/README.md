@@ -5,6 +5,8 @@ kind: "package-library"
 
 # @delo/plugin-settings-layout
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 Delo's Settings is one large panel with the navigation grouped by topic, a search field, and pages that gather upstream's General rows into cards with headings. The package registers a layout with upstream's Settings shell through upstream's settings layout seam (`ctx.settingsLayout`), so every stock and third-party section and row keeps working. It loads only while the Delo look and upstream's general Settings are on; with the stock look, upstream's flat list and its 800 × 800 panel return.
