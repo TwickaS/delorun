@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mirrorToGithub, publishChannel, publishPlan, PublishRefusal } from '../src/publish-release.ts'
-import { MemoryStore } from './support.ts'
+import { MemoryStore, signedChannel } from './support.ts'
+
+const keys = signedChannel().keys
+const timestampAt = (version: number): string => signedChannel({ keys, version }).timestamp.bytes.toString()
 
 const directories: string[] = []
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }) })
@@ -13,7 +16,7 @@ function channelDir(extra: Record<string, string> = {}): string {
   const directory = mkdtempSync(join(tmpdir(), 'release-channel-'))
   directories.push(directory)
   const tree: Record<string, string> = {
-    'timestamp.json': 'timestamp',
+    'timestamp.json': timestampAt(2),
     'root/1.root.json': 'root one',
     'releases/download/v0.1.0/b.manifest.json': 'manifest',
     'releases/download/v0.1.0/a.tar.gz': 'archive',
@@ -60,14 +63,29 @@ describe('release publishing', () => {
 
   it('replaces timestamp.json conditionally and keeps a racing re-signing', async () => {
     const store = new MemoryStore()
-    store.force('timestamp.json', Buffer.from('old'))
+    store.force('timestamp.json', Buffer.from(timestampAt(1)))
     expect(await publishChannel(store, channelDir())).toContain('timestamp.json')
-    expect(Buffer.from(store.objects.get('timestamp.json')!.bytes).toString()).toBe('timestamp')
+    expect(Buffer.from(store.objects.get('timestamp.json')!.bytes).toString()).toBe(timestampAt(2))
     const racing = new MemoryStore()
-    racing.force('timestamp.json', Buffer.from('old'))
+    racing.force('timestamp.json', Buffer.from(timestampAt(1)))
     racing.beforeWrite = key => { if (key === 'timestamp.json') racing.force(key, Buffer.from('re-signed')) }
     await expect(publishChannel(racing, channelDir())).rejects.toThrow(/timestamp\.json was replaced by another writer/u)
     expect(Buffer.from(racing.objects.get('timestamp.json')!.bytes).toString()).toBe('re-signed')
+  })
+
+  it.each([2, 3])('refuses a timestamp.json whose version is not higher than the stored version %i, and replaces nothing', async stored => {
+    const store = new MemoryStore()
+    store.force('timestamp.json', Buffer.from(timestampAt(stored)))
+    await expect(publishChannel(store, channelDir())).rejects.toThrow(new RegExp(`is version ${String(stored)}; the new one is version 2`, 'u'))
+    expect(Buffer.from(store.objects.get('timestamp.json')!.bytes).toString()).toBe(timestampAt(stored))
+    expect(store.writes).not.toContain('timestamp.json')
+  })
+
+  it('refuses a stored timestamp.json that is not a timestamp file', async () => {
+    const store = new MemoryStore()
+    store.force('timestamp.json', Buffer.from('not json'))
+    await expect(publishChannel(store, channelDir())).rejects.toThrow(/JSON/u)
+    expect(store.writes).not.toContain('timestamp.json')
   })
 
   it('refuses a directory with a stray file or no timestamp', async () => {

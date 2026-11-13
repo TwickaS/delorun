@@ -235,7 +235,7 @@ export const TIMESTAMP_BACKDATE_SECONDS = 3600
 /**
  * The content of the timestamp that continues a verified one without changing what it names: the next version, the
  * same channel entries and root, `issued` {@link TIMESTAMP_BACKDATE_SECONDS} before `now` and the lifetime contract C2
- * fixes after it. The scheduled re-signing and `resign.ts` use it.
+ * fixes after it. The scheduled re-signing uses it.
  * @param previous - the verified current timestamp.
  * @param now - the signing time, in Unix seconds.
  * @returns the content to sign.

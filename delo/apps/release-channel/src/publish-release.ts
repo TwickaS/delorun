@@ -9,7 +9,7 @@
  * `releases/download/`, then new `root/<n>.root.json` files, then `timestamp.json` last. Release files and roots are
  * create-only (`If-None-Match: *`): a published object is never replaced, and the refusal names the key. An object
  * already stored with identical bytes is skipped, so an interrupted publish resumes. `timestamp.json` is the only
- * replaced key, conditional on the entity tag read just before, so a racing re-signing wins and the publish stops
+ * replaced key, only to a higher version than the one stored and conditional on the entity tag read just before, so a racing re-signing wins and the publish stops
  * without replacing it.
  *
  * `--mirror github` uploads the same release files to the GitHub release `--tag` of `--repo` with
@@ -23,6 +23,7 @@ import { join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { promisify } from 'node:util'
+import { readEnvelope } from '@delo/release-formats/sign/schemas'
 import { releaseBucket } from './bucket.ts'
 import { s3Store } from './s3-store.ts'
 import type { PublishStore } from './store.ts'
@@ -65,13 +66,21 @@ export async function publishPlan(channel: string): Promise<{ key: string, path:
   return [...under('releases/download/'), ...under('root/'), ...timestamp]
 }
 
+function requireHigherVersion(next: Uint8Array, stored: Uint8Array): void {
+  const version = readEnvelope('timestamp', next).signed.version
+  const current = readEnvelope('timestamp', stored).signed.version
+  if (version <= current) throw new PublishRefusal(`timestamp.json in the bucket is version ${String(current)}; the new one is version ${String(version)}, and a publish only moves it to a higher version (the daily re-signing may have written a newer one; sign the next version from it)`)
+}
+
 /**
  * Upload a channel directory to the store.
  * @param store - the store.
  * @param channel - the channel directory.
  * @param log - receives one line per object.
  * @returns the keys written, in order.
- * @throws PublishRefusal when a release file or root exists with other bytes, or `timestamp.json` changed since it was read.
+ * @throws PublishRefusal when a release file or root exists with other bytes, `timestamp.json` changed since it was read,
+ * or the stored `timestamp.json` has a version equal to or higher than the new one.
+ * @throws Error when the new or the stored `timestamp.json` is not a timestamp file.
  */
 export async function publishChannel(store: PublishStore, channel: string, log: (line: string) => void = () => {}): Promise<string[]> {
   const written: string[] = []
@@ -79,6 +88,7 @@ export async function publishChannel(store: PublishStore, channel: string, log: 
     const bytes = await readFile(path)
     if (key === 'timestamp.json') {
       const current = await store.read(key)
+      if (current !== undefined) requireHigherVersion(bytes, current.bytes)
       const ok = current === undefined ? await store.putIfAbsent(key, bytes) : await store.putIfMatch(key, bytes, current.etag)
       if (!ok) throw new PublishRefusal(`${key} was replaced by another writer after it was read; the earlier write stands, nothing was replaced`)
     } else if (!await store.putIfAbsent(key, bytes)) {

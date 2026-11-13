@@ -36,6 +36,7 @@ export default Alchemy.Stack(
         { id: 'root', enabled: true, prefix: 'root/', condition },
       ],
     })
+    const mark = yield* Cloudflare.KV.Namespace('Mark', { title: `delo-release-mark-${stage}` })
     const channel = yield* Cloudflare.Worker('Channel', {
       main: source('worker.ts'),
       env: { RELEASES: releases },
@@ -43,7 +44,7 @@ export default Alchemy.Stack(
     })
     yield* Cloudflare.Worker('Resign', {
       main: source('resign-worker.ts'),
-      env: { RELEASES: releases, TIMESTAMP_KEY: Config.Redacted('DELO_TIMESTAMP_KEY') },
+      env: { RELEASES: releases, MARK: mark, TIMESTAMP_KEY: Config.Redacted('DELO_TIMESTAMP_KEY') },
       crons: [RESIGN_CRON],
       workersDev: false,
     })

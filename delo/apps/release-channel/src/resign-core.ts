@@ -2,18 +2,22 @@
  * Timestamp re-signing (contract C2, timestamp metadata). It reads the current `timestamp.json`, verifies it under the
  * root chain stored beside it, and writes the next one: version + 1, the same channel entries, `issued` one hour
  * before now and the contract's lifetime after it. It signs only what the current timestamp already names, so a holder
- * of the timestamp key keeps a release current but forges none.
+ * of the timestamp key keeps a release current but forges none. The new file is the current file's signed JSON with
+ * `version`, `issued` and `expires` replaced, so a field this code does not know (a later channel) survives. A
+ * high-water mark in storage the publish token cannot write refuses a bucket rolled back to an older timestamp.
  *
- * The cron Worker calls {@link resignTimestamp} daily with the timestamp key as a Worker secret, and `resign.ts` runs
- * it from a command line. This module imports nothing that only the command line needs, so the Worker bundle omits it.
+ * The cron Worker calls {@link resignTimestamp} daily with the timestamp key as a Worker secret. No command line runs
+ * it: the high-water mark is bound to that Worker alone, and a re-signing without it would skip the rollback check.
  *
  * @module @delo/release-channel/resign-core
  */
 import { createPrivateKey, type KeyObject } from 'node:crypto'
 import { signEnvelope } from '@delo/release-formats/sign/envelope'
-import { toJsonValue } from '@delo/release-formats/sign/json'
+import type { JsonValue } from '@delo/release-formats/sign/json'
+import { readEnvelope } from '@delo/release-formats/sign/schemas'
 import { verifyTimestamp, walkRootChain } from '@delo/release-formats/sign/verify'
 import { resignedTimestamp } from '@delo/release/sign/timestamp'
+import { checkAgainstMark, type HighWaterMark, type MarkStore } from './mark.ts'
 import type { ReplaceStore } from './store.ts'
 
 /** The result of one re-signing attempt. */
@@ -24,14 +28,15 @@ export type ResignOutcome =
 
 /**
  * Re-sign the current timestamp.
- * @param request - the store, the timestamp private key and the time in Unix seconds.
+ * @param request - the bucket store, the high-water mark store, the timestamp private key and the time in Unix seconds.
  * @returns the outcome.
  * @throws Error when no timestamp or root is stored, the roots do not chain, the current timestamp does not verify
  * under the newest root (a bad signature, a root other than the newest, or a lifetime other than the contract's), or
- * the key is not one of the root's timestamp keys; nothing is written in these cases.
+ * the key is not one of the root's timestamp keys, or the current timestamp lies below the high-water mark (a lower
+ * version, or a channel on a lower release); nothing is written in these cases.
  */
-export async function resignTimestamp(request: { readonly store: ReplaceStore, readonly key: KeyObject, readonly now: number }): Promise<ResignOutcome> {
-  const { store, key, now } = request
+export async function resignTimestamp(request: { readonly store: ReplaceStore, readonly mark: MarkStore, readonly key: KeyObject, readonly now: number }): Promise<ResignOutcome> {
+  const { store, mark, key, now } = request
   const current = await store.read('timestamp.json')
   if (current === undefined) throw new Error('the bucket holds no timestamp.json to re-sign; the first timestamp is signed with sign-timestamp.ts')
   const numbered = (await store.list('root/')).map(name => /^root\/([1-9][0-9]*)\.root\.json$/u.exec(name)).filter(match => match !== null).map(match => ({ name: match[0], version: Number(match[1]) }))
@@ -42,11 +47,16 @@ export async function resignTimestamp(request: { readonly store: ReplaceStore, r
   const root = chain.at(-1)!
   // The current timestamp may be past its expiry after a missed run; its signature and lifetime still hold.
   const previous = verifyTimestamp(root, current.bytes, now, undefined, { allowExpired: true })
+  const seen: HighWaterMark = { version: previous.version, channels: { stable: previous.channels.stable.release, beta: previous.channels.beta.release } }
+  checkAgainstMark(await mark.read(), seen)
   const content = resignedTimestamp(previous, now)
-  const bytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(content), signatures: [] }, [key]), undefined, 2)}\n`)
+  const raw = readEnvelope('timestamp', current.bytes).signedJson as { readonly [key: string]: JsonValue }
+  const signed = { ...raw, version: content.version, issued: content.issued, expires: content.expires }
+  const bytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed, signatures: [] }, [key]), undefined, 2)}\n`)
   // Verifying the new file also proves the key is one of the root's timestamp keys.
   verifyTimestamp(root, bytes, now)
   if (!await store.putIfMatch('timestamp.json', bytes, current.etag)) return { outcome: 'raced' }
+  await mark.write({ version: content.version, channels: seen.channels })
   return { outcome: 'resigned', version: content.version, expires: content.expires }
 }
 

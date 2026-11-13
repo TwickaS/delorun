@@ -1678,6 +1678,13 @@ importers:
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
   delo/apps/runtime-closure:
     dependencies:

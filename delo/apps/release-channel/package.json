@@ -10,7 +10,11 @@
     "@delo/contract-release-manifest": "workspace:*",
     "@delo/release": "workspace:*",
     "@delo/release-formats": "workspace:*",
-    "aws4fetch": "^1.0.20"
+    "aws4fetch": "^1.0.20",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0"
   },
   "delo": {
     "state": "shipped"

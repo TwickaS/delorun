@@ -1,4 +1,5 @@
 /** The public Worker's routes: exactly the channel's paths and methods, its headers and ranges, and no write route. */
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { handleChannelRequest, type ObjectBody, type ObjectHead, type ReadOnlyBucket } from '../src/routes.ts'
 
@@ -88,5 +89,13 @@ describe('release channel routes', () => {
       expect(response.status, method).toBe(404)
     }
     expect(writes).toEqual([])
+  })
+})
+
+describe('the public Worker\'s code', () => {
+  it.each(['../src/routes.ts', '../src/worker.ts'])('%s calls no write method of the bucket (R2 offers no read-only binding)', file => {
+    const code = readFileSync(new URL(file, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\/\/.*$/gmu, '')
+    expect(code).not.toMatch(/\.\s*(put|delete|createMultipartUpload|resumeMultipartUpload)\s*\(/u)
+    expect(code).not.toMatch(/\b(put|delete)\s*:/u)
   })
 })

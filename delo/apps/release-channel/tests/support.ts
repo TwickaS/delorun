@@ -10,6 +10,7 @@ import { toJsonValue } from '@delo/release-formats/sign/json'
 import { sha256Hex } from '@delo/release-formats/brands'
 import { trustRootChain } from '@delo/release-formats/sign/verify'
 import { manifestContent, rootFile, throwawayKeys, type Keys } from '@delo/release/tests/sign/fixture'
+import type { HighWaterMark, MarkStore } from '../src/mark.ts'
 import type { PublishStore, StoredObject } from '../src/store.ts'
 
 /** A store in memory. `beforeWrite` runs before each conditional write evaluates, to stage a racing writer. */
@@ -54,6 +55,21 @@ export class MemoryStore implements PublishStore {
   }
 }
 
+/** A high-water mark in memory. */
+export class MemoryMark implements MarkStore {
+  value: HighWaterMark | undefined
+  readonly writes: HighWaterMark[] = []
+
+  async read(): Promise<HighWaterMark | undefined> {
+    return this.value
+  }
+
+  async write(mark: HighWaterMark): Promise<void> {
+    this.value = mark
+    this.writes.push(mark)
+  }
+}
+
 /** The signing time of the fixture's first timestamp. */
 export const FIRST = Date.parse('2026-11-06T12:00:00Z') / 1000
 
@@ -73,7 +89,7 @@ export interface SignedChannel {
  * @param options - the keys (throwaway by default), the timestamp's lifetime in seconds (3 days by default) and its signing key.
  * @returns the root and timestamp.
  */
-export function signedChannel(options: { keys?: Keys, lifetime?: number, signer?: KeyObject, version?: number } = {}): SignedChannel {
+export function signedChannel(options: { keys?: Keys, lifetime?: number, signer?: KeyObject, version?: number, extra?: Record<string, unknown> } = {}): SignedChannel {
   const keys = options.keys ?? throwawayKeys()
   const { bytes: rootBytes } = rootFile(keys)
   const root = trustRootChain([rootBytes], FIRST).at(-1)!
@@ -88,7 +104,8 @@ export function signedChannel(options: { keys?: Keys, lifetime?: number, signer?
     root: { version: 1, sha256: root.sha256 },
     channels,
   }
-  const bytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(metadata), signatures: [] }, [options.signer ?? keys.timestamp]), undefined, 2)}\n`)
+  const signed = options.extra === undefined ? toJsonValue(metadata) : toJsonValue({ ...metadata, channels: { ...channels, ...options.extra } })
+  const bytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed, signatures: [] }, [options.signer ?? keys.timestamp]), undefined, 2)}\n`)
   return { keys, rootBytes, timestamp: { metadata, bytes } }
 }
 
