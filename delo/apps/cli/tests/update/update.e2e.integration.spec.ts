@@ -191,9 +191,9 @@ describe('delorun update end to end', TIMEOUT, () => {
     const running = await startHome()
     try {
       const result = await delorun(['update', '--yes'])
-      expect(result.stdout).toContain('Chat data: Delo 1.2.0 keeps chat data in a format Delo 1.1.0 may not read.')
+      expect(result.stdout).toContain('Chat data: Delorun 1.2.0 keeps chat data in a format Delorun 1.1.0 may not read.')
       expect(result.code).toBe(EXIT.failed)
-      expect(result.stderr).toContain('Delo 1.2.0 failed its health check (HEALTH_CHECK_FAILED); Delo 1.1.0 runs again')
+      expect(result.stderr).toContain('Delorun 1.2.0 failed its health check (HEALTH_CHECK_FAILED); Delorun 1.1.0 runs again')
       expect((await store.pointers()).current).toBe('1.1.0')
       expect(chat('opened-by-1.2.0')).toBe(false)
       expect(chat('from-before')).toBe(true)
@@ -209,7 +209,7 @@ describe('delorun update end to end', TIMEOUT, () => {
     try {
       const result = await delorun(['update', '--yes'])
       expect(result.code).toBe(EXIT.ok)
-      expect(result.stdout).toContain('Without the copy, Delo cannot go back to 1.1.0 after 1.3.0 first starts.')
+      expect(result.stdout).toContain('Without the copy, Delorun cannot go back to 1.1.0 after 1.3.0 first starts.')
       expect(result.stdout).toContain('The chat data from before is copied in data-copies/1.3.0.')
       await until(async () => (await readJournal(journalPath(home, PROFILE)).catch(() => undefined))?.phase === 'committed', 'the successor\'s commit')
     } finally {

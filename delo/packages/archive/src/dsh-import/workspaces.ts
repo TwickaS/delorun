@@ -150,7 +150,7 @@ function lexicalSensitive(folder: string, folders: SensitiveFolders): string | u
   const path = resolve(folder)
   if (path === resolve(sep)) return 'the root of the file system'
   if (inside(folders.stockHome, path)) return 'inside the DeepSeek Harness home'
-  if (inside(folders.deloHome, path)) return 'inside the Delo home'
+  if (inside(folders.deloHome, path)) return 'inside the Delorun home'
   if (folders.personHome === undefined) return undefined
   const home = resolve(folders.personHome)
   if (path === home) return 'your home folder itself'
@@ -206,7 +206,7 @@ export function serializeRegistry(registry: Registry): string {
  */
 export function mergeRegistries(delo: Registry, stock: Registry): string | undefined {
   if (delo.state.pendingMutation !== undefined) {
-    throw new DshImportError('DSH_IMPORT_REGISTRY_REFUSED', 'the Delo home\'s workspace list was interrupted while it changed; start Delo once so it finishes the change, stop it, and import again', REGISTRY_PATH)
+    throw new DshImportError('DSH_IMPORT_REGISTRY_REFUSED', 'the Delorun home\'s workspace list was interrupted while it changed; start Delorun once so it finishes the change, stop it, and import again', REGISTRY_PATH)
   }
   const records = new Map(delo.records)
   const order = [...delo.state.workspaceIds]
@@ -220,7 +220,7 @@ export function mergeRegistries(delo: Registry, stock: Registry): string | undef
     const existing = records.get(id)
     if (existing !== undefined) {
       if (existing.path !== record.path) {
-        throw new DshImportError('DSH_IMPORT_ID_COLLISION', `the stock home and the Delo home both hold the workspace ${JSON.stringify(id)} for different folders, and an import never overwrites a workspace`, REGISTRY_PATH)
+        throw new DshImportError('DSH_IMPORT_ID_COLLISION', `the stock home and the Delorun home both hold the workspace ${JSON.stringify(id)} for different folders, and an import never overwrites a workspace`, REGISTRY_PATH)
       }
       if (fresh.length > 0) {
         records.set(id, { ...existing, sessionIds: [...existing.sessionIds, ...fresh] })

@@ -232,7 +232,7 @@ describe('runUpdate', () => {
 
     expect(await update(['--yes'])).toBe(EXIT.ok)
 
-    expect(output.stdout).toBe('… fetching\nDelo 1.0.0 is the newest release on the stable channel.\n')
+    expect(output.stdout).toBe('… fetching\nDelorun 1.0.0 is the newest release on the stable channel.\n')
     expect(sent('update.apply')).toHaveLength(0)
   })
 
@@ -349,9 +349,9 @@ describe('runUpdate', () => {
 
     expect(await update([], { confirm: async () => Promise.resolve(true), copy })).toBe(EXIT.ok)
 
-    expect(copy).toHaveBeenCalledWith('Without the copy, Delo cannot go back to 1.0.0 after 1.1.0 first starts.')
+    expect(copy).toHaveBeenCalledWith('Without the copy, Delorun cannot go back to 1.0.0 after 1.1.0 first starts.')
     expect(sent('update.apply')[0]?.args).toEqual({ reportId: REPORT_ID, wait: 'drain', dataCopy: true })
-    expect(output.stdout.endsWith('Delo 1.1.0 runs now. The chat data from before is copied in data-copies/1.1.0.\n')).toBe(true)
+    expect(output.stdout.endsWith('Delorun 1.1.0 runs now. The chat data from before is copied in data-copies/1.1.0.\n')).toBe(true)
   })
 
   it('continues without the copy, and says what that costs, when the person declines it', async () => {
@@ -360,8 +360,8 @@ describe('runUpdate', () => {
     expect(await update([], { confirm: async () => Promise.resolve(true), copy: async () => Promise.resolve(false) })).toBe(EXIT.ok)
 
     expect(sent('update.apply')[0]?.args).toEqual({ reportId: REPORT_ID, wait: 'drain', dataCopy: false })
-    expect(output.stdout).toContain('Continuing without the copy. Without the copy, Delo cannot go back to 1.0.0 after 1.1.0 first starts.\n')
-    expect(output.stdout.endsWith('Delo 1.1.0 runs now.\n')).toBe(true)
+    expect(output.stdout).toContain('Continuing without the copy. Without the copy, Delorun cannot go back to 1.0.0 after 1.1.0 first starts.\n')
+    expect(output.stdout.endsWith('Delorun 1.1.0 runs now.\n')).toBe(true)
   })
 
   it('takes the copy with --yes when the chat data differs, and declines it with --no-data-copy', async () => {
@@ -485,7 +485,7 @@ describe('runUpdate', () => {
   it('shows a VERIFY_FAILED refusal\'s whole explanation, remedies included', async () => {
     await homeAnswering({ prepare: [{ ok: true, phase: 'checking' }, { ok: false, error: 'VERIFY_FAILED', detail: 'Delorun refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' }] })
 
-    await expect(update([])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: VERIFY_FAILED\nDelo refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' })
+    await expect(update([])).rejects.toMatchObject({ message: 'delorun update: the home process refused to prepare the update: VERIFY_FAILED\nDelorun refused release x, which did not verify: y. Nothing was installed.\n  Run the same command again.' })
   })
 
   it('reports the home process\'s refusal to apply', async () => {

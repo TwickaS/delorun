@@ -576,7 +576,7 @@ describe('a release named with --release when a runtime is installed', () => {
       stderr: (text) => { printed += text },
     }))
     expect(status).toBe(LAUNCHER_EXIT.failed)
-    expect(printed).toContain('Delo did not start the installed runtime')
+    expect(printed).toContain('Delorun did not start the installed runtime')
     expect(printed).toContain('--release 0.2.0')
     expect(printed).toContain('runtime 0.1.0 is already installed')
     expect(printed).toContain('delorun update --profile default')
@@ -887,9 +887,9 @@ describe('the release-log check at a start', () => {
   })
 
   it('starts an unchecked release with the warning and its reason, and never blocks it', async () => {
-    const run = await startWith({ state: 'unchecked', stop: false, warning: 'Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.', detail: 'the release log gave no checkpoint (offline)', notices: ['the stored checkpoint does not read'] })
+    const run = await startWith({ state: 'unchecked', stop: false, warning: 'Release 0.1.0 has not been checked against the release log; Delorun checks it at the next connection.', detail: 'the release log gave no checkpoint (offline)', notices: ['the stored checkpoint does not read'] })
     expect(run.started).toBe(true)
-    expect(run.printed).toBe('Release log: the stored checkpoint does not read\nRelease 0.1.0 has not been checked against the release log; Delo checks it at the next connection. (the release log gave no checkpoint (offline))\n')
+    expect(run.printed).toBe('Release log: the stored checkpoint does not read\nRelease 0.1.0 has not been checked against the release log; Delorun checks it at the next connection. (the release log gave no checkpoint (offline))\n')
     const bare = await startWith({ state: 'unchecked', stop: false, warning: 'Release 0.1.0 has not been checked.' })
     expect(bare.printed).toBe('Release 0.1.0 has not been checked.\n')
   })
@@ -908,7 +908,7 @@ describe('the release-log check at a start', () => {
     const run = await startWith({ state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'no release-log bundle is stored beside this release', missingBundle: path })
     expect(run.status).toBe(LAUNCHER_EXIT.failed)
     expect(run.started).toBe(false)
-    expect(run.printed).toContain('Delo did not start release 0.1.0: the release-log bundle stored beside it is missing.')
+    expect(run.printed).toContain('Delorun did not start release 0.1.0: the release-log bundle stored beside it is missing.')
     expect(run.printed).toContain(`no release-log bundle is stored at ${path}`)
     expect(run.printed).toContain('delorun recover rollback --profile default')
     expect(run.printed).toContain(`restore ${path}`)
@@ -962,7 +962,7 @@ describe('the release-log check at a start', () => {
   it('still runs delorun verify for a failed release, so the person can see every check', async () => {
     const run = await startWith({ state: 'failed', stop: true, refusal: 'consistency-proof-invalid', detail: 'x' }, ['--profile', 'default', 'verify'])
     expect(run.started).toBe(true)
-    expect(run.printed).toContain('Delo did not start release 0.1.0')
+    expect(run.printed).toContain('Delorun did not start release 0.1.0')
   })
 
   it('names the runtime command, skipping the profile option', () => {
@@ -1040,7 +1040,7 @@ describe('a current runtime that fails its start check', () => {
   }
 
   /** The notice a run that starts `previous` prints. */
-  const NOTICE = `Delo did not start release ${CURRENT}: it failed its start check. Starting release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback\n`
+  const NOTICE = `Delorun did not start release ${CURRENT}: it failed its start check. Starting release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback\n`
 
   it.each([
     [[]],
@@ -1106,7 +1106,7 @@ describe('a current runtime that fails its start check', () => {
     expect(result.status).toBe(7)
     expect(result.asked).toEqual({ checked: [`${PREVIOUS}@1`], commands: [`${PREVIOUS} recover rollback`] })
     expect(result.started).toEqual([{ command: `/home/.delo/runtimes/${PREVIOUS}/node/bin/node`, args: ['entry.js', ...ROLLBACK_ARGS], env: { DELO_PROFILE: 'default' }, version: PREVIOUS, root: expect.objectContaining({ version: 1 }) }])
-    expect(result.printed).toBe(`Delo did not start release ${CURRENT}: it failed its start check. Starting release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback\n`)
+    expect(result.printed).toBe(`Delorun did not start release ${CURRENT}: it failed its start check. Starting release ${PREVIOUS}, the version before the last update, to roll back to it: delorun recover rollback\n`)
   })
 
   it('refuses as before, starting nothing, when no previous is installed', async () => {
@@ -1114,7 +1114,7 @@ describe('a current runtime that fails its start check', () => {
     expect(result.status).toBe(LAUNCHER_EXIT.failed)
     expect(result.started).toEqual([])
     expect(result.asked.checked).toEqual([])
-    expect(result.printed).toContain(`Delo did not start the installed runtime.\nWhy: RUNTIME_CHANGED: runtime ${CURRENT} differs from its signed file list`)
+    expect(result.printed).toContain(`Delorun did not start the installed runtime.\nWhy: RUNTIME_CHANGED: runtime ${CURRENT} differs from its signed file list`)
   })
 
   it('refuses as before, starting nothing, when previous fails its own start check', async () => {
@@ -1122,7 +1122,7 @@ describe('a current runtime that fails its start check', () => {
     expect(result.status).toBe(LAUNCHER_EXIT.failed)
     expect(result.started).toEqual([])
     expect(result.asked).toEqual({ checked: [`${PREVIOUS}@1`], commands: [] })
-    expect(result.printed).toContain('Delo did not start the installed runtime')
+    expect(result.printed).toContain('Delorun did not start the installed runtime')
   })
 
   it('checks and starts nothing when the stored root is not one the launcher trusts', async () => {
@@ -1146,6 +1146,6 @@ describe('a current runtime that fails its start check', () => {
     expect(checked).toEqual([PREVIOUS])
     expect(result.status).toBe(LAUNCHER_EXIT.failed)
     expect(result.started).toEqual([])
-    expect(result.printed).toContain(`Delo did not start release ${PREVIOUS}: its release-log check failed`)
+    expect(result.printed).toContain(`Delorun did not start release ${PREVIOUS}: its release-log check failed`)
   })
 })

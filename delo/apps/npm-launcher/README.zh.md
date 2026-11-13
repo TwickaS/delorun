@@ -44,7 +44,7 @@ description: "npm 作为 delorun 提供的 Delo 启动器：它通过 @delo/inst
 当 `current` 未通过启动检查时，启动器会查找上一次更新所替换的版本，只读取 home 而不写入任何内容：已存储的根必须锚定在随包携带的根上，存储必须指明一个 `previous`，且 `previous` 必须通过同样的启动检查。存在这样的 `previous` 时，结果取决于命令。不带参数的 `delorun`、`delorun start` 与 `delorun recover rollback`，在其周围只有 `--profile <name>` 或 `--profile=<name>` 选项且 `--` 之后没有内容时，会打印一行，对 `previous` 运行发布日志启动检查，并以 `delorun recover rollback` 代替对方的参数启动它，profile 按启动协议 1 的方式经由 `DELO_PROFILE` 传递：
 
 ```text
-Delo did not start release 0.2.0: it failed its start check. Starting release 0.1.0, the version before the last update, to roll back to it: delorun recover rollback
+Delorun did not start release 0.2.0: it failed its start check. Starting release 0.1.0, the version before the last update, to roll back to it: delorun recover rollback
 ```
 
 该命令应用约定 C3 的回滚表，因此指针只经由它改变；若没有记录对 `current` 的更新，它以 `NO_UPDATE_RECORD` 拒绝；启动器以它的状态退出。其他每个命令都会被拒绝，包括 `delorun verify`、`delorun stop`、`delorun status`、`delorun update`、`delorun recover status`、未知命令、带有 `--foreground` 等其他任何选项的启动，以及 `--` 之后带有参数的任何命令行（启动器不读取其中的 `--profile`）：启动器不启动任何发布，不改动 home 中的任何内容，打印哪个发布未通过启动检查及原因，指明 `delorun recover rollback` 是启动 `previous` 并回滚到它的方式，并以 1 退出，因为以回滚代替该命令会在一个两者都未要求的命令上回滚运行时与 chat 数据：

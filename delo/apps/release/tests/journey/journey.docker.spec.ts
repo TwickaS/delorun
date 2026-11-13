@@ -432,7 +432,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
       const silent = await delorun(['--version'], { DELO_HOME: `${PERSON_HOME}/silent-home` })
       expect(launcherLines(silent)).toEqual(expect.arrayContaining([
         expect.stringMatching(/^Checking the release log: not checked \(.+\)\.$/u),
-        `Warning: Release ${R1} has not been checked against the release log; Delo checks it at the next connection.`,
+        `Warning: Release ${R1} has not been checked against the release log; Delorun checks it at the next connection.`,
         `Installing release ${R1}.`,
       ]))
       expect(silent.status).toBe(0)

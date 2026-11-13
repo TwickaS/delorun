@@ -47,9 +47,9 @@ describe('an install refusal', () => {
 
 describe('a runtime store refusal', () => {
   const leads: ReadonlyArray<readonly [RuntimeStoreError['code'], string]> = [
-    ['RUNTIME_CHANGED', 'Delo did not start the installed runtime.'],
-    ['RUNTIME_INCOMPATIBLE', 'Delo did not start the installed runtime.'],
-    ['ROOT_NOT_ANCHORED', 'Delo did not start the installed runtime.'],
+    ['RUNTIME_CHANGED', 'Delorun did not start the installed runtime.'],
+    ['RUNTIME_INCOMPATIBLE', 'Delorun did not start the installed runtime.'],
+    ['ROOT_NOT_ANCHORED', 'Delorun did not start the installed runtime.'],
     ['NO_ACTIVE_RUNTIME', 'Delo found no installed runtime to start.'],
     ['STORE_BUSY', 'Another Delo command is changing the installed runtimes.'],
     ['POINTER_REPLACE_FAILED', 'Delo did not change which runtime is active.'],
@@ -83,7 +83,7 @@ describe('a runtime store refusal', () => {
 describe('a refused home or release-log check', () => {
   it('names the path, the code and the fix of a refused home', () => {
     const refusal = refusalFor(new HomeLayoutError('HOME_MODE', '/home/.delo', '/home/.delo has mode 0755', 'chmod 700 /home/.delo'), CONTEXT)
-    expect(refusal.text).toBe('Delo stopped before using /home/.delo.\nWhy: HOME_MODE: /home/.delo has mode 0755\nWhat you can do:\n  Fix it with: chmod 700 /home/.delo\n')
+    expect(refusal.text).toBe('Delorun stopped before using /home/.delo.\nWhy: HOME_MODE: /home/.delo has mode 0755\nWhat you can do:\n  Fix it with: chmod 700 /home/.delo\n')
   })
 
   it('names the check that refused and what the log did', () => {
@@ -100,8 +100,8 @@ describe('the launcher\'s describers', () => {
 
 describe('any other failure', () => {
   it('is reported with its own message, no stack and no remedy', () => {
-    expect(refusalFor(new Error('the disk is full'), CONTEXT)).toEqual({ text: 'Delo stopped: the disk is full\n', exit: LAUNCHER_EXIT.failed, remedies: [] })
-    expect(refusalFor('plain text', CONTEXT).text).toBe('Delo stopped: plain text\n')
+    expect(refusalFor(new Error('the disk is full'), CONTEXT)).toEqual({ text: 'Delorun stopped: the disk is full\n', exit: LAUNCHER_EXIT.failed, remedies: [] })
+    expect(refusalFor('plain text', CONTEXT).text).toBe('Delorun stopped: plain text\n')
   })
 })
 
@@ -110,7 +110,7 @@ const PROVIDER_KEY = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
 
 describe('a refusal carrying a secret', () => {
   it('prints it redacted, through a described error and through the message no describer knows', () => {
-    expect(refusalFor(new Error(`the proxy sent ${PROVIDER_KEY}`), CONTEXT).text).toBe('Delo stopped: the proxy sent [redacted:provider-key]\n')
+    expect(refusalFor(new Error(`the proxy sent ${PROVIDER_KEY}`), CONTEXT).text).toBe('Delorun stopped: the proxy sent [redacted:provider-key]\n')
     const described = refusalFor(new InstallError('DOWNLOAD_FAILED', 'the source', `the host answered ${PROVIDER_KEY}`), CONTEXT).text
     expect(described).toContain('Why: DOWNLOAD_FAILED: the host answered [redacted:provider-key]\n')
     expect(described).not.toContain(PROVIDER_KEY)
@@ -125,7 +125,7 @@ describe('the launcher\'s last-resort handler', () => {
     const uninstall = installLauncherLastResort({ process: emitter, stderr: text => { output.push(text) }, exit })
     expect(() => installLauncherLastResort({ process: emitter, stderr: () => {}, exit: () => {} })).toThrow('already installed')
     emitter.emit('unhandledRejection', new TypeError(`fetch ${PROVIDER_KEY} failed`))
-    expect(output.join('')).toBe(`Delo stopped: fetch [redacted:provider-key] failed\nWhat you can do:\n  ${LAUNCHER_NO_LOG_POINTER}\n`)
+    expect(output.join('')).toBe(`Delorun stopped: fetch [redacted:provider-key] failed\nWhat you can do:\n  ${LAUNCHER_NO_LOG_POINTER}\n`)
     expect(exit).toHaveBeenCalledWith(1)
     uninstall()
     expect(emitter.listenerCount('unhandledRejection')).toBe(0)

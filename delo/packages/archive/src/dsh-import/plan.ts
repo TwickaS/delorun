@@ -356,7 +356,7 @@ async function refuseOverlap(source: string, target: string): Promise<void> {
   // A Delo home that does not exist yet, or that cannot be resolved, overlaps by its path alone.
   const real = await realpath(target).catch(() => target)
   if (!inside(source, real) && !inside(real, source)) return
-  throw new DshImportError('DSH_IMPORT_SOURCE_UNUSABLE', 'the DeepSeek Harness home and the Delo home overlap, and an import never reads the home it writes into')
+  throw new DshImportError('DSH_IMPORT_SOURCE_UNUSABLE', 'the DeepSeek Harness home and the Delorun home overlap, and an import never reads the home it writes into')
 }
 
 /**
@@ -429,7 +429,7 @@ class Planner {
     await this.finishRegistry()
     const merge = this.options.merge === true
     if (deloSessions.size > 0 && !merge) {
-      this.blockers.unshift(new DshImportError('DSH_IMPORT_HOME_HAS_CHATS', `the Delo home already holds ${String(deloSessions.size)} ${deloSessions.size === 1 ? 'chat' : 'chats'}; to add these beside them, run the import again with --merge`))
+      this.blockers.unshift(new DshImportError('DSH_IMPORT_HOME_HAS_CHATS', `the Delorun home already holds ${String(deloSessions.size)} ${deloSessions.size === 1 ? 'chat' : 'chats'}; to add these beside them, run the import again with --merge`))
     }
     const bytes = this.checkSizes(limits)
     return {
@@ -668,7 +668,7 @@ class Planner {
       this.chats.push({ ...chat, state: 'present' })
       return
     }
-    this.blockers.push(new DshImportError('DSH_IMPORT_ID_COLLISION', `the Delo home already holds the chat ${JSON.stringify(name)} with other content, and an import never overwrites a chat`, path))
+    this.blockers.push(new DshImportError('DSH_IMPORT_ID_COLLISION', `the Delorun home already holds the chat ${JSON.stringify(name)} with other content, and an import never overwrites a chat`, path))
   }
 
   /**
@@ -755,7 +755,7 @@ class Planner {
     const state = await this.compare(file, digest)
     if (state === 'new') this.attachments.push({ ...file, sha256: digest })
     else if (state === 'present') this.attachmentsPresent += 1
-    else this.blockers.push(new DshImportError('DSH_IMPORT_ID_COLLISION', `the Delo home holds the attachment ${JSON.stringify(file.path)} with other bytes, and an import never overwrites an attachment`, file.path))
+    else this.blockers.push(new DshImportError('DSH_IMPORT_ID_COLLISION', `the Delorun home holds the attachment ${JSON.stringify(file.path)} with other bytes, and an import never overwrites an attachment`, file.path))
   }
 
   /**
@@ -844,7 +844,7 @@ class Planner {
       if (!held.isFile()) throw new Error('it is not a file')
       delo = parseRegistry(await readFile(join(this.target, REGISTRY_PATH), 'utf8'))
     } catch (error: unknown) {
-      this.blockers.push(new DshImportError('DSH_IMPORT_REGISTRY_REFUSED', `the Delo home's workspace list cannot be read (${(error as Error).message}), so the stock workspaces cannot join it`, REGISTRY_PATH))
+      this.blockers.push(new DshImportError('DSH_IMPORT_REGISTRY_REFUSED', `the Delorun home's workspace list cannot be read (${(error as Error).message}), so the stock workspaces cannot join it`, REGISTRY_PATH))
       return
     }
     try {
@@ -1043,9 +1043,9 @@ class Planner {
     let delo
     try {
       if (held !== undefined && !held.isFile()) throw new Error('it is not a file')
-      delo = held === undefined ? undefined : readCredentials(await readFile(join(this.target, CREDENTIALS_PATH), 'utf8'), `the Delo home's ${CREDENTIALS_PATH}`)
+      delo = held === undefined ? undefined : readCredentials(await readFile(join(this.target, CREDENTIALS_PATH), 'utf8'), `the Delorun home's ${CREDENTIALS_PATH}`)
     } catch (error: unknown) {
-      return this.skip(file.path, 'unreadable', `the Delo home's credentials document cannot be read: ${(error as Error).message}`)
+      return this.skip(file.path, 'unreadable', `the Delorun home's credentials document cannot be read: ${(error as Error).message}`)
     }
     this.credentials = { file, entries: compareCredentials(stock, delo) }
   }
@@ -1141,7 +1141,7 @@ function notStockHome(): DshImportError {
  * @returns the refusal.
  */
 export function refusedTarget(path: string): DshImportError {
-  return new DshImportError('DSH_IMPORT_TARGET_REFUSED', `the Delo home's ${JSON.stringify(path)} is not a directory the import writes into`, path)
+  return new DshImportError('DSH_IMPORT_TARGET_REFUSED', `the Delorun home's ${JSON.stringify(path)} is not a directory the import writes into`, path)
 }
 
 /**

@@ -22,7 +22,7 @@ describe('c03-unverified-metadata-shown', () => {
   it('does not confirm the report with `--yes`', () => {
     const report = buildUpdateReport(input({ profile: UNREADABLE }))
     expect(confirmsWithoutAsking(report)).toBe(false)
-    expect(reasonMessage(report.items[0]!, report)).toBe("Delo could not read broken's package.json; it cannot predict what the update does to it.")
+    expect(reasonMessage(report.items[0]!, report)).toBe("Delorun could not read broken's package.json; it cannot predict what the update does to it.")
   })
 
   it('does not confirm a report whose only unverified item is a plugin that declares no requirement', () => {
@@ -37,13 +37,13 @@ describe('c03-delo-requirement-excludes-target', () => {
   it('names both target versions for a plugin whose engines.delo excludes the target', () => {
     const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('bridge', '0.5.0', { dsh: '^0.3.0', delo: '^0.10.0' })] }) }))
     expect(report.items).toMatchObject([{ kind: 'plugin', reason: 'delo-requirement-unmet', effect: 'disabled', verification: 'verified', detail: { axis: 'delo', requirement: '^0.10.0' }, actions: ['update-plugin', 'allow-version', 'keep-disabled'] }])
-    expect(reasonMessage(report.items[0]!, report)).toBe('bridge requires Delo ^0.10.0; the update installs Delo 1.0.0.')
+    expect(reasonMessage(report.items[0]!, report)).toBe('bridge requires Delorun ^0.10.0; the update installs Delorun 1.0.0.')
     expect(report.to.delo).toBe(TO.delo)
   })
 
   it('names both target versions for a DSH mismatch too', () => {
     const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })] }) }))
-    expect(reasonMessage(report.items[0]!, report)).toBe('calendar requires DSH ^0.2.0; Delo 1.0.0 runs DSH 0.3.0.')
+    expect(reasonMessage(report.items[0]!, report)).toBe('calendar requires DSH ^0.2.0; Delorun 1.0.0 runs DSH 0.3.0.')
     expect(reasonOf(report, 'calendar')).toBe('dsh-requirement-unmet')
   })
 })
@@ -55,7 +55,7 @@ describe('c03-peer-requirement-excludes-target', () => {
     const preflight = evaluatePluginCompatibility(manifest, {}, TO.dsh, undefined)
     expect(preflight?.requirements).toEqual({ '@deepseek-ai/dsh-agent': '^0.2.0' })
     expect(report.items).toMatchObject([{ kind: 'plugin', reason: 'dsh-requirement-unmet', effect: 'disabled', verification: 'verified', detail: { axis: 'dsh', requirement: requirementText(preflight!.requirements) } }])
-    expect(reasonMessage(report.items[0]!, report)).toBe('peers-only requires DSH ^0.2.0 (peer @deepseek-ai/dsh-agent); Delo 1.0.0 runs DSH 0.3.0.')
+    expect(reasonMessage(report.items[0]!, report)).toBe('peers-only requires DSH ^0.2.0 (peer @deepseek-ai/dsh-agent); Delorun 1.0.0 runs DSH 0.3.0.')
     expect(disabledPluginNames(report)).toEqual(['peers-only'])
     expect(confirmsWithoutAsking(report)).toBe(false)
   })

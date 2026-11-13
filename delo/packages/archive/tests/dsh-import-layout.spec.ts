@@ -81,8 +81,8 @@ describe('the profile helpers', () => {
 
   it('says what a carry refusal about a row the profile itself holds means', () => {
     expect(carryRefusalNotes({ code: 'ROW_NOT_CARRIED', message: '', subjects: [{ kind: 'row', name: 'own-row', layer: 'profile-patch' }], remedies: [] }, false)).toEqual(['The row own-row does not land in this profile: it is held back.'])
-    expect(carryRefusalNotes({ code: 'UNNAMED_CHANGE', message: '', subjects: [{ kind: 'configuration', name: 'x', layer: 'home-patch' }], remedies: [] }, true)).toEqual(['The Delo home patch\'s settings for x will apply to this profile too.'])
-    expect(carryRefusalNotes({ code: 'ROW_NOT_CARRIED', message: '', subjects: [{ kind: 'row', name: 'r', layer: 'home-patch' }], remedies: [] }, true)).toEqual(['The stock home patch\'s row r will not apply: the Delo home keeps its own home patch.'])
+    expect(carryRefusalNotes({ code: 'UNNAMED_CHANGE', message: '', subjects: [{ kind: 'configuration', name: 'x', layer: 'home-patch' }], remedies: [] }, true)).toEqual(['The Delorun home patch\'s settings for x will apply to this profile too.'])
+    expect(carryRefusalNotes({ code: 'ROW_NOT_CARRIED', message: '', subjects: [{ kind: 'row', name: 'r', layer: 'home-patch' }], remedies: [] }, true)).toEqual(['The stock home patch\'s row r will not apply: the Delorun home keeps its own home patch.'])
     expect(carryRefusalNotes({ code: 'CONFIGURATION_NOT_CARRIED', message: '', subjects: [{ kind: 'configuration', name: 'c', layer: 'home-patch' }], remedies: [] }, false)).toEqual(['The stock home patch\'s settings for c will not apply: it is held back.'])
     // The plugin list already names a plugin the import does not carry, so the note does not repeat it.
     expect(carryRefusalNotes({ code: 'LOCAL_PLUGIN_NOT_CARRIED', message: '', subjects: [{ kind: 'row', name: 'p', layer: 'profile-patch' }], remedies: [] }, false)).toEqual([])

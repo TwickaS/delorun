@@ -87,13 +87,13 @@ describe('the plan of a stock-home import', () => {
       ['registry-bundle', 'bundle', 'install', 'from the registry, ^2.0.0'],
       ['tagged-bundle', 'bundle', 'install', 'from the registry, next'],
       ['unknown-bundle', 'bundle', 'install', 'the stock profile does not say where it comes from; add it by name'],
-      ['@delo/other', 'bundle', 'carried', 'ships with Delo'],
+      ['@delo/other', 'bundle', 'carried', 'ships with Delorun'],
       ['Bad Name', 'bundle', 'not-carried', 'not a package name'],
       ['row-plugin', 'plugin', 'not-carried', 'installed from "link:/opt/row-plugin", which is not a registry version; if you trust it, add it again yourself'],
       ['git-plugin', 'plugin', 'not-carried', 'installed from "github:someone/plugin", which is not a registry version; if you trust it, add it again yourself'],
       ['alias-plugin', 'plugin', 'not-carried', 'installed from "npm:other@1", which is not a registry version; if you trust it, add it again yourself'],
       ['Bad\u001bName', 'plugin', 'not-carried', 'not a package name'],
-      ['@delo/bundle-local', 'bundle', 'added', 'Delo\'s own bundle, which keeps Delo\'s privacy defaults in this profile'],
+      ['@delo/bundle-local', 'bundle', 'added', 'Delorun\'s own bundle, which keeps Delorun\'s privacy defaults in this profile'],
     ])
     expect(JSON.parse(profile?.manifest ?? '')).toEqual({
       name: 'dsh-profile-web',
@@ -184,18 +184,18 @@ describe('the plan of a stock-home import', () => {
     expect(patch?.heldText).toContain('compact: !!js "true"')
     expect(patch?.heldText).toContain('# held back: it holds a !!js expression')
     expect(planned.profiles[0]?.carry).toEqual([
-      'The stock home patch\'s row stock-row will not apply: the Delo home keeps its own home patch.',
+      'The stock home patch\'s row stock-row will not apply: the Delorun home keeps its own home patch.',
       'The settings for ui-chat do not land in this profile: they are held back.',
-      'The stock home patch\'s settings for stock-config will not apply: the Delo home keeps its own home patch.',
-      'The Delo home patch\'s row delo-row will apply to this profile too.',
+      'The stock home patch\'s settings for stock-config will not apply: the Delorun home keeps its own home patch.',
+      'The Delorun home patch\'s row delo-row will apply to this profile too.',
     ])
     expect(planned.layers).toMatchObject([{ target: 'cordis.patch.yml', state: 'taken', carried: undefined, held: [{ label: 'the whole file', reason: 'taken' }], expressions: 1 }])
   })
 
-  it('carries a profile under the Delo home\'s own home patch when the stock home has none', async () => {
+  it('carries a profile under the Delorun home\'s own home patch when the stock home has none', async () => {
     homes.write('profiles/web/package.json', manifest(['@deepseek-ai/dsh-base']))
     homes.writeTarget('cordis.patch.yml', '- id: delo-config\n  config:\n    x: 1\n')
-    expect((await plan(homes)).profiles[0]?.carry).toEqual(['The Delo home patch\'s settings for delo-config will apply to this profile too.'])
+    expect((await plan(homes)).profiles[0]?.carry).toEqual(['The Delorun home patch\'s settings for delo-config will apply to this profile too.'])
   })
 
   it('says when a home patch the profile runs under cannot be read', async () => {
@@ -254,7 +254,7 @@ describe('the plan of a stock-home import', () => {
     ])
   })
 
-  it('leaves earlier settings too large to read behind, and keeps the Delo home\'s home patch for profiles', async () => {
+  it('leaves earlier settings too large to read behind, and keeps the Delorun home\'s home patch for profiles', async () => {
     homes.write('settings.yaml', Buffer.alloc(16 * 1024 * 1024 + 1, 0x20))
     homes.write('profiles/web/package.json', manifest(['@deepseek-ai/dsh-base']))
     const planned = await plan(homes, { limits: { maxEntries: 100, maxFileBytes: 64 * 1024 * 1024, maxTotalBytes: 64 * 1024 * 1024 } })
@@ -355,7 +355,7 @@ describe('the publication of a stock-home import', () => {
     expect(statSync(join(homes.target, `${held}/cordis.patch.yml`)).mode & 0o777).toBe(0o600)
   })
 
-  it('offers the DeepSeek key alone, copies it only after a yes, at mode 0600, beside the keys the Delo home holds', async () => {
+  it('offers the DeepSeek key alone, copies it only after a yes, at mode 0600, beside the keys the Delorun home holds', async () => {
     mark(homes)
     homes.write('.credentials.yaml', `version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${FIXTURE_SECRET}\n  OTHER_KEY: stock-value\nrecords:\n  llm-deepseek/main:\n    kind: api-key\n    key: record-secret\n    env:\n      DEEPSEEK_BASE_URL: https://collector.invalid\n  llm-openai/main:\n    kind: api-key\n    key: openai-secret\n`, 0o600)
     homes.writeTarget('.credentials.yaml', 'version: 1\nrefs:\n  OTHER_KEY: delo-value\n', 0o600)
@@ -379,7 +379,7 @@ describe('the publication of a stock-home import', () => {
     expect(JSON.stringify(await readDshImportRecord(homes.target))).not.toContain(FIXTURE_SECRET)
   })
 
-  it('leaves the Delo home\'s credentials untouched without a yes, and writes a new document when it has none', async () => {
+  it('leaves the Delorun home\'s credentials untouched without a yes, and writes a new document when it has none', async () => {
     mark(homes)
     homes.write('.credentials.yaml', `version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${FIXTURE_SECRET}\n`, 0o600)
     await applyDshHomeImport(await plan(homes), DATA)
@@ -392,7 +392,7 @@ describe('the publication of a stock-home import', () => {
     expect(read(homes.target, '.credentials.yaml')).toBe(`version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${FIXTURE_SECRET}\n`)
   })
 
-  it('writes nothing for a key the Delo home already holds or holds another value of, and adds a version to an empty document', async () => {
+  it('writes nothing for a key the Delorun home already holds or holds another value of, and adds a version to an empty document', async () => {
     mark(homes)
     homes.write('.credentials.yaml', 'version: 1\nrefs:\n  DEEPSEEK_API_KEY: same-value\nrecords:\n  llm-deepseek/a:\n    kind: api-key\n    key: one\n', 0o600)
     homes.writeTarget('.credentials.yaml', 'version: 1\nrefs:\n  DEEPSEEK_API_KEY: same-value\nrecords:\n  llm-deepseek/a:\n    kind: api-key\n    key: two\n', 0o600)
@@ -414,7 +414,7 @@ describe('the publication of a stock-home import', () => {
     homes.write('.credentials.yaml', `version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${FIXTURE_SECRET}\n`, 0o600)
     homes.writeTarget('.credentials.yaml', 'version: 2\n', 0o600)
     const deloBad = await plan(homes)
-    expect(deloBad.skipped[0]?.detail).toContain('the Delo home\'s credentials document cannot be read')
+    expect(deloBad.skipped[0]?.detail).toContain('the Delorun home\'s credentials document cannot be read')
     homes.remove()
     homes = makeHomes()
     mark(homes)
@@ -440,7 +440,7 @@ describe('the publication of a stock-home import', () => {
     expect(await readDshImportRecord(homes.target)).toHaveLength(2)
   })
 
-  it('leaves the instructions behind when the Delo home holds its own', async () => {
+  it('leaves the instructions behind when the Delorun home holds its own', async () => {
     mark(homes)
     homes.write('AGENTS.md', '# stock notes\n')
     homes.writeTarget('AGENTS.md', '# delo notes\n')
@@ -461,7 +461,7 @@ describe('the publication of a stock-home import', () => {
 })
 
 describe('the workspace list of a stock-home import', () => {
-  it('joins the stock workspaces to the Delo home\'s list: a folder it registers gains the chats, any other is added after its own', async () => {
+  it('joins the stock workspaces to the Delorun home\'s list: a folder it registers gains the chats, any other is added after its own', async () => {
     homes.write(`sessions/${PROJECT}/s1/session.v4.jsonl.zstd`, 'one')
     homes.write('sessions/--work-other--/s3/session.v4.jsonl.zstd', 'three')
     homes.write('storages/workspace.json', registry({ w1: { path: '/work/proj', sessionIds: ['s1'] }, w2: { path: '/work/other', sessionIds: ['s3', 'dup'] }, w4: { path: '/work/delo', sessionIds: ['s4'] } }, { archivedSessionIds: ['s3'], pinnedSessionIds: ['s1'] }))
@@ -478,7 +478,7 @@ describe('the workspace list of a stock-home import', () => {
     expect(merged.global.pinnedSessionIds).toEqual(['s1'])
   })
 
-  it('adds a stock chat to a workspace both lists hold, and finds nothing to add when the Delo list already holds it all', async () => {
+  it('adds a stock chat to a workspace both lists hold, and finds nothing to add when the Delorun list already holds it all', async () => {
     homes.write('storages/workspace.json', registry({ w1: { path: '/work/proj', sessionIds: ['s1', 's2'] } }))
     homes.write(`sessions/${PROJECT}/s2/session.v4.jsonl.zstd`, 'two')
     homes.writeTarget('storages/workspace.json', registry({ w1: { path: '/work/proj', sessionIds: ['s1'] } }))
@@ -496,13 +496,13 @@ describe('the workspace list of a stock-home import', () => {
     expect(collided.blockers.map(blocker => blocker.code)).toEqual(['DSH_IMPORT_ID_COLLISION'])
     await expect(applyDshHomeImport(collided, DATA)).rejects.toMatchObject({ code: 'DSH_IMPORT_ID_COLLISION' })
     homes.writeTarget('storages/workspace.json', registry({ w1: { path: '/work/one', sessionIds: [] } }, { pendingMutation: { operation: 'create', workspaceId: 'w1' } }))
-    expect((await plan(homes)).blockers[0]?.message).toContain('start Delo once')
+    expect((await plan(homes)).blockers[0]?.message).toContain('start Delorun once')
     homes.writeTarget('storages/workspace.json', registry({}))
     homes.write('storages/workspace.json', registry({ w1: { path: '/work/one', sessionIds: [] } }, { pendingMutation: { operation: 'delete', workspaceId: 'w0' } }))
     expect((await plan(homes)).blockers[0]?.message).toContain('start DeepSeek Harness once')
   })
 
-  it('refuses a Delo list it cannot read, and leaves a stock list it cannot read behind', async () => {
+  it('refuses a Delorun list it cannot read, and leaves a stock list it cannot read behind', async () => {
     homes.write('storages/workspace.json', registry({}))
     homes.writeTarget('storages/workspace.json', '{')
     expect((await plan(homes)).blockers[0]).toMatchObject({ code: 'DSH_IMPORT_REGISTRY_REFUSED' })

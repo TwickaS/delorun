@@ -138,7 +138,7 @@ describe('the built launcher against a local release', LIMIT, () => {
       'Resolving the release: the stable channel names 0.1.0.',
       'Checking the signature: 0.1.0 is signed under release root 1.',
       expect.stringMatching(/^Checking the release log: not checked \(the release log gave no checkpoint \(.+ could not be fetched: .+\)\)\.$/u),
-      'Warning: Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.',
+      'Warning: Release 0.1.0 has not been checked against the release log; Delorun checks it at the next connection.',
       expect.stringMatching(/^Downloading delorun-0\.1\.0-linux-x64\.tar\.gz \(\d+(\.\d)? (kB|MB)\)\.$/u),
       'Installing release 0.1.0.',
     ])
@@ -152,7 +152,7 @@ describe('the built launcher against a local release', LIMIT, () => {
     const second = await node(built.tarball, home, ['--version'], served.directory)
     expect(second.stdout).toBe('Delo 0.1.0\n')
     expect(second.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))).toEqual([
-      expect.stringMatching(/^Release 0\.1\.0 has not been checked against the release log; Delo checks it at the next connection\. \(the release log gave no checkpoint \(.+\)\)$/u),
+      expect.stringMatching(/^Release 0\.1\.0 has not been checked against the release log; Delorun checks it at the next connection\. \(the release log gave no checkpoint \(.+\)\)$/u),
     ])
     expect(second.status).toBe(0)
   })

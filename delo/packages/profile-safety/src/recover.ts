@@ -145,7 +145,7 @@ export async function recover(request: RecoverRequest): Promise<RecoverReport> {
           ...plan.skipped.length === 0
             ? ['This profile selects no third-party bundles, so the next start loads all of it.']
             : [`The next start leaves out ${plan.skipped.join(', ')}; their rows and your settings stay in the profile.`],
-          'Start Delo again, then run `delorun recover exit-safe-mode` when it works.',
+          'Start Delorun again, then run `delorun recover exit-safe-mode` when it works.',
         ],
       }
     }
@@ -166,8 +166,8 @@ function statusLines(
 ): string[] {
   return [
     lastUpdate === undefined
-      ? 'This profile has not been through a Delo update yet.'
-      : `The last update, from Delo ${lastUpdate.from} to Delo ${lastUpdate.to}, ${updateOutcome(lastUpdate)}.`,
+      ? 'This profile has not been through a Delorun update yet.'
+      : `The last update, from Delorun ${lastUpdate.from} to Delorun ${lastUpdate.to}, ${updateOutcome(lastUpdate)}.`,
     ...lastUpdate?.snapshot === undefined ? [] : [`Its snapshot is profile version ${lastUpdate.snapshot}.`],
     safeMode === undefined ? 'Safe mode is off.' : `Safe mode is on since ${safeMode.since}: ${safeMode.reason}.`,
     versionLine(versions),
