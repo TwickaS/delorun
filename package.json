@@ -115,6 +115,7 @@
     "verify-repository-references": "tsx scripts/verify-repository-references.ts",
     "verify-concrete-terms": "tsx scripts/verify-concrete-terms.ts",
     "verify-release-tense": "tsx scripts/verify-release-tense.ts",
+    "verify-british-english": "tsx scripts/verify-british-english.ts",
     "verify-no-unknown-casts": "tsx scripts/verify-no-unknown-casts.ts",
     "verify-doc-refs": "tsx scripts/verify-doc-refs.ts",
     "verify-subsystem-pages": "tsx scripts/verify-subsystem-pages.ts",
