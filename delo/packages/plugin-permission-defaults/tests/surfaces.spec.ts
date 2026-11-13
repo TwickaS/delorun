@@ -79,9 +79,10 @@ interface Mounted {
  * second profile's Host shares the home.
  * @param shared - the home and folders of another mount.
  * @param deloHome - the `DELO_HOME` the composition starts with, when it is not the home.
+ * @param mount - `row` mounts the plugin as its profile row does, `service` only the permission service.
  * @returns the composition.
  */
-async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>, deloHome?: string): Promise<Mounted> {
+async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>, deloHome?: string, mount: 'row' | 'service' = 'row'): Promise<Mounted> {
   const root = mkdtempSync(join(tmpdir(), 'delo-permission-surfaces-'))
   roots.push(root)
   const { home, workspace, other } = shared ?? { home: join(root, 'home'), workspace: join(root, 'work'), other: join(root, 'other') }
@@ -100,7 +101,8 @@ async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>, d
   } as never)
   ctx.provide('approval', { config: { policy: 'ask' }, request: async () => 'rejected', setPolicy() {} } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
-  await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true }) })
+  if (mount === 'row') await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true }) })
+  else await ctx.plugin(PermissionDefaults)
   return { ctx, harness, defaults: ctx.get('permissionDefaults') as PermissionDefaults, home, workspace, other }
 }
 
@@ -532,9 +534,12 @@ describe('a change that cannot be recorded', () => {
     expect(defaults.granted(workspace)).toBe(false)
   })
 
-  it('watches nothing while the home cannot be resolved when it starts, and counts no grant', async () => {
+  it('refuses to start the row while the home cannot be resolved, and its permission service watches nothing and counts no grant', async () => {
     // Upstream's ~/.dsh under the real OS home is a home resolveDeloHome refuses.
-    const { ctx, defaults, workspace } = await mounted(undefined, join(homedir(), '.dsh'))
+    const dshHome = join(homedir(), '.dsh')
+    // The row's network service has no store or socket directory without a home, so the row does not start.
+    await expect(mounted(undefined, dshHome)).rejects.toThrow('HOME_IS_DSH_HOME')
+    const { ctx, defaults, workspace } = await mounted(undefined, dshHome, 'service')
     expect(defaults.storeProblem).toContain('the Delo home could not be resolved')
     expect(defaults.granted(workspace)).toBe(false)
     expect(ctx.logger.buffer.some(message => String(message.args[0]).includes('not watched'))).toBe(false)
