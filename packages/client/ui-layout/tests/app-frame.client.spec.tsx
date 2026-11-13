@@ -263,6 +263,35 @@ describe('AppFrame', () => {
     expect(frame.querySelector('[data-shell-leading-band]')).toBeNull()
   })
 
+  it('publishes the open column width for the collapsed shell\'s hover peek', () => {
+    const { frame, instance } = mountFrame()
+    const openWidth = (): string => frame.style.getPropertyValue('--dsh-sidebar-expanded-width')
+    expect(openWidth()).toBe('280px')
+    act(() => { instance.actions.setSidebar(360) })
+    expect(tracks(frame)[0]).toBe(360)
+    expect(openWidth()).toBe('360px')
+    // Closing forgets the dragged width (the sidebar preference IS its width),
+    // so the rail's peek opens at the contract default, then at a replacement.
+    act(() => { instance.actions.toggleSidebar() })
+    expect(tracks(frame)[0]).toBe(56)
+    expect(openWidth()).toBe('280px')
+    act(() => { instance.actions.setSidebarWidths({ default: 300, min: 264 }) })
+    expect(openWidth()).toBe('300px')
+  })
+
+  it('publishes the folded landscape half-frame as the rail peek width', () => {
+    frameWidth = 951
+    const { frame, instance } = mountFrame()
+    // Below the auto-collapse width the opening is the narrow override, not a
+    // stored width preference.
+    act(() => { instance.actions.toggleSidebar() })
+    act(() => { foldedLandscape.set(true) })
+    expect(tracks(frame)).toEqual([475.5, 0])
+    act(() => { instance.actions.toggleSidebar() })
+    expect(tracks(frame)[0]).toBe(56)
+    expect(frame.style.getPropertyValue('--dsh-sidebar-expanded-width')).toBe('475.5px')
+  })
+
   it('mounts the shell.leading seat only while the darwin collapse hides the column', () => {
     document.documentElement.dataset.platform = 'darwin'
     const { frame, instance, sidebarOwner, queryByTestId } = mountFrame()

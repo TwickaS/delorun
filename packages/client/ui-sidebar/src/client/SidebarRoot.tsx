@@ -15,6 +15,16 @@
  * scrollbar at all: the shell tracks the pointer and rebinds ui-theme's
  * scrollbar indirection away while it is elsewhere, so a list the user is not
  * pointing at carries no bar.
+ *
+ * Collapsed, the shell can also lift itself out of the frame as a transient
+ * hover peek: the same expanded content, fixed over the page at the column's
+ * open width (the frame's --dsh-sidebar-expanded-width), while the frame keeps
+ * the rail's track and the persisted collapse state does not change. It opens
+ * on a pointer dwell of the rail's own surface (or the left edge where the
+ * platform hides the rail), closes after a short grace and fade when the pointer
+ * leaves, on Escape, and when keyboard focus leaves the panel, and it never arms from
+ * a rail control, so every rail click keeps its meaning. Without a hovering
+ * fine pointer, or in the phone drawer, there is no peek.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
@@ -41,6 +51,74 @@ const COLLAPSE_SETTLE_MS = 150
  * edge — on the way to the conversation, or around a portalled menu.
  */
 const SCROLLBAR_LINGER_MS = 2000
+
+/**
+ * Pointer dwell before the collapsed rail lifts into the hover peek. The delay
+ * is what leaves the rail's controls alone: the pointer crosses the rail's
+ * surface on its way to a control, which cancels the arm, so a click that
+ * starts on a control is never intercepted by the expanding panel.
+ */
+const PEEK_HOVER_DELAY_MS = 350
+
+/**
+ * Grace between the pointer leaving the peek and its close fade starting. Moving back into the panel inside the
+ * grace keeps it open; Escape and focus leaving close it at once.
+ */
+const PEEK_CLOSE_GRACE_MS = 250
+
+/** Hover-peek close fade; matches the 140ms `.peekClosing` animation. */
+const PEEK_SETTLE_MS = 140
+
+/** Width of the left-edge pointer band that opens the peek where the platform hides the rail, in px. */
+const PEEK_EDGE_PX = 8
+
+/**
+ * Whether the device's primary pointer hovers, which is the only input the peek
+ * serves. A view without matchMedia (jsdom in the unit lane, some embedded
+ * browsers) gets no peek; its rail keeps the explicit expand control.
+ * @returns whether `(hover: hover) and (pointer: fine)` matches.
+ */
+function hoveringPointer(): boolean {
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia('(hover: hover) and (pointer: fine)').matches
+}
+
+/**
+ * Whether a pointer target is one of the rail's own controls, whose click the
+ * peek must not interrupt by moving them under the expanding overlay.
+ * @param target - the pointer event's target, an Element for pointer events.
+ * @returns whether the target sits inside a control.
+ */
+function isRailControl(target: EventTarget): boolean {
+  return (target as Element).closest('button, a[href], [role="button"]') !== null
+}
+
+/**
+ * Whether a focus target is an overlay that a panel control opened (a menu, a
+ * dialog): focus moving there has not left the peek's task.
+ * @param target - the focusout's related target.
+ * @returns whether the target sits inside a menu, dialog or listbox.
+ */
+function isOverlayTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[role="menu"], [role="dialog"], [role="listbox"]') !== null
+}
+
+/**
+ * Whether a pointer event lies inside the column's box. Leaving is decided by
+ * geometry as well as by pointerleave: ui-settings renders a full-viewport
+ * panel as a fixed-position DESCENDANT of the column, and an overlay can open
+ * under a stationary pointer, so neither case emits the leave pair.
+ * @param column - the column element, when mounted.
+ * @param event - the pointer move.
+ * @returns whether the pointer is inside the element's border box.
+ */
+function pointerInsideElement(column: HTMLElement | null, event: PointerEvent): boolean {
+  const rect = column?.getBoundingClientRect()
+  /* v8 ignore next -- the listener only exists while the column is mounted. */
+  if (rect === undefined) return false
+  return event.clientX >= rect.left && event.clientX < rect.right
+    && event.clientY >= rect.top && event.clientY < rect.bottom
+}
 
 /** Format complete-build metadata for the local brand badge. */
 function localBuildVersion(): string | undefined {
@@ -184,7 +262,14 @@ export function SidebarRoot({
     return () => { window.clearTimeout(timer) }
   }, [collapsed, drawer])
   const windowsTitlebar = document.documentElement.hasAttribute('data-windows-titlebar')
-  const wide = drawer || (windowsTitlebar ? !collapsed : !collapsed || !settled)
+  // The hover peek's own phase: closed, open, or fading closed while its
+  // expanded content stays mounted. It is a view of the collapsed state, never
+  // a write to it, so the rail stays the persisted state throughout.
+  const [peek, setPeek] = useState<'closed' | 'open' | 'closing'>('closed')
+  const peekRef = useRef(peek)
+  peekRef.current = peek
+  const peeked = peek !== 'closed' && collapsed && !drawer
+  const wide = drawer || peeked || (windowsTitlebar ? !collapsed : !collapsed || !settled)
   // The Windows titlebar hosts the New Session controls while the sidebar is collapsed.
   const openNewSession = (): void => {
     trackEntryClick({ menu_name: 'new_session', position: windowsTitlebar && collapsed ? 'titlebar' : 'sidebar' })
@@ -244,12 +329,7 @@ export function SidebarRoot({
   useEffect(() => {
     if (!pointerInside) return
     const onMove = (event: PointerEvent): void => {
-      const rect = column.current?.getBoundingClientRect()
-      /* v8 ignore next -- the listener only exists while the column is mounted and revealed. */
-      if (rect === undefined) return
-      const inside = event.clientX >= rect.left && event.clientX < rect.right
-        && event.clientY >= rect.top && event.clientY < rect.bottom
-      if (inside) cancelLinger()
+      if (pointerInsideElement(column.current, event)) cancelLinger()
       else armLinger()
     }
     document.addEventListener('pointermove', onMove)
@@ -258,6 +338,106 @@ export function SidebarRoot({
       cancelLinger()
     }
   }, [pointerInside])
+
+  // Hover peek: dwell on the rail's own surface (or on the left edge where the
+  // platform hides the rail) lifts the expanded shell over the page. The
+  // pointer handlers arm it, both through the element and, where the column
+  // has no rail to enter, through the document's left edge band; focus and
+  // Escape end it. It never runs while the drawer is open.
+  const peekTimer = useRef<number | undefined>(undefined)
+  const peekEligible = useCallback((): boolean => collapsed && !drawer && hoveringPointer()
+    && !isBehindModal(column.current), [collapsed, drawer])
+  const cancelPeekArm = useCallback((): void => {
+    if (peekTimer.current === undefined) return
+    window.clearTimeout(peekTimer.current)
+    peekTimer.current = undefined
+  }, [])
+  const armPeek = useCallback((): void => {
+    if (peekTimer.current !== undefined || !peekEligible()) return
+    peekTimer.current = window.setTimeout(() => {
+      peekTimer.current = undefined
+      if (!peekEligible()) return
+      setPeek('open')
+    }, PEEK_HOVER_DELAY_MS)
+  }, [peekEligible])
+  const closeGraceTimer = useRef<number | undefined>(undefined)
+  const cancelPeekGrace = useCallback((): void => {
+    if (closeGraceTimer.current === undefined) return
+    window.clearTimeout(closeGraceTimer.current)
+    closeGraceTimer.current = undefined
+  }, [])
+  const closePeek = useCallback((): void => {
+    cancelPeekGrace()
+    // A closing panel would unmount the focused control under the person;
+    // hand focus to the rail's toggle (which survives both states) first.
+    if (peekRef.current === 'open' && column.current?.contains(document.activeElement) === true) {
+      const toggle = column.current.querySelector<HTMLElement>('[data-sidebar-toggle]')
+      /* v8 ignore next -- every wide state renders the toggle in the logo row or the macOS strip. */
+      if (toggle !== null) focusWithoutRing(toggle, { preventScroll: true })
+    }
+    setPeek('closing')
+  }, [cancelPeekGrace])
+  // A pointer that left starts the close after the grace; a pending grace keeps its original deadline.
+  const closePeekAfterGrace = useCallback((): void => {
+    if (peekRef.current === 'closed' || closeGraceTimer.current !== undefined) return
+    closeGraceTimer.current = window.setTimeout(() => {
+      closeGraceTimer.current = undefined
+      closePeek()
+    }, PEEK_CLOSE_GRACE_MS)
+  }, [closePeek])
+  // Expanding, collapsing into the drawer, or leaving the rail ends the peek;
+  // its trigger and close timer go with it.
+  useEffect(() => {
+    if (collapsed && !drawer) return
+    cancelPeekArm()
+    cancelPeekGrace()
+    setPeek('closed')
+  }, [collapsed, drawer, cancelPeekArm, cancelPeekGrace])
+  // The close fade keeps the expanded content mounted for its duration.
+  useEffect(() => {
+    if (peek !== 'closing') return
+    const timer = window.setTimeout(() => { setPeek('closed') }, PEEK_SETTLE_MS)
+    return () => { window.clearTimeout(timer) }
+  }, [peek])
+  useEffect(() => cancelPeekArm, [cancelPeekArm])
+  useEffect(() => cancelPeekGrace, [cancelPeekGrace])
+  // Leaving is decided by the panel's BOX as well as by pointerleave: opening
+  // under a stationary pointer (the left edge band) leaves the browser no
+  // enter/leave pair to report, so the next move to the page closes it. Moves
+  // over a menu or dialog the panel opened still belong to the peek.
+  useEffect(() => {
+    if (!peeked) return
+    const onMove = (event: PointerEvent): void => {
+      if (pointerInsideElement(column.current, event)) { cancelPeekGrace(); return }
+      if (isOverlayTarget(event.target)) return
+      closePeekAfterGrace()
+    }
+    document.addEventListener('pointermove', onMove)
+    return () => { document.removeEventListener('pointermove', onMove) }
+  }, [peeked, cancelPeekGrace, closePeekAfterGrace])
+  // Escape closes the peek from anywhere, including from inside its panel.
+  useEffect(() => {
+    if (peek === 'closed') return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      closePeek()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [peek, closePeek])
+  // macOS desktop and the Windows caption hide the collapsed column instead of
+  // keeping a rail, so the left edge band is the trigger there; a rail takes
+  // that role itself through the root's own pointer handlers.
+  useEffect(() => {
+    if (!collapsed || drawer || width > 0 || peek !== 'closed') return
+    const onMove = (event: PointerEvent): void => {
+      if (event.pointerType === 'touch') return
+      if (event.clientX <= PEEK_EDGE_PX) armPeek()
+      else cancelPeekArm()
+    }
+    document.addEventListener('pointermove', onMove)
+    return () => { document.removeEventListener('pointermove', onMove) }
+  }, [collapsed, drawer, width, peek, armPeek, cancelPeekArm])
 
   const buildVersion = localBuildVersion()
   // The local-build fallbacks copy the badge text; the brand button below
@@ -348,16 +528,45 @@ export function SidebarRoot({
       aria-modal={drawer && !collapsed ? true : undefined}
       aria-label={drawer ? t('navigation.label') : undefined}
       tabIndex={drawer ? -1 : undefined}
+      data-sidebar-peek={peek === 'closed' ? undefined : peek}
       className={clsx(
         css.root, !wide && css.collapsed, !wide && animateRail.current && css.railIn,
-        !drawer && collapsed && wide && css.fading, !pointerInside && css.quietBars,
+        // The peek's own overlay replaces the collapse crossfade: it is already
+        // the expanded shell, so nothing fades and nothing reflows.
+        !drawer && collapsed && wide && !peeked && css.fading,
+        peeked && css.peeking, peek === 'closing' && css.peekClosing,
+        !pointerInside && css.quietBars,
       )}
-      style={wide ? { width: !drawer && collapsed ? lastWideWidth.current : width } : undefined}
-      onPointerEnter={() => {
+      style={wide && !peeked ? { width: !drawer && collapsed ? lastWideWidth.current : width } : undefined}
+      onPointerEnter={(event) => {
         cancelLinger()
         setPointerInside(true)
+        if (event.pointerType === 'touch') return
+        // Returning during the close fade reopens at once; a fresh entry arms
+        // the dwell, unless it lands on a rail control (whose click the peek
+        // must not move out from under the pointer).
+        if (peek !== 'closed') { cancelPeekGrace(); setPeek('open'); return }
+        if (!isRailControl(event.target)) armPeek()
       }}
-      onPointerLeave={() => { armLinger() }}
+      onPointerMove={(event) => {
+        if (peek !== 'closed' || !collapsed || drawer || event.pointerType === 'touch') return
+        if (isRailControl(event.target)) cancelPeekArm()
+        else armPeek()
+      }}
+      onPointerLeave={() => {
+        armLinger()
+        cancelPeekArm()
+        closePeekAfterGrace()
+      }}
+      onBlurCapture={(event) => {
+        if (peek === 'closed') return
+        const next = event.relatedTarget
+        // Focus moving between the panel's own controls stays inside; focus
+        // moving into a menu or dialog the panel opened is still the panel's
+        // task. Anything else has left the peek.
+        if (next instanceof Node && (column.current?.contains(next) === true || isOverlayTarget(next))) return
+        closePeek()
+      }}
     >
       {wide && <div className={css.backdrop} aria-hidden="true">{renderSlot('sidebar.backdrop', {})}</div>}
       {/* macOS hiddenInset titlebar: the strip shares the row with the
