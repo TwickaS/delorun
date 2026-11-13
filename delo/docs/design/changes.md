@@ -33,7 +33,7 @@ Delo runs upstream's plugin loading unchanged, so this is also what Delo does to
 ## What exists today
 
 - `delorun recover safe-mode` marks the next start to boot the profile without its third-party bundles and the person's rows for them, without writing any profile file; `delorun recover exit-safe-mode` ends it. `delorun recover` (or `recover status`) also reports the profile's state, `recover rollback` rolls back the last recorded update, and `recover restore <version>` restores a profile history version.
-- `delorun doctor` checks Docker, the DeepSeek API key's format, the home and the studio's port. It reports nothing about plugins.
+- `delorun doctor` checks Docker, the DeepSeek API key's format, the home and the studio's port. For the CLI profile's plugins it reports each installed package's source and whether it is enabled, version ranges the running release does not meet, packages hidden by a shipped package of the same name, enabled bundles that are not installed, safe mode, and the plugin rows that did not activate at the last start, from the home process's log. It reports nothing about approved content or the change that introduced a failure.
 - There is no Changes surface, no store of approved content, no work session, no protection setting, and no per-plugin safe mode. `delorun verify` checks the installed release's files and its signature, and reports its other checks, the plugin check among them, as not run.
 
 ## The rules

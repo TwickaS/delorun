@@ -90,6 +90,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     expect(result.stderr).toBe([
       'warn docker: Docker is not installed; the Docker shapes stay unavailable, and native workspaces are unaffected.',
       `warn release-log: no release-log check of release ${RUNNING} is recorded in ${join(deloHome, 'trust', 'release-log.json')}; run delorun verify to check it against the release log.`,
+      `warn plugins: the CLI profile default is not set up in ${deloHome}, so it has no plugin; delorun setup creates it.`,
       '',
     ].join('\n'))
     expect(result.stdout).toContain('pass home: ')
@@ -202,6 +203,17 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     expect(result.status).toBe(lines.some(line => line.startsWith('fail ')) ? 1 : 0)
     expect(result.stderr).not.toMatch(/\n\s+at /)
     expect(result.stdout + result.stderr).not.toContain('sk-')
+  })
+
+  it('places the bundles this installation ships, and fails one it does not ship and the profile does not install', async () => {
+    const profileDir = join(deloHome, 'profiles', 'default')
+    mkdirSync(profileDir, { recursive: true })
+    writeFileSync(join(profileDir, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'acme-gone'] } } }))
+    const result = doctor(['--port', String(await freePort())], { DEEPSEEK_API_KEY: GOOD_KEY })
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('pass plugins: no plugin is installed in the profile default; it enables 2 bundles, loaded in this order: @deepseek-ai/dsh-base, acme-gone.\n')
+    expect(result.stderr).toContain('fail plugin acme-gone: the profile enables acme-gone in dsh.profile.bundles, but it is neither installed in the profile nor shipped with this Delo')
+    expect(result.stdout + result.stderr).not.toMatch(/ plugin @deepseek-ai\/dsh-base: /)
   })
 
   it('fails a port in use, names the port, and exits 1', async () => {

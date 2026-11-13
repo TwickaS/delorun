@@ -2099,7 +2099,7 @@
     {
       "path": "packages/boot/plugin-manager/src/operations.ts",
       "class": "security",
-      "reason": "The optional `baseline` of `PackageOperationOptions` holds the profile's `package.json` and lockfile from before an earlier resolution-only run of the same operation; a rejection then restores those files, and the dependencies the earlier manifest lacks count as new for compatibility checks and activation. Upstream callers pass none and are unchanged. Lead verdict (2026-11-13): approved; the existing refusals are kept.",
+      "reason": "The `operations` entry also exports `blockedBuildNames`, `recordPendingBuilds` and `approveBuilds`, the build-script approval steps the manager service runs after a failed pnpm run. The optional `baseline` of `PackageOperationOptions` holds the profile's `package.json` and lockfile from before an earlier resolution-only run of the same operation; a rejection then restores those files, and the dependencies the earlier manifest lacks count as new for compatibility checks and activation. Upstream callers pass none and are unchanged. Lead verdict (2026-11-13): approved; the existing refusals are kept.",
       "sha256": "655ad85f2b7840d7dbeeaae26e1b77dd0d2d6d99ec9d12ac2fad3e446891b2c0"
     },
     {

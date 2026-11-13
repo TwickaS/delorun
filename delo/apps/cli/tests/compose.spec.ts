@@ -354,6 +354,37 @@ describe('the approved plugin content slot', { timeout: 60_000 }, () => {
   })
 })
 
+describe('the person\'s --patch overlays', { timeout: 60_000 }, () => {
+  it('apply over the profile\'s layers and under the approved content and the sandbox overlay', async () => {
+    const overlay = join(osHome, 'mine.patch.yml')
+    writePatch(overlay, [{ id: 'delo-trash', config: {} }])
+    const extra = join(osHome, 'approved.patch.yml')
+    writePatch(extra, [{ id: 'delo-trash', config: {} }])
+    const drafts: unknown[] = []
+    const composed = await composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, {
+      prepareProfile: upstreamDependencies().prepareProfile,
+      approvedPluginContent: (draft) => { drafts.push(draft.patchFiles); return Promise.resolve([extra]) },
+    })
+    expect(drafts).toEqual([[overlay]])
+    expect(composed.patchFiles).toEqual([overlay, extra, join(deloHome, 'run', 'default', 'sandbox.patch.yml')])
+  })
+
+  it('are held to the invariants, naming the overlay that breaks one', async () => {
+    const overlay = join(osHome, 'off.patch.yml')
+    writePatch(overlay, [{ id: 'delo-fetch-guard', disabled: true }])
+    expect(await refused(() => composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT }))).toContain(overlay)
+  })
+
+  it('are refused in safe mode, which says how to leave it', async () => {
+    expect(await main(['recover', 'safe-mode'], context)).toBe(EXIT.ok)
+    const overlay = join(osHome, 'mine.patch.yml')
+    writePatch(overlay, [])
+    const message = await refused(() => composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT }))
+    expect(message).toContain('safe mode')
+    expect(message).toContain('delorun recover exit-safe-mode')
+  })
+})
+
 describe('the headless profile', { timeout: 60_000 }, () => {
   beforeEach(async () => {
     await upstreamAddHeadlessBundle(deloHome, context)

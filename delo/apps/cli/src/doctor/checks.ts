@@ -18,9 +18,10 @@ import { checkPrivateDirectory, HomeLayoutError, resolveDeloHome, runDirectory, 
 
 /**
  * A check's name, as `delorun doctor` prints it; `release-log` and `import` are the record lines of [records](./records.ts),
- * and `sandbox` is the Linux line of [sandbox](./sandbox.ts).
+ * `sandbox` is the Linux line of [sandbox](./sandbox.ts), and `plugins` and `plugin` the lines of [plugins](./plugins.ts) and
+ * [last-start](./last-start.ts).
  */
-export type CheckName = 'home' | 'docker' | 'key' | 'port' | 'sandbox' | 'release-log' | 'import' | 'update'
+export type CheckName = 'home' | 'docker' | 'key' | 'port' | 'sandbox' | 'release-log' | 'import' | 'update' | 'plugins' | 'plugin'
 
 /**
  * A check's verdict. `pass` needs nothing. `warn` names something optional or
@@ -33,6 +34,8 @@ export type CheckStatus = 'pass' | 'warn' | 'fail'
 export interface CheckResult {
   /** The check's name. */
   readonly name: CheckName
+  /** What the line is about when one check prints several lines, such as a plugin's package name; printed after the name. */
+  readonly subject?: string
   /** The verdict. */
   readonly status: CheckStatus
   /** What was found and what to do, on one line without a line break. */

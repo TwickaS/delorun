@@ -1,9 +1,12 @@
 /**
  * `delorun doctor [--port <n>]`: runs four checks in order, on Linux the
  * sandbox check, then reads the running release's release-log check state and
- * the profile's last update check, and prints one line per check.
- * `pass` lines go to standard output; `warn` and `fail` lines go to standard
- * error. The checks are described in [checks](./checks.ts) and the record
+ * the profile's last update check, then the CLI profile's plugins ([plugins](./plugins.ts),
+ * [last-start](./last-start.ts); they read manifests, the exemption file, the safe-mode
+ * marker and the home process's log, and import and run no plugin code), and prints one
+ * line per check, or per plugin. `pass` lines go to standard output; `warn` and `fail`
+ * lines go to standard error, with the characters a terminal acts on escaped, because
+ * manifests and logs carry text Delo did not write. The checks are described in [checks](./checks.ts) and the record
  * lines in [records](./records.ts). The stock-home import line is printed only
  * when the command is built with a reader of the import record. The shipped
  * command is built without one: this build has no stock-home import, so
@@ -37,6 +40,7 @@ import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { HomeStatus } from '@delo/contract-home-process'
 import { processExists, readHomeLock, readProtectedFile, resolveDeloHome, runDirectory } from '@delo/home'
 import { queryHomeStatus } from '@delo/home-process'
+import type { VersionOutput } from '@delo/contract-plugin-versions'
 import { parseDocument } from 'yaml'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
@@ -47,9 +51,12 @@ import { profileStudioPort } from '../setup/sections.ts'
 import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { studioAddress } from '../status.ts'
 import { escapeDirectories } from '../sandbox-protection.ts'
-import { deloVersion } from '../version.ts'
+import { printable } from '../terminal-text.ts'
+import { deloVersion, versions } from '../version.ts'
 import { appArmorRestrictsUserNamespaces, checkSandbox, firstExisting, runBwrapProbe } from './sandbox.ts'
 import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
+import { checkLastStart } from './last-start.ts'
+import { checkPlugins, checkSafeMode } from './plugins.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 import { checkUpdate } from './update.ts'
 import { runtimePlatformOf } from '../update/channel.ts'
@@ -64,11 +71,14 @@ const DOCTOR_USAGE = [
   'on Linux, whether bubblewrap can sandbox commands (sandbox),',
   'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
   'and the last check for a newer release (update), which sends no request.',
-  'Prints one line per check: pass on standard output, warn or fail on standard error.',
+  'Then the CLI profile\'s plugins (plugins, and plugin <name> for each): the installed packages and the bundle list, where each',
+  'package comes from and whether it is enabled, version ranges this Delo does not meet, packages a shipped package of the same',
+  'name hides, enabled bundles that are not installed, safe mode, and the plugin rows that did not activate at the last start.',
+  'Prints one line per check, or per plugin: pass on standard output, warn or fail on standard error.',
   'Exit codes: 0 when no check fails, 1 when one fails, 2 for a wrong command line. Warnings do not change the exit code.',
   '',
   'No model is contacted, no request is sent and no command runs, except the read-only probe `docker version` of the Docker',
-  'engine and, on Linux, `bwrap --ro-bind / / true`, which runs `true` in an empty sandbox; no container starts. The update line reports the last check delorun made; delorun update --check makes one now.',
+  'engine and, on Linux, `bwrap --ro-bind / / true`, which runs `true` in an empty sandbox; no container starts and no plugin code is imported. The update line reports the last check delorun made; delorun update --check makes one now.',
   'The key is checked by its format alone, and it is never printed.',
   '',
   `  --port <n>  the loopback port to check, from 1 to 65535 (default: the profile's studio port, or ${String(STUDIO_DEFAULT_PORT)} when the profile sets none)`,
@@ -190,9 +200,62 @@ async function guarded(name: CheckName, check: () => Promise<CheckResult>): Prom
   try {
     return await check()
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    return { name, status: 'fail', message: `the check could not complete: ${reason.replace(/\s*\n\s*/g, ' ')}` }
+    return incomplete(name, error)
   }
+}
+
+/**
+ * Run one check that prints several lines, as {@link guarded} runs one that prints one.
+ * @param name - the check's name.
+ * @param check - the check.
+ * @returns the check's results, or one failure line that names the error.
+ */
+async function guardedLines(name: CheckName, check: () => Promise<readonly CheckResult[]>): Promise<readonly CheckResult[]> {
+  try {
+    return await check()
+  } catch (error) {
+    return [incomplete(name, error)]
+  }
+}
+
+/**
+ * The failure line of a check that threw.
+ * @param name - the check's name.
+ * @param error - what it threw.
+ * @returns the line, naming the error on one line.
+ */
+function incomplete(name: CheckName, error: unknown): CheckResult {
+  const reason = error instanceof Error ? error.message : String(error)
+  return { name, status: 'fail', message: `the check could not complete: ${reason.replace(/\s*\n\s*/g, ' ')}` }
+}
+
+/**
+ * The plugin lines of the CLI profile: the installed packages, safe mode, then the load failures of the last start.
+ * Each part runs guarded, so a part that throws is one failure line and the others still run.
+ * @param context - the command's environment.
+ * @param profile - the CLI profile.
+ * @param environment - the installation's anchor and the running versions.
+ * @returns the lines.
+ */
+async function pluginLines(context: CommandContext, profile: string, environment: DoctorEnvironment): Promise<readonly CheckResult[]> {
+  const home = async (): Promise<string> => (await resolveDeloHome(context.env)).path
+  return [
+    ...await guardedLines('plugins', async () => checkPlugins({ home: await home(), profile, installAnchor: environment.installAnchor, versions: environment.versions })),
+    ...await guardedLines('plugins', async () => {
+      const line = checkSafeMode(await home(), profile)
+      return line === undefined ? [] : [line]
+    }),
+    ...await guardedLines('plugins', async () => checkLastStart(await home(), profile)),
+  ]
+}
+
+/**
+ * The printed line of one result, with the characters a terminal acts on escaped.
+ * @param result - the result.
+ * @returns the line with its newline.
+ */
+function resultLine(result: CheckResult): string {
+  return `${printable(`${result.status} ${result.name}${result.subject === undefined ? '' : ` ${result.subject}`}: ${result.message}`)}\n`
 }
 
 /**
@@ -273,19 +336,29 @@ export interface DoctorEnvironment {
    * @returns the version.
    */
   readonly running: () => string
+  /**
+   * The running Delo and DSH versions, which the plugin lines check each installed package's version ranges against.
+   * @returns both versions.
+   */
+  readonly versions: () => VersionOutput
+  /**
+   * The dsh installation's `package.json`, from which upstream resolves the bundles the installation ships.
+   * @returns the absolute path.
+   */
+  readonly installAnchor: () => string
   /** Reads the stock-home import record; without it the command prints no `import` line. */
   readonly importRecord?: DshImportRecordReader
 }
 
 /**
  * `delorun doctor` over an environment.
- * @param environment - the clock, the running version and the optional import-record reader.
+ * @param environment - the clock, the running versions, the installation's anchor and the optional import-record reader.
  * @returns the command.
  */
 export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
   return {
     name: 'doctor',
-    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check and the plugins',
     async run(args, context) {
       if (args.includes('--help') || args.includes('-h')) {
         context.stdout(DOCTOR_USAGE)
@@ -302,18 +375,23 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
         ...process.platform === 'linux' ? [await guarded('sandbox', () => sandboxCheck(context))] : [],
         await guarded('release-log', async () => checkReleaseLog((await resolveDeloHome(context.env)).path, environment.running(), environment.now())),
         await guarded('update', async () => updateCheck(context, profile)),
+        ...await pluginLines(context, profile, environment),
       ]
       const { importRecord } = environment
       if (importRecord !== undefined) results.push(await guarded('import', async () => checkImportRecord((await resolveDeloHome(context.env)).path, importRecord)))
       for (const result of results) {
-        const line = `${result.status} ${result.name}: ${result.message}\n`
-        if (result.status === 'pass') context.stdout(line)
-        else context.stderr(line)
+        if (result.status === 'pass') context.stdout(resultLine(result))
+        else context.stderr(resultLine(result))
       }
       return results.some(result => result.status === 'fail') ? EXIT.failed : EXIT.ok
     },
   }
 }
 
-/** `delorun doctor [--port <n>]`, over this process's clock and version, with no import-record reader. */
-export const doctorCommand: CliCommand = createDoctorCommand({ now: () => Math.floor(Date.now() / 1000), running: deloVersion })
+/** `delorun doctor [--port <n>]`, over this process's clock, versions and dsh installation, with no import-record reader. */
+export const doctorCommand: CliCommand = createDoctorCommand({
+  now: () => Math.floor(Date.now() / 1000),
+  running: deloVersion,
+  versions,
+  installAnchor: () => fileURLToPath(import.meta.resolve('@deepseek-ai/dsh/package.json')),
+})

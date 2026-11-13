@@ -1,10 +1,11 @@
 /**
  * Upstream's profile commands that `delorun` offers: `delorun plugin …` runs upstream's `dsh plugin` command line in
- * this process unchanged, with the Delo home as `DSH_HOME` and an installed Delo's own pnpm
+ * this process, with the Delo home as `DSH_HOME` and an installed Delo's own pnpm
  * ([package manager](./package-manager.ts)); upstream's parser refuses the desktop app's profile for
  * `plugin`, as it does for `dsh`. `delorun headless …` boots upstream's `headless` profile through Delo's composition
  * ([headless](./headless.ts)), not through upstream's command line.
- * `delorun plugin check` is Delo's own and reaches upstream's command line not at all.
+ * `delorun plugin check`, `new` and `dev` are Delo's own ([plugin check](./plugin-check.ts),
+ * [plugin new](./plugin-new/index.ts), [plugin dev](./plugin-dev.ts)) and reach upstream's command line not at all.
  *
  * `delorun plugin` boots no Host and has no composition: no sandbox overlay, no sandbox invariants and no pre-start
  * steps. Under upstream's profile file lock it runs pnpm in the profile directory with the person's arguments and this
@@ -38,6 +39,8 @@ import { profileDirectory, selectCommandProfile } from './profile.ts'
 import { runUpstreamProfile, upstreamDependencies } from './start.ts'
 import { shippedPackageManager } from './package-manager.ts'
 import { runPluginCheck } from './plugin-check.ts'
+import { realDevDependencies, runPluginDev } from './plugin-dev.ts'
+import { runPluginNew } from './plugin-new/index.ts'
 
 /** What `delorun plugin` runs outside this module; specs replace it. */
 export interface PluginDependencies {
@@ -74,6 +77,39 @@ export interface UpstreamOperation {
   readonly activateNewBundles?: boolean
   /** For the installation: the profile's `package.json` and lockfile text from before the resolution. */
   readonly baseline?: { readonly manifest: string | undefined, readonly lockfile: string | undefined }
+}
+
+/** What upstream's command line threw in place of exiting the process, so the plugin command can finish its part. */
+class UpstreamExit extends Error {
+  /** The exit code upstream asked for. */
+  readonly code: number
+
+  /**
+   * @param code - the exit code upstream asked for.
+   */
+  constructor(code: number) {
+    super(`upstream exited with ${String(code)}`)
+    this.code = code
+  }
+}
+
+/**
+ * Run upstream's command line, which ends by exiting the process, and keep its exit code instead.
+ * @param runUpstream - runs upstream's command line.
+ * @returns the exit code upstream asked for; 0 when it returned without exiting.
+ */
+async function upstreamExitCode(runUpstream: () => Promise<void>): Promise<number> {
+  const exit = process.exit
+  process.exit = ((code?: number | string | null) => { throw new UpstreamExit(Number(code ?? 0)) }) as typeof process.exit
+  try {
+    await runUpstream()
+    return 0
+  } catch (error) {
+    if (!(error instanceof UpstreamExit)) throw error
+    return error.code
+  } finally {
+    process.exit = exit
+  }
 }
 
 /**
@@ -216,13 +252,16 @@ export async function pluginMirror(args: readonly string[], context: CommandCont
 
 /**
  * `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management; `delorun plugin check <directory>` is
- * Delo's own ([plugin check](./plugin-check.ts)), which needs no profile.
+ * Delo's own ([plugin check](./plugin-check.ts)), which needs no profile; `new <name>` and `dev <folder>` are Delo's own too
+ * and handle their options themselves.
  */
 export const pluginCommand: CliCommand = {
   name: 'plugin',
-  summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; mirror on|off',
+  summary: 'Manage a profile\'s plugins, as dsh plugin does; check, new and dev help you write one; mirror on|off',
   run: async (args, context) => {
     if (args[0] === 'check') return runPluginCheck(args.slice(1), context)
+    if (args[0] === 'new') return runPluginNew(args.slice(1), context)
+    if (args[0] === 'dev') return runPluginDev(args.slice(1), context, realDevDependencies(context, plugin))
     if (args[0] === 'mirror') return pluginMirror(args.slice(1), context)
     // pnpm's exit code is the command's, which the CLI's exit codes do not list, so the process ends with it here.
     const code = await plugin(args, context)

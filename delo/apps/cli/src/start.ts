@@ -11,6 +11,11 @@
  *   process outlives the terminal; nothing starts it at login.
  * - Without either option the profile's setup answer chooses; `--background` detaches this start whatever setup
  *   answered, and a start that runs in this terminal because of that answer ends with how to start in the background.
+ * - `--patch <file>`, repeatable, adds the person's overlays to the composition, as `dsh --patch` does: they apply over
+ *   the profile's layers and under Delo's sandbox overlay, the composition's checks hold over them, safe mode refuses
+ *   them, and the successor process an update starts runs without them.
+ * - `--inspect` opens Node's inspector on 127.0.0.1:9229 in the home process before the profile boots, after the person
+ *   confirms at a terminal or with `--yes`, and never in safe mode ([inspector](./inspector.ts)).
  *
  * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
  * Delo bundle is refused before it boots, and one in which a row of a Delo bundle did not activate is shut down and
@@ -23,8 +28,8 @@
  * @module @delo/cli/start
  */
 import { spawn } from 'node:child_process'
-import { rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, rmSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
@@ -42,11 +47,12 @@ import { readReachRow } from './reach/row.ts'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
-import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
+import { holderAlive, HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
 import { NPM_MIRROR_ENV } from '@delo/bundle-local/profile'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delo-bundles.ts'
 import { registerHomeProcess } from './home-exclusion.ts'
+import { inspectorConsent, openDebugger, terminalInspectorConfirm } from './inspector.ts'
 import { announceStudio } from './open/announce.ts'
 import { hostStudioLink } from './open/host-link.ts'
 import { computerOpener, profileFlag, type StudioOpener } from './open/studio.ts'
@@ -328,6 +334,8 @@ export interface StartRequest {
    * release roots and the Docker context are read from it, never from this process's environment.
    */
   readonly env: Readonly<Record<string, string | undefined>>
+  /** The person's `--patch` overlays, absolute, in order ([compose](./compose.ts)); none by default. */
+  readonly patchFiles?: readonly string[]
 }
 
 /** The level of the home process's log. */
@@ -580,7 +588,7 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
 async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: RuntimeVersion | undefined, logger: DeloLogger): Promise<RunningHost> {
-  const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env }, {
+  const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env, ...request.patchFiles === undefined ? {} : { patchFiles: request.patchFiles } }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,
   }).catch(async (error: unknown) => {
@@ -709,11 +717,12 @@ function withReach(booted: BootedProfile, request: Pick<StartRequest, 'home' | '
  * @param output - where the command writes.
  * @param open - whether this command opens the studio in the browser once the home process runs.
  * @param opener - how the studio is opened; this computer's by default.
+ * @param forwarded - the `--patch` and `--inspect` options the detached `delorun start --foreground` receives.
  * @returns {@link EXIT.ok} when the home process runs, {@link EXIT.failed} when it exited or did not report `running`
  *   within 120 seconds.
  * @throws {CliError} when the home has no CLI profile.
  */
-export async function startDetached(home: string, profile: string, output: CommandOutput, open = false, opener: StudioOpener = computerOpener(process.env)): Promise<CommandResult> {
+export async function startDetached(home: string, profile: string, output: CommandOutput, open = false, opener: StudioOpener = computerOpener(process.env), forwarded: readonly string[] = []): Promise<CommandResult> {
   if (!hasCliProfile(home, profile)) throw new CliError(EXIT.failed, `delorun: the CLI profile ${profile} is not set up in ${home}; run: delorun setup`)
   const running = await answeringStatus(home, profile)
   if (running !== undefined) {
@@ -723,7 +732,7 @@ export async function startDetached(home: string, profile: string, output: Comma
   }
   const entry = process.argv[1]
   if (entry === undefined) throw new CliError(EXIT.failed, 'delorun: the command\'s own entry point is unknown, so the home process cannot be started')
-  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile], { detached: true, stdio: 'ignore', env: process.env })
+  const child = spawn(process.execPath, [...process.execArgv, entry, 'start', '--foreground', '--profile', profile, ...forwarded], { detached: true, stdio: 'ignore', env: process.env })
   let exitCode: number | null | undefined
   child.once('exit', (code) => { exitCode = code })
   child.unref()
@@ -808,16 +817,41 @@ export function foregroundHint(profile: string): string {
   return `Delo runs in this terminal; closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background${flag}, or run delorun setup background${flag} to make that the default.\n`
 }
 
-/** `delorun start [--foreground | --background] [--open] [--profile <name>]`. */
+/**
+ * The absolute paths of `--patch` files.
+ * @param files - the values given, relative to the working directory or absolute.
+ * @returns their absolute paths.
+ * @throws {CliError} for a file that does not exist.
+ */
+export function patchFilesOf(files: readonly string[]): string[] {
+  return files.map((file) => {
+    const path = resolve(file)
+    if (!existsSync(path)) throw new CliError(EXIT.usage, `delorun start: --patch ${file} does not exist`)
+    return path
+  })
+}
+
+/** `delorun start [--foreground | --background] [--open] [--profile <name>] [--patch <file>]... [--inspect [--yes]]`. */
 export const startCommand: CliCommand = {
   name: 'start',
-  summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses',
+  summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses; --patch adds overlays',
   async run(args, context) {
-    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, background: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' } })
+    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, background: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' }, patch: { type: 'string', multiple: true }, inspect: { type: 'boolean', default: false }, yes: { type: 'boolean', default: false } })
+    if (values.yes === true && values.inspect !== true) throw new CliError(EXIT.usage, 'delorun start: --yes confirms --inspect, and is refused without it')
     const { home, profile } = await prepareHome(context, values.profile)
+    const patchFiles = patchFilesOf(values.patch ?? [])
+    const inspect = values.inspect === true
     const choice = startChoice('start', { foreground: values.foreground === true, background: values.background === true }, profileDirectory(home.path, profile))
-    if (choice.detached) return startDetached(home.path, profile, context, values.open === true)
-    const result = await startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env })
+    if (inspect) await inspectorConsent({ home: home.path, profile, yes: values.yes === true, confirm: terminalInspectorConfirm() })
+    if (choice.detached) {
+      // The person confirmed here, so the detached home process gets --yes.
+      const forwarded = [...patchFiles.flatMap(file => ['--patch', file]), ...inspect ? ['--inspect', '--yes'] : []]
+      return startDetached(home.path, profile, context, values.open === true, computerOpener(process.env), forwarded)
+    }
+    const holder = readHomeLock(runDirectory(home.path, profile))
+    // A profile whose home process runs already gets no second inspector: this start only reports that process.
+    if (inspect && (holder === undefined || !holderAlive(holder))) openDebugger(home.path, profile, context)
+    const result = await startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env, ...patchFiles.length === 0 ? {} : { patchFiles } })
     if (result === undefined && !choice.explicit) context.stdout(foregroundHint(profile))
     return result
   },

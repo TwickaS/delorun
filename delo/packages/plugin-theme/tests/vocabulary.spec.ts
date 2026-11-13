@@ -64,6 +64,14 @@ describe('the hand-written Chinese copy', () => {
     }
   })
 
+  it('names delorun plugin, not dsh plugin alone, and asks for a folder\'s full path in the plugin manager\'s install texts', () => {
+    for (const texts of [COPY.pluginManager, COPY_ZH.pluginManager]) {
+      expect(texts?.installGuideIdHint).toContain('delorun plugin add')
+      expect(texts?.reasonStopProfile).toContain('delorun plugin remove')
+      expect(texts?.installPathTemplateHint).toContain('./my-plugin')
+    }
+  })
+
   it('renames the row menu\'s session ID and the trace ancestors', () => {
     expect(COPY_ZH.workspace?.['menu.sessionId']).toBe('复制对话 ID')
     expect(COPY_ZH.conversation?.['detail.trace.ancestors']).toBe('上级对话')
