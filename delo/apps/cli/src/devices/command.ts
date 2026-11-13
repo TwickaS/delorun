@@ -198,7 +198,6 @@ type Outcome = ExitCode | 'again'
  */
 async function approve(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.terminal) return failed(context, 'delorun devices approve needs a terminal to type the code in. Run it in a terminal on this computer')
   if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running. Start it with delorun start, then run delorun devices approve again')
   context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(readReachRow(home, profile))}\n`)
   for (;;) {
@@ -381,7 +380,6 @@ interface Unlock {
  */
 async function elevate(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.terminal) return failed(context, 'delorun devices elevate needs a terminal to type the code in. Run it in a terminal on this computer')
   if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running, so no device holds an unlock. Start it with delorun start')
   for (;;) {
     const listed = final(await dependencies.send(home, profile, { op: 'devices.elevate', args: {} }))

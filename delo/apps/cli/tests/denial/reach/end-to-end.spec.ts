@@ -218,7 +218,7 @@ describe('reach on the Tailscale private address', () => {
       expect(json(wrong).error).toBe('APPROVAL_CODE_MISMATCH')
       const approved = await loopback('POST', '/auth/devices/approve', { requestId: accepted.requestId, typedCode: `${code.slice(0, 4)} ${code.slice(4)}` })
       expect(approved.status).toBe(200)
-      const state = await phone.send('GET', `/auth/device/request/${accepted.requestId}`, undefined, { authorization: `Delorun-Request ${accepted.requestSecret}` })
+      const state = await phone.send('GET', `/auth/device/request/${accepted.requestId}`, undefined, { authorization: `Delo-Request ${accepted.requestSecret}` })
       expect(json(state).state).toBe('approved')
       const session = await phone.signIn()
       expect(session.status).toBe(201)

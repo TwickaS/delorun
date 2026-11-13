@@ -457,7 +457,7 @@ describe('delorun mcp', () => {
   })
 
   it('names the action it does not know, and an action without its server', async () => {
-    await expect(mcp().command.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose what to change') })
+    await expect(mcp().command.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose an action') })
     await expect(mcp().command.run(['remove', 'files'], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('"remove" is not list') })
     await expect(mcp().command.run(['list', 'files'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(mcp().command.run(['accept', 'files', 'extra'], context)).rejects.toMatchObject({ exit: EXIT.usage })
