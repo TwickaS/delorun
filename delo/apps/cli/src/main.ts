@@ -33,38 +33,59 @@
  * before upstream code runs. A failed command prints what Delo did, why and what the person can do, in the refusal
  * format `delorun` shares with its npm launcher ([refusals](./refusals.ts)), redacted, and never a stack; a failure no
  * command caught, after {@link main} returned included, prints the same way through the last-resort handler the
- * [entry point](./bin.ts) installs. Exit codes are {@link EXIT}'s.
+ * [entry point](./bin.ts) installs. Exit codes are {@link EXIT}'s. A command's module loads when its name is parsed, so
+ * `--help` and `--version` import no command ({@link COMMANDS}), and the failure report's describers load only when a command fails.
  *
  * @module @delo/cli
  */
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
-import { cliRefusal } from './refusals.ts'
-import { runSetup, setupCommand } from './setup/index.ts'
-import { foregroundHint, startChoice, startCommand, startDetached, startForeground } from './start.ts'
-import { statusCommand } from './status.ts'
-import { stopCommand } from './stop.ts'
-import { doctorCommand } from './doctor/index.ts'
-import { logsCommand } from './logs/command.ts'
-import { openCommand } from './open/command.ts'
-import { recoverCommand } from './recover.ts'
-import { trashCommand } from './trash/command.ts'
-import { exportCommand } from './export/command.ts'
-import { importCommand } from './import/command.ts'
-import { updateCommand } from './update/command.ts'
-import { importHomeCommand } from './import-home/command.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
-import { headlessCommand, pluginCommand } from './upstream.ts'
 import { applyDeloVersionEnvironment, versionCommand } from './version.ts'
-import { verifyCommand } from './verify/index.ts'
-import { reachCommand } from './reach/command.ts'
-import { devicesCommand } from './devices/command.ts'
-import { workspaceCommand } from './workspace/command.ts'
-import { mcpCommand } from './mcp/command.ts'
 
-/** Every command, in `delorun --help` order. A new command adds its row here. */
-export const COMMANDS: readonly CliCommand[] = [setupCommand, startCommand, openCommand, stopCommand, statusCommand, doctorCommand, logsCommand, updateCommand, recoverCommand, reachCommand, devicesCommand, workspaceCommand, mcpCommand, trashCommand, exportCommand, importCommand, importHomeCommand, verifyCommand, pluginCommand, headlessCommand]
+/**
+ * A command listed for `delorun --help` and loaded only when it is named: most commands import a large part of upstream
+ * and Delo's packages, so a process that runs one command does not load the others.
+ */
+export interface CommandEntry {
+  /** The word that selects it; the loaded command has the same {@link CliCommand.name}. */
+  readonly name: string
+  /** The line `delorun --help` shows; the loaded command has the same {@link CliCommand.summary}. */
+  readonly summary: string
+  /**
+   * Import the command's module.
+   * @returns the command.
+   */
+  load(): Promise<CliCommand>
+}
+
+/**
+ * Every command, in `delorun --help` order. A new command adds its row here, with a literal `import()` path so the
+ * release transpiler rewrites it to JavaScript.
+ */
+export const COMMANDS: readonly CommandEntry[] = [
+  { name: 'setup', summary: 'Set up Delorun (Quick or Full), or run one section again: delorun setup <section>; --list lists them', load: async () => (await import('./setup/index.ts')).setupCommand },
+  { name: 'start', summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses', load: async () => (await import('./start.ts')).startCommand },
+  { name: 'open', summary: 'Open the studio in your browser, or print a link that signs in once with --print (--port for a forwarded port)', load: async () => (await import('./open/command.ts')).openCommand },
+  { name: 'stop', summary: 'Stop the home process once running chats end, or at once with --now', load: async () => (await import('./stop.ts')).stopCommand },
+  { name: 'status', summary: 'Show the home, the CLI profile and the state of its home process', load: async () => (await import('./status.ts')).statusCommand },
+  { name: 'doctor', summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check', load: async () => (await import('./doctor/index.ts')).doctorCommand },
+  { name: 'logs', summary: 'Show where each operational log is and its recent records; follow, clear or prune them', load: async () => (await import('./logs/command.ts')).logsCommand },
+  { name: 'update', summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --yes, --data-copy, --no-data-copy', load: async () => (await import('./update/command.ts')).updateCommand },
+  { name: 'recover', summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>', load: async () => (await import('./recover.ts')).recoverCommand },
+  { name: 'reach', summary: 'Reach the studio from your phone over your own tailnet: status, on tailscale, off', load: async () => (await import('./reach/command.ts')).reachCommand },
+  { name: 'devices', summary: 'The devices this home trusts: list, approve, elevate, remove, code', load: async () => (await import('./devices/command.ts')).devicesCommand },
+  { name: 'workspace', summary: 'A workspace\'s full access and the external agents that start there without asking, changed at this computer: full-access [<folder> on|off], external-agents [<folder> <agent> on|off]', load: async () => (await import('./workspace/command.ts')).workspaceCommand },
+  { name: 'mcp', summary: 'The MCP servers waiting for your answer and the ones allowed: list, accept, decline, revoke', load: async () => (await import('./mcp/command.ts')).mcpCommand },
+  { name: 'trash', summary: 'List deleted chats and workspaces; restore a chat, or delete one item or all forever', load: async () => (await import('./trash/command.ts')).trashCommand },
+  { name: 'export', summary: 'Write a chat, or a workspace with its chats, as an archive signed by this home', load: async () => (await import('./export/command.ts')).exportCommand },
+  { name: 'import', summary: 'Check an archive, show who signed it and what it holds, and import it after you confirm', load: async () => (await import('./import/command.ts')).importCommand },
+  { name: 'import-home', summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delo home after a preview; --dry-run only shows it', load: async () => (await import('./import-home/command.ts')).importHomeCommand },
+  { name: 'verify', summary: 'Check the release against its signed manifest and the release log: --release <version>, --offline, --json', load: async () => (await import('./verify/index.ts')).verifyCommand },
+  { name: 'plugin', summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; mirror on|off', load: async () => (await import('./upstream.ts')).pluginCommand },
+  { name: 'headless', summary: 'Answer one task and exit, as dsh headless does, under Delo\'s protections', load: async () => (await import('./upstream.ts')).headlessCommand },
+]
 
 /**
  * The help text.
@@ -99,9 +120,11 @@ function usage(): string {
 async function bare(args: readonly string[], context: CommandContext): Promise<CommandResult> {
   const values = parseOptions('', args, { profile: { type: 'string' }, foreground: { type: 'boolean', default: false }, background: { type: 'boolean', default: false } })
   const flags = { foreground: values.foreground === true, background: values.background === true }
+  const { foregroundHint, startChoice, startDetached, startForeground } = await import('./start.ts')
   const { home, profile } = await prepareHome(context, values.profile)
   if (!hasCliProfile(home.path, profile)) {
     startChoice('', flags, profileDirectory(home.path, profile))
+    const { runSetup } = await import('./setup/index.ts')
     return runSetup({ home: home.path, profile, output: context, env: context.env, form: { kind: 'interactive' } })
   }
   // The options and the setup answer decide as they do for `delorun start`; either way the studio opens once Delo runs.
@@ -133,12 +156,13 @@ export async function main(argv: readonly string[], context: CommandContext = {
     applyDeloVersionEnvironment()
     await pruneLogsAtStart(context, Date.now())
     if (first === undefined || first.startsWith('-')) return await bare(argv, context)
-    const command = COMMANDS.find(candidate => candidate.name === first)
-    if (command === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
-    return await command.run(rest, context)
+    const entry = COMMANDS.find(candidate => candidate.name === first)
+    if (entry === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
+    return await (await entry.load()).run(rest, context)
   } catch (error) {
     // Every failure reaches the person in the refusal format, redacted and without a stack: `delorun` keeps no log of
     // its own failures, so the message is all a person has.
+    const { cliRefusal } = await import('./refusals.ts')
     const refusal = cliRefusal(error, argv)
     context.stderr(refusal.text)
     return refusal.exit
