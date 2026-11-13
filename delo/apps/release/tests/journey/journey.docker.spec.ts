@@ -592,7 +592,7 @@ describe.runIf(SELECTED)('the journey of an installed release', () => {
     const updated = await interact(machine, 'delorun update', env, [{ when: new RegExp(`Apply the update to Delorun ${R2B.replaceAll('.', '\\.')}`, 'u'), send: 'y' }])
     const named = new RegExp(`Delorun ${R2B.replaceAll('.', '\\.')} failed its health check \\(H2-host-ready`, 'u')
     // A rollback that did not finish leaves the home process's log as the only record of why.
-    expect(updated.stdout, named.test(updated.stdout) ? '' : await lockProbe()).toMatch(named)
+    expect(updated.stdout, named.test(updated.stdout) ? '' : `${(await delorun(['logs', 'home'])).stdout}\n${await lockProbe()}`).toMatch(named)
     expect(updated.status).toBe(1)
     expect(await running()).toBe(R1)
     expect(inactive(await rows())).toEqual([])

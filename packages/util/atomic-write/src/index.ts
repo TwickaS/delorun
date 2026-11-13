@@ -282,7 +282,9 @@ export async function withFileLock<T>(
       } else if (await takeOverExitedLock(lockPath)) continue
     }
     if (Date.now() >= deadline) {
-      throw new Error(`atomic-write: timed out waiting for the writer lock at ${lockPath}`)
+      const seen = await readLockRecord(lockPath)
+      const own = seen?.trim() === String(process.pid) ? ', this process' : ''
+      throw new Error(`atomic-write: timed out waiting for the writer lock at ${lockPath} (record ${JSON.stringify(seen)}${own})`)
     }
     await wait(delay, undefined, { signal: options?.signal })
     delay = Math.min(delay * 2, LOCK_RETRY_MAX_MS)
