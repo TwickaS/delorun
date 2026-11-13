@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
-import { expect, it, onTestFailed, onTestFinished } from 'vitest'
+import { expect, it, onTestFailed, onTestFinished, vi } from 'vitest'
 import { launchWebScaffold, webSnapshotMode } from './scaffold.ts'
 import { newEnglishPage, openDeloSettings, revealNavigationDrawer, saveFailureShot } from './support.ts'
 
@@ -23,6 +23,9 @@ const BUILT = [
 it.skipIf(webSnapshotMode() === 'record')('creates a plugin in the workspace and asks for it to be turned on in Changes', async () => {
   const build = spawnSync('pnpm', [...BUILT.flatMap(name => ['--filter', name]), 'run', 'build'], { cwd: REPO, encoding: 'utf8' })
   expect(build.status, build.stderr).toBe(0)
+  // `delorun` hands every Host the Delo version; the scaffold names the release a new plugin targets by it.
+  vi.stubEnv('DELO_VERSION', '0.1.0')
+  onTestFinished(() => { vi.unstubAllEnvs() })
   const scaffold = await launchWebScaffold({
     profile: { packages: [{ dir: BUNDLE_LOCAL, enabled: true }, { dir: BUNDLE_STUDIO, enabled: true }] },
   })
