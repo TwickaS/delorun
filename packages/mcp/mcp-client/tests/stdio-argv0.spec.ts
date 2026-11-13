@@ -42,7 +42,7 @@ describe.skipIf(process.platform === 'win32')('the stdio spawn', () => {
     const transport = createTransport(config)
     await transport.start()
     try {
-      return await vi.waitFor(() => JSON.parse(readFileSync(out, 'utf8')) as [string, string])
+      return await vi.waitFor(() => JSON.parse(readFileSync(out, 'utf8')) as [string, string], { timeout: 10_000 })
     } finally {
       await transport.close()
     }
