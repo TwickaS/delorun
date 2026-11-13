@@ -15,7 +15,8 @@
     "tests"
   ],
   "exclude": [
-    "tests/**/*.client.spec.tsx"
+    "tests/**/*.client.spec.tsx",
+    "tests/fake-host.ts"
   ],
   "references": [
     {
