@@ -8,7 +8,7 @@
 import { readdirSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { SEARCH_INDEX_PATH } from './config.ts'
-import { markdownSlugOf, routeOf, SECTIONS, slugsOf } from './routes.ts'
+import { changelogRoute, markdownSlugOf, routeOf, SECTIONS, slugsOf } from './routes.ts'
 import { prefixOf, type Locale } from './locale.ts'
 
 /**
@@ -25,10 +25,12 @@ function markdownFiles(dir: string): string[] {
 /**
  * The site paths of every page, its Markdown and the site's indexes, for the prerender list.
  * @param root - the repository root.
+ * @param changelog - whether a changelog record is published, which adds the changelog page in both locales.
  * @returns the paths, with the home pages, the 404 page, the `llms.txt` indexes and the search index.
  */
-export function prerenderPaths(root: string): string[] {
+export function prerenderPaths(root: string, changelog: boolean): string[] {
   const paths = ['/', '/zh', '/404', '/llms.txt', '/zh/llms.txt', SEARCH_INDEX_PATH]
+  if (changelog) paths.push(changelogRoute(false), changelogRoute(true))
   for (const section of SECTIONS) {
     const files = markdownFiles(join(root, 'delo/docs', section))
     const english = new Set(files.filter(path => !path.endsWith('.zh.md')))

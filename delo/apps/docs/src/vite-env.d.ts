@@ -10,3 +10,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** The changelog view the build derives from Delo's changelog record, or null when no version is assembled. */
+declare module 'virtual:delo-changelog' {
+  import type { ChangelogView } from '@/site/changelog.ts'
+  const view: ChangelogView | null
+  export default view
+}

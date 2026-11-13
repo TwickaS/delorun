@@ -60,3 +60,12 @@ export function pageSlugsOf(slug: readonly string[]): string[] {
 export function routeOf(section: Section, slugs: readonly string[], chinese: boolean): string {
   return [chinese ? '/zh' : '', section, ...slugs].join('/')
 }
+
+/**
+ * The site route of the changelog page, which exists only when the build published a changelog record.
+ * @param chinese - whether the page is the Chinese half.
+ * @returns `/changelog` or `/zh/changelog`.
+ */
+export function changelogRoute(chinese: boolean): string {
+  return chinese ? '/zh/changelog' : '/changelog'
+}
