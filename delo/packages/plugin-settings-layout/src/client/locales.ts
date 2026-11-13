@@ -126,7 +126,7 @@ export const zh: Record<SettingsLayoutLocaleKey, string> = {
   'page.plugins.keywords': '内置 清单 检查 会话 全局',
   'page.permissions': '权限',
   'page.permissions.keywords': '默认访问 工作区写入 只读 完全访问 授权 MCP 服务器 撤销',
-  'page.externalAgents': '外部智能体',
+  'page.externalAgents': '外部代理',
   'page.externalAgents.keywords': '委派 同意 Claude Codex 运行时长 撤销',
   'page.network': '网络',
   'page.network.keywords': '互联网 出站 离线 工作区 访问',

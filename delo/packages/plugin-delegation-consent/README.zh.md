@@ -28,7 +28,7 @@ kind: "package-bundle"
 - **拒绝。** 每次拒绝都是一句话，模型通过 subagent 运行时的 `DELEGATION_CONSENT_REFUSED` 错误读到它，其中写明原因以及本人可以做什么。审批策略为 `never`（完全访问预设的策略）的对话中，每次询问都会被审批服务直接拒绝而不询问任何人，因此在那里 agent 只有在存在工作区授权时才会启动，拒绝会说明这一点；Auto 对话的策略是 `ask`，因此在那里会像在其他任何对话中一样询问本人。
 - **运行时间上限。** 每次被允许的启动都携带 `runTimeoutMinutes`；运行时在达到上限时停止该运行，并把它报告为错误结果。
 - **工具描述。** `describe` 用 [`describeAgent`](src/copy.ts) 替换外部提供方委派工具的开头几句：只在被要求或明显有用时使用它，它在沙箱之外以本人的账户运行，除非该 agent 已为该工作区获得允许，否则每次运行都等待本人在其电脑上批准，而在无人被询问的完全访问对话或无界面运行中，除非已获得允许，否则会被拒绝。
-- **关闭它。** 只有在 home 自己电脑前的本人才能关闭 `enabled`：在“设置 → 权限”中，或在那里编辑 profile。插件挂载期间，它向 `@delo/home-auth` 把 `enabled` 注册为只有电脑才能关闭的开关（`EXTERNAL_AGENT_CONSENT_SWITCH`），因此远程访问会拒绝远程访问设备可能关闭它的设置写入，无论是否持有提权，原因为 `loopback-required: turning the external-agent consent off`；持有提权的设备更改运行时间上限或打开它仍是普通的设置写入。远程访问还会拒绝设备执行其列表未列出的每个斜杠命令，以及针对受保护配置项的每个 `setPluginEnabled`。该配置项位于 `@delo/bundle-local` 的 `protectedPlugins` 中，因此模型的 `plugin_manager` 无法禁用或重新配置它，也无法撤销或恢复到会这样做的版本，且没有其他模型工具写入设置；setup 提示的答案不写入它。完全访问对话仍可以用命令编辑 profile 的文件。
+- **关闭它。** 只有在 home 自己电脑前的本人才能关闭 `enabled`：在“设置 → 外部代理”中，或在那里编辑 profile。插件挂载期间，它向 `@delo/home-auth` 把 `enabled` 注册为只有电脑才能关闭的开关（`EXTERNAL_AGENT_CONSENT_SWITCH`），因此远程访问会拒绝远程访问设备可能关闭它的设置写入，无论是否持有提权，原因为 `loopback-required: turning the external-agent consent off`；持有提权的设备更改运行时间上限或打开它仍是普通的设置写入。远程访问还会拒绝设备执行其列表未列出的每个斜杠命令，以及针对受保护配置项的每个 `setPluginEnabled`。该配置项位于 `@delo/bundle-local` 的 `protectedPlugins` 中，因此模型的 `plugin_manager` 无法禁用或重新配置它，也无法撤销或恢复到会这样做的版本，且没有其他模型工具写入设置；setup 提示的答案不写入它。完全访问对话仍可以用命令编辑 profile 的文件。
 - **授权。** 一条授权是 Delo home 之下 `secrets/delegation-consent/grants.json`（约定 C1 的受保护状态）中的一个工作区键和一个提供方名称，版本 1，严格解析，并在 permission-defaults 存储锁下更改。服务在每次启动时读取该文件，因此 `delorun workspace external-agents` 和 studio 无需重启即可改变下一次启动。`allowWorkspace` 只有在带 `confirmed` 时，才为本 studio 注册的外部提供方、在文件夹已被 Delo 添加为工作区的打开对话中记录授权；`revoke` 删除一条授权。
 - **插件管理。** 工具防护（[`src/guard.ts`](src/guard.ts)）拒绝安装或启用外部 agent 包之 bundle 的 `plugin_manager` 调用，以及启用或配置其模块属于外部 agent 包的 Loader 配置项的调用。外部 agent 包是除两个进程内包（`fork-in-process`、`spawn-in-process`，其提供方在本进程中运行子会话）之外的任何 `@deepseek-ai/dsh-subagent-*` 或 `@deepseek-ai/dsh-experimental-subagent-*` 包：其中包括 Claude Code、Codex、DSH SDK 子进程以及 ACP（其 `command` 可运行任何程序）。目标按插件管理读取它的方式读取（`@deepseek-ai/dsh-plugin-manager` 的 `specPackageName`，结合 profile 已保存的依赖），经过大小写折叠和去除首尾空白，通过 npm 别名（`x@npm:…`、`npm:…`）解析，本地路径则通过其清单及其最后几个包路径段解析。禁用和移除会放行。本人从“插件”页面或首次运行的设置中添加这些 agent，这些途径不经过模型的工具。
 
@@ -38,8 +38,8 @@ kind: "package-bundle"
 
 | 字段 | 默认值 | 含义 |
 | --- | --- | --- |
-| `enabled` | false | 挂载服务、防护和路由；即 C16 开关 `external_agent_consent`。`@delo/bundle-local` 打开它；本人在“设置 → 权限”中关闭它，远程访问设备无法写入这一项，setup 提示的答案不改动它。 |
-| `runTimeoutMinutes` | 30 | 一次外部运行可以持续多久，1 到 1440 分钟；“设置 → 权限”可更改它，从下一次运行起生效。 |
+| `enabled` | false | 挂载服务、防护和路由；即 C16 开关 `external_agent_consent`。`@delo/bundle-local` 打开它；本人在“设置 → 外部代理”中关闭它，远程访问设备无法写入这一项，setup 提示的答案不改动它。 |
+| `runTimeoutMinutes` | 30 | 一次外部运行可以持续多久，1 到 1440 分钟；“设置 → 外部代理”可更改它，从下一次运行起生效。 |
 
 两个字段都是 schemastery `Config`，因此上游的设置服务会描述并写入它们；更改无需重启即可生效（[字段](src/wire.ts)）。
 
@@ -48,7 +48,7 @@ kind: "package-bundle"
 ## 界面
 
 - **审批卡片。** `@delo/bundle-local` 在 home 电脑上的 `external-agent` 卡片中添加“为此工作区允许”；它通过 `POST /api/deloDelegationConsent.allow` 记录授权，然后答复卡片。卡片已答复或不再接受答复后，该操作被禁用；卡片的 `canAnswer` 在点击开始时读取，因此此时的点击不记录任何内容，并在卡片被答复之前再读取一次。手机上显示“请在你的电脑上批准。”
-- **权限。** “设置 → 权限”包含开关 **外部代理运行前询问** 和运行时间上限，它们作为实时字段通过上游的设置服务写入此配置项，因此保存的更改无需重启该配置项即可生效：关闭 `enabled` 会释放服务、防护和路由，打开它会再次挂载它们，新的运行时间上限从下一次运行起生效。它还列出每条授权及其撤销（`GET .grants`、`POST .revoke`）。
+- **外部代理。** “设置 → 外部代理”包含开关 **外部代理运行前询问** 和运行时间上限，它们作为实时字段通过上游的设置服务写入此配置项，因此保存的更改无需重启该配置项即可生效：关闭 `enabled` 会释放服务、防护和路由，打开它会再次挂载它们，新的运行时间上限从下一次运行起生效。它还列出每条授权及其撤销（`GET .grants`、`POST .revoke`）。
 - **终端。** `delorun workspace external-agents [<folder> <agent> on|off]` 列出授权，在终端确认后添加授权，并撤销授权。
 
 每条路由只答复 home 自己的电脑，对其他调用方以 `LOOPBACK_REQUIRED` 拒绝（[路由](src/routes.ts)、[消息](src/wire.ts)）。

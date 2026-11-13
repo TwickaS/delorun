@@ -35,7 +35,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'plugin-manager',
     kind: 'changed',
-    reason: 'Plugin management protects Delo\'s consent and guard rows, the update gate, the update check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components.',
+    reason: 'Plugin management protects Delo\'s consent and guard rows, the update gate, the update check, the plugin install check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components. It asks the npmmirror registry only when the install check\'s `npmMirror` setting is on (`fallbackRegistries` reads `DELO_NPM_MIRROR`, which `delorun` sets at each start), where upstream asks it by default.',
     parity: { kind: 'upstream', reason: 'The replay runs upstream\'s protection: the overlay leaves the row out, so `plugin_manager` lists and refuses the recorded scenarios\' rows as upstream does.' },
   },
   {
@@ -157,6 +157,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
   {
+    id: 'delo-delegation-consent',
+    kind: 'added',
+    reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the person turns it off in Settings, External agents, which setup\'s prompts answer does not change, and the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the delegationConsent service is absent, so external providers start and describe themselves as upstream\'s do.' },
+  },
+  {
     id: 'delo-update-gate',
     kind: 'added',
     reason: 'The C16 switch `update_turn_refusal` on: while `delorun update` or a stop waits for running chats, the first step of every new turn is refused with `UPDATE_PENDING`, so the wait ends once the running turns end; and the first step of every turn waits until `delorun` has checked the booted Host\'s rows and services (`holdUntilChecked`). The plugin\'s own default, off, is the parity value.',
@@ -167,6 +173,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     kind: 'added',
     reason: 'The C16 switch `update_check` on: at start and once a day while the Host runs, the channel\'s newest release is fetched and verified as an update verifies it, and the studio shows a notice when it is newer; upstream makes no such request, and the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'Stock DSH makes no request for a newer release, and a disabled row mounts nothing: no service, no route and no check.' },
+  },
+  {
+    id: 'delo-plugin-install-check',
+    kind: 'added',
+    reason: 'The plugin install check provides upstream\'s `pluginAudit` hook: every package an installation brings is checked for integrity, known advisories, very new versions and lookalike names, a known critical advisory needs the person\'s acceptance, and each installed plugin\'s files are recorded and compared at every start; upstream audits nothing.',
+    parity: { kind: 'disabled', reason: 'Stock audits no plugin and makes no advisory or registry request for one, and a disabled row mounts nothing: no `pluginAudit` and no `deloPluginTrust`.' },
   },
   {
     id: 'delo-trash',

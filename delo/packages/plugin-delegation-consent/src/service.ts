@@ -125,7 +125,7 @@ export class DeloDelegationConsent extends Service implements DelegationConsentS
   }
 
   /**
-   * Every recorded grant, for the Permissions section.
+   * Every recorded grant, for the External agents section.
    * @returns the grants, or none with the file's problem when it cannot be read.
    */
   async grants(): Promise<GrantsAnswer> {

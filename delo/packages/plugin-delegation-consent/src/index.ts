@@ -1,7 +1,7 @@
 /**
  * @delo/plugin-delegation-consent: Delo's consent before an external agent runs. It provides the
  * `delegationConsent` service of `@deepseek-ai/dsh-subagent`'s external-delegation seam ([service](./service.ts)),
- * the loopback-only routes the studio's approval card and Permissions section call ([routes](./routes.ts)), and a
+ * the loopback-only routes the studio's approval card and External agents section call ([routes](./routes.ts)), and a
  * tool guard that refuses the model's `plugin_manager` calls that would install, enable or reconfigure an external
  * agent's package ([guard](./guard.ts)). With `enabled` off, the schema's default and the C16 switch
  * `external_agent_consent`'s parity value, it mounts nothing: external providers start as upstream starts them and
@@ -22,13 +22,13 @@ export { DeloDelegationConsent, DelegationConsentError } from './service.ts'
 export { isExternalAgentPackage, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict, targetPackageNames } from './guard.ts'
 
 /**
- * The plugin's configuration: the fields Settings, Permissions writes ([`DelegationConsentSettings`](./wire.ts)), each
+ * The plugin's configuration: the fields Settings → External agents writes ([`DelegationConsentSettings`](./wire.ts)), each
  * live, so a saved change applies without a restart.
  */
 export interface Config {
   /**
    * The C16 switch `external_agent_consent`: off, the plugin mounts nothing. Delo's composition turns it on; the
-   * person turns it off in Settings, Permissions on the home's own computer.
+   * person turns it off in Settings → External agents on the home's own computer.
    */
   readonly enabled: Volatile<boolean>
   /** How long one external agent run may take before it is stopped, in whole minutes; a change applies from the next run. */

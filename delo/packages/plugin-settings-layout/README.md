@@ -36,8 +36,8 @@ The navigation has five groups: General, Agent, Safety, Devices and Data. Each p
 | Agent | Tools | Tool settings: a link to each tool's page in Plugins | section `delo-tool-settings` |
 | Agent | Plugins | Upstream's inventory of built-in plugins | section `plugins` |
 | Safety | Permissions | A New chats card with the default permission mode, then Full access and MCP servers | row `permission`; section `delo-permissions` |
-| Safety | External agents | The delegation consent, where its section is registered | section `delo-external-agents` |
-| Safety | Network | Each workspace's network access, where its section is registered | section `delo-network` |
+| Safety | External agents | The delegation consent: the switch that asks before an external agent runs, its run time limit, and the agents allowed to start without asking, each with a revoke | section `delo-external-agents` |
+| Safety | Network | Each workspace's network access for sandboxed commands and `web_fetch` | section `delo-network` |
 | Safety | Privacy | The session-log upload switch, the desktop analytics line and feedback | section `delo-privacy` |
 | Devices | Devices | Remote access and the approved devices | section `delo-devices` |
 | Data | Trash | Deleted chats and workspaces | section `delo-trash` |

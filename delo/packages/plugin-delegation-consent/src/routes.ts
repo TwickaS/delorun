@@ -1,5 +1,5 @@
 /**
- * The studio's routes to the external-agent grants ({@link DELEGATION_CONSENT_ROUTES}): the list the Permissions
+ * The studio's routes to the external-agent grants ({@link DELEGATION_CONSENT_ROUTES}): the list the External agents
  * section shows, the grant the approval card's "Allow for this workspace" records, and the revoke. Every route answers
  * only a request that arrived on the loopback listener: a reach device, or a request the home cannot place, is
  * answered `403 LOOPBACK_REQUIRED` before its body is read, so an external agent is allowed and revoked only at the

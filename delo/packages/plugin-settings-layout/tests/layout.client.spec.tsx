@@ -13,11 +13,10 @@ const REGISTERED_ITEMS = [
   'composer-enter', 'performance-usage', 'session-log-deepseek', 'current-version', 'delo-onboarding', 'delo-look',
   'delo-update-check', 'delo-versions', 'delo-typeface', 'delo-density', 'delo-effort-labels',
 ]
-/** The sections the studio composition registers today: every placed id but the ones later work adds. */
-const LATER_SECTIONS: readonly string[] = [SECTIONS.externalAgents, SECTIONS.network]
+/** The sections the studio composition registers: every placed id. */
 const SECTION_ROWS = [
   { id: 'general', order: 0, label: 'General' },
-  ...Object.values(SECTIONS).filter(id => !LATER_SECTIONS.includes(id)).map((id, order) => ({ id, order: order + 1, label: id })),
+  ...Object.values(SECTIONS).map((id, order) => ({ id, order: order + 1, label: id })),
 ]
 const layout = deloSettingsLayout(makeTranslate(en))
 
@@ -41,7 +40,7 @@ describe("Delo's layout", () => {
     expect(nav.groups.map(group => [group.label, group.pages.map(page => page.label)])).toEqual([
       ['General', ['General', 'Appearance', 'Sidebar', 'Conversation', 'Chat', 'Account']],
       ['Agent', ['Models', 'Modes', 'Tools', 'Plugins']],
-      ['Safety', ['Permissions', 'Privacy']],
+      ['Safety', ['Permissions', 'External agents', 'Network', 'Privacy']],
       ['Devices', ['Devices']],
       ['Data', ['Trash', 'About']],
     ])
@@ -66,6 +65,8 @@ describe("Delo's layout", () => {
       Tools: ['delo-tool-settings'],
       Plugins: ['plugins'],
       Permissions: ['New chats: permission', 'delo-permissions'],
+      'External agents': ['delo-external-agents'],
+      Network: ['delo-network'],
       Privacy: ['delo-privacy'],
       Devices: ['delo-devices'],
       Trash: ['delo-trash'],
@@ -73,16 +74,10 @@ describe("Delo's layout", () => {
     })
   })
 
-  it('shows External agents and Network between Permissions and Privacy once their sections register', () => {
-    const later = LATER_SECTIONS.map((id, index) => ({ id, order: 50 + index, label: id }))
-    const nav = projectLayout(layout, [...SECTION_ROWS, ...later], REGISTERED_ITEMS)
-    const safety = nav.groups.find(group => group.id === 'safety')
-    expect(safety?.pages.map(page => [page.label, page.blocks.map(block => block.id)])).toEqual([
-      ['Permissions', ['new-chats', 'delo-permissions']],
-      ['External agents', ['delo-external-agents']],
-      ['Network', ['delo-network']],
-      ['Privacy', ['delo-privacy']],
-    ])
+  it('leaves out External agents and Network where their sections are not registered', () => {
+    const absent = [SECTIONS.externalAgents, SECTIONS.network]
+    const nav = projectLayout(layout, SECTION_ROWS.filter(row => !absent.includes(row.id)), REGISTERED_ITEMS)
+    expect(nav.groups.find(group => group.id === 'safety')?.pages.map(page => page.label)).toEqual(['Permissions', 'Privacy'])
   })
 
   it('gives every pane a heading of its own and a distinct icon, and leaves Devices and Trash to their sections\' icons', () => {

@@ -66,7 +66,7 @@ export function askText(facts: AskFacts): string {
   return `Start ${name} in ${where}?${task} ${name} runs as its own program, outside Delo's sandbox and approval prompts. `
     + `It can read and change files in this workspace and anywhere else its own settings allow, including Delo's home folder with its keys and tokens. `
     + `It uses your own ${name} sign-in and account, so any cost goes to that account. `
-    + `Allow once starts this run only. To let ${name} start here without asking, allow it for this workspace; revoke that in Settings, Permissions, or with ${CLI_COMMAND}.`
+    + `Allow once starts this run only. To let ${name} start here without asking, allow it for this workspace; revoke that in Settings → External agents, or with ${CLI_COMMAND}.`
 }
 
 /**
@@ -81,7 +81,7 @@ export function askTextZh(facts: AskFacts): string {
   return `要在 ${where} 中启动 ${name} 吗？${task}${name} 作为独立程序运行，不受 Delo 的沙箱和审批提示约束。`
     + '它可以读取和修改此工作区中的文件，以及其自身设置允许的任何其他位置，包括存放密钥和令牌的 Delo 主目录。'
     + `它使用你自己的 ${name} 登录和账户，所有费用都计入该账户。`
-    + `“允许一次”只启动这一次运行。要让 ${name} 在此处无需询问即可启动，请为此工作区允许；可在“设置 → 权限”中或通过 ${CLI_COMMAND} 撤销。`
+    + `“允许一次”只启动这一次运行。要让 ${name} 在此处无需询问即可启动，请为此工作区允许；可在“设置 → 外部代理”中或通过 ${CLI_COMMAND} 撤销。`
 }
 
 /**

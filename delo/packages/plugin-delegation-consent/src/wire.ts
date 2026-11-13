@@ -14,10 +14,10 @@ export const DELEGATION_CONSENT_ROUTES = {
   revoke: '/api/deloDelegationConsent.revoke',
 } as const
 
-/** The row id `@delo/bundle-local` inserts for the plugin, whose fields Settings, Permissions writes. */
+/** The row id `@delo/bundle-local` inserts for the plugin, whose fields Settings → External agents writes. */
 export const DELEGATION_CONSENT_ROW = 'delo-delegation-consent'
 
-/** The fields of the plugin's row that Settings, Permissions writes. */
+/** The fields of the plugin's row that Settings → External agents writes. */
 export interface DelegationConsentSettings {
   /** Whether the consent asks before each external agent run ([`Config`](./index.ts)). */
   readonly enabled: boolean

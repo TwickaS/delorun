@@ -42,17 +42,19 @@ The file tools, such as `read`, `grep` and `apply_patch`, refuse your Delorun ho
 
 | Sandbox | Where | What it enforces |
 | --- | --- | --- |
-| bwrap (bubblewrap, a Linux sandbox tool) | Linux, WSL2 included | Every rule above. Under WSL2 it also hides `/run/WSL`, so commands cannot start Windows programs. |
-| Landlock (a Linux kernel feature) | Linux without bwrap | The write and read rules; commands can still connect to Delorun's control socket, which refuses them because they cannot read its token, and to Docker's socket. |
+| bwrap (bubblewrap, a Linux sandbox tool) | Linux, WSL2 included | Every rule above. It hides the sockets your session keeps as files, so commands cannot start programs through `systemd-run --user`, D-Bus, tmux, screen or the X server's socket file, or use your ssh-agent, gpg-agent or keyring, and it gives read-only commands an empty `/tmp`. It also hides Docker Desktop's control sockets and Tailscale's. Under WSL2 it also hides `/run/WSL` and WSLg, so commands cannot start Windows programs. Sockets that no file names stay reachable: on a Linux desktop the X server's, and a session bus started by `dbus-launch`. |
+| Landlock (a Linux kernel feature) | Linux without bwrap | The write and read rules. It cannot hide sockets, so on a machine with a desktop or login session, D-Bus, tmux or WSL it refuses to run commands at all. Elsewhere, such as in a container, commands can still connect to Delorun's control socket, which refuses them because they cannot read its token, to Docker's socket and to an ssh-agent. |
 | Windows access lists | Windows | Writes only: commands can read your Delorun home, its secrets and the token included. |
 
-Commands can still reach the network, other local sockets such as your ssh-agent and D-Bus, and everything else your user can read, such as `~/.ssh` and `~/.aws`. The sandbox limits writes and protects Delorun's home; it does not hide the rest of your account.
+Commands can still reach the network, local sockets outside the places the sandbox hides, such as one in your home folder, and everything else your user can read, such as `~/.ssh` and `~/.aws`. A command that needs your ssh-agent, such as `git push` over ssh, needs full access. The sandbox limits writes and protects Delorun's home; it does not hide the rest of your account.
 
 ## Full access
 
 A workspace on full access runs the model's commands outside the sandbox, with everything your user can do, Delorun's home and secrets included. Every new workspace starts on Workspace Write instead.
 
 With setup's **Safer prompts**, the default, Delorun asks for full access once per workspace before it applies: pick Full access in a chat, choose "Allow full access for this workspace" on an approval card, use Settings, Permissions, or run `delorun workspace full-access <folder> on`, and you answer on the home's own computer. A single command can still ask to run outside the sandbox: DeepSeek Harness asks you, and its question does not say that such a command can read Delorun's home. With **Same as stock**, a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness.
+
+To take full access away, use Revoke in Settings, Permissions, pick Workspace Write in a chat of that workspace, or run `delorun workspace full-access <folder> off`. The workspace's open chats go back to Workspace Write within a second in every running profile, because each one watches the list of full-access grants. If a profile cannot watch it, its log says so, and its chats pick up the change the next time they check a permission. A running `delorun headless` task picks up the change only when it next checks a permission.
 
 ## Consents
 
@@ -65,13 +67,19 @@ Setup's prompts question decides how Delorun asks before risky changes, and `del
 | A new MCP server that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
 | The model creates or edits a scheduled task | Asks with the task's prompt, its schedule, the chat it runs in and that chat's permission preset; a delivery is refused when that chat's preset has changed | Created as in DeepSeek Harness |
 
-The `web_fetch` guard and the update protections stay on with either answer. Plugin management cannot turn off, remove or reconfigure Delorun's consent and guard plugins or the sandbox, in any mode.
+The `web_fetch` guard, the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or reconfigure Delorun's consent and guard plugins or the sandbox, in any mode.
 
 A consent covers the tool it names. A shell command or code the model runs can still write `AGENTS.md` or a skill inside a writable workspace without asking.
 
 ### MCP servers
 
 An MCP server that runs a command runs it on your computer with your access, outside the sandbox. With Safer prompts, Delorun holds a new one stopped until you allow it in Settings, Permissions or with `delorun mcp accept <server>`. Before you answer you see its command, arguments, folder and environment variable names, and the exact file that will run and the folder it runs in, found the way the server would start. On Windows you also see the command shell that runs a `.cmd` or `.bat` file. Delorun asks again when any of these changes, including when the same command now finds a different file, for example after a folder earlier in `PATH` gains a program with that name. If the file changes between your look and your answer, your answer is refused and the review shows the new file. `delorun mcp revoke <server>` or Revoke in Settings, Permissions stops a server you allowed.
+
+### External agents
+
+Claude Code and Codex are optional delegation plugins: the model can hand a task to one of them. An external agent runs as its own program, outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home with its keys and tokens included, and it uses your own Claude Code or Codex sign-in and account, so any cost goes to that account.
+
+Delorun asks before each run on the home's own computer, whichever prompts answer you gave in setup; a phone signed in over remote access cannot answer. "Allow once" starts that run only. "Allow for this workspace" lets that agent start there without asking until you revoke it in Settings, External agents, or with `delorun workspace external-agents <folder> <agent> off`; `delorun workspace external-agents` lists what you allowed. A chat on Read Only never starts an external agent, a run cannot start outside the chat's workspace, and each run stops after 30 minutes. A chat on Full access refuses every approval without asking you, so there an agent starts only in a workspace where you allowed it; a chat on Auto asks you, as on Workspace Write. `delorun headless` cannot ask anyone either, so it starts an agent only where you allowed it. A chat without a workspace folder never starts one, and the approval names the folder the agent will run in. The model cannot install or turn on these plugins, or another external-agent plugin such as the ACP one, which can run any program, through plugin management; you add them from the Plugins page or the first-run setup. A full-access chat can run any command anyway. Settings, External agents turns this question off, so agents start without asking as in DeepSeek Harness, or changes the 30-minute limit, from 1 to 1440 minutes; a change applies from the next run. Only the home's own computer can turn the question off.
 
 ## The web_fetch guard
 
@@ -92,7 +100,7 @@ The release checks prove that you run the release Delorun's keys signed and logg
 - **Programs running as you outside the sandbox.** Any program you run, and any command you let run with full access, can read and change everything in your Delorun home, use its token to approve a device or open the studio, and change the checks.
 - **Windows reads.** On Windows, the model's commands can read Delorun's secrets and token.
 - **Landlock sockets.** On a Linux system with Landlock but no bwrap, commands can connect to Docker's socket, which gives root on a rootful Docker.
-- **The network and other sockets.** Commands reach any network host, your ssh-agent, D-Bus and the display server.
+- **The network and other sockets.** Commands reach any network host and local sockets outside the places the sandbox hides, such as one in your home folder. On a Linux desktop an X server also listens on a socket no file path names, and a session bus that `dbus-launch` started can listen on one too; commands can still reach both, and through such a bus start programs outside the sandbox.
 - **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox, audit or revoke plugins. It checks a plugin's declared version ranges at install and at each start, but does not check a plugin's files again after install: a plugin from npm, git or a tarball whose files change on disk loads as it now is at the next start.
 - **Instructions in text the model reads.** Web pages, files, repositories and tool output can carry instructions; the consents and the sandbox limit what follows from them, and do not detect them.
 - **The studio's sign-in.** A browser that signed in stays signed in for 30 days, across restarts, and the sign-in cannot be revoked.

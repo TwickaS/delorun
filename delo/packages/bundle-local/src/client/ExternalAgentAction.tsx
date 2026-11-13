@@ -2,7 +2,7 @@
  * The approval card's action for a request to start an external agent, such as Claude Code or Codex. At the home's own
  * computer it offers "Allow for this workspace": the grant is recorded first, then the card is answered as allowed, so
  * this run starts and later runs in the workspace start without asking until the person revokes the grant in
- * Permissions. A failed grant leaves the card unanswered with the reason under the button. Once the card answered, is
+ * External agents. A failed grant leaves the card unanswered with the reason under the button. Once the card answered, is
  * sending an answer or no longer accepts one, the action is disabled and a click records nothing: the card's
  * `canAnswer` is read when the click starts, and again after the grant, before the card is answered. On a remote
  * studio, whose grant the home refuses, the action says to approve at the computer instead of offering a button; the
