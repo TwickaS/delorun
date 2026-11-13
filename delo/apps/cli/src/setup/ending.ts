@@ -1,204 +1,96 @@
 /**
- * The end of an interactive setup: the offer to install the `delorun` command, then starting Delorun and opening
- * the studio, and the text that says what is running and how to look at it or stop it. The install names the exact
- * version of the launcher that started this run (`DELO_LAUNCHER_VERSION`), so the installed command is the package
- * the person already ran and not whatever npm serves as newest; without that version setup offers no install. Everything that touches the
- * computer goes through {@link Ending}, so specs inject a fake spawn and a fake start. The studio address comes from
- * the home process's `status` answer and carries no token; the browser gets a one-time link the home process mints
- * ([studio](../open/studio.ts)).
+ * The end of every `delorun setup` form: the next steps, and nothing else. Setup starts nothing and opens nothing;
+ * the text says how to start Delorun and open the studio, where the guide's first-chat page is, and how to change an
+ * answer later. When the launcher (`npx delorun`) started the run, the first step installs the `delorun` command at the
+ * launcher's exact version (`DELO_LAUNCHER_VERSION`), so the installed command is the package the person already ran and
+ * not whatever npm serves as newest.
  *
  * @module @delo/cli/setup/ending
  */
-import { hostname, userInfo } from 'node:os'
-import { DELO_LAUNCHER_VERSION_ENV, HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import { DELO_LAUNCHER_VERSION_ENV } from '@delo/contract-home-layout'
+import type { SetupAnswers } from '@delo/contract-setup-answers'
 import semver from 'semver'
-import { queryHomeStatus } from '@delo/home-process'
-import { EXIT, type ExitCode } from '../exit.ts'
-import type { CommandOutput, CommandResult } from '../command.ts'
-import { computerOpener, openStudio, profileFlag, spawnCommand, type StudioOpener } from '../open/studio.ts'
-import { startDetached, startForeground } from '../start.ts'
-import { SetupCancelled, type Prompter } from './prompts.ts'
+import { profileFlag } from '../open/studio.ts'
+import { SETUP_PROVIDERS } from './providers.ts'
+
+/** The guide page that walks through the first chat. */
+export const FIRST_CHAT_PAGE = 'https://docs.delorun.com/guide/first-chat'
 
 /**
- * The command the install offer runs, and prints when the person declines or it fails: the launcher package at one
- * exact version.
+ * The command that installs the `delorun` command: the launcher package at one exact version.
  * @param version - the launcher's version, a semantic version.
- * @returns the program and its arguments.
+ * @returns the command line the person can run.
  */
-export function installCommand(version: string): readonly [string, ...string[]] {
-  return ['npm', 'install', '-g', `delorun@${version}`]
-}
-
-/** What setup prints when the launcher's version is unknown, in place of the install offer. */
-export const NO_LAUNCHER_VERSION = 'Setup does not offer to install the delorun command: this Delorun was not started by the delorun launcher, so the launcher version to pin is not known. Install it with npm install -g delorun@<version>, naming the version in the release notes, after comparing its integrity as the Trust page describes.'
-
-/** How the studio was started: attached to this terminal, or detached from it. */
-export type StartMode = 'background' | 'foreground'
-
-/** What the ending does on the computer. */
-export interface Ending {
-  /**
-   * Run a command with the terminal attached.
-   * @param command - the program.
-   * @param args - its arguments.
-   * @returns its exit code; 127 when it could not start.
-   */
-  spawn(command: string, args: readonly string[]): Promise<number>
-  /**
-   * Start Delorun without opening the studio.
-   * @param mode - detached from the terminal, or attached to it.
-   * @returns the start's result, as {@link startDetached} and {@link startForeground} return it.
-   */
-  start(mode: StartMode): Promise<CommandResult>
-  /**
-   * @returns the studio's loopback address, without a token, from the running home process's `status` answer, or
-   *   `undefined` when it serves no studio or does not answer.
-   */
-  address(): Promise<string | undefined>
-  /**
-   * Ask the home process for a fresh one-time studio link and hand it to the computer's default browser.
-   * @returns whether a browser took it.
-   */
-  open(): Promise<boolean>
-  /**
-   * @returns whether a browser can plausibly be shown on this computer: a desktop, and not an SSH session.
-   */
-  canOpen(): boolean
-  /**
-   * @returns the account and computer name for the SSH port-forward line.
-   */
-  identity(): { readonly user: string, readonly host: string }
-  /**
-   * @returns the version of the launcher that started this run, from `DELO_LAUNCHER_VERSION`, or `undefined` when the
-   *   variable is unset or not a semantic version.
-   */
-  launcherVersion(): string | undefined
+export function installLine(version: string): string {
+  return `npm install -g delorun@${version}`
 }
 
 /**
- * The studio address a running home process reports.
- * @param home - the Delo home.
- * @param profile - the CLI profile.
- * @returns the address without a token, or `undefined` when the home process serves no studio or does not answer.
- */
-export async function studioAddress(home: string, profile: string): Promise<string | undefined> {
-  try {
-    const status = await queryHomeStatus(home, profile, HOME_STATUS_TIMEOUT_MS)
-    return 'studio' in status && typeof status.studio === 'string' ? status.studio : undefined
-  } catch (_notAnswering) {
-    // The start reported success, so a home process that does not answer now has stopped; the report says so.
-    return undefined
-  }
-}
-
-/**
- * The ending of a terminal run on this computer.
- * @param home - the Delo home.
- * @param profile - the profile to start.
- * @param output - where the start writes.
+ * The version of the launcher that started this run.
  * @param env - the environment `delorun` inherited.
- * @param run - runs a program; {@link spawnCommand} by default.
- * @param opener - how the studio is opened; this computer's, through `run`, by default.
- * @returns the ending.
+ * @returns the version from `DELO_LAUNCHER_VERSION`, or `undefined` when the variable is unset or not a semantic version.
  */
-export function computerEnding(
-  home: string, profile: string, output: CommandOutput, env: Readonly<Record<string, string | undefined>>,
-  run: typeof spawnCommand = spawnCommand, opener: StudioOpener = computerOpener(env, run),
-): Ending {
-  return {
-    spawn: (command, args) => run(command, args),
-    start: mode => mode === 'background' ? startDetached(home, profile, output, false, opener) : startForeground({ home, profile, open: false, output, env }),
-    address: () => studioAddress(home, profile),
-    open: async () => (await openStudio(home, profile, opener)).kind === 'opened',
-    canOpen: () => opener.canOpen(),
-    identity: () => ({ user: userInfo().username, host: hostname() }),
-    launcherVersion: () => {
-      const version = env[DELO_LAUNCHER_VERSION_ENV]
-      return version !== undefined && semver.valid(version) === version ? version : undefined
-    },
-  }
+export function launcherVersion(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const version = env[DELO_LAUNCHER_VERSION_ENV]
+  return version !== undefined && semver.valid(version) === version ? version : undefined
 }
 
-/** What the ending needs to know about the run. */
-export interface EndingRequest {
+/** What the next steps depend on. */
+export interface NextStepsRequest {
   /** The profile that was set up. */
   readonly profile: string
-  /** Whether the person chose to keep Delorun running after the terminal closes. */
-  readonly background: boolean
-  /** Where the ending writes. */
-  readonly output: CommandOutput
+  /** The answers the run applied. */
+  readonly answers: SetupAnswers
+  /** The environment `delorun` inherited, which shows whether a key variable is set and whether the launcher started the run. */
+  readonly env: Readonly<Record<string, string | undefined>>
 }
 
 /**
- * Ask whether to install the command. Cancelling the question declines it: setup has written everything by now.
- * @param prompter - asks the question.
- * @param command - the install command, as the person reads it.
- * @returns whether the person said yes.
+ * The key step, when the answers leave Delorun without a key it can use.
+ * @param request - the run.
+ * @param flag - the `--profile` flag for the profile, or empty.
+ * @returns the step's text, or `undefined` when a key is stored or its variable is set.
  */
-async function offersInstall(prompter: Prompter, command: string): Promise<boolean> {
-  try {
-    return await prompter.confirm(`Install the delorun command? (runs ${command})`, true)
-  } catch (error) {
-    if (error instanceof SetupCancelled) return false
-    throw error
+function keyStep(request: NextStepsRequest, flag: string): string | undefined {
+  const provider = request.answers.modelProvider
+  if (provider === null) return `Add a model key first: delorun setup key${flag}`
+  if (provider.credential.source === 'environment' && (request.env[provider.credential.name] ?? '') === '') {
+    return `Set ${provider.credential.name} in your terminal, then run delorun stop and delorun start if Delorun is running. It is the ${SETUP_PROVIDERS[provider.id].label} key you chose.`
   }
+  return undefined
 }
 
 /**
- * Offer to install the command, then start Delorun and open the studio.
- * @param prompter - asks the install offer.
- * @param ending - what the ending does on the computer.
- * @param request - the profile, the background answer and the output.
- * @returns the exit code of the start.
+ * The text a finished setup prints.
+ * @param request - the profile, the answers and the environment.
+ * @returns the text: what is set up, the numbered next steps for the use case, and how to change an answer.
  */
-export async function finishSetup(prompter: Prompter, ending: Ending, request: EndingRequest): Promise<ExitCode> {
-  const { output } = request
-  const version = ending.launcherVersion()
-  if (version === undefined) {
-    output.stdout(`${NO_LAUNCHER_VERSION}\n`)
+export function nextSteps(request: NextStepsRequest): string {
+  const flag = profileFlag(request.profile)
+  const { useCase, reach } = request.answers
+  const steps: string[][] = []
+  const version = launcherVersion(request.env)
+  if (version !== undefined) steps.push(['Install the delorun command, which npx does not keep:', `  ${installLine(version)}`])
+  const key = keyStep(request, flag)
+  if (key !== undefined) steps.push([key])
+  if (useCase === 'automation') {
+    steps.push([`Run a task from a script or CI: delorun headless${flag} "your task"`])
+    steps.push([`To use the studio as well, start it any time with delorun${flag}.`])
   } else {
-    const [command, ...args] = installCommand(version)
-    const line = [command, ...args].join(' ')
-    if (await offersInstall(prompter, line)) {
-      if ((await ending.spawn(command, args)) !== 0) output.stdout(`The install did not finish. To install it yourself, run:\n  ${line}\n`)
-    } else {
-      output.stdout(`To install it later, run:\n  ${line}\n`)
+    steps.push([`Start Delorun and open the studio: delorun${flag}`, `Send a first message in a new chat. The guide's first-chat page walks through it: ${FIRST_CHAT_PAGE}`])
+    if (useCase === 'remote') {
+      steps.push(reach.option === 'none'
+        ? ['Remote access is off. Fix what the Tailscale note said, then run delorun reach on tailscale.']
+        : [`Add your phone or another device: delorun devices approve${flag}, then type the code it shows.`])
     }
   }
-  const mode: StartMode = request.background ? 'background' : 'foreground'
-  const canOpen = ending.canOpen()
-  const started = await ending.start(mode)
-  if (started !== undefined && started !== EXIT.ok) return started
-  const address = await ending.address()
-  const opened = canOpen && address !== undefined && await ending.open()
-  output.stdout(report(mode, request.profile, address, canOpen, opened, ending.identity()))
-  return EXIT.ok
-}
-
-/**
- * The text that says what is running.
- * @param mode - how Delorun was started.
- * @param profile - the profile.
- * @param address - the studio address, if known.
- * @param canOpen - whether this computer can show a browser.
- * @param opened - whether the browser was opened by setup.
- * @param identity - the account and computer name for the SSH line.
- * @returns the text.
- */
-function report(mode: StartMode, profile: string, address: string | undefined, canOpen: boolean, opened: boolean, identity: { readonly user: string, readonly host: string }): string {
-  const flag = profileFlag(profile)
-  const lines = [mode === 'background'
-    ? 'Delorun is running in the background and keeps running after you close this terminal.'
-    : `Delorun is running in this terminal. Closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background${flag}, or run delorun setup background${flag} to make that the default.`]
-  lines.push(address === undefined ? `The home process reports no studio; see delorun status${flag} and delorun logs --follow${flag}` : `Studio: ${address}${opened ? ' (opened in your browser)' : ''}`)
-  if (!canOpen && address !== undefined) {
-    const port = new URL(address).port || '80'
-    lines.push(
-      'There is no browser to open here. To reach the studio from your own computer, run this there:',
-      `  ssh -L ${port}:127.0.0.1:${port} ${identity.user}@${identity.host}`,
-      `then run delorun open --print${flag} here and open the link it prints there; it signs in once, within one minute.`,
-    )
-  }
-  lines.push(`  delorun status${flag}`, `  delorun logs --follow${flag}`, `  delorun stop${flag}`)
-  return `${lines.join('\n')}\n`
+  return `${[
+    'Delorun is set up. Nothing is running yet.',
+    '',
+    'Next:',
+    ...steps.flatMap((lines, index) => lines.map((line, position) => position === 0 ? `  ${String(index + 1)}. ${line}` : `     ${line.trimStart()}`)),
+    '',
+    `Change an answer later: delorun setup <section>${flag} (delorun setup --list shows the sections).`,
+    `If something looks wrong: delorun doctor${flag}.`,
+  ].join('\n')}\n`
 }

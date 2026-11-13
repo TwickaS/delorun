@@ -4,6 +4,7 @@
  * defaults, and the refusals that keep reach and credential forwarding off in
  * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, and
  * a document that carries a question setup no longer asks. A refusal names the field and never echoes a value.
+ * An answers record written before the use-case question reads as `local`, and a `mode` of `quick` or `full` in it is ignored.
  * A version-2 document, written before the release-check question, reads as the current version with the check on; a
  * version-2 or version-3 document, written before the provider question, reads with DeepSeek and the profile's default
  * model as its provider, which is what setup of those versions applied.
@@ -14,14 +15,17 @@ import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import {
   IDENTITY_FACTORS,
+  LEGACY_SETUP_MODE_KEY,
   PROMPTS_OPTIONS,
   REMOVED_ANSWER_KEYS,
   SECTION_STATUSES,
   SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS,
   SETUP_ANSWERS_SCHEMA_VERSION,
   SETUP_DEFAULT_PROVIDER_ID,
+  SETUP_DEFAULT_USE_CASE,
   SETUP_DEFAULTS,
   SETUP_PROVIDER_IDS,
+  SETUP_USE_CASES,
   type ModelProviderAnswer,
   type SetupAnswers,
 } from '@delo/contract-setup-answers'
@@ -100,6 +104,7 @@ const sections = z.array(z.strictObject({ id: z.string().min(1), status: z.enum(
  */
 const answersSchema = z.strictObject({
   schemaVersion: z.literal(SETUP_ANSWERS_SCHEMA_VERSION),
+  useCase: z.enum(SETUP_USE_CASES).default(SETUP_DEFAULT_USE_CASE),
   modelProvider: modelProvider.nullable(),
   ...answerFields,
   updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck),
@@ -110,11 +115,11 @@ const answersSchema = z.strictObject({
 
 /** The version-3 document, which has no provider question, read as the current version with DeepSeek as its provider. */
 const version3Schema = z.strictObject({ schemaVersion: z.literal(3), modelProvider: earlierModelProvider, ...answerFields, updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck), sections })
-  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, modelProvider: provider, ...answers, sections: record }))
+  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, useCase: SETUP_DEFAULT_USE_CASE, modelProvider: provider, ...answers, sections: record }))
 
 /** The version-2 document, which has no `updateCheck` either, read as the current version with the check on. */
 const version2Schema = z.strictObject({ schemaVersion: z.literal(2), modelProvider: earlierModelProvider, ...answerFields, sections })
-  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, modelProvider: provider, ...answers, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
+  .transform(({ modelProvider: provider, sections: record, schemaVersion: _version, ...answers }) => ({ schemaVersion: SETUP_ANSWERS_SCHEMA_VERSION, useCase: SETUP_DEFAULT_USE_CASE, modelProvider: provider, ...answers, updateCheck: SETUP_DEFAULTS.updateCheck, sections: record }))
 
 /**
  * The schema of a document's declared version.
@@ -186,7 +191,20 @@ export type ParsedAnswers = SetupAnswers & { readonly acceptDangerousMode?: bool
  * @returns zod's result, whose data is current-version answers.
  */
 export function parseAnswers(document: unknown): z.ZodSafeParseResult<ParsedAnswers> {
-  return schemaFor(document).safeParse(document)
+  return schemaFor(document).safeParse(withoutLegacyMode(document))
+}
+
+/**
+ * Drop the Quick or Full choice that an answers record written before the use-case question may hold.
+ * @param document - a parsed JSON value.
+ * @returns the value without a `mode` of `quick` or `full`; any other value is returned as it is.
+ */
+function withoutLegacyMode(document: unknown): unknown {
+  if (typeof document !== 'object' || document === null || Array.isArray(document)) return document
+  const mode: unknown = Reflect.get(document, LEGACY_SETUP_MODE_KEY)
+  if (mode !== 'quick' && mode !== 'full') return document
+  const { [LEGACY_SETUP_MODE_KEY]: _mode, ...rest } = document as Record<string, unknown>
+  return rest
 }
 
 /**

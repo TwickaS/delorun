@@ -26,8 +26,8 @@
  * - the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, its
  *   `escapeSocketDirectories` hold every directory the start names, its `privateTmp` is on, and it sets no
  *   `runnerCommand` or `runnerFailureSignatures`;
- * - in the CLI profile, each prompt row's switch has the value the recorded prompts answer gives it ("Safer prompts"
- *   Delo's default, "Same as stock" the parity value), and the guard rows `delo-fetch-guard` and `delo-update-gate`
+ * - in the CLI profile, each prompt row's switch has the value the recorded prompts answer gives it ("Ask me first"
+ *   Delo's default, "Ask less" the parity value), and the guard rows `delo-fetch-guard` and `delo-update-gate`
  *   are on; in the `headless` profile, which has no setup answer, each row of `@delo/bundle-headless` has Delo's
  *   default ({@link HEADLESS_ROW_VALUES});
  * - each required Delo row's package, and the Delo bundle that declares the row, resolve inside this Delo's own
@@ -175,7 +175,7 @@ const GUARD_ROWS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = 
 }
 
 /** The prompts answers as a refusal names them. */
-const PROMPT_ANSWER_LABELS = { safer: 'Safer prompts', stock: 'Same as stock', dangerous: 'Dangerous' } as const
+const PROMPT_ANSWER_LABELS = { safer: 'Ask me first', stock: 'Ask less', dangerous: 'Never ask (dangerous)' } as const
 
 /**
  * The values each row of `@delo/bundle-headless` must have in the `headless` profile: Delo's defaults, which no setup

@@ -1,131 +1,67 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EXIT } from '../../src/exit.ts'
-import { SetupCancelled } from '../../src/setup/prompts.ts'
-import { resolveSurface } from '@delo/logs'
-import type { StudioOpener } from '../../src/open/studio.ts'
-import { fakeEnding, scriptedPrompter, type EndingLog, type Recording } from './support.ts'
+import { describe, expect, it } from 'vitest'
+import { SETUP_DEFAULTS, type SetupAnswers } from '@delo/contract-setup-answers'
+import { FIRST_CHAT_PAGE, installLine, launcherVersion, nextSteps } from '../../src/setup/ending.ts'
 
-vi.mock('../../src/start.ts', () => ({
-  startDetached: vi.fn(() => Promise.resolve(0)),
-  startForeground: vi.fn(() => Promise.resolve(undefined)),
-}))
+const KEY_SET = { DEEPSEEK_API_KEY: 'env-key' }
+const DEEPSEEK_ENV: SetupAnswers['modelProvider'] = { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null }
 
-const { computerEnding, finishSetup, studioAddress } = await import('../../src/setup/ending.ts')
-const { startDetached, startForeground } = await import('../../src/start.ts')
-
-let directory: string
-
-beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'delorun-ending-'))
-})
-
-afterEach(() => {
-  rmSync(directory, { recursive: true, force: true })
-})
-
-/** An opener that records what it was asked and opens nothing. */
-function recordingOpener(canOpen: boolean, opens = true): StudioOpener & { readonly opened: string[] } {
-  const opened: string[] = []
-  return {
-    opened,
-    canOpen: () => canOpen,
-    link: () => Promise.resolve({ kind: 'link', link: { url: 'http://127.0.0.1:1/?token=one-time', oneTime: true } }),
-    open: (url) => {
-      opened.push(url)
-      return Promise.resolve(opens)
-    },
-  }
+/** @returns the next steps of a profile with the answers that differ from the defaults. */
+function steps(answers: Partial<SetupAnswers>, env: Record<string, string> = KEY_SET, profile = 'default'): string {
+  return nextSteps({ profile, answers: { ...SETUP_DEFAULTS, modelProvider: DEEPSEEK_ENV, ...answers }, env })
 }
 
-describe('the computer', () => {
-  const output = { stdout: () => undefined, stderr: () => undefined }
-
-  it('starts through the existing start entries without opening the studio there', async () => {
-    const opener = recordingOpener(true)
-    const launched = { DELO_FIXTURE: 'launch' }
-    const ending = computerEnding(directory, 'work', output, launched, undefined, opener)
-    expect(await ending.start('background')).toBe(EXIT.ok)
-    expect(startDetached).toHaveBeenCalledWith(directory, 'work', output, false, opener)
-    expect(await ending.start('foreground')).toBeUndefined()
-    expect(startForeground).toHaveBeenCalledWith({ home: directory, profile: 'work', open: false, output, env: launched })
-  })
-
-  it('opens a fresh link from the home process through the opener, and reports when no browser took it', async () => {
-    const opener = recordingOpener(true)
-    expect(await computerEnding(directory, 'default', output, {}, undefined, opener).open()).toBe(true)
-    expect(opener.opened).toEqual(['http://127.0.0.1:1/?token=one-time'])
-    expect(await computerEnding(directory, 'default', output, {}, undefined, recordingOpener(true, false)).open()).toBe(false)
-    expect(await computerEnding(directory, 'default', output, {}, undefined, recordingOpener(false)).open()).toBe(false)
-  })
-
-  it('asks the opener whether a browser can open, installs through the runner and reports the account and computer', async () => {
-    const run = vi.fn(() => Promise.resolve(0))
-    expect(computerEnding(directory, 'default', output, { SSH_CONNECTION: '1 2 3 4' }, run).canOpen()).toBe(false)
-    expect(computerEnding(directory, 'default', output, {}, run, recordingOpener(true)).canOpen()).toBe(true)
-    expect(await computerEnding(directory, 'default', output, {}, run).spawn('npm', ['install', '-g', 'delorun'])).toBe(0)
-    expect(run).toHaveBeenLastCalledWith('npm', ['install', '-g', 'delorun'])
-    const identity = computerEnding(directory, 'default', output, {}).identity()
-    expect(identity.user).not.toBe('')
-    expect(identity.host).not.toBe('')
-  })
-
-  it('reads the launcher version the launcher set, and no version that is not a semantic version', () => {
-    expect(computerEnding(directory, 'default', output, { DELO_LAUNCHER_VERSION: '0.3.1' }).launcherVersion()).toBe('0.3.1')
-    expect(computerEnding(directory, 'default', output, {}).launcherVersion()).toBeUndefined()
-    for (const value of ['latest', '0.3.1 --ignore-scripts', '', 'v0.3.1']) {
-      expect(computerEnding(directory, 'default', output, { DELO_LAUNCHER_VERSION: value }).launcherVersion()).toBeUndefined()
-    }
-  })
-
-  it('reads no address while no home process answers, and never from the log', async () => {
-    const { mkdirSync, writeFileSync } = await import('node:fs')
-    const { dirname } = await import('node:path')
-    const file = resolveSurface({ kind: 'home', home: directory, profile: 'default' }).file
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, 'booting\ndsh web: http://127.0.0.1:3090/?token=from-the-log\n')
-    expect(await studioAddress(directory, 'default')).toBeUndefined()
-    expect(await computerEnding(directory, 'default', output, {}).address()).toBeUndefined()
+describe('the launcher version', () => {
+  it('reads the version the launcher set, and no version that is not a semantic version', () => {
+    expect(launcherVersion({ DELO_LAUNCHER_VERSION: '0.1.0' })).toBe('0.1.0')
+    expect(launcherVersion({ DELO_LAUNCHER_VERSION: 'latest' })).toBeUndefined()
+    expect(launcherVersion({})).toBeUndefined()
+    expect(installLine('0.1.0')).toBe('npm install -g delorun@0.1.0')
   })
 })
 
-describe('finishing a run', () => {
-  const output = { stdout: () => undefined, stderr: () => undefined }
-
-  it('passes on a failure of the install question that is not a cancellation', async () => {
-    const recording: Recording = { screen: [], asked: [] }
-    const log: EndingLog = { spawned: [], started: [], opened: 0 }
-    const prompter = { ...scriptedPrompter([], recording), confirm: () => Promise.reject(new Error('terminal closed')) }
-    await expect(finishSetup(prompter, fakeEnding(log), { profile: 'default', background: true, output })).rejects.toThrow('terminal closed')
-    const cancelled = { ...prompter, confirm: () => Promise.reject(new SetupCancelled()) }
-    expect(await finishSetup(cancelled, fakeEnding(log), { profile: 'default', background: true, output })).toBe(EXIT.ok)
+describe('the next steps', () => {
+  it('print how to start and open the studio, the first-chat page and how to change an answer, and nothing about a process', () => {
+    const text = steps({})
+    expect(text).toBe([
+      'Delorun is set up. Nothing is running yet.',
+      '',
+      'Next:',
+      '  1. Start Delorun and open the studio: delorun',
+      `     Send a first message in a new chat. The guide's first-chat page walks through it: ${FIRST_CHAT_PAGE}`,
+      '',
+      'Change an answer later: delorun setup <section> (delorun setup --list shows the sections).',
+      'If something looks wrong: delorun doctor.',
+      '',
+    ].join('\n'))
+    expect(text).not.toMatch(/process|start id|profiles\//u)
   })
 
-  it('c02-setup-installs-pinned-launcher: installs the delorun command pinned to the version of the launcher that started the run, never unpinned', async () => {
-    const recording: Recording = { screen: [], asked: [] }
-    const log: EndingLog = { spawned: [], started: [], opened: 0 }
-    await finishSetup(scriptedPrompter([true], recording), fakeEnding(log, { launcherVersion: '0.3.1' }), { profile: 'default', background: true, output })
-    expect(log.spawned).toEqual(['npm install -g delorun@0.3.1'])
+  it('name the profile in every command when it is not the default', () => {
+    const text = steps({}, KEY_SET, 'work')
+    expect(text).toContain('delorun --profile work\n')
+    expect(text).toContain('delorun setup <section> --profile work')
+    expect(text).toContain('delorun doctor --profile work')
   })
 
-  it('offers no install when the launcher version is unknown, and says how to install a pinned version', async () => {
-    const recording: Recording = { screen: [], asked: [] }
-    const log: EndingLog = { spawned: [], started: [], opened: 0 }
-    const lines: string[] = []
-    await finishSetup(scriptedPrompter([], recording), fakeEnding(log, { launcherVersion: undefined }), { profile: 'default', background: true, output: { stdout: text => void lines.push(text), stderr: () => undefined } })
-    expect(log.spawned).toEqual([])
-    expect(recording.asked).toEqual([])
-    expect(lines.join('')).toContain('npm install -g delorun@<version>')
+  it('put the install of the command first when the launcher started the run', () => {
+    const text = steps({}, { ...KEY_SET, DELO_LAUNCHER_VERSION: '0.1.0' })
+    expect(text).toContain('  1. Install the delorun command, which npx does not keep:\n     npm install -g delorun@0.1.0\n  2. Start Delorun')
   })
 
-  it('names port 80 in the SSH line when the address has no port', async () => {
-    const recording: Recording = { screen: [], asked: [] }
-    const log: EndingLog = { spawned: [], started: [], opened: 0 }
-    const lines: string[] = []
-    const prompter = scriptedPrompter([false], recording)
-    await finishSetup(prompter, fakeEnding(log, { canOpen: false, address: 'http://studio.example/' }), { profile: 'default', background: true, output: { stdout: text => void lines.push(text), stderr: () => undefined } })
-    expect(lines.join('')).toContain('ssh -L 80:127.0.0.1:80 person@machine')
+  it('ask for a key first when no provider was chosen, and name the variable when it is unset', () => {
+    expect(steps({ modelProvider: null })).toContain('  1. Add a model key first: delorun setup key\n  2. Start')
+    expect(steps({}, {})).toContain('  1. Set DEEPSEEK_API_KEY in your terminal, then run delorun stop and delorun start if Delorun is running. It is the DeepSeek key you chose.')
+    expect(steps({ modelProvider: { ...DEEPSEEK_ENV as NonNullable<typeof DEEPSEEK_ENV>, credential: { source: 'prompt' } } }, {})).not.toContain('Set DEEPSEEK_API_KEY')
+  })
+
+  it('print the headless command and no studio start for scripts and automation', () => {
+    const text = steps({ useCase: 'automation' })
+    expect(text).toContain('  1. Run a task from a script or CI: delorun headless "your task"')
+    expect(text).not.toContain('first-chat')
+  })
+
+  it('print the device approval for remote use, or the fix when remote access is off', () => {
+    expect(steps({ useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } })).toContain('  2. Add your phone or another device: delorun devices approve, then type the code it shows.')
+    expect(steps({ useCase: 'remote' })).toContain('  2. Remote access is off. Fix what the Tailscale note said, then run delorun reach on tailscale.')
   })
 })

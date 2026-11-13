@@ -26,14 +26,14 @@ import { Redactor, resolveSurface, SurfaceLog } from '@delo/logs'
 import { PROMPTS_OPTIONS, SETUP_DEFAULTS, type ModelProviderAnswer, type PromptsAnswer, type SetupAnswers } from '@delo/contract-setup-answers'
 import { baseURLWarning, checkCatalogModel, chosenProvider, parseAnswers, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
 import { promptsFromFlags } from './dangerous.ts'
-import { computerEnding, finishSetup, type Ending } from './ending.ts'
+import { nextSteps } from './ending.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
 import { keyTarget } from './provider-section.ts'
 import { installedCatalog, SETUP_PROVIDERS, type ProviderCatalog } from './providers.ts'
 import { ANSWERS_FILENAME, PROFILE_STEP, readProgress, removeProgress, sectionStep, writeAnswersRecord, writeProgress, type SetupProgress, type SetupStep } from './progress.ts'
 import { defaultRegistry, statementLines, unattendedRecord, withRecord, type Draft, type SectionEnvironment, type SectionRegistry, type SetupSection } from './sections.ts'
-import { terminalPrompter, type Prompter } from './prompts.ts'
+import { SetupCancelled, terminalPrompter, type Prompter } from './prompts.ts'
 import { BACK, stepIO } from './steps.ts'
 import { shippedPackageManager } from '../package-manager.ts'
 
@@ -85,8 +85,6 @@ export interface SetupRequest {
   readonly noUpdateCheck?: boolean
   /** Whether a local port is free; a listen on the loopback address by default. */
   readonly portIsFree?: (port: number) => Promise<boolean>
-  /** What the end of a terminal run does on the computer; install, start and open on this computer by default. */
-  readonly ending?: Ending
 }
 
 /**
@@ -300,7 +298,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
   const runDir = runDirectory(request.home, request.profile)
   let progress = readProgress(runDir)
   if (progress === undefined && hasCliProfile(request.home, request.profile)) {
-    request.output.stdout(`The CLI profile ${request.profile} is already set up at ${profileDirectory(request.home, request.profile)}.\n`)
+    request.output.stdout(`Delorun is already set up${request.profile === 'default' ? '' : ` for the profile ${request.profile}`}. Change one answer with delorun setup <section> (delorun setup --list shows them), or start with delorun.\n`)
     return EXIT.ok
   }
   let secret: string | undefined
@@ -314,7 +312,12 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
     const provider = progress.answers.modelProvider
     if (provider?.credential.source === 'prompt' && !progress.completed.includes(sectionStep('key'))) {
       if (request.form.kind !== 'interactive') throw new CliError(EXIT.failed, `delorun setup: the setup run for ${request.profile} is unfinished and needs the model key; run delorun setup in a terminal to finish it`)
-      secret = await prompterFor(request.form).secret(`${SETUP_PROVIDERS[provider.id].label} API key`)
+      try {
+        secret = await prompterFor(request.form).secret(`${SETUP_PROVIDERS[provider.id].label} API key`)
+      } catch (error) {
+        if (error instanceof SetupCancelled) throw new SetupCancelled(`The answers of the earlier run are kept for ${request.profile}.`)
+        throw error
+      }
     }
     request.output.stdout(`Resuming the setup of ${request.profile}.\n`)
   }
@@ -332,12 +335,8 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
   const directory = profileDirectory(request.home, profile)
   writeAnswersRecord(directory, progress.answers)
   removeProgress(runDir)
-  request.output.stdout(`Set up the CLI profile ${profile} at ${directory}.\n`)
-  if (request.form.kind !== 'interactive') {
-    request.output.stdout(`Run delorun${profile === 'default' ? '' : ` --profile ${profile}`} to start Delo and open the studio.\n`)
-    return EXIT.ok
-  }
-  return finishSetup(prompterFor(request.form), request.ending ?? computerEnding(request.home, profile, request.output, request.env), { profile, background: progress.answers.background, output: request.output })
+  request.output.stdout(nextSteps({ profile, answers: progress.answers, env: request.env }))
+  return EXIT.ok
 }
 
 /**
@@ -377,7 +376,7 @@ export async function runSection(request: SetupRequest, id: string): Promise<Exi
   if (!section.appliesTo(environment)) throw new CliError(EXIT.failed, `delorun setup: the ${id} section does not apply on this computer`)
   if (request.form.kind !== 'interactive') throw new CliError(EXIT.usage, 'delorun setup: a section asks its question in a terminal; --yes and --config do not apply to it')
   const directory = profileDirectory(request.home, request.profile)
-  const draft: Draft = { mode: 'full', answers: recordedAnswers(directory), secret: undefined, keyCheckFailure: undefined }
+  const draft: Draft = { phase: 'single', answers: recordedAnswers(directory), secret: undefined, keyCheckFailure: undefined }
   let given: Exclude<Awaited<ReturnType<SetupSection['ask']>>, typeof BACK>
   if (request.providerChoice === undefined) {
     given = await section.ask(stepIO(prompterFor(request.form), false), draft, environment) as typeof given
@@ -405,7 +404,7 @@ export function sectionList(registry: SectionRegistry): string {
   const width = Math.max(...sections.map(section => section.id.length))
   return `${[
     'Sections (delorun setup <section> runs one again):',
-    ...sections.map(section => `  ${section.id.padEnd(width)}  ${section.title} (${section.mode === 'quick' ? 'Quick and Full' : 'Full'})`),
+    ...sections.map(section => `  ${section.id.padEnd(width)}  ${section.title}`),
   ].join('\n')}\n`
 }
 
@@ -431,7 +430,7 @@ export function providerChoiceFromFlags(values: Readonly<Partial<Record<(typeof 
 /** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--prompts <safer|stock|dangerous> [--accept-dangerous-mode]] [--check-key] [--no-update-check] [--list]`. */
 export const setupCommand: CliCommand = {
   name: 'setup',
-  summary: 'Set up Delorun (Quick or Full), or run one section again: delorun setup <section>; --list lists them',
+  summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them',
   async run(args, context) {
     const { values, positionals } = (() => {
       try {

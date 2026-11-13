@@ -39,8 +39,8 @@ async function refusal(args: readonly string[]): Promise<CliError> {
 describe('delorun setup', { timeout: 60_000 }, () => {
   it('--list names every section without touching the home', async () => {
     expect(await setupCommand.run(['--list'], context)).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('  key         Model provider and key (Quick and Full)')
-    expect(lines.join('')).toContain('  profile     Profile name and port (Full)')
+    expect(lines.join('')).toContain('  key         Model provider and key\n')
+    expect(lines.join('')).toContain('  profile     Profile name and port')
     expect(lines.join('')).toContain('Sections (delorun setup <section> runs one again):')
   })
 
@@ -133,7 +133,7 @@ describe('delorun setup --config and the port check', { timeout: 60_000 }, () =>
     const document = join(osHome, 'answers.json')
     writeFileSync(document, JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'stock', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }))
     expect(await setupCommand.run(['--config', document], context)).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('Set up the CLI profile default')
+    expect(lines.join('')).toContain('Delorun is set up. Nothing is running yet.')
   })
 
   it('finds a port taken by a listener and a port that is free', async () => {

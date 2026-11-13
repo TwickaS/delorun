@@ -23,8 +23,9 @@ import { EXIT } from '../../src/exit.ts'
 import { announceStudio } from '../../src/open/announce.ts'
 import { openCommand, runOpen } from '../../src/open/command.ts'
 import { hostStudioLink } from '../../src/open/host-link.ts'
-import { computerOpener, describeOpening, openerFor, openHint, requestStudioLink, spawnCommand, type StudioOpener } from '../../src/open/studio.ts'
-import { computerEnding } from '../../src/setup/ending.ts'
+import { computerOpener, describeOpening, openStudio, openerFor, openHint, requestStudioLink, spawnCommand, type StudioOpener } from '../../src/open/studio.ts'
+import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import { queryHomeStatus } from '@delo/home-process'
 
 const PROFILE = 'default'
 const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
@@ -138,14 +139,14 @@ async function visit(url: string, cookie?: string): Promise<{ readonly status: n
 
 const DELO_CONNECTION = { oneTimeLaunchTokens: true, reopenHint: 'run delorun open to open the studio' }
 
-describe('setup-ending-signs-in', TIMEOUT, () => {
+describe('a link from the home process signs in once', TIMEOUT, () => {
   it('opens a link from the home process that signs in once, and reads the address from the status answer', async () => {
     const { ctx, origin } = await studioHost(DELO_CONNECTION)
     await runHome(ctx)
     const launched: string[] = []
-    const ending = computerEnding(home, PROFILE, { stdout: () => {}, stderr: () => {} }, {}, undefined, browserOpener(launched))
-    expect(await ending.address()).toBe(`${origin}/`)
-    expect(await ending.open()).toBe(true)
+    const opener = browserOpener(launched)
+    expect(Reflect.get(await queryHomeStatus(home, PROFILE, HOME_STATUS_TIMEOUT_MS), 'studio')).toBe(`${origin}/`)
+    expect((await openStudio(home, PROFILE, opener)).kind).toBe('opened')
     expect(launched).toHaveLength(1)
     const [url = ''] = launched
     expect(new URL(url).origin).toBe(origin)
@@ -223,7 +224,7 @@ describe('delorun open', TIMEOUT, () => {
     expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delo is not running for the profile default; start it with delorun start.\n' })
     expect(await open(['--print', '--profile', 'work'], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delo is not running for the profile work; start it with delorun start --profile work.\n' })
     await runHome(undefined)
-    expect(await computerEnding(home, PROFILE, { stdout: () => {}, stderr: () => {} }, {}).address()).toBeUndefined()
+    expect(Reflect.get(await queryHomeStatus(home, PROFILE, HOME_STATUS_TIMEOUT_MS), 'studio')).toBeUndefined()
     expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.failed, stdout: '', stderr: 'The home process for the profile default did not give a studio link (STUDIO_UNAVAILABLE: the Host serves no studio); see delorun status.\n' })
     expect((await open(['--print'], browserOpener(launched))).code).toBe(EXIT.failed)
     const noBrowser = { ...browserOpener(launched), canOpen: () => false, link: vi.fn() }

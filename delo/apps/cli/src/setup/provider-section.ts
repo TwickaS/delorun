@@ -1,17 +1,18 @@
 /**
  * The `key` section of `delorun setup` (contract C11, "Model providers"): which model provider Delorun uses, where
- * its key comes from, and the model new chats start on. Quick and Full ask the provider, then for an
+ * its key comes from, and the model new chats start on. The section asks the provider, then for an
  * `openai-compatible` endpoint its base URL and model, then where the key comes from and, for a typed key, the key,
- * which one live request checks before it is stored. Full then asks the model of every provider; Quick asks it only
- * of a provider without a default model in the profile, which is every provider but DeepSeek. Each later question can
- * go back to the one before it. "None for now" writes nothing, leaves the provider rows as they are, and says which model
+ * which one live request checks before it is stored. The model question follows for a provider without a default model in the
+ * profile, which is every provider but DeepSeek; `delorun setup key` asks it of DeepSeek too. Each later question can
+ * go back to the one before it. "Choose later" writes nothing, leaves the provider rows as they are, and says which model
  * new chats still start on and how to add a provider.
  *
  * @module @delo/cli/setup/provider-section
  */
 import { join } from 'node:path'
-import type { ModelCredential, ModelProviderAnswer, SetupAnswers } from '@delo/contract-setup-answers'
+import { SETUP_DEFAULT_PROVIDER_ID, type ModelCredential, ModelProviderAnswer, SetupAnswers } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
+import { choiceNote, ENVIRONMENT_VARIABLE_LINE, RECOMMENDED } from './choices.ts'
 import { baseURLProblem, baseURLWarning, modelIdProblem } from './answers.ts'
 import type { KeyTarget } from './key-check.ts'
 import { isSetupProviderId, profileModelSelection, PROVIDERS_BY_LABEL, SETUP_PROVIDERS, writeProviderRows, type ModelSelection, type ProviderCatalog, type SetupProvider } from './providers.ts'
@@ -19,8 +20,11 @@ import type { Draft, SectionAnswer, SectionEnvironment, SetupSection } from './s
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { storeCredential } from './writes.ts'
 
-/** The value of the provider question's "None for now" choice; no provider id uses it. */
+/** The value of the provider question's "Choose later" choice; no provider id uses it. */
 const NO_PROVIDER = 'none'
+
+/** The value of the provider question's "More providers" choice; no provider id uses it. */
+const MORE_PROVIDERS = 'more'
 
 /**
  * What a run that sets up no provider prints: the model new chats still start on, which no answer changed, and how to
@@ -48,7 +52,7 @@ interface Choice {
 }
 
 /** The section's questions, in the order they can be asked. */
-type Question = 'provider' | 'endpoint' | 'endpoint-model' | 'source' | 'key' | 'model' | 'done'
+type Question = 'provider' | 'more-providers' | 'endpoint' | 'endpoint-model' | 'source' | 'key' | 'model' | 'done'
 
 /**
  * Where a provider's key is checked.
@@ -66,14 +70,42 @@ export function keyTarget(provider: SetupProvider, baseURL: string | null, catal
 }
 
 /**
- * Whether the model question is asked in a run of a mode.
+ * Whether the model question is asked in a run.
  * @param provider - the provider.
- * @param mode - the run's mode.
- * @returns true in Full for a provider whose models setup lists, and in Quick for one without a default model.
+ * @param phase - where the section is asked.
+ * @returns true for a provider without a default model in the profile, and for any provider whose models setup lists when the section runs on its own.
  */
-function asksModel(provider: SetupProvider, mode: Draft['mode']): boolean {
+function asksModel(provider: SetupProvider, phase: Draft['phase']): boolean {
   if (provider.adapter === 'custom') return false
-  return mode === 'full' || provider.adapter === 'catalog'
+  return phase === 'single' || provider.adapter === 'catalog'
+}
+
+/**
+ * The note above the key-source question: where to create a key, and what each way of giving it means.
+ * @param provider - the provider.
+ * @returns the note body.
+ */
+function keySourceNote(provider: SetupProvider): string {
+  const where = provider.adapter === 'custom'
+    ? 'Use the key your endpoint gives you.'
+    : provider.keyPage === undefined ? `Create one in your ${provider.label} account.` : `Create one at ${provider.keyPage}`
+  return [
+    `${provider.label} needs an API key to answer. ${where}`,
+    '',
+    choiceNote([
+      { label: 'Paste it now', lines: ['Delorun stores it in your Delorun folder, where only you can read it. The simplest choice.', 'Change later: delorun setup key.'] },
+      { label: `Use ${provider.keyVariable}`, lines: [`For people who already set that variable in their shell. ${ENVIRONMENT_VARIABLE_LINE}`, 'Delorun reads it each time it starts.'] },
+    ]),
+  ].join('\n')
+}
+
+/**
+ * The warning for a key variable that is empty in this terminal.
+ * @param variable - the variable.
+ * @returns the warning with the fix.
+ */
+function unsetVariableNote(variable: string): string {
+  return `${variable} is not set in this terminal. Chats will not answer until you set it (for example, add export ${variable}=your-key to your shell profile) and then run delorun stop, then delorun start.`
 }
 
 /**
@@ -101,6 +133,22 @@ async function askTypedKey(io: StepIO, provider: SetupProvider, target: KeyTarge
 }
 
 /**
+ * The choice after a provider is picked.
+ * @param next - the picked provider.
+ * @param earlier - the earlier answer, whose endpoint, model and key source are offered again for the same provider when the section runs on its own.
+ * @param draft - the run's answers, whose use case sets where the key comes from at first.
+ * @returns the choice and the next question.
+ */
+function pickProvider(next: SetupProvider, earlier: ModelProviderAnswer | null, draft: Draft): { readonly choice: Choice, readonly next: Question } {
+  const kept = draft.phase === 'single' && earlier !== null && earlier.id === next.id ? earlier : undefined
+  const fresh: ModelCredential = draft.answers.useCase === 'automation' ? { source: 'environment', name: next.keyVariable } : { source: 'prompt' }
+  return {
+    choice: { provider: next, baseURL: kept?.baseURL ?? null, model: kept?.model ?? null, credential: kept?.credential ?? fresh, secret: undefined, failure: undefined },
+    next: next.adapter === 'custom' ? 'endpoint' : 'source',
+  }
+}
+
+/**
  * Ask one question of the section.
  * @param question - the question.
  * @param io - the questions; the first one's go back to the previous section, later ones to the section's earlier question.
@@ -113,22 +161,30 @@ async function askTypedKey(io: StepIO, provider: SetupProvider, target: KeyTarge
 async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choice, draft: Draft, environment: SectionEnvironment, catalog: ProviderCatalog): Promise<{ readonly choice: Choice, readonly next: Question } | Back> {
   const earlier = draft.answers.modelProvider
   const provider = choice.provider as SetupProvider
-  const afterKey = (): Question => (asksModel(provider, draft.mode) ? 'model' : 'done')
+  const afterKey = (): Question => (asksModel(provider, draft.phase) ? 'model' : 'done')
   switch (question) {
     case 'provider': {
+      io.note(choiceNote([
+        { label: `${SETUP_PROVIDERS['deepseek-official'].label}${RECOMMENDED}`, lines: ['Delorun\'s default models, the ones it is tuned for.', 'Change later: delorun setup key.'] },
+        { label: 'More providers', lines: ['Anthropic, OpenAI, Google Gemini and others, or any server that speaks the OpenAI API.'] },
+        { label: 'Choose later', lines: ['The studio opens, but chats cannot answer until you run delorun setup key.'] },
+      ]), 'Model provider')
+      const initial = earlier === null ? NO_PROVIDER : earlier.id === SETUP_DEFAULT_PROVIDER_ID ? SETUP_DEFAULT_PROVIDER_ID : MORE_PROVIDERS
       const picked = await io.select('Which model provider should Delorun use?', [
-        ...PROVIDERS_BY_LABEL.map(each => ({ value: each.id, label: each.label, hint: each.adapter === 'custom' ? 'a server that speaks OpenAI\'s Chat Completions API; asks its base URL and model' : undefined })),
-        { value: NO_PROVIDER, label: 'None for now', hint: 'add one later with delorun setup key or in the studio\'s Settings → Models' },
-      ], earlier?.id ?? NO_PROVIDER)
+        { value: SETUP_DEFAULT_PROVIDER_ID, label: `${SETUP_PROVIDERS[SETUP_DEFAULT_PROVIDER_ID].label}${RECOMMENDED}` },
+        { value: MORE_PROVIDERS, label: 'More providers' },
+        { value: NO_PROVIDER, label: 'Choose later' },
+      ], initial)
       if (picked === BACK) return BACK
       if (picked === NO_PROVIDER) return { choice: { ...choice, provider: undefined }, next: 'done' }
-      const next = SETUP_PROVIDERS[picked]
-      // The earlier answer's endpoint, model and key source are offered again only for the same provider.
-      const kept = earlier !== null && earlier.id === next.id ? earlier : undefined
-      return {
-        choice: { provider: next, baseURL: kept?.baseURL ?? null, model: kept?.model ?? null, credential: kept?.credential ?? { source: 'prompt' }, secret: undefined, failure: undefined },
-        next: next.adapter === 'custom' ? 'endpoint' : 'source',
-      }
+      if (picked === MORE_PROVIDERS) return { choice, next: 'more-providers' }
+      return pickProvider(SETUP_PROVIDERS[picked], earlier, draft)
+    }
+    case 'more-providers': {
+      const others = PROVIDERS_BY_LABEL.filter(each => each.id !== SETUP_DEFAULT_PROVIDER_ID)
+      const [first] = others as [SetupProvider, ...SetupProvider[]]
+      const picked = await io.select('Which provider?', others.map(each => ({ value: each.id, label: each.label, hint: each.adapter === 'custom' ? 'a server that speaks OpenAI\'s Chat Completions API; asks its base URL and model' : undefined })), earlier !== null && earlier.id !== SETUP_DEFAULT_PROVIDER_ID ? earlier.id : first.id)
+      return picked === BACK ? BACK : pickProvider(SETUP_PROVIDERS[picked], earlier, draft)
     }
     case 'endpoint': {
       const entered = await io.text('Base URL of the endpoint', choice.baseURL ?? '', baseURLProblem)
@@ -143,14 +199,17 @@ async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choi
       return entered === BACK ? BACK : { choice: { ...choice, model: entered.trim() }, next: 'source' }
     }
     case 'source': {
-      const source = await io.select(`Where does the ${provider.label} API key come from?`, [
-        { value: 'prompt', label: 'Enter the key now', hint: 'stored in the home\'s credentials document' },
-        { value: 'environment', label: `Read ${provider.keyVariable} from the environment at each start` },
+      const automation = draft.answers.useCase === 'automation'
+      io.note(keySourceNote(provider), `${provider.label} API key`)
+      const source = await io.select(`How should Delorun get the ${provider.label} API key?`, [
+        { value: 'prompt', label: `Paste it now${automation ? '' : RECOMMENDED}` },
+        { value: 'environment', label: `Use ${provider.keyVariable}${automation ? RECOMMENDED : ''}` },
       ], choice.credential.source)
       if (source === BACK) return BACK
       if (source === 'prompt') return { choice: { ...choice, credential: { source: 'prompt' } }, next: 'key' }
       const credential = { source: 'environment', name: provider.keyVariable } as const
       const value = environment.env[provider.keyVariable] ?? ''
+      if (value === '') io.note(unsetVariableNote(provider.keyVariable), 'Key variable')
       if (environment.checkEnvironmentKey && value !== '') {
         const result = await environment.checkKey(keyTarget(provider, choice.baseURL, catalog), value)
         if (!result.ok) {
@@ -192,7 +251,7 @@ function answerOf(choice: Choice): ModelProviderAnswer | null {
  * @returns where the key comes from.
  */
 function keySource(answer: ModelProviderAnswer): string {
-  return answer.credential.source === 'prompt' ? 'key entered now' : `key read from ${answer.credential.name} at each start`
+  return answer.credential.source === 'prompt' ? 'pasted now' : `read from ${answer.credential.name} at each start`
 }
 
 /**
@@ -204,7 +263,7 @@ export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupS
   return {
     id: 'key',
     title: 'Model provider and key',
-    mode: 'quick',
+    plan: { local: 'asked', remote: 'asked', automation: 'asked' },
     asks: () => true,
     appliesTo: () => true,
     async ask(io, draft, environment): Promise<SectionAnswer | Back> {
@@ -234,11 +293,11 @@ export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupS
     },
     review(answers: SetupAnswers, draft?: Draft) {
       const answer = answers.modelProvider
-      if (answer === null) return 'Model provider: none for now; add one later with delorun setup key'
+      if (answer === null) return 'Model: chosen later; chats cannot answer until delorun setup key'
       const provider = SETUP_PROVIDERS[answer.id]
       const endpoint = answer.baseURL === null ? '' : ` at ${answer.baseURL}`
-      const model = answer.model === null ? 'the profile\'s default model' : `model ${answer.model}`
-      return `Model provider: ${provider.label}${endpoint}, ${model}, ${keySource(answer)}${draft?.keyCheckFailure === undefined ? '' : `, not verified: ${draft.keyCheckFailure}`}`
+      const model = answer.model === null ? 'default model' : answer.model
+      return `Model: ${provider.label}${endpoint}, ${model}. Key: ${keySource(answer)}${draft?.keyCheckFailure === undefined ? '.' : `, not verified: ${draft.keyCheckFailure}`}`
     },
     async apply(context, answers) {
       const answer = answers.modelProvider

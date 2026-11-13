@@ -21,12 +21,12 @@ Delorun works with the model provider you choose. Setup asks which one to use, t
 
 ## Choose a provider in setup
 
-Setup's model provider question is `Which model provider should Delorun use?`. Quick and Full both ask it, then:
+Setup's model provider question is `Which model provider should Delorun use?`, with DeepSeek (recommended), More providers and Choose later. Every use case asks it, then:
 
 1. For an OpenAI-compatible endpoint, the base URL and the model id.
-2. `Where does the <provider> key come from?`: **Enter the key now**, which stores it in your home's credentials file, or **Read `<VARIABLE>` from the environment at each start**.
+2. `How should Delorun get the <provider> API key?`: **Paste it now**, which stores it in your home's credentials file, or **Use `<VARIABLE>`**, which reads that environment variable at each start. Setup names the provider's key page and warns at once when the variable is unset.
 3. For a typed key, the key itself, which setup checks before it stores it.
-4. The model new chats start on, from the provider's model list, starting on a current general model of that provider. Full asks it for every provider; Quick asks it for every provider except DeepSeek, which starts on the profile's default model, DeepSeek-V4.1-Flash.
+4. The model new chats start on, from the provider's model list, starting on a current general model of that provider. Setup asks it for every provider except DeepSeek, which starts on the profile's default model, DeepSeek-V4.1-Flash; `delorun setup key` asks it for DeepSeek too.
 
 **None for now** changes no provider setting: new chats keep the model the profile already uses, DeepSeek-V4.1-Flash on a new profile, and setup tells you which model that is and how to add a provider. You can change the model of any chat in the studio's model picker.
 
@@ -35,7 +35,7 @@ Setup's model provider question is `Which model provider should Delorun use?`. Q
 | Provider | Id for `--provider` | Key variable | What setup asks |
 | --- | --- | --- | --- |
 | Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | The key and the model |
-| DeepSeek | `deepseek-official` | `DEEPSEEK_API_KEY` | The key; Full also asks the model |
+| DeepSeek | `deepseek-official` | `DEEPSEEK_API_KEY` | The key; `delorun setup key` also asks the model |
 | Google Gemini | `google` | `GEMINI_API_KEY` | The key and the model |
 | Groq | `groq` | `GROQ_API_KEY` | The key and the model |
 | Mistral | `mistral` | `MISTRAL_API_KEY` | The key and the model |

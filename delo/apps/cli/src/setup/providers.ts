@@ -49,6 +49,8 @@ export interface SetupProvider {
   readonly keyVariable: string
   /** How setup checks a key. */
   readonly check: KeyCheckSpec
+  /** The provider's page for creating a key, which answered a request when it was added; `undefined` when none is named. */
+  readonly keyPage: string | undefined
   /**
    * The model the model question starts on: a current general chat model of the provider's installed catalog, or for
    * DeepSeek the profile's default; `undefined` for the custom endpoint, whose models setup does not know.
@@ -58,17 +60,17 @@ export interface SetupProvider {
 
 /** The providers setup offers, by id. Each catalog provider's endpoint is read from pi-ai's installed catalog. */
 export const SETUP_PROVIDERS: Readonly<Record<SetupProviderId, SetupProvider>> = {
-  'anthropic': { id: 'anthropic', label: 'Anthropic', adapter: 'catalog', keyVariable: 'ANTHROPIC_API_KEY', check: { kind: 'anthropic', path: '/v1/models?limit=1' }, defaultModel: 'claude-sonnet-5-5' },
-  'deepseek-official': { id: 'deepseek-official', label: 'DeepSeek', adapter: 'deepseek', keyVariable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, check: { kind: 'deepseek', path: '/models' }, defaultModel: 'deepseek-flash' },
-  'google': { id: 'google', label: 'Google Gemini', adapter: 'catalog', keyVariable: 'GEMINI_API_KEY', check: { kind: 'google', path: '/models?pageSize=1' }, defaultModel: 'gemini-3.8-flash' },
-  'groq': { id: 'groq', label: 'Groq', adapter: 'catalog', keyVariable: 'GROQ_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'openai/gpt-oss-120b' },
-  'mistral': { id: 'mistral', label: 'Mistral', adapter: 'catalog', keyVariable: 'MISTRAL_API_KEY', check: { kind: 'bearer', path: '/v1/models' }, defaultModel: 'mistral-large-latest' },
-  'moonshotai': { id: 'moonshotai', label: 'Moonshot AI', adapter: 'catalog', keyVariable: 'MOONSHOT_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'kimi-k3' },
-  'openai': { id: 'openai', label: 'OpenAI', adapter: 'catalog', keyVariable: 'OPENAI_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'gpt-6.1-sol' },
-  'openai-compatible': { id: 'openai-compatible', label: 'OpenAI-compatible endpoint', adapter: 'custom', keyVariable: 'OPENAI_COMPATIBLE_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: undefined },
-  'openrouter': { id: 'openrouter', label: 'OpenRouter', adapter: 'catalog', keyVariable: 'OPENROUTER_API_KEY', check: { kind: 'bearer', path: '/key' }, defaultModel: 'anthropic/claude-sonnet-5.5' },
-  'together': { id: 'together', label: 'Together AI', adapter: 'catalog', keyVariable: 'TOGETHER_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'Qwen/Qwen3.7-Max' },
-  'xai': { id: 'xai', label: 'xAI', adapter: 'catalog', keyVariable: 'XAI_API_KEY', check: { kind: 'bearer', path: '/models' }, defaultModel: 'grok-4.7' },
+  'anthropic': { id: 'anthropic', label: 'Anthropic', adapter: 'catalog', keyVariable: 'ANTHROPIC_API_KEY', check: { kind: 'anthropic', path: '/v1/models?limit=1' }, keyPage: 'https://platform.claude.com/settings/keys', defaultModel: 'claude-sonnet-5-5' },
+  'deepseek-official': { id: 'deepseek-official', label: 'DeepSeek', adapter: 'deepseek', keyVariable: SETUP_DEFAULT_CREDENTIAL_VARIABLE, check: { kind: 'deepseek', path: '/models' }, keyPage: undefined, defaultModel: 'deepseek-flash' },
+  'google': { id: 'google', label: 'Google Gemini', adapter: 'catalog', keyVariable: 'GEMINI_API_KEY', check: { kind: 'google', path: '/models?pageSize=1' }, keyPage: 'https://aistudio.google.com/apikey', defaultModel: 'gemini-3.8-flash' },
+  'groq': { id: 'groq', label: 'Groq', adapter: 'catalog', keyVariable: 'GROQ_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://console.groq.com/keys', defaultModel: 'openai/gpt-oss-120b' },
+  'mistral': { id: 'mistral', label: 'Mistral', adapter: 'catalog', keyVariable: 'MISTRAL_API_KEY', check: { kind: 'bearer', path: '/v1/models' }, keyPage: 'https://console.mistral.ai/api-keys', defaultModel: 'mistral-large-latest' },
+  'moonshotai': { id: 'moonshotai', label: 'Moonshot AI', adapter: 'catalog', keyVariable: 'MOONSHOT_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://platform.kimi.ai/console/api-keys', defaultModel: 'kimi-k3' },
+  'openai': { id: 'openai', label: 'OpenAI', adapter: 'catalog', keyVariable: 'OPENAI_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: undefined, defaultModel: 'gpt-6.1-sol' },
+  'openai-compatible': { id: 'openai-compatible', label: 'OpenAI-compatible endpoint', adapter: 'custom', keyVariable: 'OPENAI_COMPATIBLE_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: undefined, defaultModel: undefined },
+  'openrouter': { id: 'openrouter', label: 'OpenRouter', adapter: 'catalog', keyVariable: 'OPENROUTER_API_KEY', check: { kind: 'bearer', path: '/key' }, keyPage: 'https://openrouter.ai/keys', defaultModel: 'anthropic/claude-sonnet-5.5' },
+  'together': { id: 'together', label: 'Together AI', adapter: 'catalog', keyVariable: 'TOGETHER_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: 'https://api.together.ai/settings/api-keys', defaultModel: 'Qwen/Qwen3.7-Max' },
+  'xai': { id: 'xai', label: 'xAI', adapter: 'catalog', keyVariable: 'XAI_API_KEY', check: { kind: 'bearer', path: '/models' }, keyPage: undefined, defaultModel: 'grok-4.7' },
 }
 
 /** The providers in the order setup lists them: by label, so none is placed ahead of another. */

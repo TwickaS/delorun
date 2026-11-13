@@ -3,7 +3,7 @@
  * not a link to one, and the Delo home holds no chat; its question shown after
  * the preview of the data, defaulting to no; its answer applied by carrying
  * out exactly the plan that preview showed, with the data alone; and a refusal
- * reported with its code. A Quick setup run with a stock home asks it between
+ * reported with its code. A setup run with a stock home asks it between
  * the privacy note and the key.
  */
 import { existsSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -20,7 +20,7 @@ import { profileDirectory } from '../../src/profile.ts'
 import { runSetup } from '../../src/setup/index.ts'
 import { defaultRegistry, type Draft, type SectionEnvironment } from '../../src/setup/sections.ts'
 import { BACK, stepIO } from '../../src/setup/steps.ts'
-import { fakeEnding, scriptedPrompter, type Answer, type EndingLog, type Recording } from '../setup/support.ts'
+import { scriptedPrompter, type Answer, type Recording } from '../setup/support.ts'
 import { chatLog, fresh, put, removeScratch, snapshot, STOCK_SECRET, stockHome } from './support.ts'
 
 let person: string
@@ -59,7 +59,7 @@ function environment(env: Record<string, string | undefined> = { HOME: person })
  * @returns what the section returned.
  */
 function ask(script: readonly Answer[], answers: SetupAnswers = SETUP_DEFAULTS): ReturnType<typeof section.ask> {
-  const draft: Draft = { mode: 'quick', answers, secret: undefined }
+  const draft: Draft = { phase: 'main', answers, secret: undefined }
   return section.ask(stepIO(scriptedPrompter(script, recording), true), draft, environment())
 }
 
@@ -75,7 +75,7 @@ function context(env: Record<string, string | undefined> = { HOME: person }): Pa
 const YES = { ...SETUP_DEFAULTS, importStockHome: true }
 
 /** The question the section asks. */
-const QUESTION = 'select: Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.'
+const QUESTION = 'select: Copy your DeepSeek Harness chats, attachments and workspace list? Your DeepSeek Harness folder is only read. You can also do this later with delorun import-home.'
 
 describe('setup\'s import section', () => {
   it('applies only when the stock home is a directory and the Delo home holds no chat', () => {
@@ -190,26 +190,24 @@ describe('setup\'s import section', () => {
   it('passes on a failure that is not a refusal', async () => {
     stockHome(join(person, '.dsh'))
     const failing = importSection({ deloBundles: [], exclusive: () => Promise.reject(new Error('the lock failed')) })
-    await failing.ask(stepIO(scriptedPrompter(['yes'], recording), true), { mode: 'quick', answers: SETUP_DEFAULTS, secret: undefined }, environment())
+    await failing.ask(stepIO(scriptedPrompter(['yes'], recording), true), { phase: 'main', answers: SETUP_DEFAULTS, secret: undefined }, environment())
     await expect(failing.apply(context(), YES)).rejects.toThrow('the lock failed')
   })
 
-  it('sits between the privacy note and the key in a Quick setup, and copies the chats before the key is asked for', async () => {
+  it('sits between the privacy note and the key in the main flow, and copies the chats before the key is asked for', async () => {
     stockHome(join(person, '.dsh'))
-    const ending: EndingLog = { spawned: [], started: [], opened: 0 }
     const code = await runSetup({
       home,
       profile: 'default',
       output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
       env: { HOME: person, DEEPSEEK_API_KEY: 'env-key' },
-      form: { kind: 'interactive', prompter: scriptedPrompter(['quick', 'yes', 'deepseek-official', 'environment', 'safer', 'save', false], recording) },
+      form: { kind: 'interactive', prompter: scriptedPrompter(['local', 'yes', 'deepseek-official', 'environment', 'safer', 'save'], recording) },
       registry: defaultRegistry(),
       keyCheck: async () => ({ ok: true }),
       portIsFree: async () => true,
-      ending: fakeEnding(ending),
     })
     expect(code).toBe(EXIT.ok)
-    expect(recording.asked.slice(0, 3)).toEqual(['select: How do you want to set up Delorun?', QUESTION, 'select: Which model provider should Delorun use?'])
+    expect(recording.asked.slice(0, 3)).toEqual(['select: How will you use Delorun?', QUESTION, 'select: Which model provider should Delorun use?'])
     expect(readFileSync(join(home, 'sessions/_no-cwd/s2/session.v4.jsonl.zstd'))).toEqual(chatLog('s2', undefined))
     expect(existsSync(join(home, 'profiles/web/package.json'))).toBe(false)
     const record = JSON.parse(readFileSync(join(profileDirectory(home, 'default'), 'setup-answers.json'), 'utf8')) as SetupAnswers

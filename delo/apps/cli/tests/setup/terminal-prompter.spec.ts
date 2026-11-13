@@ -77,7 +77,7 @@ describe('the terminal prompter', () => {
     await expect(prompter.select('Pick', [], 'a')).rejects.toBeInstanceOf(SetupCancelled)
     await expect(prompter.confirm('Sure?', true)).rejects.toBeInstanceOf(SetupCancelled)
     await expect(prompter.secret('Key')).rejects.toBeInstanceOf(SetupCancelled)
-    await expect(prompter.text('Name', '', () => undefined)).rejects.toThrow('delorun setup: cancelled')
+    await expect(prompter.text('Name', '', () => undefined)).rejects.toThrow('Setup cancelled. Nothing was saved.')
   })
 })
 

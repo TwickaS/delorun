@@ -21,6 +21,6 @@ describe('setup\'s import section', () => {
   it('passes on a failure of the plan that is not a refusal', async () => {
     const section = importSection({ deloBundles: [] })
     const environment = { env: { HOME: '/' }, home: '/nowhere', profile: 'default', profileExists: false, profileNameTaken: () => false, checkKey: async () => ({ ok: true as const }), checkEnvironmentKey: false, portIsFree: async () => true }
-    await expect(section.ask(stepIO(scriptedPrompter([], { screen: [], asked: [] }), true), { mode: 'quick', answers: SETUP_DEFAULTS, secret: undefined }, environment)).rejects.toThrow('an unexpected failure')
+    await expect(section.ask(stepIO(scriptedPrompter([], { screen: [], asked: [] }), true), { phase: 'main', answers: SETUP_DEFAULTS, secret: undefined }, environment)).rejects.toThrow('an unexpected failure')
   })
 })

@@ -9,14 +9,14 @@ English | [中文](c11-setup-answers.zh.md)
 <a id="summary"></a>
 ## Summary
 
-Setup answers are what `delorun setup` asks, the schema that stores each answer, the profile writes each answer produces, and the `--yes` and `--config` forms that give the same answers without a terminal. Setup opens with Quick or Full. Quick asks the privacy note, the stock-home import when a stock home exists, the model provider with its key and the prompts question; Full also asks whether to check for new releases and adds the sections that change the computer. Every question takes effect or is not asked. Delo has no telemetry of its own, and the privacy note says that upstream's two opt-ins are off and are changed in Settings → Privacy, where the studio's consent screen owns them, and what the release check requests. A release check turned off in setup is off before Delorun first starts, so it makes no request.
+Setup answers are what `delorun setup` asks, the schema that stores each answer, the profile writes each answer produces, and the `--yes` and `--config` forms that give the same answers without a terminal. Setup opens with "How will you use Delorun?" The answer, `useCase`, sets the defaults and decides which questions the main flow asks: the privacy note, the stock-home import when a stock home exists, the model provider with its key and the prompts question for everyone, remote access for the phone use case, and the release check, background running, the profile name and the port under the review screen's "More settings". Every question takes effect or is not asked. Delo has no telemetry of its own, and the privacy note says that upstream's two opt-ins are off and are changed in Settings → Privacy, where the studio's consent screen owns them, and what the release check requests. A release check turned off in setup is off before Delorun first starts, so it makes no request.
 
 <a id="status"></a>
 ## Status
 
-`delorun setup` with its Quick and Full flows, the `--yes` and `--config` forms and the profile writes below are built; the stock-home `import` section and the `reach` section for Tailscale on the person's own tailnet are built too; the other reach options, the passkey and OIDC identity factors and the runtime section are not, and the opt-ins stay off only in the CLI profile.
+`delorun setup` with its use-case flow, the `--yes` and `--config` forms and the profile writes below are built; the stock-home `import` section and the `reach` section for Tailscale on the person's own tailnet are built too; the other reach options, the passkey and OIDC identity factors and the runtime section are not, and the opt-ins stay off only in the CLI profile.
 
-- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`, where `reach` offers only `none` or `tailscale-private` with the factor `tailnet-membership`; the eleven model providers of [Model providers](#model-providers), each with its live key check and its profile rows; the schema with its refusals of removed keys, of a provider setup does not offer, of a model the provider's installed catalog does not list, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile; the `updateCheck` answer, which Full setup asks and `delorun setup privacy` changes, written as the `delo-update-check` row's switch before the first start.
+- **Built and reached:** the sections `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`, where `reach` offers only `none` or `tailscale-private` with the factor `tailnet-membership`; the eleven model providers of [Model providers](#model-providers), each with its live key check and its profile rows; the schema with its refusals of removed keys, of a provider setup does not offer, of a model the provider's installed catalog does not list, of a reach option other than `none` in a document and of unknown fields; the live key check to the provider's origin with redirects refused; the writes that keep upstream's two opt-ins off in the CLI profile; the `updateCheck` answer, which More settings asks and `delorun setup privacy` changes, written as the `delo-update-check` row's switch before the first start.
 - **Not built:** the reach options `tailscale-funnel` and `self-hosted-relay`, the `passkey`, `oidc` and `tailnet` identity factors and the enrolment request; the runtime section; the feedback dialog and its send, because the CLI profile disables upstream's feedback rows, while setup's privacy note still prints the feedback statement; the rule that a failed key check's reason is not printed, because setup prints it (the reason names the origin and the HTTP status and holds no part of the key).
 - **Not reached by Delo's writes:** `delorun headless` runs upstream's headless profile, which carries none of these writes, so DeepSeek's session-log upload is on there by upstream's default and the requirement that the opt-ins are off does not hold for it.
 
@@ -28,7 +28,7 @@ The requirements and denial tests below that this list names as not built or rea
 - [Summary](#summary)
 - [Status](#status)
 - [Contract](#contract)
-  - [Modes and sections](#modes-and-sections)
+  - [Use cases and sections](#modes-and-sections)
   - [Questions](#questions)
   - [Model providers](#model-providers)
   - [Answer schema](#answer-schema)
@@ -44,23 +44,31 @@ The requirements and denial tests below that this list names as not built or rea
 ## Contract
 
 <a id="modes-and-sections"></a>
-### Modes and sections
+### Use cases and sections
 
-The first screen asks for **Quick** (preselected) or **Full**. Each topic is a registered section with an id, a title, a test for whether it applies on this computer, its question, its writes and an optional review line. Quick runs the sections marked `quick`; Full runs every section. `delorun setup <section>` runs one section again on a profile that is set up, and `delorun setup --list` lists them. Later packages add sections through the registry in `delo/apps/cli/src/setup/sections.ts`, each with an order that places it among the others.
+The first screen asks "How will you use Delorun?" with three options, each shown with plain lines for what it does, who it suits and how to change it later; the recommended option is marked "(recommended)":
 
-| Section | Mode | What it does |
+| `useCase` | Option | Defaults it sets |
 | --- | --- | --- |
-| `privacy` | Quick | Shows the privacy note. In Full and in `delorun setup privacy` it asks whether to check for new releases; in Quick it asks nothing and says how to reach that question before Delorun first starts. |
-| `import` | Quick | Shown only when `~/.dsh` is a directory, not a link, and the Delo home holds no chat: shows the data part of the stock-home import's preview, then asks "Copy your DeepSeek Harness chats, attachments and workspace list?". |
-| `key` | Quick | Asks the model provider, where its key comes from and the model new chats start on ([Model providers](#model-providers)). A typed key is checked with one live request before it is stored. |
-| `prompts` | Quick | Safer prompts, Same as stock, or Dangerous: full access without asking, which prints a warning, asks a yes-or-no that starts on No, and then asks for the exact phrase `full access everywhere`; anything else keeps the previous answer. |
-| `background` | Full | Whether Delorun keeps running after the terminal closes. |
-| `reach` | Full | Whether the studio is reachable from the person's phone over their own tailnet. A yes runs the Tailscale checks of `delorun reach on tailscale`, Funnel included, and shows the trust statement; a failed check leaves remote access off and names what to fix. Applying it writes the reach row with a fixed listener port. |
-| `profile` | Full | The profile's name and the studio's port. |
+| `local` | Just me, on this computer (recommended) | Background running on, remote access off. |
+| `remote` | Also from my phone or another device | As `local`, and the remote-access question is asked in the main flow, preselected on Yes. |
+| `automation` | For scripts and automation | Background running off, and the key comes from an environment variable at first. |
 
-Every question after the first can return to the one before it: a select or yes-or-no question offers "← Back", and a text or key question takes an empty entry as "go back". A review screen lists the answers before anything is written.
+Each topic is a registered section with an id, a title, a plan per use case, a test for whether it applies on this computer, its question, its writes and a review line. A plan is `asked` (the main flow asks it), `note` (the main flow shows its note and "More settings" asks the question), `more` (only "More settings" asks it) or `never`. The review screen lists every answer the use case keeps, the sentence "Nothing is saved until you choose Save and set up", and offers Save and set up, More settings (when a section remains) and Cancel. "More settings" asks every remaining section, then returns to the review. `delorun setup <section>` runs one section again on a profile that is set up, and `delorun setup --list` lists them. Later packages add sections through the registry in `delo/apps/cli/src/setup/sections.ts`, each with an order that places it among the others.
 
-A terminal run ends by offering to install the `delorun` command (it runs `npm install -g delorun@<version>` at the version the launcher named in `DELO_LAUNCHER_VERSION`, and prints that line when the person declines or the install fails; a run the launcher did not start offers no install), then starts Delorun in the background or in the terminal, as the `background` answer says, and opens the studio. It prints whether Delorun keeps running after the terminal closes, the studio's address, and `delorun status`, `delorun logs --follow` and `delorun stop`. On a computer with no display, or in an SSH session, it prints the address and the SSH port-forward line instead of opening a browser. `--yes` and `--config` start nothing and print the command to run.
+| Section | `local` | `remote` | `automation` | What it does |
+| --- | --- | --- | --- | --- |
+| `privacy` | `note` | `note` | `note` | Shows the privacy note. "More settings" and `delorun setup privacy` ask whether to check for new releases; the main flow asks nothing and says where to reach that question before Delorun first starts. |
+| `import` | `asked` | `asked` | `never` | Shown only when `~/.dsh` is a directory, not a link, and the Delo home holds no chat: shows the data part of the stock-home import's preview, then asks "Copy your DeepSeek Harness chats, attachments and workspace list?". |
+| `key` | `asked` | `asked` | `asked` | Asks the model provider (DeepSeek, More providers, or Choose later), where its key comes from, with the provider's key page when one is known and one line on what an environment variable is, and the model new chats start on ([Model providers](#model-providers)). A typed key is checked with one live request before it is stored. A key variable that is unset in the terminal produces a warning with the fix at once. DeepSeek's model is asked by `delorun setup key` only. |
+| `prompts` | `asked` | `asked` | `asked` | Ask me first (`safer`), Ask less (`stock`), or Never ask (dangerous), which is always listed last, prints a warning, asks a yes-or-no that starts on No, and then asks for the exact phrase `full access everywhere`; anything else keeps the previous answer. "← Back" from the confirmation returns to the prompts question. |
+| `background` | `more` | `more` | `never` | Whether Delorun keeps running after the terminal closes. |
+| `reach` | `more` | `asked` | `never` | Whether the studio is reachable from the person's phone over their own tailnet. A yes runs the Tailscale checks of `delorun reach on tailscale`, Funnel included, and shows the trust statement; a failed check leaves remote access off and names what to fix. Applying it writes the reach row with a fixed listener port. |
+| `profile` | `more` | `more` | `more` | The profile's name and the studio's port. |
+
+Every question after the first can return to the nearest earlier question that was asked, including from the first "More settings" question to the review: a select or yes-or-no question offers "← Back", and a text or key question takes an empty entry as "go back". A review screen lists the answers before anything is written.
+
+Every form ends the same way and starts nothing: it prints "Delorun is set up. Nothing is running yet." and numbered next steps for the use case. For `local` and `remote`: start Delorun and open the studio with `delorun`, and the guide's first-chat page (`https://docs.delorun.com/guide/first-chat`). For `remote` also `delorun devices approve`, or how to turn remote access on when the Tailscale check failed. For `automation`: `delorun headless "your task"`. A step comes first when it is needed: installing the `delorun` command at the launcher's version (`DELO_LAUNCHER_VERSION`) when `npx` started the run, adding a model key when none was chosen, or setting a key variable that is unset. The last lines say how to change an answer (`delorun setup <section>`, `delorun setup --list`) and name `delorun doctor`. An interrupt (Ctrl-C) at any question exits with code 130 and prints "Setup cancelled. Nothing was saved. Run delorun to start again."; an interrupt while an earlier run's answers are kept says that instead.
 
 <a id="questions"></a>
 ### Questions
@@ -69,15 +77,16 @@ Setup asks these questions, in this order. The default applies when the person a
 
 | Question | Section | Answer | Default |
 | --- | --- | --- | --- |
-| Check for new releases | `privacy` | Yes or no. Asked in Full, with the note's facts as the hint. | Yes |
+| How will you use Delorun? | none | `local`, `remote` or `automation`. | `local`; `--yes` keeps it. |
+| Check for new releases | `privacy` | Yes or no. Asked under "More settings", with each choice's lines. | Yes |
 | Copy your DeepSeek Harness chats, attachments and workspace list? | `import` | Yes or no, after the preview. | No. |
-| Model provider | `key` | One of the providers of [Model providers](#model-providers), or none for now. | DeepSeek in a terminal; none with `--yes`. |
-| Base URL and model id | `key` | Asked for an `openai-compatible` endpoint only, in both modes. | None. |
+| Model provider | `key` | DeepSeek, one of the other providers of [Model providers](#model-providers) behind More providers, or Choose later. | DeepSeek in a terminal; none with `--yes`. |
+| Base URL and model id | `key` | Asked for an `openai-compatible` endpoint only. | None. |
 | Model key | `key` | Typed at the prompt, or read from the provider's variable at each start. | Typed at the prompt. |
-| Model | `key` | One model of the provider's installed catalog. Asked in Full, and in Quick for every provider but DeepSeek, whose default is the profile's. | The provider's recommended model in setup's provider table, a current general chat model its catalog lists; for DeepSeek, the profile's default. |
-| Prompts | `prompts` | Safer prompts, Same as stock, or Dangerous; `--yes` never selects Dangerous. | Safer prompts |
-| Keep running in the background | `background` | Yes or no. | Yes |
-| Reach this studio from your phone over your own tailnet (Tailscale)? | `reach` | Yes or no. | No |
+| Model | `key` | One model of the provider's installed catalog. Asked for every provider but DeepSeek, whose default is the profile's and which `delorun setup key` asks. | The provider's recommended model in setup's provider table, a current general chat model its catalog lists; for DeepSeek, the profile's default. |
+| Prompts | `prompts` | Ask me first (`safer`), Ask less (`stock`), or Never ask (dangerous); `--yes` never selects dangerous. | Ask me first |
+| Keep running in the background | `background` | Yes or no. | Yes; No for `automation`, which does not ask. |
+| Open Delorun from your phone or another device over Tailscale? | `reach` | Yes or no. | No; the question starts on Yes for `remote`. |
 | Profile name and port | `profile` | A profile name and a free port from 1024 to 65535. | The selected profile, and 3080. |
 
 Reach beyond the person's tailnet, a passkey or OIDC identity factor and the runtime are not asked yet; their packages add them. Setup reads a stock home only to copy from it, and never modifies it. Setup's import copies the data alone: no profile, settings layer, instructions, skill or stored key, which can change what Delo runs or what the agent is told; `delorun import-home` copies each of those after its own yes.
@@ -117,6 +126,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 ```json
 {
   "schemaVersion": 4,
+  "useCase": "local",
   "modelProvider": { "id": "anthropic", "credential": { "source": "environment", "name": "ANTHROPIC_API_KEY" }, "baseURL": null, "model": "claude-sonnet-5" },
   "prompts": "safer",
   "background": true,
@@ -131,6 +141,7 @@ An answers document is a JSON object with the fields below. The same schema is u
 | Field | Type and values | Default | Rule |
 | --- | --- | --- | --- |
 | `schemaVersion` | Integer `4`, or `2` or `3` for a document written before the provider question. | `4` | Setup refuses any other value. A version-2 document has no `updateCheck`, reads as `true`, and is refused when it carries one. A version-2 or version-3 document's `modelProvider` holds `id` and `credential` only, and reads as `deepseek-official` with its credential and the profile's default model, because setup of those versions applied DeepSeek's key and no other provider. One that names another id is refused with a message that it needs schema version 4. |
+| `useCase` | `local`, `remote` or `automation`. | `local` | How the person uses Delorun. The interactive form sets the defaults and the questions from it; `--yes` and `--config` store it and ask nothing. A `remote` document cannot enable reach, so remote access is turned on with `delorun setup reach`. A record written before the use-case question has none and reads as `local`; its `mode` key (`quick` or `full`, written by the setup that asked Quick or Full) is read and ignored, and any other `mode` value is refused. |
 | `modelProvider` | An object with the four fields below, or `null` for no provider. | The object with each field's default in a terminal; `null` with `--yes` unless `--provider` is given. | `null` writes no provider row and leaves the rows already there, so new chats keep the model the profile selected; setup says which. |
 | `modelProvider.id` | An id of [Model providers](#model-providers). | `deepseek-official` | Any other id is refused, naming the ids setup accepts. |
 | `modelProvider.credential` | `{ "source": "prompt" }` or `{ "source": "environment", "name": "<variable>" }`. | `{ "source": "prompt" }` | `prompt` is accepted only in the interactive form. |
@@ -159,7 +170,7 @@ Each answer produces the writes below. Config writes go to the per-profile `cord
 | --- | --- | --- |
 | `modelProvider` | A typed key goes to upstream's credential store, `.credentials.yaml` under the home, at mode 0600, under the provider's key variable. A key read from the environment is stored nowhere. | The home. |
 | `modelProvider` | The rows in the form Settings → Models and the model picker save them: DeepSeek with `DEEPSEEK_API_KEY` and the profile's default model writes no row, as stock DeepSeek Harness composes the profile; another variable sets `apiKeyEnv` on `llm-deepseek`. A pi-ai provider sets its route under `llm-pi-ai`'s `providers`, keeping the routes already there: `apiKeyEnv` for a catalog route, and also `displayName`, `api: openai-completions`, `baseURL` and the model in `models` for `openai-compatible`. A named model sets `agent-default-model` to the provider and model without a reasoning effort. `null` writes none of these rows. | The profile's `cordis.patch.yml`. |
-| `prompts` | `config.enabled` of the rows `delo-permission-defaults`, `delo-instruction-consent`, `delo-mcp-consent` and `delo-schedule-consent`, set to each switch's Delo default (`safer`) or parity value (`stock`) in contract C16's registry. With `safer` the person allows a workspace's full access, and a new stdio MCP server, at the home's computer: in the studio's Settings, Permissions, or with `delorun workspace full-access` and `delorun mcp`; with `stock` neither consent is mounted and those surfaces say the profile does not ask. The fetch guard is a refusal, not a prompt, and no answer changes it; nor does any answer change the external-agent consent (`delo-delegation-consent`), which the person switches in Settings, Permissions. With `dangerous` the three consent rows take their parity values, `delo-permission-defaults` stays on, and every answer sets its `fullAccessEverywhere` to whether the answer is `dangerous`; `dangerous` also writes the grant file `<home>/secrets/permission-defaults/full-access-everywhere.json` (mode 0600, `{ "v": 1, "grantedAt", "warning": 1 }`) under the permission store's lock after the rows, and `safer` and `stock` remove it. Full access is available everywhere only while both the row setting and a valid grant file hold. | The profile's `cordis.patch.yml`, and for the grant file the home's `secrets/permission-defaults/`. |
+| `prompts` | `config.enabled` of the rows `delo-permission-defaults`, `delo-instruction-consent`, `delo-mcp-consent` and `delo-schedule-consent`, set to each switch's Delo default (`safer`, Ask me first) or parity value (`stock`, Ask less) in contract C16's registry. With `safer` the person allows a workspace's full access, and a new stdio MCP server, at the home's computer: in the studio's Settings, Permissions, or with `delorun workspace full-access` and `delorun mcp`; with `stock` neither consent is mounted and those surfaces say the profile does not ask. The fetch guard is a refusal, not a prompt, and no answer changes it; nor does any answer change the external-agent consent (`delo-delegation-consent`), which the person switches in Settings, Permissions. With `dangerous` the three consent rows take their parity values, `delo-permission-defaults` stays on, and every answer sets its `fullAccessEverywhere` to whether the answer is `dangerous`; `dangerous` also writes the grant file `<home>/secrets/permission-defaults/full-access-everywhere.json` (mode 0600, `{ "v": 1, "grantedAt", "warning": 1 }`) under the permission store's lock after the rows, and `safer` and `stock` remove it. Full access is available everywhere only while both the row setting and a valid grant file hold. | The profile's `cordis.patch.yml`, and for the grant file the home's `secrets/permission-defaults/`. |
 | `background` | Recorded in the answers record `setup-answers.json`; the start commands read it. | The profile directory. |
 | `profile.name` | The CLI profile is created under this name. | The home. |
 | `profile.port` | The `webserver` row with the port, restating the Web bundle's other keys. Not written for the default port. | The profile's `cordis.patch.yml`. |
@@ -174,7 +185,7 @@ Upstream's session-telemetry row `session-telemetry-otel` is not an answer. In u
 <a id="yes-and-config-forms"></a>
 ### The --yes and --config forms
 
-`--yes` accepts every default but the provider, and applies no answer other than the defaults, the provider flags and `--no-update-check`. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
+`--yes` keeps the `local` use case, accepts every default but the provider, and applies no answer other than the defaults, the provider flags and `--no-update-check`. Without `--provider` it sets up no provider, whatever keys the environment holds, and prints how to add one: `delorun setup key` in a terminal or with the provider flags, or the studio's Settings → Models. `--provider <id>` names a provider of [Model providers](#model-providers), `--model <id>` its model, which every provider but DeepSeek needs, `--base-url <url>` the endpoint of `openai-compatible` and of no other provider, and `--key-env <NAME>` the variable the key is read from at each start, which defaults to the provider's key variable. A key is never accepted on the command line, and a `--key-env` value that is not a variable name is refused without being echoed. When the variable is unset, setup stops with a typed error that names it. `delorun setup key` takes the same flags on a profile that is set up and then asks nothing. `--check-key` without a provider is refused with the usage code.
 
 `--config <file>` reads an answers document with the schema above, and applies its answers under the same rules as `--yes`; its provider is the one `modelProvider` names, and the provider flags are refused beside it; `--no-update-check` turns the release check off whatever the document says. A document whose `reach.option` is not `none` is refused with a typed error that names the field, and so is a document whose `importStockHome` is `true`. A document that carries a removed key is refused with a message that names the removed keys. A document that carries a credential value, in any field, is refused without echoing that value.
 
@@ -205,7 +216,7 @@ The statements about recovery and Docker belong to the sections that add those t
 <a id="compatibility"></a>
 ## Compatibility
 
-The answers schema is versioned by `schemaVersion`, which is `4`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Setup reads a version-2 or version-3 document as version 4, as [Answer schema](#answer-schema) describes, and records it as version 4. Setup refuses an answers document whose version it does not know.
+The answers schema is versioned by `schemaVersion`, which is `4`. A change that adds a question with a safe default keeps the version when an older reader that ignores the new field writes the same profile; `useCase` is such a field, because the answers it sets are stored beside it and the profile files do not depend on it. A change that alters the meaning of an existing answer, or that removes a field, increments the version; version 2 removed five fields. Version 3 added `updateCheck`: a reader that ignored `false` would leave the release check on, so the version increments. Version 4 gave `modelProvider.id` its meaning and added `baseURL`, `model` and `null`: a version-3 reader ignores the id and would store an Anthropic key as DeepSeek's, so the version increments. Setup reads a version-2 or version-3 document as version 4, as [Answer schema](#answer-schema) describes, and records it as version 4. Setup refuses an answers document whose version it does not know.
 
 A new upstream opt-in is added as a question with a default of off, in the same change that adds its profile row to the mapping.
 
@@ -240,18 +251,20 @@ Denial tests:
 | `typed key is never printed` | The recorded screen of a run holds no part of the typed key, and no file under the home but `.credentials.yaml` holds it, for DeepSeek and for a pi-ai provider. |
 | `default-profile run sends no analytics or upload` | A network fixture records no request to an analytics destination and no session-log upload in a default profile. |
 | `default-profile model request carries no dsh_session_log` | A model request from a default profile has no `dsh_session_log` field. |
-| `update-notice-off-at-first-start` | After a Full setup that answers No, and after `--yes --no-update-check`, the profile the first start composes has the `delo-update-check` row with `enabled: false`, and the row mounts no check service. |
+| `update-notice-off-at-first-start` | After a setup that answers No under More settings, and after `--yes --no-update-check`, the profile the first start composes has the `delo-update-check` row with `enabled: false`, and the row mounts no check service. |
 
 Acceptance tests:
 
 - `setup states the telemetry statement and that both opt-ins are off`.
-- `the Quick flow reads as the transcript in the specs, top to bottom`.
+- `each use case asks the questions its plan names, and the review lists every answer`.
+- `an interrupt at any question exits 130 and saves nothing`.
+- `a record with a Quick or Full mode and no use case still reads`.
 - `Same as stock sets every prompt switch to its parity value`.
 - `interactive and --yes runs write identical profile files`.
 - `interrupted setup resumes without a repeated write`.
 - `consent screen turns each upstream opt-in on alone and off again from the same screen`.
 - `a way back returns to the previous question with the earlier answers kept`.
-- `sits between the privacy note and the key in a Quick setup, and copies the chats before the key is asked for`.
+- `sits between the privacy note and the key in the main flow, and copies the chats before the key is asked for`.
 - `delorun setup privacy shows the note, turns the check off, and turns it on again by removing the row`.
 
 <a id="decided-values"></a>
@@ -259,6 +272,7 @@ Acceptance tests:
 
 - The answers schema version is `4`; setup also reads versions 2 and 3.
 - The provider question starts on `deepseek-official` in a terminal, and `--yes` sets up no provider unless `--provider` names one.
+- The use case defaults to `local`; `remote` and `automation` are chosen, never defaulted.
 - The defaults are safer prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
 - Each provider's key variable is the one [Model providers](#model-providers) lists; DeepSeek's is `DEEPSEEK_API_KEY`.
 - The reach options of setup are `none`, `tailscale-private`, `tailscale-funnel` and `self-hosted-relay`.

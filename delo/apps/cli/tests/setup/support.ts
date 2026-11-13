@@ -1,8 +1,7 @@
 /**
  * Shared helpers of the setup specs: a prompter that plays a script and records everything the person would see, and
- * a fake ending that records what setup did to the computer.
+ * what was typed.
  */
-import type { Ending, StartMode } from '../../src/setup/ending.ts'
 import type { PromptOption, Prompter } from '../../src/setup/prompts.ts'
 
 /** One scripted answer. A select answers with an option value, a confirm with a boolean, a text or key with a string. */
@@ -73,52 +72,5 @@ export function scriptedPrompter(script: readonly Answer[], recording: Recording
     note(body, title) {
       recording.screen.push(`# ${title}`, ...body.split('\n').map(line => `  ${line}`))
     },
-  }
-}
-
-/** What a fake ending did. */
-export interface EndingLog {
-  readonly spawned: string[]
-  readonly started: StartMode[]
-  /** How many times the ending opened the studio. */
-  opened: number
-}
-
-/** How the fake ending behaves. */
-export interface EndingBehaviour {
-  readonly installExit?: number
-  readonly canOpen?: boolean
-  readonly address?: string | undefined
-  readonly startResult?: 0 | 1
-  /** Whether a browser takes the link; true by default. */
-  readonly opens?: boolean
-  /** The launcher's version; `0.1.0` by default, and `undefined` for a run the launcher did not start. */
-  readonly launcherVersion?: string | undefined
-}
-
-/**
- * A fake ending.
- * @param log - where it records what it was asked.
- * @param behaviour - how it answers.
- * @returns the ending.
- */
-export function fakeEnding(log: EndingLog, behaviour: EndingBehaviour = {}): Ending {
-  return {
-    spawn: (command, args) => {
-      log.spawned.push([command, ...args].join(' '))
-      return Promise.resolve(behaviour.installExit ?? 0)
-    },
-    start: (mode) => {
-      log.started.push(mode)
-      return Promise.resolve(behaviour.startResult ?? 0)
-    },
-    address: () => Promise.resolve('address' in behaviour ? behaviour.address : 'http://127.0.0.1:3080/'),
-    open: () => {
-      log.opened += 1
-      return Promise.resolve(behaviour.opens ?? true)
-    },
-    canOpen: () => behaviour.canOpen ?? true,
-    identity: () => ({ user: 'person', host: 'machine' }),
-    launcherVersion: () => ('launcherVersion' in behaviour ? behaviour.launcherVersion : '0.1.0'),
   }
 }

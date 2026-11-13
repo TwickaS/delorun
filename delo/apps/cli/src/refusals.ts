@@ -194,5 +194,5 @@ export function cliRedactor(): TextRedactor {
  */
 export function cliRefusal(error: unknown, argv: readonly string[]): { readonly text: string, readonly exit: ExitCode } {
   const refusal = describeFailure(error, CLI_DESCRIBERS, refusalContext(argv))
-  return { text: renderRefusal(refusal, cliRedactor()), exit: error instanceof CliError ? error.exit : EXIT.failed }
+  return { text: renderRefusal(refusal, cliRedactor()), exit: error instanceof CliError ? error.exit : error instanceof SetupCancelled ? EXIT.interrupted : EXIT.failed }
 }

@@ -73,8 +73,11 @@ const SEARCH_ROWS = 12
 
 /** Thrown when the person cancels a prompt; setup then writes nothing further. */
 export class SetupCancelled extends Error {
-  constructor() {
-    super('delorun setup: cancelled')
+  /**
+   * @param saved - what an earlier run or step already wrote and still stands; `undefined` when nothing was saved.
+   */
+  constructor(saved?: string) {
+    super(`Setup cancelled. ${saved ?? 'Nothing was saved.'} Run delorun to ${saved === undefined ? 'start again' : 'finish setting up'}.`)
     this.name = 'SetupCancelled'
   }
 }

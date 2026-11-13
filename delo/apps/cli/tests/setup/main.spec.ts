@@ -25,12 +25,12 @@ afterEach(() => {
 })
 
 describe('delorun on a new home', () => {
-  it('reports a cancelled setup in one line, with the failure code and no stack', async () => {
+  it('reports a cancelled setup in one line, says nothing was saved, exits 130 and prints no stack', async () => {
     vi.mocked(runSetup).mockRejectedValueOnce(new SetupCancelled())
     const lines: string[] = []
     const code = await main([], { env: { DELO_HOME: join(osHome, '.delo') }, stdout: text => void lines.push(text), stderr: text => void lines.push(text) })
-    expect(code).toBe(EXIT.failed)
-    expect(lines.join('')).toBe('delorun setup: cancelled\n')
+    expect(code).toBe(EXIT.interrupted)
+    expect(lines.join('')).toBe('Setup cancelled. Nothing was saved. Run delorun to start again.\n')
   })
 
   it('reports any other failure as what Delo did, without a stack, and exits 1', async () => {
@@ -55,6 +55,6 @@ describe('delorun on a new home', () => {
   it('lists the setup sections in its help', async () => {
     const lines: string[] = []
     expect(await main(['--help'], { env: {}, stdout: text => void lines.push(text), stderr: () => undefined })).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('Set up Delorun (Quick or Full), or run one section again')
+    expect(lines.join('')).toContain('Set up Delorun by how you use it, or run one section again')
   })
 })
