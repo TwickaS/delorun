@@ -1,6 +1,6 @@
 /**
  * The end of every `delorun setup` form: the next steps, and nothing else. Setup starts nothing and opens nothing;
- * the text says how to start Delorun and open the studio, where the guide's first-chat page is, and how to change an
+ * the text says how to start Delorun and open the studio, where the install guide's first-chat section is, and how to change an
  * answer later. When the launcher (`npx delorun`) started the run, the first step installs the `delorun` command at the
  * launcher's exact version (`DELO_LAUNCHER_VERSION`), so the installed command is the package the person already ran and
  * not whatever npm serves as newest.
@@ -13,8 +13,11 @@ import semver from 'semver'
 import { profileFlag } from '../open/studio.ts'
 import { SETUP_PROVIDERS } from './providers.ts'
 
-/** The guide page that walks through the first chat. */
-export const FIRST_CHAT_PAGE = 'https://docs.delorun.com/guide/first-chat'
+/** The documentation site's origin, which {@link FIRST_CHAT_PAGE} extends. */
+export const DOCS_ORIGIN = 'https://docs.delorun.com'
+
+/** The install guide's section on the studio and the first chat. */
+export const FIRST_CHAT_PAGE = `${DOCS_ORIGIN}/guide/install#the-studio-and-your-first-chat`
 
 /**
  * The command that installs the `delorun` command: the launcher package at one exact version.
@@ -77,7 +80,7 @@ export function nextSteps(request: NextStepsRequest): string {
     steps.push([`Run a task from a script or CI: delorun headless${flag} "your task"`])
     steps.push([`To use the studio as well, start it any time with delorun${flag}.`])
   } else {
-    steps.push([`Start Delorun and open the studio: delorun${flag}`, `Send a first message in a new chat. The guide's first-chat page walks through it: ${FIRST_CHAT_PAGE}`])
+    steps.push([`Start Delorun and open the studio: delorun${flag}`, `Send a first message in a new chat. The install guide's section on your first chat walks through it: ${FIRST_CHAT_PAGE}`])
     if (useCase === 'remote') {
       steps.push(reach.option === 'none'
         ? ['Remote access is off. Fix what the Tailscale note said, then run delorun reach on tailscale.']

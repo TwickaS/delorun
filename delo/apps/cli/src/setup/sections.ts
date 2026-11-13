@@ -272,7 +272,7 @@ export const privacySection: SetupSection = {
 }
 
 /** The name of each prompts answer, in the question, the review and the notes. */
-export const PROMPT_LABELS: Readonly<Record<PromptsAnswer, string>> = { safer: 'Ask me first', stock: 'Ask less', dangerous: 'Never ask (dangerous)' }
+export const PROMPT_LABELS: Readonly<Record<PromptsAnswer, string>> = { safer: 'Ask me first', stock: 'Ask less (like DeepSeek Harness)', dangerous: 'Never ask (dangerous)' }
 
 /** What each prompts answer does, in the order the question lists them. */
 const PROMPTS_TEXT: readonly ChoiceText[] = [

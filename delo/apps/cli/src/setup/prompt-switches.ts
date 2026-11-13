@@ -1,6 +1,6 @@
 /**
- * The prompts answer as profile rows. "Safer prompts" sets each prompt switch of the parity registry
- * (contract C16) to the value of Delo's default composition, and "Same as stock" to its parity value, by writing
+ * The prompts answer as profile rows. "Ask me first" sets each prompt switch of the parity registry
+ * (contract C16) to the value of Delo's default composition, and "Ask less (like DeepSeek Harness)" to its parity value, by writing
  * the `config` of the row that `@delo/bundle-local` inserts for the switch into the profile's `cordis.patch.yml`,
  * which loads after the bundle. "Dangerous" sets the three consent switches to their parity values, keeps the
  * permission defaults on, and sets `fullAccessEverywhere` on their row; the plugin honours it only while the grant
@@ -59,7 +59,7 @@ export function writePromptRows(patchPath: string, answer: PromptsAnswer): void 
 
 /**
  * The prompts answer setup recorded for a profile, which the start holds the prompt rows to. A profile without an
- * answers record, or with one that does not name a known answer, has setup's default, "Safer prompts"; `delorun
+ * answers record, or with one that does not name a known answer, has setup's default, "Ask me first"; `delorun
  * setup prompts` records the answer again.
  * @param profileDirectory - the CLI profile's directory.
  * @returns the answer.

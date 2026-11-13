@@ -68,7 +68,7 @@ Each topic is a registered section with an id, a title, a plan per use case, a t
 
 Every question after the first can return to the nearest earlier question that was asked, including from the first "More settings" question to the review: a select or yes-or-no question offers "← Back", and a text or key question takes an empty entry as "go back". A review screen lists the answers before anything is written.
 
-Every form ends the same way and starts nothing: it prints "Delorun is set up. Nothing is running yet." and numbered next steps for the use case. For `local` and `remote`: start Delorun and open the studio with `delorun`, and the guide's first-chat page (`https://docs.delorun.com/guide/first-chat`). For `remote` also `delorun devices approve`, or how to turn remote access on when the Tailscale check failed. For `automation`: `delorun headless "your task"`. A step comes first when it is needed: installing the `delorun` command at the launcher's version (`DELO_LAUNCHER_VERSION`) when `npx` started the run, adding a model key when none was chosen, or setting a key variable that is unset. The last lines say how to change an answer (`delorun setup <section>`, `delorun setup --list`) and name `delorun doctor`. An interrupt (Ctrl-C) at any question exits with code 130 and prints "Setup cancelled. Nothing was saved. Run delorun to start again."; an interrupt while an earlier run's answers are kept says that instead.
+Every form ends the same way and starts nothing: it prints "Delorun is set up. Nothing is running yet." and numbered next steps for the use case. For `local` and `remote`: start Delorun and open the studio with `delorun`, and the install guide's first-chat section (`https://docs.delorun.com/guide/install#the-studio-and-your-first-chat`). For `remote` also `delorun devices approve`, or how to turn remote access on when the Tailscale check failed. For `automation`: `delorun headless "your task"`. A step comes first when it is needed: installing the `delorun` command at the launcher's version (`DELO_LAUNCHER_VERSION`) when `npx` started the run, adding a model key when none was chosen, or setting a key variable that is unset. The last lines say how to change an answer (`delorun setup <section>`, `delorun setup --list`) and name `delorun doctor`. An interrupt (Ctrl-C) at any question exits with code 130 and prints "Setup cancelled. Nothing was saved. Run delorun to start again."; an interrupt while an earlier run's answers are kept says that instead.
 
 <a id="questions"></a>
 ### Questions
@@ -259,7 +259,7 @@ Acceptance tests:
 - `each use case asks the questions its plan names, and the review lists every answer`.
 - `an interrupt at any question exits 130 and saves nothing`.
 - `a record with a Quick or Full mode and no use case still reads`.
-- `Same as stock sets every prompt switch to its parity value`.
+- `Ask less (like DeepSeek Harness) sets every prompt switch to its parity value`.
 - `interactive and --yes runs write identical profile files`.
 - `interrupted setup resumes without a repeated write`.
 - `consent screen turns each upstream opt-in on alone and off again from the same screen`.
@@ -273,7 +273,7 @@ Acceptance tests:
 - The answers schema version is `4`; setup also reads versions 2 and 3.
 - The provider question starts on `deepseek-official` in a terminal, and `--yes` sets up no provider unless `--provider` names one.
 - The use case defaults to `local`; `remote` and `automation` are chosen, never defaulted.
-- The defaults are safer prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
+- The defaults are "Ask me first" prompts, background running on, port 3080, `none` for reach, off for the stock-home import, which the import section also preselects as no when it is shown, and on for the release check.
 - Each provider's key variable is the one [Model providers](#model-providers) lists; DeepSeek's is `DEEPSEEK_API_KEY`.
 - The reach options of setup are `none`, `tailscale-private`, `tailscale-funnel` and `self-hosted-relay`.
 - The feedback send is not an answer, and setup states it.

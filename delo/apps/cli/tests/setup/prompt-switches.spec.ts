@@ -8,7 +8,7 @@ const BUNDLE_PATCH = parse(readFileSync(new URL('../../../../packages/bundle-loc
 const BUNDLE_ROWS = new Map(BUNDLE_PATCH.flatMap(patch => patch.insert ?? []).map(row => [row.id, row]))
 
 describe('the prompts answer as switch values', () => {
-  it('sets each prompt switch to its Delo default for "Safer prompts" and to its parity value for "Same as stock"', () => {
+  it('sets each prompt switch to its Delo default for "Ask me first" and to its parity value for "Ask less (like DeepSeek Harness)"', () => {
     const safer = promptRows('safer')
     const stock = promptRows('stock')
     expect(safer).toHaveLength(Object.keys(PROMPT_SWITCH_ROWS).length)

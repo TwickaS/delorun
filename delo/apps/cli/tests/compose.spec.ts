@@ -176,7 +176,7 @@ describe('a set-up CLI profile', { timeout: 60_000 }, () => {
   it('refuses a consent row left on when the recorded answer is "Ask less"', async () => {
     const answers = join(deloHome, 'profiles', 'default', 'setup-answers.json')
     writeFileSync(answers, JSON.stringify({ ...JSON.parse(readFileSync(answers, 'utf8')) as object, prompts: 'stock' }))
-    expect(await refused(compose)).toContain('which the recorded prompts answer "Ask less" sets')
+    expect(await refused(compose)).toContain('which the recorded prompts answer "Ask less (like DeepSeek Harness)" sets')
   })
 
   it('reports a required row no layer inserts, and a profile preparation that throws a plain value', async () => {

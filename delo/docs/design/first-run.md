@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-One command, `npx delorun`, takes a person from nothing to a first chat. The launcher says what it does while it downloads and verifies a release. Setup asks the few questions a working chat needs, or every question that changes the computer when the person chooses Full. Setup then starts Delo, in the background unless the person chose otherwise, and opens the studio, where onboarding covers what setup did not, and no question is asked twice across the terminal and the studio. The terminal is for setup and operations only: chatting happens in the studio. Setup's answers are [contract C11](../contracts/c11-setup-answers.md).
+One command, `npx delorun`, takes a person from nothing to a first chat. The launcher says what it does while it downloads and verifies a release. Setup asks how the person will use Delorun, then the few questions a working chat needs; More settings on the review screen asks every other question that changes the computer. Setup then starts Delo, in the background unless the person chose otherwise, and opens the studio, where onboarding covers what setup did not, and no question is asked twice across the terminal and the studio. The terminal is for setup and operations only: chatting happens in the studio. Setup's answers are [contract C11](../contracts/c11-setup-answers.md).
 
 ## Contents
 

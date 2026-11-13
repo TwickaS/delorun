@@ -20,14 +20,14 @@ describe('the launcher version', () => {
 })
 
 describe('the next steps', () => {
-  it('print how to start and open the studio, the first-chat page and how to change an answer, and nothing about a process', () => {
+  it('print how to start and open the studio, the install guide first-chat section and how to change an answer, and nothing about a process', () => {
     const text = steps({})
     expect(text).toBe([
       'Delorun is set up. Nothing is running yet.',
       '',
       'Next:',
       '  1. Start Delorun and open the studio: delorun',
-      `     Send a first message in a new chat. The guide's first-chat page walks through it: ${FIRST_CHAT_PAGE}`,
+      `     Send a first message in a new chat. The install guide's section on your first chat walks through it: ${FIRST_CHAT_PAGE}`,
       '',
       'Change an answer later: delorun setup <section> (delorun setup --list shows the sections).',
       'If something looks wrong: delorun doctor.',

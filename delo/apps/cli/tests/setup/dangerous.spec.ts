@@ -179,7 +179,7 @@ describe('the refusals of dangerous mode', { timeout: TIMEOUT_MS }, () => {
     expect(() => promptsFromFlags({ prompts: 'dangerous', acceptDangerousMode: true }, true, PROMPTS_OPTIONS)).toThrow('refused when running as root')
   })
 
-  it('keeps --yes on Safer prompts and writes no grant', async () => {
+  it('keeps --yes on Ask me first and writes no grant', async () => {
     expect(await yes()).toBe(EXIT.ok)
     expect(recordedPrompts()).toBe('safer')
     expect(rows().get('delo-permission-defaults')).toEqual({ enabled: true, fullAccessEverywhere: false })
@@ -242,7 +242,7 @@ describe('the accepted path', { timeout: TIMEOUT_MS }, () => {
     expect(readFileSync(join(profileDirectory(home, PROFILE), 'setup-answers.json'), 'utf8')).not.toContain('acceptDangerousMode')
   })
 
-  it('removes the grant when the person later chooses Safer prompts or Same as stock', async () => {
+  it('removes the grant when the person later chooses Ask me first or Ask less (like DeepSeek Harness)', async () => {
     expect(await interactive(ACCEPT_DANGEROUS)).toBe(EXIT.ok)
     expect(await again(['stock'])).toBe(EXIT.ok)
     expect(existsSync(dangerousGrantPath(home))).toBe(false)

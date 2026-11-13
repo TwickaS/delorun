@@ -241,9 +241,9 @@ describe('the key questions', { timeout: TIMEOUT_MS }, () => {
 })
 
 describe('the prompts question', { timeout: TIMEOUT_MS }, () => {
-  it('lists Ask me first, Ask less and Never ask (dangerous) in plain lines, dangerous always last', async () => {
+  it('lists Ask me first, Ask less (like DeepSeek Harness) and Never ask (dangerous) in plain lines, dangerous always last', async () => {
     await interactive(['local', DS, 'environment', 'safer', 'save'])
-    expect(screen()).toContain('? How much should Delorun ask before it changes things?\n> Ask me first (recommended)\n  Ask less\n  Never ask (dangerous)\n  ← Back')
+    expect(screen()).toContain('? How much should Delorun ask before it changes things?\n> Ask me first (recommended)\n  Ask less (like DeepSeek Harness)\n  Never ask (dangerous)\n  ← Back')
     expect(screen()).toContain('Ask me first (recommended)\n    Delorun asks before a chat gets full access to a folder, adds a tool server, edits its own instructions or schedules work. You can allow each once.\n    Change later: delorun setup prompts.')
   })
 })
@@ -285,7 +285,7 @@ describe('the ending', { timeout: TIMEOUT_MS }, () => {
     expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
     const ending = screen().split('Delorun is set up.')[1] ?? ''
     expect(ending).toContain('Start Delorun and open the studio: delorun')
-    expect(ending).toContain('https://docs.delorun.com/guide/first-chat')
+    expect(ending).toContain('https://docs.delorun.com/guide/install#the-studio-and-your-first-chat')
     expect(ending).toContain('Change an answer later: delorun setup <section> (delorun setup --list shows the sections).')
     expect(recording.asked.filter(question => question.includes('Install the delorun command'))).toEqual([])
     expect(screen()).not.toMatch(/Studio: http|is running in|opened in your browser/u)
