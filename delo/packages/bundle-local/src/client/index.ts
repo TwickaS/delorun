@@ -26,6 +26,7 @@
  * @module @delo/bundle-local/client
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: the ctx.locale Context merge.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the ctx.slots Context merge.
@@ -238,7 +239,7 @@ export const FULL_ACCESS_ACTION_ID = 'delo-full-access'
 export const EXTERNAL_AGENT_ACTION_ID = 'delo-external-agent'
 
 /** Required services. */
-export const inject = ['slots', 'locale', 'configForms']
+export const inject = ['slots', 'locale', 'configForms', 'connection']
 
 /**
  * Register the Privacy, About, Devices and Network sections, the release check's General row, the Delo sidebar brand, the
@@ -346,7 +347,7 @@ export function apply(ctx: Context): void {
   const devicesT = ctx.locale.bind(DEVICES_NS)
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const unlock = applyUnlock(ctx, browserFetch)
+  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
   const devicesFace = (): DevicesSectionInjected => ({ fetch: browserFetch, hooks: unlock.hooks, openUnlock: unlock.open, lockUnlock: unlock.lock })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -456,13 +457,14 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
 /**
  * Register the remote studio's unlock: its store, which reads this device's unlock now, after each connection reset and
  * after each call remote access refused with `elevation-required:`, and its `shell.overlay` entry. On the home's own
- * computer the first read finds no device and the entry renders nothing.
+ * computer the store reads nothing and the entry renders nothing.
  * @param ctx - the browser plugin context.
  * @param fetch - the request function.
+ * @param onComputer - whether the page is on the home's own computer ({@link createUnlockSource}).
  * @returns the store, which the Devices section reads too.
  */
-export function applyUnlock(ctx: Context, fetch: HostFetch): UnlockSource {
-  const unlock = createUnlockSource(fetch)
+export function applyUnlock(ctx: Context, fetch: HostFetch, onComputer = false): UnlockSource {
+  const unlock = createUnlockSource(fetch, Date.now, onComputer)
   ctx.effect(() => () => { unlock.dispose() }, 'delo-devices: the unlock\'s timers stop once the plugin unloads')
   ctx.on('remote/call-denied', (denial) => { unlock.refused(denial.reason) })
   ctx.on('connection/reset', () => { void unlock.refresh() })

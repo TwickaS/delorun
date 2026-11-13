@@ -102,6 +102,18 @@ describe('the unlock routes', () => {
 })
 
 describe('the unlock store', () => {
+  it('is away from the start on the computer and sends no request', async () => {
+    const host = fakeHost({ [`GET ${ELEVATION_ROUTES.state}`]: refusal(421, 'HOST_MISMATCH') })
+    const unlock = createUnlockSource(host.fetch, Date.now, true)
+    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ place: 'away', dialog: null })
+    await unlock.refresh()
+    unlock.refused('elevation-required: terminal/create')
+    unlock.open()
+    await settle()
+    expect(unlock.hooks.unlock.getSnapshot()).toMatchObject({ place: 'away', dialog: null })
+    expect(host.count(`GET ${ELEVATION_ROUTES.state}`)).toBe(0)
+  })
+
   it('stays away on the computer, where a refusal opens nothing', async () => {
     const unlock = createUnlockSource(fakeHost({ [`GET ${ELEVATION_ROUTES.state}`]: refusal(421, 'HOST_MISMATCH') }).fetch)
     await unlock.refresh()
