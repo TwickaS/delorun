@@ -158,23 +158,41 @@ async function writeDurable(directory: string, name: string, text: string): Prom
 }
 
 /**
- * Count and sum the regular files under a directory, and sync each when asked.
+ * Count and sum the regular files under a directory, and sync each when asked. Symbolic links are neither counted nor
+ * followed, so a link to a directory outside the home is never walked or opened.
  * @param directory - the directory, which may be absent.
  * @param flush - whether to flush every file and directory to disk.
  * @returns the file count and byte total.
  */
 async function walk(directory: string, flush: boolean): Promise<{ files: number, bytes: number }> {
   if (!await exists(directory)) return { files: 0, bytes: 0 }
+  const total = await walkEntries(directory, flush)
+  if (flush) await sync(directory)
+  return total
+}
+
+/**
+ * Count, sum and optionally sync the regular files under a directory, descending only into real subdirectories.
+ * `readdir`'s `recursive` option is not used because it descends into symbolic links to directories.
+ * @param directory - an existing directory.
+ * @param flush - whether to flush every file to disk.
+ * @returns the file count and byte total.
+ */
+async function walkEntries(directory: string, flush: boolean): Promise<{ files: number, bytes: number }> {
   let files = 0
   let bytes = 0
-  for (const entry of await readdir(directory, { withFileTypes: true, recursive: true })) {
-    if (!entry.isFile()) continue
-    const path = join(entry.parentPath, entry.name)
-    files += 1
-    bytes += (await lstat(path)).size
-    if (flush) await sync(path)
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      const nested = await walkEntries(path, flush)
+      files += nested.files
+      bytes += nested.bytes
+    } else if (entry.isFile()) {
+      files += 1
+      bytes += (await lstat(path)).size
+      if (flush) await sync(path)
+    }
   }
-  if (flush) await sync(directory)
   return { files, bytes }
 }
 
