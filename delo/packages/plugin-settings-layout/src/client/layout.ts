@@ -27,6 +27,7 @@ export const SECTIONS = {
   modes: 'agent-presets',
   toolSettings: 'delo-tool-settings',
   inventory: 'plugins',
+  pluginInstalls: 'delo-plugin-installs',
   permissions: 'delo-permissions',
   externalAgents: 'delo-external-agents',
   network: 'delo-network',
@@ -160,7 +161,7 @@ export function deloSettingsLayout(
           },
           {
             id: 'plugins', label: text('page.plugins'), icon: IconCordisPluginOutlineMedium, keywords: text('page.plugins.keywords'),
-            blocks: [section(SECTIONS.inventory)],
+            blocks: [section(SECTIONS.inventory), section(SECTIONS.pluginInstalls)],
           },
         ],
       },

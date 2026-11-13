@@ -14,11 +14,12 @@ import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject, type ConfigForm, type ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { SettingsLayoutRegistry, type SettingsLayout } from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import {
-  ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, inject, OPT_IN_ROWS, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, UPDATE_CHECK_ITEM,
+  ABOUT_SECTION_ID, ABOUT_SECTION_ORDER, apply, inject, OPT_IN_ROWS, PLUGIN_INSTALLS_SECTION_ID, PLUGIN_INSTALLS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, UPDATE_CHECK_ITEM,
   VERSION_ROW, VERSIONS_GLOBAL, VERSIONS_ITEM,
 } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { OptIn, type OptInField, type OptInSettings } from '../src/client/opt-in.ts'
+import { PluginInstallsSection, type PluginInstallsSectionProps } from '../src/client/PluginInstallsSection.tsx'
 import { PrivacySection, type PrivacyOptInId, type PrivacySectionProps } from '../src/client/PrivacySection.tsx'
 import { UpdateCheckRow, type UpdateCheckRowProps } from '../src/client/UpdateCheckRow.tsx'
 import { NOTICE_STORAGE_KEY, NOTICE_VERSION } from '../src/client/DeloNotice.tsx'
@@ -43,7 +44,7 @@ function hostForm(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready',
 }
 
 function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['status'] = 'ready') {
-  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus), npmMirror: hostForm('ready', false, 'npmMirror') }
+  const forms = { sessionLog: hostForm(), analytics: hostForm(analyticsStatus) }
   // The renderer's standard props are absent: the section reads none of them.
   const props = {
     t: makeTranslate(en),
@@ -52,12 +53,23 @@ function renderSection(analyticsStatus: ConfigFormSnapshot<OptInSettings>['statu
     useSessionLogMutation: bindSnapshotSelector(forms.sessionLog.optIn.state),
     useAnalytics: bindSnapshotSelector(forms.analytics.form),
     useAnalyticsMutation: bindSnapshotSelector(forms.analytics.optIn.state),
-    useNpmMirror: bindSnapshotSelector(forms.npmMirror.form),
-    useNpmMirrorMutation: bindSnapshotSelector(forms.npmMirror.optIn.state),
     setEnabled: (id: PrivacyOptInId, enabled: boolean) => forms[id].optIn.setEnabled(enabled),
   } as PrivacySectionProps
   render(<PrivacySection {...props} />)
   return forms
+}
+
+function renderInstalls(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready') {
+  const npmMirror = hostForm(status, false, 'npmMirror')
+  // The renderer's standard props are absent: the section reads none of them.
+  const props = {
+    t: makeTranslate(en),
+    useNpmMirror: bindSnapshotSelector(npmMirror.form),
+    useNpmMirrorMutation: bindSnapshotSelector(npmMirror.optIn.state),
+    setEnabled: (value: boolean) => npmMirror.optIn.setEnabled(value),
+  } as PluginInstallsSectionProps
+  const view = render(<PluginInstallsSection {...props} />)
+  return { npmMirror, view }
 }
 
 function renderUpdateCheck(status: ConfigFormSnapshot<OptInSettings>['status'] = 'ready', enabled = true) {
@@ -76,16 +88,15 @@ function renderUpdateCheck(status: ConfigFormSnapshot<OptInSettings>['status'] =
 const switchOf = (name: string): HTMLElement => screen.getByRole('switch', { name })
 
 describe('the Privacy section', () => {
-  it('opens with one sentence, shows the opt-ins and the npm mirror off under their heading, states how feedback is sent, and leaves the release check to General', () => {
+  it('opens with one sentence, shows the two opt-ins off under their heading, states how feedback is sent, and leaves the release check to General and the npm mirror to Plugins', () => {
     renderSection()
     expect(screen.getByText(en.intro)).toBeTruthy()
     const group = screen.getByRole('region', { name: en['sharing.heading'] })
     expect(within(group).getByText(en['statement.feedback'])).toBeTruthy()
     expect(within(group).getByRole('switch', { name: en['sessionLog.title'] }).getAttribute('aria-checked')).toBe('false')
     expect(switchOf(en['analytics.title']).getAttribute('aria-checked')).toBe('false')
-    expect(within(group).getByRole('switch', { name: en['npmMirror.title'] }).getAttribute('aria-checked')).toBe('false')
-    for (const key of ['statement.delo', 'statement.optIns', 'statement.updateCheck', 'updateCheck.title'] as const) expect(screen.queryByText(en[key])).toBeNull()
-    expect(screen.queryAllByRole('switch')).toHaveLength(3)
+    for (const key of ['statement.delo', 'statement.optIns', 'statement.updateCheck', 'updateCheck.title', 'npmMirror.title'] as const) expect(screen.queryByText(en[key])).toBeNull()
+    expect(screen.queryAllByRole('switch')).toHaveLength(2)
   })
 
   it.each([
@@ -118,7 +129,8 @@ describe('the Privacy section', () => {
   })
 
   it('turns the npm mirror on after consent by writing npmMirror of the install check\'s row, and off at once', async () => {
-    const forms = renderSection()
+    const { npmMirror } = renderInstalls()
+    expect(screen.getByRole('region', { name: en['installs.heading'] })).toBeTruthy()
     const toggle = switchOf(en['npmMirror.title'])
     expect(toggle.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(toggle)
@@ -128,8 +140,13 @@ describe('the Privacy section', () => {
     await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('true') })
     fireEvent.click(toggle)
     await waitFor(() => { expect(toggle.getAttribute('aria-checked')).toBe('false') })
-    expect(forms.npmMirror.set.mock.calls).toEqual([['npmMirror', true], ['npmMirror', false]])
+    expect(npmMirror.set.mock.calls).toEqual([['npmMirror', true], ['npmMirror', false]])
     expect(OPT_IN_ROWS.npmMirror).toBe('delo-plugin-install-check')
+  })
+
+  it('shows nothing where the profile does not load the plugin install check', () => {
+    const { view } = renderInstalls('unavailable')
+    expect(view.container.textContent).toBe('')
   })
 
   it('says why desktop analytics has no switch in a profile that does not serve it', () => {
@@ -234,11 +251,15 @@ describe('the plugin', () => {
       slots.register({ name: 'sidebar.brand.mark' }, () => null)
       slots.register({ name: 'sidebar.brand.name' }, () => null)
       await ctx.plugin({ inject, apply }).await()
-      const [section] = slots.entries('settings.section')
+      const section = slots.entries('settings.section').find(entry => entry.options.id === PRIVACY_SECTION_ID)
       const about = slots.entries('settings.section').find(entry => entry.options.id === ABOUT_SECTION_ID)
       expect(section?.options).toMatchObject({ id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER })
       const label = section?.options.label
       expect(typeof label === 'function' ? label() : label).toBe(en.nav)
+      const installs = slots.entries('settings.section').find(entry => entry.options.id === PLUGIN_INSTALLS_SECTION_ID)
+      expect(installs?.options).toMatchObject({ order: PLUGIN_INSTALLS_SECTION_ORDER })
+      const installsLabel = installs?.options.label
+      expect(typeof installsLabel === 'function' ? installsLabel() : installsLabel).toBe(en['installs.nav'])
       expect(about?.options).toMatchObject({ order: ABOUT_SECTION_ORDER })
       const aboutLabel = about?.options.label
       expect(typeof aboutLabel === 'function' ? aboutLabel() : aboutLabel).toBe(en['about.nav'])
@@ -261,7 +282,9 @@ describe('the plugin', () => {
       expect(analytics).toHaveBeenCalledWith('enabled', true)
       expect(sessionLog).not.toHaveBeenCalled()
       const mirror = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.npmMirror), 'set').mockResolvedValue(true)
-      await face.setEnabled('npmMirror', true)
+      const installsFace = installs?.inject?.()
+      if (installsFace === undefined || !('setEnabled' in installsFace) || typeof installsFace.setEnabled !== 'function') throw new Error('no installs face')
+      await installsFace.setEnabled(true)
       expect(mirror).toHaveBeenCalledWith('npmMirror', true)
       await face.setEnabled('sessionLog', false)
       expect(sessionLog).toHaveBeenCalledWith('enabled', false)

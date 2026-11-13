@@ -60,7 +60,7 @@ A start and `delorun verify` write the result of their change check to `<profile
 | `trustedSources` | `[]` | npm scopes (`@scope`) and git owners (`github.com/owner`) whose plugins show critical advisories only. |
 | `npmMirror` | `false` | Ask the npmmirror registry when the first registry fails; a start passes it to the plugin manager's `fallbackRegistries`. |
 
-A person changes them by restating the `delo-plugin-install-check` row in the profile's own `cordis.patch.yml` with the whole `config`. `delorun plugin` and a start read the same composed row. To turn the npmmirror fallback on, use Settings → Privacy or run `delorun plugin mirror on`.
+A person changes them by restating the `delo-plugin-install-check` row in the profile's own `cordis.patch.yml` with the whole `config`. `delorun plugin` and a start read the same composed row. To turn the npmmirror fallback on, use Settings → Plugins or run `delorun plugin mirror on`.
 
 ## Known limitations
 

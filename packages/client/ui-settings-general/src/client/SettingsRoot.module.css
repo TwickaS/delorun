@@ -537,3 +537,33 @@
    ui-web base.css's `body > :not(#root)` subtraction covers it wherever it
    overlaps a chrome row's drag — including above every column, which an in-root
    overlay could not promise once a chrome row declares drag itself. */
+
+/* The phone strip fades at whichever edge has more tabs beyond it, which is the cue that it scrolls. */
+@property --dsh-nav-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --dsh-nav-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes navListEdges {
+  0% { --dsh-nav-fade-start: 0px; --dsh-nav-fade-end: 32px; }
+  4% { --dsh-nav-fade-start: 32px; --dsh-nav-fade-end: 32px; }
+  96% { --dsh-nav-fade-start: 32px; --dsh-nav-fade-end: 32px; }
+  100% { --dsh-nav-fade-start: 32px; --dsh-nav-fade-end: 0px; }
+}
+
+@media (max-width: 767px) {
+  @supports (animation-timeline: scroll()) {
+    :global(html:not([data-windows-titlebar]):not([data-platform='darwin'])) .navList {
+      mask-image: linear-gradient(to right, transparent, #000 var(--dsh-nav-fade-start), #000 calc(100% - var(--dsh-nav-fade-end)), transparent);
+      animation: navListEdges linear both;
+      animation-timeline: scroll(self inline);
+    }
+  }
+}

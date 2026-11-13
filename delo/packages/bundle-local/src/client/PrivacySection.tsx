@@ -1,4 +1,4 @@
-/** The Privacy settings section: one sentence on what Delorun sends, then the consent switches for upstream's two opt-ins, the npm mirror for plugin installs and the feedback statement. */
+/** The Privacy settings section: one sentence on what Delorun sends, then the consent switches for upstream's two opt-ins and the feedback statement. */
 import type { ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -11,13 +11,13 @@ import css from './SettingsSection.module.css'
 import rowCss from './SettingsRow.module.css'
 
 /** The switches the section shows, in screen order. */
-export const PRIVACY_OPT_INS = ['sessionLog', 'analytics', 'npmMirror'] as const
+export const PRIVACY_OPT_INS = ['sessionLog', 'analytics'] as const
 
 /** One switch of {@link PRIVACY_OPT_INS}. */
 export type PrivacyOptInId = (typeof PRIVACY_OPT_INS)[number]
 
 /** The switches whose rows a profile may not serve, which then say why instead of showing a switch. */
-const UNAVAILABLE: Readonly<Partial<Record<PrivacyOptInId, PrivacyLocaleKey>>> = { analytics: 'analytics.unavailable', npmMirror: 'npmMirror.unavailable' }
+const UNAVAILABLE: Readonly<Partial<Record<PrivacyOptInId, PrivacyLocaleKey>>> = { analytics: 'analytics.unavailable' }
 
 /** Hooks and writers the plugin supplies for each opt-in. */
 export interface PrivacySectionInjected {
@@ -26,8 +26,6 @@ export interface PrivacySectionInjected {
     sessionLogMutation: ObservableSnapshot<OptInMutation>
     analytics: ObservableSnapshot<ConfigFormSnapshot<OptInSettings>>
     analyticsMutation: ObservableSnapshot<OptInMutation>
-    npmMirror: ObservableSnapshot<ConfigFormSnapshot<OptInSettings>>
-    npmMirrorMutation: ObservableSnapshot<OptInMutation>
   }
   /**
    * Write the field of one switch's row that the switch shows.
@@ -49,11 +47,10 @@ export type PrivacySectionProps = PropsRuntime<'settings.section'> & PropsLocale
  */
 export function PrivacySection(props: PrivacySectionProps): ReactNode {
   const { t, setEnabled } = props
-  const forms = { sessionLog: props.useSessionLog(value => value), analytics: props.useAnalytics(value => value), npmMirror: props.useNpmMirror(value => value) }
+  const forms = { sessionLog: props.useSessionLog(value => value), analytics: props.useAnalytics(value => value) }
   const mutations = {
     sessionLog: props.useSessionLogMutation(value => value),
     analytics: props.useAnalyticsMutation(value => value),
-    npmMirror: props.useNpmMirrorMutation(value => value),
   }
   return <div className={css.section}>
     <h2 className={css.title}>{t('title')}</h2>

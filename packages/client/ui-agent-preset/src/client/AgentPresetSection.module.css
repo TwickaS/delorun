@@ -36,11 +36,12 @@
 
 .groupHead {
   margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-settings-card-heading-size, 12px);
+  line-height: var(--dsh-settings-card-heading-line-height, normal);
+  font-weight: var(--dsh-settings-card-heading-weight, 600);
+  letter-spacing: var(--dsh-settings-card-heading-letter-spacing, .06em);
+  text-transform: var(--dsh-settings-card-heading-transform, uppercase);
+  color: var(--dsh-settings-card-heading-color, var(--dsw-alias-label-tertiary));
 }
 
 .cards {

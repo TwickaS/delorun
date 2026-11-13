@@ -63,7 +63,7 @@ describe("Delo's layout", () => {
       Models: ['models'],
       Modes: ['agent-presets'],
       Tools: ['delo-tool-settings'],
-      Plugins: ['plugins'],
+      Plugins: ['plugins', 'delo-plugin-installs'],
       Permissions: ['New chats: permission', 'delo-permissions'],
       'External agents': ['delo-external-agents'],
       Network: ['delo-network'],
