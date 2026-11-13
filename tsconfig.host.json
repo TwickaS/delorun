@@ -238,6 +238,8 @@
     "apps/web/tests/workflow-run.e2e.ts",
     "apps/web/tests/delo-preset-inspect.e2e.ts",
     "apps/web/tests/delo-privacy-consent.e2e.ts",
+    "apps/web/tests/delo-full-access-consent.e2e.ts",
+    "apps/web/tests/delo-allow-for-chat.e2e.ts",
     "apps/web/tests/delo-update-notice.e2e.ts",
     "apps/web/tests/delo-reach.ts",
     "apps/web/tests/delo-reach-listener.e2e.ts",
