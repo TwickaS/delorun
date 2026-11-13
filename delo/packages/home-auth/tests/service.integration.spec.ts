@@ -267,6 +267,34 @@ describe('the homeAuth service', () => {
     }
   })
 
+  it('sets back through the settings service what a device loosened, when the first read finds the mode ended', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      let mode = true
+      const values: Record<string, unknown> = { enabled: true }
+      const calls: unknown[] = []
+      ctx.provide('reachFullAccessGrants', { dangerousMode: () => mode } as never)
+      ctx.provide('settings', {
+        describe: () => [{ ns: 'delo-delegation-consent', value: values }],
+        update: (_ns: string, patch: Record<string, unknown>) => { calls.push(patch); Object.assign(values, patch); return Promise.resolve() },
+      } as never)
+      // The device turns the consent off under the mode; the policy records it before the write.
+      ctx.homeAuth.recordLifts([{ ns: 'delo-delegation-consent', field: 'enabled', written: false }])
+      values.enabled = false
+      // Pins the mode check: while it holds, a read of the mode reverts nothing.
+      expect(ctx.homeAuth.dangerousMode()).toBe(true)
+      expect(calls).toEqual([])
+      mode = false
+      expect(ctx.homeAuth.dangerousMode()).toBe(false)
+      await ctx.homeAuth.endDangerousSettings()
+      expect(calls).toEqual([{ enabled: true }])
+      expect(values.enabled).toBe(true)
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('refuses a secrets directory that is not absolute', async () => {
     const ctx = new Context()
     ctx.provide('webServer', { register: () => () => {} } as never)

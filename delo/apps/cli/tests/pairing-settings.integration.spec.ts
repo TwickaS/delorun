@@ -74,7 +74,7 @@ describe('Settings → Devices writing the pairing section', () => {
     ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: 'https://home.example.ts.net' as never, factor: 'tailnet-membership' })
     const policy = createReachAccessPolicy({
       admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: home,
-      elevationOf: () => undefined, logElevated: () => {},
+      elevationOf: () => undefined, logElevated: () => {}, liftedSettings: () => {},
       computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
       protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false,
     })

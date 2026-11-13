@@ -31,6 +31,7 @@ import { parseCommand } from '@deepseek-ai/dsh-commands'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { Workspace } from '@deepseek-ai/dsh-workspace/types'
 import type { ReachListenerId } from '@delo/contract-admission'
+import type { SettingsLift } from './dangerous-settings.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface PrincipalMap {
@@ -550,6 +551,22 @@ function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string
   }
 }
 
+/**
+ * The fields a device's settings write loosens, which dangerous mode lets through: the switches
+ * {@link DANGEROUS_LIFTABLE_SWITCHES} lists that the write turns off, and the default preset when it loosens.
+ * @param facts - the Host state the policy reads.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @param loosens - whether the write loosens the default permission.
+ * @returns the lifts, each with the value the call sets when its arguments name one.
+ */
+function liftsOf(facts: Pick<ReachAccessFacts, 'computerOnlySwitches'>, action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, loosens: boolean): SettingsLift[] {
+  const ns = String(args.ns)
+  const lifted = (field: string): SettingsLift => ({ ns, field, written: fieldWritten(action, args, field).at(-1) })
+  const switches = facts.computerOnlySwitches().filter(target => DANGEROUS_LIFTABLE_SWITCHES.has(target.ns) && turnsSwitchOff(action, args, target))
+  return [...switches.map(target => lifted(target.field)), ...loosens ? [lifted('defaultPreset')] : []]
+}
+
 /** The reason a settings write that would loosen the permission new chats start in is refused to a device, unlocked or not. */
 export const DEFAULT_PERMISSION_REFUSAL = 'loopback-required: loosening the permission new chats start in'
 
@@ -590,14 +607,14 @@ function looser(next: PermissionLevel, current: PermissionLevel): boolean {
 }
 
 /**
- * The `defaultPreset` values a settings write sets: undefined for one that removes it, which falls back to an inferred
+ * The values a settings write sets a field to: undefined for one that removes it, which falls back to an inferred
  * preset, and for arguments the condition cannot read.
  * @param action - the settings write.
  * @param args - the call's arguments.
- * @returns the values, empty when the write leaves `defaultPreset` alone.
+ * @param field - the field.
+ * @returns the values, empty when the write leaves the field alone.
  */
-function presetsWritten(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): readonly unknown[] {
-  const field = 'defaultPreset'
+function fieldWritten(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, field: string): readonly unknown[] {
   switch (action) {
     case 'settings/mutate':
       if (!Array.isArray(args.ops)) return [undefined]
@@ -629,7 +646,7 @@ function presetsWritten(action: RemoteAccessAction, args: Readonly<Record<string
 function loosensDefaultPermission(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, permission: DefaultPermission | undefined): boolean {
   if (permission === undefined || typeof args.ns !== 'string' || !permission.namespaces.has(args.ns)) return false
   const { current } = permission
-  return presetsWritten(action, args).some((name) => {
+  return fieldWritten(action, args, 'defaultPreset').some((name) => {
     const next = typeof name === 'string' ? permission.levelOf(name) : undefined
     return next === undefined || current === undefined || looser(next, current)
   })
@@ -748,7 +765,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'liftedSettings' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission' | 'dangerousMode'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener } = principal
@@ -768,6 +785,7 @@ export function createCondition(
   return ({ action, resource, args }) => {
     // Dangerous mode lifts the four refusals below for an unlocked device: an elevated action is still refused to a
     // locked one, and the unlock check follows. The mode is read per call, so withdrawing the grant restores them.
+    const lifts: SettingsLift[] = []
     if (args !== undefined) {
       const dangerous = facts.dangerousMode()
       // A computer-only switch stays on, new chats' permission stays as loose as it is, a protected row stays as it is,
@@ -776,7 +794,9 @@ export function createCondition(
       if (SETTINGS_WRITES.has(action)) {
         const off = facts.computerOnlySwitches().find(target => !(dangerous && DANGEROUS_LIFTABLE_SWITCHES.has(target.ns)) && turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
-        if (!dangerous && loosensDefaultPermission(action, args, facts.defaultPermission())) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
+        const loosens = loosensDefaultPermission(action, args, facts.defaultPermission())
+        if (!dangerous && loosens) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
+        if (dangerous) lifts.push(...liftsOf(facts, action, args, loosens))
       }
       if (!dangerous) {
         if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
@@ -792,6 +812,8 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
+    // The write proceeds once the unlock admitted it, so the mode's end can set the field back.
+    if (lifts.length > 0) facts.liftedSettings(lifts)
     if (args === undefined) return ALLOW
     if (action === 'session/create') {
       if (createsInKnownWorkspace(facts, args)) return ALLOW
@@ -854,6 +876,12 @@ export interface ReachAccessFacts {
    * @param line - the line.
    */
   readonly logElevated: (line: string) => void
+  /**
+   * Record the settings a device is about to loosen while dangerous mode holds, so the mode's end sets them back.
+   * Called after the unlock admitted the call and before it proceeds.
+   * @param lifts - the fields and the values the call sets.
+   */
+  readonly liftedSettings: (lifts: readonly SettingsLift[]) => void
   /**
    * The computer-only switches the mounted plugins registered.
    * @returns the switches.

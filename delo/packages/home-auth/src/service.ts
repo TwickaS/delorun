@@ -12,11 +12,12 @@
  * @module @delo/home-auth/service
  */
 import type {} from './full-access-grants.ts'
-import { basename, dirname } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
 import type {} from '@delo/logs/cordis'
 import schema from '@deepseek-ai/schemastery'
 import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
+import { HOME_AUTH_FILES } from '@delo/contract-device-approval'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import type { DeviceRecord } from './records.ts'
 import { PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, WINDOWLESS_MODES, type PairingConfig, type PairingView } from './pairing.ts'
@@ -27,6 +28,7 @@ import {
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
 import { EVERY_FIELD, type ComputerOnlySwitch } from './reach-access.ts'
+import { DangerousSettingsLedger, type SettingsFieldAccess, type SettingsLift } from './dangerous-settings.ts'
 import type { ElevationState } from '@delo/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
@@ -113,6 +115,8 @@ export class HomeAuthService extends Service {
   static Config = Config
 
   private core: HomeAuth | undefined
+  /** The settings a device loosened while dangerous mode held, set back when it ends. */
+  private lifts: DangerousSettingsLedger | undefined
 
   /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
   private readonly switches = new Set<ComputerOnlySwitch>()
@@ -155,6 +159,11 @@ export class HomeAuthService extends Service {
     })
     await core.start()
     this.core = core
+    this.lifts = new DangerousSettingsLedger(join(this.secretsDirectory, HOME_AUTH_FILES.reachDangerousSettings))
+    await this.lifts.load()
+    // A lift left by a run whose mode has ended is set back before the first request; without the permission-defaults
+    // provider the mode cannot be read yet, and the first read of it ends the lift.
+    if (this.ctx.get('reachFullAccessGrants') !== undefined) await this.endDangerousSettings()
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
     // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
     // stays out, being the person's own text.
@@ -282,11 +291,47 @@ export class HomeAuthService extends Service {
    * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
    */
   dangerousMode(): boolean {
+    const holds = this.readDangerousMode()
+    // A setting a device loosened does not outlive the mode: the first read that finds it ended sets it back.
+    if (!holds && this.lifts?.pending() === true) void this.endDangerousSettings()
+    return holds
+  }
+
+  private readDangerousMode(): boolean {
     try {
       return this.ctx.get('reachFullAccessGrants')?.dangerousMode() ?? false
     } catch (_unreadable) {
       // An unreadable store cannot show the grant, so no refusal is lifted.
       return false
+    }
+  }
+
+  /**
+   * Record the settings a device is about to loosen while dangerous mode holds, with the values they have now.
+   * @param lifts - the fields and the values the call sets.
+   */
+  recordLifts(lifts: readonly SettingsLift[]): void {
+    this.lifts?.record(lifts, (ns, field) => this.settingsFields().read(ns, field))
+  }
+
+  /**
+   * Write back, through the settings service, every setting a device loosened under a mode that has ended, except one
+   * the person changed since.
+   * @returns when the pass is done; a failed write is retried at the next read of the mode.
+   */
+  async endDangerousSettings(): Promise<void> {
+    await this.lifts?.revert(this.settingsFields(), () => this.readDangerousMode())
+  }
+
+  private settingsFields(): SettingsFieldAccess {
+    const settings = this.ctx.get('settings')
+    return {
+      read: (ns, field) => Reflect.get(settings?.describe().find(row => row.ns === ns)?.value ?? {}, field),
+      write: async (ns, field, value) => {
+        if (settings === undefined) throw new Error('home-auth: no settings service is mounted')
+        if (value === undefined) await settings.mutate(ns, [{ op: 'unset', path: [field] }])
+        else await settings.update(ns, { [field]: value })
+      },
     }
   }
 

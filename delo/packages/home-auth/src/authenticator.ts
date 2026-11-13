@@ -236,6 +236,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         deloHome: ctx.homeAuth.deloHome,
         elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
         logElevated: (line) => { ctx.logger.info(line) },
+        liftedSettings: (lifts) => { ctx.homeAuth.recordLifts(lifts) },
         computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
         protectedEntryIds: () => protectedEntryIdsOf(ctx),
         defaultPermission: () => defaultPermissionOf(access),

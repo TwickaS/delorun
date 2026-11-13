@@ -41,6 +41,8 @@ export const HOME_AUTH_FILES = {
   passkeys: 'passkeys.json',
   ownerCode: 'owner-code.json',
   recovery: 'recovery.json',
+  /** The settings a device loosened while dangerous mode held, set back when it ends (C14, "Elevation"). */
+  reachDangerousSettings: 'reach-dangerous-settings.json',
 } as const
 
 /** IndexedDB database and store that hold a browser device key on its origin. */

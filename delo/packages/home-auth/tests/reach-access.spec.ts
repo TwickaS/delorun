@@ -68,7 +68,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     workspaceRootOf: () => undefined,
     deloHome: '/nowhere',
     elevationOf: () => undefined,
-    logElevated: () => {},
+    logElevated: () => {}, liftedSettings: () => {},
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
     defaultPermission: () => PERMISSION,
