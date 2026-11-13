@@ -36,10 +36,11 @@ export {
   type SaveRequest,
 } from './data-copy.ts'
 export { decideRollback, ROLLING_BACK_PHASE, rollbackUpdate, type RollbackDecision, type RollbackRequest, type RollbackResult, type UpdateRecordFacts } from './rollback.ts'
+export { harnessItems, type HarnessFact } from './harness-items.ts'
 export { type BundleFacts, type IncludeFact, type InstallationStatusFacts, type LayerFact, type ProfileFacts, type ReleaseChecks, type ReportInput, type RevokedPluginVersion, type RowFact, type SkippedBundleFact, type TargetFacts } from './facts.ts'
 export { bundleItems, pluginItems, predictBundleList, rowItems, versionOf, type DisabledPlugin, type PluginItems } from './items.ts'
 export { readInstalledPlugin, type InstalledPluginFact } from './manifest.ts'
 export { dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE, type MessageVersions } from './messages.ts'
 export { buildUpdateReport, countItems, disabledPluginNames, sortItems } from './report.ts'
-export { buildFromSources, builtReport, readReportInput, UpdateReportService, type BuiltUpdateReport, type ReportHealth, type ReportSources, type UpdateReportOptions } from './service.ts'
+export { buildFromSources, builtReport, readReportInput, UpdateReportService, type BuiltUpdateReport, type ReportHealth, type ReportPurpose, type ReportSources, type UpdateReportOptions } from './service.ts'
 export { evaluatePluginAxes, exempted, exemptionKey, requirementText, satisfiesRange, type AxisDecision, type AxisVersions } from './versions.ts'

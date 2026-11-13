@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { HandoverMessage, UpdateJournal } from '@delo/contract-home-process'
 import { CountingChatGate, HomeProcessError, journalPath, readJournal, stashPath, startSuccessor, UpdateHandshake, writeJournal, type HandoverLine, type HandshakeSubject, type Successor } from '../src/index.ts'
 import type { HostProtection } from '../src/index.ts'
-import { FixtureCopies, FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, REPOSITORY, tempHome, V0, V1, V2, type TempHome } from './support.ts'
+import { FixtureCopies, FixtureHarness, FixtureSnapshots, FixtureStore, installFixture, MemoryLogger, PROFILE, readPointer, REPOSITORY, tempHome, V0, V1, V2, type TempHome } from './support.ts'
 
 /** The sandbox protection the running Host booted with. */
 const PROTECTION: HostProtection = { protectedHome: '/h', protectedHomeReadable: ['runtimes'], deniedSockets: ['/h/run/default/update.sock'], escapeSocketDirectories: ['/run/WSL'], privateTmp: true }
@@ -82,7 +82,7 @@ async function setUp(options: SetUpOptions = {}) {
     rows: () => (hostRuns ? [{ id: 'row-a', name: 'plugin-a', generated: false }, { id: 'b08ab057', name: 'plugin-b', generated: true }] : []),
     protection: () => (hostRuns ? PROTECTION : undefined),
   }
-  const handshake = new UpdateHandshake(subject, { store, snapshots, copies })
+  const handshake = new UpdateHandshake(subject, { store, snapshots, copies, harness: new FixtureHarness() })
   return { home, events, handovers, store, snapshots, copies, handshake, journal, gate, logger }
 }
 

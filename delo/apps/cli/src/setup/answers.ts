@@ -2,8 +2,9 @@
  * The answers `delorun setup` applies (contract C11, "Answer schema" and
  * "The --yes and --config forms"): the `--config` document, the `--yes`
  * defaults, and the refusals that keep reach and credential forwarding off in
- * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, and
- * a document that carries a question setup no longer asks. A refusal names the field and never echoes a value.
+ * the unattended forms, the refusal of a document that asks for the stock-home import, which shows a preview first, or
+ * for changes protection, which only a terminal proof changes, and a document that carries a question setup no longer
+ * asks. A refusal names the field and never echoes a value.
  * A version-2 document, written before the release-check question, reads as the current version with the check on; a
  * version-2 or version-3 document, written before the provider question, reads with DeepSeek and the profile's default
  * model as its provider, which is what setup of those versions applied.
@@ -89,6 +90,7 @@ const answerFields = {
   profile: z.strictObject({ name: z.string().min(1).nullable(), port: z.number().int().min(MIN_PORT).max(MAX_PORT).nullable() }),
   reach,
   importStockHome: z.boolean(),
+  protectChanges: z.boolean().default(SETUP_DEFAULTS.protectChanges),
 }
 
 const sections = z.array(z.strictObject({ id: z.string().min(1), status: z.enum(SECTION_STATUSES) })).default([])
@@ -241,6 +243,8 @@ export function readAnswersDocument(path: string): SetupAnswers {
   if (answers.sections.length > 0) throw refusal('sections', 'is written by setup; remove it from the document')
   // The stock-home import shows its preview before anything changes, which no document can stand in for.
   if (answers.importStockHome) throw refusal('importStockHome', 'must be false in --config: the import shows what it copies before it asks, so run delorun import-home in a terminal')
+  // Only a terminal proof changes the protection setting (C21), which no document can stand in for.
+  if (answers.protectChanges) throw refusal('protectChanges', 'must be false in --config: changes protection is turned on only at a terminal, so run delorun changes protection on in one')
   if (answers.profile.name !== null) {
     try {
       selectProfile(answers.profile.name, {})

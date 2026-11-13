@@ -80,14 +80,14 @@ export {
   removeDeviceHandler,
   type RouteHandler,
 } from './routes.ts'
-export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from './arrival.ts'
+export { REQUEST_LISTENER, isLoopbackHost, listenerOf, stampListener, type LoopbackPort, type StampedRequest } from '@delo/home'
 export { requireComputer, routedPathname, type ComputerRequest } from './computer-only.ts'
 export {
   LOOPBACK_STUDIO_ADDRESS,
   isForeignFetchSite,
   isSameLoopbackOrigin,
   loopbackAddressOf,
-} from './arrival.ts'
+} from '@delo/home'
 export {
   HOME_AUTH_HTTP_STATUS,
   HOME_AUTH_LOCAL_CODES,

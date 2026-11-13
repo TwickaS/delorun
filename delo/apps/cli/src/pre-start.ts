@@ -9,6 +9,8 @@
  *
  * @module @delo/cli/pre-start
  */
+import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { changesPreStartStep } from './changes/start.ts'
 import type { CommandOutput } from './command.ts'
 import type { ComposeKind } from './compose.ts'
 import { finishInterruptedRestore, startRegistration } from './home-exclusion.ts'
@@ -27,6 +29,20 @@ export interface PreStartContext {
   readonly successor: boolean
   /** Where a step writes what the person reads. */
   readonly output: CommandOutput
+  /** The stored runtime a fresh start of the CLI profile runs from C1's store; absent outside the store and for headless. */
+  readonly storedRuntime?: StoredRuntime
+}
+
+/** The installed version a fresh start runs from C1's runtime store, and the store's start check of its files. */
+export interface StoredRuntime {
+  /** The installed version this process runs. */
+  readonly version: RuntimeVersion
+  /**
+   * C1's start check of the version's files against its signed file list.
+   * @returns when the files match.
+   * @throws {RuntimeStoreError} when they do not.
+   */
+  readonly check: () => Promise<void>
 }
 
 /** One step before a Host boots. */
@@ -85,10 +101,13 @@ export interface PreStartDependencies {
  * 3. `profile-migrations`: the CLI profile on a fresh start, where an update's successor never runs them, so its boot
  *    stays within the health check's time; and the `headless` profile on every `delorun headless` run, whose one-time
  *    change links Delo's headless bundle and so creates the profile on the first run.
- * 4. `plugin-changes`: both starts; the quick check of the profile's installed plugins against their install records,
+ * 4. `changes`: both starts, after the migrations so the links they add are judged too; a fresh start from the store
+ *    first refuses a runtime whose files differ from the signed release, then each plugin the profile links from a
+ *    folder is made to load the content Changes allows ([changes](./changes/start.ts)).
+ * 5. `plugin-changes`: both starts; the quick check of the profile's installed plugins against their install records,
  *    which writes the profile's trust status and prints a warning for each plugin whose files changed since it was
  *    installed, before any plugin code loads ([install check](./plugin-install-check.ts)). It never stops the start.
- * 5. `update-notice`: both starts; {@link updateNoticeStep}.
+ * 6. `update-notice`: both starts; {@link updateNoticeStep}.
  * @param dependencies - the migrations and the plugin change check.
  * @returns the steps, in the order they run.
  */
@@ -103,6 +122,7 @@ export function preStartSteps(dependencies: PreStartDependencies): readonly PreS
         if (!context.successor) await runProfileMigrations(context.home, context.profile, dependencies.migrations(context), context.output)
       },
     },
+    { name: 'changes', kinds: ['cli', 'headless'], run: changesPreStartStep },
     { name: 'plugin-changes', kinds: ['cli', 'headless'], run: dependencies.pluginChanges },
     { name: 'update-notice', kinds: ['cli', 'headless'], run: updateNoticeStep },
   ]

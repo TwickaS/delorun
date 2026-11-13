@@ -19,7 +19,7 @@ import type { DeviceId } from '@delo/contract-admission'
 import { DEVICE_APPROVAL_VERSION } from '@delo/contract-device-approval'
 import type { HomeAuth } from './home-auth.ts'
 import { HomeAuthError, refusalBody } from './errors.ts'
-import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from './arrival.ts'
+import { isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, loopbackAddressOf } from '@delo/home'
 import { isRecord } from './files.ts'
 import { devicePublicKeyOf } from './records.ts'
 

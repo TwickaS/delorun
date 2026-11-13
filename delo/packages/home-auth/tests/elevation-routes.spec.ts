@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type StudioAddress } from '@delo/contract-admission'
 import { ELEVATION_LIMITS } from '@delo/contract-oidc-passkeys'
-import { stampListener } from '../src/arrival.ts'
+import { stampListener } from '@delo/home'
 import {
   ELEVATION_PATHS,
   elevationApproveHandler,

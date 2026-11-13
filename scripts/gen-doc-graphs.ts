@@ -155,6 +155,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns module and exact configuration watchers; application mutations share its queue and automatic reloads await the application file lock.',
   },
   {
+    key: 'profileReconcileCheck',
+    pkg: 'hmr',
+    title: 'Profile recomposition check',
+    mode: 'seam',
+    implementations: [],
+    consumers: ['hmr'],
+    note: 'Optional check a distribution provides that runs before each profile recomposition, inside the reload queue; a throw refuses the recomposition with everything still running.',
+  },
+  {
     key: 'pluginRegistryProbe',
     pkg: 'client-ui-plugin-manager',
     title: 'Host registry response comparison',

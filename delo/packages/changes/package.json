@@ -1,0 +1,28 @@
+{
+  "name": "@delo/changes",
+  "description": "Delo's Changes: the approved-content store for plugins linked from folders, the change log and its states, the pending changes computed from a folder, the risk summary, the protection setting and the work-session record",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./install": "./src/install-actions.ts",
+    "./stop": "./src/stop.ts",
+    "./plugin-operation": "./src/plugin-operation.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-atomic-write": "workspace:*",
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@delo/contract-home-layout": "workspace:*",
+    "@delo/home": "workspace:*",
+    "@delo/profile-safety": "workspace:*",
+    "diff": "^9.0.0",
+    "yaml": "^2.9.0"
+  },
+  "delo": {
+    "state": "shipped"
+  }
+}

@@ -20,7 +20,7 @@ import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
 import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
 import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
-import { REQUEST_LISTENER } from '../src/arrival.ts'
+import { REQUEST_LISTENER } from '@delo/home'
 import { DeviceStore } from '../src/devices.ts'
 import { claimOf, recordOf } from './fixtures/home.ts'
 

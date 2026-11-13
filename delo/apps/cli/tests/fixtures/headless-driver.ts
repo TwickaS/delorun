@@ -7,7 +7,7 @@
  * Mode `probe` (the default): the booted Host's guards are asked in this process, and the line holds each outcome: a
  * fetch to a loopback address through the web seam's real HTTP provider, a `write` of an `AGENTS.md` that a scripted
  * model requests from the real file tool, a switch to full access for a workspace without a grant (the guard and the
- * preset service), and the turn gate.
+ * preset service), an agent's plugin install under protection on, which the home has, and the turn gate.
  *
  * Mode `permission-mode`: the profile's `headless-runner` row stays enabled and the task's arguments carry
  * `--permission-mode danger-full-access` for a workspace without a grant. Delo's pre-boot refusal is bypassed by
@@ -28,6 +28,8 @@ import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-web'
 import type {} from '@delo/bundle-local/update-gate'
+import { attestTerminal, readChangeLog, setProtection } from '@delo/changes'
+import { HEADLESS_PROFILE } from '@delo/contract-home-layout'
 import { prepareHome } from '../../src/command.ts'
 import { CliError } from '../../src/exit.ts'
 import { runHeadless, type HeadlessDependencies } from '../../src/headless.ts'
@@ -39,6 +41,8 @@ const mode = (process.argv[2] ?? 'probe') as Mode
 const output = { env: { ...process.env }, stdout: (text: string) => void process.stderr.write(text), stderr: (text: string) => void process.stderr.write(text) }
 const workspace = join(process.cwd(), 'workspace')
 const { home } = await prepareHome(output, undefined)
+// With protection on, an agent's plugin install waits for the person.
+await setProtection(home.path, 'on', attestTerminal({ stdin: { isTTY: true }, stdout: { isTTY: true } }))
 mkdirSync(workspace, { recursive: true })
 
 /** The test overlay of each mode, which applies before the sandbox overlay. */
@@ -89,6 +93,7 @@ const dependencies: HeadlessDependencies = {
       watchUpdates: () => Promise.resolve(),
       studio: () => undefined,
       studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
+      reload: () => Promise.resolve({ ok: true }),
     } satisfies BootedProfile
   },
 }
@@ -198,6 +203,11 @@ async function probe(ctx: Context): Promise<Record<string, unknown>> {
   const guardReason = ctx.get('sandboxModeGuard')?.(agent.session, 'danger-full-access')
   const selection = await refusalOf(() => ctx.permissionPresets.set(agent.session, 'danger-full-access'))
   const modes = (): unknown[] => agent.session.ownEvents().flatMap(event => event.type === 'sandbox/mode' ? [event.data.mode] : [])
+  // An agent's plugin install reaches the tool registry's pre-execute chain, where Changes holds it as a pending change.
+  const install = { name: 'plugin_manager', arguments: { action: 'install_bundle', target: 'left-pad' } }
+  const pluginInstall = await ctx.waterfall('tools/pre-execute', install as never, () => Promise.resolve({ kind: 'allow' as const }))
+  const pending = (await readChangeLog(home.path, HEADLESS_PROFILE)).entries.map(entry => ({ kind: entry.kind, state: entry.state, spec: entry.subject.spec }))
+  const installed = existsSync(join(home.path, 'profiles', HEADLESS_PROFILE, 'node_modules', 'left-pad'))
   // The turn started before the release; it ran only because the gate was released, and the model's write request reaches the file tool.
   await agent.whenIdle()
   const results = agent.session.ownEvents().flatMap(event => event.type === 'tool/result' ? [event.data] : [])
@@ -205,6 +215,7 @@ async function probe(ctx: Context): Promise<Record<string, unknown>> {
     fetch,
     instructionWrite: { toolResults: results.map(({ message, error }) => ({ isError: message.isError === true, error })), written: existsSync(target) },
     fullAccess: { guardReason: guardReason ?? null, selection, modes: modes() },
+    pluginChange: { decision: pluginInstall, pending, installed },
     turnGate: { present: ctx.get('deloTurnGate') !== undefined, beforeRelease, held: ctx.get('deloTurnGate')?.held, releases, modelRequests: adapter.requests, turnEnds: agent.session.ownEvents().flatMap(event => event.type === 'turn/end' ? [event.data.reason] : []) },
   }
 }

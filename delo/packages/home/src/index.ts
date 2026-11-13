@@ -21,3 +21,4 @@ export { acquireHomeLock, adoptHomeLock, newStartId, readHomeLock, removeStaleLo
 export { workspaceLocationHomes, workspaceLocationMessage, workspaceLocationProblem, type WorkspaceLocationHomes, type WorkspaceLocationProblem } from './workspace-location.ts'
 export { newStartToken, parseStartToken, readStartTokenFile, removeStartTokenFile, StartTokenCheck, startTokenFile, writeNewStartToken } from './start-token.ts'
 export { authenticateLine, listenTokenSocket, type ChannelLimits, type ChannelLogDetails, type ChannelLogger, type ChannelRefusal, type ListenerRefusal, type TokenSocket, type TokenSocketOptions } from './token-socket.ts'
+export { LOOPBACK_STUDIO_ADDRESS, REQUEST_LISTENER, isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, stampListener, type LoopbackPort, type StampedRequest } from './arrival.ts'

@@ -269,7 +269,7 @@ function presetEffectText(layer: CompositionLayer): string {
  * @param diff - the tool's diff representation, omitted when the tool carries none.
  * @returns the diff text the note shows.
  */
-function diffText(diff: WriteConsentDiff | undefined): string {
+export function diffText(diff: WriteConsentDiff | undefined): string {
   if (diff === undefined) return '(the tool carries no diff)'
   if (typeof diff === 'string') return diff
   const old = diff.old === null ? '(the write tool does not carry the previous text)' : diff.old

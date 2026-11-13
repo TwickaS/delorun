@@ -20,6 +20,7 @@ function pluginNames(report: ReturnType<typeof buildUpdateReport>): string[] {
 describe('buildUpdateReport', () => {
   it('names the format, the installation, both releases and the checks the target passed', () => {
     const report = buildUpdateReport(input())
+    expect(report.schema).toBe('delo.update-report/3')
     expect(report.schema).toBe(UPDATE_REPORT_SCHEMA)
     expect(report.installation).toBe('cli-home')
     expect(report.from).toEqual(FROM)
@@ -37,7 +38,7 @@ describe('buildUpdateReport', () => {
 
   it('sorts items by kind and then by subject', () => {
     const report = buildUpdateReport(input())
-    const subjects = report.items.map(item => `${item.kind}:${item.kind === 'plugin' ? item.subject.name : item.kind === 'bundle' ? item.subject.package : item.kind === 'row' ? item.subject.name : item.subject.directories.join(',')}`)
+    const subjects = report.items.map(item => `${item.kind}:${item.kind === 'plugin' ? item.subject.name : item.kind === 'bundle' ? item.subject.package : item.kind === 'row' ? item.subject.name : item.kind === 'data' ? item.subject.directories.join(',') : item.subject.file}`)
     expect(subjects).toEqual([...subjects].sort((left, right) => {
       const rank = (text: string): number => text.startsWith('plugin:') ? 0 : text.startsWith('bundle:') ? 1 : 2
       const byKind = rank(left) - rank(right)
@@ -47,8 +48,8 @@ describe('buildUpdateReport', () => {
   })
 
   it('counts every effect and the unverified items beside them', () => {
-    expect(buildUpdateReport(input()).counts).toEqual({ disabled: 9, removed: 1, changed: 0, unverified: 4, data: 0 })
-    expect(countItems([])).toEqual({ disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0 })
+    expect(buildUpdateReport(input()).counts).toEqual({ disabled: 9, removed: 1, changed: 0, unverified: 4, data: 0, harness: 0 })
+    expect(countItems([])).toEqual({ disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0, harness: 0 })
   })
 
   it('names the plugins the update disables, which the health check holds the target to', () => {
@@ -76,7 +77,7 @@ describe('buildUpdateReport', () => {
   it('is empty when nothing changes', () => {
     const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('dsh-tools', '1.4.0', { dsh: '^0.3.0' })] }), target: target() }))
     expect(report.items).toEqual([])
-    expect(report.counts).toEqual({ disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0 })
+    expect(report.counts).toEqual({ disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0, harness: 0 })
   })
 
   it('does not change the facts it was handed', () => {

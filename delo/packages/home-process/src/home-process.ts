@@ -587,6 +587,10 @@ export class HomeProcess implements HandshakeSubject {
         return reachStatus(request, check.callerOf(request.token), this.host?.reach)
       case 'reach.apply':
         return reachApply(request, check.callerOf(request.token), this.host?.reach)
+      case 'changes.reload':
+        this.refuseOutsideRunning()
+        // `running` is entered only after the Host booted, and left before it closes.
+        return { reload: await this.host!.reload() }
       default: {
         const unknown: never = request
         throw new HomeProcessError('SCHEMA_VIOLATION', `unknown op ${String((unknown as { readonly op: unknown }).op)}`)

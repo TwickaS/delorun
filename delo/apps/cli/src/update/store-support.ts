@@ -12,7 +12,7 @@ import type { RuntimeVersion } from '@delo/contract-home-layout'
 import type { VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import type { UpdateSupport } from '@delo/home-process'
 import type { DeloLogger } from '@delo/logs'
-import { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, type OpenUpdateChannel, type TrustedRootSource } from '@delo/runtime-store'
+import { FULL_CHECK_DAYS_ENV, resolveFullCheckDays, RuntimeStore, type OpenUpdateChannel, type TrustedRootSource, type VerifiedRuntime } from '@delo/runtime-store'
 import { homeReleaseChannel, runtimePlatformOf } from './channel.ts'
 import { storeReportSources } from './sources.ts'
 import { homeUpdateSupport } from './support.ts'
@@ -80,9 +80,10 @@ export function storeUpdateSupport(home: string, profile: string, running: Runti
  * @param logger - the home process's logger.
  * @param root - the stored root, anchored on the launcher's roots.
  * @param fullCheckDays - the interval of the start check's full hash in days.
+ * @returns the verified runtime with its signed file list.
  * @throws {RuntimeStoreError} when the version is not installed, its files do not match its manifest, or the root
  *   does not verify it; `ROOT_NOT_ANCHORED` when the root cannot be anchored.
  */
-export async function checkStoredRuntime(home: string, version: RuntimeVersion, logger: DeloLogger, root: TrustedRootSource, fullCheckDays: number): Promise<void> {
-  await new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger }).startCheckRuntime(version, await root(), fullCheckDays)
+export async function checkStoredRuntime(home: string, version: RuntimeVersion, logger: DeloLogger, root: TrustedRootSource, fullCheckDays: number): Promise<VerifiedRuntime> {
+  return new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger }).startCheckRuntime(version, await root(), fullCheckDays)
 }

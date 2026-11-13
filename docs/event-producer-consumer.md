@@ -58,8 +58,8 @@ Application listeners are outside this package matrix. Desktop Host subscribes t
 | `fs/write-intent` | `waterfall` | [`packages/fs/fs/src/index.ts:66`](../packages/fs/fs/src/index.ts) | `liveshare` (`waterfall`), [`tool-fs`](../packages/fs/tool-fs) (`waterfall`), [`tool-str-replace-editor`](../packages/fs/tool-str-replace-editor) (`waterfall`) | [`fs-observation-policy`](../packages/fs/fs-observation-policy), [`tool-fs`](../packages/fs/tool-fs), [`workspace-changes`](../packages/deliverables/workspace-changes) |
 | `goal/activation-changed` | `emit` | [`packages/goal/goal/src/types.ts:147`](../packages/goal/goal/src/types.ts) | [`goal`](../packages/goal/goal) (`emit`) | `remotes`, `server` |
 | `goal/changed` | `emit` | [`packages/goal/goal/src/domain.ts:114`](../packages/goal/goal/src/domain.ts) | [`goal`](../packages/goal/goal) (`emit`) | [`goal-round-driver`](../packages/goal/goal-round-driver) |
-| `hmr/change` | `emit` | [`packages/boot/hmr/src/index.ts:35`](../packages/boot/hmr/src/index.ts) | [`hmr`](../packages/boot/hmr) (`emit`) | - |
-| `hmr/reload` | `emit` | [`packages/boot/hmr/src/index.ts:40`](../packages/boot/hmr/src/index.ts) | [`hmr`](../packages/boot/hmr) (`emit`) | - |
+| `hmr/change` | `emit` | [`packages/boot/hmr/src/index.ts:37`](../packages/boot/hmr/src/index.ts) | [`hmr`](../packages/boot/hmr) (`emit`) | - |
+| `hmr/reload` | `emit` | [`packages/boot/hmr/src/index.ts:42`](../packages/boot/hmr/src/index.ts) | [`hmr`](../packages/boot/hmr) (`emit`) | - |
 | `llm-pi-ai/request-headers` | `waterfall` | [`packages/llm/llm-pi-ai/src/index.ts:114`](../packages/llm/llm-pi-ai/src/index.ts) | [`llm-pi-ai`](../packages/llm/llm-pi-ai) (`waterfall`) | - |
 | `llm/adapters-updated` | `emit` | [`packages/llm/llm/src/types.ts:24`](../packages/llm/llm/src/types.ts) | [`llm`](../packages/llm/llm) (`events.dispatch`) | [`acp`](../packages/acp/acp), `remotes` |
 | `llm/models-updated` | `emit` | [`packages/llm/llm/src/types.ts:30`](../packages/llm/llm/src/types.ts) | [`llm-deepseek`](../packages/llm/llm-deepseek) (`emit`) | `remotes` |

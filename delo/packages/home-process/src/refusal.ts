@@ -47,6 +47,15 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not update: the release channel could not be reached, and nothing was downloaded or changed.', remedies: ['Check this computer\'s connection, then run the same command again.'] }
     case 'GIT_UNAVAILABLE':
       return { lead: 'Delo did not go ahead: git, which saves and restores the profile\'s history, cannot run here, and nothing was changed.', remedies: ['Install git, then run the same command again.'] }
+    case 'HARNESS_CHANGES_PENDING':
+      return { lead: 'Delo did not update: your changes to Delo itself wait for review, and an update would leave them behind.', remedies: ['Apply or discard them: delorun changes list', 'Then run the same command again.'] }
+    case 'HARNESS_COPY_UNREADABLE':
+      return {
+        lead: 'Delo did not update: it could not read your copy of Delo itself, so it cannot tell whether changes there wait for review, and it kept the release it runs.',
+        remedies: [`Take back every change in the copy: delorun changes edit-harness --discard${profile}`, `Or fix the copy, then see its changes: delorun changes list${profile}`, 'Then run the same command again.'],
+      }
+    case 'HARNESS_REPORT_STALE':
+      return { lead: 'Delo did not update: what it would now do with your changes to Delo itself differs from the report you confirmed, and it kept the release it runs.', remedies: [`Read the new report and confirm it: delorun update${profile}`] }
     case 'NO_PREVIOUS':
       return { lead: 'Delo did not roll back: no previous release is installed.', remedies: [] }
     case 'NO_UPDATE_RECORD':

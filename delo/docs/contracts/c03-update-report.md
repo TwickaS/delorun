@@ -1,5 +1,5 @@
 ---
-description: "Contract C3: the update report shown before a Delo update applies, its items (plugin, bundle, row, reason, verified or unverified) and reason codes, the versions and update states of the CLI home and the desktop Host, the health-check criteria, the rollback triggers, and the checks and approval prompt of undo and restore."
+description: "Contract C3: the update report shown before a Delo update applies, its items (plugin, bundle, row, chat data, harness file, reason, verified or unverified) and reason codes, the versions and update states of the CLI home and the desktop Host, the health-check criteria, the rollback triggers, and the checks and approval prompt of undo and restore."
 ---
 
 # C3 Update report
@@ -8,13 +8,14 @@ English | [中文](c03-update-report.zh.md)
 
 ## Summary
 
-Before an update applies, Delo shows what the target release would change or break in the person's profile: every plugin, bundle and profile row it would disable, remove or change, with the reason and whether the prediction rests on metadata Delo could read (verified) or not (unverified). Nothing applies until the person confirms. The CLI home and the desktop Host are separate installations that update independently, and the report shows the versions and update states of both. After the switch, a health check decides within 120 seconds whether the update stands; a failed check rolls back automatically, and the person can roll back at any later time. Undo and restore of profile history run the same plugin checks an install runs and list what they change before they apply. The types live in [`@delo/contract-update-report`](../../packages/contract-update-report/README.md).
+Before an update applies, Delo shows what the target release would change or break in the person's profile: every plugin, bundle and profile row it would disable, remove or change, and every file of the harness the person changed with whether that change carries over, with the reason and whether the prediction rests on metadata Delo could read (verified) or not (unverified). Nothing applies until the person confirms. The CLI home and the desktop Host are separate installations that update independently, and the report shows the versions and update states of both. After the switch, a health check decides within 120 seconds whether the update stands; a failed check rolls back automatically, and the person can roll back at any later time. Undo and restore of profile history run the same plugin checks an install runs and list what they change before they apply. The types live in [`@delo/contract-update-report`](../../packages/contract-update-report/README.md).
 
 ## Status
 
 The CLI home's update and rollback are built and reached by `delorun update` and `delorun recover`; the studio's and the desktop app's are not, and undo and restore run without their checks and approval prompt.
 
 - **Built and reached:** `delorun update` builds the report against the newest release on the channel, applies nothing until the person confirms (`--yes` confirms only a report with no `disabled`, `removed` or unverified item and a `log` of `passed`), writes the snapshot, waits for running chats while the CLI profile's update gate refuses new turns, takes the session-data copy, runs H1 to H5 within 120 seconds and rolls back automatically when one fails. `delorun recover` rolls back through the one table, restores a profile history version, enters and leaves safe mode and discards set-aside data. The [update check](#update-check) runs in the Host of a CLI home that runs from the store, writes its record and serves the notice to the terminal, the studio's sidebar and `delorun doctor`.
+- **Built and reached:** the report's `harness` items, one per file the running runtime runs other than its signed one ([C21](c21-changes.md#harness-edits)), merged with the target's verified file, which `delorun update` prints and `--yes` holds to its rule; and applying them right before the switch ([Harness files across an update](#harness-files-across-an-update)).
 - **Not built:** the studio's update screen, "Update now" and rollback; the desktop updater's use of this report and procedure; the status records, which the report reads and no installation writes, so the other installation always shows `unknown`; the approval prompt and the install-time plugin checks of undo and restore (R5), so `delorun recover restore` applies a version at once and lists what changed afterwards; the revocation list (no release publishes one, so every report lists `revocations` as not checked); H1's release-log condition, because H1 checks the runtime files only; reverting a restore that fails partway, which leaves the profile partly restored; the startup report with Update, Keep disabled and Roll back, because upstream's start disables an incompatible row and prints one line to standard error; the desktop's fatal recovery writing a history version and offering the profile from before the update; a history version before profile normalisation.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them.
@@ -31,6 +32,7 @@ The requirements and denial tests below that this list names as not built or rea
 - [Verified and unverified](#verified-and-unverified)
 - [Data formats](#data-formats)
 - [Applying an update](#applying-an-update)
+- [Harness files across an update](#harness-files-across-an-update)
 - [Health check](#health-check)
 - [Rollback triggers](#rollback-triggers)
 - [Rollback](#rollback)
@@ -83,7 +85,7 @@ A report is built for one installation and one target release, after the target'
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema` | `delo.update-report/2` | The report format. |
+| `schema` | `delo.update-report/3` | The report format. |
 | `installation` | `cli-home` or `desktop-host` | The installation being updated. |
 | `from`, `to` | `{ "delo", "dsh", "channel" }` | The running and target versions ([C17](c17-plugin-versions.md#the-two-versions)). |
 | `release` | `{ "manifest": sha256, "signature", "freshness", "log" }` | The target's manifest digest and each check's result. `signature` and `freshness` are `passed` or `failed`: the store verifies the signature when it builds the report, and the install verified freshness before the files landed. `log` is the state the install recorded in `trust/release-log.json` ([C18](c18-release-log.md)): `passed` for `verified`, `unchecked` when the online check did not complete or no state is recorded, `failed` for a verifiable failure. A report is made for `passed` and `unchecked`, and the report says when the log was not reached. |
@@ -91,7 +93,7 @@ A report is built for one installation and one target release, after the target'
 | `installations` | list of `{ "id", "delo", "dsh", "state", "target"? }` | Both installations' versions and update states. |
 | `items` | list of item | Everything that changes, sorted by kind, then subject. |
 | `notChecked` | list of `revocations` | The sources the report did not read; the report says so instead of counting them as checked. `revocations` means the target publishes no revocation list, and the report states: `Not checked: revocations. This release publishes no revocation list; the health check after the switch holds what one would show.` |
-| `counts` | `{ "disabled", "removed", "changed", "unverified", "data" }` | The number of items with each effect, of unverified items and of `data` items. |
+| `counts` | `{ "disabled", "removed", "changed", "unverified", "data", "harness" }` | The number of items with each effect, of unverified items, of `data` items and of `harness` items. |
 
 The report is stored in the snapshot's history version, so the history shows what the update was predicted to change. No release reads a stored report back, so `log`'s `unchecked` value belongs to format 2 without a new version: a report an earlier release wrote never carries it.
 
@@ -99,12 +101,12 @@ The report is stored in the snapshot's history version, so the history shows wha
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `kind` | `plugin`, `bundle`, `row` or `data` | What the item is about. |
-| `subject` | object | For `plugin`: `{ "name", "version" }`; for `bundle`: `{ "package" }`; for `row`: `{ "id"?, "name", "layer" }`, where `layer` names the bundle, profile patch, home patch or overlay that holds the row; for `data`: `{ "directories": ["sessions", "storages"] }`. |
+| `kind` | `plugin`, `bundle`, `row`, `data` or `harness` | What the item is about. |
+| `subject` | object | For `plugin`: `{ "name", "version" }`; for `bundle`: `{ "package" }`; for `row`: `{ "id"?, "name", "layer" }`, where `layer` names the bundle, profile patch, home patch or overlay that holds the row; for `data`: `{ "directories": ["sessions", "storages"] }`; for `harness`: `{ "file" }`, the file's path relative to the runtime's root. |
 | `reason` | reason code | Why it changes ([reasons](#reasons)). |
 | `effect` | `disabled`, `removed`, `changed` or `kept` | What happens to it on the target; `kept` appears only for an exempted or unverified subject the person should see. |
 | `verification` | `verified` or `unverified` | Whether the prediction rests on metadata Delo read ([verified and unverified](#verified-and-unverified)). |
-| `detail` | object | The reason's facts, such as the requirement range, the axis, the revocation message or the replacement bundle. |
+| `detail` | object | The reason's facts, such as the requirement range, the axis, the revocation message, the replacement bundle, or a harness file's `merge`, `result` and `diff`. |
 | `actions` | list | Offered choices: `update-plugin`, `keep-disabled`, `allow-version`, `skip-update`, `copy-session-data`, `continue-without-copy`. |
 
 ## Reasons
@@ -126,8 +128,13 @@ The report is stored in the snapshot's history version, so the history shows wha
 | `row-include-blocked` | row | disabled | `Include <file> reaches <plugin>, which the update disables, so the whole Include is disabled.` |
 | `data-format-changed` | data | changed | `Delo <to.delo> keeps chat data in a format Delo <from.delo> may not read.` |
 | `data-format-unknown` | data | changed | `Delo cannot tell whether Delo <from.delo> reads the chat data Delo <to.delo> writes.` |
+| `harness-change-carried` | harness | kept | `Your change to <file> carries over to Delo <to.delo>.` |
+| `harness-change-merged` | harness | changed | `Your change to <file> and Delo <to.delo>'s change to it merge into a file neither has; read the merge before you confirm.` |
+| `harness-change-conflicts` | harness | disabled | `Your change to <file> conflicts with Delo <to.delo>'s file; the new release's file runs, and yours is kept beside it as <file>.mine.`; for `release-changed-removed`: `You removed <file>, and Delo <to.delo> changed it; the new release's file runs.` |
 
 The `bundle-skipped` items and the rows of bundle layers come from the bundle list the target would load: the template, or the profile's list without the retired bundles. Each bundle resolves from the target's install anchor first and the profile second, as upstream's profile load resolves it. The target skips a bundle that does not resolve, declares no `dsh.bundle`, lists `dsh.bundle.platforms` without this machine's platform, has a DSH requirement (`engines.dsh`, else its `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*` peers) that the target does not meet and no exact-version exemption covers, or has an `engines.delo` the target does not meet. The patch files a loaded bundle declares in `dsh.bundle.patch` are walked row by row, like the profile patch, and each row's `layer` is the bundle.
+
+A `harness` item is `verified` and comes from a three-way merge of the running release's signed file, the content the running runtime runs (the approved content, or for a change a failed start left out that stays out, what runs instead) and the target's signed file, read after the target's file list is verified; its `detail.merge` names the outcome. The change carries as it is (`harness-change-carried`, no action) when the target left the file as it was (`release-unchanged`) or when the target's file already equals the approved content (`in-release`). When both releases' files differ and the patch from the running release's file to the approved content applies to the target's file with no fuzz and no line-ending conversion, or only the execute bits differ, the target runs a merge of both sides that neither had (`merged`, `harness-change-merged`, action `skip-update`): the item carries `detail.diff`, the unified diff from the target's file to the merged file with `old mode` and `new mode` lines when the execute bit differs, bounded as [C21](c21-changes.md)'s diffs are (no lines of a side that is binary or larger than 1 MiB, and none of any diff once the report's merged diffs pass 256 KiB, each with `notShown` saying why), which `delorun update` prints under the item. For each file the target runs of a carried or merged change, `detail.result` holds the SHA-256 and execute bit of what it runs. Every other case conflicts (`harness-change-conflicts`, action `skip-update`): the edits overlap (`edits-overlap`), both sides changed a file that is not UTF-8 text (`binary`) or one larger than 1 MiB (`too-large`), the target removes a file the person changed (`release-removed`), the person removed a file the target changed (`release-changed-removed`), or both add the file with different content (`both-added`). A conflicted file never silently keeps either side. A rollback's report has no `harness` item, because the runtime rolled back to runs its own approved files.
 
 For a mismatch on either version axis the report names both target versions, and its `actions` offer updating the plugin to a version that meets the target and, for the axis that is unmet, an exact-version exemption on the target version ([C17](c17-plugin-versions.md#exemptions)).
 
@@ -149,10 +156,16 @@ A session-data copy holds the home's `sessions/` and `storages/` as real copies 
 
 ## Applying an update
 
-1. The person confirms the report; `delorun update` prints it and asks, and `delorun update --yes` confirms a report that has no `disabled` or `removed` item, no unverified item and a `log` of `passed`. With a `data` item the person also chooses about the copy: `--yes` takes it, and declining needs `--no-data-copy` or the prompt's second choice.
+1. The person confirms the report; `delorun update` prints it and asks, and `delorun update --yes` confirms a report that has no `disabled` or `removed` item, no `harness-change-merged` item, no unverified item and a `log` of `passed`. With a `data` item the person also chooses about the copy: `--yes` takes it, and declining needs `--no-data-copy` or the prompt's second choice.
 2. A snapshot is written: a profile history version named "Before update to Delo <to.delo>", holding the profile patch, the home patch, the bundle list, both exemption files, the profile's `pnpm-workspace.yaml` and the report. The update record `run/<profile>/update.json` ([C1](c01-home-layout.md)) names the two versions, whether the data differs, whether a copy is taken and the snapshot's history version (`snapshot`).
 3. Running chats finish, or the person stops them; the CLI switch goes through the home process's update handshake, which never switches under a running chat ([C19](c19-home-process.md)), and the desktop app does this in its pre-restart step. With the Host stopped and the home lock held, the session-data copy is written when the person chose it.
 4. The update record's `targetStarted` is written and synced, then the target starts and the health check runs.
+
+## Harness files across an update
+
+An update refuses with [C19](c19-home-process.md)'s `HARNESS_CHANGES_PENDING` while changes to the running runtime's harness wait for review in its writable copy: at `update.prepare` before anything is fetched, and again right before the switch. The person applies or discards them first, so an update never leaves a change behind unseen. When the copy cannot be scanned, because it passes the scan's limits, an entry cannot be read or a file changed while it was read, the update refuses at the same two points with `HARNESS_COPY_UNREADABLE`, naming what failed and the commands that clear it: `delorun changes edit-harness --discard`, or fixing the copy and `delorun changes list`.
+
+Right before the switch, after the session-data copy and under the harness's lock, which the runtime switch runs inside, the home process plans the merge again against the target's verified files and compares it with the `harness` items of the report the person confirmed, which it kept from `update.prepare`; it reads nothing of the report from the client. A file in one and not the other, another `merge`, or another `result` refuses the update with `HARNESS_REPORT_STALE`, which names the files and tells the person to run `delorun update` again; nothing is written for the target and the update ends `aborted` with the Host running again. Otherwise it writes the target runtime's harness files ([C21](c21-changes.md#harness-edits)). Whatever an earlier install left under `changes/harness/<to>/` is removed first, never merged into. Each carried file becomes an approved file of the target whose `signed` is the target's file, logged as an applied `harness-edit` of the target runtime with `decidedFrom: "update"`; a file the target already holds needs nothing. A conflicted file runs the target's file: when the running runtime has a writable copy, or any file conflicts, the target gets a writable copy, and each conflicted file the person changed is kept in it as `<file>.mine`, which is never a change; a file the person removed has nothing to keep. When anything fails before the switch, what was written for the target is removed, the update ends `aborted` and the Host runs again. The running runtime's record, copy and log entries are never written, so a rollback to it runs its approved files again. The target's composed tree is built by its first start, whose signed entry hands off to it with the handover descriptor ([C21](c21-changes.md#harness-edits)), so the health check covers the files it runs.
 
 ## Health check
 
@@ -220,7 +233,7 @@ A plugin version the current revocation list revokes is restored disabled with i
 
 ## Compatibility
 
-The report's `schema` names its major version; reason codes form a closed list in that version, and a new reason is a new major version, so a reader never meets a code it does not know. The required changes to upstream's own startup behaviour are that an incompatible plugin at startup is reported with Update, Keep disabled and Roll back instead of being disabled with one line on standard error, that the desktop's fatal-recovery "Disable third-party plugins" writes a history version and offers "Restore profile from before the update", and that profile normalisation writes a history version first; none of the three is built, and normalisation rewrites the bundle list without a history version.
+The report's `schema` names its major version; reason codes form a closed list in that version, and a new reason is a new major version, so a reader never meets a code it does not know. Formats 1 and 2 are retired: no Delo release wrote either, so no reader of them ships. No release has written format 3, and no reader of it exists outside Delo's own update packages, which change together; `harness-change-merged` and the `result` and `diff` details joined format 3 under that condition, and once a release writes format 3 its list is closed. The required changes to upstream's own startup behaviour are that an incompatible plugin at startup is reported with Update, Keep disabled and Roll back instead of being disabled with one line on standard error, that the desktop's fatal-recovery "Disable third-party plugins" writes a history version and offers "Restore profile from before the update", and that profile normalisation writes a history version first; none of the three is built, and normalisation rewrites the bundle list without a history version.
 
 ## Security
 
@@ -278,4 +291,8 @@ The report's `schema` names its major version; reason codes form a closed list i
 | `update-report-applies-nothing` | update | `delorun update --report` prints the report, asks nothing and applies nothing. |
 | `update-notice-off-makes-no-request` | update-notice | With the switch off the row mounts no service and no route. |
 | `update-notice-remote-session-offers-no-action` | update-notice | A remote session's notice offers no control. |
+| `c03-harness-change-carried` | update | A change to a harness file the target did not change is one `harness-change-carried` item, `kept` and `verified`, stating the SHA-256 of what the target runs, and `--yes` still confirms the report; applying the update writes the target's record with the carried file and an applied log entry decided at `update`, and a rollback runs the previous runtime's own record again (`harness-items.spec.ts`, `harness-update.integration.spec.ts`, `update.e2e.integration.spec.ts`). |
+| `c03-harness-change-merged` | update | A change to a harness file the target changed without overlapping it is one `harness-change-merged` item, `changed` and `verified`, offering `skip-update`, with the diff from the target's file to the merged file; `delorun update` prints the diff and `--yes` does not confirm the report (`harness-items.spec.ts` in `@delo/update` and in the CLI, `command.spec.ts`, `harness-merge.spec.ts`). |
+| `c03-harness-report-stale` | update | An apply whose merge under the harness lock differs from the confirmed report's `harness` items, by file, `merge` or `result`, refuses with `HARNESS_REPORT_STALE` before anything is written or switched; the home process hands the carry the report it kept (`harness-carry.integration.spec.ts`, `harness-update.integration.spec.ts`, `handshake.integration.spec.ts`). |
+| `c03-harness-conflict-keeps-mine` | update | A harness file whose change conflicts with the target's is one `harness-change-conflicts` item, `disabled`, offering `skip-update`, and `--yes` does not confirm the report; applying the update runs the target's file and writes the person's content beside it as `<file>.mine` in the target's writable copy (`harness-items.spec.ts`, `command.spec.ts`, `harness-update.integration.spec.ts`). |
 | `c03-previous-release-reads-delorun-records` | update | Every record `deloRecords` names is written at the version listed, and the update record a release writes is read back by the same reader. |

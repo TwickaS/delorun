@@ -73,7 +73,7 @@ async function ownSupport(): Promise<UpdateSupport> {
     root: unused,
     fullCheckDays: 7,
     openChannel: unused,
-    sources: { running: unused, statuses: unused, profile: unused, target: unused, data: unused, now: () => { throw new Error('not read before the refusal') } },
+    sources: { running: unused, statuses: unused, profile: unused, target: unused, data: unused, harness: unused, now: () => { throw new Error('not read before the refusal') } },
     now: () => new Date('2026-11-10T12:00:00.000Z'),
   })
 }

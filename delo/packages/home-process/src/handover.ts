@@ -8,7 +8,7 @@
  *
  * @module @delo/home-process/handover
  */
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -135,15 +135,37 @@ export interface Successor {
    */
   commit(): Promise<void>
   /**
-   * Stop the successor and wait for it to exit.
+   * Stop the successor with every process of its process group, such as the composed tree's `delorun` a signed
+   * successor handed off to, and wait for the successor to exit.
    * @returns when it has exited.
    */
   stop(): Promise<void>
 }
 
 /**
- * Start a successor from a version's runtime and write the handover line to its pipe. It runs in its own process
- * group, so a signal to the requester's terminal does not reach it.
+ * Kill a successor's process group: on POSIX `SIGKILL` to the group the successor leads; on Windows, which has no
+ * process groups, `taskkill /T /F` over the successor's process tree, then the successor itself.
+ * @param child - the successor.
+ */
+function killGroup(child: ChildProcess): void {
+  const pid = child.pid
+  if (pid === undefined) return
+  /* v8 ignore next 5 -- Windows only; no spec runs on Windows. */
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    return
+  }
+  try {
+    process.kill(-pid, 'SIGKILL')
+  } catch (_gone) {
+    // ESRCH: no process of the group is left, so nothing of the successor's runs.
+  }
+}
+
+/**
+ * Start a successor from a version's runtime and write the handover line to its pipe. It leads its own process group,
+ * so a signal to the requester's terminal does not reach it, and stopping it stops the group.
  * @param command - the command from the runtime store.
  * @param handover - the handover line.
  * @param timeoutMs - how long the successor has to answer.
@@ -155,6 +177,10 @@ export function startSuccessor(command: HomeCommand, handover: HandoverLine, tim
   const exited = new Promise<void>((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) resolve()
     else child.once('exit', () => { resolve() })
+    // A process that could not be started reports `error` before `spawn` and never exits.
+    const notStarted = (): void => { resolve() }
+    child.once('error', notStarted)
+    child.once('spawn', () => { child.off('error', notStarted) })
   })
   const result = new Promise<HandoverMessage>((resolve) => {
     let settled = false
@@ -187,7 +213,7 @@ export function startSuccessor(command: HomeCommand, handover: HandoverLine, tim
       })
     }),
     async stop() {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      killGroup(child)
       await exited
       pipe.destroy()
     },

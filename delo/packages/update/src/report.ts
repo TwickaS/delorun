@@ -15,11 +15,12 @@ import type { VersionAxis } from '@delo/contract-plugin-versions'
 import { UpdateReportError } from './errors.ts'
 import type { ReportInput, TargetFacts } from './facts.ts'
 import { dataItems } from './data-formats.ts'
+import { harnessItems } from './harness-items.ts'
 import { bundleItems, pluginItems, rowItems } from './items.ts'
 import type { AxisVersions } from './versions.ts'
 
 /** The order C3's item table lists the kinds in, which the report sorts by first. */
-const KIND_ORDER: Readonly<Record<ReportItem['kind'], number>> = { plugin: 0, bundle: 1, row: 2, data: 3 }
+const KIND_ORDER: Readonly<Record<ReportItem['kind'], number>> = { plugin: 0, bundle: 1, row: 2, data: 3, harness: 4 }
 
 /** The three checks C3 requires to have passed before any report is shown. */
 const RELEASE_CHECKS = ['signature', 'freshness', 'log'] as const
@@ -27,7 +28,7 @@ const RELEASE_CHECKS = ['signature', 'freshness', 'log'] as const
 /**
  * The subject text an item is sorted by within its kind.
  * @param item - the item.
- * @returns the plugin name, the bundle package, the row's id or name, or the data item's directories.
+ * @returns the plugin name, the bundle package, the row's id or name, the data item's directories, or the harness file.
  */
 function subjectText(item: ReportItem): string {
   switch (item.kind) {
@@ -39,6 +40,8 @@ function subjectText(item: ReportItem): string {
       return item.subject.id ?? item.subject.name
     case 'data':
       return item.subject.directories.join(',')
+    case 'harness':
+      return item.subject.file
   }
 }
 
@@ -57,7 +60,7 @@ export function sortItems(items: readonly ReportItem[]): readonly ReportItem[] {
 }
 
 /**
- * The counts C3's `counts` field holds: the items per effect, and the unverified and `data` items beside them.
+ * The counts C3's `counts` field holds: the items per effect, and the unverified, `data` and `harness` items beside them.
  * @param items - every item.
  * @returns the counts.
  */
@@ -68,6 +71,7 @@ export function countItems(items: readonly ReportItem[]): UpdateReport['counts']
     changed: items.filter(item => item.effect === 'changed').length,
     unverified: items.filter(item => item.verification === 'unverified').length,
     data: items.filter(item => item.kind === 'data').length,
+    harness: items.filter(item => item.kind === 'harness').length,
   }
 }
 
@@ -113,7 +117,8 @@ export function disabledPluginNames(report: UpdateReport): readonly string[] {
 
 /**
  * Build the report for one installation and one target release.
- * @param input - the installation, the running and target releases, the profile, both status records and the time.
+ * @param input - the installation, the running and target releases, the profile, both status records, the data and
+ *   harness facts, and the time.
  * @returns the report, with its items sorted and counted.
  * @throws {UpdateReportError} `REPORT_TARGET_UNVERIFIED` when the target did not pass every check.
  */
@@ -127,6 +132,7 @@ export function buildUpdateReport(input: ReportInput): UpdateReport {
     // The bundles' layers apply first, then the person's patch layers, as upstream composes them.
     ...rowItems([...target.bundles.layers, ...profile.layers], plugins.disabled),
     ...dataItems(input.data),
+    ...harnessItems(input.harness),
   ])
   return {
     schema: UPDATE_REPORT_SCHEMA,

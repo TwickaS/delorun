@@ -29,7 +29,7 @@ async function mount(overrides: Partial<ReportSources> = {}): Promise<{ ctx: Con
 describe('UpdateReportService', () => {
   it('builds the report and the plugin ids it disables', async () => {
     const { service } = await mount()
-    const built = await service.build('1.0.0')
+    const built = await service.build('1.0.0', 'update')
     expect(built.report.installation).toBe('cli-home')
     expect(built.report.generated).toBe(GENERATED)
     expect(built.health.disabledPlugins).toEqual(['bridge', 'calendar', 'legacy-x', 'old-exempt', 'revoked-plugin', 'weird'])
@@ -38,8 +38,8 @@ describe('UpdateReportService', () => {
   it('refuses a version that is not a semantic version before it reads anything', async () => {
     let reads = 0
     const { service } = await mount({ running: async () => { reads += 1; return sources().running() } })
-    await expect(service.build('1.0')).rejects.toThrow(UpdateReportError)
-    await expect(service.build('1.0')).rejects.toThrow('not a semantic version')
+    await expect(service.build('1.0', 'update')).rejects.toThrow(UpdateReportError)
+    await expect(service.build('1.0', 'update')).rejects.toThrow('not a semantic version')
     expect(reads).toBe(0)
   })
 
@@ -50,12 +50,21 @@ describe('UpdateReportService', () => {
     const { service } = await mount({
       running: async () => { reads += 1; await gate; return sources().running() },
     })
-    const first = service.build('1.0.0')
-    const second = service.build('1.0.0')
+    const first = service.build('1.0.0', 'update')
+    const second = service.build('1.0.0', 'update')
     release()
     const [left, right] = await Promise.all([first, second])
     expect(reads).toBe(1)
     expect(left.report).toBe(right.report)
+  })
+
+  it('reads the harness facts for an update\'s report and not for a rollback\'s, and does not join the two', async () => {
+    const asked: string[] = []
+    const { service } = await mount({ harness: async (version) => { asked.push(version); return Promise.resolve([{ file: 'app/a.js', merge: 'edits-overlap' }]) } })
+    const [update, rollback] = await Promise.all([service.build('1.0.0', 'update'), service.build('1.0.0', 'rollback')])
+    expect(update.report.items.filter(item => item.kind === 'harness')).toHaveLength(1)
+    expect(rollback.report.items.filter(item => item.kind === 'harness')).toEqual([])
+    expect(asked).toEqual(['1.0.0'])
   })
 
   it('builds one report at a time, so a second version waits for the first', async () => {
@@ -65,8 +74,8 @@ describe('UpdateReportService', () => {
     const { service } = await mount({
       target: async version => { order.push(version); await gate; return target() },
     })
-    const first = service.build('1.0.0')
-    const second = service.build('1.0.1')
+    const first = service.build('1.0.0', 'update')
+    const second = service.build('1.0.1', 'update')
     await Promise.resolve()
     release()
     await Promise.all([first, second])
@@ -77,11 +86,11 @@ describe('UpdateReportService', () => {
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
     const { service, fiber } = await mount({ target: async () => { await gate; return target() } })
-    const pending = service.build('1.0.0')
+    const pending = service.build('1.0.0', 'update')
     await fiber.dispose()
     release()
     await expect(pending).rejects.toThrow('REPORT_DISPOSED')
-    await expect(service.build('1.0.0')).rejects.toThrow('REPORT_DISPOSED')
+    await expect(service.build('1.0.0', 'update')).rejects.toThrow('REPORT_DISPOSED')
   })
 
   it('refuses a disposed context with its own failure, not with the target it happened to read', async () => {
@@ -89,7 +98,7 @@ describe('UpdateReportService', () => {
     const gate = new Promise<void>(resolve => { release = resolve })
     // The facts that arrive after the disposal would make the builder refuse the target; the context's disposal comes first.
     const { service, fiber } = await mount({ target: async () => { await gate; return target({ release: { ...target().release, signature: 'failed' } }) } })
-    const pending = service.build('1.0.0')
+    const pending = service.build('1.0.0', 'update')
     await fiber.dispose()
     release()
     const failure = await pending.catch((error: unknown) => error)

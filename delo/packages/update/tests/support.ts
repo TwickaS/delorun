@@ -190,6 +190,7 @@ export function input(overrides: Partial<ReportInput> = {}): ReportInput {
     profile: PROFILE,
     statuses: STATUSES,
     data: DATA,
+    harness: [],
     generated: GENERATED,
     ...overrides,
   }
@@ -207,6 +208,7 @@ export function sources(overrides: Partial<ReportSources> = {}): ReportSources {
     profile: async () => PROFILE,
     target: async () => target({ bundles: BUNDLE_FACTS, revocations: revocations() }),
     data: async () => DATA,
+    harness: async () => [],
     now: () => GENERATED,
     ...overrides,
   }

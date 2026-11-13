@@ -13,6 +13,7 @@
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
  * | `delorun update [--check \| --yes] [--data-copy \| --no-data-copy]` | the newest release's report, and the update through the home process (contracts C3, C19; [update](./update/command.ts)) |
  * | `delorun recover [status \| rollback [--profile-only] \| restore <version> \| safe-mode \| exit-safe-mode \| discard <path>]` | where the profile stands after an update, and the way back (contract C3; [recover](./recover.ts)) |
+ * | `delorun changes [list \| show <id> [--diff] \| apply <id> \| discard <id> \| undo <id> \| off <plugin> \| on <plugin> \| protection [block \| warn \| off]]` | what waits for your review, and the decisions about it (contract C21; [changes](./changes/command.ts)) |
  * | `delorun trash list \| restore <id> \| purge <id> \| empty` | the trash: what was deleted, restoring an item and deleting one or all forever (contract C8; [trash](./trash/command.ts)) |
  * | `delorun export <chat-or-workspace> --out <file>` | a chat, or a workspace with its chats, as an archive signed by this home (contract C8; [export](./export/command.ts)) |
  * | `delorun import <file>` | an archive checked, shown and imported after the person confirms (contract C8; [import](./import/command.ts)) |
@@ -74,6 +75,7 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'logs', summary: 'Show where each operational log is and its recent records; follow, clear or prune them', load: async () => (await import('./logs/command.ts')).logsCommand },
   { name: 'update', summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --yes, --data-copy, --no-data-copy', load: async () => (await import('./update/command.ts')).updateCommand },
   { name: 'recover', summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>', load: async () => (await import('./recover.ts')).recoverCommand },
+  { name: 'changes', summary: 'What waits for your review, and apply <id>, discard <id>, undo <id>, off <plugin>, on <plugin>, protection, work <plugin>, done <plugin>, edit-harness', load: async () => (await import('./changes/command.ts')).changesCommand },
   { name: 'reach', summary: 'Reach the studio from your phone over your own tailnet: status, on tailscale, off', load: async () => (await import('./reach/command.ts')).reachCommand },
   { name: 'devices', summary: 'The devices this home trusts: list, approve, elevate, remove, code', load: async () => (await import('./devices/command.ts')).devicesCommand },
   { name: 'workspace', summary: 'A workspace\'s full access and the external agents that start there without asking, changed at this computer: full-access [<folder> on|off], external-agents [<folder> <agent> on|off]', load: async () => (await import('./workspace/command.ts')).workspaceCommand },
