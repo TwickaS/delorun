@@ -257,7 +257,9 @@
     "tests/delo-reach.ts",
     "tests/delo-reach-listener.e2e.ts",
     "tests/delo-dangerous-mode.e2e.ts",
-    "tests/delo-pairing.e2e.ts"
+    "tests/delo-pairing.e2e.ts",
+    "tests/delo-create-plugin.e2e.ts",
+    "tests/delo-setup-versions.e2e.ts"
   ],
   "references": [
     { "path": "../../packages/experimental/auto-review" },
