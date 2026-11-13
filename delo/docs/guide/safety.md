@@ -34,7 +34,7 @@ Four words recur. A [workspace](../reference/glossary.md#workspace) is a folder 
 - **`delorun plugin`** has none of them. It runs DeepSeek Harness's plugin installer as you.
 - **DeepSeek Harness's desktop app** is upstream's, unchanged. None of Delorun's protections apply to it.
 
-Delorun will not start a [profile](../reference/glossary.md#profile) whose settings turn one of its protections off. It names the setting and the file, and you can fix it with [Troubleshooting](troubleshooting.md#protections-and-plugins).
+Delorun does not start a [profile](../reference/glossary.md#profile) whose settings turn one of its protections off. It names the setting and the file, and you can fix it with [Troubleshooting](troubleshooting.md#protections-and-plugins).
 
 ## The sandbox
 

@@ -6,8 +6,6 @@ description: "Install Delorun with npx delorun and take it from nothing to a fir
 
 English
 
-Delorun has no release yet; this page describes the first release.
-
 ## Summary
 
 This page takes you from nothing to your first chat. You run one command, `npx delorun`. It downloads Delorun, checks that the download is genuine, asks a few questions, starts Delorun and opens it in your browser. Everything then runs on your own computer. You need a computer that Delorun supports, Node.js to run the command, and a key for the AI model you want to talk to. A chat needs the key; the studio opens without one, so you can look around first.
@@ -28,7 +26,7 @@ Delorun is a community fork of [DeepSeek Harness](../reference/glossary.md#stock
 
 ## Before you start
 
-- **A supported computer.** Linux on x64 or arm64, and Windows on x64, which includes WSL2. macOS is not supported yet.
+- **A supported computer.** Linux on x64 or arm64, and Windows on x64, which includes WSL2. macOS is not supported ([Roadmap and vision](roadmap.md)).
 - **[Node.js](https://nodejs.org) 24.9 or newer.** Only the install command needs it. Check with `node --version`.
 - **A model key.** A key is a secret text that lets Delorun use an AI model on your account. The company or server that runs the model is the [model provider](../reference/glossary.md#provider). The default is a DeepSeek API key. Other providers work too ([Model providers](providers.md)). You can skip the key during setup and add it later.
 - **git**, which Delorun uses to save your settings before an update ([Updates](updates.md)).
@@ -41,7 +39,7 @@ Run this in a terminal:
 npx delorun
 ```
 
-The first run downloads and installs Delorun, then starts setup. You will see the checks described below, then the first setup question. Every later `npx delorun` starts the installed Delorun and downloads nothing.
+The first run downloads and installs Delorun, then starts setup. Delorun prints the checks described below, then asks the first setup question. Every later `npx delorun` starts the installed Delorun and downloads nothing.
 
 At the end of setup, Delorun offers `Install the delorun command? (runs npm install -g delorun)`. Say yes, and you can type `delorun` instead of `npx delorun` from then on.
 

@@ -162,7 +162,7 @@ A workspace that you already put on full access at your computer can still be dr
 - If a workspace is on full access, then the phone opens a terminal there without an unlock, because the model can already run any command there — a terminal opened that way keeps running when you take full access away; the next one needs an unlock.
 - If a phone's session is idle for 12 hours, or 14 days have passed since it signed in, then the session ends and its open connections close — the phone signs in again from the sign-in page with its own key.
 - If you approve or remove any device, then every phone's open connections close — each phone signs in again by itself.
-- If a reply shows an image as a file on your computer, or you preview a file, then it does not show on the phone yet — images attached to messages do show.
+- If a reply shows an image as a file on your computer, or you preview a file, then it does not show on the phone — images attached to messages do show.
 - If you lose a phone, then run `delorun devices remove <device id>` at once ([Remove a device](#remove-a-device)).
 
 </details>
@@ -243,7 +243,7 @@ Approved devices stay approved, so turning remote access on again does not ask f
 
 You should see "Owner code:" followed by the code, then "It works once, for 10 minutes, on this computer's studio."
 
-You do not need the code to approve a phone: approving a device at your computer with `delorun devices approve` claims a home that has no owner yet. Nothing in the studio asks for the code today.
+You do not need the code to approve a phone: approving a device at your computer with `delorun devices approve` claims a home that has no owner yet. Nothing in the studio asks for the code.
 
 ## What Tailscale sees
 

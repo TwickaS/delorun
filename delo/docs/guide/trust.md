@@ -6,8 +6,6 @@ description: "What you trust when you use Delorun: what runs on your computer, w
 
 English | [中文](trust.zh.md)
 
-Delorun has no release yet; this page describes the first release.
-
 ## Summary
 
 This page helps you decide what you are comfortable with. It says, party by party, what each one can see and do when you use Delorun, and how to check it yourself. You need nothing first, but it reads best after [Install and first run](install.md).
@@ -28,12 +26,12 @@ Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run
 
 - **Delorun itself.** The studio and its [plugins](../reference/glossary.md#plugin) run as your user, with your user's access. Any other program you run as yourself can read everything in your [home](../reference/glossary.md#home), the folder `~/.delo`, and Delorun cannot stop that.
 - **Commands the model runs.** They run with your access too, inside the [sandbox](../reference/glossary.md#sandbox): a set of operating-system rules that limits what a command can touch. The sandbox keeps commands from writing into Delorun's home. Where your system supports it, it also keeps them from reading Delorun's secrets or reaching Docker. Commands can still use other local services and the network, unless you set the workspace's [network setting](../reference/glossary.md#network-setting) to Allowlist or Off ([Prompt injection and data exfiltration](prompt-injection.md)). [What Delorun protects](safety.md#the-sandbox) lists the rules on each system, and on Linux `delorun doctor` shows whether the sandbox can run.
-- **Docker workspaces**, which would run a workspace's commands in a container, are not available yet. Every workspace runs on your computer directly.
+- **Every workspace** runs on your computer directly. Delorun has no Docker workspaces, which would run a workspace's commands in a container ([Roadmap and vision](roadmap.md)).
 - **Plugins** run with the same full access as Delorun. When you install a plugin and each time Delorun starts, it checks that the plugin says it works with your versions. It does not check the plugin's files again after the install: if a plugin you installed from npm, git or a tarball changes on disk, the changed version loads at the next start.
 
 ## What Delo Run can and cannot do
 
-Delo Run publishes Delorun's releases, this documentation and the waitlist. A plugin catalogue and a list of revoked plugins are not available yet.
+Delo Run publishes Delorun's releases, this documentation and the waitlist. It publishes no plugin catalogue and no list of revoked plugins ([Roadmap and vision](roadmap.md)).
 
 Delo Run can:
 
@@ -55,17 +53,17 @@ What you still trust:
 
 ## What each reach option shows its provider
 
-[Reach](../reference/glossary.md#reach) means opening your studio from another device, such as your phone. It is off until you turn it on, and it uses nothing of Delo Run's. Today there is one option: Tailscale on your own [tailnet](../reference/glossary.md#tailnet) ([Reach the studio from your phone](reach.md)). `delorun reach on tailscale` refuses while Tailscale Funnel, which would publish your address on the internet, is on.
+[Reach](../reference/glossary.md#reach) means opening your studio from another device, such as your phone. It is off until you turn it on, and it uses nothing of Delo Run's. Delorun offers one option: Tailscale on your own [tailnet](../reference/glossary.md#tailnet) ([Reach the studio from your phone](reach.md)). `delorun reach on tailscale` refuses while Tailscale Funnel, which would publish your address on the internet, is on.
 
-The table also describes the two options that are not available yet, so you can compare.
+The table also describes two options that Delorun does not offer, so you can compare ([Roadmap and vision](roadmap.md)).
 
 | Reach option | What the provider can see or do |
 | --- | --- |
 | Tailscale on your tailnet (available) | Only devices on your tailnet can open the address. Tailscale's coordination service sees your computer's name, the IP addresses of your computer and of each device, connection times and how much traffic flows. Tailscale can add a device to your tailnet unless Tailnet Lock is on. Tailscale controls `ts.net` and obtains your address's certificate. |
-| Tailscale Funnel (not available yet) | Anyone on the internet can open the address. Tailscale's Funnel servers and coordination service see your computer's name, the IP addresses of your computer and of each device that connects, connection times and traffic volume. Funnel passes encrypted traffic to your computer, where Tailscale's software decrypts it. Tailscale can add a device to your tailnet unless Tailnet Lock is on, and it obtains the address's certificate. |
-| A relay you host on your own domain (not available yet) | Your relay sees the address, the IP addresses of your computer and of each device, connection times and traffic volume. It can refuse or drop connections. It passes encrypted traffic it cannot read, which only your computer decrypts, as long as your domain's DNS lets only your computer obtain certificates for it and your computer answers its own certificate challenges. Let's Encrypt and your DNS provider can still affect certificates for your domain. |
+| Tailscale Funnel (not offered) | Anyone on the internet can open the address. Tailscale's Funnel servers and coordination service see your computer's name, the IP addresses of your computer and of each device that connects, connection times and traffic volume. Funnel passes encrypted traffic to your computer, where Tailscale's software decrypts it. Tailscale can add a device to your tailnet unless Tailnet Lock is on, and it obtains the address's certificate. |
+| A relay you host on your own domain (not offered) | Your relay sees the address, the IP addresses of your computer and of each device, connection times and traffic volume. It can refuse or drop connections. It passes encrypted traffic it cannot read, which only your computer decrypts, as long as your domain's DNS lets only your computer obtain certificates for it and your computer answers its own certificate challenges. Let's Encrypt and your DNS provider can still affect certificates for your domain. |
 
-Whatever the option, a device opens your chats only after you approve it at your computer. Sign-in with a passkey or your own sign-in provider is not available yet either.
+Whatever the option, a device opens your chats only after you approve it at your computer. Delorun offers no sign-in with a passkey or your own sign-in provider either.
 
 <details>
 <summary>Edge cases</summary>
@@ -84,7 +82,7 @@ Two checks run by default. They carry nothing about you, but each server they re
 - **The release-log check**, at each start. It asks Sigstore's public release log, and the service that publishes its state, whether the release you run is the one Delo Run recorded publicly. No setting turns it off. When the log cannot be reached, Delorun starts anyway and warns you.
 - **The update check**, once a day. It fetches Delorun's signed release files from releases.delorun.com and GitHub to see whether a newer release exists ([Updates](updates.md#the-update-notice)). Turn it off in Settings, General, Updates, or with `delorun setup privacy`.
 
-Each file these checks download is checked against its signature, so a server that hands out a changed file fails the check. Delorun downloads no list of revoked plugins, because none is published yet.
+Each file these checks download is checked against its signature, so a server that hands out a changed file fails the check. Delorun downloads no list of revoked plugins, because Delo Run publishes none.
 
 ### Only when you opt in
 
@@ -106,14 +104,14 @@ Each file these checks download is checked against its signature, so a server th
 
 ## Checking it yourself
 
-- **`delorun verify`** checks that the installed release is signed, that it is in the public release log, and that its files are the signed ones. Its other planned checks, of isolation, exposure, sign-in, plugins and data sharing, are not available yet: the report lists each as `not run` and ends with `this is not a full verification of this Delo`. The checks run as you, so a program running as you could tamper with them.
+- **`delorun verify`** checks that the installed release is signed, that it is in the public release log, and that its files are the signed ones. It does not check isolation, exposure, sign-in, plugins or data sharing: the report lists each as `not run` and ends with `this is not a full verification of this Delo`. The checks run as you, so a program running as you could tamper with them.
 - **`delorun logs`** shows each log, where it is and what it holds ([Where Delorun keeps its logs](logs.md)).
 
 <details>
 <summary>Go further</summary>
 
 - **Check the launcher.** npm serves the `delorun` [launcher](../reference/glossary.md#launcher) before any Delorun check runs, so check it separately. `delorun verify` prints a `Launcher` line with the integrity that the installed release's signed manifest gives the launcher you ran. Compare it with the output of `npm view delorun@<version> dist.integrity`.
-- **Compare the release roots.** Delo Run publishes the SHA-256 of each release root file and its key ids in the README, on this page, in each release's notes and in `delo/release/production-keys.json`. Compare them with the root files under the launcher package's `roots/` directory. No release root is published yet.
+- **Compare the release roots.** Delo Run publishes the SHA-256 of each release root file and its key ids in the README, on this page, in each release's notes and in `delo/release/production-keys.json`. Compare them with the root files under the launcher package's `roots/` directory.
 - Setup installs the `delorun` command at the version you ran, never the newest version npm serves.
 
 </details>

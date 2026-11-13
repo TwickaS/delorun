@@ -6,8 +6,6 @@ description: "Where Delorun keeps its operational logs: every log's location, wh
 
 English | [中文](logs.zh.md)
 
-Delorun has no release yet; this page describes the first release.
-
 ## Summary
 
 This page helps you find out why something failed. You need Delorun installed ([Install and first run](install.md)). When something goes wrong, the first place to look is a log. Delorun's own processes each write an [operational log](../reference/glossary.md#operational-log): a file that records what the process did, so you, or an agent you ask for help, can find out why something failed. These logs are separate from your chats, which Delorun keeps until you delete them. Run `delorun logs` to see where every log is and the latest records of the running Delorun. Secrets are removed from every record before it is written, each log is capped in size, and old log files are deleted after 14 days.
@@ -33,7 +31,7 @@ The paths below are inside your Delorun home, `~/.delo` unless you set `DELO_HOM
 | The desktop app's server | `desktop-host` | `logs/desktop-host/desktop-host.log` |
 | A self-hosted relay | `relay` | `/var/log/delo-relay/relay.log` inside the relay's container, not on your computer |
 
-The first release uses only the first of these. Docker workspaces, a Delorun desktop app and a self-hosted relay are not available yet, so `delorun logs` shows the other logs as not created.
+Delorun writes only the first of these. It includes no Docker workspaces, desktop app or self-hosted relay, so `delorun logs` shows the other logs as not created ([Roadmap and vision](roadmap.md)).
 
 - **Older files.** When a log file reaches 10 MiB, it is renamed `<file>.1`, and older files move up to `<file>.4`. Each log keeps at most 5 files, 50 MiB in all.
 - **DeepSeek Harness's startup reports.** DeepSeek Harness's own `dsh` command writes `logs/startup-*.log` when it fails to start. Those reports can contain your keys, because they hold raw diagnostics. `delorun` never writes them, and `delorun logs startup` lists them with that warning.
@@ -90,7 +88,7 @@ A record prints as `<time> <level> <log name> [<chat id>/<turn>] <message>`. Con
 <details>
 <summary>Edge cases</summary>
 
-- If a log shows as not created, then the program that writes it has not run on this computer. Only the first row of the table is in use in the first release.
+- If a log shows as not created, then the program that writes it has not run on this computer. Only the first row of the table is in use.
 - If you set `DELO_HOME` or `--profile`, then the paths and names change with them.
 - If a log line shows escaped characters, then the original had control characters; they are escaped so a log line cannot change what your terminal shows.
 - If you delete a chat for good, then pieces of it can stay in captured output. Add `--clear-logs` to `delorun trash purge <id>` or `delorun trash empty`.

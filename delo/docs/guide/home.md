@@ -73,7 +73,7 @@ Run the printed `chmod` command, then run `delorun` again. Delorun never changes
 - If a profile name uses capitals, spaces or more than 32 characters, or is `desktop`, `headless` or a Windows device name such as `con`, then `delorun` refuses it.
 - If another user can read your home or a secret file, then Delorun refuses to use it and prints the `chmod` command that fixes it ([Fixing permissions](#fixing-permissions)).
 - If a file or folder in the home is a symbolic link or belongs to another user, then Delorun refuses it with no command to fix it. Move it away and let `delorun` create it again.
-- If you run Delorun on Windows, then it does not check these permissions yet.
+- If you run Delorun on Windows, then it does not check these permissions.
 - If two commands change the home at once, then the second refuses with `another process … holds the home lock`. Wait, then run it again ([Starting and stopping](troubleshooting.md#starting-and-stopping)).
 
 </details>

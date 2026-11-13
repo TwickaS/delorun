@@ -2,11 +2,11 @@
 
 English | [中文](glossary.zh.md)
 
-Delo has no release yet; this page describes the first release.
-
 The words every Delo document, skill, interface string and pull request uses, one canonical term per concept. It extends upstream's [glossary](../../../docs/glossary.md), which owns the harness's own terms (agent, session, turn, step, tool, preset, plugin, bundle, profile); this page owns what Delo adds.
 
 Each entry starts with one plain-English sentence, then adds a technical note where it helps and, where they differ, the name the code uses. Interface text uses the term; code and maintainer docs may add the code name in backticks. A new concept gets its entry in the same pull request that introduces it.
+
+Some entries define terms for capabilities that Delorun does not include, such as the Delo relay and the catalogue; the [roadmap](../guide/roadmap.md) lists them.
 
 ## Contents
 
@@ -52,10 +52,10 @@ The words the [user guide](../guide/README.md) uses most come first, in plain En
 Defined in other sections: home, studio, workspace and chat under [Where things run](#where-things-run), the home process and the network setting there too, reach and tailnet under [Reaching a studio](#reaching-a-studio), trusted device under [Signing in](#signing-in), safe mode under [Changing the harness](#changing-the-harness), and prompt injection and trash under [Keeping work safe](#keeping-work-safe).
 
 - **Delo** — the open-source project, app, with the `delorun` command: a community fork of DeepSeek Harness. <a id="delo"></a>
-- **Delo Run** — the hosted service at delorun.com: the community pages and the waitlist, and, with the Delo relay (roadmap stage 2), its accounts (email code, GitHub, optional passkey), sign-in and device approvals through Delo. Public text names the contact support@delorun.com only. <a id="delo-run"></a>
+- **Delo Run** — the hosted service at delorun.com: the community pages and the waitlist, and, with the Delo relay ([roadmap](../guide/roadmap.md)), its accounts (email code, GitHub, optional passkey), sign-in and device approvals through Delo. Public text names the contact support@delorun.com only. <a id="delo-run"></a>
 - **stock DSH** — DeepSeek Harness as upstream releases it. **stock look** — Delo with its studio additions turned off. <a id="stock"></a>
 - **studio** — the harness's web interface, the same in a browser and in the desktop app. Code: upstream's Web client. <a id="studio"></a>
-- **studio additions** — Delo's theme, sidebar, chat states, settings layout and onboarding; the first release turns them on by default, and one Settings switch turns them off. Code: `@delo/bundle-studio`. <a id="studio-additions"></a>
+- **studio additions** — Delo's theme, sidebar, chat states, settings layout and onboarding; they are on by default, and one Settings switch turns them off. Code: `@delo/bundle-studio`. <a id="studio-additions"></a>
 - **main chat** — one chat outside every workspace, from which the person asks about and steers their other chats and starts work in a workspace; it asks the person before every change that outlasts a turn. Code: `@delo/plugin-main-chat`. <a id="main-chat"></a>
 - **augmentation** — an opt-in addition beyond the stock workflow, such as reach, Docker isolation or extra machines. <a id="augmentation"></a>
 - **the person** — the one owner of a home. Maintainer docs say "the person"; interface text says "you". Not "user", which upstream uses for the model conversation's user role. <a id="the-person"></a>

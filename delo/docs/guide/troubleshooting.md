@@ -73,7 +73,7 @@ A command that fails without a code of its own starts with `delorun <command>:` 
 | `HOME_IS_DSH_HOME` | `DELO_HOME` names DeepSeek Harness's home `~/.dsh` or a folder inside it. | Choose another folder; Delorun keeps `~/.dsh` untouched. |
 | `SOCKET_PATH_TOO_LONG` | The home's path is too long for the local channel through which `delorun` commands talk to the running Delorun. | Choose a shorter home with `DELO_HOME`. |
 
-You should see the command run without a refusal once the fix is in. On Windows, Delorun does not check these permissions yet. [Your Delorun home](home.md) explains the home and its permissions.
+You should see the command run without a refusal once the fix is in. On Windows, Delorun does not check these permissions. [Your Delorun home](home.md) explains the home and its permissions.
 
 A `.env` file in the folder you run `delorun` from, or in your Delorun home, may not set a name that starts with `DELO_`, because those names decide which home, profile and releases Delorun trusts. The refusal names the file. Remove the names from it, and set them in your shell instead if you need them.
 

@@ -6,9 +6,9 @@ Delo is the community fork of DeepSeek Harness made for daily use: compatible wi
 
 Delo is independent. It is not a DeepSeek product, and DeepSeek does not endorse it.
 
-## Status
+## What Delorun provides
 
-Delo is pre-release. It has no tagged release yet, and interfaces and defaults can still change. Today the `delorun` command provides:
+The `delorun` command provides:
 
 - `setup`, `start`, `stop` and `status` to create the Delo home, run the home process and inspect it.
 - `doctor` to check the home's permissions, Docker, the DeepSeek API key's format and whether the studio's port is free.
@@ -18,15 +18,15 @@ Delo is pre-release. It has no tagged release yet, and interfaces and defaults c
 - `trash`, `export` and `import` to restore or purge deleted chats and workspaces, and to move a chat or a workspace between homes as a signed archive.
 - `plugin` and `headless`. `delorun plugin` runs DeepSeek Harness's plugin installer inside your Delorun home, without Delorun's protections. `delorun headless` answers one task and exits, as `dsh headless` does, but with Delorun's sandbox protection, guards and consents, and with DeepSeek's session-log upload off; a consent that would ask you refuses instead, because nobody is there to answer.
 
-Review the [safety notice](SAFETY.md) before running the project. The [user guide](delo/docs/guide/README.md) explains how to install and use Delorun.
+Review the [safety notice](SAFETY.md) before running the project. The [user guide](delo/docs/guide/README.md) explains how to install and use Delorun, and [Roadmap and vision](delo/docs/guide/roadmap.md) describes where it is going.
 
 ## Run
 
-Delo has no published package yet, so run it from a checkout.
+Install Node.js 24.9 or later, then run `npx delorun`. [Install and first run](delo/docs/guide/install.md) walks through setup and the first chat.
 
 ### Run from source
 
-Install Node.js 24.9 or later and pnpm, then run from a checkout:
+To run a checkout, install Node.js 24.9 or later and pnpm, then run:
 
 ```sh
 pnpm install
@@ -51,7 +51,8 @@ Delo is a fork of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-har
 - [Architecture](delo/docs/architecture/README.md)
 - [Security and threat model](delo/docs/security/README.md)
 - [Security fundamentals](delo/docs/security/fundamentals.md)
-- [Designs of features not built yet](delo/docs/design/README.md)
+- [Roadmap and vision](delo/docs/guide/roadmap.md)
+- [Designs of features not built](delo/docs/design/README.md)
 
 ## Community
 

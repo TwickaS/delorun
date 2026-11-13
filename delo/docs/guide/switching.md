@@ -116,7 +116,7 @@ Your chats and workspaces look as they did, and your plugins work as they did in
 - **Updates.** Delorun checks for a newer release once a day, shows what an update would change before you confirm, and can go back ([Updates](updates.md)).
 - **The look.** Delorun's theme, sidebar, chat states and settings layout.
 
-[Delorun and stock DeepSeek Harness](delo-vs-stock.md) lists every difference and what is not available yet, and the [parity checklist](../reference/parity.md) lists each changed default with its evidence.
+[Delorun and stock DeepSeek Harness](delo-vs-stock.md) lists every difference and what Delorun does not include, and the [parity checklist](../reference/parity.md) lists each changed default with its evidence.
 
 ## Same as stock
 
