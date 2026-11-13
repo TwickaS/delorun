@@ -2051,8 +2051,8 @@
     {
       "path": "packages/client/ui-permission-presets/src/client/index.ts",
       "class": "security",
-      "reason": "Security entry (per-workspace full access, C16 permission_defaults). Lead verdict: approved, stricter only. Both current-session pickers ask the optional `permissionSwitchConsent` client service after their own risk confirmation and before they submit `/permission <preset>`; a `false` answer submits nothing and the Session keeps its preset. Without a mounted service every pick submits exactly as upstream does, so the parity composition is unchanged. The hook can only withhold a switch, never make one. It is not the enforcement: a typed `/permission <preset>` skips it, and the Host's sandbox-mode guard still refuses full access in a workspace with no recorded consent. Denial test: tests/browser-plugin.client.spec.ts (asks a mounted permissionSwitchConsent before either surface submits, and submits nothing it declines).",
-      "sha256": "c6ca08bf7d72c0657c1891fb793e8939b5ca05843be04f8e7628570fdc296440"
+      "reason": "Security entry (per-workspace full access, C16 permission_defaults). Lead verdict: approved, stricter only. Both current-session pickers ask the optional `permissionSwitchConsent` client service after their own risk confirmation and before they submit `/permission <preset>`; a `false` answer submits nothing and the Session keeps its preset. Without a mounted service every pick submits exactly as upstream does, so the parity composition is unchanged. The hook can only withhold a switch, never make one. It is not the enforcement: a typed `/permission <preset>` skips it, and the Host's sandbox-mode guard still refuses full access in a workspace with no recorded consent. Denial test: tests/browser-plugin.client.spec.ts (asks a mounted permissionSwitchConsent before either surface submits, and submits nothing it declines). `PermissionSwitchConsent` gains the optional `ownsConfirmation(preset)`: when the mounted service answers true for a preset, the `/permission` picker omits its built-in confirmation for it and the composer control is told the same through `PermissionSelectInjected.ownsConfirmation`, because the service asks its own risk question in `confirm`. Without a service, or for a preset it does not own, the built-in confirmation shows as upstream. Lead verdict (2026-11-13): approved after the lead review of the diff; every switch to full access still asks exactly one question.",
+      "sha256": "5df9cc410d341353291dfc839c75d26ddbbd84dc548ea0b38c5f75afcf371e9a"
     },
     {
       "path": "packages/client/ui-approval/src/client/ApprovalCard.tsx",
@@ -2149,6 +2149,12 @@
       "class": "security",
       "reason": "An external provider's tool description opens with the consent's `describe` text when one is composed, and the tool remounts when the `delegationConsent` service appears or leaves; without it the wording is upstream's. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
       "sha256": "ad96b6d895478817d32b55c2a8aeb47bec3f4f0871f6fffdbe05b8f3595bdd06"
+    },
+    {
+      "path": "packages/client/ui-permission-presets/src/client/PermissionSelect.tsx",
+      "class": "security",
+      "reason": "Security entry (per-workspace full access, A307). The composer permission control skips its built-in `RiskConfirmation` for full access or auto review only when the injected `ownsConfirmation(preset)` is true, i.e. the composition's `permissionSwitchConsent` asks its own risk question before the switch is submitted; otherwise unchanged. Lead verdict (2026-11-13): approved after the lead review of the diff; every switch to full access still asks exactly one question.",
+      "sha256": "6ff0f819e2f53f9acc13ab4151bb2e1613e8a36f88be70f7a550a06aa5b24f76"
     }
   ],
   "retired": []
