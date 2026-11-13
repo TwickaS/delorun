@@ -45,17 +45,17 @@ function recorded(ran: string[], migrated: PreStartContext[]): PreStartStep[] {
 }
 
 describe('the pre-start steps', () => {
-  it('run in one order: the import recovery, the restore recovery, the migrations, the plugin change check, then the update notice', () => {
-    expect(preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'plugin-changes', 'update-notice'])
+  it('run in one order: the import recovery, the restore recovery, the data-format record, the migrations, the plugin change check, then the update notice', () => {
+    expect(preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() }).map(step => step.name)).toEqual(['stock-import-recovery', 'data-copy-recovery', 'data-format-record', 'profile-migrations', 'plugin-changes', 'update-notice'])
   })
 
   it('run every step for the CLI profile, and all but the restore recovery for delorun headless', async () => {
     const cli: string[] = []
     await runPreStartSteps(recorded(cli, []), context('cli'))
-    expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'profile-migrations', 'plugin-changes', 'update-notice'])
+    expect(cli).toEqual(['stock-import-recovery', 'data-copy-recovery', 'data-format-record', 'profile-migrations', 'plugin-changes', 'update-notice'])
     const headless: string[] = []
     await runPreStartSteps(recorded(headless, []), context('headless'))
-    expect(headless).toEqual(['stock-import-recovery', 'profile-migrations', 'plugin-changes', 'update-notice'])
+    expect(headless).toEqual(['stock-import-recovery', 'data-format-record', 'profile-migrations', 'plugin-changes', 'update-notice'])
   })
 
   it('ask for the migrations of the headless profile on every delorun headless run, and none for a successor', async () => {
@@ -96,6 +96,7 @@ describe('the pre-start steps', () => {
   it('finish no restore and withdraw no import on a home without either, and leave the notice slot doing nothing until its feature fills it', async () => {
     const real = preStartSteps({ migrations: () => [], pluginChanges: () => Promise.resolve() })
     await expect(real.find(step => step.name === 'data-copy-recovery')!.run(context('cli'))).resolves.toBeUndefined()
+    await expect(real.find(step => step.name === 'data-format-record')!.run(context('cli'))).resolves.toBeUndefined()
     await expect(recoverStockImportStep(context('cli'))).resolves.toBeUndefined()
     await expect(updateNoticeStep(context('headless'))).resolves.toBeUndefined()
   })

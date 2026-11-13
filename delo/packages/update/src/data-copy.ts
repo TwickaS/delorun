@@ -48,6 +48,12 @@ const VERSION_NAME = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/u
 /** A set-aside directory's name: the version and a compact UTC time. */
 const SET_ASIDE_NAME = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?-[0-9]{8}T[0-9]{6}Z(?:-[0-9]+)?$/u
 
+/** The name `delorun repair` gives the program store it sets aside, before the compact UTC time. */
+export const RUNTIMES_SET_ASIDE_PREFIX = 'runtimes.set-aside-'
+
+/** A set-aside program store's name under the home. */
+const RUNTIMES_SET_ASIDE_NAME = /^runtimes\.set-aside-[0-9]{8}T[0-9]{6}Z(?:-[0-9]+)?$/u
+
 /** A temporary copy's name. */
 const TEMPORARY_NAME = /^\.tmp-[0-9a-f]{16}$/u
 
@@ -540,8 +546,8 @@ export async function recoverDataCopies(home: string): Promise<boolean> {
 
 /** A copy or set-aside directory as `delorun recover status` lists it. */
 export interface KeptData {
-  /** `data-copies` or `data-set-aside`. */
-  readonly kind: 'copy' | 'set-aside'
+  /** `data-copies`, `data-set-aside`, or a program store `delorun repair` set aside as `runtimes.set-aside-<time>`. */
+  readonly kind: 'copy' | 'set-aside' | 'runtimes'
   /** The path relative to the home. */
   readonly path: string
   /** Its regular files' byte total. */
@@ -549,9 +555,9 @@ export interface KeptData {
 }
 
 /**
- * Every copy and set-aside directory the home keeps, with its size.
+ * Every copy, set-aside directory and set-aside program store the home keeps, with its size.
  * @param home - the resolved Delo home.
- * @returns the entries, copies first, each kind in name order.
+ * @returns the entries, copies first, then chat-data set-aside directories, then set-aside program stores, each kind in name order.
  */
 export async function listKeptData(home: string): Promise<readonly KeptData[]> {
   const kept: KeptData[] = []
@@ -562,6 +568,9 @@ export async function listKeptData(home: string): Promise<readonly KeptData[]> {
       if (!name.test(entry)) continue
       kept.push({ kind, path: join(directory, entry), bytes: (await walk(join(parent, entry), false)).bytes })
     }
+  }
+  for (const entry of (await readdir(home)).sort()) {
+    if (RUNTIMES_SET_ASIDE_NAME.test(entry)) kept.push({ kind: 'runtimes', path: entry, bytes: (await walk(join(home, entry), false)).bytes })
   }
   return kept
 }

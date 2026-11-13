@@ -22,6 +22,7 @@ export {
   discardKeptData,
   keepOnlyCopy,
   listKeptData,
+  RUNTIMES_SET_ASIDE_PREFIX,
   planDataCopy,
   readCopyRecord,
   recoverDataCopies,
@@ -43,3 +44,4 @@ export { dataCopyNote, reasonMessage, uncheckedMessage, UNVERIFIED_NOTE, type Me
 export { buildUpdateReport, countItems, disabledPluginNames, sortItems } from './report.ts'
 export { buildFromSources, builtReport, readReportInput, UpdateReportService, type BuiltUpdateReport, type ReportHealth, type ReportSources, type UpdateReportOptions } from './service.ts'
 export { evaluatePluginAxes, exempted, exemptionKey, requirementText, satisfiesRange, type AxisDecision, type AxisVersions } from './versions.ts'
+export { parseHomeDataFormat, readHomeDataFormat, recordHomeDataFormat, relateHomeData, writeHomeDataFormat, type HomeDataRelation, type RecordOutcome, type ReleaseHomeFacts } from './home-data-format.ts'

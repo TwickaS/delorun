@@ -12,6 +12,7 @@
 import type { CommandOutput } from './command.ts'
 import type { ComposeKind } from './compose.ts'
 import { finishInterruptedRestore, startRegistration } from './home-exclusion.ts'
+import { recordDataFormatStep } from './data-format-record.ts'
 import { recoverInterruptedImport } from './import-home/recover.ts'
 import { runProfileMigrations, type ProfileMigration } from './profile-migrations.ts'
 
@@ -82,13 +83,15 @@ export interface PreStartDependencies {
  * 2. `data-copy-recovery`: the CLI profile; an interrupted restore of a session-data copy finishes before any Host
  *    starts (contract C3, "Rollback"), while the home process's registration is exclusive
  *    ({@link finishInterruptedRestore}). `delorun headless` refuses while one is unfinished, when it registers.
- * 3. `profile-migrations`: the CLI profile on a fresh start, where an update's successor never runs them, so its boot
+ * 3. `data-format-record`: both starts; writes the home's `data-format.json` from the running release's
+ *    `data-formats.json` ([record](./data-format-record.ts)), so a later `delorun repair` knows which release wrote the data.
+ * 4. `profile-migrations`: the CLI profile on a fresh start, where an update's successor never runs them, so its boot
  *    stays within the health check's time; and the `headless` profile on every `delorun headless` run, whose one-time
  *    change links Delo's headless bundle and so creates the profile on the first run.
- * 4. `plugin-changes`: both starts; the quick check of the profile's installed plugins against their install records,
+ * 5. `plugin-changes`: both starts; the quick check of the profile's installed plugins against their install records,
  *    which writes the profile's trust status and prints a warning for each plugin whose files changed since it was
  *    installed, before any plugin code loads ([install check](./plugin-install-check.ts)). It never stops the start.
- * 5. `update-notice`: both starts; {@link updateNoticeStep}.
+ * 6. `update-notice`: both starts; {@link updateNoticeStep}.
  * @param dependencies - the migrations and the plugin change check.
  * @returns the steps, in the order they run.
  */
@@ -96,6 +99,7 @@ export function preStartSteps(dependencies: PreStartDependencies): readonly PreS
   return [
     { name: 'stock-import-recovery', kinds: ['cli', 'headless'], run: recoverStockImportStep },
     { name: 'data-copy-recovery', kinds: ['cli'], run: async (context) => { await finishInterruptedRestore(context.home, context.profile) } },
+    { name: 'data-format-record', kinds: ['cli', 'headless'], run: recordDataFormatStep },
     {
       name: 'profile-migrations',
       kinds: ['cli', 'headless'],
