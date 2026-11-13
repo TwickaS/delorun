@@ -62,7 +62,7 @@ import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permiss
 // Type-only: the 'conversation.approval.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-approval/client'
 // Type-only: ctx.sessions, whose live sessions take the composer's `/permission <preset>` command.
-import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { PermissionSelection } from '@deepseek-ai/dsh-permission-presets/client'
 import { en as consentsEn, zh as consentsZh, type ConsentsLocaleKey } from './consents-locales.ts'
@@ -382,18 +382,31 @@ export function apply(ctx: Context): void {
 }
 
 /**
- * Switch a live chat's permission preset as the composer does, so the switch is logged and announced as any other.
+ * The chat's permission preset as its permission projection reports it.
  * @param ctx - the browser plugin context.
  * @param sessionId - the chat.
- * @param preset - the preset.
- * @throws {ChatSwitchRefused} with the host's sentence when the switch is refused or the chat is not materialized.
+ * @returns the preset, or undefined while the chat is not materialized or has no permission control.
  */
-async function switchChat(ctx: Context, sessionId: SessionId, preset: string): Promise<void> {
-  const live = ctx.sessions.binding(sessionId)?.session
+function presetOf(ctx: Context, sessionId: SessionId): string | undefined {
+  return (ctx.sessions.binding(sessionId)?.session.projections.faceOf('permissions').getSnapshot() as PermissionSelection | undefined)?.currentValue
+}
+
+/**
+ * Switch a live chat's permission preset as the composer does, so the switch is logged and announced as any other, then
+ * confirm that the chat's permission reports the preset.
+ * @param live - the chat's session, or undefined while the chat is not materialized.
+ * @param currentPreset - reads the chat's permission preset; called after the command.
+ * @param preset - the preset.
+ * @throws {ChatSwitchRefused} with the host's sentence when the switch is refused, or with a sentence saying the chat's
+ * permission did not change.
+ */
+export async function switchChat(live: Pick<ISession, 'command'> | undefined, currentPreset: () => string | undefined, preset: string): Promise<void> {
   if (live === undefined) throw new ChatSwitchRefused('this session is not materialized yet')
   const result = await live.command(`/permission ${preset}`)
   if (!result.ok) throw new ChatSwitchRefused(result.error.message)
   if (!result.value.matched) throw new ChatSwitchRefused('the host offers no /permission command')
+  // `command` reports whether a line matched, not whether it applied: an unknown preset answers with an error the result omits.
+  if (currentPreset() !== preset) throw new ChatSwitchRefused('the chat\'s permission did not change')
 }
 
 /**
@@ -446,12 +459,13 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: (chat: string): AllowForChatInjected => {
       const sessionId = chat as SessionId
+      const currentPreset = (): string | undefined => presetOf(ctx, sessionId)
       return {
         sessionId,
         fetch,
         consent,
-        currentPreset: () => (ctx.sessions.binding(sessionId)?.session.projections.faceOf('permissions').getSnapshot() as PermissionSelection | undefined)?.currentValue,
-        switchTo: (preset) => switchChat(ctx, sessionId, preset),
+        currentPreset,
+        switchTo: (preset) => switchChat(ctx.sessions.binding(sessionId)?.session, currentPreset, preset),
       }
     },
   }, AllowForChat))

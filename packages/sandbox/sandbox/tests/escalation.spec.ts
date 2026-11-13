@@ -121,6 +121,15 @@ describe('approveEscalation', () => {
     expect(seen.map(request => request.escalatesTo)).toEqual(['danger-full-access', 'workspace-write'])
   })
 
+  it('names the requested mode only for a command or operation escalation, never for plugin management', async () => {
+    const seen: { escalatesTo?: string }[] = []
+    const sink = approver('allowed-once', r => seen.push(r as { escalatesTo?: string }))
+    await approveEscalation(req({ subject: 'operation' }), ingredients({ approver: sink }))
+    await approveEscalation(req({ subject: 'plugin_manager' }), ingredients({ approver: sink }))
+    expect(seen[0]?.escalatesTo).toBe('workspace-write')
+    expect(seen[1]).not.toHaveProperty('escalatesTo')
+  })
+
   it.each(ESCALATION_TARGETS)('repeating %s succeeds without asking for approval', async (mode) => {
     const seen: unknown[] = []
     const request = req({ requestedMode: mode, effectiveMode: mode })

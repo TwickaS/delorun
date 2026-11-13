@@ -6,8 +6,9 @@
  * switches at once. A request for `danger-full-access` first shows the one full-access dialog of
  * [`FullAccessConsent.tsx`](./FullAccessConsent.tsx) for this chat, which records the workspace's grant when it holds
  * none; cancelling it leaves the card waiting. A chat already at or above the requested mode is not offered the choice,
- * and on a remote studio, whose full-access review the home refuses, neither is a request for full access: the
- * full-access line of [`FullAccessAction.tsx`](./FullAccessAction.tsx) says to approve at the computer. A refused
+ * and a chat raised to that mode after the card rendered is answered as Allow once, with no dialog or switch. On a remote
+ * studio, whose full-access review the home refuses, the choice is not offered for full access: the full-access line of
+ * [`FullAccessAction.tsx`](./FullAccessAction.tsx) says to approve at the computer. A refused
  * switch leaves the card unanswered with the refusal under the button. Once the card answered, is sending an answer or no
  * longer accepts one, the button is disabled, and a click already under way records and switches nothing more: the
  * card's `canAnswer` is read at the click, when the person confirms the dialog, before the switch and after it. A card
@@ -80,7 +81,9 @@ export function AllowForChat({ escalatesTo, allow, answered, canAnswer, offer, s
     void isRemoteStudio(fetch, sessionId).then((next) => { if (current) setRemote(next) })
     return () => { current = false }
   }, [fullAccess, fetch, sessionId])
-  const shown = remote === false && rankOf(currentPreset()) < rankOf(escalatesTo)
+  // A chat that already reaches the requested mode needs no switch; a click that finds it so answers the card as Allow once.
+  const atRequestedMode = (): boolean => rankOf(currentPreset()) >= rankOf(escalatesTo)
+  const shown = remote === false && !atRequestedMode()
   useEffect(() => {
     offer(shown)
     return () => { offer(false) }
@@ -91,10 +94,13 @@ export function AllowForChat({ escalatesTo, allow, answered, canAnswer, offer, s
     setBusy(true)
     setFailure(undefined)
     try {
-      if (fullAccess && !await confirmPermissionSwitch(fetch, consent, sessionId, FULL_ACCESS_PRESET, canAnswer)) return
-      // The person may have answered the card, or its request ended, while the dialog was open.
-      if (!canAnswer()) return
-      await switchTo(escalatesTo)
+      if (!atRequestedMode()) {
+        if (fullAccess && !await confirmPermissionSwitch(fetch, consent, sessionId, FULL_ACCESS_PRESET, canAnswer)) return
+        // The person may have answered the card, or its request ended, while the dialog was open.
+        if (!canAnswer()) return
+        // The chat may have been raised while the dialog was open, so the mode is checked again right before the switch.
+        if (!atRequestedMode()) await switchTo(escalatesTo)
+      }
       // The raised permission stays when the card was answered elsewhere, or its request ended, during the switch.
       if (!canAnswer()) return
       await allow()

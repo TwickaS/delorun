@@ -30,6 +30,7 @@ import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpW
 import { AGENTS_COMMAND, ExternalAgentsSection, type ExternalAgentsSectionProps } from '../src/client/ExternalAgentsSection.tsx'
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
 import { OptIn } from '../src/client/opt-in.ts'
+import { switchChat } from '../src/client/index.ts'
 
 afterEach(() => {
   cleanup()
@@ -585,6 +586,49 @@ describe('the approval card\'s "Allow for this chat" choice', () => {
     await settle()
     expect(screen.getByRole('alert').textContent).toBe(en['failed.stale'])
     expect(props.allow).not.toHaveBeenCalled()
+  })
+
+  it('answers a request the chat reaches once it was raised after the card rendered, with no switch', async () => {
+    let current = 'read-only'
+    const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write', currentPreset: () => current })
+    render(<AllowForChat {...props} />)
+    current = 'danger-full-access'
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.switchTo).not.toHaveBeenCalled()
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows no dialog for a full-access request once the chat was raised to full access after the card rendered', async () => {
+    let current = 'workspace-write'
+    const props = choiceProps(fakeHost(REVIEWED_OFF), { currentPreset: () => current })
+    render(<AllowForChat {...props} />)
+    await settle()
+    current = 'danger-full-access'
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(props.consent.askSwitch).not.toHaveBeenCalled()
+    expect(props.switchTo).not.toHaveBeenCalled()
+    expect(props.allow).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves the switch once the chat\'s permission reports the requested preset', async () => {
+    let current = 'read-only'
+    const live = { command: vi.fn(async (_line: string) => { current = 'workspace-write'; return { ok: true as const, value: { matched: true } } }) }
+    await expect(switchChat(live, () => current, 'workspace-write')).resolves.toBeUndefined()
+    expect(live.command).toHaveBeenCalledWith('/permission workspace-write')
+  })
+
+  it('leaves the card unanswered with a failure when the command matches but the chat\'s permission keeps its preset', async () => {
+    const live = { command: vi.fn(async (_line: string) => ({ ok: true as const, value: { matched: true } })) }
+    const props = choiceProps(fakeHost(), { escalatesTo: 'workspace-write', switchTo: preset => switchChat(live, () => 'read-only', preset) })
+    render(<AllowForChat {...props} />)
+    fireEvent.click(allowForChat())
+    await settle()
+    expect(live.command).toHaveBeenCalledWith('/permission workspace-write')
+    expect(props.allow).not.toHaveBeenCalled()
+    expect(allowForChat().disabled).toBe(false)
+    expect(screen.getByRole('alert').textContent).toContain('did not change')
   })
 
   it('reports no shown button once it unmounts', async () => {

@@ -184,7 +184,10 @@ export interface EscalationRequest {
   justification: string
   /** The call's effective mode (session override ?? composition default); repeating it needs no approval. */
   effectiveMode: SandboxMode
-  /** The family's noun for the escalated action in user-facing texts (`command` for bash, `operation` for fs). */
+  /**
+   * The family's noun for the escalated action in user-facing texts (`command` for bash, `operation` for fs). Only a
+   * `command` or `operation` escalation carries the requested mode to the approval card as `escalatesTo`.
+   */
   subject: string
 }
 
@@ -222,7 +225,8 @@ export async function approveEscalation<A, C>(request: EscalationRequest, approv
     reason: `escalate sandbox to ${mode}: ${justification}`,
     displayReason: escalationDisplayReason(mode, justification),
     ...mode === 'danger-full-access' ? { grants: 'full-access' as const } : {},
-    ...mode === 'workspace-write' || mode === 'danger-full-access' ? { escalatesTo: mode } : {},
+    // Only command and operation escalations offer the chat-scoped choice; other subjects keep upstream's buttons.
+    ...(subject === 'command' || subject === 'operation') && (mode === 'workspace-write' || mode === 'danger-full-access') ? { escalatesTo: mode } : {},
     ...approval.signal ? { signal: approval.signal } : {},
   })
   switch (outcome) {

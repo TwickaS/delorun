@@ -90,8 +90,9 @@ export interface ApprovalRequestEvent {
    */
   readonly grants?: ApprovalGrant
   /**
-   * The sandbox mode a sandbox escalation asks for, so a presenter can offer to switch the session to it. Presentation
-   * only: never persisted, and no Host refuses an answer by it.
+   * The sandbox mode a shell-command or file-operation sandbox escalation asks for, so a presenter can offer to switch
+   * the session to it; other requests leave it unset. Presentation only: never persisted, and no Host refuses an answer
+   * by it.
    */
   readonly escalatesTo?: ApprovalEscalation
   /** Cancellation lifetime of the pending request. */

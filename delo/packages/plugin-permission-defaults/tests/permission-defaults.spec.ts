@@ -544,4 +544,8 @@ describe('a full-access consent that is not granted', () => {
     expect(fullAccessRefusal('')).toContain('delorun workspace full-access <folder> on')
     expect(fullAccessRefusal('/work', 'mode 0644')).toContain('The permission store could not be read, so no consent counts (mode 0644).')
   })
+
+  it('points the person to the approval card\'s "Allow for this chat" choice', () => {
+    expect(fullAccessRefusal('/work')).toContain('the approval card\'s "Allow for this chat"')
+  })
 })
