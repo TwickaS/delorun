@@ -95,6 +95,8 @@ describe('web e2e: collapsed rail gestures in the assembled application', () => 
     })
     const main = page.locator('[data-slot="main"]').locator('..')
     const column = sidebar.locator('..')
+    // The frame animates its grid tracks to the rail's width after the collapse settles; measure only once it has.
+    await expect.poll(async () => (await column.boundingBox())?.width, { timeout: 10_000 }).toBe(56)
     const mainBefore = await main.boundingBox()
     const columnBefore = await column.boundingBox()
     expect(columnBefore?.width).toBe(56)
