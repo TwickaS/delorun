@@ -11,6 +11,7 @@
     { "kind": "service", "name": "deloTurnGate", "side": "host", "source": "delo/packages/bundle-local/src/update-gate.ts" },
     { "kind": "service", "name": "deloUpdateCheck", "side": "host", "source": "delo/packages/bundle-local/src/update-check.ts" },
     { "kind": "service", "name": "deloPluginTrust", "side": "host", "source": "delo/packages/plugin-install-check/src/index.ts" },
+    { "kind": "service", "name": "deloTrust", "side": "host", "source": "delo/packages/bundle-local/src/trust.ts" },
     { "kind": "service", "name": "deloNotice", "side": "browser", "source": "delo/packages/bundle-local/src/client/index.ts" },
     { "kind": "service", "name": "updateReport", "side": "host", "source": "delo/packages/update/src/service.ts" },
     { "kind": "service", "name": "homeAuth", "side": "host", "source": "delo/packages/home-auth/src/service.ts" },

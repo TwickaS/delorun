@@ -11,14 +11,14 @@
  * @module @delo/npm-launcher/launcher
  */
 import { join } from 'node:path'
-import { DELO_HOME_ENTRIES, DELO_PROFILE_ENV, PROFILE_NAME_PATTERN, profileNameProblem, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
+import { DELO_HOME_ENTRIES, DELO_PROFILE_ENV, DELO_START_CHECK_ENV, PROFILE_NAME_PATTERN, profileNameProblem, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { codedReason, profileOption } from '@delo/home'
 import { messageOf, readStoredRootBytes, readStoredRootChain, trustFile, verifyStoredRoot } from '@delo/install'
 import type { DeloLogger } from '@delo/logs'
 import type { StartCheckResult } from '@delo/release-verify/start'
-import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type RuntimePointers, type VerifiedRuntime } from '@delo/runtime-store'
+import { RuntimeStoreError, START_CHECK_SCHEMA, startCheckHandoffText, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type RuntimePointers, type StartCheckSummary, type VerifiedRuntime } from '@delo/runtime-store'
 import type { LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal, type RemedyContext } from './refusals.ts'
 
@@ -75,6 +75,19 @@ export interface LauncherStore {
 
 /** Runs an installed runtime and resolves with its exit status. */
 export type SpawnRuntime = (command: LaunchCommand) => Promise<number>
+
+/** The launcher as the start-check record names it, and the clock the record's time comes from. */
+export interface LauncherIdentity {
+  /** The launcher package's version, or `null` when its `package.json` does not read. */
+  readonly version: string | null
+  /** The launcher package's directory. */
+  readonly path: string
+  /**
+   * The clock.
+   * @returns milliseconds since the epoch.
+   */
+  readonly now: () => number
+}
 
 /** Where the launcher writes. */
 export interface LauncherOutput {
@@ -135,6 +148,11 @@ export interface LauncherOptions {
    * because the install checked the release. No check runs when this is absent.
    */
   readonly startCheck?: (version: RuntimeVersion, root: RootMetadata) => Promise<LauncherStartCheck>
+  /**
+   * The launcher that hands the runtime the record of its start check in `DELO_START_CHECK`, which the runtime reports
+   * without hashing again, and the clock the record's time comes from.
+   */
+  readonly identity: LauncherIdentity
 }
 
 /**
@@ -208,8 +226,25 @@ function runsOneOf(args: readonly string[], passedThrough: readonly string[], co
   return commands.some(command => command.length === words.length && command.every((word, at) => words[at] === word))
 }
 
-/** A command to start, with the release and the root its start check verified it under. */
-type CheckedPlan = LaunchPlan & { readonly root: RootMetadata }
+/** A command to start, with the release and the root its start check verified it under, and when that check began. */
+type CheckedPlan = LaunchPlan & { readonly root: RootMetadata, readonly checkedAt: number }
+
+/**
+ * The command with the record of its start check in `DELO_START_CHECK`.
+ * @param options - the launch's inputs.
+ * @param plan - the checked command.
+ * @returns the command to spawn.
+ */
+function handedOver(options: Pick<LauncherOptions, 'identity'>, plan: CheckedPlan): LaunchCommand {
+  const record = startCheckHandoffText({
+    schema: START_CHECK_SCHEMA,
+    release: String(plan.version),
+    at: plan.checkedAt,
+    ...plan.check,
+    launcher: { version: options.identity.version, path: options.identity.path },
+  })
+  return { command: plan.command, args: plan.args, env: { ...plan.env, [DELO_START_CHECK_ENV]: record } }
+}
 
 /**
  * Start the installed runtime, and install the channel's release first when the store holds none. When `current`
@@ -234,13 +269,13 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
         return LAUNCHER_EXIT.failed
       }
       options.output.stderr(`Delo did not start release ${String(rollback.current)}: it failed its start check. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
-      return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root }, ROLLBACK_ARGS)
+      return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root, check: rollback.check, checkedAt: rollback.checkedAt }, ROLLBACK_ARGS)
     }
     if (!(error instanceof RuntimeStoreError && error.code === 'NO_ACTIVE_RUNTIME')) throw error
   }
   if (plan === undefined) {
     await install(options)
-    return options.spawn(await prepare(options))
+    return options.spawn(handedOver(options, await prepare(options)))
   }
   // A release named with `--release` is installed, and this launcher installs one only when the store holds no
   // runtime: it never replaces the runtime a person already has. Starting the installed runtime instead would
@@ -270,14 +305,14 @@ async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly
         const rollback = await previousRollback(options)
         if (rollback !== undefined && rollback.current === plan.version) {
           options.output.stderr(`Delo did not start release ${String(plan.version)}: its release-log bundle is missing. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
-          return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root }, ROLLBACK_ARGS)
+          return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root, check: rollback.check, checkedAt: rollback.checkedAt }, ROLLBACK_ARGS)
         }
       }
       options.output.stderr(failedStartText(plan.version, check, options.profile))
       if (runtimeCommand(args) !== 'verify') return LAUNCHER_EXIT.failed
     }
   }
-  return options.spawn(plan)
+  return options.spawn(handedOver(options, plan))
 }
 
 /**
@@ -290,7 +325,7 @@ async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly
  * @returns the version `previous` names, the root it passed its start check under and the version `current` names, or
  *   `undefined` when there is no usable `previous`, so the start's own refusal stands.
  */
-async function previousRollback(options: LauncherOptions): Promise<{ readonly previous: RuntimeVersion, readonly root: RootMetadata, readonly current: RuntimeVersion } | undefined> {
+async function previousRollback(options: LauncherOptions): Promise<{ readonly previous: RuntimeVersion, readonly root: RootMetadata, readonly current: RuntimeVersion, readonly check: StartCheckSummary, readonly checkedAt: number } | undefined> {
   if (options.target !== undefined) return undefined
   // A refusal at any step leaves no version to start the rollback from, and the refusal of `current` is what the
   // person sees: a root this launcher does not anchor, pointers that do not read, or a `previous` that fails its own
@@ -300,8 +335,13 @@ async function previousRollback(options: LauncherOptions): Promise<{ readonly pr
   const pointers = await options.store.pointers().catch(() => undefined)
   if (pointers?.previous === undefined) return undefined
   const previous = pointers.previous
-  if (!await options.store.checkRuntime(previous, root).then(() => true, () => false)) return undefined
-  return { previous, root, current: pointers.current }
+  const checkedAt = options.identity.now()
+  const verified = await options.store.checkRuntime(previous, root).catch(() => undefined)
+  if (verified === undefined) return undefined
+  // `checkRuntime` outside a shared scope hashes every file of the version.
+  const files = verified.files.files
+  const check: StartCheckSummary = { full: true, hashed: files.length, files: files.length, fullCheckAt: checkedAt }
+  return { previous, root, current: pointers.current, check, checkedAt }
 }
 
 /**
@@ -368,14 +408,25 @@ export function runtimeCommand(args: readonly string[]): string | undefined {
 }
 
 /**
+ * The interval of the start check's full hash for a run: 0 for `delorun verify`, so the files the command checks with
+ * are hashed before it runs whatever the identity record says; the person's interval for every other command.
+ * @param options - the launch's inputs.
+ * @returns the interval in days.
+ */
+export function fullCheckDaysFor(options: Pick<LauncherOptions, 'args' | 'fullCheckDays'>): number {
+  return runtimeCommand(options.args) === 'verify' ? 0 : options.fullCheckDays
+}
+
+/**
  * Run contract C2's start check through the store and build the command it names, writing nothing.
  * @param options - the launch's inputs.
- * @returns the command that starts `current`, with the root it was checked under.
+ * @returns the command that starts `current`, with the root it was checked under and the time the check began.
  * @throws {RuntimeStoreError} `NO_ACTIVE_RUNTIME`, `RUNTIME_CHANGED`, `RUNTIME_INCOMPATIBLE`, `STORE_BUSY`.
  */
 async function prepare(options: LauncherOptions): Promise<CheckedPlan> {
   const root = await storedRoot(options.home, options.roots)
-  return { ...await options.store.prepareLaunch({ launcher: SUPPORTED, root, mode: options.mode, fullCheckDays: options.fullCheckDays, profile: options.profile, args: options.args }), root }
+  const checkedAt = options.identity.now()
+  return { ...await options.store.prepareLaunch({ launcher: SUPPORTED, root, mode: options.mode, fullCheckDays: fullCheckDaysFor(options), profile: options.profile, args: options.args }), root, checkedAt }
 }
 
 /**

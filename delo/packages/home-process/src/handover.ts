@@ -12,7 +12,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { RUNTIME_VERSION_PATTERN, type RuntimeVersion, type StartId } from '@delo/contract-home-layout'
+import { DELO_START_CHECK_ENV, inheritableEnvironment, RUNTIME_VERSION_PATTERN, type RuntimeVersion, type StartId } from '@delo/contract-home-layout'
 import { HANDOVER_FD, type HandoverMessage } from '@delo/contract-home-process'
 import { z } from 'zod'
 import type { HealthExpectations, HomeCommand } from './seams.ts'
@@ -142,15 +142,29 @@ export interface Successor {
 }
 
 /**
- * Start a successor from a version's runtime and write the handover line to its pipe. It runs in its own process
- * group, so a signal to the requester's terminal does not reach it.
+ * The environment a successor starts with: this process's, without the variables that load code into a Node or its
+ * dynamic loader (`DROPPED_LAUNCH_ENV`), which this process may have taken from a `.env` file after the launcher dropped
+ * them from its own start, and without `DELO_START_CHECK`, which describes this process's start, not the successor's.
+ * @param inherited - this process's environment.
+ * @returns the successor's environment.
+ */
+export function successorEnvironment(inherited: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  const environment = inheritableEnvironment(inherited)
+  delete environment[DELO_START_CHECK_ENV]
+  return environment
+}
+
+/**
+ * Start a successor from a version's runtime and write the handover line to its pipe, with
+ * {@link successorEnvironment}. It runs in its own process group, so a signal to the requester's terminal does not
+ * reach it.
  * @param command - the command from the runtime store.
  * @param handover - the handover line.
  * @param timeoutMs - how long the successor has to answer.
  * @returns the successor.
  */
 export function startSuccessor(command: HomeCommand, handover: HandoverLine, timeoutMs: number): Successor {
-  const child: ChildProcess = spawn(command.command, [...command.args], { cwd: command.cwd, stdio: ['ignore', 'ignore', 'ignore', 'pipe'], detached: true })
+  const child: ChildProcess = spawn(command.command, [...command.args], { cwd: command.cwd, env: successorEnvironment(process.env), stdio: ['ignore', 'ignore', 'ignore', 'pipe'], detached: true })
   const pipe = child.stdio[HANDOVER_FD] as Duplex
   const exited = new Promise<void>((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) resolve()

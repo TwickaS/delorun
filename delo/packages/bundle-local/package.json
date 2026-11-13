@@ -19,7 +19,10 @@
     "./rows": "./src/rows.ts",
     "./update-gate": "./src/update-gate.ts",
     "./update-check": "./src/update-check.ts",
+    "./trust": "./src/trust.ts",
     "./statements": "./src/client/locales.ts",
+    "./trust-bill": "./src/client/trust-bill.ts",
+    "./trust-schema": "./src/client/trust-schema.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -34,7 +37,10 @@
     "src/rows.ts",
     "src/update-gate.ts",
     "src/update-check.ts",
-    "src/client/locales.ts"
+    "src/trust.ts",
+    "src/client/locales.ts",
+    "src/client/trust-bill.ts",
+    "src/client/trust-schema.ts"
   ],
   "dsh": {
     "bundle": {
@@ -67,7 +73,8 @@
     "@delo/plugin-schedule-consent": "workspace:*",
     "@delo/plugin-trash": "workspace:*",
     "@delo/reach": "workspace:*",
-    "@delo/settings-controls": "workspace:*"
+    "@delo/settings-controls": "workspace:*",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

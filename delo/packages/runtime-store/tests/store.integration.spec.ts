@@ -322,6 +322,7 @@ describe('the start check', () => {
     const plan = await launch()
     expect(plan).toEqual({
       version: V2,
+      check: expect.objectContaining({ hashed: expect.any(Number), files: expect.any(Number) }),
       command: join(runtimes(), V2, 'node/bin/node'),
       args: [join(runtimes(), V2, 'app/node_modules/@delo/cli/src/bin.js'), 'status'],
       env: { DSH_HOME: fixture.home, DELO_HOME: fixture.home, DELO_PROFILE: 'default' },

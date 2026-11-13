@@ -1861,6 +1861,9 @@ importers:
       '@delo/settings-controls':
         specifier: workspace:*
         version: link:../settings-controls
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

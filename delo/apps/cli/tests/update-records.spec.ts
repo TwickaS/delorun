@@ -99,6 +99,10 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   // never unchanged, and the next installation writes it again; the trust status is replaced by every check.
   'delo.plugin-install': null,
   'delo.plugin-trust': null,
+  // What the start check did, handed to the runtime in its environment by the launcher that starts it; never a file.
+  'delo.start-check': null,
+  // The bill `delorun verify --json` prints and the Host serves to the studio; produced on request, never stored.
+  'delo.trust-bill': null,
 }
 
 describe('c03-previous-release-reads-delorun-records', () => {

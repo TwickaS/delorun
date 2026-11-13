@@ -14,6 +14,9 @@ import { join } from 'node:path'
 import type { RuntimeFile, RuntimeFileList } from '@delo/contract-release-manifest'
 import { identityOf, RACY_WINDOW_NS } from './identity.ts'
 
+/** The most bytes one read of a hashed file takes. */
+const READ_CHUNK_BYTES = 1_048_576
+
 /** Files hashed at once. */
 const HASH_CONCURRENCY = 8
 
@@ -76,9 +79,12 @@ async function checkFile(path: string, expected: RuntimeFile, device: bigint): P
     if (before.size !== BigInt(expected.length)) return { problem: { path: expected.path, kind: 'length' } }
     const hash = createHash('sha256')
     let length = 0
-    for await (const chunk of handle.createReadStream({ autoClose: false, start: 0 }) as AsyncIterable<Buffer>) {
-      length += chunk.byteLength
-      hash.update(chunk)
+    const buffer = Buffer.allocUnsafe(Math.min(Math.max(expected.length, 1), READ_CHUNK_BYTES) + 1)
+    for (;;) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, length)
+      if (bytesRead === 0) break
+      length += bytesRead
+      hash.update(buffer.subarray(0, bytesRead))
     }
     if (length !== expected.length) return { problem: { path: expected.path, kind: 'length' } }
     if (hash.digest('hex') !== expected.sha256) return { problem: { path: expected.path, kind: 'sha256' } }

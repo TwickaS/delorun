@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, DELO_LAUNCHER_VERSION_ENV, type RuntimeVersion } from '@delo/contract-home-layout'
+import { CLI_PROFILE, DELO_LAUNCHER_ROOTS_ENV, DELO_LAUNCHER_VERSION_ENV, DROPPED_LAUNCH_ENV, inheritableEnvironment, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { RootMetadata, RuntimePlatform } from '@delo/contract-release-manifest'
 import type { VerificationMode } from '@delo/contract-verification-checks'
 import { ensureHomeTree, resolveDeloHome } from '@delo/home'
@@ -50,19 +50,19 @@ export const TERMINATOR = '--'
  * `BOOTSTRAP_PREFIXES` in `@deepseek-ai/dsh-app-boot`), so no file that arrives with a repository sets one inside the
  * runtime either; `tests/environment-denylist.integration.spec.ts` holds the two lists together.
  */
-export const DROPPED_ENV = /^(?:NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|NODE_COMPILE_CACHE|NODE_V8_COVERAGE|NODE_ICU_DATA|OPENSSL_CONF|OPENSSL_MODULES|OPENSSL_ENGINES|GCONV_PATH|LOCPATH|LD_.*|DYLD_.*|DELO_LAUNCHER_.*)$/iu
+export const DROPPED_ENV = new RegExp(`${DROPPED_LAUNCH_ENV.source.slice(0, -2)}|DELO_LAUNCHER_.*)$`, 'iu')
 
 /**
  * The environment a runtime starts with: this process's, without the variables that would load code into the
- * runtime's Node or its dynamic loader, and with the launch protocol's own variables in place of any inherited value.
+ * runtime's Node or its dynamic loader (`DROPPED_LAUNCH_ENV`), and with the launch protocol's own variables in place of any inherited value.
  * @param inherited - the environment this process was given.
  * @param set - the variables launch protocol 1 sets.
  * @returns the variables to start the runtime with, each a string.
  */
 export function launchEnvironment(inherited: NodeJS.ProcessEnv, set: Readonly<Record<string, string>>): Record<string, string> {
   const environment: Record<string, string> = {}
-  for (const [name, value] of Object.entries(inherited)) {
-    if (value !== undefined && !DROPPED_ENV.test(name)) environment[name] = value
+  for (const [name, value] of Object.entries(inheritableEnvironment(inherited))) {
+    if (!DROPPED_ENV.test(name)) environment[name] = value
   }
   return { ...environment, ...set }
 }
@@ -149,8 +149,9 @@ export function usage(): string {
     '',
     'Every other argument is passed to delorun unchanged.',
     '',
-    'Every start checks the installed runtime against its signed file list, and hashes every file at least',
-    `every 7 days; ${FULL_CHECK_DAYS_ENV} sets that interval from 0 (every start) to 30 days.`,
+    'Every start checks the installed runtime against its signed file list. It hashes every file before',
+    'delorun verify runs, and otherwise once the last full check its record names is 7 days old;',
+    `${FULL_CHECK_DAYS_ENV} sets that interval from 0 (every start) to 30 days.`,
     '',
   ].join('\n')
 }
@@ -360,6 +361,7 @@ export async function main(argv: readonly string[], context: LauncherContext = {
       // setup's install of the delorun command to this launcher's version.
       spawn: command => spawn({ ...command, env: { ...command.env, [DELO_LAUNCHER_ROOTS_ENV]: join(packageDirectory, ROOTS_DIRECTORY), ...version === undefined ? {} : { [DELO_LAUNCHER_VERSION_ENV]: version } } }),
       startCheck: (version, root) => startCheck({ home: home.path, platform, version, root, transport: transportFor(root), now: Math.floor((context.now ?? Date.now)() / 1000) }),
+      identity: { version: version ?? null, path: packageDirectory, now: context.now ?? Date.now },
       output: context.output,
       report,
       ...target === undefined ? {} : { target },
