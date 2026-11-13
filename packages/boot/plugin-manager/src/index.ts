@@ -1192,7 +1192,9 @@ export class PluginManager extends TypertRemoteService {
    * only network failures or timeouts stop installation, and a stop streams the check's diagnostic
    * as the installation's install-log run under its request id, while pnpm owns authentication and transport fallback. An
    * HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs
-   * find that only SSH can read it. A run
+   * find that only SSH can read it. With a `pluginAudit` provider composed, pnpm first only resolves the package into
+   * the lockfile, the audit answers with `pending: 'install'`, and only then pnpm installs the lockfile; without one the
+   * installation is a single `pnpm add`. A run
    * that fails, is cancelled, or adds a package without a bundle patch restores
    * `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.
    * @param spec One package spec, including local paths relative to the invocation directory.
@@ -1226,6 +1228,8 @@ export class PluginManager extends TypertRemoteService {
         result.approvedBuilds = options.approvedBuilds
       }
       const files = await this.readRestoredFiles()
+      // Read once, so the resolution and the installation below take the same path for the whole installation.
+      const audited = this.ownerContext.get('pluginAudit') !== undefined
       let name: string
       let version: string | undefined
       try {
@@ -1273,8 +1277,9 @@ export class PluginManager extends TypertRemoteService {
           result.registries.push(registry)
           used = registry
           announce('installing', { registry, index: index + 1, total: plan.length })
-          // Resolution only: no file is fetched into the profile and no script runs until the audit below has answered.
-          run = await this.runPnpm(['add', installSpec, '--lockfile-only', ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)], control.abort.signal, requestId)
+          // With an audit, resolution only: no file is fetched into the profile and no script runs until it answered.
+          const resolveOnly = audited ? ['--lockfile-only'] : []
+          run = await this.runPnpm(['add', installSpec, ...resolveOnly, ...options?.saveExact === true ? ['--save-exact'] : [], ...registryArguments(registry)], control.abort.signal, requestId)
           result.packageResult = run
           if (stopped()) throw new InstallCancelledError()
           // A compatibility refusal is the package's own answer, so no other registry is asked.
@@ -1316,21 +1321,23 @@ export class PluginManager extends TypertRemoteService {
         name = target
         const providedByTarget = this.providedProtected(name)
         if (providedByTarget.length > 0) throw this.protectionFailure(providedByTarget)
-        // The lockfile names what will be installed; a refusal here leaves nothing fetched and no script run.
-        await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install')
-        const fetched = await this.runPnpm(['install', '--frozen-lockfile', ...registryArguments(used)], control.abort.signal, requestId, {
-          manifest: files.get(join(this.profile.dir, 'package.json')), lockfile: files.get(join(this.profile.dir, 'pnpm-lock.yaml')),
-        })
-        result.packageResult = fetched
-        if (stopped()) throw new InstallCancelledError()
-        if (fetched.incompatible !== undefined) throw new ManagementFailure('incompatible-version', fetched.incompatible)
-        if (fetched.exitCode !== 0 || fetched.timedOut === true) {
-          // The build scripts pnpm reported as blocked are offered for approval, as for a failed resolution.
-          try { result.pendingBuilds = await recordPendingBuilds(this.profile.dir, fetched.output) }
-          catch (error) {
-            this.ownerContext.logger.warn('Could not read pending build approvals after pnpm failed', error)
+        if (audited) {
+          // The lockfile names what will be installed; a refusal here leaves nothing fetched and no script run.
+          await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install')
+          const fetched = await this.runPnpm(['install', '--frozen-lockfile', ...registryArguments(used)], control.abort.signal, requestId, {
+            manifest: files.get(join(this.profile.dir, 'package.json')), lockfile: files.get(join(this.profile.dir, 'pnpm-lock.yaml')),
+          })
+          result.packageResult = fetched
+          if (stopped()) throw new InstallCancelledError()
+          if (fetched.incompatible !== undefined) throw new ManagementFailure('incompatible-version', fetched.incompatible)
+          if (fetched.exitCode !== 0 || fetched.timedOut === true) {
+            // The build scripts pnpm reported as blocked are offered for approval, as for a failed resolution.
+            try { result.pendingBuilds = await recordPendingBuilds(this.profile.dir, fetched.output) }
+            catch (error) {
+              this.ownerContext.logger.warn('Could not read pending build approvals after pnpm failed', error)
+            }
+            throw new Error(fetched.output)
           }
-          throw new Error(fetched.output)
         }
         const dir = resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir)
         const manifest = bundleManifest(name, this.profile.dir, this.profile.installAnchor)
