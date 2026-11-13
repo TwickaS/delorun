@@ -233,7 +233,7 @@ Source: [`packages/boot/hmr/src/index.ts`](../../packages/boot/hmr/src/index.ts)
 
 ### `ctx.pluginAudit` — `PluginAudit`
 
-The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the package is installed; a restore asks it before the build scripts it allows run, and again after them. A distribution provides it as `pluginAudit`; without one, nothing is audited.
+The optional plugin audit, a Service Definition: the manager asks it before it selects an installed bundle and before it enables a bundle, and refuses the change on `needs-acceptance` and `refused`. An installation asks it first after pnpm resolved the package into the lockfile and before any file is fetched or any script runs, and again once the package is installed; a restore asks it before the build scripts it allows run, and again after them. A distribution provides it as `pluginAudit`; without one, nothing is audited and an installation is a single `pnpm add`.
 
 ```ts cordis-catalog
 /**
@@ -406,7 +406,9 @@ async previewRestore(version: ProfileVersionId): Promise<ProfileVersionPreview>
  * only network failures or timeouts stop installation, and a stop streams the check's diagnostic
  * as the installation's install-log run under its request id, while pnpm owns authentication and transport fallback. An
  * HTTP(S) Git URL on another host is installed over SSH instead when access probes bounded by gitTransportTimeoutMs
- * find that only SSH can read it. A run
+ * find that only SSH can read it. With a `pluginAudit` provider composed, pnpm first only resolves the package into
+ * the lockfile, the audit answers with `pending: 'install'`, and only then pnpm installs the lockfile; without one the
+ * installation is a single `pnpm add`. A run
  * that fails, is cancelled, or adds a package without a bundle patch restores
  * `package.json` and `pnpm-lock.yaml` as they were; downloaded files can stay.
  * @param spec One package spec, including local paths relative to the invocation directory.
