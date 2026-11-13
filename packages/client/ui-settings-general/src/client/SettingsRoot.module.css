@@ -353,15 +353,16 @@
   min-width: 0;
 }
 
+/* A distribution's layout restyles the card captions through these properties. */
 .cardHeading {
   margin: 0;
   padding: 0 4px;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsh-settings-card-heading-size, 12px);
+  line-height: var(--dsh-settings-card-heading-line-height, 18px);
+  font-weight: var(--dsh-settings-card-heading-weight, 500);
+  letter-spacing: var(--dsh-settings-card-heading-letter-spacing, 0.02em);
+  text-transform: var(--dsh-settings-card-heading-transform, uppercase);
+  color: var(--dsh-settings-card-heading-color, var(--dsw-alias-label-secondary));
 }
 
 /* A card whose rows all render nothing does not show. */
