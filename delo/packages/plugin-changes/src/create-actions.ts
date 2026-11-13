@@ -10,8 +10,8 @@
  *
  * @module @delo/plugin-changes/create-actions
  */
-import { lstat, mkdir, readFile, realpath } from 'node:fs/promises'
-import { join } from 'node:path'
+import { lstat, mkdir, readFile, realpath, rm, rmdir } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import type { ChangeEntry, ChangesContext } from '@delo/changes'
 import { recordPluginRequest } from '@delo/changes/install'
 import type { VersionOutput } from '@delo/contract-plugin-versions'
@@ -112,11 +112,13 @@ async function checkPluginsDirectory(workspace: string, make: boolean): Promise<
  * @param workspaces - the workspaces the registry holds, the default first.
  * @param body - `name`, `kind` and optionally `workspace`.
  * @param target - the release and installation the plugin targets.
+ * @param afterCheck - runs between the check of the `plugins` folder and the write; the spec that swaps the folder for a
+ *   link at that moment passes it.
  * @returns the workspace, the folder and the files written.
  * @throws {CreateRefusal} `400` for a refused name or kind, `404` for an unknown workspace, `409` for a folder that
  *   cannot take the files.
  */
-export async function createAction(workspaces: readonly WorkspaceChoice[], body: { readonly name: unknown, readonly kind: unknown, readonly workspace?: unknown }, target: ScaffoldTarget): Promise<CreatedView> {
+export async function createAction(workspaces: readonly WorkspaceChoice[], body: { readonly name: unknown, readonly kind: unknown, readonly workspace?: unknown }, target: ScaffoldTarget, afterCheck?: () => Promise<void>): Promise<CreatedView> {
   if (typeof body.name !== 'string' || typeof body.kind !== 'string') throw new CreateRefusal(400, 'BAD_REQUEST', 'Name the plugin and choose its kind.')
   try {
     const kind = checkKind(body.kind)
@@ -125,12 +127,49 @@ export async function createAction(workspaces: readonly WorkspaceChoice[], body:
     const folder = pluginFolder(workspace.path, body.name)
     // The name's checks come before any folder is made, so a refused name leaves nothing behind.
     await checkPluginsDirectory(workspace.path, true)
+    await afterCheck?.()
     const files = await createPlugin({ name: body.name, kind, folder, running: target.running, installation: target.installation, chooseFolderVia: ', or choose another name' })
+    await refuseSwappedFolder(workspace.path, folder, files)
     return { kind: 'created', plugin: body.name, pluginKind: kind, workspace: workspace.id, folder, files }
   } catch (error) {
     if (error instanceof ScaffoldError) throw new CreateRefusal(error.kind === 'usage' ? 400 : 409, error.kind === 'usage' ? 'BAD_REQUEST' : 'CANNOT_CREATE', error.message)
     throw error
   }
+}
+
+/**
+ * Check, after the write, that the folder written is still inside the workspace, because the write resolves the path
+ * again after {@link checkPluginsDirectory}: a `plugins` folder swapped for a link in between sends the files elsewhere.
+ * When it did, remove what the scaffold wrote there and refuse.
+ * @param workspace - the workspace's canonical folder.
+ * @param folder - the plugin's folder.
+ * @param files - the scaffold's files, relative to the folder.
+ * @throws {CreateRefusal} `409` when the folder resolves outside `<workspace>/plugins`.
+ */
+async function refuseSwappedFolder(workspace: string, folder: string, files: readonly string[]): Promise<void> {
+  const landed = await realpath(folder)
+  if (landed === join(await realpath(workspace), PLUGINS_DIRECTORY, basename(folder))) return
+  // The files are the scaffold's own, so each is removed by name and the folder only when that leaves it empty.
+  for (const file of [...files].sort().reverse()) await rm(join(landed, ...file.split('/')), { force: true })
+  await removeEmptyDirectories(landed, files)
+  throw new CreateRefusal(409, 'CANNOT_CREATE', `${join(workspace, PLUGINS_DIRECTORY)} changed while the plugin was written, so the files were removed and no plugin is made there. Try again.`)
+}
+
+/**
+ * Remove the scaffold's directories under a folder, deepest first, then the folder, each only when empty.
+ * @param folder - the folder the scaffold wrote.
+ * @param files - the scaffold's files, relative to the folder.
+ */
+async function removeEmptyDirectories(folder: string, files: readonly string[]): Promise<void> {
+  const directories = new Set<string>()
+  for (const file of files) {
+    const parts = file.split('/').slice(0, -1)
+    for (let depth = 1; depth <= parts.length; depth += 1) directories.add(parts.slice(0, depth).join('/'))
+  }
+  // A directory that is not empty holds something the scaffold did not write, so it stays.
+  const keep = (_notEmpty: unknown): void => undefined
+  for (const directory of [...directories].sort().reverse()) await rmdir(join(folder, ...directory.split('/'))).catch(keep)
+  await rmdir(folder).catch(keep)
 }
 
 /**

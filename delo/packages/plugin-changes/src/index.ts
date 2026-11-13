@@ -205,8 +205,10 @@ function protectionUnreadable(action: string, detail: string): PreToolDecision {
  * Provide the check before every recomposition of the profile, and, with the switch on, hold back the agent's plugin
  * changes while protection is on: every `plugin_manager` install, update or removal is recorded as a pending change in
  * the profile the Host runs and denied with the change's id, one that cannot be recorded is denied too, and every other
- * action that changes what the profile runs is denied as one the person makes at their computer. With protection off
- * such a call goes on to upstream; with a protection record that cannot be read it is denied. With the switch off, only
+ * action that changes what the profile runs is denied as one the person makes at their computer. With protection off,
+ * a removal, a turn-off or another action goes on to upstream, but an install is still recorded and a turn-on of a bundle
+ * or a plugin is still denied as the person's at their computer, because turning a plugin on is never the agent's step;
+ * with a protection record that cannot be read every such call is denied. With the switch off, only
  * the check is provided.
  * @param ctx - the plugin context.
  * @param config - the switch, defaulted by the schema above.
@@ -260,7 +262,8 @@ export function apply(ctx: Context, config: Config): void {
     } catch (error) {
       return protectionUnreadable(action, messageOf(error))
     }
-    if (level === 'off') return next()
+    // A plugin that is not on yet starts only at the computer, whatever the level (A330); protection decides the rest.
+    if (level === 'off' && !startsPlugin(exec, held)) return next()
     if (held === undefined) return atComputer(action)
     if (typeof held.target !== 'string' || held.target.trim() === '') return unrecorded('the call names no target.')
     try {
@@ -273,6 +276,18 @@ export function apply(ctx: Context, config: Config): void {
   ctx.tools.guard(exec => (heldRequest(exec) !== undefined || atComputerAction(exec)) && !recorded.has(exec)
     ? 'Plugin changes wait for the person at their computer; this call was not handled as one, so it does not run.'
     : undefined)
+}
+
+/**
+ * Whether a call would start a plugin that is not running: an install, or a turn-on of a bundle or a plugin.
+ * @param exec - the pending call.
+ * @param held - its held request, when it is one.
+ * @returns true for an install and for `set_bundle` or `set_plugin` with `enabled` true.
+ */
+function startsPlugin(exec: Pick<ToolExecution, 'arguments'>, held: ReturnType<typeof heldRequest>): boolean {
+  if (held !== undefined) return held.action === 'install'
+  const args = exec.arguments as { action?: unknown, enabled?: unknown }
+  return (args.action === 'set_bundle' || args.action === 'set_plugin') && args.enabled === true
 }
 
 /**

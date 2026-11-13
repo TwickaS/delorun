@@ -21,6 +21,6 @@ A plugin is a folder with a `package.json`. Make it in the current workspace, in
 
 ## Turning it on is the person's step
 
-You cannot turn a plugin on, reload it, approve its build or change plugin settings, and `plugin_manager` refuses these while the person's protection is on. Do not try to work around that.
+You cannot turn a plugin on, approve its build or change plugin settings. At every protection level `plugin_manager` records an install as a change waiting at the person's computer and refuses a turn-on or a settings change. Do not try to work around that.
 
-Tell the person what you made and where, then tell them to turn it on at their computer: in the studio, Settings, Plugins, Create a plugin, open the plugin and choose Turn on; or run `delorun plugin add link:<absolute folder>`. Delo then lists it in Changes with its files, and the person approves it there. After that, every later edit to the plugin's files waits for the person's approval in Changes before it loads, so say what you changed each time.
+Tell the person what you made and where, then tell them to turn it on at their computer: in the studio, Settings, Plugins, Create a plugin, open the plugin and choose Turn on; or run `delorun plugin add link:<absolute folder>`. Delo then lists it in Changes with its files, and the person approves it there. After that, with the person's changes protection on, every later edit to the plugin's files waits for their approval in Changes before it loads. Protection is off by default: edits to a plugin that is already on then reload live and are logged as loaded without review. Either way, say what you changed each time.

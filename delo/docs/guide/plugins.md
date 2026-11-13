@@ -59,7 +59,7 @@ Creating a plugin does not turn it on. Turn on records the plugin as a change wa
 
 ## In a chat
 
-Ask the agent for a plugin and it loads the `delo-plugin-authoring` skill: it scaffolds the plugin in the chat's workspace under `plugins/<name>` with `delorun plugin new`, edits the files, and checks them with `delorun plugin check` and the plugin's own tests. Its file writes and commands follow the chat's normal approvals. It cannot turn the plugin on, reload it or approve its build, so it tells you where the plugin is; turn it on at your computer as above, or with `delorun plugin add link:<folder>`.
+Ask the agent for a plugin and it loads the `delo-plugin-authoring` skill: it scaffolds the plugin in the chat's workspace under `plugins/<name>` with `delorun plugin new`, edits the files, and checks them with `delorun plugin check` and the plugin's own tests. Its file writes and commands follow the chat's normal approvals. It cannot turn the plugin on or approve its build, whatever the chat's access or the protection setting: an install it asks for is listed in Changes for you to approve at your computer. It tells you where the plugin is; turn it on at your computer as above, or with `delorun plugin add link:<folder>`.
 
 With changes protection on, a plugin you approved keeps running the approved files whoever edits its folder afterwards. An edit by the agent or by anyone else appears in Changes as a change waiting for your review and loads only after you approve it. Protection is off by default, so the agent's edits to a linked plugin reload live like yours and are logged as loaded without review; turn protection on and they wait for your approval.
 
@@ -76,6 +76,7 @@ delorun plugin dev ./my-plugin
 - A package with a `build` script is built once at the start and again after each change under `src/`. A failed build leaves the last good build loaded, and the error is on your terminal.
 - A change to the plugin's `cordis.patch.yml` or `package.json` loads at the next start: `delorun stop`, then `delorun start`.
 - Delo does not have to run first: start it at any time, and it loads the plugin.
+- You started it at the terminal, so every edit in that folder loads live while it runs, whether you or the agent made it and whatever the changes protection setting is.
 
 While it runs, `plugin dev` adds one entry, marked with a comment, to your profile's `cordis.patch.yml`: it sets the folders that upstream's `hmr` row watches. Ctrl+C removes the entry again; if the command was killed, the next `plugin dev` reuses it. If your profile patch already sets the `hmr` row itself, `plugin dev` refuses rather than replace your setting. The plugin stays installed when you stop; `delorun plugin remove my-plugin` uninstalls it. An update of Delo waits while `plugin dev` runs.
 

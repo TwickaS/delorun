@@ -915,12 +915,14 @@ function profileOf(dependencies: RouteDependencies): ChangesContext {
 }
 
 /**
- * `GET workspaces`: where Create a plugin may put a plugin.
+ * `GET workspaces`: where Create a plugin may put a plugin. Creation is the computer's, so a remote session learns
+ * no workspace and no path.
  * @param workspaces - the registry's workspaces, the default first.
  * @param atComputer - whether the request is at the computer.
  * @returns the answer.
  */
 function workspacesOf(workspaces: readonly WorkspaceChoice[], atComputer: boolean): WorkspacesView {
+  if (!atComputer) return { atComputer, workspaces: [] }
   return { atComputer, workspaces: workspaces.map(({ id, title, path }) => ({ id, title, path })) }
 }
 

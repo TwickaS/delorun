@@ -2,7 +2,7 @@
  * Specs of `@delo/plugin-changes` against upstream's real `plugin_manager` tool and tool pipeline: with the C16 switch
  * `plugin_changes_pending` on and protection on, the model's install, update and removal record a pending change and
  * change nothing the profile runs, without reaching the tool's full-access approval; with protection off, the default,
- * every such call reaches upstream's approval and manager as with the switch off; a protection record that cannot be
+ * a removal or a turn-off reaches upstream's approval and manager as with the switch off, while an install is recorded and a turn-on is left to the person at their computer, as at every level; a protection record that cannot be
  * read holds the call; the setting is read at each call, so changing it takes effect without a restart; a listener that
  * allows such a call without the plugin's listener is overruled by its guard; and with the switch at parity the tool
  * asks its approval as upstream's does.
@@ -94,9 +94,10 @@ function activeAgent(): Agent {
  * @param withProfile - whether the Host runs a profile launched by dsh.
  * @param profileHistory - the tool's switch that offers `configure`, `undo` and `restore`.
  * @param protection - the protection setting the home records; `none`, the home has no record and is at the default.
+ * @param sandboxMode - the sandbox mode the chat runs in.
  * @returns the context, the manager, the approval spy, the profile and a call.
  */
-async function harness(enabled: boolean, withProfile = true, profileHistory = false, protection: ProtectionLevel | 'none' = 'on') {
+async function harness(enabled: boolean, withProfile = true, profileHistory = false, protection: ProtectionLevel | 'none' = 'on', sandboxMode: 'workspace-write' | 'danger-full-access' = 'workspace-write') {
   const profile = home()
   if (protection !== 'none') await protect(profile.home, protection)
   const ctx = new Context()
@@ -120,7 +121,7 @@ async function harness(enabled: boolean, withProfile = true, profileHistory = fa
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(SessionProjections)
-  await ctx.plugin(SandboxPolicy, { mode: 'workspace-write' })
+  await ctx.plugin(SandboxPolicy, { mode: sandboxMode })
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   await ctx.plugin(tool, { profileHistory })
   await ctx.plugin(plugin, { enabled, installationBundles: [] })
@@ -276,18 +277,37 @@ describe('the model\'s plugin_manager changes wait for the person', () => {
 })
 
 describe('with protection off', () => {
-  it('the model\'s plugin_manager install runs through upstream\'s approval with protection off, the default', async () => {
-    const { manager, approval, profile, call } = await harness(true, true, false, 'none')
-    const result = await call({ action: 'install_bundle', target: 'new-plugin@2.0.0' })
-    // The listener passed the call on and the guard let it run: upstream's approval and manager decided it.
-    expect(result.isError).toBe(false)
-    expect(approval).toHaveBeenCalledTimes(1)
-    expect(manager.installBundle).toHaveBeenCalledWith('new-plugin@2.0.0', {})
+  it.each(['off', 'none'] as const)('records the model\'s plugin_manager install as pending at protection %s, and a removal goes to upstream', async (level) => {
+    const { manager, approval, profile, call } = await harness(true, true, false, level)
+    const result = await call({ action: 'install_bundle', target: 'link:/work/plugins/new-plugin' })
+    expect(result.error?.info).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
+    expect(manager.installBundle).not.toHaveBeenCalled()
+    expect(approval).not.toHaveBeenCalled()
+    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ kind: 'plugin-install', state: 'pending' })])
     expect((await call({ action: 'remove_bundle', target: 'installed-plugin' })).isError).toBe(false)
     expect(manager.removeBundle).toHaveBeenCalledWith('installed-plugin')
-    expect(approval).toHaveBeenCalledTimes(2)
-    // A registry install or a removal is not under Changes: nothing is logged for it.
-    expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([])
+    expect(approval).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds a chat\'s install and turn-on at protection off although the chat has full access', async () => {
+    const { manager, approval, call } = await harness(true, true, false, 'off', 'danger-full-access')
+    expect((await call({ action: 'install_bundle', target: 'link:/work/plugins/new-plugin' })).error?.info).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
+    expect((await call({ action: 'set_bundle', target: 'new-plugin', enabled: true })).error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
+    expect(manager.installBundle).not.toHaveBeenCalled()
+    expect(manager.setBundleEnabled).not.toHaveBeenCalled()
+    expect(approval).not.toHaveBeenCalled()
+  })
+
+  it('leaves a turn-on to the person at the computer at protection off, and a turn-off to upstream', async () => {
+    const { manager, call } = await harness(true, true, false, 'off')
+    for (const action of ['set_bundle', 'set_plugin']) {
+      const result = await call({ action, target: 'some-plugin', enabled: true })
+      expect(result.error?.info).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
+    }
+    expect(manager.setBundleEnabled).not.toHaveBeenCalled()
+    expect(manager.setPluginEnabled).not.toHaveBeenCalled()
+    expect((await call({ action: 'set_plugin', target: 'some-plugin', enabled: false })).isError).toBe(false)
+    expect(manager.setPluginEnabled).toHaveBeenCalledTimes(1)
   })
 
   it('every other action that changes what runs goes to upstream too', async () => {
@@ -323,16 +343,16 @@ describe('with protection off', () => {
 
   it('reads the setting at each call, so changing it takes effect in the running Host without a restart', async () => {
     const { manager, approval, profile, call } = await harness(true, true, false, 'off')
-    expect((await call({ action: 'install_bundle', target: 'first-plugin' })).isError).toBe(false)
-    expect(manager.installBundle).toHaveBeenCalledTimes(1)
+    expect((await call({ action: 'remove_bundle', target: 'first-plugin' })).isError).toBe(false)
+    expect(manager.removeBundle).toHaveBeenCalledTimes(1)
     await protect(profile.home, 'on')
     const held = await call({ action: 'install_bundle', target: 'second-plugin' })
     expect(held.error?.info).toEqual({ name: 'PluginChangePending', code: plugin.PLUGIN_CHANGE_PENDING })
-    expect(manager.installBundle).toHaveBeenCalledTimes(1)
+    expect(manager.installBundle).not.toHaveBeenCalled()
     expect((await readChangeLog(profile.home, PROFILE)).entries).toEqual([expect.objectContaining({ kind: 'plugin-install', state: 'pending', subject: { plugin: 'second-plugin', spec: 'second-plugin' } })])
     await protect(profile.home, 'off')
-    expect((await call({ action: 'install_bundle', target: 'third-plugin' })).isError).toBe(false)
-    expect(manager.installBundle).toHaveBeenLastCalledWith('third-plugin', {})
+    expect((await call({ action: 'remove_bundle', target: 'third-plugin' })).isError).toBe(false)
+    expect(manager.removeBundle).toHaveBeenLastCalledWith('third-plugin')
     expect(approval).toHaveBeenCalledTimes(2)
   })
 })

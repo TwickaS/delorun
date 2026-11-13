@@ -116,7 +116,7 @@ describe('Create a plugin', () => {
 
   it('tells a remote session it is not at the computer', async () => {
     const { routes } = await server()
-    expect(json(await send(routes.port, '/delo/changes/workspaces', { method: 'GET', headers: [CREDENTIAL, 'x-test-remote: 1'] }))).toMatchObject({ atComputer: false })
+    expect(json(await send(routes.port, '/delo/changes/workspaces', { method: 'GET', headers: [CREDENTIAL, 'x-test-remote: 1'] }))).toEqual({ atComputer: false, workspaces: [] })
   })
 
   it('records the install of a created folder as a change that waits, and turns nothing on', async () => {
