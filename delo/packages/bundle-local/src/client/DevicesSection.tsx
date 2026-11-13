@@ -8,11 +8,12 @@ import type { ReactNode } from 'react'
 import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  approveDevice, cancelPendingDevice, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow, PENDING_POLL_MS, readDevices, readPendingDevices,
+  approveDevice, cancelPendingDevice, LOOPBACK_REQUIRED, openApprovalWindow, PENDING_POLL_MS, readDevices, readPendingDevices,
   readReachStatus, removeDevice,
   type ApprovalRequestId, type Device, type DeviceList, type HostFetch, type PendingDevice, type ReachOptionStatus,
   type ReachStatus,
 } from './devices-api.ts'
+import { failureSentence, type Loaded } from './host-api.ts'
 import css from './DevicesSection.module.css'
 
 /** The command that turns remote access on, which the section shows while it is off. */
@@ -32,9 +33,6 @@ export type DevicesSectionProps = PropsRuntime<'settings.section'> & PropsLocale
 
 type Translate = DevicesSectionProps['t']
 
-/** A request's state: not answered yet, answered, or failed with the sentence to show. */
-type Loaded<T> = { readonly kind: 'loading' } | { readonly kind: 'ready'; readonly value: T } | { readonly kind: 'failed'; readonly text: string }
-
 /**
  * The sentence for a failed request.
  * @param t - the section's copy.
@@ -44,18 +42,11 @@ type Loaded<T> = { readonly kind: 'loading' } | { readonly kind: 'ready'; readon
  *   sentence for an unreachable Host or an unreadable answer.
  */
 export function failureText(t: Translate, error: unknown, action: DevicesAction): string {
-  const failure = hostFailureOf(error)
-  switch (failure.kind) {
-    case 'refused':
-      return failure.code === LOOPBACK_REQUIRED ? t('loopback', { action: t(`action.${action}`) }) : failure.message
-    case 'unreachable':
-      return t('failed.unreachable')
-    case 'unreadable':
-      return t('failed.unreadable')
-    /* v8 ignore next 2 -- HostFailure is a closed union, so the default holds no reachable statement. */
-    default:
-      return failure satisfies never
-  }
+  return failureSentence(error, {
+    refused: (code, message) => code === LOOPBACK_REQUIRED ? t('loopback', { action: t(`action.${action}`) }) : message,
+    unreachable: t('failed.unreachable'),
+    unreadable: t('failed.unreadable'),
+  })
 }
 
 /**

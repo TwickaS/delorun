@@ -29,7 +29,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **Delo Run**：位于 delorun.com 的托管服务：社区页面与候补名单；配合 Delo 中继（路线图第 2 阶段），它还提供账户（邮件验证码、GitHub、可选的通行密钥）、登录，以及经由 Delo 的设备批准。公开文本只标注联系邮箱 support@delorun.com。<a id="delo-run"></a>
 - **stock DSH**：上游按原样发布的 DeepSeek Harness。**stock look**：关闭 studio 附加功能后的 Delo。<a id="stock"></a>
 - **studio**：harness 的网页界面，在浏览器与桌面应用中相同。代码对应：上游的 Web 客户端。<a id="studio"></a>
-- **studio 附加功能**：Delo 的主题、侧边栏、chat 状态、主对话、设置布局、思考视图与新手引导；首个发布版本默认开启它们。代码对应：`@delo/bundle-studio`。<a id="studio-additions"></a>
+- **studio 附加功能**：Delo 的主题、侧边栏、chat 状态、设置布局与新手引导；首个发布版本默认开启它们，“设置”中的一个开关可以关闭它们。代码对应：`@delo/bundle-studio`。<a id="studio-additions"></a>
 - **主对话**（main chat）：位于所有工作区之外的一个 chat，本人从这里询问并引导其他 chat，并在某个工作区中开始工作；凡超出单个轮次的变更，它都会先询问本人。代码对应：`@delo/plugin-main-chat`。<a id="main-chat"></a>
 - **增强功能**（augmentation）：超出 stock 工作流、需由本人选择开启的附加功能，例如远程访问、Docker 隔离或额外机器。<a id="augmentation"></a>
 - **本人**（the person）：一个 home 的唯一所有者。维护者文档用「the person」，界面文本用「你」。不用 user 一词，上游把它用于模型对话中的用户角色。<a id="the-person"></a>
@@ -51,7 +51,8 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **能力报告**（capability report）：说明机器运行什么、强制执行什么的陈述，其中每项限制标为 `enforced`、`not-enforced` 或 `unknown` 并附证据；setup 在本人选择 Docker 形态之前显示它。代码对应：运行时提供方的 `report()`。<a id="capability-report"></a>
 - **读取豁免**（read exemption）：受限命令可以读取并执行的目录，即 `runtimes/`、`skills/` 与 `dsh-runtimes/`；任何密钥都不写入其中。<a id="read-exemption"></a>
 - **启动协议**（launch protocol）：运行时已签名 manifest 中的编号，它规定入口文件、启动器传入的参数与所设置的环境变量；启动器只在支持该编号时运行此运行时。<a id="launch-protocol"></a>
-- **出站代理**（egress proxy）：每个 Docker 工作区在其自有网络上运行的 HTTP 代理，它自行解析每个目标并拒绝非公共地址；它是工作区唯一的对外路由。<a id="egress-proxy"></a>
+- **工作区网络**（workspace network）：原生工作区为模型在其沙箱中运行的命令以及 `web_fetch` 设定的网络：`open`，即原版给出的主机网络，为默认值；`allowlist`，只允许列出的主机，经出站代理访问；或 `off`，没有网络。它只能在 home 所在电脑上的 studio 中更改。代码对应：`@delo/plugin-permission-defaults` 中的 `deloCommandNetwork`。<a id="workspace-network"></a>
+- **出站代理**（egress proxy）：作为工作区唯一对外路由、拒绝非公共地址的 HTTP 代理。网络为 `allowlist` 的原生工作区使用每个列表一个的代理，由 Host 在 `~/.delo` 下的套接字上运行，并由沙箱绑定进每个命令，它在解析名称之前先与列表比对；每个 Docker 工作区则在其自有网络上运行自己的代理。<a id="egress-proxy"></a>
 - **出站允许列表**（egress allowlist）：Docker 工作区的默认出站模式，允许其 profile 中的模型提供商、默认列表中的包仓库与 Git 主机，以及该工作区自行添加的主机。<a id="egress-allowlist"></a>
 - **容器拒绝标记**（container denial marker）：Docker 工作区只读根目录拒绝文件访问时所带的那一行，它说明环境拒绝了该访问、任何沙箱模式都不允许它，因此不提供提权提示。<a id="container-denial-marker"></a>
 - **S2 辅助通道**（S2 helper channel）：每个 S2 工作区容器内的 SSH 辅助程序，承载该工作区的文件、进程、终端、LSP 与 PTC 调用。<a id="s2-helper-channel"></a>
@@ -94,6 +95,7 @@ Delo 的文档、skill（技能）、界面文案与拉取请求所用的词，�
 - **eject**：将插件源码复制到 profile 中，作为原插件的可编辑替代品。<a id="eject"></a>
 - **源码模式**（source mode）：从本人自己分叉的 git 检出版本运行 Delo，并通过合并已签名的发布标签进行更新。目前未提供此模式，界面文本不使用该术语。<a id="source-mode"></a>
 - **更新报告**（update report）：新版本会改变或破坏什么，在更新应用之前显示。<a id="update-report"></a>
+- **更新检查**（update check）：运行中的安装向发布渠道请求其最新版本，像更新一样验证它，且不发送任何关于本人的信息；“设置”→“隐私”可以关闭它。**更新提示**（update notice）：终端中的一行，以及 studio 侧边栏中不打扰的提示，说明有更新的版本；它不应用任何内容。<a id="update-check"></a>
 - **更新日志**（update journal）：文件 `run/<profile>/update.json`，home 进程从 `snapshot` 阶段起在每个更新阶段开始时写入它，下次启动读取它以完成被中断的更新。<a id="update-journal"></a>
 
 <a id="keeping-work-safe"></a>

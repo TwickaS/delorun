@@ -2921,7 +2921,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-sandbox-local`
 
-- `source`: [`packages/sandbox/sandbox-local/src/index.ts:73`](../packages/sandbox/sandbox-local/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-local/src/index.ts:75`](../packages/sandbox/sandbox-local/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config. All optional — `static Config` supplies the defaults. */
@@ -2996,6 +2996,21 @@ export interface Config {
    * Landlock and Seatbelt cannot express it and leave it out. Off: `read-only` commands read the host's `/tmp`.
    */
   privateTmp?: boolean
+  /**
+   * Absolute paths of Unix sockets that a command whose policy restricts the network cannot connect to, because a
+   * daemon behind them resolves names or sends traffic for the command: the system D-Bus, through which
+   * systemd-resolved answers lookups, tailscaled's control socket, and snapd's sockets, whose API downloads and
+   * installs snaps. Denied like {@link deniedSockets} entries, on bwrap only, and only for such a command; a command
+   * with the host's network keeps them. Defaults to {@link NETWORK_DENIED_SOCKETS}.
+   */
+  networkDeniedSockets?: string[]
+  /**
+   * Absolute paths of directories whose sockets resolve names for a command, hidden like
+   * {@link deniedSocketDirectories} entries from a command whose policy restricts the network: systemd-resolved's
+   * varlink directory, nscd's and avahi's, and CUPS's, whose scheduler sends jobs to network printers. Defaults to
+   * {@link NETWORK_DENIED_SOCKET_DIRECTORIES}.
+   */
+  networkDeniedSocketDirectories?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-local -->
@@ -3007,7 +3022,7 @@ export interface Config {
 
 - `inject`: `sessionProjections`
 - `refs`: [`SandboxMode`](subsystems/sandbox.zh.md)
-- `source`: [`packages/sandbox/sandbox-policy/src/index.ts:95`](../packages/sandbox/sandbox-policy/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-policy/src/index.ts:96`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 ```ts config-catalog
 /**

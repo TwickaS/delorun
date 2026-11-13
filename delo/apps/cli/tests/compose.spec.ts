@@ -32,6 +32,7 @@ const HEADLESS_SERVICES = [
   ['mcpAddConsent', 'delo-mcp-consent'],
   ['scheduleConsent', 'delo-schedule-consent'],
   ['sandboxModeGuard', 'delo-permission-defaults'],
+  ['sandboxNetwork', 'delo-permission-defaults'],
   [TURN_GATE_SERVICE, 'delo-update-gate'],
 ] as const
 

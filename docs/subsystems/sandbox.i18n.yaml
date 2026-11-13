@@ -9,8 +9,11 @@
   en: 6777e1b1270ec3e1
   zh: 22533fb3304c1dd8
 /process-sandbox/per-call-policy:
-  en: fac6f5d32327dfb6
-  zh: 1b8e4a1af48f33e8
+  en: 43337e4a406fa071
+  zh: 9a0819020070736b
+/process-sandbox/network:
+  en: 356264472b9f1014
+  zh: 1f3b78875c562bd1
 /process-sandbox/wrapped-argv-and-classification-dialects:
   en: 29c001b767e376ad
   zh: c0798af1daa3b19f

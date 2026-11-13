@@ -315,7 +315,8 @@
 | capability report | 能力报告 | 能力报告（capability report） |  | `report()` 返回的限制状态陈述 |
 | read exemption | 读取豁免 | 读取豁免（read exemption） |  | 受限命令可读取的目录 |
 | launch protocol | 启动协议 | 启动协议（launch protocol） |  | 运行时入口、参数与环境变量的编号 |
-| egress proxy | 出站代理 | 出站代理（egress proxy） |  | Docker 工作区的唯一对外路由 |
+| egress proxy | 出站代理 | 出站代理（egress proxy） |  | 工作区唯一的对外路由：原生工作区网络为 allowlist 时的代理，或 Docker 工作区的代理 |
+| workspace network | 工作区网络 | 工作区网络（workspace network） |  | 原生工作区为沙箱中命令与 web_fetch 设定的网络：open、allowlist 或 off |
 | egress allowlist | 出站允许列表 | 出站允许列表（egress allowlist） |  | Docker 工作区的默认出站模式 |
 | container denial marker | 容器拒绝标记 | 容器拒绝标记（container denial marker） |  | 环境拒绝文件访问时的结果行 |
 | S2 helper channel | S2 辅助通道 | S2 辅助通道（S2 helper channel） |  | S2 工作区容器内的 SSH 辅助程序 |

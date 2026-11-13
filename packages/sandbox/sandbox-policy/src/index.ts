@@ -33,6 +33,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 
 export { SANDBOX_MODES, SandboxModeRefusedError, setSandboxMode } from './session-mode.ts'
 export type { SandboxModeGuard } from './session-mode.ts'
+export type { SandboxNetworkRequest, SandboxNetworkResolver } from './network.ts'
 
 /** Preserve execution-world spelling; enforcing providers resolve filesystem identity on their host. */
 function resolveWorkspaceRoot(path: string): string {
@@ -219,15 +220,20 @@ export class SandboxPolicyService extends Service {
    * deployment default. A session cwd is its workspace-write boundary; the
    * configured root is the fallback for agentless calls and sessions without a
    * cwd.
+   * A mounted `ctx.sandboxNetwork` resolver decides the call's network; without
+   * one the policy carries none, and runners share the host's network.
    * @param request - optional session and approved mode override.
-   * @returns the fully resolved per-call mode and absolute workspace root.
+   * @returns the fully resolved per-call mode, absolute workspace root and, when a resolver decides one, network.
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
+    const workspaceRoot = resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot)
+    const network = this.ctx.get('sandboxNetwork')?.({ ...session === undefined ? {} : { session }, workspaceRoot })
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
-      workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
+      workspaceRoot,
       ...this.additionalWritableRoots === undefined ? {} : { additionalWritableRoots: this.additionalWritableRoots },
+      ...network === undefined ? {} : { network },
       ...session === undefined ? {} : { sessionId: session.id },
     }
   }

@@ -11,8 +11,8 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
-  apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID,
-  PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID,
+  apply, CONSENT_TOAST_ID, DEVICES_SECTION_ID, DEVICES_SECTION_ORDER, FULL_ACCESS_CONSENT_ID, inject, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, NETWORK_SECTION_ID,
+  NETWORK_SECTION_ORDER, PERMISSIONS_SECTION_ID, PERMISSIONS_SECTION_ORDER, PRIVACY_SECTION_ID, PRIVACY_SECTION_ORDER, readReachStatus, REMOTE_NOTICE_ID,
 } from '../src/client/index.ts'
 import {
   approveDevice, DEVICE_ROUTES, HostRequestError, hostFailureOf, isRefused, openApprovalWindow, PENDING_POLL_MS,
@@ -501,10 +501,10 @@ describe('the plugin', () => {
       const sections = slots.entries('settings.section').map(entry => entry.options)
       expect(sections).toMatchObject([
         { id: PRIVACY_SECTION_ID, order: PRIVACY_SECTION_ORDER }, { id: DEVICES_SECTION_ID, order: DEVICES_SECTION_ORDER },
-        { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER },
+        { id: PERMISSIONS_SECTION_ID, order: PERMISSIONS_SECTION_ORDER }, { id: NETWORK_SECTION_ID, order: NETWORK_SECTION_ORDER },
       ])
       expect(DEVICES_SECTION_ORDER).toBe(PRIVACY_SECTION_ORDER + 1)
-      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav, 'Permissions'])
+      expect(sections.map(section => typeof section.label === 'function' ? section.label() : section.label)).toEqual(['Privacy', en.nav, 'Permissions', 'Network'])
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')

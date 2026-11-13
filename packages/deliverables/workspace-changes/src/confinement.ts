@@ -15,7 +15,7 @@ import type { GitConfinement } from './git.ts'
  * The policy one git command runs confined under. A command that writes nothing beside the repository gets the
  * Session's own policy. One that writes the private directory gets it as an extra writable root: under
  * `workspace-write` beside the Session's writable roots, and under `read-only` as the only writable root, so it can
- * still write nothing in the repository.
+ * still write nothing in the repository. Every policy keeps the Session's `network`.
  * @param policy - the Session's resolved policy in a confined mode.
  * @param writes - directories outside the repository the command writes.
  * @returns the policy to confine the command under.
@@ -30,6 +30,7 @@ export function gitPolicy(policy: SandboxExecutionPolicy & { mode: ConfinedSandb
     mode: 'workspace-write',
     workspaceRoot: first,
     ...rest.length === 0 ? {} : { additionalWritableRoots: rest },
+    ...policy.network === undefined ? {} : { network: policy.network },
     ...policy.sessionId === undefined ? {} : { sessionId: policy.sessionId },
   }
 }

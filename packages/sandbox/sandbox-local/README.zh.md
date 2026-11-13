@@ -50,7 +50,10 @@ kind: "package-reference"
 | `protectedHomeToolReadable` | `[]` | `protectedHome` 下、相对于它的路径，进程内读取工具只能读取其中授予它的部分（例如调用会话自己的 spill 目录），受限命令仍不可读取；在 `protectedReads` 中报告，任何 runner 都不授予；需要 `protectedHome` |
 | `deniedSockets` | `[]` | 受限命令不能连接的 Unix 套接字绝对路径，在能表达该规则的 runner 上生效 |
 | `deniedSocketDirectories` | `[]` | 只存放受限命令不能连接的套接字的目录的绝对路径，例如 Docker Desktop 的控制套接字目录；bwrap 隐藏整个目录，Seatbelt 拒绝包装时其中存在的每个套接字 |
+| `escapeSocketDirectories` | `[]` | 其中的套接字能在所有隔离之外启动程序的目录的绝对路径，例如 WSL 的互操作目录 `/run/WSL`。每个条目都像 `deniedSocketDirectories` 条目一样被拒绝；只要其中之一存在，在无法拒绝套接字连接的 runner（Landlock、windows-acl）上的包装就以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝而不运行命令，bwrap 则安装 [vsock 过滤器](#escape-socket-directories-and-the-vsock-filter)。包装时不存在的条目不拒绝任何东西。 |
 | `privateTmp` | `false` | bwrap 是否给 `read-only` 命令一个空的只读 `/tmp`（位于 `/tmp` 下的工作区根目录以只读方式绑定回去），如同 `workspace-write` 命令已得到一个空的可写 `/tmp`，并在两种模式下隐藏主机 `/tmp` 的每个其他挂载，例如 WSLg 的 `/mnt/wslg/distro/tmp`。Landlock 与 Seatbelt 不应用它。 |
+| `networkDeniedSockets` | `['/run/dbus/system_bus_socket', '/run/tailscale/tailscaled.sock', '/run/snapd.socket', '/run/snapd-snap.socket']` | 策略带有 `network` 的命令无法连接的套接字的绝对路径，因为其后的守护进程会替它解析名称或发送流量。在 bwrap 上仅对这样的命令像 `deniedSockets` 条目一样拒绝。 |
+| `networkDeniedSocketDirectories` | `['/run/systemd/resolve', '/run/nscd', '/run/avahi-daemon', '/run/cups']` | 对策略带有 `network` 的命令像 `deniedSocketDirectories` 条目一样隐藏的绝对目录：systemd-resolved 的 varlink 目录、nscd、avahi 与 CUPS 的目录。 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-sandbox-local)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -96,6 +99,43 @@ Seatbelt、bwrap 和 Landlock 在 `workspace-write` 下包含策略显式指定�
 
 这两个套接字目录是 WSL 下 Docker Desktop 的目录；其中 `host-services/backend.sock` 对所有用户可写，并控制引擎。在 Linux 上使用 Docker Desktop 时目录为 `~/.docker/desktop`，在 macOS 上为 `~/Library/Containers/com.docker.docker/Data` 与 `~/.docker/run`，均以绝对路径传入。
 
+<a id="escape-socket-directories-and-the-vsock-filter"></a>
+### 逃逸套接字目录与 vsock 过滤器
+
+`escapeSocketDirectories` 条目指明其中的套接字能在所有隔离之外启动程序的目录，例如 WSL 的互操作目录 `/run/WSL`。提供方在每次包装时检查它是否存在。存在时，bwrap 像隐藏被拒绝的套接字目录一样隐藏它，Landlock 与 Windows ACL runner 以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝该包装。Landlock 的拒绝信息指明修复方法：`PATH` 上没有可执行的 `bwrap` 时，安装 bubblewrap；bwrap 的探测未在 `probeTimeoutMs` 内完成时，重新启动或调大 `probeTimeoutMs`；否则让 `bwrap` 能创建用户命名空间，带有 AppArmor 用户命名空间限制的系统（例如 Ubuntu）会阻止这一点。
+
+主机的 `/tmp` 中有本人程序的套接字，名称无法由任何列表预知，例如 ssh-agent 的 `/tmp/ssh-*/agent.*`。`privateTmp` 对每个 bwrap 命令隐藏它；使用方还应在 `escapeSocketDirectories` 中指明其下可预知的逃逸目录，例如 tmux 服务器的 `/tmp/tmux-<uid>`，这样显示主机 `/tmp` 的 Landlock 会在其存在时拒绝。隐藏目录内部再被隐藏的目录，以及其中指向主目录的套接字或别名，不会获得自己的挂载。
+
+没有挂载规则能隐藏虚拟机（`AF_VSOCK`）套接字，即 WSL 等虚拟机与其宿主之间的传输通道。因此，凡内核提供它们（包装时 `/proc/net/protocols` 列出 `AF_VSOCK`）、凡存在逃逸目录、凡无法读取该列表之处，bwrap 都在 seccomp 过滤器下启动每个命令。过滤器以 `EAFNOSUPPORT` 拒绝 `socket(AF_VSOCK, …)`，以 `ENOSYS` 拒绝 `io_uring_setup`，因为 io_uring 请求不经 `socket` 调用就能创建套接字。它覆盖 x86-64（含 x32 编号）、i386、AArch64 与 32 位 Arm，允许这些架构的其他所有调用，并以 `ENOSYS` 拒绝它未覆盖的架构的每个调用。程序在 [`src/seccomp.ts`](src/seccomp.ts) 中逐条指令写出。两个条件都不成立时，bwrap 调用保持不变。
+
+过滤器改变的不止 vsock，而且在任何带 vsock 的虚拟机上都如此，不限于 WSL：
+
+- 必须使用 io_uring 的程序会失败；能回退到普通调用的程序照常运行。
+- 通过多路复用的 `socketcall` 调用创建套接字的 32 位程序（如 2.23 之前的 32 位 glibc）无法创建任何套接字，因为过滤器读不到该调用的协议族。
+- 在过滤器未覆盖其架构的主机上（例如 RISC-V），每个受限命令都以 bwrap 诊断失败，而不是在没有过滤器的情况下运行。
+- bwrap 从描述符 9 读取过滤器，因此包装从 `/bin/sh` 启动 bwrap，由它用内置 `printf` 把程序写入管道。命令的标准输入、退出状态与描述符 3 到 7 照常传递；调用方的描述符 8 和 9 不会到达命令。
+- shell 始终是 bwrap 的父进程，因此 bwrap 被信号杀死时，包装报告的退出状态是 128 加信号编号。
+- 缺少 `printf`、标准输入已关闭、内核拒绝过滤器，都会在命令运行前以 `bwrap:` 诊断失败，消费方将其归类为 runner 失败。
+
+Landlock 不施加 seccomp 过滤器：在 WSL 下它因 `/run/WSL` 拒绝每次包装，在其他虚拟机上 vsock 与 io_uring 对其命令仍然开放。配置的 `runnerCommand` 既没有过滤器，也不会被拒绝。
+
+<a id="network"></a>
+### 网络
+
+策略的 `network` 限制命令能到达什么；没有它时，命令与主机共享网络，与上文每个 profile 相同。只有 bwrap 能表达网络规则（[`RUNNER_NETWORK`](src/network.ts)）。Landlock、Seatbelt 与 Windows ACL runner 以 `SANDBOX_UNSUPPORTED_POLICY` 拒绝带网络的策略，错误指明 runner 与应对办法，而不是让命令使用主机网络运行：Landlock 启动器不施加网络规则，这里没有为 Seatbelt 构建网络规则，Windows runner 则没有网络规则。
+
+| `network` | bwrap |
+|---|---|
+| 无 | 主机网络，保持不变 |
+| `off` | 命令独有的网络命名空间（`--unshare-net`），只有回环接口：主机上及其之外的任何地址都不可达，包括主机的回环服务与抽象 Unix 套接字 |
+| `proxy` | 同样的命名空间，代理的 Unix 套接字按原路径绑定，并由桥接程序在命名空间内的 `127.0.0.1:3128` 上提供它；`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 及其小写形式与 `NODE_USE_ENV_PROXY=1` 指向桥接程序，`NO_PROXY` 列出回环地址 |
+
+在 `proxy` 下，包装启动 `/bin/sh`，由它用 Host 自身的 Node 可执行文件运行桥接程序，再以命令替换自身，因此命令保留其退出状态、标准输入与描述符。桥接程序在命令启动前脱离，把到其端口的每个连接复制到一个新的套接字连接，并在命令退出时随命名空间结束。在监听前失败的桥接程序会写出以 `sandbox-proxy-bridge: ` 开头的一行，命令不会运行；包装的 `runnerFailureRules` 包含该签名。套接字在包装时必须存在，否则 bwrap 会在命令运行前失败。位于受保护主目录下的套接字在主目录的空 tmpfs 变为只读之前绑定在其中，因此命令在那里只能看到自己代理的套接字；位于命令可见的其他任何位置的套接字，对网络为 `off` 的命令仍然可达。
+
+`proxy` 下的命令能到达什么，取决于代理允许什么。忽略代理变量、按地址连接或使用 UDP 的程序什么也到达不了；除非 `/etc/hosts` 能回答，命令也无法自行解析名称。
+
+命名空间之外替程序解析名称或发送流量的守护进程，会把命令的数据带出这两种命名空间。因此，策略带有 `network` 的命令还会在包装时遮蔽已存在的 `networkDeniedSockets`，并隐藏已存在的 `networkDeniedSocketDirectories`：默认是系统 D-Bus（systemd-resolved 也通过它应答查询）、tailscaled 的控制套接字、snapd 的套接字，以及 systemd-resolved 的 varlink 套接字、nscd、avahi 与 CUPS 的目录。需要系统 D-Bus 的命令，例如 `systemctl`，在带有 `network` 时会失败。命名空间不会切断路径名套接字：其余每一个都仍然可达，其后的守护进程可以替命令打开连接。本人运行时目录中的套接字，例如 D-Bus 会话总线，仍然可达，除非使用方在 `escapeSocketDirectories` 中指明该目录，而 `systemd-run --user` 会通过会话总线在沙箱之外启动拥有主机网络的程序；本人主目录下的套接字，例如 ssh ControlMaster 套接字，也是如此。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -135,6 +175,8 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 | [`src/index.ts`](src/index.ts) | 插件入口：runner 链选择、功能探测、逐调用包装、ACL 授权生命周期 |
 | [`src/profiles.ts`](src/profiles.ts) | 各平台 profile 构建器：bwrap 挂载、Landlock 授权、Seatbelt SBPL，以及每个 runner 的受保护主目录规则 |
 | [`src/mounts.ts`](src/mounts.ts) | 从 `/proc/self/mountinfo` 得到的挂载别名，以及受保护路径在 macOS 上的 firmlink 写法 |
+| [`src/seccomp.ts`](src/seccomp.ts) | vsock 过滤器的 BPF 程序、把它交给 bwrap 的 shell 加载器，以及 vsock 检查 |
+| [`src/network.ts`](src/network.ts) | 能表达网络规则的 runner、bwrap 的网络参数与代理环境变量、桥接程序，以及拒绝文本 |
 
 </details>
 
@@ -176,6 +218,9 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 - **Landlock 下的受保护主目录**——Landlock 按目录树授予读取，因此每次包装都会列出从 `/` 到主目录路径上的各个目录，并授予其中的其他条目：这些目录本身不能被列出，包装之后在其中新建的条目不可读，而在包装与启动之间被删除的条目会让启动器拒绝运行。看到这种 runner 失败的消费方在报告之前重试一次包装。Landlock 没有管辖连接路径名套接字的权限，因此被拒绝的套接字和主目录下的套接字在那里仍可访问。
 - **套接字与别名的覆盖范围**——bwrap 只遮蔽包装时已存在的被拒绝套接字，Seatbelt 只拒绝列出的套接字路径。btrfs、bcachefs 与 overlayfs 上的别名可能找不到（报告为 `unknown`），以另一个设备号镜像主目录的文件系统（例如 FUSE 镜像）也检测不到。别名在每次包装时查找，因此命令运行期间新增的挂载不在覆盖范围内，也没有 runner 覆盖在沙箱外为主目录下文件创建的硬链接，或主目录下已被删除或替换、却仍能访问旧内容的文件的绑定挂载。
 - **包装后重新创建的套接字**——bwrap 把 `/dev/null` 绑定到包装时存在的套接字文件上；在该路径上被删除并重新创建的套接字（例如 Docker 引擎重启之后）可被之前包装的命令访问。让受限命令长时间运行的消费方（例如终端或后台任务）必须在被拒绝的套接字重新创建时重新包装或停止这些命令。
+- **抽象 Unix 套接字**——没有 runner 能拒绝对抽象命名空间套接字的连接：其地址位于 seccomp 过滤器读不到的内存中，要隐藏它们需要网络命名空间，而那也会移除网络访问。在其上监听的程序对受限命令可达，无论是否存在逃逸目录，除非策略的 `network` 让 bwrap 的命令拥有自己的命名空间。
+- **只有 bwrap 支持网络规则**——Landlock、Seatbelt 与 Windows ACL runner 拒绝带 `network` 的策略。Landlock 自内核 ABI 4 起的 TCP 规则只能按端口而不能按地址限制连接，且不涉及 UDP；启动器不施加它们。
+- **桥接程序的端口与可执行文件**——在 `proxy` 下，桥接程序在命令的命名空间中绑定 `127.0.0.1:3128`，因此自行绑定该端口的命令会以 `EADDRINUSE` 失败；桥接程序运行 Host 的 Node 可执行文件，它在沙箱内必须可读。长时间运行的命令保留包装时绑定的套接字：代理停止或被替换后，它在重新包装之前没有网络。
 - **runner 选择在提供方生命周期内缓存**——安装、移除或修复 runner 后，必须重载插件才能改变选择。
 - **`runnerCommand` 是操作方断言**——配置的自定义 runner 会跳过功能探测，并假定它诚实实现与 bwrap 兼容的 profile；如果它本身是 Bash 脚本，其解释器启动发生在该脚本施加约束之前。
 
