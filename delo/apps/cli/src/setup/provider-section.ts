@@ -10,7 +10,7 @@
  * @module @delo/cli/setup/provider-section
  */
 import { join } from 'node:path'
-import { SETUP_DEFAULT_PROVIDER_ID, type ModelCredential, ModelProviderAnswer, SetupAnswers } from '@delo/contract-setup-answers'
+import { SETUP_DEFAULT_PROVIDER_ID, type ModelCredential, type ModelProviderAnswer, type SetupAnswers } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
 import { choiceNote, ENVIRONMENT_VARIABLE_LINE, RECOMMENDED } from './choices.ts'
 import { baseURLProblem, baseURLWarning, modelIdProblem } from './answers.ts'
