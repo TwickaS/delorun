@@ -49,6 +49,12 @@ Each workspace also has a network for the commands the model runs in the sandbox
 - [`src/network-store.ts`](src/network-store.ts) keeps the settings in `secrets/permission-defaults/network.json` at mode 0600, under the same refusal rule as the permission store. While a store that exists cannot be read, every workspace counts as `off` and no change is recorded.
 - Two Fetch routes serve the studio's Network section: `GET /api/deloNetwork.list` and `POST /api/deloNetwork.set`. Both refuse with `LOOPBACK_REQUIRED` a request that did not arrive on the loopback listener under a loopback `Host`, before its body is read, through `@delo/home-auth`'s `requireComputer` and `routedPathname`, so no spelling of a route passes the check. A change that loosens the network, to a less restrictive access or with a host the old list did not admit, is refused with `NETWORK_UNCONFIRMED` until the request carries the person's confirmation; a tightening applies at once. The model has no tool that reaches the setting, and plugin management cannot reconfigure this row.
 
+## Dangerous mode
+
+With `fullAccessEverywhere` set and a valid grant file, `granted(cwd)` is true for every workspace, the guard admits a switch to full access and `select` records the workspace default without asking and without a grant time. `everywhere()` reports `{ on, grantedAt?, problem? }`, and the workspaces listing carries it. When the grant file is removed or the row turns it off, the store's watch reads the change within a second and open full-access chats in workspaces without their own grant go back to the safer preset.
+
+Two routes serve it. `GET /api/deloPermission.everywhere` reads the state and `POST /api/deloPermission.everywhereOff` removes the grant file; the computer's own request and a reach device with a running unlock may call either, because reading and turning off only tighten, and every other device is refused before the body is read. No route turns it on: only `delorun setup` writes the grant file, through `writeDangerousGrant` in `@delo/plugin-permission-defaults/store`.
+
 ## Configuration
 
 | Option | Default | What it does |
@@ -59,6 +65,7 @@ Each workspace also has a network for the commands the model runs in the sandbox
 | `proxyConnectTimeoutMs` | `30000` | How long the egress proxy waits for a connection to a listed host to open. |
 | `proxyMaxConnections` | `256` | The most connections one allowlist's egress proxy holds at once; one more is refused with `503`. |
 | `proxyIdleTimeoutMs` | `300000` | How long a connection through the egress proxy may carry no byte either way before the proxy closes it. |
+| `fullAccessEverywhere` | `false` | Dangerous mode, written only by `delorun setup`'s third prompts answer. True makes full access available to every chat, with no workspace consent and no dialog, but only while the grant file `secrets/permission-defaults/full-access-everywhere.json` is also present and valid (mode 0600, no symbolic link, `{ v: 1, grantedAt, warning: 1 }`); either half missing leaves each workspace's own consent in force and names a refused file in the store problem. A device's settings write and the plugin manager cannot set it. |
 
 ## Tests
 

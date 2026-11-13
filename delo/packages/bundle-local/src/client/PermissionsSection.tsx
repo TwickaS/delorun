@@ -14,8 +14,8 @@ import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  declineServer, FULL_ACCESS_PRESET, readServers, readWorkspaces, revokeServer, setFullAccess,
-  type AcceptedServer, type PendingServer, type PendingServersAnswer, type WorkspaceAccess, type WorkspacesAnswer,
+  declineServer, FULL_ACCESS_PRESET, readEverywhere, readServers, readWorkspaces, revokeServer, setFullAccess, turnEverywhereOff,
+  type AcceptedServer, type EverywhereAnswer, type PendingServer, type PendingServersAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from './consents-api.ts'
 import { consentFailureOf, consentFailureText, FULL_ACCESS_COMMAND, workspaceName, type FullAccessConsentSource } from './FullAccessConsent.tsx'
 import { serverChangeText, ServerStart, type McpReviewSource } from './McpServerReview.tsx'
@@ -48,11 +48,14 @@ export type PermissionsSectionProps = PropsRuntime<'settings.section'> & PropsLo
 export function PermissionsSection({ t, fetch, ask, review }: PermissionsSectionProps): ReactNode {
   const [workspaces, setWorkspaces] = useState<Listing<WorkspacesAnswer>>({ kind: 'loading' })
   const [servers, setServers] = useState<Listing<PendingServersAnswer>>({ kind: 'loading' })
+  const [everywhere, setEverywhere] = useState<EverywhereAnswer>({ on: false })
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<{ readonly text: string; readonly failed: boolean } | undefined>()
 
   const refresh = useCallback(async (): Promise<void> => {
-    const [nextWorkspaces, nextServers] = await Promise.all([readListing(t, () => readWorkspaces(fetch)), readListing(t, () => readServers(fetch))])
+    // Dangerous mode is read on its own route, which a remote studio with a running unlock may read too.
+    const [nextWorkspaces, nextServers, nextEverywhere] = await Promise.all([readListing(t, () => readWorkspaces(fetch)), readListing(t, () => readServers(fetch)), readEverywhere(fetch)])
+    setEverywhere(nextEverywhere)
     setWorkspaces(nextWorkspaces)
     setServers(nextServers)
   }, [fetch, t])
@@ -78,6 +81,10 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
     const change = await setFullAccess(fetch, access, false)
     return t('access.revoked', { workspace: workspaceName(access), count: String(change.chats) })
   }, 'action.changeAccess')
+  const turnOff = (): Promise<void> => answer(async () => {
+    await turnEverywhereOff(fetch)
+    return t('everywhere.turnedOff')
+  }, 'action.changeAccess')
   const reviewServer = (server: PendingServer): Promise<void> => answer(async () => {
     const started = await review(server)
     if (started === undefined) return undefined
@@ -99,6 +106,20 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
     {outcome === undefined ? null : <p className={outcome.failed ? css.failed : css.line} role={outcome.failed ? 'alert' : 'status'}>{outcome.text}</p>}
     {remote
       ? <p className={css.line} role="status">{t('permissions.remote')} <code className={css.command}>{FULL_ACCESS_COMMAND}</code> <code className={css.command}>{MCP_COMMAND}</code></p>
+      : null}
+    {everywhere.on || everywhere.problem !== undefined
+      ? <SettingsCard title={t('everywhere.heading')} group="dangerous-mode">
+        {everywhere.on
+          ? <div className={css.row} data-dangerous-mode="on">
+            <div className={css.details}>
+              <div className={css.title}>{t('everywhere.on')}</div>
+              {everywhere.grantedAt === undefined ? null : <div className={css.description}>{t('everywhere.since', { time: formatTime(t, Date.parse(everywhere.grantedAt)) })}</div>}
+              <div className={css.description}>{t('everywhere.how')}</div>
+            </div>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => { void turnOff() }}>{t('everywhere.off')}</Button>
+          </div>
+          : <p className={css.boxFailed} role="alert">{t('everywhere.problem', { problem: everywhere.problem ?? '' })}</p>}
+      </SettingsCard>
       : null}
     <SettingsCard title={t('access.heading')} description={t('access.description')} group="full-access">
       <FullAccessGroup t={t} listing={workspaces} busy={busy} allow={allowWorkspace} revoke={revokeWorkspace} />

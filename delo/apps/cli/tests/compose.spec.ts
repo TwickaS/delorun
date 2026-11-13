@@ -7,6 +7,7 @@
  * runs another plugin, refuses; safe mode exempts no required row; the "Same as stock" answer is honoured; and the
  * approved plugin content slot applies before the sandbox overlay.
  */
+import { CLI_PROFILE } from '@delo/contract-home-layout'
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
@@ -387,6 +388,14 @@ describe('the headless profile', { timeout: 60_000 }, () => {
     ])
     expect(composed.prompts).toBeUndefined()
     expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()
+  })
+
+  it('gives the permission row fullAccessEverywhere only when the CLI profile\'s answer is dangerous', async () => {
+    expect((await compose('headless', 'headless')).values.get('delo-permission-defaults')).toEqual({ enabled: true, fullAccessEverywhere: false })
+    const directory = join(deloHome, 'profiles', CLI_PROFILE)
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'setup-answers.json'), JSON.stringify({ prompts: 'dangerous' }))
+    expect((await compose('headless', 'headless')).values.get('delo-permission-defaults')).toEqual({ enabled: true, fullAccessEverywhere: true })
   })
 
   it('holds the update gate to its start hold, which keeps the first step of a turn until the Host passed its check', async () => {

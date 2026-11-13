@@ -5,7 +5,7 @@
  * it — and the routes over them, whose denial cases prove that a remote device, an unconfirmed answer and a stale
  * review record nothing.
  */
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -49,6 +49,7 @@ import {
   writePermissionStore,
 } from '../src/index.ts'
 import { registerPermissionRoutes } from '../src/routes.ts'
+import { dangerousGrantPath, writeDangerousGrant } from '../src/store.ts'
 
 const roots: string[] = []
 const originalHome = process.env['DELO_HOME']
@@ -80,14 +81,16 @@ interface Mounted {
  * @param shared - the home and folders of another mount.
  * @param deloHome - the `DELO_HOME` the composition starts with, when it is not the home.
  * @param mount - `row` mounts the plugin as its profile row does, `service` only the permission service.
+ * @param everywhere - whether the row sets `fullAccessEverywhere` over a valid grant file.
  * @returns the composition.
  */
-async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>, deloHome?: string, mount: 'row' | 'service' = 'row'): Promise<Mounted> {
+async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>, deloHome?: string, mount: 'row' | 'service' = 'row', everywhere = false): Promise<Mounted> {
   const root = mkdtempSync(join(tmpdir(), 'delo-permission-surfaces-'))
   roots.push(root)
   const { home, workspace, other } = shared ?? { home: join(root, 'home'), workspace: join(root, 'work'), other: join(root, 'other') }
   for (const directory of [home, workspace, other]) mkdirSync(directory, { recursive: true })
   process.env['DELO_HOME'] = deloHome ?? home
+  if (everywhere) await writeDangerousGrant(home)
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
@@ -101,7 +104,7 @@ async function mounted(shared?: Pick<Mounted, 'home' | 'workspace' | 'other'>, d
   } as never)
   ctx.provide('approval', { config: { policy: 'ask' }, request: async () => 'rejected', setPolicy() {} } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
-  if (mount === 'row') await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true }) })
+  if (mount === 'row') await ctx.plugin({ name: 'permission-defaults', apply: (pluginCtx: Context) => apply(pluginCtx, { ...Config(), enabled: true, fullAccessEverywhere: everywhere }) })
   else await ctx.plugin(PermissionDefaults)
   return { ctx, harness, defaults: ctx.get('permissionDefaults') as PermissionDefaults, home, workspace, other }
 }
@@ -271,6 +274,8 @@ describe('reading the store again', () => {
 interface FakeConnection {
   readonly hook: (request: object, response: ServerResponse, next: () => Promise<void>) => Promise<void>
   readonly fetch: (path: string, init?: RequestInit) => Promise<Response>
+  /** The route's `admitPeer` answer for a Peer principal. */
+  readonly admits: (path: string, principal: { kind: string, deviceId?: string, listener?: string }) => boolean
 }
 
 /**
@@ -280,19 +285,20 @@ interface FakeConnection {
  * @param listener - the listener `homeAuth` reports.
  * @returns the captured hook and a caller of the captured routes.
  */
-function routesOver(defaults: PermissionDefaults, listener: string | undefined): FakeConnection {
+function routesOver(defaults: PermissionDefaults, listener: string | undefined, unlocked: readonly string[] = []): FakeConnection {
   let hook: FakeConnection['hook'] | undefined
-  const routes = new Map<string, { fetch: (request: Request) => Promise<Response> | Response }>()
+  const routes = new Map<string, { fetch: (request: Request) => Promise<Response> | Response, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }>()
   const ctx = {
     on: (_name: string, listener: FakeConnection['hook']) => { hook = listener },
-    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }) } : undefined),
-    connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response> }) => { routes.set(route.path, route) } } },
+    get: (name: string) => (name === 'homeAuth' ? { arrivalOf: () => ({ listener }), elevationOf: (deviceId: string) => (unlocked.includes(deviceId) ? { id: 'e' } : undefined) } : undefined),
+    connection: { fetch: { register: (route: { path: string, fetch: (request: Request) => Promise<Response>, admitPeer?: (request: Request, peer: { principal: { kind: string, deviceId?: string, listener?: string } }) => boolean }) => { routes.set(route.path, route) } } },
     permissionDefaults: defaults,
   }
   registerPermissionRoutes(ctx as never)
   return {
     hook: (request, response, next) => hook!(request, response, next),
     fetch: async (path, init) => routes.get(path)!.fetch(new Request(`http://localhost${path}`, init)),
+    admits: (path, principal) => routes.get(path)!.admitPeer!(new Request(`http://localhost${path}`), { principal }),
   }
 }
 
@@ -314,7 +320,7 @@ describe('the routes', () => {
     const { defaults } = await mounted()
     const routes = routesOver(defaults, 'tailscale-private')
     // Every spelling the Connection routes to the same exact route is refused too.
-    const spellings = Object.values(PERMISSION_ROUTES).flatMap(path => [path, path.replace('/api/', '/api/x/../'), path.replace('/api/', '/api/x/%2e%2e/'), path.replace('/api/', '/api\\x\\..\\')])
+    const spellings = Object.values(PERMISSION_ROUTES).filter(path => path !== PERMISSION_ROUTES.everywhere && path !== PERMISSION_ROUTES.everywhereOff).flatMap(path => [path, path.replace('/api/', '/api/x/../'), path.replace('/api/', '/api/x/%2e%2e/'), path.replace('/api/', '/api\\x\\..\\')])
     for (const path of spellings) {
       const { response, answered } = recordingResponse()
       let reached = false
@@ -631,5 +637,48 @@ describe('the service around its decisions', () => {
     ctx.provide('connection', { fetch: { register } } as never)
     await new Promise(resolve => setImmediate(resolve))
     expect(register.mock.calls.map(([route]) => route.path).sort()).toEqual([...Object.values(PERMISSION_ROUTES), NETWORK_LIST_PATH, NETWORK_SET_PATH].sort())
+  })
+})
+
+describe('the dangerous-mode routes', () => {
+  const reach = { kind: 'reach-device', deviceId: 'phone', listener: 'tailscale-private' }
+
+  it('refuse the computer-only routes to a device, and an off-loopback Host on the loopback listener, for the off route too', async () => {
+    const { defaults } = await mounted()
+    for (const path of [PERMISSION_ROUTES.everywhereOff, PERMISSION_ROUTES.everywhere]) {
+      const { response, answered } = recordingResponse()
+      let reached = false
+      await routesOver(defaults, 'loopback').hook({ url: path, headers: { host: 'rebind.example.com' } }, response, async () => { reached = true })
+      expect({ path, reached, status: answered.status }).toEqual({ path, reached: false, status: 403 })
+    }
+    const unplaced = recordingResponse()
+    let reached = false
+    await routesOver(defaults, undefined).hook({ url: PERMISSION_ROUTES.everywhereOff, headers: { host: 'localhost:3080' } }, unplaced.response, async () => { reached = true })
+    expect({ reached, status: unplaced.answered.status }).toEqual({ reached: false, status: 403 })
+  })
+
+  it('leave a device to the peer check, which refuses a locked device and a peer that is not a reach device', async () => {
+    const { defaults } = await mounted()
+    const routes = routesOver(defaults, 'tailscale-private', ['unlocked-phone'])
+    for (const path of [PERMISSION_ROUTES.everywhereOff, PERMISSION_ROUTES.everywhere]) {
+      let reached = false
+      await routes.hook({ url: path, headers: { host: 'home.example.ts.net' } }, recordingResponse().response, async () => { reached = true })
+      expect(reached).toBe(true)
+      expect(routes.admits(path, reach)).toBe(false)
+      expect(routes.admits(path, { kind: 'owner' })).toBe(false)
+      expect(routes.admits(path, { ...reach, deviceId: 'unlocked-phone' })).toBe(true)
+    }
+  })
+
+  it('turn dangerous mode off from the loopback listener by removing the grant file, and answer the state', async () => {
+    const { harness, ctx, defaults, home, workspace } = await mounted(undefined, undefined, 'row', true)
+    const routes = routesOver(defaults, 'loopback')
+    expect(await (await routes.fetch(PERMISSION_ROUTES.everywhere)).json()).toMatchObject({ on: true })
+    const chat = await harness.create(SessionId('chat-off'), {}, { cwd: workspace })
+    ctx.permissionPresets.set(chat.session, 'danger-full-access')
+    const off = await routes.fetch(PERMISSION_ROUTES.everywhereOff, { method: 'POST' })
+    expect([off.status, await off.json()]).toEqual([200, { on: false }])
+    expect(existsSync(dangerousGrantPath(home))).toBe(false)
+    expect((ctx.sessionProjections.checkpoint(chat.session).permissions?.val as { preset: string | null } | undefined)?.preset).toBe('workspace-write')
   })
 })

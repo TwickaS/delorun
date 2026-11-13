@@ -10,6 +10,7 @@
 import { mkdirSync, watch, type FSWatcher } from 'node:fs'
 import { basename, dirname } from 'node:path'
 import { PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
+import { DANGEROUS_GRANT_FILE } from './store.ts'
 
 /**
  * How long a watch waits after the last change event before it reports a change, in milliseconds: one write raises
@@ -29,13 +30,14 @@ export interface PermissionStoreWatchCalls {
 }
 
 /**
- * Watch the store's file. Its directory is created at the private directory mode when missing, so a store not yet
+ * Watch the store's file and the dangerous-mode grant file beside it. Its directory is created at the private directory mode when missing, so a store not yet
  * written is watched too.
  * @param path - the store's absolute path.
  * @param calls - the change and failure calls.
+ * @param grantFile - the dangerous-mode grant file's name in the same directory, whose changes are reported too.
  * @returns the function that closes the watch and drops a pending change.
  */
-export function watchPermissionStore(path: string, calls: PermissionStoreWatchCalls): () => void {
+export function watchPermissionStore(path: string, calls: PermissionStoreWatchCalls, grantFile: string = DANGEROUS_GRANT_FILE): () => void {
   const file = basename(path)
   let timer: NodeJS.Timeout | undefined
   let watcher: FSWatcher | undefined
@@ -49,7 +51,7 @@ export function watchPermissionStore(path: string, calls: PermissionStoreWatchCa
     mkdirSync(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
     watcher = watch(dirname(path), { persistent: false }, (_event, name) => {
       // A platform that names no file reports some change in the directory; it is read as the store's.
-      if (name !== null && name !== file) return
+      if (name !== null && name !== file && name !== grantFile) return
       clearTimeout(timer)
       timer = setTimeout(() => {
         timer = undefined

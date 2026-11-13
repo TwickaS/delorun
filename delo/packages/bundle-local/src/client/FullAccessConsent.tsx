@@ -9,7 +9,7 @@
 import { useState, type ReactNode } from 'react'
 import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { FULL_ACCESS_PRESET, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
+import { FULL_ACCESS_PRESET, readEverywhere, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
 import { hostFailureOf, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import css from './ConsentSections.module.css'
 
@@ -166,7 +166,8 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
 /**
  * The `permissionSwitchConsent` question of the composer's permission control: a switch to full access in a chat whose
  * workspace holds no grant shows the consent first, and is submitted only once the grant is recorded. Every other
- * switch, and every switch in a profile that does not ask for full access per workspace, is submitted at once.
+ * switch, every switch in a profile that does not ask for full access per workspace, and every switch to full access
+ * while dangerous mode is on, is submitted at once.
  * @param fetch - the request function.
  * @param consent - the consent's store.
  * @param sessionId - the chat the switch belongs to.
@@ -177,6 +178,8 @@ export function createFullAccessConsentSource(fetch: HostFetch): FullAccessConse
  */
 export async function confirmPermissionSwitch(fetch: HostFetch, consent: Pick<FullAccessConsentSource, 'ask' | 'askSwitch'>, sessionId: string, preset: string, wanted?: () => boolean): Promise<boolean> {
   if (preset !== FULL_ACCESS_PRESET) return true
+  // Dangerous mode (chosen in `delorun setup`) makes full access available everywhere without a dialog, on a remote studio too.
+  if ((await readEverywhere(fetch)).on) return true
   let access: WorkspaceAccess | undefined
   try {
     access = await reviewChat(fetch, sessionId)

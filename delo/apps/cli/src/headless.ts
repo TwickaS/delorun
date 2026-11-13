@@ -25,6 +25,7 @@ import { runDirectory, shellQuote } from '@delo/home'
 import { HostNotStoppedError, refuseBootedHost } from '@delo/home-process'
 import { FULL_ACCESS_PRESET, fullAccessGranted, permissionStorePath, readPermissionStore } from '@delo/plugin-permission-defaults/store'
 import { workspaceKey } from '@delo/plugin-permission-defaults/workspace'
+import { dangerousModeHolds } from './setup/dangerous.ts'
 import type { CommandOutput, CommandResult } from './command.ts'
 import { assertDeloInvariants, composeDeloProfile, type ComposeDependencies } from './compose.ts'
 import { CliError, EXIT } from './exit.ts'
@@ -147,6 +148,7 @@ export function fullAccessRequests(args: readonly string[], env: Readonly<Record
 export async function refuseUngrantedFullAccess(home: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, cwd: string, presets?: ReadonlySet<string>): Promise<void> {
   const requests = fullAccessRequests(args, env, presets)
   if (requests.length === 0) return
+  if (await dangerousModeHolds(home)) return
   const workspace = workspaceKey(cwd)
   const read = await readPermissionStore(permissionStorePath(home))
   switch (read.kind) {

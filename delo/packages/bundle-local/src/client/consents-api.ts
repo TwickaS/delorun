@@ -11,14 +11,14 @@ import {
   type RevokeServerAnswer, type ServerChange, type WaitingServer, type WaitingServersAnswer,
 } from '@delo/plugin-mcp-consent/wire'
 import {
-  PERMISSION_ROUTES, type SetFullAccessAnswer, type WorkspaceAccess, type WorkspacesAnswer,
+  PERMISSION_ROUTES, type EverywhereAnswer, type SetFullAccessAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from '@delo/plugin-permission-defaults/wire'
 import {
   DELEGATION_CONSENT_ROUTES, type AllowWorkspaceAnswer, type GrantsAnswer, type GrantView, type RevokeAnswer,
 } from '@delo/plugin-delegation-consent/wire'
 import { call, fields, hostFailureOf, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
 
-export type { AcceptedServer, EnvVariable, GrantView, GrantsAnswer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
+export type { EverywhereAnswer, AcceptedServer, EnvVariable, GrantView, GrantsAnswer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
 
 /** The preset whose switch needs the workspace's consent. */
 export const FULL_ACCESS_PRESET = 'danger-full-access'
@@ -33,7 +33,8 @@ const isWorkspaceAccess: Check = fields({
   grantedAt: orNull(isTime),
   reviewId: isString,
 })
-const isWorkspaces: Check = fields({ workspaces: listOf(isWorkspaceAccess), storeProblem: optional(isString) })
+const isEverywhere: Check = fields({ on: value => typeof value === 'boolean', grantedAt: optional(isString), problem: optional(isString) })
+const isWorkspaces: Check = fields({ workspaces: listOf(isWorkspaceAccess), everywhere: isEverywhere, storeProblem: optional(isString) })
 const isReview: Check = fields({ access: isWorkspaceAccess })
 const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime })
 const isServerChange: Check = value => SERVER_CHANGES.some(change => change === value)
@@ -85,6 +86,31 @@ async function mounted<T>(request: Promise<T>): Promise<T | undefined> {
  */
 export function readWorkspaces(fetch: HostFetch): Promise<WorkspacesAnswer | undefined> {
   return mounted(call<WorkspacesAnswer>(fetch, PERMISSION_ROUTES.workspaces, isWorkspaces))
+}
+
+/**
+ * Read whether dangerous mode is on. A refusal (a locked device), a profile without the route and an unreachable Host
+ * all read as off, the direction that asks.
+ * @param fetch - the request function.
+ * @returns the state; `{ on: false }` when it cannot be read.
+ */
+export async function readEverywhere(fetch: HostFetch): Promise<EverywhereAnswer> {
+  try {
+    return await call<EverywhereAnswer>(fetch, PERMISSION_ROUTES.everywhere, isEverywhere)
+  } catch (_unreadable) {
+    // Any failure leaves dangerous mode off, so every consent asks as it does without it.
+    return { on: false }
+  }
+}
+
+/**
+ * Turn dangerous mode off by removing its grant file; the computer and an unlocked device may call it.
+ * @param fetch - the request function.
+ * @returns the state after the change.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export function turnEverywhereOff(fetch: HostFetch): Promise<EverywhereAnswer> {
+  return call<EverywhereAnswer>(fetch, PERMISSION_ROUTES.everywhereOff, isEverywhere, {})
 }
 
 /**

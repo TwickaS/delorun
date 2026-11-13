@@ -47,6 +47,8 @@
       name: '@delo/plugin-permission-defaults'
       config:
         enabled: true
+        # `delorun headless` overlays true here only while setup's Dangerous answer and its grant file hold.
+        fullAccessEverywhere: false
 
     # A fetch of a private, loopback or link-local address is refused.
     - id: delo-fetch-guard

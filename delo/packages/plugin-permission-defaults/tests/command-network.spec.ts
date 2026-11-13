@@ -286,7 +286,7 @@ describe('the route hook', () => {
 
 describe('the plugin\'s network configuration', () => {
   it('defaults to the parity value and an open network', () => {
-    expect(Config()).toEqual({ enabled: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000, proxyMaxConnections: 256, proxyIdleTimeoutMs: 300_000 })
+    expect(Config()).toEqual({ enabled: false, fullAccessEverywhere: false, network: 'open', allowedHosts: [], proxyConnectTimeoutMs: 30_000, proxyMaxConnections: 256, proxyIdleTimeoutMs: 300_000 })
   })
 
   it('refuses an invalid default allowlist, a zero timeout and a second resolver at load', async () => {

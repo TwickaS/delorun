@@ -671,7 +671,7 @@ export const REACH_DEVICE_COMMANDS = {
   compact: 'compact the chat\'s older history',
   export: 'download the chat\'s log',
   goal: 'set or read the chat\'s goal',
-  permission: 'switch the chat\'s permission preset; a full-access preset still meets the workspace\'s consent, which only the computer grants',
+  permission: 'switch the chat\'s permission preset; a full-access preset meets the workspace\'s consent where the home asks for one, which only the computer grants, and with setup\'s stock or dangerous answer it does not',
   plan: 'enter or leave plan mode in the chat',
 } as const satisfies Readonly<Record<string, string>>
 

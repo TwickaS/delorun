@@ -61,6 +61,16 @@ describe('the permission store\'s watch', () => {
     expect(seen.changed).toBe(1)
   })
 
+  it('reports a change to the dangerous-mode grant file, and to no other file beside the store', () => {
+    const { seen } = watched()
+    fake.listener?.('rename', 'full-access-everywhere.json')
+    vi.advanceTimersByTime(PERMISSION_STORE_WATCH_DEBOUNCE_MS)
+    expect(seen.changed).toBe(1)
+    fake.listener?.('rename', 'full-access-everywhere.json.lock')
+    vi.advanceTimersByTime(PERMISSION_STORE_WATCH_DEBOUNCE_MS)
+    expect(seen.changed).toBe(1)
+  })
+
   it('reads a change that names no file as the store\'s', () => {
     const { seen } = watched()
     fake.listener?.('rename', null)
