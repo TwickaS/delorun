@@ -48,10 +48,10 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | Feature | What the edits do | Serves |
 | --- | --- | --- |
 | `code-refusal-switch` | The loader's `refuseCode` option and the boot's forwarding of it | a switch, off; no Delo composition turns it on |
-| `config-editor-events` | The config editor's `edited` event (C4) and its `before-save` hook (C1) | shipped `cli`, which refuses a value for a secret-role field |
+| `settings-by-chat` | The config editor's `edited` event (C4) and its `before-save` hook (C1) | shipped `cli`, which refuses a value for a secret-role field |
 | `container-denial-marker` | The sandbox, shell and PTC fields that mark a denial by the environment | shipped confinement, behind a C16 switch |
 | `custom-chat-display` | The Custom work-details mode and the presentation policy the chat renderers read | the studio lane |
-| `default-workspace-directory` | The operator-named path of the first-use Workspace | no Delo consumer on `v5` |
+| `default-workspace-directory` | The operator-named path of the first-use Workspace | shipped `bundle-local` and `cli` (`delorun start`), behind a C16 switch |
 | `delorun-launcher` | `runCli` takes its arguments from the launcher, and the CLI's argument parser and plugin command are built as entries a launcher imports | shipped `cli` |
 | `doctor` | The doctor checks, app, bundle and profile template | shipped `cli` |
 | `fork-gates` | Upstream's documentation and repository gates run over Delo's tree | repository tooling |
@@ -61,14 +61,14 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | `late-projection-keys` | Projection keys registered after a Session's baseline reach open control streams | no Delo consumer on `v5` |
 | `parity-replay` | The snapshot harness applies the parity overlay (C16) | the parity replay lane of `tools` |
 | `permission-defaults` | Whether a Session holds no permission preset | shipped `plugin-permission-defaults` |
-| `plugin-manager-improvements` | Plugin-manager diagnostic reasons and opening a plugin's page | no Delo consumer on `v5` |
+| `plugin-manager-improvements` | Plugin-manager diagnostic reasons and opening a plugin's page | shipped `plugin-onboarding` (opening a plugin's page) |
 | `plugin-version-axis` | A plugin's `engines.delo` range (C17) | shipped `update` and `contract-plugin-versions` |
 | `project-identity` | Delo Run's copyright line in the root `LICENSE`, under upstream's notice | the repository |
 | `preset-inspect` | The `preset_inspect` tool, its preset rows and its catalogue entry | a C16 switch, off |
 | `product-name` | The build title in the iOS home-screen title and the web manifest | the Web build of `tools` and `release` |
 | `profile-history` | Profile history, safe mode and the plugin audit on install | shipped `cli` (`delorun recover`) and `profile-safety` |
 | `scheduled-task-consent` | The consent asked before a scheduled task wakes its Session | shipped `plugin-schedule-consent` |
-| `session-created-at` | Session list rows carry `createdAt` | no Delo consumer on `v5` |
+| `session-created-at` | Session list rows carry `createdAt` | shipped `plugin-sidebar` (sort by created) |
 | `studio-seams` | Settings layout, onboarding, theme, sidebar and one-list workspace seams (WP1.6) | the studio lane; `bundle-local` sets `welcomeNotice` |
 | `terminal-card-controls` | The terminal card's copy-command control, duration and open start | the studio lane |
 | `trash-purge` | Forgetting purged Sessions in the search index and projection cache (C8) | shipped `trash` |
@@ -94,14 +94,18 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 The budget limits how far the ledger may grow in one release, and it names the checks that enforce that limit.
 
 - **Count.** A release's count is the ledger's entries and hunks per class, and the rule-covered paths and hunks as the class `ruled`; generated paths are counted under `ruled`. A retired entry is credited against the count: growth is measured net of the entries and hunks that retired entries record.
-- **Growth cap.** Growth per release is capped at the larger of 20 entries or 10 % of the first release's baseline entries. Growth in hunks is capped at the larger of 150 hunks or 10 % of the first release's baseline hunks.
+- **Growth cap.** Growth per release is capped at the larger of 20 entries or 10 % of release 0.1.0's baseline entries. Growth in hunks is capped at the larger of 150 hunks or 10 % of release 0.1.0's baseline hunks.
 - **Breach.** A breach of either cap needs a maintainer decision, recorded in the release notes.
 - **Rehearsal merge.** Delo's budget requires that the rehearsal merge onto upstream's newest tag fail when conflicted hunks exceed 15 % of the ledger's hunks at that tag. It also fails when any `security`-class file conflicts without a recorded maintainer decision. `node_modules/.bin/tsx delo/apps/tools/src/rehearse-upstream.ts --tag <tag>` runs the rehearsal merge in a scratch worktree and also holds the growth to the caps; `--ref <ref>` rehearses a commit or branch already in the clone, such as `upstream/master`, instead. The [tools README](../../../apps/tools/README.md#the-rehearsal-merge) describes its output.
-- **Baseline.** The first release's baseline is recorded when that release is cut.
-- **Current count.** `node_modules/.bin/tsx delo/apps/tools/src/check-fork-boundary.ts --count` prints the ledger's entries and hunks against the base tag; the first release's baseline is recorded in that release's notes.
+- **Baseline.** The baseline is the ledger's entries and hunks at release 0.1.0, recorded in that release's notes. Without a recorded baseline, the caps are the floors, 20 entries and 150 hunks.
+- **Current count.** `node_modules/.bin/tsx delo/apps/tools/src/check-fork-boundary.ts --count` prints the ledger's entries and hunks against the base tag.
 
 ## Divergence records
 
 A substantial change to one upstream area gets its own divergence record, a page in this directory that explains how to merge the next upstream release for that area. The change that creates the divergence adds the page. No records exist yet.
 
 Upstream merges follow the [fork boundary](../../../../AGENTS.md#the-fork-boundary) rules in the root guide.
+
+## Where to go next
+
+The [parity checklist](../parity.md) records the status and evidence of each difference that the ledger accounts for. The [glossary](../glossary.md) defines the terms on this page. The [reference index](../README.md) lists the other developer pages.

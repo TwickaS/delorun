@@ -96,7 +96,7 @@ An `x.y.0` release is not a patch and is not compared. A patch version with no e
 
 ## Compatibility
 
-The inventory's `schema` names its major version. The `event` kind was added to `delo.plugin-interface/1` before any release was published. Moving an entry from `internal` to `covered` is a minor release's change; moving one from `covered` to `internal` removes it from the promise, which from 1.0 needs a major release.
+The inventory's `schema` names its major version. Moving an entry from `internal` to `covered` is a minor release's change; moving one from `covered` to `internal` removes it from the promise, which from 1.0 needs a major release.
 
 ## Security
 

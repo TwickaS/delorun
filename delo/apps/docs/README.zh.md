@@ -8,9 +8,10 @@
 
 | 路由 | 提供的内容 |
 | --- | --- |
-| `/` | 首页，链接到两个部分 |
+| `/` | 首页，链接到两个部分；已汇编版本时，还以“新内容”展示最新版本 |
 | `/guide`、`/guide/<页面>` | 英文的用户指南 |
 | `/reference`、`/reference/<页面>` | 英文的参考资料 |
+| `/changelog` | 更新日志：与上游版本的常驻对比，随后是每个已汇编版本（最新在前）；没有已汇编版本时不存在 |
 | `/zh/...` | 同样的路由，中文版；没有中文对应页的页面显示其英文文本 |
 | `/llms.mdx/<部分>/<页面>` 和 `/zh/llms.mdx/...` | 每个页面的 Markdown 版本。部分的索引页为 `/llms.mdx/<部分>/index`，目录的索引页为 `/llms.mdx/<部分>/<目录>/index` |
 | `/llms.txt`、`/zh/llms.txt` | 每种语言页面的索引，链接到它们的 Markdown 版本 |
@@ -33,6 +34,19 @@
 ## 版本
 
 每个页面都标明它描述的 Delo 版本。版本从 [`delo/apps/release/package.json`](../release/package.json) 读取，这是站点唯一引用的来源。
+
+## 更新日志
+
+更新日志页面和首页的“新内容”部分在构建时由 Delorun 的更新日志记录 `delo/changelog/changelog.json` 生成，发布工具在汇编版本时写入该记录。构建使用 [`delo/apps/release/src/changelog/data.ts`](../release/src/changelog/data.ts) 的类型和函数读取该记录，这些函数同样渲染 `CHANGELOG.md` 和发布说明，因此站点与这些文件陈述相同的条目。站点从不读取未发布的片段：版本汇编后才会出现。中文页面使用中文标题和标签，条目为英文。
+
+没有记录时构建仍然成功，并省略该页面、其预渲染文件和首页部分。要在版本汇编之前审阅站点，请把未发布的片段写成仓库之外的预览记录，并用它构建；第一条命令在仓库根目录运行。不会移动任何文件，输出也从不提交：
+
+```sh
+node_modules/.bin/tsx delo/apps/docs/scripts/preview-record.ts 0.1.0 /tmp/docs-preview/changelog.json
+(cd delo/apps && DOCS_CHANGELOG_PREVIEW=/tmp/docs-preview/changelog.json pnpm --dir docs run build)
+```
+
+`DOCS_CHANGELOG_PREVIEW` 指定要发布的记录，以替代仓库中的记录；文件不存在时构建失败。
 
 ## 主题
 

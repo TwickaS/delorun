@@ -23,7 +23,7 @@ This package builds [contract C3](../../docs/contracts/c03-update-report.md)'s u
 - [Confirming without asking](#confirming-without-asking)
 - [The sentences](#the-sentences)
 - [Seams for other packages](#seams-for-other-packages)
-- [Not yet implemented](#not-yet-implemented)
+- [Not implemented](#not-implemented)
 - [Tests](#tests)
 
 ## What the report decides
@@ -87,10 +87,10 @@ A record already in phase `rolling-back` completes that rollback: the function n
 
 One report is built at a time and a second request for the version already building joins it. The build is an effect of the context, so a disposed context returns no report: a caller still waiting is refused with `REPORT_DISPOSED` instead of being handed a report from a context that no longer exists.
 
-## Not yet implemented
+## Not implemented
 
-- The CLI's readers read no revocation list, because no release publishes one yet; the report names `revocations` in `notChecked`, and the health check's H3 catches a plugin the target disables that the report did not name.
-- A stored report's reader validates nothing yet: a report kept in a profile history version is read back against the contract's types by its reader, and the report format's own validator lands with the history's reader.
+- The CLI's readers read no revocation list, because no release publishes one; the report names `revocations` in `notChecked`, and the health check's H3 catches a plugin the target disables that the report did not name.
+- A stored report's reader validates nothing: a report kept in a profile history version is read back against the contract's types by its reader, and the report format has no validator of its own.
 - The studio's update screens (WP6.3) show this report. Their copy goes through the Web UI's locale dictionaries when they land; this package's sentences are the CLI's.
 - The health check's own criteria (H1 to H5) run in the CLI's Host (`delo/apps/cli/src/update/host.ts`) and the rollback triggers in the home process's handshake, not here; `health` is what they compare against.
 

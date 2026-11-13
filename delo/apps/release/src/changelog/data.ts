@@ -113,7 +113,7 @@ function itemsOf(fragments: readonly Fragment[]): ComparedItem[] {
  * @param items - the ordered items.
  * @returns one group per area that has items.
  */
-function byArea(items: readonly ComparedItem[]): AreaItems[] {
+export function byArea(items: readonly ComparedItem[]): AreaItems[] {
   return AREAS.flatMap((area) => {
     const own = items.filter(item => item.area === area).map(({ section, text }) => ({ section, text }))
     return own.length === 0 ? [] : [{ area, items: own }]
@@ -209,13 +209,32 @@ export function foldedPreviews(existing: ChangelogData | undefined, version: str
 }
 
 /**
+ * The word a bullet prints before its text.
+ * @param section - the bullet's section.
+ * @returns the section name for Security, Removed and Fixed; undefined for the other sections.
+ */
+export function bulletPrefix(section: Section): string | undefined {
+  return PREFIXED_SECTIONS.includes(section) ? section : undefined
+}
+
+/**
  * One bullet as a Markdown line.
  * @param section - the bullet's section.
  * @param text - the bullet text.
  * @returns `- text`, with a bold section prefix for Security, Removed and Fixed.
  */
 function bullet(section: Section, text: string): string {
-  return PREFIXED_SECTIONS.includes(section) ? `- **${section}:** ${text}` : `- ${text}`
+  const prefix = bulletPrefix(section)
+  return prefix === undefined ? `- ${text}` : `- **${prefix}:** ${text}`
+}
+
+/**
+ * The line that names the upstream release a version is based on, which opens every version's From upstream block.
+ * @param ref - the upstream release.
+ * @returns the line's text, without its list marker.
+ */
+export function basedOnText(ref: string): string {
+  return `Based on DeepSeek Harness \`${ref}\`.`
 }
 
 /**
@@ -240,7 +259,7 @@ function bodyLines(entry: VersionEntry, level: string): string[] {
   return [
     ...areaLines(entry.areas, level),
     `${level} From upstream`,
-    `- Based on DeepSeek Harness \`${ref}\`.`,
+    `- ${basedOnText(ref)}`,
     ...items.map(item => `- ${item.text}`),
     '',
     ...entry.previews.flatMap(preview => [
@@ -262,15 +281,29 @@ export function renderEntry(entry: VersionEntry): string {
 }
 
 /**
+ * The heading and the opening sentence of the standing comparison.
+ * @param data - the data file.
+ * @returns the heading text, and the sentence that follows it: the statement that no difference is recorded, or the
+ * sentence that introduces the bullets.
+ */
+export function comparedText(data: ChangelogData): { readonly heading: string; readonly intro: string } {
+  const { ref } = data.upstream
+  return {
+    heading: `Delo compared with DeepSeek Harness ${ref}`,
+    intro: data.compared.length === 0 ? 'No difference is recorded yet.' : `This is everything that differs from DeepSeek Harness \`${ref}\` in the latest assembled version.`,
+  }
+}
+
+/**
  * The standing comparison as the changelog prints it.
  * @param data - the data file.
  * @returns the `## Delo compared with DeepSeek Harness <ref>` block, ending with one newline.
  */
 function renderCompared(data: ChangelogData): string {
-  const lines = [`## Delo compared with DeepSeek Harness ${data.upstream.ref}`, '']
+  const { heading, intro } = comparedText(data)
+  const lines = [`## ${heading}`, '', intro, '']
   const areas = byArea(data.compared)
-  if (areas.length === 0) lines.push('No difference is recorded yet.', '')
-  else lines.push(`This is everything that differs from DeepSeek Harness \`${data.upstream.ref}\` in the latest assembled version.`, '', ...areaLines(areas, '###'))
+  if (areas.length > 0) lines.push(...areaLines(areas, '###'))
   return `${lines.join('\n').trimEnd()}\n`
 }
 

@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-Delorun tells you when a newer release exists, shows what it would change before it applies anything, and applies it only when you confirm. Before the switch it saves your profile's history, and when the new release changes how chats are stored, it copies your chat data first. After the switch it checks the new release and goes back on its own if a check fails. Your plugins, presets and profile changes carry over; when a release cannot carry one, the report names it before you decide.
+This page shows how to see what a new Delorun release would change, apply it safely, and go back if it goes wrong. You need Delorun installed with its launcher ([Install and first run](install.md)) and git. Delorun tells you when a newer release exists, shows what it would change before it applies anything, and applies it only when you confirm. Before the switch it saves your [profile's history](../reference/glossary.md#profile-history), and when the new release changes how chats are stored, it copies your chat data first. After the switch it checks the new release and goes back on its own if a check fails. Your plugins, presets and profile changes carry over; when a release cannot carry one, the report names it before you decide.
 
 ## Contents
 
@@ -19,6 +19,7 @@ Delorun tells you when a newer release exists, shows what it would change before
 - [Chat data that changes format](#chat-data-that-changes-format)
 - [Going back](#going-back)
 - [Channels](#channels)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## The update notice
@@ -104,6 +105,40 @@ A rollback does not merge. When the data format changed, the chat data as the ne
 ## Channels
 
 Each release belongs to a channel, `stable` or `beta`, and checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it differs from the running one, a lower version included.
+
+<details>
+<summary>Edge cases</summary>
+
+- If you have no terminal, then `delorun update` answers no and changes nothing.
+- If you have no git, then `delorun update` refuses before it fetches anything. `--check` and `--report` do not need git.
+- If your report is older than ten minutes, then Delorun says `Delo did not update: the update report is unknown or older than ten minutes.` Run `delorun update` again.
+- If the report turns a plugin off, removes something, or holds something Delorun cannot predict, then `--yes` does not confirm it. Run `delorun update` and decide.
+- If chats are still running, then Delorun waits up to 30 minutes, then stops the update with `DRAIN_TIMEOUT` and changes nothing.
+- If the new release fails its health check, then Delorun goes back on its own and prints which check failed.
+- If the chat-data copy does not fit on the disk, then Delorun refuses with `DATA_COPY_NO_SPACE`. Free some space or choose `--no-data-copy` knowing the consequence above.
+- If you took no copy and want to go back after a format change, then `delorun recover rollback` refuses with `ROLLBACK_NEEDS_DATA_COPY`. `delorun recover rollback --profile-only` still restores your profile.
+- If you run Delorun from a source checkout, then no update check runs.
+- If you reach the studio from a phone, then it shows the notice without its controls. Apply the update at your computer.
+- If you turned the check off, then there is no notice, and `delorun update` still works when you run it.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- Read the report before you decide: `delorun update --report` installs the release beside yours and changes nothing.
+- Always take a chat-data copy: `delorun update --data-copy`.
+- Turn the daily check off: Settings → General → Updates, or `delorun setup privacy`.
+- Clean up old copies: `delorun recover status` lists them, and `delorun recover discard <path>` removes one.
+- Restore any saved profile version: `delorun recover restore <version>`.
+
+</details>
+
+## Next
+
+- Use Delorun: [Daily use](daily-use.md).
+- Keep your own changes through updates: [Changing your harness](https://docs.delorun.com/guide/changing-your-harness).
+- If an update failed: [Updates and rollback](troubleshooting.md#updates-and-rollback).
 
 ## For the technically curious
 

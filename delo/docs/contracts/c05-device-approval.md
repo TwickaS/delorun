@@ -264,7 +264,7 @@ Every home delivers every alert through all of these channels; a home with no sc
 <a id="delo-run-mailbox"></a>
 ### Delo Run mailbox
 
-The Delo Run mailbox, which carries device-signed approvals between devices through Delo Run, is a fast-follow and is not part of Delo 1.0. Every approval reaches the home directly, as an admitted request of the approving device's live session. When the mailbox is added, it carries only messages it cannot forge, and an approval that arrives only through the mailbox, outside a live session, is refused.
+The Delo Run mailbox, which carries device-signed approvals between devices through Delo Run, is not part of Delorun ([roadmap](../guide/roadmap.md)). Every approval reaches the home directly, as an admitted request of the approving device's live session. A mailbox would carry only messages it cannot forge, and would refuse an approval that arrives only through it, outside a live session.
 
 <a id="consumers"></a>
 ## Consumers

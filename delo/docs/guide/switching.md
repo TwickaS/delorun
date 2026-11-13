@@ -8,7 +8,9 @@ English
 
 ## Summary
 
-If you used stock DeepSeek Harness, your chats, workspaces, profiles and settings live in `~/.dsh`. Delorun keeps its own home, `~/.delo`, and copies what you choose from `~/.dsh` into it. The copy only reads `~/.dsh`: nothing in it changes, so stock DeepSeek Harness keeps working exactly as before, and you can go back at any time.
+This page helps you move from stock DeepSeek Harness to Delorun without losing your chats. Stock DeepSeek Harness keeps your [chats](../reference/glossary.md#chat), [workspaces](../reference/glossary.md#workspace), [profiles](../reference/glossary.md#profile) and settings in a folder called `~/.dsh`. Delorun keeps its own [home](../reference/glossary.md#home), `~/.delo`, and copies what you choose from `~/.dsh` into it. The copy only reads `~/.dsh`. Nothing in it changes, so stock DeepSeek Harness keeps working exactly as before, and you can go back at any time.
+
+You need Delorun installed ([Install and first run](install.md)) and, to copy a key or install plugins, a terminal.
 
 ## Contents
 
@@ -22,6 +24,7 @@ If you used stock DeepSeek Harness, your chats, workspaces, profiles and setting
 - [What changes when you switch](#what-changes-when-you-switch)
 - [Same as stock](#same-as-stock)
 - [Going back](#going-back)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Import your home
@@ -53,7 +56,7 @@ Stop DeepSeek Harness and Delorun before you import. If a file in `~/.dsh` chang
 - **Instructions and skills, when you say so.** Your `AGENTS.md` and your skills. Every chat reads the instructions, and a skill can tell the agent what to do, so read them before you say yes.
 - **Your DeepSeek key, when you say so.** The import lists your stored keys by name, never showing a value, and offers only the DeepSeek key, which it copies into Delorun's credentials file, which only you can read. Add other keys again in Delorun.
 
-A chat that ran with full access in DeepSeek Harness opens in Delorun on Workspace Write, the safer preset, until you turn on full access for its workspace in Delorun: pick Full access in the chat, choose "Allow for this chat" on an approval card that asks for it, or use Settings, Permissions, or `delorun workspace full-access <folder> on`.
+A chat that ran with full access in DeepSeek Harness opens in Delorun on Workspace Write, the safer preset, until you turn on full access for its workspace in Delorun: pick Full access in the chat, choose "Allow for this chat" on an approval card that asks for it, or use Settings → Safety → Permissions, or `delorun workspace full-access <folder> on`.
 
 The import never runs anything from `~/.dsh`.
 
@@ -109,11 +112,11 @@ Your chats and workspaces look as they did, and your plugins work as they did in
 - **What commands can reach.** Commands the model runs cannot write, or read, Delorun's home, and every new workspace starts on Workspace Write ([What Delorun protects](safety.md)).
 - **Consents.** With setup's default Safer prompts, Delorun asks before the model writes instruction files or schedules work, holds a new MCP server that runs a command until you allow it, and asks once before a workspace gets full access ([Consents](safety.md#consents)).
 - **`web_fetch`.** It does not fetch addresses on your own computer or network ([The web_fetch guard](safety.md#the-web_fetch-guard)).
-- **Data sharing.** DeepSeek's session-log upload is off until you turn it on in Settings → Privacy.
+- **Data sharing.** DeepSeek's session-log upload is off until you turn it on in Settings → Safety → Privacy.
 - **Updates.** Delorun checks for a newer release once a day, shows what an update would change before you confirm, and can go back ([Updates](updates.md)).
 - **The look.** Delorun's theme, sidebar, chat states and settings layout.
 
-[Delorun and stock DeepSeek Harness](delo-vs-stock.md) lists every difference and what is not available yet, and the [parity checklist](../reference/parity.md) lists each changed default with its evidence.
+[Delorun and stock DeepSeek Harness](delo-vs-stock.md) lists every difference and what Delorun does not include, and the [parity checklist](../reference/parity.md) lists each changed default with its evidence.
 
 ## Same as stock
 
@@ -124,13 +127,44 @@ Each of these returns one difference to DeepSeek Harness's behaviour, and you ca
 | Prompts: **Same as stock** | `delorun setup prompts`, or the prompts question in setup | Turns off the full-access consent, the instruction-file consent, the MCP server consent and the scheduled-task consent. The `web_fetch` guard stays on. |
 | Look: **Stock** | Settings → General → Look, or onboarding's studio look | The original look, without Delorun's theme, sidebar, chat states, settings layout and onboarding. **Delorun look** in Settings → General switches back. |
 | **Check for new releases** off | Settings → General → Updates, or `delorun setup privacy` | No release check request; `delorun update` still works when you run it. |
-| **DeepSeek session-log upload** on | Settings → Privacy | Each request to DeepSeek's API carries part of your session log, as in DeepSeek Harness. |
+| **DeepSeek session-log upload** on | Settings → Safety → Privacy | Each request to DeepSeek's API carries part of your session log, as in DeepSeek Harness. |
 
 Some differences have no switch: commands the model runs never write into Delorun's home, `web_fetch` always refuses local addresses, and Delorun checks every release it runs.
 
 ## Going back
 
 `~/.dsh` is untouched, so stock DeepSeek Harness works as it did before the import. Chats you start in Delorun stay in your Delorun home; `delorun export` writes chats and workspaces as files that another home imports with `delorun import`.
+
+<details>
+<summary>Edge cases</summary>
+
+- If `~/.dsh` does not exist or cannot be read, then `delorun import-home` refuses with `DSH_IMPORT_SOURCE_UNUSABLE` and imports nothing. Use `--from <dir>` to name another stock home.
+- If `~/.dsh` is a link rather than a folder, then setup does not offer the import.
+- If you run the import without a terminal, then nothing is imported, because it asks before it copies.
+- If DeepSeek Harness or Delorun runs while you import, then stop both first. A file that changes during the copy stops the import and leaves your Delorun home as it was.
+- If your computer stops during an import, then the next start of Delorun removes the part it had copied.
+- If your Delorun home already has chats, then the import refuses until you add `--merge`.
+- If the copy would exceed 4 GiB, then it stops. Give a larger limit in bytes, such as `--max-size 8589934592`.
+- If a chat stays behind because it stopped in the middle of a turn, then finish or close it in DeepSeek Harness and import again.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- `delorun import-home --dry-run` shows everything without writing, and is a safe first look.
+- `delorun import-home --profile work` imports into the profile `work`.
+- Held-back settings are saved under `~/.delo/archive/stock-import/`. Copy what you trust from there.
+- Move chats between Delorun homes with `delorun export` and `delorun import` ([Daily use](daily-use.md#trash-export-and-import)).
+
+</details>
+
+## Next
+
+- Start Delorun: [Daily use](daily-use.md).
+- See the model providers: [Model providers](providers.md).
+- Know what Delorun changes from stock: [Delorun and stock DeepSeek Harness](delo-vs-stock.md).
+- If something went wrong: [Archives, imports and the trash](troubleshooting.md#archives-imports-and-the-trash).
 
 ## For the technically curious
 

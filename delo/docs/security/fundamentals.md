@@ -10,7 +10,7 @@ English
 
 A security fundamental is a rule about what Delo does or refuses that a person can rely on in every release. Each one is stated in one sentence, with the code that enforces it and the test that fails when that code stops enforcing it. An `enforced` fundamental holds on the code in this repository today. A `designed` fundamental is a rule Delo has adopted whose code is not built yet; its [design page](../design/README.md) states how it will hold, and the change that builds it moves the row to `enforced`.
 
-Later work may add protections that make a fundamental stricter, and nothing weakens or removes one without the decision described in [Changing a fundamental](#changing-a-fundamental). The [security extension points design](../design/security-extension-points.md), which is not built, lets a plugin make Delo stricter and never weaker.
+A protection can make a fundamental stricter, and nothing weakens or removes one without the decision described in [Changing a fundamental](#changing-a-fundamental). The [security extension points design](../design/security-extension-points.md), which is not built, lets a plugin make Delo stricter and never weaker.
 
 ## Contents
 
@@ -20,7 +20,7 @@ Later work may add protections that make a fundamental stricter, and nothing wea
 
 ## The fundamentals
 
-"Enforced by" names the narrowest files that hold the check. "Proven by" names a spec file and the exact title of a test in it that feeds the refused case and fails when the check is removed. Rows marked `designed` name no code, because none exists yet.
+"Enforced by" names the narrowest files that hold the check. "Proven by" names a spec file and the exact title of a test in it that feeds the refused case and fails when the check is removed. Rows marked `designed` name no code, because no code enforces them.
 
 | ID | Fundamental | Status | Enforced by | Proven by |
 | --- | --- | --- | --- | --- |

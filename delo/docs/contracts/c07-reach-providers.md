@@ -206,7 +206,7 @@ Own-domain reach is the self-hosted relay option. The certificate authority this
 <a id="delo-relay-client"></a>
 ### Delo relay client
 
-The Delo relay client is a fast-follow: Delo 1.0 registers no `delo-relay` provider, and setup does not offer the option. When it is added, it registers through the same Service Definition with the option id `delo-relay`, publishes a visibility note that names what Delo Run can see and do, including that Delo could obtain a publicly logged certificate for a `delo.run` name, and follows [C6's rules for the Delo relay](c06-relay-protocol.md#delo-relay).
+Delorun does not include a Delo relay client ([roadmap](../guide/roadmap.md)): it registers no `delo-relay` provider, and setup does not offer the option. Such a provider registers through the same Service Definition with the option id `delo-relay`, publishes a visibility note that names what Delo Run can see and do, including that Delo could obtain a publicly logged certificate for a `delo.run` name, and follows [C6's rules for the Delo relay](c06-relay-protocol.md#delo-relay).
 
 <a id="consumers"></a>
 ## Consumers

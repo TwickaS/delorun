@@ -8,9 +8,9 @@ English
 
 ## Summary
 
-A design page states the rules Delo has adopted for a feature that is not built, or only partly built: what it will do, what it will refuse, what it will not protect against, and the denial tests that will prove it. The [contract pages](../contracts/README.md) describe only what is built. A design page lets a contributor see where Delo is going without a contract claiming what the code does not do.
+A design page states the rules Delo has adopted for a feature that is not built, or only partly built: what it does, what it refuses, what it does not protect against, and the denial tests that prove it. The [contract pages](../contracts/README.md) describe only what is built. A design page lets a contributor read the adopted rules of an unbuilt feature without a contract claiming what the code does not do.
 
-Every design page has the same sections: a summary; what exists today, checked against the code; the rules; what the design does not protect against; the denial tests it will have; and what is built so far. Statements under "What exists today" and "What is built so far" are about the code in this repository. Statements under the rules are the design, and none of them holds until a change builds it.
+Every design page has the same sections: a summary; what exists today, checked against the code; the rules; what the design does not protect against; the denial tests it has; and what is built so far. Statements under "What exists today" and "What is built so far" are about the code in this repository. Statements under the rules are the design, and none of them holds until a change builds it.
 
 ## How a design becomes a contract
 

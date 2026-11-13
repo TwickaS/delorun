@@ -22,7 +22,7 @@ A running board of friction met while working in this harness and this repositor
 
 ### 2026-11-07 · #2 The plugin-manager e2e's team dialog times out on this host
 
-**What happened.** `apps/web/tests/plugin-manager.e2e.ts:1215` times out waiting for the 智能体团队 dialog's "Team 暂不可用" text (30 s `locator.waitFor`). The failure reproduces with every working-tree change stashed, on the same tree, so no in-flight change causes it; the e2e runs app-boot's built `lib/`.
+**What happened.** `apps/web/tests/plugin-manager.e2e.ts` times out in its team-dialog step, at the `waitFor` for the 智能体团队 dialog's empty-state text (30 s `locator.waitFor`), before the step's check that "Team 暂不可用" is absent. The failure reproduces with every working-tree change stashed, on the same tree, so no in-flight change causes it; the e2e runs app-boot's built `lib/`.
 
 **What it cost.** `tests:web-changed` selects the spec whenever a changed package reaches app-boot (as the loader `refuseCode` change does), turning a lane that would otherwise decline into one that fails.
 
@@ -42,10 +42,14 @@ A running board of friction met while working in this harness and this repositor
 
 ### 2026-11-10 · #4 parity-switches flags a non-model-visible edit inside an upstream plugin's `apply`
 
-**What happened.** `parity-switches` counts a changed line of a ledgered upstream file as a model-visible contribution when it lies anywhere in a top-level statement that holds a registration call. The `lane/sandbox-escapes` security fix binds each Session's git runner to its sandbox with one changed line inside `packages/deliverables/workspace-changes/src/index.ts`'s `apply`, which also holds upstream's unchanged `ctx.on('tools/pre-execute')` listener, so the check reports `index.ts:148` although nothing the model sees changes and `parity-replay` shows no difference. No restructuring avoids it: any edit inside `apply` lands in the same statement.
+**What happened.** `parity-switches` counts a changed line of a ledgered upstream file as a model-visible contribution when it lies anywhere in a top-level statement that holds a registration call. The `lane/sandbox-escapes` security fix binds each Session's git runner to its sandbox with one changed line inside `packages/deliverables/workspace-changes/src/index.ts`'s `apply`, which also holds upstream's unchanged `ctx.on('tools/pre-execute')` listener, so the check reports that one line although nothing the model sees changes and `parity-replay` shows no difference. No restructuring avoids it: any edit inside `apply` lands in the same statement.
 
 **What it cost.** The check fails on a security fix that has no C16 switch to register, because the fix must hold in the parity composition too.
 
 **What to do instead.** Review the hunk, then record it with `node_modules/.bin/tsx delo/apps/tools/src/ledger-record.ts --non-model-visible-hunk <path>:<line> --reason "<one line>"`, which adds its digest to the file's security entry under `nonModelVisibleHunks` and exits 3 for the lead's verdict; `parity-switches` then passes that exact hunk and fails again when it changes ([tools README](../../apps/tools/README.md)). A skip of `parity-switches` or of `tests:fork` needs the lead's authorisation for that push and is never available for the trunk.
 
 **Status:** `fixed`: security entries record reviewed non-model-visible hunks, and the check reads them.
+
+## Where to go next
+
+The [parity baseline](parity-baseline.md) records the host state that several entries depend on. The [reference index](README.md) lists the other developer pages.

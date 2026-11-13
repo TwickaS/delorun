@@ -4,9 +4,11 @@ description: "The model providers Delorun sets up: DeepSeek, Anthropic, Google G
 
 # Model providers
 
+English
+
 ## Summary
 
-Delorun works with the model provider you choose. Setup asks which one to use, takes its key and, for most providers, the model new chats start on. Every provider below is set up the same way and is listed in the same order setup lists it, by name. DeepSeek support is built in and needs no extra install; every other provider runs on the multi-provider adapter that ships with DeepSeek Harness, so none of them needs an install either. More providers, and more of each provider's settings, are in the studio's Settings → Models.
+This page helps you choose which AI model service Delorun talks to, give it your key, and change that later. You need Delorun installed ([Install and first run](install.md)) and an account with a provider. A [model provider](../reference/glossary.md#provider) is a company or server that runs the AI model; a key is the secret text that lets Delorun use your account there. Delorun works with the provider you choose. Setup asks which one to use, takes its key and, for most providers, the model new chats start on. Every provider below is set up the same way and is listed in the same order setup lists it, by name. DeepSeek support is built in and needs no extra install; every other provider runs on the multi-provider adapter that ships with DeepSeek Harness, so none of them needs an install either. More providers, and more of each provider's settings, are in the studio's Settings → Agent → Models.
 
 ## Contents
 
@@ -18,6 +20,8 @@ Delorun works with the model provider you choose. Setup asks which one to use, t
 - [Set up without questions](#set-up-without-questions)
 - [Change the provider later](#change-the-provider-later)
 - [Providers set up in the studio](#providers-set-up-in-the-studio)
+- [Next](#next)
+- [For the technically curious](#for-the-technically-curious)
 
 ## Choose a provider in setup
 
@@ -46,7 +50,7 @@ Setup's model provider question is `Which model provider should Delorun use?`, w
 | Together AI | `together` | `TOGETHER_API_KEY` | The key and the model |
 | xAI | `xai` | `XAI_API_KEY` | The key and the model |
 
-The model list of each provider is the list installed with Delorun. Some key variables differ from the name the studio's Settings → Models would give the key it stores: Google Gemini uses `GEMINI_API_KEY` and Moonshot AI `MOONSHOT_API_KEY`, the names those providers' own tools read. Setup records the variable it used, so the studio reads the key from the same place. Every provider but the OpenAI-compatible endpoint uses the address the provider publishes. DeepSeek also reads `DEEPSEEK_BASE_URL` when you set it, as DeepSeek Harness does.
+The model list of each provider is the list installed with Delorun. Some key variables differ from the name the studio's Settings → Agent → Models would give the key it stores: Google Gemini uses `GEMINI_API_KEY` and Moonshot AI `MOONSHOT_API_KEY`, the names those providers' own tools read. Setup records the variable it used, so the studio reads the key from the same place. Every provider but the OpenAI-compatible endpoint uses the address the provider publishes. DeepSeek also reads `DEEPSEEK_BASE_URL` when you set it, as DeepSeek Harness does.
 
 ## An OpenAI-compatible endpoint
 
@@ -82,10 +86,42 @@ delorun setup --yes --provider openai-compatible --base-url http://127.0.0.1:114
 
 ## Change the provider later
 
-Run `delorun setup key` to choose again; it asks every question of the provider section. With `--provider` and its flags it asks nothing, so a script can run it. Restart Delorun afterwards with `delorun stop`, then `delorun start`. The studio's Settings → Models shows what setup wrote, and changes it there too. Choosing DeepSeek again returns new chats to DeepSeek's default model and keeps the other providers you set up, so their models stay in the model picker.
+Run `delorun setup key` to choose again; it asks every question of the provider section. With `--provider` and its flags it asks nothing, so a script can run it. Restart Delorun afterwards with `delorun stop`, then `delorun start`. The studio's Settings → Agent → Models shows what setup wrote, and changes it there too. Choosing DeepSeek again returns new chats to DeepSeek's default model and keeps the other providers you set up, so their models stay in the model picker.
 
 ## Providers set up in the studio
 
-The multi-provider adapter knows more providers than setup lists, among them Amazon Bedrock, Azure OpenAI, Cerebras, Cloudflare, Fireworks, GitHub Copilot, Google Vertex AI, Hugging Face, MiniMax, NVIDIA, Z.AI and Xiaomi. Add any of them in the studio's Settings → Models, which also signs in to providers that use an account instead of a key, and edits any provider's address, models and request settings.
+The multi-provider adapter knows more providers than setup lists, among them Amazon Bedrock, Azure OpenAI, Cerebras, Cloudflare, Fireworks, GitHub Copilot, Google Vertex AI, Hugging Face, MiniMax, NVIDIA, Z.AI and Xiaomi. Add any of them in the studio's Settings → Agent → Models, which also signs in to providers that use an account instead of a key, and edits any provider's address, models and request settings.
 
 Claude Code and Codex are not model providers for Delorun's chats: they are agents that a chat can hand work to, and they run as their own programs with their own sign-in. The studio's first-run guide offers to add them.
+
+<details>
+<summary>Edge cases</summary>
+
+- If you choose **None for now**, then chats cannot answer until you add a provider. New chats keep the profile's model, and `delorun doctor` shows `warn key`.
+- If setup cannot reach the provider, then the key check fails with the address and HTTP status. Choose **Continue without a successful check** to store the key anyway, or fix the network first.
+- If your endpoint needs no key, then enter any text; the adapter always sends one.
+- If you use plain `http` to another computer, then setup warns you that the key and prompts cross the network unencrypted.
+- If you change the provider while Delorun runs, then stop and start it: `delorun stop`, then `delorun start`.
+- If you run setup without a terminal, then `--yes` sets up no provider unless you name one with `--provider`.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- Use several providers: run `delorun setup key` again with another provider. Setup keeps the providers you set up before, so all their models stay in the model picker.
+- Run a model on your own computer through Ollama, LM Studio or vLLM with the OpenAI-compatible endpoint.
+- Add providers setup does not list, sign in with an account instead of a key, or edit a provider's address and request settings in Settings → Agent → Models.
+- Hand work to Claude Code or Codex from a chat: the first-run guide's Agents step adds them ([Install and first run](install.md#the-studio-and-your-first-chat)).
+
+</details>
+
+## Next
+
+- Start a chat: [Daily use](daily-use.md).
+- See what a chat costs: [See what a chat costs](cost-meter.md).
+- If the key was refused: [Setup and the model key](troubleshooting.md#setup-and-the-model-key).
+
+## For the technically curious
+
+[Contract C11](../contracts/c11-setup-answers.md) defines the setup answers, including `modelProvider`.

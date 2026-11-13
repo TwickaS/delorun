@@ -17,7 +17,7 @@ Nothing on this page is built: no code fetches, verifies or caches a catalogue i
 - **Built and reached:** the `catalogue` key role in the root metadata schema of [C2](c02-release-manifest.md#key-roles), and the file name `catalogue/revocations.json` in the home layout of [C1](c01-home-layout.md). Plugins install through upstream's plugin manager, which records each package's integrity hash in the profile's `pnpm-lock.yaml`; Delo adds no pin of its own.
 - **Not built:** the `@delo/catalogue` package; the signed index and revocation list and their publish job; installing from the catalogue with exact versions and integrity pins; the sequence, expiry and 24-hour cache-age checks; the stale state; disabling a revoked plugin version at its next load; badges and listed findings in the studio; the `plugin-pins` check, which `delorun verify` reports as not run. `delorun update`'s report lists `revocations` as not checked.
 
-The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them. A plugin installed today stays enabled whatever is later known about it, until the person removes it.
+The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them. A plugin installed stays enabled whatever is later known about it, until the person removes it.
 
 ## Contents
 
@@ -154,7 +154,7 @@ A list with any malformed revocation is refused as a whole; the client keeps the
 
 ## Stale state
 
-The revocation list is stale when the cache age exceeds 24 hours, when the stored list is past `expires`, or when no list has verified yet. While it is stale:
+The revocation list is stale when the cache age exceeds 24 hours, when the stored list is past `expires`, or when no list has verified. While it is stale:
 
 - the studio shows "The plugin revocation list has been out of date since <time>; new catalogue installs are paused." with the reason of the last failure;
 - new catalogue installs and catalogue updates are refused;
