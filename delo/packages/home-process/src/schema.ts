@@ -47,6 +47,15 @@ const request = z.discriminatedUnion('op', [
     op: z.literal('devices.remove'),
     args: z.strictObject({ deviceId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) }),
   }),
+  z.strictObject({
+    ...base,
+    op: z.literal('devices.elevate'),
+    args: z.strictObject({
+      requestId: approvalRequestId.optional(),
+      typedCode: z.string().regex(/^[0-9 -]{8,12}$/).optional(),
+      revokeId: approvalRequestId.optional(),
+    }),
+  }),
   z.strictObject({ ...base, op: z.literal('permission.reload') }),
   z.strictObject({ ...base, op: z.literal('mcp.list') }),
   z.strictObject({ ...base, op: z.literal('mcp.accept'), args: mcpReview }),

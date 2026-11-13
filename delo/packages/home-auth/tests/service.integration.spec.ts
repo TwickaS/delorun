@@ -35,7 +35,15 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', REACH_PATHS.pending],
   ['exact', REACH_PATHS.approve],
   ['exact', REACH_PATHS.cancel],
+  ['exact', ELEVATION_PATHS.state],
+  ['exact', ELEVATION_PATHS.request],
+  ['exact', ELEVATION_PATHS.lock],
+  ['exact', ELEVATION_PATHS.pending],
+  ['exact', ELEVATION_PATHS.approve],
+  ['exact', ELEVATION_PATHS.revoke],
+  ['exact', ELEVATION_PATHS.terminal],
 ]
+import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { deviceIdOf } from '../src/records.ts'
 import { claimOf, keyOf } from './fixtures/home.ts'
 
@@ -59,10 +67,10 @@ interface Mount {
 
 /**
  * Mount the service over a temporary secrets directory and a fake web server.
- * @param extra - what else to provide on the context, such as a connection service.
+ * @param extra - what else to provide on the context, such as a connection service, and extra plugin configuration.
  * @returns the mount.
  */
-async function mount(extra: { readonly connection?: unknown } = {}): Promise<Mount> {
+async function mount(extra: { readonly connection?: unknown, readonly config?: Readonly<Record<string, unknown>> } = {}): Promise<Mount> {
   const directory = await mkdtemp(join(tmpdir(), 'delo-home-auth-service-'))
   const ctx = new Context()
   const registered: Registered[] = []
@@ -74,9 +82,11 @@ async function mount(extra: { readonly connection?: unknown } = {}): Promise<Mou
     },
   } as never)
   if (extra.connection !== undefined) ctx.provide('connection', extra.connection as never)
-  const fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+  const fiber = await ctx.plugin(HomeAuthService, { ...extra.config, secretsDirectory: join(directory, 'secrets', 'home-auth') })
   return { ctx, fiber, registered, unregistered, directory }
 }
+
+const TAILNET = brandString<StudioAddress>('https://home.example.ts.net')
 
 describe('the homeAuth service', () => {
   it('mounts under its name and registers the claim, device and reach routes', async () => {
@@ -99,6 +109,45 @@ describe('the homeAuth service', () => {
       expect(mounted.unregistered).toEqual(ROUTES.map(([, path]) => path))
       expect(mounted.ctx.get('homeAuth')).toBeUndefined()
     } finally {
+      await rm(mounted.directory, { recursive: true, force: true })
+    }
+  })
+
+  it('serves elevation to a device and to the computer, and logs each start and ending', async () => {
+    const mounted = await mount()
+    const lines: string[] = []
+    try {
+      const service = mounted.ctx.get('homeAuth') as HomeAuthService
+      mounted.ctx.logger.info = (line: string) => { lines.push(line) }
+      expect(service.elevationOf('nobody', 'reach-tailscale-private')).toBeUndefined()
+      service.serve({ listener: 'reach-tailscale-private', address: TAILNET, factor: 'tailnet-membership' })
+      const issued = await service.issueOwnerCode()
+      await service.claim(claimOf(issued.code, { address: TAILNET }))
+      const deviceId = deviceIdOf(keyOf(1))
+      const opened = await service.openSession({ deviceId, listener: 'reach-tailscale-private', address: TAILNET, factor: 'tailnet-membership', lifetimeMs: HOUR })
+      const admitted = service.admitToken(opened.token, 'reach-tailscale-private')
+      if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
+      const changes: string[] = []
+      const off = service.onElevationChange((change) => { changes.push(change.kind) })
+      const state = service.requestElevation(admitted.sessionId, admitted.session)
+      if (state.kind !== 'pending') throw new Error('no request is waiting')
+      expect(service.elevationState(deviceId, 'reach-tailscale-private')).toEqual(state)
+      expect(service.elevationsAtComputer().pending).toHaveLength(1)
+      const record = service.approveElevation(state.requestId, state.code)
+      expect(service.elevationOf(deviceId, 'reach-tailscale-private')).toEqual(record)
+      service.lockElevation(deviceId, 'reach-tailscale-private')
+      const again = service.requestElevation(admitted.sessionId, admitted.session)
+      if (again.kind !== 'pending') throw new Error('no request is waiting')
+      expect(service.revokeElevation(again.requestId)).toBe(true)
+      off()
+      expect(changes).toEqual(['started', 'ended'])
+      // Pins the log line: the device, the listener and the elevation, and who ended it.
+      expect(lines).toEqual([
+        `home-auth: elevation started until ${new Date(record.endsAt).toISOString()}: device=${deviceId} listener=reach-tailscale-private elevation=${record.id}`,
+        `home-auth: elevation ended (locked-from-device): device=${deviceId} listener=reach-tailscale-private elevation=${record.id}`,
+      ])
+    } finally {
+      await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })
     }
   })
@@ -171,6 +220,8 @@ describe('the homeAuth service', () => {
     expect(service.arrivalOf({ headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '127.0.0.1', localAddress: '127.0.0.1', localPort: 3080 } }))
       .toEqual({ listener: undefined, host: '127.0.0.1:3080', source: 'unknown' })
     expect(service.servedListener('reach-tailscale-private')).toBeUndefined()
+    // The terminal switch only lowers protection, so it reads off until the home started.
+    expect(service.terminalWithoutUnlock()).toBe(false)
     expect(() => service.owner()).toThrow(/has not started/)
     expect(() => service.cancelApproval('request')).toThrow(/has not started/)
   })
@@ -219,11 +270,37 @@ describe('the homeAuth service', () => {
     }
   })
 
+  it('reads the terminal switch from its own store, never from the plugin\'s configuration', async () => {
+    // A plugin row's configuration is what a settings save, a slash command, the plugin manager's configure, undo and
+    // restore, and the model's configuration tools write; none of it turns the switch on.
+    const { ctx, fiber, directory } = await mount({ config: { terminalWithoutUnlock: true, withoutUnlock: true, reachTerminal: true } })
+    try {
+      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+      await ctx.homeAuth.setTerminalWithoutUnlock(true, 'computer')
+      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(true)
+      await expect(ctx.homeAuth.setTerminalWithoutUnlock(true, 'device')).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
+      await ctx.homeAuth.setTerminalWithoutUnlock(false, 'device')
+      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('refuses a secrets directory that is not absolute', async () => {
     const ctx = new Context()
     ctx.provide('webServer', { register: () => () => {} } as never)
     // Pins the path check: a relative directory would create the store where the process happens to run.
     await expect(ctx.plugin(HomeAuthService, { secretsDirectory: 'secrets/home-auth' })).rejects.toThrow(/absolute path/)
     await ctx.fiber.dispose()
+  })
+
+  it('refuses a secrets directory outside a Delo home, and names the home it lies in', async () => {
+    const ctx = new Context()
+    ctx.provide('webServer', { register: () => () => {} } as never)
+    // Pins the layout check: the home a device's workspace-file read never reaches is derived from this directory.
+    await expect(ctx.plugin(HomeAuthService, { secretsDirectory: '/elsewhere/home-auth' })).rejects.toThrow(/Delo home's secrets directory/)
+    await ctx.fiber.dispose()
+    expect(new HomeAuthService(new Context(), { secretsDirectory: '/home/someone/.delo/secrets/home-auth' }).deloHome).toBe('/home/someone/.delo')
   })
 })

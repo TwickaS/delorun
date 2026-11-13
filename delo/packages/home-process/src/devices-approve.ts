@@ -12,10 +12,13 @@
  *   has no owner) and answers once a request is pending or the window closed. With `requestId` and `typedCode` it
  *   approves that request with the match code the person typed, which records the approver as `local`. With
  *   `cancelRequestId` alone it cancels that pending request at the person's choice.
+ * - **`devices.elevate`.** The same caller rule keeps the answer to a device's request to unlock sensitive actions (C14,
+ *   "Elevation") at the computer: it lists the waiting requests and the running elevations, approves a request with the
+ *   code the device shows, and declines a request or ends an elevation.
  *
  * @module @delo/home-process/devices-approve
  */
-import type { DevicesApproveRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
+import type { DevicesApproveRequest, DevicesElevateRequest, DevicesRemoveRequest } from '@delo/contract-home-process'
 import { HomeProcessError } from './errors.ts'
 
 /** A pending approval request as the person's command shows it. */
@@ -26,6 +29,33 @@ export interface PendingDevice {
   readonly address: string
   readonly createdAt: number
   readonly expiresAt: number
+}
+
+/** A device's waiting request to unlock sensitive actions, as the person's command shows it; never with its code. */
+export interface PendingElevationRequest {
+  readonly requestId: string
+  readonly deviceId: string
+  /** The device's name and platform, empty when its record is gone. */
+  readonly label: string
+  readonly platform: string
+  readonly requestedAt: number
+  readonly expiresAt: number
+}
+
+/** A device's running elevation, as the person's command shows it. */
+export interface RunningElevation {
+  readonly id: string
+  readonly deviceId: string
+  /** The device's name and platform, empty when its record is gone. */
+  readonly label: string
+  readonly platform: string
+  readonly endsAt: number
+}
+
+/** The waiting requests to unlock and the running elevations, oldest first. */
+export type ElevationsAtComputer = {
+  readonly pending: readonly PendingElevationRequest[]
+  readonly running: readonly RunningElevation[]
 }
 
 /** The Host's half of the local approval: `@delo/home-auth`'s window, pending requests and approval. */
@@ -66,6 +96,25 @@ export interface LocalDeviceApproval {
    * @throws an error with a `code` property, such as `NO_OWNER`, for a refused removal.
    */
   remove(deviceId: string): Promise<{ readonly removed: boolean; readonly sessions: number; readonly connections: number }>
+  /**
+   * The waiting requests to unlock sensitive actions and the running elevations.
+   * @returns both, with each device's name.
+   */
+  elevations(): Promise<ElevationsAtComputer>
+  /**
+   * Approve a request to unlock with the code the person typed from the device.
+   * @param requestId - the request.
+   * @param typedCode - the 8 digits.
+   * @returns the elevation that started.
+   * @throws an error with a `code` property, such as `APPROVAL_CODE_MISMATCH`, for a refused approval.
+   */
+  approveElevation(requestId: string, typedCode: string): { readonly id: string; readonly deviceId: string; readonly endsAt: number }
+  /**
+   * Decline a request to unlock or end an elevation.
+   * @param id - the request id or the elevation id.
+   * @returns whether either was found.
+   */
+  revokeElevation(id: string): boolean
 }
 
 /** Which credential a request carried. */
@@ -132,7 +181,7 @@ export async function approveDevices(
  * @param fallback - the sentence for an error without one.
  * @returns the refusal.
  */
-function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED', error: unknown, fallback: string): HomeProcessError {
+function homeAuthRefusal(refusal: 'APPROVAL_FAILED' | 'REMOVAL_FAILED' | 'ELEVATION_FAILED', error: unknown, fallback: string): HomeProcessError {
   const code = error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'INTERNAL_ERROR'
   const detail = error instanceof Error && 'detail' in error && typeof error.detail === 'string' ? error.detail : fallback
   return new HomeProcessError(refusal, `${code}: ${detail}`)
@@ -156,5 +205,35 @@ export async function removeDevice(request: DevicesRemoveRequest, caller: Channe
     return await devices.remove(request.args.deviceId)
   } catch (error) {
     throw homeAuthRefusal('REMOVAL_FAILED', error, 'the removal failed')
+  }
+}
+
+/**
+ * Run `devices.elevate`.
+ * @param request - the request.
+ * @param caller - the credential it carried.
+ * @param devices - the Host's local approval, or undefined when the profile does not load `@delo/home-auth`.
+ * @returns the waiting requests and the running elevations, the elevation that started, or whether a revoke found its
+ *   request or elevation.
+ * @throws {HomeProcessError} `LOOPBACK_REQUIRED` for the Host's token; `APPROVALS_UNAVAILABLE` without home-auth;
+ *   `SCHEMA_VIOLATION` for a request id without a code or the reverse, or a revoke with either; `ELEVATION_FAILED`
+ *   naming home-auth's code for a refused approval or listing.
+ */
+export async function elevateDevices(request: DevicesElevateRequest, caller: ChannelCaller, devices: LocalDeviceApproval | undefined): Promise<Readonly<Record<string, unknown>>> {
+  if (caller !== 'person') {
+    throw new HomeProcessError('LOOPBACK_REQUIRED', 'unlocking sensitive actions on a device needs you at your computer: run delorun devices elevate there')
+  }
+  if (devices === undefined) throw new HomeProcessError('APPROVALS_UNAVAILABLE', 'this profile does not load @delo/home-auth')
+  const { requestId, typedCode, revokeId } = request.args
+  if ((requestId === undefined) !== (typedCode === undefined)) {
+    throw new HomeProcessError('SCHEMA_VIOLATION', 'an approval names both the request and the typed code')
+  }
+  if (revokeId !== undefined && requestId !== undefined) throw new HomeProcessError('SCHEMA_VIOLATION', 'a revoke names only the request or elevation to end')
+  try {
+    if (revokeId !== undefined) return { revoked: devices.revokeElevation(revokeId) }
+    if (requestId !== undefined && typedCode !== undefined) return { elevation: devices.approveElevation(requestId, typedCode) }
+    return await devices.elevations()
+  } catch (error) {
+    throw homeAuthRefusal('ELEVATION_FAILED', error, 'the unlock did not change')
   }
 }

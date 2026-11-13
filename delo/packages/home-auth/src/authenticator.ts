@@ -26,6 +26,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
+import type {} from '@deepseek-ai/dsh-working-directory'
+import type {} from './full-access-grants.ts'
 import { Authenticator, LOOPBACK_LISTENER, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
 import type { RemoteAnswerGuard, RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
 import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
@@ -167,19 +169,41 @@ export class HomeAuthAuthenticator extends Authenticator {
     // with it when it goes.
     ctx.inject(['remoteAccess', 'remoteAnswerGuard'], (access) => {
       registerReachPolicy(access.get('remoteAnswerGuard'), access.remoteAccess, createReachAccessPolicy({
-        admitted: deviceId => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId),
+        admitted: (deviceId, listener) => [...this.reachPeers.values()].some(peer => peer.deviceId === deviceId && peer.listener === listener),
         workspaces: () => access.get('workspaceRegistry')?.list() ?? [],
         liveSessions: () => (access.get('sessions')?.list() ?? []).map(session => session.id),
+        workspaceRootOf: (sessionId) => {
+          const live = access.get('sessions')?.get(sessionId)?.header
+          if (live !== undefined) return live.cwd
+          return access.get('workspaceRegistry')?.list().find(workspace => workspace.sessionIds.includes(sessionId))?.path
+        },
+        deloHome: ctx.homeAuth.deloHome,
+        elevationOf: (deviceId, listener) => ctx.homeAuth.elevationOf(deviceId, listener),
+        logElevated: (line) => { ctx.logger.info(line) },
+        terminalFoldersOf: (sessionId) => {
+          // A terminal opens in the Session's current directory, or in its original folder when that one is gone.
+          const session = access.get('sessions')?.get(sessionId)
+          const current = session === undefined ? undefined : access.get('workingDirectory')?.get(session)
+          const original = session?.header.cwd
+          return current === undefined || original === undefined ? undefined : [current, original]
+        },
+        grantedFolders: () => access.get('reachFullAccessGrants')?.grantedFolders() ?? [],
+        terminalWithoutUnlock: () => ctx.homeAuth.terminalWithoutUnlock(),
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {
-        for (const deviceId of new Set([...this.reachPeers.values()].map(peer => peer.deviceId))) {
-          access.remoteAccess.invalidate(reachDevicePrincipal(deviceId))
-        }
+        for (const peer of this.reachPeers.values()) access.remoteAccess.invalidate(reachDevicePrincipal(peer.deviceId, peer.listener))
       }
       access.on('session/created', invalidate)
       access.on('session/disposed', invalidate)
       access.on('domain/changed', (change) => { if (change.domain === 'workspace') invalidate() })
+      // A device's snapshot on one listener lists its elevated actions while it holds an unlock there, so it is
+      // recomputed when one starts or ends.
+      access.effect(() => ctx.homeAuth.onElevationChange((change) => {
+        access.remoteAccess.invalidate(reachDevicePrincipal(change.elevation.deviceId, change.elevation.listener))
+      }), 'home-auth elevation snapshots')
+      // A device's snapshot lists the terminal actions it may take without an unlock, so the switch recomputes it.
+      access.effect(() => ctx.homeAuth.onTerminalSwitchChange(invalidate), 'home-auth terminal switch snapshots')
     })
   }
 
@@ -239,7 +263,7 @@ export class HomeAuthAuthenticator extends Authenticator {
     const key = `${served.listener}\u0000${session.deviceId}`
     let peer = this.peers.get(key)
     if (peer === undefined) {
-      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId) })
+      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener) })
       this.peers.set(key, peer)
       this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor })
     }

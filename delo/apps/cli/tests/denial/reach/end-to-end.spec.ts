@@ -135,9 +135,9 @@ function loopback(method: string, path: string, body?: unknown, credential = stu
 beforeAll(async () => {
   studio = await bootStudio()
   secrets = await mkdtemp(join(tmpdir(), 'delo-reach-e2e-'))
-  await studio.ctx.plugin(HomeAuthService, { secretsDirectory: join(secrets, 'home-auth') })
+  await studio.ctx.plugin(HomeAuthService, { secretsDirectory: join(secrets, 'secrets', 'home-auth') })
   const listenerPort = await chooseListenerPort(LISTENER_PORT_RANGE)
-  const config: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs: 60_000 } }
+  const config: Config = { enabled: true, tailscalePrivate: { enabled: true, address: ADDRESS, servePort: 443, listenerPort, serveCheckIntervalMs: 60_000, elevationMinutes: 15 } }
   await studio.ctx.plugin(FakeReach, config)
   await new Promise<void>((resolve) => { studio.ctx.inject(['reach'], () => { resolve() }) })
   const served = calls.find(call => call[1] === '--bg')?.at(-1) ?? ''

@@ -24,6 +24,7 @@ import { isLoopbackHost } from '@delo/home-auth'
 import schema from '@deepseek-ai/schemastery'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
+import { ELEVATION_LIMITS } from '@delo/contract-oidc-passkeys'
 import {
   DEFAULT_SERVE_CHECK_INTERVAL_MS, DEFAULT_SERVE_PORT, MIN_SERVE_CHECK_INTERVAL_MS, type ReachConfigRows, type ReachErrorCode, type ReachOptionId, type ReachState, type ReachStateChange,
 } from '@delo/contract-reach-providers'
@@ -62,6 +63,8 @@ export interface Config {
     readonly listenerPort: number
     /** How often a ready option rereads the serve status for Funnel, in milliseconds. */
     readonly serveCheckIntervalMs: number
+    /** How many minutes an elevation approved for a device lasts. */
+    readonly elevationMinutes: number
   }
 }
 
@@ -76,7 +79,9 @@ export const Config: schema<Config> = schema.object({
       .description('The fixed port on 127.0.0.1 that tailscale serve forwards to, which delorun reach on tailscale chooses once and writes here. 0 means none is chosen, and an enabled option then fails at load.'),
     serveCheckIntervalMs: schema.natural().min(MIN_SERVE_CHECK_INTERVAL_MS).default(DEFAULT_SERVE_CHECK_INTERVAL_MS)
       .description('How often, in milliseconds, a ready option rereads tailscale serve status for Funnel.'),
-  }).default({ enabled: false, address: '', servePort: DEFAULT_SERVE_PORT, listenerPort: 0, serveCheckIntervalMs: DEFAULT_SERVE_CHECK_INTERVAL_MS }),
+    elevationMinutes: schema.natural().min(1).max(ELEVATION_LIMITS.maxMinutes).default(ELEVATION_LIMITS.defaultMinutes)
+      .description('How many minutes sensitive actions stay unlocked on a device after the person approves it at this computer, from 1 to 60.'),
+  }).default({ enabled: false, address: '', servePort: DEFAULT_SERVE_PORT, listenerPort: 0, serveCheckIntervalMs: DEFAULT_SERVE_CHECK_INTERVAL_MS, elevationMinutes: ELEVATION_LIMITS.defaultMinutes }),
 })
 
 /**
@@ -274,7 +279,7 @@ export class ReachService extends Service {
    */
   private async startOption(provider: ReachProvider, spec: ReachSpec): Promise<void> {
     this.change({ option: spec.option, state: 'starting', address: spec.address })
-    const unserve = this.ctx.homeAuth.serve({ listener: spec.listener, address: spec.address, factor: provider.factor })
+    const unserve = this.ctx.homeAuth.serve({ listener: spec.listener, address: spec.address, factor: provider.factor, elevationMinutes: spec.elevationMinutes })
     let front: LoopbackFront
     try {
       front = await openFront(spec.listenerPort)

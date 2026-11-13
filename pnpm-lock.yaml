@@ -1342,6 +1342,9 @@ importers:
       '@delo/contract-home-process':
         specifier: workspace:*
         version: link:../../packages/contract-home-process
+      '@delo/contract-oidc-passkeys':
+        specifier: workspace:*
+        version: link:../../packages/contract-oidc-passkeys
       '@delo/contract-operational-logs':
         specifier: workspace:*
         version: link:../../packages/contract-operational-logs
@@ -2128,6 +2131,9 @@ importers:
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../../packages/typert/protocol
+      '@deepseek-ai/dsh-working-directory':
+        specifier: workspace:*
+        version: link:../../../packages/session/working-directory
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:*
         version: link:../../../packages/workspace/workspace
@@ -2140,6 +2146,9 @@ importers:
       '@delo/contract-device-approval':
         specifier: workspace:*
         version: link:../contract-device-approval
+      '@delo/contract-home-layout':
+        specifier: workspace:*
+        version: link:../contract-home-layout
       '@delo/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../contract-oidc-passkeys

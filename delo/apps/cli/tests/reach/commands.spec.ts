@@ -80,7 +80,7 @@ describe('delorun reach', () => {
     const calls: string[][] = []
     await expect(reach({ tailscale: tailscale({}, calls) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
     const row = readReachRow(deloHome, 'default')
-    expect(patchRows()).toEqual([{ id: 'delo-reach', config: { enabled: true, tailscalePrivate: { enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: row.listenerPort, serveCheckIntervalMs: 60_000 } } }])
+    expect(patchRows()).toEqual([{ id: 'delo-reach', config: { enabled: true, tailscalePrivate: { enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: row.listenerPort, serveCheckIntervalMs: 60_000, elevationMinutes: 15 } } }])
     expect(row.listenerPort).toBeGreaterThanOrEqual(LISTENER_PORT_RANGE.min)
     expect(row.listenerPort).toBeLessThanOrEqual(LISTENER_PORT_RANGE.max)
     for (const line of TRUST_STATEMENT) expect(out.stdout).toContain(line)
@@ -421,7 +421,7 @@ describe('delorun devices', () => {
     expect(out.stderr).toContain('cancelled; no device was approved')
     await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }]], answers: ['1', undefined] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }], [{ ok: false, error: 'SCHEMA_VIOLATION' }]], answers: ['1', 'x'] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('the device was not approved: SCHEMA_VIOLATION')
+    expect(out.stderr).toContain('no device was approved: SCHEMA_VIOLATION')
     await expect(devices({ lines: [[{ ok: true, pending: [PENDING] }], [{ ok: false, error: 'APPROVAL_FAILED', detail: 'NO_OWNER: none' }]], answers: ['c1'] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('the request was not cancelled: NO_OWNER: none')
     for (const pending of [{}, [null], [{ ...PENDING, label: 7 }], [{ ...PENDING, createdAt: '0' }], [{ ...PENDING, createdAt: Number.NaN }]]) {
@@ -554,7 +554,12 @@ describe('the pieces the commands share', () => {
       approveLocally: (id: string, code: string) => { calls.push(`${id} ${code}`); return Promise.resolve({ id: 'd', label: 'Phone', address: 'a', platform: '' }) },
       cancelApproval: (id: string) => { calls.push(`cancel ${id}`) },
       revokeDevice: (id: string) => { calls.push(`remove ${id}`); return Promise.resolve({ removed: true, sessions: 2, connections: 1, extra: 'dropped' }) },
+      elevationsAtComputer: () => unlocks,
+      devices: () => Promise.resolve({ devices: [{ id: 'phone', label: 'Phone', platform: 'iOS' }] }),
+      approveElevation: (id: string, code: string) => { calls.push(`elevate ${id} ${code}`); return { ...RUNNING, deviceId: 'phone', listener: 'reach-tailscale-private', sessionId: 's', startedAt: 0 } },
+      revokeElevation: (id: string) => { calls.push(`revoke ${id}`); return true },
     }
+    let unlocks: { pending: unknown[]; running: unknown[] } = { pending: [], running: [] }
     const approval = localDeviceApproval({ get: (name: string) => (name === 'homeAuth' ? homeAuth : undefined) } as never)
     await expect(approval?.openWindow()).resolves.toBe(5)
     expect(approval?.windowOpenUntil()).toBe(5)
@@ -562,7 +567,118 @@ describe('the pieces the commands share', () => {
     await expect(approval?.approve('r', '1')).resolves.toEqual({ id: 'd', label: 'Phone', address: 'a' })
     approval?.cancel('r')
     await expect(approval?.remove('d')).resolves.toEqual({ removed: true, sessions: 2, connections: 1 })
-    expect(calls).toEqual(['open', 'r 1', 'cancel r', 'remove d'])
+    // A home with nothing to name is not asked for its devices, which it refuses without an owner.
+    await expect(approval?.elevations()).resolves.toEqual({ pending: [], running: [] })
+    unlocks = {
+      pending: [{ requestId: 'r', deviceId: 'phone', listener: 'reach-tailscale-private', sessionId: 's', requestedAt: 1, expiresAt: 2 }],
+      running: [{ id: 'e', deviceId: 'gone', listener: 'reach-tailscale-private', sessionId: 't', startedAt: 0, endsAt: 3 }],
+    }
+    await expect(approval?.elevations()).resolves.toEqual({
+      pending: [{ requestId: 'r', deviceId: 'phone', label: 'Phone', platform: 'iOS', requestedAt: 1, expiresAt: 2 }],
+      running: [{ id: 'e', deviceId: 'gone', label: '', platform: '', endsAt: 3 }],
+    })
+    expect(approval?.approveElevation('r', '1')).toEqual({ id: RUNNING.id, deviceId: 'phone', endsAt: RUNNING.endsAt })
+    expect(approval?.revokeElevation('e')).toBe(true)
+    expect(calls).toEqual(['open', 'r 1', 'cancel r', 'remove d', 'elevate r 1', 'revoke e'])
+  })
+})
+
+const REQUEST = { requestId: 'CCCCCCCCCCCCCCCCCCCCCC', deviceId: 'phone', label: 'Phone', platform: 'iOS', requestedAt: 0, expiresAt: 1 }
+const RUNNING = { id: 'DDDDDDDDDDDDDDDDDDDDDD', deviceId: 'laptop', label: 'Laptop', platform: '', endsAt: 900_000 }
+
+describe('delorun devices elevate', () => {
+  it('lists the requests and the unlocks, and unlocks the chosen device with the code it shows', async () => {
+    const { command, sent } = devices({
+      lines: [
+        [{ ok: true, pending: [REQUEST], running: [RUNNING] }],
+        [{ ok: false, error: 'ELEVATION_FAILED', detail: 'APPROVAL_CODE_MISMATCH: Type it again' }],
+        [{ ok: true, elevation: { id: 'e', deviceId: 'phone', endsAt: 900_000 } }],
+      ],
+      answers: ['2', 'x', '1', '0000 0000', '1234 5678'],
+    })
+    await expect(command.run(['elevate'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('  1. Phone (iOS) asks to unlock, asked at 1970-01-01T00:00:00.000Z, request CCCCCCCC\n')
+    expect(out.stdout).toContain('  2. Laptop is unlocked until 1970-01-01T00:15:00.000Z\n')
+    // Pins the kind check: a number alone never approves anything for a device that is unlocked already.
+    expect(out.stderr).toContain('That device is unlocked already. Type e and its number to end the unlock.')
+    expect(out.stderr).toContain('Type a number from 1 to 2, or e and a number.')
+    expect(out.stderr).toContain('Try again.')
+    expect(sent).toEqual([
+      { op: 'devices.elevate', args: {} },
+      { op: 'devices.elevate', args: { requestId: REQUEST.requestId, typedCode: '0000 0000' } },
+      { op: 'devices.elevate', args: { requestId: REQUEST.requestId, typedCode: '1234 5678' } },
+    ])
+    expect(out.stdout).toContain('Unlocked sensitive actions on Phone until 1970-01-01T00:15:00.000Z.')
+  })
+
+  it('ends a running unlock or declines a request, and shows the rest again', async () => {
+    const ending = devices({
+      lines: [
+        [{ ok: true, pending: [REQUEST], running: [RUNNING] }],
+        [{ ok: true, revoked: true }],
+        [{ ok: true, pending: [REQUEST], running: [] }],
+        [{ ok: true, revoked: false }],
+        [{ ok: true, pending: [], running: [] }],
+      ],
+      answers: ['e 2', 'END1'],
+    })
+    await expect(ending.command.run(['elevate'], context)).resolves.toBe(EXIT.ok)
+    expect(ending.sent).toEqual([
+      { op: 'devices.elevate', args: {} },
+      { op: 'devices.elevate', args: { revokeId: RUNNING.id } },
+      { op: 'devices.elevate', args: {} },
+      { op: 'devices.elevate', args: { revokeId: REQUEST.requestId } },
+      { op: 'devices.elevate', args: {} },
+    ])
+    expect(out.stdout).toContain('Ended the unlock of Laptop.')
+    expect(out.stderr).toContain('That request or unlock had ended already.')
+    expect(out.stdout).toContain('No device asks to unlock sensitive actions')
+    const declining = devices({ lines: [[{ ok: true, pending: [REQUEST], running: [] }], [{ ok: true, revoked: true }], [{ ok: true, pending: [], running: [] }]], answers: ['e1'] })
+    await expect(declining.command.run(['elevate'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Declined the request of Phone.')
+  })
+
+  it('shows the list again after the third wrong code or a request that ended on its own', async () => {
+    const wrong = { ok: false, error: 'ELEVATION_FAILED', detail: 'APPROVAL_CODE_MISMATCH: wrong' }
+    const listed = { ok: true, pending: [REQUEST], running: [] }
+    const empty = { ok: true, pending: [], running: [] }
+    const guessing = devices({ lines: [[listed], [wrong], [wrong], [wrong], [empty]], answers: ['1', '1', '2', '3'] })
+    await expect(guessing.command.run(['elevate'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stderr).toContain('Three wrong codes cancelled this request')
+    const expired = devices({ lines: [[listed], [{ ok: false, error: 'ELEVATION_FAILED', detail: 'APPROVAL_EXPIRED: gone' }], [empty]], answers: ['1', '1'] })
+    await expect(expired.command.run(['elevate'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stderr).toContain('That request is no longer waiting.')
+  })
+
+  it('refuses without a running home, on a refusal, a cancel and an unreadable list', async () => {
+    await expect(devices({ running: () => false }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('Delo is not running, so no device holds an unlock')
+    await expect(devices({ lines: [[{ ok: false, error: 'LOOPBACK_REQUIRED', detail: 'needs you' }]] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('the home refused: LOOPBACK_REQUIRED (needs you)')
+    const listed = { ok: true, pending: [REQUEST], running: [RUNNING] }
+    await expect(devices({ lines: [[listed]], answers: [undefined] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('cancelled; nothing changed')
+    await expect(devices({ lines: [[listed]], answers: ['1', undefined] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('cancelled; nothing was unlocked')
+    await expect(devices({ lines: [[listed], [{ ok: false, error: 'ELEVATION_FAILED', detail: 'NO_OWNER: none' }]], answers: ['1', '12345678'] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('nothing was unlocked: NO_OWNER: none')
+    await expect(devices({ lines: [[listed], [{ ok: false, error: 'ELEVATION_FAILED' }]], answers: ['e2'] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('nothing was ended: ELEVATION_FAILED')
+    for (const answer of [{}, { pending: [] }, { pending: [], running: {} }, { pending: [null], running: [] }, { pending: [{ ...REQUEST, label: 7 }], running: [] }, { pending: [], running: [{ ...RUNNING, endsAt: Number.NaN }] }, { pending: [], running: [{ ...RUNNING, endsAt: '0' }] }]) {
+      await expect(devices({ lines: [[{ ok: true, ...answer }]] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
+    }
+    expect(out.stderr).toContain('a list of unlocks this command cannot read')
+  })
+
+  it('says only what it can read of the unlock the home started, and escapes a device\'s name', async () => {
+    const planted = { ...REQUEST, label: 'Ph\u001b[2Jone', platform: 'iOS\u202e' }
+    for (const elevation of [undefined, null, { endsAt: 'soon' }, { endsAt: Number.NaN }]) {
+      out.stdout = ''
+      const { command } = devices({ lines: [[{ ok: true, pending: [planted], running: [] }], [{ ok: true, elevation }]], answers: ['1', '12345678'] })
+      await expect(command.run(['elevate'], context)).resolves.toBe(EXIT.ok)
+      expect(out.stdout).toContain('Unlocked sensitive actions on Ph\\u001b[2Jone. End it sooner')
+    }
+    expect(out.stdout).toContain('Ph\\u001b[2Jone (iOS\\u202e) asks to unlock')
   })
 })
 
@@ -585,7 +701,7 @@ describe('setup\'s reach section', () => {
     expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale')
     await expect(section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('delorun devices approve')
     const row = readReachRow(deloHome, 'default')
-    expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000 })
+    expect(row).toEqual({ enabled: true, address: `https://${HOST}`, servePort: 443, listenerPort: expect.any(Number), serveCheckIntervalMs: 60_000, elevationMinutes: 15 })
     // Applying again keeps the port chosen once.
     await section.apply({ home: deloHome, env: {}, directory, secret: undefined }, answers)
     expect(readReachRow(deloHome, 'default').listenerPort).toBe(row.listenerPort)

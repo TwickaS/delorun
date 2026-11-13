@@ -5,9 +5,11 @@
  * only its own row's `config.enabled` through upstream's configuration form, into the active profile's
  * `cordis.patch.yml`.
  *
- * It also registers the Devices section, which shows the reach state and manages the devices the home approved, and
- * the notice that an answer the home refused, such as a full-access grant from a remote studio, must be given at the
- * home's own computer. The consent surfaces of Delo's two consent plugins come from here too: the full-access consent,
+ * It also registers the Devices section, which shows the reach state, manages the devices the home approved and answers
+ * their requests to unlock sensitive actions; the notice that an answer the home refused, such as a full-access grant
+ * from a remote studio, must be given at the home's own computer; and the remote studio's unlock, which turns a call
+ * refused with `elevation-required:` into a request to the computer and shows a banner while sensitive actions are
+ * unlocked. The consent surfaces of Delo's two consent plugins come from here too: the full-access consent,
  * which upstream's permission control asks through the `permissionSwitchConsent` service before a chat switches to
  * full access in a workspace without a grant; the approval card's action for a request that asks for full access; the
  * review of a waiting stdio MCP server and the notice that one waits; and the Permissions section, which lists every
@@ -41,6 +43,8 @@ import { PrivacySection, type OptInId, type PrivacySectionInjected } from './Pri
 import { overrideTitle } from './title.ts'
 import { readVersions } from './versions.ts'
 import { createRemoteNoticeSource, RemoteNotice } from './RemoteNotice.tsx'
+import { createUnlockSource, type UnlockSource } from './unlock.ts'
+import { UnlockOverlay } from './UnlockOverlay.tsx'
 // Type-only: the ctx.permissionSwitchConsent merge.
 import type { PermissionSwitchConsent } from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 // Type-only: the 'conversation.approval.action' SlotMap entry.
@@ -67,6 +71,8 @@ export { readVersions, VERSIONS_GLOBAL, type DeloVersions } from './versions.ts'
 export type { OptInMutation, OptInSettings } from './opt-in.ts'
 export type { OptInId, PrivacySectionInjected, PrivacySectionProps } from './PrivacySection.tsx'
 export type { DevicesSectionInjected, DevicesSectionProps } from './DevicesSection.tsx'
+export type { UnlockDialog, UnlockOutcome, UnlockSource, UnlockView } from './unlock.ts'
+export type { UnlockOverlayProps } from './UnlockOverlay.tsx'
 export {
   DEVICE_ROUTES, HostRequestError, readReachStatus, REACH_STATES,
   type HostFailure, type HostFetch, type ReachOptionStatus, type ReachState, type ReachStatus,
@@ -137,6 +143,9 @@ export const DEVICES_SECTION_ORDER = 21
 
 /** The `shell.overlay` id of the remote studio's refused-answer notice. */
 export const REMOTE_NOTICE_ID = 'delo-remote-full-access'
+
+/** The `shell.overlay` id of the remote studio's unlock dialog, banner and locked-again notice. */
+export const UNLOCK_OVERLAY_ID = 'delo-unlock'
 
 /** Dictionary namespace of the consent surfaces. */
 export const CONSENTS_NS = 'deloConsents'
@@ -226,7 +235,8 @@ export function apply(ctx: Context): void {
   const devicesT = ctx.locale.bind(DEVICES_NS)
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const devicesFace = (): DevicesSectionInjected => ({ fetch: browserFetch })
+  const unlock = applyUnlock(ctx, browserFetch)
+  const devicesFace = (): DevicesSectionInjected => ({ fetch: browserFetch, hooks: unlock.hooks, openUnlock: unlock.open, lockUnlock: unlock.lock })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: DEVICES_SECTION_ID,
@@ -297,6 +307,29 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     locale: CONSENTS_NS,
     inject: permissionsFace,
   }, PermissionsSection))
+}
+
+/**
+ * Register the remote studio's unlock: its store, which reads this device's unlock now, after each connection reset and
+ * after each call remote access refused with `elevation-required:`, and its `shell.overlay` entry. On the home's own
+ * computer the first read finds no device and the entry renders nothing.
+ * @param ctx - the browser plugin context.
+ * @param fetch - the request function.
+ * @returns the store, which the Devices section reads too.
+ */
+export function applyUnlock(ctx: Context, fetch: HostFetch): UnlockSource {
+  const unlock = createUnlockSource(fetch)
+  ctx.effect(() => () => { unlock.dispose() }, 'delo-devices: the unlock\'s timers stop once the plugin unloads')
+  ctx.on('remote/call-denied', (denial) => { unlock.refused(denial.reason) })
+  ctx.on('connection/reset', () => { void unlock.refresh() })
+  void unlock.refresh()
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: UNLOCK_OVERLAY_ID,
+    locale: DEVICES_NS,
+    inject: () => ({ hooks: unlock.hooks, request: unlock.request, cancel: unlock.cancel, lock: unlock.lock, dismissEnded: unlock.dismissEnded }),
+  }, UnlockOverlay))
+  return unlock
 }
 
 /**

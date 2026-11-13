@@ -213,6 +213,27 @@ export interface DevicesRemoveRequest extends RequestBase {
 }
 
 /**
+ * The `devices.elevate` request: the person at the home's own computer answers a device's request to unlock sensitive
+ * actions (C14, "Elevation"). Without arguments it answers the waiting requests and the running elevations; with
+ * `requestId` and `typedCode` it approves that request with the code the device shows; with `revokeId` alone it declines
+ * that request or ends that elevation. Accepted only with the token the person's own `delorun` reads from the token file,
+ * and refused with `LOOPBACK_REQUIRED` for the Host's channel token.
+ */
+export interface DevicesElevateRequest extends RequestBase {
+  /** The operation. */
+  readonly op: 'devices.elevate'
+  /** Arguments. */
+  readonly args: {
+    /** The waiting request to approve. */
+    readonly requestId?: string
+    /** The 8-digit code the person typed from the device's screen. */
+    readonly typedCode?: string
+    /** The request to decline or the elevation to end; it comes without `requestId` and `typedCode`. */
+    readonly revokeId?: string
+  }
+}
+
+/**
  * The `permission.reload` request: the per-workspace permission store of `@delo/plugin-permission-defaults` was changed
  * at the home's own computer by `delorun workspace full-access`, which writes the store itself; the running Host reads
  * it again, and sets the open chats of a workspace that lost its grant back to the safer preset. Accepted with either
@@ -329,6 +350,7 @@ export type UpdateChannelRequest =
   | StudioOpenTokenRequest
   | DevicesApproveRequest
   | DevicesRemoveRequest
+  | DevicesElevateRequest
   | PermissionReloadRequest
   | McpListRequest
   | McpAcceptRequest
@@ -365,6 +387,7 @@ export type HomeProcessErrorCode =
   | 'APPROVAL_FAILED'
   | 'APPROVALS_UNAVAILABLE'
   | 'REMOVAL_FAILED'
+  | 'ELEVATION_FAILED'
   | 'CONSENT_UNAVAILABLE'
   | 'STALE_REVIEW'
   | 'CONSENT_FAILED'

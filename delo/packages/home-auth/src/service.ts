@@ -11,15 +11,19 @@
  *
  * @module @delo/home-auth/service
  */
+import { basename, dirname } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import schema from '@deepseek-ai/schemastery'
 import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
+import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import type { DeviceRecord } from './records.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
-  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
+  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TerminalSwitchOrigin, type TokenAdmission,
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
+import type { ElevationChange, ElevationRecord } from './elevation.ts'
+import type { ElevationState } from '@delo/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
 import {
@@ -27,6 +31,16 @@ import {
   windowHandler,
 } from './reach-routes.ts'
 import { HomeAuthAuthenticator } from './authenticator.ts'
+import {
+  ELEVATION_PATHS,
+  elevationApproveHandler,
+  elevationLockHandler,
+  elevationPendingHandler,
+  elevationRequestHandler,
+  elevationRevokeHandler,
+  terminalSwitchHandler,
+  elevationStateHandler,
+} from './elevation-routes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -76,6 +90,9 @@ export class HomeAuthService extends Service {
     if (!this.config.secretsDirectory.startsWith('/')) {
       throw new Error(`home-auth: the secrets directory must be an absolute path, got ${JSON.stringify(this.config.secretsDirectory)}`)
     }
+    if (basename(dirname(this.config.secretsDirectory)) !== DELO_HOME_ENTRIES.secrets) {
+      throw new Error(`home-auth: the secrets directory must lie in the Delo home's ${DELO_HOME_ENTRIES.secrets} directory, got ${JSON.stringify(this.config.secretsDirectory)}`)
+    }
     const core = new HomeAuth({
       directory: this.config.secretsDirectory,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
@@ -84,6 +101,13 @@ export class HomeAuthService extends Service {
     await core.start()
     this.core = core
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
+    // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
+    // stays out, being the person's own text.
+    this.ctx.effect(() => core.onElevationChange((change) => {
+      const { deviceId, listener, id } = change.elevation
+      const ending = change.kind === 'ended' ? `ended (${change.reason})` : `started until ${new Date(change.elevation.endsAt).toISOString()}`
+      this.ctx.logger.info(`home-auth: elevation ${ending}: device=${deviceId} listener=${listener} elevation=${id}`)
+    }), 'home-auth elevation log')
     const credential = loopbackCredentialOf(this.ctx)
     this.ctx.effect(() => {
       const server = this.ctx.webServer
@@ -101,12 +125,27 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: REACH_PATHS.pending, handler: pendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: REACH_PATHS.approve, handler: approveHandler(core, credential) }),
         server.register({ kind: 'exact', path: REACH_PATHS.cancel, handler: cancelHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.state, handler: elevationStateHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.request, handler: elevationRequestHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.lock, handler: elevationLockHandler(core) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
+        server.register({ kind: 'exact', path: ELEVATION_PATHS.terminal, handler: terminalSwitchHandler(core, credential) }),
       ]
       return () => {
         for (const off of registered) off()
       }
     }, 'home-auth routes')
     this.ctx.plugin(HomeAuthAuthenticator)
+  }
+
+  /**
+   * The Delo home the secrets directory lies in, which no device's workspace-file read reaches.
+   * @returns its absolute path.
+   */
+  get deloHome(): string {
+    return dirname(dirname(this.config.secretsDirectory))
   }
 
   /**
@@ -159,6 +198,107 @@ export class HomeAuthService extends Service {
    */
   onDeviceRemoved(listener: (deviceId: DeviceId) => void): () => void {
     return this.state().onDeviceRemoved(listener)
+  }
+
+  /**
+   * Call a listener for each elevation that starts or ends (C14, "Elevation").
+   * @param listener - called with the change.
+   * @returns the disposer.
+   */
+  onElevationChange(listener: (change: ElevationChange) => void): () => void {
+    return this.state().onElevationChange(listener)
+  }
+
+  /**
+   * The running elevation of one device on one listener.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the elevation, or undefined, also before the service started.
+   */
+  elevationOf(deviceId: string, listener: ReachListenerId): ElevationRecord | undefined {
+    return this.core?.elevationOf(deviceId, listener)
+  }
+
+  /**
+   * Whether a device opens a terminal without an unlock in every folder.
+   * @returns whether the switch is on; off before the service started.
+   */
+  terminalWithoutUnlock(): boolean {
+    return this.core?.terminalWithoutUnlock() ?? false
+  }
+
+  /**
+   * Turn the terminal switch on or off.
+   * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
+   * @param from - who asks; a device is refused turning it on.
+   */
+  async setTerminalWithoutUnlock(withoutUnlock: boolean, from: TerminalSwitchOrigin): Promise<void> {
+    await this.state().setTerminalWithoutUnlock(withoutUnlock, from)
+  }
+
+  /**
+   * Call a listener after this home turns the terminal switch on or off.
+   * @param listener - called after the change.
+   * @returns the disposer.
+   */
+  onTerminalSwitchChange(listener: () => void): () => void {
+    return this.state().onTerminalSwitchChange(listener)
+  }
+
+  /**
+   * Record a signed-in device's request to elevate.
+   * @param sessionId - the admitted session.
+   * @param session - its record.
+   * @returns the device's state, with the code it shows.
+   */
+  requestElevation(sessionId: string, session: SessionRecord): ElevationState {
+    return this.state().requestElevation(sessionId, session)
+  }
+
+  /**
+   * What one device's own studio shows about elevation.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   * @returns the state.
+   */
+  elevationState(deviceId: string, listener: ReachListenerId): ElevationState {
+    return this.state().elevationState(deviceId, listener)
+  }
+
+  /**
+   * End a device's elevation and its waiting request, from the device's own studio.
+   * @param deviceId - the device.
+   * @param listener - the listener.
+   */
+  lockElevation(deviceId: string, listener: ReachListenerId): void {
+    this.state().lockElevation(deviceId, listener)
+  }
+
+  /**
+   * The waiting requests and the running elevations, for the home's own computer only.
+   * @returns both, without any code.
+   */
+  elevationsAtComputer(): ReturnType<HomeAuth['elevationsAtComputer']> {
+    return this.state().elevationsAtComputer()
+  }
+
+  /**
+   * Approve a request to elevate with the code the person typed; the home's own computer only.
+   * @param requestId - the request.
+   * @param typedCode - the code.
+   * @returns the elevation that started.
+   */
+  approveElevation(requestId: string, typedCode: string): ElevationRecord {
+    return this.state().approveElevation(requestId, typedCode)
+  }
+
+  /**
+   * Decline a request or end an elevation; the home's own computer only.
+   * @param id - the request id or the elevation id.
+   * @returns whether either was found.
+   */
+  revokeElevation(id: string): boolean {
+    return this.state().revokeElevation(id)
   }
 
   /**

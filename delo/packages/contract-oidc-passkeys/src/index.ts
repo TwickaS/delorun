@@ -37,6 +37,8 @@ export const LOOPBACK_REQUIRED_ACTIONS = [
   'recovery-kit',
   'factor-enrol',
   'reach-settings',
+  'elevation-approve',
+  'elevation-revoke',
 ] as const
 
 /** One action of {@link LOOPBACK_REQUIRED_ACTIONS}. */
@@ -134,6 +136,62 @@ export interface PinnedOwnerIdentity {
 
 const SECOND_MS = 1000
 const MINUTE_MS = 60 * SECOND_MS
+
+/**
+ * Elevation, "sudo mode", an unlock in the studio's words: a device the home approved may ask, from its own studio, to
+ * take for a short time the rare sensitive actions a device is refused without one (settings writes, slash commands,
+ * plugin changes, terminals, the folder picker, new folders and dynamic plugin code), and the person approves it at the
+ * computer by typing the code the device shows (C14, "Elevation"). One elevation lasts the minutes of the reach row it arrived on, from 1
+ * to `maxMinutes`.
+ */
+export const ELEVATION_LIMITS = {
+  /** The reach row's minutes when it names none. */
+  defaultMinutes: 15,
+  /** The most minutes a reach row may set; a larger value is refused where the row is read. */
+  maxMinutes: 60,
+  /** How long a request waits for the person at the computer. */
+  requestLifetimeMs: 5 * MINUTE_MS,
+  /** How many requests one home holds at once. */
+  pendingPerHome: 5,
+  /** How many wrong codes one request takes; the last cancels it. */
+  wrongCodesPerRequest: 3,
+  /** Random bytes of a request id and of an elevation id. */
+  idBytes: 16,
+} as const
+
+/**
+ * Why an elevation ended, which the home logs with it:
+ * - `expired`: its minutes ran out.
+ * - `revoked-at-computer`: the person ended it at the computer.
+ * - `locked-from-device`: the person locked it from the device's own studio.
+ * - `replaced`: the person approved a new request from the same device on the same listener.
+ * - `session-ended`: the session that asked ended, by its limits, a sign-out or a rotation.
+ * - `device-removed`: the device was removed.
+ * - `listener-stopped`: remote access stopped serving the listener.
+ * - `home-stopped`: the Host stopped.
+ */
+export const ELEVATION_END_REASONS = [
+  'expired',
+  'revoked-at-computer',
+  'locked-from-device',
+  'replaced',
+  'session-ended',
+  'device-removed',
+  'listener-stopped',
+  'home-stopped',
+] as const
+
+/** One reason of {@link ELEVATION_END_REASONS}. */
+export type ElevationEndReason = (typeof ELEVATION_END_REASONS)[number]
+
+/**
+ * What a device's own studio shows about elevation: nothing, a request waiting with the code to read out at the
+ * computer, or an elevation and its end, in milliseconds since the epoch.
+ */
+export type ElevationState =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'pending'; readonly requestId: string; readonly code: string; readonly expiresAt: number }
+  | { readonly kind: 'elevated'; readonly elevationId: string; readonly endsAt: number }
 
 /** Limits of this contract. */
 export const IDENTITY_LIMITS = {

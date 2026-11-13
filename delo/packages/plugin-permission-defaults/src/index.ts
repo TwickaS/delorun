@@ -35,6 +35,7 @@
  *
  * @module @delo/plugin-permission-defaults
  */
+import type {} from '@delo/home-auth'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-workspace'
@@ -223,6 +224,8 @@ export class PermissionDefaults extends Service {
     await this.load()
     this.applied = this.entries
     this.ctx.provide('sandboxModeGuard', this.guard())
+    // A reach device opens a terminal without an unlock inside a workspace with a grant (`@delo/home-auth`, C14).
+    this.ctx.provide('reachFullAccessGrants', { grantedFolders: () => this.grantedFolders() })
     // Prepend: the seed must land before upstream's pin, which fills every
     // still-unset knob with the deployment default on the same event.
     this.ctx.on('agent/created', ({ agent }) => { this.seed(agent.session) }, { prepend: true })
@@ -252,6 +255,17 @@ export class PermissionDefaults extends Service {
   granted(cwd: string): boolean {
     this.refresh()
     return fullAccessGranted(this.entries, workspaceKey(cwd))
+  }
+
+  /**
+   * The workspace folders that hold a full-access grant, read again when the store changed, so a withdrawn grant is
+   * absent at the next call.
+   * @returns the folders; empty while the store cannot be read, as no grant counts then.
+   */
+  grantedFolders(): readonly string[] {
+    this.refresh()
+    if (this.problem !== undefined) return []
+    return [...this.entries].flatMap(([workspace, entry]) => entry.fullAccessGrantedAt === null ? [] : [workspace])
   }
 
   /**

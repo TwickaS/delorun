@@ -120,6 +120,7 @@ The rows are fields of the `@delo/reach` plugin's `Config` in the home's profile
 | `tailscalePrivate.servePort` | integer | `443` | 1 to 65535. |
 | `tailscalePrivate.listenerPort` | integer | `0`, none chosen | 1 to 65535 when the option is on; `delorun reach on tailscale` and setup choose it once, at random from 20000 to 32767, and keep it unless another program holds it while Delo is stopped. An enabled row with `0` fails at load with `PORT_CONFLICT`. |
 | `tailscalePrivate.serveCheckIntervalMs` | integer | `60000` | At least `1000`. |
+| `tailscalePrivate.elevationMinutes` | integer | `15` | 1 to 60: how long an elevation the person approves for a device on this option lasts ([C14](c14-oidc-passkeys.md#elevation)). An enabled row outside the range fails at load, and at `reach.apply`, with `ELEVATION_MINUTES_INVALID`. |
 | `tailscaleFunnel.enabled` | boolean | `false` | — |
 | `tailscaleFunnel.address` | studio address | none | As `tailscalePrivate.address`, with the Funnel port. |
 | `tailscaleFunnel.funnelPort` | integer | `8443` | `443`, `8443` or `10000`, the ports Funnel accepts, and different from `servePort` when both options are on. |
@@ -191,6 +192,7 @@ Own-domain reach is the self-hosted relay option. The certificate authority this
 | `TAILSCALE_FUNNEL_ON` | Tailscale Funnel is allowed for the Tailscale private address. |
 | `FUNNEL_NOT_PERMITTED` | The tailnet policy does not grant the `funnel` attribute. |
 | `PORT_CONFLICT` | `funnelPort` equals an enabled `servePort`, a port row is out of range or unchosen, or another program holds `tailscalePrivate.listenerPort`. |
+| `ELEVATION_MINUTES_INVALID` | `tailscalePrivate.elevationMinutes` is not a whole number from 1 to 60. |
 | `NO_OWNER` | The home has no owner. |
 | `NO_IDENTITY_FACTOR` | No identity factor that C14 allows for the address is enrolled. |
 | `TAILNET_IDENTITY_UNAVAILABLE` | The `tailnet` identity factor under the fallback. |

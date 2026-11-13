@@ -115,7 +115,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 更新通道是 [C1](c01-home-layout.zh.md) 放在 `run/<profile>/update.sock` 的套接字，在 Windows 上则是 [C1](c01-home-layout.zh.md) 命名的命名管道。它承载读取或改变 home 进程状态的每个请求。
 
 - **调用方。** 它服务读取令牌文件的本人的 `delorun` 命令。Host 的更新插件尚未构建，因此没有任何 studio 操作抵达该通道；该插件将代表已由 studio 自身认证（上游的回环认证，或远程访问监听器上 C4 的准入）放行的 studio 会话行事，并附上它在内存中持有的令牌。
-- **调用方规则。** 请求携带的令牌指明其调用方：令牌文件中的令牌指明本人自己的命令，Host 的通道令牌指明 Host。每个操作都接受两者，但 `studio.open-token`、`devices.approve`、`devices.remove`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 除外，home 进程会在读取其他任何内容之前对 Host 的通道令牌拒绝这些操作（`UNAUTHENTICATED` 与 `LOOPBACK_REQUIRED`），因为 Host 代表每个监听器上的会话行事，包括远程访问会话（[C14](c14-oidc-passkeys.zh.md#tailnet-membership)）。
+- **调用方规则。** 请求携带的令牌指明其调用方：令牌文件中的令牌指明本人自己的命令，Host 的通道令牌指明 Host。每个操作都接受两者，但 `studio.open-token`、`devices.approve`、`devices.remove`、`devices.elevate`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 除外，home 进程会在读取其他任何内容之前对 Host 的通道令牌拒绝这些操作（`UNAUTHENTICATED` 与 `LOOPBACK_REQUIRED`），因为 Host 代表每个监听器上的会话行事，包括远程访问会话（[C14](c14-oidc-passkeys.zh.md#tailnet-membership)）。
 - **令牌检查。** 每个连接的第一行是带有 `token` 字段的请求。home 进程以恒定时间把它与当前启动的令牌比较。缺失、格式错误、错误或属于之前某次启动的令牌收到 `UNAUTHENTICATED`，连接随即关闭；该响应不携带其他任何信息。
 - **Host 的通道令牌。** home 进程在每次启动时创建第二个令牌，只把它保存在内存中，并在 Host 启动时通过其收到的 `UpdateChannelAccess` 交给 Host。通道对除 `studio.open-token` 之外的每个操作都接受它，`studio.open-token` 对它回答 `UNAUTHENTICATED`。
 - **帧格式。** 每个连接承载一个请求，编码为一行最多 16,384 字节的 UTF-8 JSON，以及回答它的若干响应行，每行一个 JSON 对象后跟换行符。home 进程在最后一个响应行之后关闭连接。
@@ -139,6 +139,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `studio.open-token` | `port`，可选：转发到 studio 的回环端口，1 至 65535 | 一行：`url`，即 studio 的回环地址（给出 `port` 时以它代替 studio 自己的端口）以及 Host 为本次请求签发的启动令牌，和 `oneTime`，即该令牌是否只能在 60 秒内使用一次（[C4](c04-admission.zh.md#sessions)）；没有 Host 运行、Host 不提供 studio、其 studio 在回环以外的地址上监听，或它在公共 URL 上发布 studio 时，返回带原因的 `STUDIO_UNAVAILABLE` |
 | `devices.approve` | 无；`requestId` 与 `typedCode` 一起；或单独的 `cancelRequestId` | 不带参数时：打开 [C5](c05-device-approval.zh.md#approval-request) 的批准窗口，为本地的本人认领没有所有者的 home，并在有请求待处理或窗口关闭后回答一行 `closesAt` 与 `pending`；带 `requestId` 与 `typedCode` 时：[C5](c05-device-approval.zh.md#approval) 的本地批准，回答一行已批准的 `device`；带 `cancelRequestId` 时：取消该待处理请求，回答一行 `cancelled` |
 | `devices.remove` | `deviceId` | 移除一台受信任的设备（[C5](c05-device-approval.zh.md)），立即结束其会话并关闭其远程访问连接，回答一行 `removed`、`sessions` 与 `connections` |
+| `devices.elevate` | 无；`requestId` 与 `typedCode` 一起；或单独的 `revokeId` | 答复设备解锁敏感操作的请求（[C14](c14-oidc-passkeys.zh.md#elevation)）；无参数时：回答一行 `pending`，即等待中的请求，带 `requestId`、`deviceId`、`label`、`platform`、`requestedAt` 与 `expiresAt`，但从不带验证码，以及 `running`，即正在进行的提权，带 `id`、`deviceId`、`label`、`platform` 与 `endsAt`；带 `requestId` 与 `typedCode` 时：用设备显示的验证码批准该请求，回答一行已开始的 `elevation`（`id`、`deviceId`、`endsAt`）；带 `revokeId` 时：拒绝该请求或结束该提权，回答一行 `revoked`，即是否找到其中之一 |
 | `permission.reload` | 无 | Host 在 `delorun workspace full-access` 写入 `@delo/plugin-permission-defaults` 的按工作区权限存储之后重新读取它，并把失去授权的工作区中打开的 chat 设回更安全的预设；一行 `digest`，即 Host 现在持有的存储条目的 SHA-256，存储无法读取时还带 `storeProblem` |
 | `mcp.list` | 无 | 一行 `servers`：Host 的添加时同意拒绝了其启动的每个 stdio MCP 服务器，带 `serverName`、`reviewId`、`command`、`args`、`cwd`、`env`（每个变量的 `name`，只有 `NODE_OPTIONS`、`LD_PRELOAD`、`LD_LIBRARY_PATH`、`PATH`、`PYTHONPATH` 与 `DYLD_*` 这些会改变运行内容的变量才带 `value`）、`reason`、`change`（与该服务器的接受相比有何不同：`new`、`command`、`arguments`、`directory`、`environment`，接受存储无法读取时的 `unreadable`，或按服务器名称保存接受之前已接受的启动的 `upgraded`）、`changedVariables`（对 `environment` 而言，增加、删除或变更的变量）、`state`（`waiting`，或本人搁置直到其变化的启动的 `declined` 或 `revoked`）与 `reviewedAt`；以及 `accepted`：每个服务器名称已接受的启动，带 `acceptanceId`、`serverName`、`command`、`args`、`cwd`、`env`、`acceptedAt` 与 `configured`（是否有已配置服务器使用该名称），存储无法读取时为空 |
 | `mcp.accept` | `serverName`、`reviewId` | 把该审查所显示的启动记录为已接受，并再次启动该服务器被拒绝的行；一行 `started`，即启动了多少行 |
@@ -265,10 +266,11 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 | `STUDIO_UNAVAILABLE` | `studio.open-token` 没有找到运行中的 Host，或找到的 Host 无法为这台电脑生成链接；该行的 `detail` 说明是哪种情况 |
 | `HOST_STOP_FAILED` | 为切换而进行的 Host 拆除失败或未在 `drainTimeoutS` 内完成；没有切换任何内容，Host 重新运行 |
 | `NO_RUNTIME_STORE` | 启动时存在一条不是 `committed` 的更新记录，而进程在运行时仓库之外运行，因此它不启动任何 Host；本人通过启动器启动 Delo，或运行 `delorun recover` |
-| `LOOPBACK_REQUIRED` | `devices.approve`、`devices.remove`、`mcp.accept`、`mcp.decline` 或 `mcp.revoke` 携带了 Host 的通道令牌 |
+| `LOOPBACK_REQUIRED` | `devices.approve`、`devices.remove`、`devices.elevate`、`mcp.accept`、`mcp.decline` 或 `mcp.revoke` 携带了 Host 的通道令牌 |
 | `APPROVAL_FAILED` | 本地批准或取消被拒绝；detail 写明 [C5](c05-device-approval.zh.md#errors) 的代码，例如 `APPROVAL_CODE_MISMATCH` |
-| `APPROVALS_UNAVAILABLE` | `devices.approve` 或 `devices.remove` 抵达了未加载 `@delo/home-auth` 的 profile |
+| `APPROVALS_UNAVAILABLE` | `devices.approve`、`devices.remove` 或 `devices.elevate` 抵达了未加载 `@delo/home-auth` 的 profile |
 | `REMOVAL_FAILED` | home-auth 拒绝了一次 `devices.remove`；detail 写明其代码 |
+| `ELEVATION_FAILED` | home-auth 拒绝了一次 `devices.elevate`，例如验证码错误（`APPROVAL_CODE_MISMATCH`）或请求已不再等待（`APPROVAL_EXPIRED`）；detail 写明其代码 |
 | `CONSENT_UNAVAILABLE` | `permission.reload` 或某个 `mcp.*` 操作抵达的 Host 所在的 profile 未挂载该同意，因为其开关关闭 |
 | `STALE_REVIEW` | `mcp.accept` 或 `mcp.decline` 指定的审查已不属于该服务器：在 `mcp.list` 显示它之后，其启动被再次审查或被接受；或 `mcp.revoke` 指定的接受 id 已不在存储中：在 `mcp.list` 显示它之后，该服务器被再次接受或被撤回 |
 | `CONSENT_FAILED` | Host 因其他原因拒绝了一次 `mcp.accept` 或 `mcp.revoke`，例如无法写入的接受存储；detail 写明其代码 |
@@ -312,7 +314,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 9. 该保护依赖于对 agent 命令的限制。沙箱之外的本人用户进程可以自行运行 `delorun update`，本约定不声称能防范它。不存在 root 所有的辅助程序。
 10. 只有不受限制地运行的命令才能携带令牌抵达更新通道。`danger-full-access` 提权只能经由 [C1](c01-home-layout.zh.md) 的提权提示批准，该提示说明完全访问可以触及 Delo 的 home、其令牌、Docker 监管器与更新通道。
 11. 通道只为携带启动令牌的 `studio.open-token` 提供 studio 链接，从不为携带 Host 通道令牌的请求提供。响应行与链接都不会记录到日志，`delorun` 只在 `delorun open --print` 下打印链接。
-12. `devices.approve`、`devices.remove`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 只在携带本人自己的命令从令牌文件读取的令牌时才被接受；Host 的通道令牌（home 进程只把它保存在内存中）对其中每一个都会被拒绝。
+12. `devices.approve`、`devices.remove`、`devices.elevate`、`mcp.accept`、`mcp.decline` 与 `mcp.revoke` 只在携带本人自己的命令从令牌文件读取的令牌时才被接受；Host 的通道令牌（home 进程只把它保存在内存中）对其中每一个都会被拒绝。
 13. `mcp.accept` 与 `mcp.decline` 指定 `mcp.list` 显示的审查，`mcp.revoke` 指定它显示的接受 id；对服务器已不再持有的审查的答复，或对存储已不再持有的接受的撤回，以 `STALE_REVIEW` 被拒绝，且不记录任何内容。没有任何操作开启工作区的完全访问：`delorun workspace full-access` 在本人于终端确认之后自行写入权限存储，`permission.reload` 只让 Host 读取存储中的内容。
 
 ### 拒绝测试
@@ -341,7 +343,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 - **Landlock。** 受限命令能连接更新通道；拒绝只依赖于令牌不可读。这样的命令还能占用连接直至通道的限额，这会影响可用性。
 - **完全访问。** 获准 `danger-full-access` 的命令可以读取令牌，并在封闭的请求集合内发送 `delorun` 命令能发送的任何请求。
 - **进程内存。** 在 macOS 与 Windows 上，对 home 进程内存的保护依赖于操作系统自身关于读取其他进程内存的规则，没有 Delo 测试证明这一点。
-- **本人自己的进程。** 沙箱之外的本人用户进程可以读取令牌，并自行运行 `delorun update`。持有令牌时，它还可以运行 `devices.approve`（打开批准窗口，并在给出匹配码时批准待处理的请求）、`devices.remove`，以及返回新的 studio 登录链接的 `studio.open-token`。同时控制一台请求批准的设备的持有者可以在无人在场的情况下批准它。防范 agent 做同样的事，只依赖于其命令无法读取令牌文件或连接套接字。
+- **本人自己的进程。** 沙箱之外的本人用户进程可以读取令牌，并自行运行 `delorun update`。持有令牌时，它还可以运行 `devices.approve`（打开批准窗口，并在给出匹配码时批准待处理的请求）、`devices.remove`、`devices.elevate`（在给出设备显示的验证码时批准设备解锁敏感操作的请求），以及返回新的 studio 登录链接的 `studio.open-token`。同时控制一台请求批准的设备的持有者可以在无人在场的情况下批准它。防范 agent 做同样的事，只依赖于其命令无法读取令牌文件或连接套接字。
 - **Host 中的代码。** Host 的通道令牌阻止 Host 通过通道发送的请求（例如它为 studio 会话转发的请求）获得 studio 链接。它不限制 Host 代码：Host 插件在 home 进程中不受限制地运行，可以自行调用上游的 `authenticatedUrl` 或读取令牌文件。
 
 <a id="enforcement-per-platform-and-dialect"></a>

@@ -75,6 +75,8 @@ function homeProcessRefusal(error: HomeProcessError, context: RefusalContext): O
       return { lead: 'Delo did not change any device: the running profile does not load remote access.', remedies: [`Turn remote access on, then restart Delo: delorun reach on tailscale${profile}`] }
     case 'REMOVAL_FAILED':
       return { lead: 'Delo did not remove the device.', remedies: [`See the trusted devices: delorun devices list${profile}`] }
+    case 'ELEVATION_FAILED':
+      return { lead: 'Delo did not unlock sensitive actions on the device, or did not end the unlock.', remedies: [`See the requests and the running unlocks again: delorun devices elevate${profile}`] }
     case 'CONSENT_UNAVAILABLE':
       return { lead: 'Delo changed nothing: the running profile does not ask this consent, because its switch is off.', remedies: [`See which prompts the profile asks: delorun setup prompts${profile}`] }
     case 'STALE_REVIEW':

@@ -14,6 +14,7 @@ Remote access lets you open the studio of the Delorun running on your computer f
 - [Turn remote access on](#turn-remote-access-on)
 - [Approve a device](#approve-a-device)
 - [What an approved phone can and cannot do](#what-an-approved-phone-can-and-cannot-do)
+- [Unlock sensitive actions for a while](#unlock-sensitive-actions-for-a-while)
 - [Remove a device](#remove-a-device)
 - [Turn remote access off](#turn-remote-access-off)
 - [What Tailscale sees](#what-tailscale-sees)
@@ -47,30 +48,56 @@ Delorun cannot verify where a request comes from: any device on your tailnet can
 
 ## What an approved phone can and cannot do
 
-An approved phone speaks for a device, not for you at your computer. Delorun allows it a fixed list of actions and refuses everything else.
+An approved phone is you: it can already ask the agent to do things, so it can do everything that is no riskier than a message. A few sensitive actions need a short unlock that you approve at your computer, and a few things never work from a phone.
 
-It can:
+Without an unlock, the phone can:
 
 - read your chats and workspaces, and follow a chat while it runs;
-- reply, attach files, edit or withdraw a queued message, start a chat in a workspace you already have, with your configured preset, and fork a chat;
-- rename and pin chats;
+- reply, attach files, edit or withdraw a queued message, fork a chat, and start a chat in a workspace you already have, with any of your presets. A preset decides the plugins and tools a chat runs with, and choosing one grants nothing by itself: the workspace's full access and every approval prompt still decide what that chat may do;
+- read the files of a chat's own workspace and see its changes. A file outside the workspace is refused, including one reached through a link, and so is anything in Delo's own folder;
+- rename, pin, archive, restore and reorder chats, rename and reorder workspaces, and move a workspace to the trash;
+- set, edit, pause and clear a chat's goal, and create, edit, run and delete scheduled follow-ups;
+- choose a chat's model, which also saves it as the default for new chats;
+- read the installed plugins and the profile changes you can undo;
+- give feedback on a chat or a message;
 - answer ordinary prompts and questions the agent asks, and stop a run or a background job.
 
-It cannot:
+In a workspace you put on full access, the phone opens a terminal without an unlock, because the agent can already run any command there. A terminal opened that way keeps running when you take full access away; the next one needs an unlock. To skip the unlock for terminals everywhere, turn on **Terminal from phone without unlock** in Settings, Devices on your computer. Only your computer turns it on; the phone can turn it off.
+
+With an unlock, the phone can also:
+
+- change settings;
+- run slash commands;
+- install, enable, update or remove plugins, and undo or restore a profile change. Delo's own guard plugins and remote access cannot be turned off or changed this way;
+- open a terminal in a folder outside the workspaces you put on full access;
+- browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
+- run plugin code the agent wrote.
+
+Never, even unlocked:
 
 - grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
 - accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Permissions on the phone says the same;
-- install, enable or remove plugins, undo profile changes, or change any setting, the model a chat saves as default, or a chat's preset;
-- run slash commands, open a terminal, browse folders, read files on your computer by path, or apply, discard or undo changes;
-- answer a prompt that would let the agent manage workspaces and their instructions, change a chat's goals, or record feedback;
-- start a chat in a folder of its choosing, create, rename or delete workspaces, archive or reorder chats, or create or edit scheduled follow-ups;
-- approve or remove devices, change remote access, or reset the home.
+- read or change your keys and other credentials, or your account;
+- turn off **Ask before external agents run**; the phone can still turn it on and change its run time limit;
+- answer a prompt that would let the agent manage workspaces and their instructions;
+- open a file or folder in an application on your computer, or open the settings file in an editor there;
+- approve or remove devices, change remote access, unlock itself or make an unlock longer, or reset the home.
 
-Other refused actions show the studio's error message. Images that a reply shows as files on your computer, and file previews, do not show on the phone yet; images attached to messages do.
+Another refused action shows the studio's error message. Images that a reply shows as files on your computer, and file previews, do not show on the phone yet; images attached to messages do.
 
 The limit is partial. A workspace that you already put on full access at your computer can still be driven from the phone, and a command there can do anything your user can do. What protects you is the phone's own lock and removing the device when you lose it. A phone's session ends after 12 hours in which the phone sent nothing, and 14 days after sign-in; its open connections close at that moment. Approving or removing a device closes every phone's open connections; each phone then signs in again from the sign-in page, with its own key.
 
 No outside security review of remote access has happened. Its tests fake `tailscale`, and no real tailnet or phone has exercised it; the [reach design](../design/reach.md#never-run-on-a-real-tailnet-or-phone) lists what stays untried.
+
+## Unlock sensitive actions for a while
+
+When you try a sensitive action on the phone, it says "This needs a quick unlock from your computer" and offers **Unlock**. You can also unlock ahead of time from Settings, Devices on the phone.
+
+1. On the phone, choose **Unlock**. The phone shows an 8-digit code and waits for your computer for up to 5 minutes; **Cancel** withdraws the request.
+2. On your computer, open Settings, Devices in the studio, where the request waits with a code field, or run `delorun devices elevate`, which lists the phones that ask. Type the code the phone shows and approve. Three wrong codes cancel the request; **Decline** turns it down.
+3. The phone shows "Sensitive actions unlocked until" and the time the unlock ends, with **Lock now**.
+
+An unlock lasts 15 minutes; `elevationMinutes` in the profile's reach row sets 1 to 60. Nothing extends it: when it ends, unlock again. It ends early when you choose **Lock now** on the phone, **End** in Settings, Devices on your computer or end it with `delorun devices elevate`, when the phone's session ends, when you remove the phone, and when Delorun stops or turns remote access off. When an unlock ends, the phone reconnects, so a terminal opened under it closes. An unlock works only for the phone that asked, on the address it asked on, and only in the Delorun profile that approved it. Delorun logs each start and end, and each action taken under an unlock.
 
 ## Remove a device
 

@@ -449,9 +449,9 @@ describe('the routes', () => {
   it('let a reach device read only the waiting servers\' names and what changed', async () => {
     const remote = routesOver('tailscale-private')
     expect((await remote.hook(MCP_CONSENT_ROUTES.waiting, 'home.example.ts.net')).reached).toBe(true)
-    expect(remote.admits(MCP_CONSENT_ROUTES.waiting, { kind: 'reach-device', deviceId: 'phone' })).toBe(true)
+    expect(remote.admits(MCP_CONSENT_ROUTES.waiting, { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' })).toBe(true)
     expect(remote.admits(MCP_CONSENT_ROUTES.waiting, { kind: 'sdk' })).toBe(false)
-    expect(remote.admits(MCP_CONSENT_ROUTES.pending, { kind: 'reach-device', deviceId: 'phone' })).toBe(false)
+    expect(remote.admits(MCP_CONSENT_ROUTES.pending, { kind: 'reach-device', deviceId: 'phone', listener: 'reach-tailscale-private' })).toBe(false)
     await consent.review(START)
     await consent.review({ ...START, serverName: 'declined' })
     await consent.declineReview('declined', mcpReviewId({ ...START, serverName: 'declined' }))

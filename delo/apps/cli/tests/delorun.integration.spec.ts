@@ -523,6 +523,9 @@ describe('starting the home process', { timeout: 60_000 }, () => {
       },
       cancel: () => undefined,
       remove: () => Promise.resolve({ removed: true, sessions: 0, connections: 0 }),
+      elevations: () => Promise.resolve({ pending: [], running: [] }),
+      approveElevation: () => ({ id: 'elevation', deviceId: 'device', endsAt: 0 }),
+      revokeElevation: () => false,
     }
     const base = recording([])
     const withApproval: StartDependencies = { ...base, runProfile: async options => ({ ...await base.runProfile(options), devices: () => devices }) }

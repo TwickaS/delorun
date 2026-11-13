@@ -6,14 +6,15 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import type { Admission, ConnectionIndexRequest } from '@deepseek-ai/dsh-client-connection'
 import type { PeerId, PeerScope, Principal } from '@deepseek-ai/dsh-typert-protocol'
-import type { RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
+import type { RemoteAccessBinding, RemoteAccessPolicy } from '@deepseek-ai/dsh-api-remote-access/types'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
@@ -72,7 +73,7 @@ beforeEach(async () => {
     },
     closeReachConnections: () => 0,
   } as never)
-  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+  fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
   await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
 })
 
@@ -83,7 +84,7 @@ afterEach(async () => {
 
 /** A session for a device recorded at the served address. */
 async function session(fill: number, lifetimeMs = HOUR): Promise<string> {
-  const store = new DeviceStore({ file: join(directory, 'home-auth', 'devices.json') })
+  const store = new DeviceStore({ file: join(directory, 'secrets', 'home-auth', 'devices.json') })
   if (await ctx.homeAuth.owner() === undefined) {
     await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   }
@@ -211,7 +212,9 @@ describe('the authenticator provider', () => {
     expect(() => { check(admitted.peer, { request: {} }) }).not.toThrow()
     expect(() => { check(admitted.peer, { request: { grants: 'other' } }) }).not.toThrow()
     expect(() => { check(admitted.peer, { event: 'question/ask' }) }).not.toThrow()
-    expect(ctx.get('remoteAnswerGuard')).toBeDefined()
+    // Pins the guard the Gateway calls: it is the same check.
+    expect(() => { ctx.get('remoteAnswerGuard')?.check({ peer: admitted.peer, event: 'approval/request', request: { grants: 'full-access' }, value: 'allowed-once' } as never) })
+      .toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
 
   it('sets the rolled cookie on a plain request and never on an upgrade', async () => {
@@ -219,7 +222,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const token = await session(2, SESSION_LIMITS.reach.absoluteMs)
@@ -248,7 +251,7 @@ describe('the authenticator provider', () => {
     await fiber.dispose()
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'home-auth') })
+      fiber = await ctx.plugin(HomeAuthService, { secretsDirectory: join(directory, 'secrets', 'home-auth') })
       await new Promise<void>((resolve) => { ctx.inject(['authenticator'], () => { resolve() }) })
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const cookie = { cookie: `__Host-delo-session=${await session(2, SESSION_LIMITS.reach.absoluteMs)}` }
@@ -300,7 +303,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [] })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -313,24 +316,117 @@ describe('the authenticator provider', () => {
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
       // Pins the principal: an owner Peer passes every remote access check.
-      expect(principals).toEqual([reachDevicePrincipal(recordOf(2, ADDRESS).id)])
+      expect(principals).toEqual([reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')])
     })
 
     it('binds an admitted device to the global resource, every Workspace and every Session it can name', async () => {
       const access = await fakeRemoteAccess()
-      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
       // Pins the registry fallbacks: without a Workspace registry or a Session store only the global resource is bound.
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       expect(access.policy().bindings(device)).toEqual([])
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
       expect(access.policy().bindings(device).map(binding => binding.resource)).toEqual([{ kind: 'global' }])
-      ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', sessionIds: ['s-1'] }] } as never)
+      ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', path: '/nowhere/w-1', sessionIds: ['s-1'] }] } as never)
       ctx.provide('sessions', { list: () => [{ id: 's-1' }, { id: 's-live' }] } as never)
       // Pins the facts the authenticator gives the policy: the admitted device, the Workspaces and the live Sessions.
       expect(access.policy().bindings(device).map(binding => binding.resource)).toEqual([
         { kind: 'global' }, { kind: 'workspace', id: 'w-1' }, { kind: 'session', id: 's-1' }, { kind: 'session', id: 's-live' },
       ])
-      expect(access.policy().bindings(reachDevicePrincipal('another-device'))).toEqual([])
+      expect(access.policy().bindings(reachDevicePrincipal('another-device', 'reach-tailscale-private'))).toEqual([])
+      // Pins the listener in the admission fact: the device's Peer on the private listener binds nothing on another.
+      expect(access.policy().bindings(reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-funnel'))).toEqual([])
+    })
+
+    it('decides an elevated action from the device\'s elevation, and recomputes its snapshot when one starts or ends', async () => {
+      const access = await fakeRemoteAccess()
+      const logged: string[] = []
+      ctx.logger.info = (line: string) => { logged.push(line) }
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      const token = await session(2)
+      const admitted = ctx.homeAuth.admitToken(token, 'reach-tailscale-private')
+      if (admitted.kind !== 'admitted') throw new Error('the device was not admitted')
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${token}` } }), 'reach-tailscale-private')
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
+      const [binding] = access.policy().bindings(device)
+      const create = () => binding?.condition?.({ action: 'terminal/create', resource: { kind: 'global' }, args: {} } as never)
+      const asked = vi.spyOn(ctx.homeAuth, 'elevationOf')
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+      // Pins the listener the authenticator asks for: the principal's own, so an unlock on one listener admits nothing on another.
+      expect(asked).toHaveBeenCalledWith(device.deviceId, 'reach-tailscale-private')
+      const before = access.invalidated.length
+      const state = ctx.homeAuth.requestElevation(admitted.sessionId, admitted.session)
+      if (state.kind !== 'pending') throw new Error('no request is waiting')
+      const record = ctx.homeAuth.approveElevation(state.requestId, state.code)
+      // Pins the facts the authenticator gives the policy: the home's elevation for the device, and the log.
+      expect(create()).toEqual({ kind: 'allow' })
+      expect(logged).toContain(`home-auth: elevated action: device=${device.deviceId} listener=reach-tailscale-private action=terminal/create elevation=${record.id}`)
+      ctx.homeAuth.lockElevation(device.deviceId, 'reach-tailscale-private')
+      // Pins the invalidation: the device's snapshot is recomputed when its elevation starts and when it ends.
+      expect(access.invalidated.slice(before)).toEqual([device, device])
+      expect(create()).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+    })
+
+    it('names a Session\'s workspace root from its live header, else from its Workspace, for the file reads', async () => {
+      const access = await fakeRemoteAccess()
+      const outside = await mkdtemp(join(tmpdir(), 'delo-home-auth-roots-'))
+      try {
+        const live = join(outside, 'live')
+        const stored = join(outside, 'stored')
+        await mkdir(live)
+        await mkdir(stored)
+        await writeFile(join(live, 'a.txt'), 'a')
+        await writeFile(join(stored, 'b.txt'), 'b')
+        ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+        provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+        ctx.provide('workspaceRegistry', { list: () => [{ id: 'w-1', path: stored, sessionIds: ['s-stored'] }] } as never)
+        ctx.provide('sessions', { list: () => [{ id: 's-live' }], get: (id: string) => (id === 's-live' ? { header: { cwd: live } } : undefined) } as never)
+        const binding = access.policy().bindings(reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private'))
+          .find((candidate): candidate is Extract<RemoteAccessBinding, { readonly resource: { readonly kind: 'session' } }> => candidate.resource.kind === 'session')
+        const read = (id: string, path: string) => binding?.condition?.({ action: 'workspaceFiles/read', resource: { kind: 'session', id: id as SessionId }, args: { path } })
+        // Pins the root facts: a live Session reads from its working directory, a stored one from its Workspace's path.
+        expect(read('s-live', 'a.txt')).toEqual({ kind: 'allow' })
+        expect(read('s-live', 'b.txt')).toMatchObject({ kind: 'deny' })
+        expect(read('s-stored', 'b.txt')).toEqual({ kind: 'allow' })
+        expect(read('s-unknown', 'b.txt')).toMatchObject({ kind: 'deny' })
+      } finally {
+        await rm(outside, { recursive: true, force: true })
+      }
+    })
+
+    it('opens a terminal from the Session\'s folders, the granted workspaces and the switch, and recomputes the snapshot on a switch change', async () => {
+      const access = await fakeRemoteAccess()
+      const outside = await mkdtemp(join(tmpdir(), 'delo-home-auth-terminal-'))
+      try {
+        const granted = join(outside, 'granted')
+        const moved = join(granted, 'inner')
+        const other = join(outside, 'other')
+        await mkdir(moved, { recursive: true })
+        await mkdir(other)
+        ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+        provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+        const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
+        const live = { 's-in': { header: { cwd: granted } }, 's-out': { header: { cwd: other } } } as Record<string, { readonly header: { readonly cwd: string } }>
+        ctx.provide('sessions', { list: () => [{ id: 's-in' }, { id: 's-out' }, { id: 's-gone' }], get: (id: string) => live[id] } as never)
+        ctx.provide('workingDirectory', { get: (session: { readonly header: { readonly cwd: string } }) => (session === live['s-in'] ? moved : session.header.cwd) } as never)
+        const binding = access.policy().bindings(device)
+          .find((candidate): candidate is Extract<RemoteAccessBinding, { readonly resource: { readonly kind: 'session' } }> => candidate.resource.kind === 'session')
+        const open = (id: string) => binding?.condition?.({ action: 'terminal/create', resource: { kind: 'session', id: id as SessionId }, args: {} } as never)
+        // Without a grant provider no workspace counts as granted.
+        expect(open('s-in')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+        ctx.provide('reachFullAccessGrants', { grantedFolders: () => [granted] } as never)
+        // Pins the folder facts: a live Session's current and original folders, checked against the granted workspaces.
+        expect(open('s-in')).toEqual({ kind: 'allow' })
+        expect(open('s-out')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+        expect(open('s-gone')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
+        const before = access.invalidated.length
+        await ctx.homeAuth.setTerminalWithoutUnlock(true, 'computer')
+        // Pins the switch fact and its invalidation: the device's snapshot is recomputed when the switch changes.
+        expect(open('s-out')).toEqual({ kind: 'allow' })
+        expect(access.invalidated.slice(before)).toEqual([device])
+      } finally {
+        await rm(outside, { recursive: true, force: true })
+      }
     })
 
     it('recomputes each admitted device\'s snapshot when a Session or a Workspace changes', async () => {
@@ -338,7 +434,7 @@ describe('the authenticator provider', () => {
       ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
       const token = await session(2)
       provider().admit(request({ headers: { cookie: `__Host-delo-session=${token}` } }), 'reach-tailscale-private')
-      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id)
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
       ctx.emit('session/created', {} as never)
       ctx.emit('session/disposed', {} as never)
       ctx.emit('domain/changed', { domain: 'settings' } as never)

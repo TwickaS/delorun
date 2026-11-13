@@ -48,6 +48,14 @@ export { RemoteSnapshotStream } from './snapshot-stream.ts'
 export type { RemoteSnapshotStreamOptions } from './snapshot-stream.ts'
 export type { RemoteAnswerRefusal } from './remote-events.ts'
 
+/** A call of this Client that the Host's remote access refused, as `remote/call-denied` reports it. */
+export interface RemoteCallDenial {
+  /** The refused `<namespace>/<method>` endpoint. */
+  readonly endpoint: string
+  /** The policy's reason from the failure's `details.reason`, such as `elevation-required: terminal/create`; undefined when absent. */
+  readonly reason: string | undefined
+}
+
 interface MountToken {
   active: boolean
   readonly abort: AbortController
@@ -140,6 +148,14 @@ declare module '@deepseek-ai/cordis' {
      * @param refusal - the event, the Host's code and sentence, and the refused action.
      */
     'remote/answer-refused'(refusal: RemoteAnswerRefusal): void
+    /**
+     * The Host's remote access refused one Remote call of this Client with `remote-access/denied`. The call's caller
+     * still receives the failure; a listener only observes it. A throwing listener is reported and does not affect the
+     * call's result.
+     * @mode emit
+     * @param denial - the refused endpoint and the policy's reason.
+     */
+    'remote/call-denied'(denial: RemoteCallDenial): void
   }
 }
 
@@ -470,7 +486,10 @@ class ClientRemoteService extends Service implements ClientRemote {
       const result = await connection.rpc.call('/api', endpoint, { args: prepared.args }, prepared.signal)
       if (!mountActive(token)) return withdrawn(endpoint)
       prepared.signal.throwIfAborted()
-      if (!result.ok) return { ok: false, error: rebuiltFailure(result.error) }
+      if (!result.ok) {
+        if (result.error.code === 'remote-access/denied') this.reportDenial(endpoint, result.error.details)
+        return { ok: false, error: rebuiltFailure(result.error) }
+      }
       const value = descriptor.result.mode === 'strict' && descriptor.result.decode !== undefined
         ? descriptor.result.decode(result.value)
         : result.value
@@ -482,6 +501,16 @@ class ClientRemoteService extends Service implements ClientRemote {
       // round-trip, so it gets the same code the Host would have produced.
       if (prepared.signal.aborted) return cancelledFailure(endpoint, error)
       return carrierFailure(endpoint, error)
+    }
+  }
+
+  /** Emit `remote/call-denied`, containing a throwing listener so the call's own result is unchanged. */
+  private reportDenial(endpoint: string, details: object): void {
+    const reason: unknown = Reflect.get(details, 'reason')
+    try {
+      this.ownerCtx.emit('remote/call-denied', { endpoint, reason: typeof reason === 'string' ? reason : undefined })
+    } catch (error) {
+      console.error('client api: remote/call-denied listener threw:', error)
     }
   }
 

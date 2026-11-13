@@ -168,6 +168,7 @@ Funnel 始终以它自己的监听器 `reach-tailscale-funnel` 为目标，该�
 | `TAILSCALE_ADDRESS_MISMATCH` | 配置的地址与 Tailscale 报告的名称不同。 |
 | `FUNNEL_NOT_PERMITTED` | tailnet 策略未授予 `funnel` 属性。 |
 | `PORT_CONFLICT` | `funnelPort` 等于某个已启用的 `servePort`。 |
+| `ELEVATION_MINUTES_INVALID` | `tailscalePrivate.elevationMinutes` 不是 1 到 60 之间的整数。 |
 | `NO_OWNER` | home 没有所有者。 |
 | `NO_IDENTITY_FACTOR` | 未注册任何 C14 允许该地址使用的身份因子。 |
 | `TAILNET_IDENTITY_UNAVAILABLE` | 在回退方案下使用 `tailnet` 身份因子。 |

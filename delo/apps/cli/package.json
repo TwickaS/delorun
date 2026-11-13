@@ -36,6 +36,7 @@
     "@delo/contract-device-approval": "workspace:*",
     "@delo/contract-home-layout": "workspace:*",
     "@delo/contract-home-process": "workspace:*",
+    "@delo/contract-oidc-passkeys": "workspace:*",
     "@delo/contract-operational-logs": "workspace:*",
     "@delo/contract-parity-composition": "workspace:*",
     "@delo/contract-plugin-versions": "workspace:*",
