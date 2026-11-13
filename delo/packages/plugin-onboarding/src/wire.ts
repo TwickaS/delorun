@@ -113,8 +113,9 @@ export const KEY_TEST_PATH = '/api/deloOnboarding.keyTest'
 
 /**
  * What one provider's test came to: `works` the listing answered; `rejected` the provider refused the key;
- * `unreachable` the provider did not answer; `failed` the test failed without saying which; `no-key` no key is stored
- * or set for it; `untested` this provider offers no listing to test with.
+ * `unreachable` the provider did not answer; `failed` the test failed without saying which; `no-key` no credential is
+ * configured for it (for the official DeepSeek route, it is not signed in); `untested` it has a credential, or a sign-in,
+ * but its models cannot be listed.
  */
 export const KEY_RESULTS = ['works', 'rejected', 'unreachable', 'failed', 'no-key', 'untested'] as const
 

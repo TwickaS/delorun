@@ -2,7 +2,7 @@
  * The calm inline banner above the message box while no model key works: upstream's "Add an API key" dialog is off in
  * Delo's studio (`credentialOnboarding: false` in `@delo/bundle-studio`), so this is the only nudge. It asks the key
  * test, which spends no tokens, once when the box mounts and every few seconds while it shows, so it leaves once a key
- * is added. A key test that cannot be read, or that cannot tell, shows nothing.
+ * is added. A key test that cannot be read shows nothing.
  */
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { useEffect, useState } from 'react'
@@ -22,15 +22,15 @@ export interface KeyBannerInjected {
 }
 
 /**
- * Whether the person has no working key: no provider that works, and none that might. A provider that is unreachable or
- * whose test failed might work, so it counts as a key. One with no model listing (`untested`, such as an account route
- * that needs a sign-in Delo does not offer) says nothing either way, so it is ignored.
+ * Whether the person has no working key: every provider is `no-key` or `rejected`, or there is no provider. A provider
+ * that works, is unreachable, failed, or is `untested` (it has a credential or a sign-in whose models cannot be listed)
+ * might work, so it counts as a key.
  * @param answer - the key test's answer, or undefined when it could not be read.
  * @returns true when the banner should show.
  */
 export function hasNoWorkingKey(answer: KeyTestAnswer | undefined): boolean {
   if (answer === undefined) return false
-  return answer.providers.every(each => each.result === 'no-key' || each.result === 'rejected' || each.result === 'untested')
+  return answer.providers.every(each => each.result === 'no-key' || each.result === 'rejected')
 }
 
 /** The props of the banner in the input dock: this plugin's copy and the services. */

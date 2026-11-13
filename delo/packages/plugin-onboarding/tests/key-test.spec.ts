@@ -20,6 +20,7 @@ function deps(change: Partial<KeyTestDeps> = {}): KeyTestDeps {
   return {
     providers: () => [{ id: 'openai', name: 'OpenAI' }, { id: DEEPSEEK_ROUTE, name: 'DeepSeek' }],
     configurable: () => [{ provider: 'openai', settingsNs: 'llm.openai' }],
+    credentialConfigured: vi.fn(async () => true),
     discover: vi.fn(async () => {}),
     deepseek: vi.fn(async () => 'works' as const),
     timeoutMs: 1000,
@@ -46,6 +47,43 @@ describe('the key test', () => {
       deepseek: vi.fn(async () => 'rejected' as const),
     })
     expect((await testKeys(parts)).providers.map(each => each.result)).toEqual(['untested', 'rejected'])
+  })
+
+  it('answers no-key for a route with no configured credential, without asking its discovery, and untested for a configured one with no listing', async () => {
+    const discover = vi.fn(async () => { throw coded('INVALID_DISCOVERY') })
+    const credentialConfigured = vi.fn(async (provider: string) => provider === 'custom')
+    const parts = deps({
+      providers: () => [{ id: 'custom', name: 'Custom' }, { id: 'unset', name: 'Unset' }],
+      configurable: () => [{ provider: 'custom', settingsNs: 'llm.custom' }, { provider: 'unset', settingsNs: 'llm.unset' }],
+      credentialConfigured,
+      discover,
+    })
+    expect((await testKeys(parts)).providers.map(each => each.result)).toEqual(['untested', 'no-key'])
+    expect(credentialConfigured.mock.calls).toEqual([['custom'], ['unset']])
+    expect(discover).toHaveBeenCalledExactlyOnceWith('llm.custom', 'custom', expect.any(AbortSignal))
+  })
+
+  it('answers failed for a route whose credential cannot be read, and asks its discovery nothing', async () => {
+    const discover = vi.fn(async () => {})
+    const parts = deps({
+      providers: () => [{ id: 'custom', name: 'Custom' }],
+      credentialConfigured: async () => { throw new Error('malformed reference') },
+      discover,
+    })
+    expect((await testKeys(parts)).providers.map(each => each.result)).toEqual(['failed'])
+    expect(discover).not.toHaveBeenCalled()
+  })
+
+  it('decides the official DeepSeek route by its own listing, not by the credential check', async () => {
+    const credentialConfigured = vi.fn(async () => true)
+    const parts = deps({
+      providers: () => [{ id: DEEPSEEK_ROUTE, name: 'DeepSeek' }],
+      configurable: () => [],
+      credentialConfigured,
+      deepseek: vi.fn(async () => 'no-key' as const),
+    })
+    expect((await testKeys(parts)).providers.map(each => each.result)).toEqual(['no-key'])
+    expect(credentialConfigured).not.toHaveBeenCalled()
   })
 
   it('answers failed for a route whose test throws, and tests at most the limit', async () => {
@@ -148,5 +186,55 @@ describe('the key test in the harness', () => {
     controller.abort()
     expect(await result).toBe('unreachable')
     expect(String(fetch.mock.calls[0]?.[0])).toContain('api.deepseek.com')
+  })
+
+  describe('the configured-credential check', () => {
+    /** A context whose configurable route `custom` keeps its credential reference in its settings profile. */
+    function routeContext(profile: unknown, describe = vi.fn(async () => ({ configured: true, writable: true }))) {
+      const ctx = new Context()
+      ctx.provide('llm', { listConfigurableProviders: () => [{ provider: 'custom', displayName: 'Custom', settingsNs: 'llm.custom', settingsPath: ['providers', 'custom'] }] } as never)
+      ctx.provide('settings', { describe: () => [{ ns: 'llm.custom', value: profile }] } as never)
+      const resolve = vi.fn(async () => ({ value: 'sk-stored' }))
+      ctx.provide('credentials', { describe, resolve } as never)
+      return { ctx, describe, resolve }
+    }
+
+    it('asks the credentials service whether the route\'s reference is configured, and never reads its value', async () => {
+      const { ctx, describe, resolve } = routeContext({ providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } })
+      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(true)
+      expect(describe).toHaveBeenCalledExactlyOnceWith('CUSTOM_API_KEY')
+      expect(resolve).not.toHaveBeenCalled()
+    })
+
+    it('answers the credentials service\'s configured flag', async () => {
+      const { ctx } = routeContext({ providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } }, vi.fn(async () => ({ configured: false, writable: true })))
+      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+    })
+
+    it('reports no credential for a route the directory does not list, or whose profile names no reference', async () => {
+      expect(await keyTestDeps(new Context(), 1000).credentialConfigured('custom')).toBe(false)
+      for (const profile of [undefined, {}, { providers: {} }, { providers: { custom: 'text' } }, { providers: { custom: {} } }, { providers: { custom: { apiKeyEnv: '' } } }]) {
+        const { ctx, describe } = routeContext(profile)
+        expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+        expect(describe).not.toHaveBeenCalled()
+      }
+    })
+
+    it('reads the launch environment as the store without a credentials service', async () => {
+      const ctx = new Context()
+      ctx.provide('llm', { listConfigurableProviders: () => [{ provider: 'custom', displayName: 'Custom', settingsNs: 'llm.custom', settingsPath: ['providers', 'custom'] }] } as never)
+      ctx.provide('settings', { describe: () => [{ ns: 'llm.custom', value: { providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } } }] } as never)
+      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+      vi.stubEnv('CUSTOM_API_KEY', '')
+      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(false)
+      vi.stubEnv('CUSTOM_API_KEY', 'sk-env')
+      expect(await keyTestDeps(ctx, 1000).credentialConfigured('custom')).toBe(true)
+    })
+
+    it('refuses a route whose settings service is not mounted, rather than reporting no credential', async () => {
+      const unmounted = new Context()
+      unmounted.provide('llm', { listConfigurableProviders: () => [{ provider: 'custom', displayName: 'Custom', settingsNs: 'llm.custom', settingsPath: [] }] } as never)
+      await expect(keyTestDeps(unmounted, 1000).credentialConfigured('custom')).rejects.toThrow('the settings service is not mounted')
+    })
   })
 })
