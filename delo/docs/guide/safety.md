@@ -10,9 +10,9 @@ English
 
 This page helps you understand what keeps the model from doing damage on your computer, and how to loosen or tighten each protection. You need Delorun installed and running ([Install and first run](install.md)). You do not need to change anything to be protected.
 
-Delorun runs on your computer with your own access. An agent that runs commands for you can do real damage when it makes a mistake, or when text it reads tells it to. Delorun keeps DeepSeek Harness's approvals and sandbox and adds more: commands the model runs cannot touch Delorun's own [home](../reference/glossary.md#home), risky changes ask you first, each workspace can limit its network, `web_fetch` does not reach your local network, and releases are checked before they run.
+Delorun runs on your computer with your own access. An agent that runs commands for you can do real damage when it makes a mistake, or when text it reads tells it to. Delorun keeps DeepSeek Harness's approvals and sandbox and adds more: commands the model runs cannot touch Delorun's own [home](../reference/glossary.md#home), risky changes ask for your [consent](../reference/glossary.md#consent) first, each workspace can limit its [network setting](../reference/glossary.md#network-setting), `web_fetch` does not reach your local network, and releases are checked before they run.
 
-Four words recur. A [workspace](../reference/glossary.md#workspace) is a folder you let the model work in. A [chat](../reference/glossary.md#chat) is one conversation with the model, and it belongs to one workspace. A command is a program the model runs for you in a chat, such as `git` or `npm`. The sandbox is a set of operating-system rules that limits what those commands can touch.
+Four words recur. A [workspace](../reference/glossary.md#workspace) is a folder you let the model work in. A [chat](../reference/glossary.md#chat) is one conversation with the model, and it belongs to one workspace. A command is a program the model runs for you in a chat, such as `git` or `npm`. The [sandbox](../reference/glossary.md#sandbox) is a set of operating-system rules that limits what those commands can touch.
 
 ## Contents
 
@@ -59,7 +59,7 @@ Commands can still reach everything else your user can: other local sockets, fil
 <details>
 <summary>Edge cases</summary>
 
-- If a command needs your ssh-agent, such as `git push` over ssh, then it fails in the sandbox. Give that workspace full access, or push from your own terminal.
+- If a command needs your ssh-agent, such as `git push` over ssh, then it fails in the sandbox. Give that workspace [full access](../reference/glossary.md#full-access), or push from your own terminal.
 - If you run Linux without bubblewrap on a desktop, then every sandboxed command is refused. Install the `bubblewrap` package and start Delorun again. If it is installed but cannot create a sandbox, see [Troubleshooting](troubleshooting.md#protections-and-plugins).
 - If you run under WSL2, then the Linux rules apply and commands cannot start Windows programs.
 - If you run on Windows, then commands can read Delorun's secrets and token. Treat the model's commands there as having read access to your Delorun home.
@@ -80,9 +80,9 @@ Commands can still reach everything else your user can: other local sockets, fil
 
 Full access is a permission a chat can have: its commands run outside the sandbox, with everything your user can do, Delorun's home and secrets included. Every new workspace starts on Workspace Write instead. You grant full access to a workspace once, at the computer that runs Delorun, and chats in that workspace can then use it.
 
-With setup's **Safer prompts**, the default, you can grant it in four places:
+With setup's [**Safer prompts**](../reference/glossary.md#safer-prompts), the default, you can grant it in four places:
 
-- **On an approval card.** When a command asks to run outside the sandbox, the studio shows a card with **Allow once**, which lets that one command run, and **Allow for this chat**, which switches the chat to the permission the command asked for. The chat stays there until you lower it in the composer. When the command asks for full access and the workspace has none yet, **Allow for this chat** opens the full-access dialog. **Allow full access** in the dialog records the grant for the workspace and switches the chat. When it worked, the card is answered and the command runs.
+- **On an [approval card](../reference/glossary.md#approval-card).** When a command asks to run outside the sandbox, the studio shows a card with **Allow once**, which lets that one command run, and **Allow for this chat**, which switches the chat to the permission the command asked for. The chat stays there until you lower it in the composer. When the command asks for full access and the workspace has none yet, **Allow for this chat** opens the full-access dialog. **Allow full access** in the dialog records the grant for the workspace and switches the chat. When it worked, the card is answered and the command runs.
 - **In a chat.** Pick Full access in the chat's permission control. The same dialog opens, with a box to tick that you understand the risks. When it worked, the control shows Full access.
 - **In Settings.** Open Settings, Safety, Permissions and choose **Allow full access** beside the workspace. When it worked, the workspace shows "Allowed" with the time.
 - **In a terminal.** Run `delorun workspace full-access <folder> on` and answer yes. When it worked, `delorun workspace full-access` with no folder lists the workspace.
@@ -104,7 +104,7 @@ To take full access away, choose **Revoke** in Settings, Safety, Permissions, pi
 - If you run `delorun headless` in a folder without a grant, then it refuses with "which you have not granted full access" and does not start — run `delorun workspace full-access <folder> on`, or run without full access. A running headless task sees a revoke only when it next checks a permission.
 - If you choose the safer preset in a chat, then the workspace's grant is withdrawn and its other open chats on full access drop back too — grant it again to return.
 - If a single command asks to run outside the sandbox with no grant, then DeepSeek Harness asks you directly, and its question does not say the command can read Delorun's home — read it as if it did.
-- If you chose **Same as stock** in setup, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
+- If you chose [**Same as stock**](../reference/glossary.md#same-as-stock) in setup, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
 
 </details>
 
@@ -125,10 +125,10 @@ Setup's prompts question decides how Delorun asks before risky changes. `delorun
 | --- | --- | --- |
 | A workspace switched to full access | Asks once per workspace, as [Full access](#full-access) explains | Switches after the studio's confirmation |
 | The model writes `AGENTS.md`, a skill or a preset with its file tools | Asks first, says the text will load as instructions in every future chat it reaches, and shows the difference. Nothing is written until you allow it | Written like any file |
-| A new MCP server that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
-| The model creates or edits a scheduled task | Asks, showing the task's prompt, its schedule, the chat it runs in and that chat's permission preset | Created as in DeepSeek Harness |
+| A new [MCP server](../reference/glossary.md#mcp-server) that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
+| The model creates or edits a scheduled task | Asks, showing the task's prompt, its schedule, the chat it runs in and that chat's [permission preset](../reference/glossary.md#permission-preset) | Created as in DeepSeek Harness |
 
-The `web_fetch` guard, the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or change Delorun's consent and guard plugins or the sandbox, in any mode.
+The `web_fetch` [guard](../reference/glossary.md#fetch-guard), the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or change Delorun's consent and guard plugins or the sandbox, in any mode.
 
 <details>
 <summary>Edge cases</summary>
@@ -169,7 +169,7 @@ Before you answer you see its command, arguments, folder and the names of its en
 
 ### External agents
 
-Claude Code and Codex are optional plugins that let the model hand a task to another agent program. That program runs outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home included. It uses your own Claude Code or Codex sign-in, so any cost goes to that account.
+Claude Code and Codex are optional plugins that let the model hand a task to another agent program, an [external agent](../reference/glossary.md#external-agent). That program runs outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home included. It uses your own Claude Code or Codex sign-in, so any cost goes to that account.
 
 Delorun asks before each run, at the computer that runs Delorun, whichever prompts answer you gave in setup. **Allow once** starts that run only. **Allow for this workspace** lets that agent start there without asking until you revoke it in Settings, Safety, External agents, or with `delorun workspace external-agents <folder> <agent> off`. Each run stops after 30 minutes.
 
