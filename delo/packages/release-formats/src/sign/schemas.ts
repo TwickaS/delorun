@@ -6,6 +6,7 @@
  */
 import {
   DESKTOP_PLATFORMS,
+  RELEASE_CHANNELS,
   RELEASE_FILE_SIZE_LIMITS,
   RELEASE_SCHEMAS,
   RELEASE_SUMMARY_MAX_LENGTH,
@@ -79,6 +80,18 @@ export const RootSchema = z.strictObject({
   if (active !== 1) context.addIssue({ code: 'custom', path: ['roles', 'targets', 'keys'], message: `${String(active)} targets keys are active; exactly one must be` })
 })
 
+/**
+ * Open map: a reader drops the keys of `keys` it does not know before validating the rest, so a platform or channel a
+ * later release adds never makes an older reader refuse the file. Dropped keys stay inside the signed bytes and are
+ * never used.
+ */
+function onlyKeys<T extends z.ZodType>(keys: readonly string[], schema: T): z.ZodType<z.output<T>, unknown> {
+  return z.preprocess(value => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
+    return Object.fromEntries(Object.entries(value).filter(([key]) => keys.includes(key)))
+  }, schema)
+}
+
 const channelPointer = z.strictObject({ release: version, manifest: fileRef })
 
 /** The signed content of timestamp metadata. */
@@ -88,7 +101,7 @@ export const TimestampSchema = z.strictObject({
   issued: timestamp,
   expires: timestamp,
   root: z.strictObject({ version: positive, sha256 }),
-  channels: z.strictObject({ stable: channelPointer, beta: channelPointer }),
+  channels: onlyKeys(RELEASE_CHANNELS, z.strictObject({ stable: channelPointer, beta: channelPointer })),
 })
 
 const desktopRef = fileRef.extend({ sha512: z.string().regex(/^[A-Za-z0-9+/]{86}==$/u).transform(value => brandString<Sha512Base64>(value)) })
@@ -105,9 +118,27 @@ export const ReleaseSummarySchema = z.string().refine(isValidSummary, `a release
  */
 export const LOCAL_RELEASE_BUILDER = 'local release (no independent rebuild)'
 
+/** The desktop files of every desktop platform; optional in {@link ManifestSchema}, required to sign. */
+export const DesktopSchema = z.strictObject(Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, z.strictObject({ installer: desktopRef, update: desktopRef, blockmap: fileRef })])) as Record<(typeof DESKTOP_PLATFORMS)[number], z.ZodObject<{ installer: typeof desktopRef, update: typeof desktopRef, blockmap: typeof fileRef }, z.core.$strict>>)
+/** The S2 and S3 images; optional in {@link ManifestSchema}, required to sign. */
+export const ImagesSchema = z.strictObject({ s2: ImageRefSchema, s3: ImageRefSchema })
+/** The install scripts; optional in {@link ManifestSchema}, required to sign. */
+export const InstallSchema = z.strictObject({ sh: fileRef, ps1: fileRef })
+
+const runtimeArtifacts = z.strictObject({ archive: fileRef, files: fileRef })
+
+/**
+ * The runtime table a signer accepts: a platform key outside {@link RUNTIME_PLATFORMS}, such as a misspelt one, is
+ * refused instead of dropped, so the signed manifest lists every platform the draft names. Only readers ignore unknown
+ * platforms ({@link ManifestSchema}).
+ */
+export const StrictRuntimeSchema: z.ZodType<z.output<typeof ManifestSchema>['runtime']> = z.strictObject(Object.fromEntries(RUNTIME_PLATFORMS.map(platform => [platform, runtimeArtifacts.exactOptional()])))
+  .refine(runtime => Object.keys(runtime).length > 0, 'a release publishes the runtime of at least one platform')
+
 /**
  * The signed content of a release manifest. `security` and `summary` are optional, so a manifest signed before they
- * existed still reads; signing requires both (`ManifestDraftSchema` in `release.ts`).
+ * existed still reads; `desktop`, `images` and `install` are optional so a release without them still reads. Signing
+ * requires all five (`ManifestDraftSchema` in `release.ts`). `runtime` ignores platform keys this reader does not know.
  */
 export const ManifestSchema = z.strictObject({
   schema: z.literal(RELEASE_SCHEMAS.manifest),
@@ -116,13 +147,13 @@ export const ManifestSchema = z.strictObject({
   channel: z.enum(['stable', 'beta']),
   source: z.strictObject({ repository: z.string().min(1), tag: z.string().min(1), commit: z.string().regex(/^[0-9a-f]{40}$/u) }),
   published: timestamp,
-  runtime: z.partialRecord(z.enum(RUNTIME_PLATFORMS), z.strictObject({ archive: fileRef, files: fileRef }))
+  runtime: onlyKeys(RUNTIME_PLATFORMS, z.partialRecord(z.enum(RUNTIME_PLATFORMS), runtimeArtifacts))
     .refine(runtime => Object.keys(runtime).length > 0, 'a release publishes the runtime of at least one platform'),
-  desktop: z.strictObject(Object.fromEntries(DESKTOP_PLATFORMS.map(platform => [platform, z.strictObject({ installer: desktopRef, update: desktopRef, blockmap: fileRef })])) as Record<(typeof DESKTOP_PLATFORMS)[number], z.ZodObject<{ installer: typeof desktopRef, update: typeof desktopRef, blockmap: typeof fileRef }, z.core.$strict>>),
-  images: z.strictObject({ s2: ImageRefSchema, s3: ImageRefSchema }),
+  desktop: DesktopSchema.exactOptional(),
+  images: ImagesSchema.exactOptional(),
   sbom: fileRef.extend({ format: z.literal('SPDX-2.3+json') }),
   npm: z.array(z.strictObject({ name: z.string().min(1), version, integrity: z.string().regex(/^sha512-[A-Za-z0-9+/]{86}==$/u).transform(value => brandString<NpmIntegrity>(value)) })),
-  install: z.strictObject({ sh: fileRef, ps1: fileRef }),
+  install: InstallSchema.exactOptional(),
   rebuild: z.strictObject({ record: fileRef, builders: z.array(z.strictObject({ name: z.string().min(1), ci: z.literal(false) })).min(1) }),
   advisories: z.strictObject({ report: fileRef, accepted: z.array(z.string().regex(/^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/u).transform(value => brandString<AdvisoryId>(value))) }),
   security: z.boolean().exactOptional(),

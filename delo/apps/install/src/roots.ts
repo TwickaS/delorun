@@ -34,7 +34,7 @@ export async function readShippedRoots(directory: string): Promise<readonly Uint
     names = await readdir(directory)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new InstallError('NO_TRUSTED_ROOT', directory, `${directory} holds no release root, so no release can be verified with it; install Delo from its release page instead`, { cause: error })
+      throw new InstallError('NO_TRUSTED_ROOT', directory, `${directory} holds no release root, so no release can be verified with it; run npx delorun@latest, which ships the current release roots, instead`, { cause: error })
     }
     throw new InstallError('NO_TRUSTED_ROOT', directory, `${directory} cannot be read: ${messageOf(error)}`, { cause: error })
   }
@@ -44,7 +44,7 @@ export async function readShippedRoots(directory: string): Promise<readonly Uint
     .map(match => ({ version: Number(match[1]), name: match[0] }))
     .sort((left, right) => left.version - right.version)
   if (versions.length === 0) {
-    throw new InstallError('NO_TRUSTED_ROOT', directory, `${directory} holds no <n>.root.json file, so no release can be verified with it; install Delo from its release page instead`)
+    throw new InstallError('NO_TRUSTED_ROOT', directory, `${directory} holds no <n>.root.json file, so no release can be verified with it; run npx delorun@latest, which ships the current release roots, instead`)
   }
   const roots: Uint8Array[] = []
   for (const [position, entry] of versions.entries()) {

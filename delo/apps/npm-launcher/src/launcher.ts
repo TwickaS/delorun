@@ -347,7 +347,7 @@ export function failedStartText(version: RuntimeVersion, check: LauncherStartChe
     lead: `Delorun did not start release ${String(version)}: its release-log check failed.`,
     reason: codedReason(String(check.refusal), check.detail),
     remedies: [
-      'Run delorun verify to see every check of this release, and reinstall Delo from its release page if the failure stays.',
+      'Run delorun verify to see every check of this release, and run npx delorun@latest repair if the failure stays.',
       'Deleting files under the home\'s trust/ directory does not repair this: the next check finds the same failure, or starts without the record that caught it.',
     ],
   })

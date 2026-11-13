@@ -85,7 +85,7 @@ Installing release 0.1.0.
 - **Public release log.** Every release is also entered in a public, append-only [release log](../reference/glossary.md#release-log). The launcher checks the entry. If the log cannot be reached, the launcher installs the release on its signature alone, prints a warning, and checks the log again at the next start that can reach it.
 - **Every start.** The launcher compares the installed files with the signed list. A start with a release installed needs no network.
 
-You can run these checks again at any time with `delorun verify` ([Daily use](daily-use.md#check-the-release-and-your-setup)). [What you trust when you use Delorun](trust.md) says what you still rely on.
+You can run these checks again at any time with `delorun verify` ([Daily use](daily-use.md#check-the-release-and-your-setup)). [What you trust when you use Delorun](trust.md) says what you still rely on. The launcher installs from releases.delorun.com, with GitHub Releases and a spare host of Delorun's as fallbacks, and from no other host. It does not check the release's SBOM, and the npm package carries no build attestation.
 
 <details>
 <summary>Edge cases</summary>

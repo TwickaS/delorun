@@ -24,7 +24,7 @@ This page shows how to see what a new Delorun release would change, apply it saf
 
 ## The update notice
 
-Once a day, Delorun fetches the signed release files from releases.delorun.com and GitHub and checks whether a newer release exists on its channel. The check sends nothing about your installation, and those hosts see your computer's address. It verifies the files' signatures and downloads no release. When a newer release exists, Delorun says so in three places:
+Once a day, Delorun fetches the signed release files from releases.delorun.com, or from a fallback host when it is unreachable, and checks whether a newer release exists on its channel. The check sends nothing about your installation, and those hosts see your computer's address. It verifies the files' signatures and downloads no release. When a newer release exists, Delorun says so in three places:
 
 - in the terminal, when Delorun starts, as a line such as `Delorun 0.1.3 is available (security fix; all your plugins stay compatible). Run: delorun update`;
 - in the studio, as a card at the bottom of the chat list, which names the kind of release, how many of your plugins it would turn off and the command to run; **Hide this notice until a newer release** hides it for that release only;
@@ -104,7 +104,7 @@ A rollback does not merge. When the data format changed, the chat data as the ne
 
 ## Channels
 
-Each release belongs to a channel, `stable` or `beta`, and checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it differs from the running one, a lower version included.
+Each release belongs to a channel, `stable` or `beta`, and checks for updates on its own channel; no setting moves an installation to another channel. `delorun update` offers the channel's current release whenever it is newer than the running one. It never offers a lower version; `delorun recover rollback` returns to the previous release.
 
 <details>
 <summary>Edge cases</summary>

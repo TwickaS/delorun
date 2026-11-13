@@ -491,6 +491,15 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
     refusedWithoutWriting(fixture, await fixture.sign(), 'a release summary: 1 to 200 characters')
   })
 
+  it('c02-draft-unknown-platform-refused: signing refuses a draft whose runtime names a misspelt platform, instead of signing it without that platform', async (test) => {
+    const fixture = await releaseFixture(test)
+    editDraftFields(fixture, (draft) => {
+      const runtime = draft.runtime as Record<string, unknown>
+      runtime['linux-x65'] = runtime['linux-x64']
+    })
+    refusedWithoutWriting(fixture, await fixture.sign(), 'the manifest draft manifest-draft.json does not read')
+  })
+
   it('c02-security-not-boolean-refused: signing refuses a draft whose security is not a boolean', async (test) => {
     const fixture = await releaseFixture(test)
     editDraftFields(fixture, (draft) => { draft.security = 'true' })

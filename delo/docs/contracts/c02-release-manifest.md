@@ -63,7 +63,7 @@ A release with version `<version>` (Delo's semantic version, without a leading `
 | `*.blockmap` | electron-updater's block maps of the desktop files. |
 | `latest.yml`, `latest-mac.yml` (stable); `beta.yml`, `beta-mac.yml` (beta) | electron-updater's feed files. They are not signed; the desktop app trusts only the manifest. |
 
-Release metadata that is not tied to one release is served as static files through GitHub Pages from a `Delo-Run` repository at `releases.delorun.com`: `root/<n>.root.json` for every root version `n` and `timestamp.json`. The host is not trusted: every file is signed, and a client refuses one that does not verify.
+Release metadata that is not tied to one release is served at `releases.delorun.com`: `root/<n>.root.json` for every root version `n` and `timestamp.json`. The same host serves every release file at `releases/download/v<version>/<file>`. Two mirrors serve the same bytes: the spare host `releases.delo.run` for every file, and the GitHub release of the tag for release files. A client tries a mirror only after the host before it fails on the network or by HTTP status, or serves bytes that do not match the signed reference. The hosts are not trusted: every file is signed, and a client refuses one that does not verify.
 
 ## Signature envelope
 
@@ -289,7 +289,9 @@ The desktop app is upstream's, unchanged, and Delo builds none. Its updater (`De
 
 ## Compatibility
 
-Each file's `schema` names its major version; a change that an older reader would misread adds a new major version, and the release publishes both versions of a file while clients that read only the old one are supported. New optional fields need a new major version too, because readers refuse unknown fields. The optional `security` and `summary` fields were added to `delo.release-manifest/1` before any release was published, so no reader that refuses them exists; from the first published release, a new field needs a new major version. Upstream's desktop update flow, `latest.yml` feeds and electron-updater stay as upstream ships them.
+Each file's `schema` names its major version; a change that an older reader would misread adds a new major version, and the release publishes both versions of a file while clients that read only the old one are supported. New optional fields need a new major version too, because readers refuse unknown fields. The optional `security` and `summary` fields were added to `delo.release-manifest/1` before any release was published, so no reader that refuses them exists; from the first published release, a new field needs a new major version.
+
+Three places stay open so that a reader of the first release survives growth of the release set. In a manifest, `runtime` ignores a platform key that is not one of the platform identifiers above, and `desktop`, `images` and `install` may be absent. In timestamp metadata, `channels` ignores a channel other than `stable` and `beta`. A reader drops an ignored key and never uses it; the signature still covers it, so changing it after signing is refused. A release whose `runtime` lists no platform the reader knows is refused, because the reader cannot install it. Everything else stays closed: an unknown field anywhere else, an unknown `schema` and an unknown `roles` key are refused. Signing still requires `desktop`, `images` and `install`. Upstream's desktop update flow, `latest.yml` feeds and electron-updater stay as upstream ships them.
 
 ## Security
 

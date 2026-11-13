@@ -432,7 +432,7 @@ describe('an install step that refuses', () => {
     }))
     expect(status).toBe(LAUNCHER_EXIT.failed)
     expect(printed).toContain('Delo refused the release it downloaded')
-    expect(printed).toContain('delorun update --profile default')
+    expect(printed).toContain('npx delorun@latest repair')
   })
 
   it('prints what Delo did, why and a remedy for every install refusal the path can raise', () => {
@@ -579,7 +579,7 @@ describe('a release named with --release when a runtime is installed', () => {
     expect(printed).toContain('Delorun did not start the installed runtime')
     expect(printed).toContain('--release 0.2.0')
     expect(printed).toContain('runtime 0.1.0 is already installed')
-    expect(printed).toContain('delorun update --profile default')
+    expect(printed).toContain('npx delorun@latest repair')
     expect(started).toBe(false)
     expect(asked).toBe(0)
     expect(recorded.installs).toHaveLength(0)

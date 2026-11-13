@@ -180,8 +180,8 @@ export function signedRelease(key: KeyObject, platform: RuntimePlatform, release
   }
   const listBytes = sign(list, key)
   const placeholder = ref('placeholder', Buffer.from('placeholder'))
-  const desktopRef = { ...placeholder, sha512: brandString<ReleaseManifest['desktop']['mac-arm64']['installer']['sha512']>(`${'A'.repeat(86)}==`) }
-  const oci = brandString<ReleaseManifest['images']['s2']['index']>(`sha256:${'0'.repeat(64)}`)
+  const desktopRef = { ...placeholder, sha512: brandString<NonNullable<ReleaseManifest['desktop']>['mac-arm64']['installer']['sha512']>(`${'A'.repeat(86)}==`) }
+  const oci = brandString<NonNullable<ReleaseManifest['images']>['s2']['index']>(`sha256:${'0'.repeat(64)}`)
   const image = { repository: 'ghcr.io/example/fixture', index: oci, platforms: { 'linux/amd64': oci, 'linux/arm64': oci } }
   const manifest: ReleaseManifest = {
     schema: RELEASE_SCHEMAS.manifest,
@@ -194,7 +194,7 @@ export function signedRelease(key: KeyObject, platform: RuntimePlatform, release
       archive: placeholder,
       files: each === platform ? ref(`delorun-${release}-${each}.files.json`, listBytes) : placeholder,
     }])) as ReleaseManifest['runtime'],
-    desktop: Object.fromEntries(DESKTOP_PLATFORMS.map(each => [each, { installer: desktopRef, update: desktopRef, blockmap: placeholder }])) as ReleaseManifest['desktop'],
+    desktop: Object.fromEntries(DESKTOP_PLATFORMS.map(each => [each, { installer: desktopRef, update: desktopRef, blockmap: placeholder }])) as NonNullable<ReleaseManifest['desktop']>,
     images: { s2: image, s3: image },
     sbom: { ...placeholder, format: 'SPDX-2.3+json' },
     npm: [],

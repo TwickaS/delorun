@@ -139,9 +139,9 @@ The npm launcher and `delorun update` verify every [release](../reference/glossa
 | `ARCHIVE_REFUSED` | The runtime archive held something Delorun does not install. | As above. |
 | `PLATFORM_NOT_RELEASED` | The release has no runtime for this computer's system and processor. | Use a computer whose platform the release lists. |
 | `RELEASE_NOT_OFFERED` | You asked for a release your channel does not publish. | Name a published release, or leave the release out to install the current one. |
-| `NO_TRUSTED_ROOT` | This launcher holds no key it can verify a release with. | Install Delorun from the install script on its release page. |
+| `NO_TRUSTED_ROOT` | This launcher holds no key it can verify a release with. | Run `npx delorun@latest`, which ships the current release roots. |
 | `TRUST_STATE_INVALID` | The file in which Delorun remembers which releases it has verified cannot be read. | Move the file the refusal names out of the way and run the command again. |
-| `NO_ACTIVE_RUNTIME` | No installed runtime is marked active, or the active one is missing. | Run `delorun update` to install the release again, or `delorun recover rollback`. |
+| `NO_ACTIVE_RUNTIME` | No installed runtime is marked active, or the active one is missing. | Run `npx delorun@latest repair` ([Repair](#repair)), or `delorun recover rollback` when `delorun` still starts. |
 | `RUNTIME_INCOMPATIBLE` | The installed runtime needs a newer launcher, or the launcher a newer runtime. | Follow the remedy: update the runtime, or update the launcher. |
 | `STORE_BUSY` | Another `delorun` command is changing the installed runtimes. | Wait for it to finish. |
 

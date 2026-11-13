@@ -96,7 +96,8 @@ describe('release verification', () => {
 
   it('refuses timestamp metadata issued after the local clock, or living other than 3 days', () => {
     const release = publish()
-    expect(() => verifyTimestamp(release.root, release.timestamp.bytes, ISSUED - 1)).toThrow(/was issued at 2026-11-06T12:00:00Z, after this machine's clock/u)
+    expect(() => verifyTimestamp(release.root, release.timestamp.bytes, ISSUED - 1)).toThrow(/was issued at 2026-11-06T12:00:00Z, 1 second after this machine's clock.*Check that the computer's clock/u)
+    expect(() => verifyTimestamp(release.root, release.timestamp.bytes, ISSUED - 3_900)).toThrow(/1 hour 5 minutes after this machine's clock/u)
     const longer = envelopeBytes({ ...release.timestamp.metadata, expires: utc(ISSUED + 4 * DAY) }, [release.keys.timestamp])
     expect(() => verifyTimestamp(release.root, longer, ISSUED + 60)).toThrow(/does not expire exactly 259200 seconds after it was issued/u)
   })
@@ -232,13 +233,49 @@ describe('release verification', () => {
     expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...manifestContent('0.1.0', release.archive), schema: 'delo.release-manifest/2' }, [release.keys.targets]))).toThrow(/schema/u)
   })
 
-  it('accepts a manifest that lists some platforms, and refuses one that lists none or an unknown platform', () => {
+  it('accepts a manifest that lists some platforms, and refuses one that lists none', () => {
     const release = publish()
     const content = manifestContent('0.1.0', release.archive)
     const linux = { 'linux-x64': content.runtime['linux-x64'] }
     expect(Object.keys(verifySignedManifest(release.root.metadata, envelopeBytes({ ...content, runtime: linux }, [release.keys.targets])).runtime)).toEqual(['linux-x64'])
     expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...content, runtime: {} }, [release.keys.targets]))).toThrow(/a release publishes the runtime of at least one platform/u)
-    expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...content, runtime: { ...linux, 'freebsd-x64': content.runtime['linux-x64'] } }, [release.keys.targets]))).toThrow(/runtime/u)
+  })
+
+  it('reads a manifest naming a platform this reader does not know and drops that platform', () => {
+    const release = publish()
+    const content = manifestContent('0.1.0', release.archive)
+    const future = envelopeBytes({ ...content, runtime: { ...content.runtime, 'win32-arm64': content.runtime['linux-x64'] } }, [release.keys.targets])
+    const manifest = verifySignedManifest(release.root.metadata, future)
+    expect(Object.keys(manifest.runtime).sort()).toEqual(Object.keys(content.runtime).sort())
+    const only = envelopeBytes({ ...content, runtime: { 'win32-arm64': content.runtime['linux-x64'] } }, [release.keys.targets])
+    expect(() => verifySignedManifest(release.root.metadata, only)).toThrow(/a release publishes the runtime of at least one platform/u)
+  })
+
+  it('reads a timestamp naming a channel this reader does not know and drops that channel', () => {
+    const release = publish()
+    const metadata = release.timestamp.metadata
+    const future = envelopeBytes({ ...metadata, channels: { ...metadata.channels, nightly: metadata.channels.stable } }, [release.keys.timestamp])
+    const read = verifyTimestamp(release.root, future, ISSUED + 60)
+    expect(Object.keys(read.channels).sort()).toEqual(['beta', 'stable'])
+  })
+
+  it('reads a manifest without desktop, images or install, and still refuses a top-level unknown field', () => {
+    const release = publish()
+    const { desktop: _desktop, images: _images, install: _install, ...bare } = manifestContent('0.1.0', release.archive)
+    const manifest = verifySignedManifest(release.root.metadata, envelopeBytes(bare, [release.keys.targets]))
+    expect([manifest.desktop, manifest.images, manifest.install]).toEqual([undefined, undefined, undefined])
+    expect(() => verifySignedManifest(release.root.metadata, envelopeBytes({ ...bare, extra: true }, [release.keys.targets]))).toThrow(/extra/u)
+  })
+
+  it('refuses a tolerated field that is tampered with after signing', () => {
+    const release = publish()
+    const content = manifestContent('0.1.0', release.archive)
+    const signed = envelopeBytes({ ...content, runtime: { ...content.runtime, 'win32-arm64': content.runtime['linux-x64'] } }, [release.keys.targets])
+    const tampered = Buffer.from(signed.toString('utf8').replace('win32-arm64', 'win32-ia32'))
+    expect(() => verifySignedManifest(release.root.metadata, tampered)).toThrow(/signature|threshold|verif/iu)
+    const channels = release.timestamp.metadata.channels
+    const stamp = envelopeBytes({ ...release.timestamp.metadata, channels: { ...channels, nightly: channels.stable } }, [release.keys.timestamp])
+    expect(() => verifyTimestamp(release.root, Buffer.from(stamp.toString('utf8').replace('nightly', 'weekly')), ISSUED + 60)).toThrow(/signature|threshold|verif/iu)
   })
 
   it.each(['../delorun-0.1.0-linux-x64.tar.gz', 'release/delorun.tar.gz', '..', '.', 'a\\b', ''])('refuses the file name %j, which is not one path segment', (name) => {

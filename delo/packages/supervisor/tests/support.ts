@@ -80,7 +80,7 @@ export const ABSENT_DIGEST = `sha256:${'0'.repeat(64)}` as OciDigest
  * @param s2Seccomp - the S2 image's listed seccomp profile file, if any.
  * @returns the manifest's image entries.
  */
-export function fixtureManifest(s2: OciDigest = ABSENT_DIGEST, s3: OciDigest = ABSENT_DIGEST, s2Seccomp?: FileRef): VerifiedManifest {
+export function fixtureManifest(s2: OciDigest = ABSENT_DIGEST, s3: OciDigest = ABSENT_DIGEST, s2Seccomp?: FileRef): Required<VerifiedManifest> {
   return {
     images: {
       s2: { repository: IMAGES.s2, index: s2, platforms: { 'linux/amd64': s2, 'linux/arm64': s2 }, ...s2Seccomp === undefined ? {} : { seccomp: s2Seccomp } },

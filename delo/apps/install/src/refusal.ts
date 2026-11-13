@@ -1,6 +1,6 @@
 /**
  * How an {@link InstallError} reads in `@delo/home`'s refusal format: what the install did, the code and detail, and
- * the remedies: the same command again when the cause may pass, and the release page's install script when nothing
+ * the remedies: the same command again when the cause may pass, and a newer launcher from npx when nothing
  * can be verified.
  *
  * @module @delo/install/refusal
@@ -18,7 +18,7 @@ export function installRemedies(code: InstallErrorCode): readonly string[] {
     case 'DOWNLOAD_FAILED':
       return ['Check this computer\'s connection, then run the same command again.']
     case 'NO_TRUSTED_ROOT':
-      return ['Install Delo from the install script on its release page.']
+      return ['Run npx delorun@latest, which ships the current release roots.']
     case 'TRUST_STATE_INVALID':
       return ['Move the file named above out of the way and run the same command again; Delo stores it again from the release it verifies.']
     case 'RELEASE_NOT_OFFERED':

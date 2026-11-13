@@ -455,9 +455,10 @@ describe('a release the channel does not offer', () => {
 })
 
 describe('the channel’s defaults', () => {
-  it('fetches metadata from the release host and every other file from the version’s GitHub release', async () => {
+  it('fetches every file from the release host, with the version’s GitHub release and the spare host as mirrors', async () => {
     expect(RELEASE_SOURCE.metadata).toBe('https://releases.delorun.com')
-    expect(RELEASE_SOURCE.files('0.1.0' as never, 'delorun-0.1.0.manifest.json')).toBe('https://github.com/Delo-Run/delo/releases/download/v0.1.0/delorun-0.1.0.manifest.json')
+    expect(RELEASE_SOURCE.files('0.1.0' as never, 'delorun-0.1.0.manifest.json')).toBe('https://releases.delorun.com/releases/download/v0.1.0/delorun-0.1.0.manifest.json')
+    expect(RELEASE_SOURCE.mirrors?.map(mirror => mirror.files?.('0.1.0' as never, 'a'))).toEqual(['https://github.com/Delo-Run/delo/releases/download/v0.1.0/a', 'https://releases.delo.run/releases/download/v0.1.0/a'])
     const fixture = await fixtureRelease()
     const channel = new LauncherChannel({ home: await scratchHome(), platform: fixture.platform, roots: fixture.roots, channel: 'stable', log: logService(fixture.checkpoint) })
     expect(channel).toBeInstanceOf(LauncherChannel)
@@ -636,5 +637,94 @@ describe('a root the launcher does not ship yet', () => {
     const { channel } = await harness(fixture, { roots: [second] })
     const error = await refusal(channel.resolve(), 'INSTALL_VERIFY_FAILED')
     expect(error.detail).toContain('older than root 2')
+  })
+})
+
+describe('the production origins and their mirrors', () => {
+  type Serve = (host: string, path: string) => Response | undefined
+
+  /**
+   * A channel over the production source whose fetch answers per host.
+   * @param fixture - the release.
+   * @param serve - answers for a host and path, or `undefined` to fail the connection.
+   * @returns the channel, the progress events and the hosts asked, in order.
+   */
+  async function mirrored(fixture: Fixture, serve: Serve): Promise<{ readonly channel: LauncherChannel, readonly events: InstallProgress[], readonly asked: string[] }> {
+    const events: InstallProgress[] = []
+    const asked: string[] = []
+    const fetched: typeof globalThis.fetch = async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      asked.push(url.hostname)
+      const response = serve(url.hostname, url.pathname)
+      if (response === undefined) throw new TypeError('fetch failed')
+      return response
+    }
+    const channel = new LauncherChannel({
+      home: await scratchHome(),
+      platform: fixture.platform,
+      roots: fixture.roots,
+      channel: 'stable',
+      log: logService(fixture.checkpoint),
+      downloader: new Downloader({ fetch: fetched }),
+      now: () => NOW * 1000,
+      progress: event => events.push(event),
+    })
+    return { channel, events, asked }
+  }
+
+  /** The release's files by path, as `releases.delorun.com` lays them out. */
+  function published(fixture: Fixture): Map<string, Buffer> {
+    return new Map([...releasePaths(fixture)].map(([path, bytes]) => [path.replace(/^\/releases\/([^/]+)\//u, '/releases/download/v$1/'), bytes]))
+  }
+
+  const ok = (bytes: Buffer): Response => new Response(new Uint8Array(bytes), { status: 200 })
+
+  it('installs from the mirrors when the primary host is down, and says which origin served what', async () => {
+    const fixture = await fixtureRelease()
+    const files = published(fixture)
+    const { channel, events, asked } = await mirrored(fixture, (host, path) => {
+      if (host === 'releases.delorun.com') return undefined
+      const bytes = files.get(path.replace('/Delo-Run/delo', ''))
+      return bytes === undefined ? new Response(null, { status: 404 }) : ok(bytes)
+    })
+    const release = await channel.resolve()
+    await channel.fill(release, await staging())
+    expect(asked).toContain('releases.delo.run')
+    expect(events).toContainEqual(expect.objectContaining({ step: 'origin-skipped', name: 'timestamp.json', failed: 'releases.delorun.com', served: 'releases.delo.run' }))
+    expect(events).toContainEqual(expect.objectContaining({ step: 'origin-skipped', failed: 'releases.delorun.com', served: 'github.com' }))
+  })
+
+  it('refuses a mirror that serves tampered bytes after the primary failed', async () => {
+    const fixture = await fixtureRelease()
+    const files = published(fixture)
+    const archive = `/releases/download/v${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`
+    const { channel } = await mirrored(fixture, (host, path) => {
+      if (host === 'releases.delorun.com') return path === archive ? new Response(null, { status: 503 }) : ok(files.get(path)!)
+      const bytes = files.get(path.replace('/Delo-Run/delo', ''))!
+      return ok(path.endsWith(archive) ? Buffer.from(bytes).fill(1) : bytes)
+    })
+    const release = await channel.resolve()
+    await refusal(channel.fill(release, await staging()), 'INSTALL_VERIFY_FAILED')
+  })
+
+  it('retries a file whose bytes fail verification on the next origin, and uses it only when those bytes verify', async () => {
+    const fixture = await fixtureRelease()
+    const files = published(fixture)
+    const archive = `/releases/download/v${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`
+    const { channel, events } = await mirrored(fixture, (host, path) => {
+      const bytes = files.get(path.replace('/Delo-Run/delo', ''))!
+      return ok(host === 'releases.delorun.com' && path === archive ? Buffer.from(bytes).fill(1) : bytes)
+    })
+    await channel.fill(await channel.resolve(), await staging())
+    expect(events).toContainEqual(expect.objectContaining({ step: 'origin-skipped', failed: 'releases.delorun.com', served: 'github.com' }))
+  })
+
+  it('refuses a redirect to a host outside the allowlist without asking a mirror', async () => {
+    const fixture = await fixtureRelease()
+    const { channel, asked } = await mirrored(fixture, host => (host === 'releases.delorun.com'
+      ? new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/timestamp.json' } })
+      : undefined))
+    await refusal(channel.resolve(), 'DOWNLOAD_REFUSED')
+    expect(asked).toEqual(['releases.delorun.com'])
   })
 })
