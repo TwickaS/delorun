@@ -130,7 +130,7 @@ describe('the history admission', () => {
       { file: 'home-cordis.patch.yml', entryId: 'web-deepseek-api', path: ['apiKey'], references: ['apiKeyEnv'] },
     ])
     const refusal = admit(new Map([['cordis.patch.yml', secret], ['home-cordis.patch.yml', undefined]]))
-    expect(refusal).toBe(`cordis.patch.yml holds a value for the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead). Delo keeps secrets out of patch files, which the profile history saves in git, so the history saves no version until the value is gone from the patch. ${secretFieldRemedy(true)}`)
+    expect(refusal).toBe(`cordis.patch.yml holds a value for the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead). Delorun keeps secrets out of patch files, which the profile history saves in git, so the history saves no version until the value is gone from the patch. ${secretFieldRemedy(true)}`)
     expect(admit(new Map([['cordis.patch.yml', '- id: headers\n  config: { requestHeaders: { A: b } }\n']]))).toContain(secretFieldRemedy(false))
     expect(secretFieldRemedy(true)).toContain('first line is `version: 1`')
     expect(secretFieldRemedy(false)).toContain('`!!js process.env.NAME`')

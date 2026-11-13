@@ -297,8 +297,8 @@ export function describeSecretValues(places: readonly SecretValuePlace[]): strin
  * @returns the remedy sentence.
  */
 export function secretFieldRemedy(references: boolean): string {
-  const store = 'store the key in `.credentials.yaml` in the Delo home (`~/.delo` unless DELO_HOME names another), a file of mode 0600 whose first line is `version: 1` and which lists keys under `refs:` as `NAME: <key>`, NAME being a POSIX identifier such as MY_SEARCH_KEY, and set the plugin\'s credential field to NAME'
-  const environment = 'export the key as an environment variable NAME where you start Delo and set the field to `!!js process.env.NAME`'
+  const store = 'store the key in `.credentials.yaml` in the Delorun home (`~/.delo` unless DELO_HOME names another), a file of mode 0600 whose first line is `version: 1` and which lists keys under `refs:` as `NAME: <key>`, NAME being a POSIX identifier such as MY_SEARCH_KEY, and set the plugin\'s credential field to NAME'
+  const environment = 'export the key as an environment variable NAME where you start Delorun and set the field to `!!js process.env.NAME`'
   return references ? `To give the plugin a key, ${store}.` : `This field has no credential field beside it, so to give the plugin a key, ${environment}.`
 }
 
@@ -311,6 +311,6 @@ export function secretFieldAdmission(schemasOf: ConfigSchemasOf): VersionAdmissi
   return (files) => {
     const places = secretValuesInVersion(files, schemasOf)
     if (places.length === 0) return undefined
-    return `${describeSecretValues(places)}. Delo keeps secrets out of patch files, which the profile history saves in git, so the history saves no version until the value is gone from the patch. ${secretFieldRemedy(places.every(place => place.references.length > 0))}`
+    return `${describeSecretValues(places)}. Delorun keeps secrets out of patch files, which the profile history saves in git, so the history saves no version until the value is gone from the patch. ${secretFieldRemedy(places.every(place => place.references.length > 0))}`
   }
 }
