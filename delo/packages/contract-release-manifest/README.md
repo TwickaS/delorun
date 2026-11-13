@@ -14,12 +14,12 @@ English | [中文](README.zh.md)
 ## Contents
 
 - [Use this package](#use-this-package)
-- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Known limitations](#known-limitations)
 
 ## Use this package
 
 The release build in `delo/apps/release/`, the install script and npm launcher, the runtime store's start check and the desktop updater consume it, and the other release and catalogue contract packages import its digest, version and envelope types. Import the types with `import type` and the constants with a value import from `@delo/contract-release-manifest`; a package that reads or writes the files this contract defines still validates them at its parser, because these types describe valid files and do not check them.
 
-## Known Limitations and Deferred Work
+## Known limitations
 
 - Canonical JSON serialization and Ed25519 verification are left to each consumer's chosen library; the package names the algorithms and does not implement them.

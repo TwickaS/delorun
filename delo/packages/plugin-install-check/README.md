@@ -64,7 +64,7 @@ A person changes them by restating the `delo-plugin-install-check` row in the pr
 
 ## Known limitations
 
-- The check knows published advisories only. A malicious version that no advisory names yet passes with at most a publish-age or name warning.
+- The check knows published advisories only. A malicious version that no advisory names passes with at most a publish-age or name warning.
 - The check reads the lockfile, so it knows what a package's install scripts would run only by the findings above, not by reading them; an allowed build runs once the check passed.
 - The record detects a change made outside the plugin: an edited file, pnpm's store edited through a link, a package operation outside Delo. Code that runs as the person can rewrite the record too.
 - Publish times come from the configured registry; a package from a private registry gets a `publish-time-unchecked` finding.

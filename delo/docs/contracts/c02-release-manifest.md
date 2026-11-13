@@ -223,7 +223,7 @@ It also refuses, before it writes anything, when:
 - the release commit is not an ancestor of the release branch, `origin/v5` unless `--release-branch` names another;
 - the targets key is not listed in `delo/release/production-keys.json` as the release branch commits it; the registry lists no key until the owner records the keys of the key ceremony, so signing stops until then;
 - the release tag is not an annotated tag whose `tag` header names it, carrying an SSH signature that `git verify-tag` verifies with a key listed in `delo/release/allowed-signers` as the release branch commits it, never the working tree's copy; the committed file lists no key until the owner adds the release signers' keys, so every tag is refused until then;
-- the draft's `install.sh` or `install.ps1` is not a zero-length placeholder, because the rebuild comparison does not cover the install scripts yet;
+- the draft's `install.sh` or `install.ps1` is not a zero-length placeholder, because the rebuild comparison does not cover the install scripts;
 - an `npm` entry's packed tarball, `<name>-<version>.tgz` in the release directory, is missing, or its `sha512-` integrity, or the name and version in its `package/package.json`, differ from the entry.
 
 `local-release.ts` builds and signs a release for a channel directory of its own, with no rebuild and no advisory check. Its manifest names the builder `local release (no independent rebuild)`; it refuses a root file whose SHA-256, or a root, targets or timestamp key id, `delo/release/production-keys.json` lists; and a launcher fetching from the production publication refuses a manifest that names that builder.

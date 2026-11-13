@@ -102,7 +102,7 @@ A `trust/checkpoint.json` an earlier install wrote with only a tree size and a r
 | State | Meaning |
 | --- | --- |
 | `verified` | The bundle verifies and the online check passed at least once for this installation. |
-| `unchecked` | The online check has not passed yet: the log was not reachable, gave no checkpoint its key signed, or its witnesses had not cosigned its latest checkpoint within 24 hours; the bundle, if present, verifies. |
+| `unchecked` | The online check has not passed: the log was not reachable, gave no checkpoint its key signed, or its witnesses had not cosigned its latest checkpoint within 24 hours; the bundle, if present, verifies. |
 | `failed` | The bundle or the online check failed verifiably. |
 
 The state is stored per installed release in `trust/release-log.json` (schema `delo.release-log-state/1`, one entry per release with its `state`, `lastAttempt`, for `unchecked` the reason as `detail` and the first attempt of the current `unchecked` run as `uncheckedSince`, and the attempt's `notices`, such as a stored checkpoint that did not read), beside the checkpoint [C1](c01-home-layout.md) names. An install records `verified` or `unchecked` for the release it installs, and the start check updates the same entry. `delorun verify` shows it with the release's version ([C15](c15-verification-checks.md)); `delorun status` and the studio show no release-log state.

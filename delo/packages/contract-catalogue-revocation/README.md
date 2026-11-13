@@ -14,12 +14,12 @@ English | [中文](README.zh.md)
 ## Contents
 
 - [Use this package](#use-this-package)
-- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Known limitations](#known-limitations)
 
 ## Use this package
 
 No package in this repository consumes it: the catalogue client, the load-time revocation check and the Discover integration that C13 names are not built. Import the types with `import type` and the constants with a value import from `@delo/contract-catalogue-revocation`; a package that reads or writes the files this contract defines still validates them at its parser, because these types describe valid files and do not check them.
 
-## Known Limitations and Deferred Work
+## Known limitations
 
 - The display wording rules for badges and findings are stated on the contract page; the package carries only the list of wording no screen may use about a plugin.

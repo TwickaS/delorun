@@ -20,7 +20,7 @@ This app is the `delorun` command. Before any upstream code runs, it resolves an
 - [Opening the studio](#opening-the-studio)
 - [How delorun runs upstream](#how-delorun-runs-upstream)
 - [Extension points](#extension-points)
-- [Not yet implemented](#not-yet-implemented)
+- [Not implemented](#not-implemented)
 - [Development](#development)
 
 ## Commands
@@ -118,15 +118,17 @@ Running upstream's `dsh` directly on a Delo CLI profile, rather than `delorun st
 - **Setup** is `runSetup` in `src/setup/index.ts`, which both `delorun setup` and a first run call. Its sections are in `src/setup/sections.ts` and the step runner with the way back is `src/setup/steps.ts`, behind the `Prompter` interface of `src/setup/prompts.ts`, so a test runs them against a scripted prompter.
 - **The home process's dependencies** are `StartDependencies` in `src/start.ts`: the profile preparation and runner, the environment loader, the holder probe (the update channel's `status` request), the exit hooks, the output capture and the studio opener, so a spec runs a start against stand-ins.
 
-## Not yet implemented
+## Not implemented
+
+The CLI does not include the following; the [roadmap](../../docs/guide/roadmap.md) covers what Delorun does not do.
 
 - Start at login (`delorun start --at-login`, `delorun stop --at-login`), `delorun status --follow`, and the confinement probes of the start sequence.
-- The chat gate holds no scheduled delivery: a delivery that falls due during an update's wait has its turn refused with `UPDATE_PENDING`. The report reads no revocation list, because no release publishes one ([`@delo/update`](../../packages/update/README.md#not-yet-implemented)).
+- The chat gate holds no scheduled delivery: a delivery that falls due during an update's wait has its turn refused with `UPDATE_PENDING`. The report reads no revocation list, because no release publishes one ([`@delo/update`](../../packages/update/README.md#not-implemented)).
 - Setup's reach question. Setup records reach as off.
 - The Windows DACL check ([#48](https://github.com/Delo-Run/delo/issues/48)): on Windows the directory check checks nothing and the protected-file check looks only at the file type.
 - `reach`, `devices` and `dev`.
 - Opening imported chats in the studio.
-- `delorun verify --mode`, and every registered check but `release-signature` and `runtime-files`. `delorun verify` reports the default mode, `warn`, because nothing reads `integrity.mode` yet.
+- `delorun verify --mode`, and every registered check but `release-signature` and `runtime-files`. `delorun verify` reports the default mode, `warn`, because nothing reads `integrity.mode`.
 
 ## Development
 
