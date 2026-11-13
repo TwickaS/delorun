@@ -32,7 +32,7 @@ import type {} from '@deepseek-ai/dsh-app-boot'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
-import { WriteConsentRefusedError, type WriteConsentArgs, type WriteConsentDiff } from '@deepseek-ai/dsh-tool-fs/src/consent.ts'
+import { WriteConsentRefusedError, type WriteConsentArgs, type WriteConsentDiff } from '@deepseek-ai/dsh-tool-fs'
 import { CHANGES_ENTRIES, profileChangesDirectory, readApproved, readProtection, type ProtectionLevel } from '@delo/changes'
 import { diffText } from './classify.ts'
 

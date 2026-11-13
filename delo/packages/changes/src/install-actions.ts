@@ -20,7 +20,7 @@
 import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import { recordPendingBuilds } from '@deepseek-ai/dsh-plugin-manager/src/build-approval.ts'
+import { recordPendingBuilds } from '@deepseek-ai/dsh-plugin-manager'
 import { InvalidInstallSpecError, parseInstallSpec, type ParsedInstallSpec } from '@deepseek-ai/dsh-plugin-manager'
 import { PROTECTED_FILE_MODE } from '@delo/contract-home-layout'
 import type { ChangesContext, ReloadHost } from './actions.ts'

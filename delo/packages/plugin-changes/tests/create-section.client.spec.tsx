@@ -70,7 +70,9 @@ describe('Create a plugin', () => {
     harness()
     const entry = await open()
     expect([entry.options.order, entry.options.label?.(), entry.options.locale]).toEqual([CREATE_SECTION_ORDER, en['create.nav'], NS])
-    await screen.findByRole('heading', { name: en['create.title'] })
+    const heading = await screen.findByRole('heading', { name: en['create.title'] })
+    // The heading ignores a titled page's rule that hides section titles: Plugins' page title names only the inventory.
+    expect(heading.className).toContain('createHeading')
   })
 
   it('creates the plugin in the chosen workspace, shows where it goes and lists the files', async () => {

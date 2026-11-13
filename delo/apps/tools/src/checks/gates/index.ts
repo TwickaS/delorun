@@ -102,6 +102,12 @@ export const GATES: readonly GateCheck[] = withDebt([
     inputs: ['delo/**/*.ts', 'delo/**/*.tsx', 'delo/**/*.mts', 'delo/**/*.cts', `${GATE_DIR}/erasable-syntax.ts`],
   },
   {
+    id: 'gates:upstream-src-imports',
+    title: 'No Delo source imports a file from an upstream package\'s src/',
+    command: [TSX, `${GATE_DIR}/upstream-src-imports.ts`],
+    inputs: ['delo/packages/*/src/**', 'delo/apps/*/src/**', `${GATE_DIR}/upstream-src-imports.ts`],
+  },
+  {
     id: 'gates:no-unknown-casts',
     title: 'No assertion to `unknown` beyond upstream\'s recorded baseline, in upstream\'s sources and Delo\'s',
     command: [TSX, 'scripts/verify-no-unknown-casts.ts'],

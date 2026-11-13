@@ -476,6 +476,19 @@ async function cleanupScaffoldWorld(ctx: Context, workspaceCwd: string, persiste
 }
 
 /**
+ * The entries a startup warning reports as failed. {@link auditStartupEntries} warns, without failing startup, about each
+ * optional entry that did not activate: one line per entry, `id (module): detail`, with stack lines indented. A plugin
+ * whose import throws (a TypeScript form Node cannot strip, a missing export) is such an entry, so a profile that loses
+ * a plugin that way would still pass its specs; the scaffold fails on it instead. An entry that only waits for a
+ * service is not a load failure and is not returned.
+ * @param warning - the text the audit passed to its warning sink.
+ * @returns each failed entry's first line, empty when none failed.
+ */
+export function failedStartupEntries(warning: string): string[] {
+  return warning.split('\n').filter(line => /^\S.*\): /u.test(line) && !line.includes(': pending (waiting for'))
+}
+
+/**
  * Boot the real web composition under the current snapshot mode.
  * @param options - replay fixture selection and pacing.
  * @returns the running scaffold.
@@ -869,7 +882,12 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     await ctx.plugin(Loader)
     await mountRootInclude(ctx, rootConfig, readProfilePatches('dsh', profileContext))
     await ctx.loader.await()
-    await auditStartupEntries(ctx, 'web e2e scaffold')
+    const startupWarnings: string[] = []
+    await auditStartupEntries(ctx, 'web e2e scaffold', line => void startupWarnings.push(line))
+    const failedEntries = failedStartupEntries(startupWarnings.join(''))
+    if (failedEntries.length > 0) {
+      throw new Error(`web e2e scaffold: ${String(failedEntries.length)} plugin ${failedEntries.length === 1 ? 'entry' : 'entries'} failed to load:\n${failedEntries.join('\n')}`)
+    }
     if (options.developerTools !== undefined) {
       await ctx.settings.update('ui-settings', { enabled: options.developerTools })
     }

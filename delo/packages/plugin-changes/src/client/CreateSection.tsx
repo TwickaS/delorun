@@ -85,7 +85,7 @@ export function CreateSection(props: CreateSectionProps) {
   }
   return <div className={css.section} aria-busy={load.status === 'loading'}>
     <div className={css.header}>
-      <h2 className={css.heading}>{t('create.title')}</h2>
+      <h2 className={css.createHeading}>{t('create.title')}</h2>
     </div>
     <p className={css.meta}>{t('create.intro')}</p>
     {load.status === 'loading' ? <p className={css.meta} role="status">{t('create.loading')}</p> : null}

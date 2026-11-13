@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { parseSessionLog, prepareSessionSnapshotFixtureForComparison } from '@deepseek-ai/dsh-llm-replay'
 import {
   assertFixtureInventory,
+  failedStartupEntries,
   parseSeedFixture,
   recordedSessionFixturePath,
   selectedSessionFixture,
@@ -101,5 +102,23 @@ describe('Web snapshot generation filenames', () => {
 
     await expect(assertFixtureInventory(root, ['session.jsonl', 'ui.expected.md']))
       .resolves.toBeUndefined()
+  })
+})
+
+describe('Web scaffold plugin load gate', () => {
+  it('returns the entries that failed to import or activate and not the ones waiting for a service', () => {
+    const warning = [
+      'web e2e scaffold: warning: 3 entries did not activate',
+      '@delo/plugin-changes (@delo/plugin-changes): failed to import: SyntaxError: TypeScript parameter property is not supported in strip-only mode',
+      '    at parseTypeScript (node:internal/modules/typescript:68:40)',
+      'plugin-a (@delo/plugin-a): pending (waiting for service: llm)',
+      'plugin-b (@delo/plugin-b): Error: boom',
+      '',
+    ].join('\n')
+    expect(failedStartupEntries(warning)).toEqual([
+      '@delo/plugin-changes (@delo/plugin-changes): failed to import: SyntaxError: TypeScript parameter property is not supported in strip-only mode',
+      'plugin-b (@delo/plugin-b): Error: boom',
+    ])
+    expect(failedStartupEntries('')).toEqual([])
   })
 })

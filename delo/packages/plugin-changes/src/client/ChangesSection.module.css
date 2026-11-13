@@ -24,6 +24,12 @@
   display: var(--dsh-settings-section-title-display, block);
 }
 
+.createHeading {
+  composes: heading;
+  /* Create a plugin shares the Plugins page with the inventory, so the page title does not name it. */
+  display: block;
+}
+
 .group {
   display: flex;
   flex-direction: column;

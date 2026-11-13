@@ -8,7 +8,7 @@
  * @module @delo/plugin-settings-layout/client/layout
  */
 import {
-  IconAgentPresetOutlineMedium, IconCordisPluginOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium,
+  IconAgentPresetOutlineMedium, IconChecklistOutlineMedium, IconCordisPluginOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium,
   IconGlobeOutlineMedium, IconInfoOutlineMedium, IconInspectOutlineMedium, IconNewChatOutlineMedium, IconPanelLeftOutlineMedium,
   IconSettingsOutlineMedium, IconShieldOutlineMedium, IconSlidersTwoOutlineMedium, IconSparkleMedium, IconUserOutlineMedium,
   IconUsersOutlineMedium,
@@ -34,6 +34,7 @@ export const SECTIONS = {
   privacy: 'delo-privacy',
   devices: 'delo-devices',
   trash: 'delo-trash',
+  changes: 'delo-changes',
   about: 'delo-about',
 } as const
 
@@ -201,6 +202,10 @@ export function deloSettingsLayout(
         pages: [
           // No icon here: the Trash section registers its own under its id.
           { id: SECTIONS.trash, label: text('page.trash'), keywords: text('page.trash.keywords'), blocks: [section(SECTIONS.trash)] },
+          {
+            id: 'changes', label: text('page.changes'), icon: IconChecklistOutlineMedium, keywords: text('page.changes.keywords'),
+            blocks: [section(SECTIONS.changes)],
+          },
           {
             id: 'about', label: text('page.about'), icon: IconInfoOutlineMedium, keywords: text('page.about.keywords'),
             blocks: [card('versions', 'card.versions', ['currentVersion']), section(SECTIONS.about)],

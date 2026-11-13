@@ -33,7 +33,7 @@ import { basename, dirname, isAbsolute, join, sep } from 'node:path'
 import { DEFAULT_INSTRUCTION_FILE_NAMES } from '@deepseek-ai/dsh-agent-instructions'
 import { resolveAgentsHome, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { HOME_SKILL_DIR, PROJECT_SKILL_DIRS } from '@deepseek-ai/dsh-skill-filesystem'
-import type { WriteConsentDiff } from '@deepseek-ai/dsh-tool-fs/src/consent.ts'
+import type { WriteConsentDiff } from '@deepseek-ai/dsh-tool-fs'
 
 /**
  * The file names the workspace instruction loader reads as instructions by default: `AGENTS.md`, `CLAUDE.md` and
