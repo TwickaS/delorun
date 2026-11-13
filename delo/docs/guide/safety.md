@@ -16,7 +16,6 @@ Delorun runs on your computer with your own access, and an agent that runs comma
 - [The sandbox](#the-sandbox)
 - [Full access](#full-access)
 - [Consents](#consents)
-- [Dangerous mode](#dangerous-mode)
 - [The web_fetch guard](#the-web_fetch-guard)
 - [Release checks](#release-checks)
 - [What Delorun does not protect against](#what-delorun-does-not-protect-against)
@@ -53,7 +52,7 @@ Commands can still reach the network, local sockets outside the places the sandb
 
 A workspace on full access runs the model's commands outside the sandbox, with everything your user can do, Delorun's home and secrets included. Every new workspace starts on Workspace Write instead.
 
-With setup's **Safer prompts**, the default, Delorun asks for full access once per workspace before it applies: pick Full access in a chat, choose "Allow full access for this workspace" on an approval card, use Settings, Permissions, or run `delorun workspace full-access <folder> on`, and you answer on the home's own computer. A single command can still ask to run outside the sandbox: DeepSeek Harness asks you, and its question does not say that such a command can read Delorun's home. With **Same as stock**, a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, and that confirmation can come from a phone signed in over remote access too.
+With setup's **Safer prompts**, the default, Delorun asks for full access once per workspace before it applies: pick Full access in a chat, choose "Allow for this chat" on an approval card that asks for full access, use Settings, Permissions, or run `delorun workspace full-access <folder> on`, and you answer on the home's own computer. A single command can still ask to run outside the sandbox: DeepSeek Harness asks you, and its question does not say that such a command can read Delorun's home. With **Same as stock**, a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness.
 
 To take full access away, use Revoke in Settings, Permissions, pick Workspace Write in a chat of that workspace, or run `delorun workspace full-access <folder> off`. The workspace's open chats go back to Workspace Write within a second in every running profile, because each one watches the list of full-access grants. If a profile cannot watch it, its log says so, and its chats pick up the change the next time they check a permission. A running `delorun headless` task picks up the change only when it next checks a permission.
 
@@ -81,16 +80,6 @@ An MCP server that runs a command runs it on your computer with your access, out
 Claude Code and Codex are optional delegation plugins: the model can hand a task to one of them. An external agent runs as its own program, outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home with its keys and tokens included, and it uses your own Claude Code or Codex sign-in and account, so any cost goes to that account.
 
 Delorun asks before each run on the home's own computer, whichever prompts answer you gave in setup; a phone signed in over remote access cannot answer. "Allow once" starts that run only. "Allow for this workspace" lets that agent start there without asking until you revoke it in Settings, External agents, or with `delorun workspace external-agents <folder> <agent> off`; `delorun workspace external-agents` lists what you allowed. A chat on Read Only never starts an external agent, a run cannot start outside the chat's workspace, and each run stops after 30 minutes. A chat on Full access refuses every approval without asking you, so there an agent starts only in a workspace where you allowed it; a chat on Auto asks you, as on Workspace Write. `delorun headless` cannot ask anyone either, so it starts an agent only where you allowed it. A chat without a workspace folder never starts one, and the approval names the folder the agent will run in. The model cannot install or turn on these plugins, or another external-agent plugin such as the ACP one, which can run any program, through plugin management; you add them from the Plugins page or the first-run setup. A full-access chat can run any command anyway. Settings, External agents turns this question off, so agents start without asking as in DeepSeek Harness, or changes the 30-minute limit, from 1 to 1440 minutes; a change applies from the next run. Only the home's own computer can turn the question off.
-
-## Dangerous mode
-
-Setup's third prompts answer, **Dangerous: full access without asking**, works like Claude Code's bypass mode. It does not put every chat on full access. It makes full access available to every chat without asking: any chat can switch to full access with no consent for its workspace and no dialog, whether it runs at this computer, on a phone signed in over remote access, in a scheduled task, in a bot or in `delorun headless`. A new chat still starts on Workspace Write unless the workspace's default is full access.
-
-What you give up: commands then run outside the sandbox with everything your user can do, including reading and changing Delorun's home, its keys and the token that controls it. The questions before writing `AGENTS.md` or skills, adding MCP servers and creating scheduled tasks are off, as in DeepSeek Harness. Text the model reads (web pages, files, repositories) can tell it to do harmful things, and in this mode nothing asks you first.
-
-Two steps turn it on. Setup prints the warning and asks `Allow any chat to switch to full access without asking?`, which starts on No. Then you type `full access everywhere` exactly; anything else cancels and keeps your previous answer. A scripted setup needs `--yes --prompts dangerous --accept-dangerous-mode`; `--yes` alone never selects it, and a document given to `--config` needs `"acceptDangerousMode": true` beside `"prompts": "dangerous"`. Delorun refuses Dangerous when it runs as root, as Claude Code does, because full access would then reach the whole computer.
-
-Setup writes the answer into the profile and a grant file in the home's protected `secrets/` directory. Both must be present: the profile alone grants nothing. While it is on, `delorun` prints `Dangerous mode is on: any chat can switch to full access without asking. Turn it off with `delorun setup prompts`.` at start, and `delorun status` and `delorun doctor` show it. Choose **Safer prompts** or **Same as stock** with `delorun setup prompts` to turn it off; setup removes the grant file.
 
 ## The web_fetch guard
 

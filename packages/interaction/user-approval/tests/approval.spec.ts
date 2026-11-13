@@ -87,6 +87,28 @@ describe('ApprovalService.request', () => {
     expect(Object.keys(appended[0]?.data ?? {}).sort()).toEqual(['id', 'toolName'])
   })
 
+  it('keeps the presentation-only fields out of the logged audit events while answerers still receive them', async () => {
+    const ctx = await mounted()
+    const { agent, appended } = fakeAgent(ctx)
+    let received: ApprovalRequest | undefined
+    ctx.on('approval/request', (req) => {
+      received = req
+      return Promise.resolve<ApprovalOutcome>('allowed-once')
+    })
+
+    await ctx.approval.request(requestOf(agent, {
+      reason: 'escalate sandbox to danger-full-access: build',
+      displayReason: { en: 'Allow it?' },
+      grants: 'full-access',
+      escalatesTo: 'danger-full-access',
+    }))
+
+    expect(received).toMatchObject({ grants: 'full-access', escalatesTo: 'danger-full-access' })
+    const logged = JSON.stringify([...appended, ...agent.session.snapshotEvents()])
+    for (const field of ['escalatesTo', 'grants', 'displayReason']) expect(logged).not.toContain(field)
+    expect(Object.keys(appended[0]?.data ?? {}).sort()).toEqual(['id', 'reason', 'toolName'])
+  })
+
   it('borrows the exact readonly request for scoped dispatch and audit', async () => {
     const ctx = await mounted()
     const { agent, appended } = fakeAgent(ctx)

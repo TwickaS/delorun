@@ -33,13 +33,10 @@ import {
 } from '@delo/profile-safety'
 import { isSeq, parse, parseDocument, type Document } from 'yaml'
 import { profileDirectory } from './profile.ts'
-import { CREDENTIALS_FILENAME } from './setup/writes.ts'
+import { CREDENTIALS_FILENAME, JS_TAG } from './setup/writes.ts'
 
 /** The patch file of a profile and of the home. */
 const PATCH_FILENAME = 'cordis.patch.yml'
-
-/** Upstream's `!!js` tag, kept as a tagged string so a rewritten patch writes every expression back unchanged. */
-const JS_TAG = { tag: 'tag:yaml.org,2002:js', resolve: (source: string) => source }
 
 /** What settling a start's patch files did, as lines the person reads; no line holds a value. */
 export interface SecretSettlement {

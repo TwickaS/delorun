@@ -35,6 +35,7 @@ function setup(options: {
   catalog?: PermissionCatalog | null
   locked?: boolean
   select?: (preset: string) => Promise<boolean>
+  ownsConfirmation?: (preset: string) => boolean
 } = {}) {
   const selection = createSnapshotStore<{ value: PermissionSelection | undefined }>({
     value: 'selection' in options ? options.selection : { currentValue: 'workspace-write' },
@@ -50,6 +51,7 @@ function setup(options: {
     useProjection,
     usePermissionCatalog: bindSnapshotSelector(catalog),
     select,
+    ownsConfirmation: options.ownsConfirmation ?? (() => false),
     t,
   } as unknown as PermissionSelectProps
   const view = render(<PermissionSelect {...props} />)
@@ -138,6 +140,47 @@ describe('PermissionSelect', () => {
     fireEvent.click(screen.getByRole('button', { name: '启用完全权限' }))
     expect(select).toHaveBeenCalledExactlyOnceWith('danger-full-access')
     await act(async () => {})
+  })
+
+  it('selects at once when the consent service owns the preset question, and keeps the built-in one for the rest', async () => {
+    const { select } = setup({ ownsConfirmation: preset => preset === 'danger-full-access' })
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: '完全权限' }))
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(select).toHaveBeenCalledExactlyOnceWith('danger-full-access')
+    await act(async () => {})
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: /自动审查/ }))
+    expect(screen.getByRole('checkbox')).toBeTruthy()
+  })
+
+  it('keeps showing the current preset while the consent service asks its own question, and shows the switch once it lands', async () => {
+    const answered = Promise.withResolvers<boolean>()
+    const { select, selection } = setup({
+      ownsConfirmation: preset => preset === 'danger-full-access',
+      select: () => answered.promise,
+    })
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: '完全权限' }))
+    expect(select).toHaveBeenCalledExactlyOnceWith('danger-full-access')
+    expect(trigger().textContent).toBe('工作区内修改')
+
+    act(() => { selection.set({ value: { currentValue: 'danger-full-access' } }) })
+    answered.resolve(true)
+    await act(async () => {})
+    expect(trigger().textContent).toBe('完全权限')
+  })
+
+  it('keeps the current preset when the consent service is cancelled', async () => {
+    const { selection } = setup({
+      ownsConfirmation: preset => preset === 'danger-full-access',
+      select: () => Promise.resolve(false),
+    })
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByRole('menuitem', { name: '完全权限' }))
+    await act(async () => {})
+    expect(trigger().textContent).toBe('工作区内修改')
+    expect(selection.getSnapshot().value?.currentValue).toBe('workspace-write')
   })
 
   it('marks Auto experimental and uses the current-session risk copy', async () => {

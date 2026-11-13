@@ -1877,6 +1877,12 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: workspace:*
         version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:*
+        version: link:../../../packages/api/remotes
+      '@deepseek-ai/dsh-api-session-controller':
+        specifier: workspace:*
+        version: link:../../../packages/api/session-controller
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
@@ -1940,6 +1946,9 @@ importers:
       '@deepseek-ai/dsh-otel':
         specifier: workspace:*
         version: link:../../../packages/telemetry/otel
+      '@deepseek-ai/dsh-permission-presets':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/permission-presets
       '@deepseek-ai/dsh-sandbox':
         specifier: workspace:*
         version: link:../../../packages/sandbox/sandbox

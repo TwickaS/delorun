@@ -222,3 +222,10 @@
 .hint {
   color: var(--dsw-alias-label-secondary);
 }
+
+/* After .failed, whose margin it replaces: the choice's failure fills a line of the card's decision row. */
+.choiceFailure {
+  flex: 1 0 100%;
+  margin: 0;
+  text-align: right;
+}

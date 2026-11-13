@@ -9,7 +9,8 @@ import { ApprovalCard } from '../src/client/ApprovalCard.tsx'
 import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
 import { ApprovalPanel } from '../src/client/ApprovalPanel.tsx'
 import type {
-  ApprovalActionOwnerProps, ApprovalCardInput, ApprovalComposerProps, ApprovalGrant, ApprovalInjected,
+  ApprovalActionOwnerProps, ApprovalCardInput, ApprovalChoiceOwnerProps, ApprovalEscalation,
+  ApprovalComposerProps, ApprovalGrant, ApprovalInjected,
 } from '../src/client/contract/slots.ts'
 import { PendingApproval } from '../src/client/contract/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -23,6 +24,7 @@ type ApprovalListener = (
     reason?: string
     displayReason?: PendingApproval['displayReason']
     grants?: ApprovalGrant
+    escalatesTo?: ApprovalEscalation
     signal?: AbortSignal
   },
   next: () => Promise<'unavailable'>,
@@ -312,6 +314,19 @@ describe('approval Remote Event consumer', () => {
     expect(pending).toMatchObject({ toolName: 'read' })
     expect(pending.callId).toBeUndefined()
     expect(pending.reason).toBeUndefined()
+    await scope.fiber.dispose()
+  })
+
+  it('carries the escalation target onto the pending approval', async () => {
+    const bench = await setupPlugin()
+    const scope = createScope(bench.ctx, id('s1'))
+    await scope.fiber.await()
+    const result = bench.listener.call(scope.ctx, { toolName: 'bash', escalatesTo: 'workspace-write' }, () => Promise.resolve('unavailable'))
+    const pending = bench.pending.getSnapshot()[0]!
+
+    expect(pending.escalatesTo).toBe('workspace-write')
+    await pending.answer('rejected')
+    await expect(result).resolves.toBe('rejected')
     await scope.fiber.dispose()
   })
 
@@ -672,4 +687,90 @@ it.each(['allow', 'reject', 'always', 'keyboard'] as const)('settles a fixed app
   }
   await waitFor(() => { expect(actions[action]).toHaveBeenCalledOnce() })
   expect(Object.values(actions).filter(callback => callback.mock.calls.length > 0)).toEqual([actions[action]])
+})
+
+describe('persistent choices', () => {
+  function renderChoice(pending: PendingApproval) {
+    let owner: ApprovalChoiceOwnerProps | undefined
+    const renderSlot = vi.fn((key: string, props: object) => {
+      if (key !== 'conversation.approval.choice') return null
+      owner = props as ApprovalChoiceOwnerProps
+      return <button type="button">Allow for this chat</button>
+    }) as FactoryComponentPropsOf<'conversation.approval.card'>['renderSlot']
+    render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
+    return { renderSlot, owner: () => owner }
+  }
+
+  it('renders the choice list in the decision row with the escalation target', () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash', callId: 'call-1' as ToolCallId, escalatesTo: 'danger-full-access' })
+    const { owner } = renderChoice(pending)
+
+    expect(screen.getByRole('button', { name: 'Allow for this chat' }).parentElement?.contains(screen.getByRole('button', { name: 'Allow once' }))).toBe(true)
+    expect(owner()).toMatchObject({ escalatesTo: 'danger-full-access', toolName: 'bash', callId: 'call-1', answered: false })
+    pending.abort(new Error('test cleanup'))
+    return pending.result.catch(() => {})
+  })
+
+  it('keeps Allow once primary until an entry reports a shown button', () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash', escalatesTo: 'workspace-write' })
+    const { owner } = renderChoice(pending)
+    const outlined = (): boolean => /_outline_/.test(screen.getByRole('button', { name: 'Allow once' }).className)
+    expect(outlined()).toBe(false)
+
+    act(() => { owner()!.offer(true) })
+    expect(outlined()).toBe(true)
+    act(() => { owner()!.offer(false) })
+    expect(outlined()).toBe(false)
+    pending.abort(new Error('test cleanup'))
+    return pending.result.catch(() => {})
+  })
+
+  it('answers allow-once exactly once when a choice allows', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash', escalatesTo: 'workspace-write' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderChoice(pending)
+
+    await act(async () => { await owner()!.allow() })
+    await act(async () => { await owner()!.allow() })
+
+    await expect(pending.result).resolves.toBe('allowed-once')
+    expect(answer).toHaveBeenCalledExactlyOnceWith('allowed-once')
+  })
+
+  it('stops accepting a choice answer once Allow once answered, so a switch finishing later answers nothing more', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash', escalatesTo: 'workspace-write' })
+    const answer = vi.spyOn(pending, 'answer')
+    const { owner } = renderChoice(pending)
+    const first = owner()!
+    expect(first.canAnswer()).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    await expect(pending.result).resolves.toBe('allowed-once')
+    expect(owner()!.canAnswer()).toBe(false)
+    expect(owner()!.answered).toBe(true)
+    await act(async () => { await first.allow() })
+
+    expect(answer).toHaveBeenCalledExactlyOnceWith('allowed-once')
+  })
+
+  it('ignores an offer that arrives after the card unmounted', () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash', escalatesTo: 'workspace-write' })
+    const { owner } = renderChoice(pending)
+    const late = owner()!
+    cleanup()
+
+    expect(() => { late.offer(true) }).not.toThrow()
+    pending.abort(new Error('test cleanup'))
+    return pending.result.catch(() => {})
+  })
+
+  it('renders no choice list for a request that is not an escalation', () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'bash', grants: 'full-access' })
+    const { renderSlot } = renderChoice(pending)
+
+    expect(screen.queryByRole('button', { name: 'Allow for this chat' })).toBeNull()
+    expect(renderSlot).not.toHaveBeenCalledWith('conversation.approval.choice', expect.anything())
+    pending.abort(new Error('test cleanup'))
+    return pending.result.catch(() => {})
+  })
 })

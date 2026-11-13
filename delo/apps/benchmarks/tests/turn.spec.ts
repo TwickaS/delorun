@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { checkTurn, PROJECT_DIRECTORY, READ_FILE, stockPatch, switchRows, textItems, TOOL_CALLS, toolItems, TOOLS, TURN_ITEMS, TURN_SCENARIOS, turnSuite, type FinishedTurn } from '../src/suites/turn/index.ts'
+import { checkTurn, PROJECT_DIRECTORY, READ_FILE, stockAnswers, stockPatch, stockRows, switchRows, textItems, TOOL_CALLS, toolItems, TOOLS, TURN_ITEMS, TURN_SCENARIOS, turnSuite, type FinishedTurn } from '../src/suites/turn/index.ts'
 import { isTurnRequest, replyEvents, SIDE_TEXT, sseFrame, startModelStub, toolResultsOf, turnScript, type ModelStub, type StubExchange } from '../src/suites/turn/model-stub.ts'
 import { authCookie, openFrame, parseDownlink, rpcBody, rpcValue, sessionIdOf, TurnRecorder, within } from '../src/suites/turn/studio-client.ts'
 
@@ -225,13 +225,16 @@ describe('the turn suite', () => {
     expect(PROJECT_DIRECTORY).not.toContain('.delo')
   })
 
-  it('finds the switch rows the bundle inserts and restates them disabled', () => {
+  it('finds the switch rows the bundle inserts and restates the prompt rows with their switch off', () => {
     const bundle = readFileSync(new URL('../../../packages/bundle-local/cordis.patch.yml', import.meta.url), 'utf8')
     const rows = switchRows(bundle)
     const inserted = [...bundle.matchAll(/^ {4}- id: (\S+)\n {6}name: .*\n {6}config:\n {8}enabled: true$/gmu)].map(match => match[1])
     expect(rows).toEqual(inserted)
     expect(rows).toEqual(expect.arrayContaining(['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent', 'delo-fetch-guard', 'delo-update-gate']))
-    expect(stockPatch(rows.slice(0, 1))).toBe('- id: delo-instruction-consent\n  disabled: true\n')
+    expect(stockPatch(rows.slice(0, 1))).toBe('- id: delo-instruction-consent\n  config:\n    enabled: false\n')
+    expect(stockRows(rows)).toEqual(['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent'])
+    expect(() => stockRows(['delo-instruction-consent'])).toThrow('delo-mcp-consent')
+    expect(JSON.parse(stockAnswers('{"version":1,"prompts":"safer","background":true}'))).toEqual({ version: 1, prompts: 'stock', background: true })
     expect(switchRows('- insert:\n    - id: a\n      config:\n        enabled: true\n        enabled: true\n- id: b\n  config:\n    enabled: true\n')).toEqual(['a'])
     expect(() => stockPatch([])).toThrow('no switch row')
   })

@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
+import { apply as connectionApply } from '@deepseek-ai/dsh-client-connection/client'
 import { bindSnapshotSelector, makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { COMMON_NS, LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
@@ -218,6 +219,7 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', locale)
+      ctx.provide('sessions', {})
       const describeSettings = vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } }))
       new TestRemote(ctx, { settings: { describe: describeSettings } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
@@ -227,6 +229,7 @@ describe('the plugin', () => {
       // The sidebar's brand holes are declared at the root, where the Delo occupants wait for them.
       slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.general.item': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
+      await ctx.plugin({ inject: [], apply: connectionApply }).await()
       await ctx.plugin({ inject, apply }).await()
       const [section] = slots.entries('settings.section')
       const about = slots.entries('settings.section').find(entry => entry.options.id === ABOUT_SECTION_ID)
@@ -288,12 +291,14 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', new LocaleRuntime(ctx))
+      ctx.provide('sessions', {})
       new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
       slots.register({ name: 'root', children: { 'settings.general.item': { kind: 'list', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.general.item', {})}</>)
+      await ctx.plugin({ inject: [], apply: connectionApply }).await()
       await ctx.plugin({ inject, apply }).await()
       const rows = slots.entries('settings.general.item')
       const row = rows.find(entry => entry.options.id === VERSION_ROW.id)
