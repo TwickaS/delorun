@@ -7,7 +7,7 @@ kind: "package-bundle"
 
 ## Summary
 
-`@delo/bundle-studio` is the bundle that mounts Delo's studio additions in every Delo CLI profile: the theme, the settings layout, chat states, the sidebar and onboarding. It holds no code; its [`cordis.patch.yml`](cordis.patch.yml) inserts one row per plugin and turns on [C16](../../docs/contracts/c16-parity-composition.md) switch `studio_additions` on the theme row. One switch in Settings turns all of them off and leaves upstream's studio, the stock look.
+`@delo/bundle-studio` is the bundle that mounts Delo's studio additions in every Delo CLI profile: the theme, the settings layout, chat states, the sidebar and onboarding, and the optional cost meter, whose row stays disabled until the person turns it on. It holds no code; its [`cordis.patch.yml`](cordis.patch.yml) inserts one row per plugin and turns on [C16](../../docs/contracts/c16-parity-composition.md) switch `studio_additions` on the theme row. One switch in Settings turns all of them off and leaves upstream's studio, the stock look.
 
 ## Contents
 
@@ -32,6 +32,7 @@ kind: "package-bundle"
 | `delo-chat-states` | [`@delo/plugin-chat-states`](../plugin-chat-states/README.md) | Snooze and settle chats, with their shelves |
 | `delo-sidebar` | [`@delo/plugin-sidebar`](../plugin-sidebar/README.md) | The chat list as cards, workspace icons and header art |
 | `delo-onboarding` | [`@delo/plugin-onboarding`](../plugin-onboarding/README.md) | The first-run flow that ends in a new chat |
+| `delo-cost-meter` | [`@delo/plugin-cost-meter`](../plugin-cost-meter/README.md) | The estimated chat cost under the composer; inserted with `disabled: true`, so it mounts only after the person turns it on in Settings → Plugins |
 
 ## The stock look
 
