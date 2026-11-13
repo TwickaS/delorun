@@ -50,6 +50,9 @@ export async function storeCredential(home: string, name: string, value: string)
   })
 }
 
+/** Upstream's `!!js` tag, kept as a tagged string so a rewritten patch writes every expression back unchanged. */
+export const JS_TAG = { tag: 'tag:yaml.org,2002:js', resolve: (source: string) => source }
+
 /** One scalar value of a patch row's config. */
 export type PatchValue = boolean | number | string
 
@@ -73,14 +76,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * @param path - the profile's `cordis.patch.yml`.
  * @param command - the command that starts a refusal's message.
  * @param after - the words that end a refusal's message.
+ * @param readOnly - whether the rows are only read: `!!js` expressions then resolve to their source text without a
+ *   warning. A caller that writes the rows back passes `false`, because the written rows would hold the expressions as
+ *   plain strings, which the parser's warning reports.
  * @returns the rows.
  * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list.
  */
-function readPatchList(path: string, command: string, after: string): unknown[] {
+function readPatchList(path: string, command: string, after: string, readOnly = false): unknown[] {
   const text = existsSync(path) ? readFileSync(path, 'utf8') : ''
   let list: unknown
   try {
-    list = parse(text) ?? []
+    list = parse(text, { customTags: readOnly ? [JS_TAG] : [] }) ?? []
   } catch {
     // parse rejects a document whose text is not YAML or uses a tag delorun does not read.
     throw new CliError(EXIT.failed, `${command}: ${path} is not a YAML patch list delorun can read${after}`)
@@ -98,7 +104,7 @@ function readPatchList(path: string, command: string, after: string): unknown[] 
  * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list.
  */
 export function readPatchRow(path: string, id: string, command: string): Readonly<Record<string, unknown>> | undefined {
-  const row = readPatchList(path, command, '').find(entry => isRecord(entry) && entry['id'] === id)
+  const row = readPatchList(path, command, '', true).find(entry => isRecord(entry) && entry['id'] === id)
   return isRecord(row) && isRecord(row['config']) ? row['config'] : undefined
 }
 

@@ -193,6 +193,7 @@ describe('resolveStudioPort', () => {
     expect(resolveStudioPort(4100, 4200, 'default')).toEqual({ port: 4100, source: 'option', profile: 'default' })
     expect(resolveStudioPort(undefined, 4200, 'work')).toEqual({ port: 4200, source: 'profile', profile: 'work' })
     expect(resolveStudioPort(undefined, undefined, 'default')).toEqual({ port: STUDIO_DEFAULT_PORT, source: 'default', profile: 'default' })
+    expect(resolveStudioPort(undefined, 0, 'work')).toEqual({ port: 0, source: 'ephemeral', profile: 'work' })
     expect(STUDIO_DEFAULT_PORT).toBe(3080)
   })
 })

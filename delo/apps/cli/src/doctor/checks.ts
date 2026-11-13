@@ -193,12 +193,15 @@ export function checkKey(key: string | undefined, subject: KeySubject = DEEPSEEK
   return outcome('key', 'pass', `the ${subject.label} API key is set and has the expected format (${note}).`)
 }
 
-/** Where the checked port came from: `--port`, the profile's studio row, or upstream's default because the profile sets none. */
-export type PortSource = 'option' | 'profile' | 'default'
+/**
+ * Where the checked port came from: `--port`, the profile's studio row, upstream's default because the profile sets
+ * none, or the profile's port 0, which asks the system for a free port at each start.
+ */
+export type PortSource = 'option' | 'profile' | 'default' | 'ephemeral'
 
 /** The port the port check looks at. */
 export interface StudioPort {
-  /** The TCP port, from 1 to 65535. */
+  /** The TCP port, from 1 to 65535, or 0 when `source` is `ephemeral`. */
   readonly port: number
   /** Where it came from. */
   readonly source: PortSource
@@ -210,13 +213,14 @@ export interface StudioPort {
  * Choose the port to check: the `--port` value when given, otherwise the port the profile's studio row sets, otherwise
  * {@link STUDIO_DEFAULT_PORT}, the port upstream's web server row binds when no row sets one.
  * @param option - the `--port` value, if given.
- * @param configured - the port the profile's studio row sets, or `undefined` when it sets none; the caller need not read it when `option` is given.
+ * @param configured - the port the profile's studio row sets, 0 for a port the system chooses at each start, or `undefined` when it sets none; the caller need not read it when `option` is given.
  * @param profile - the CLI profile.
  * @returns the port and where it came from.
  */
 export function resolveStudioPort(option: number | undefined, configured: number | undefined, profile: string): StudioPort {
   if (option !== undefined) return { port: option, source: 'option', profile }
-  return configured === undefined ? { port: STUDIO_DEFAULT_PORT, source: 'default', profile } : { port: configured, source: 'profile', profile }
+  if (configured === undefined) return { port: STUDIO_DEFAULT_PORT, source: 'default', profile }
+  return { port: configured, source: configured === 0 ? 'ephemeral' : 'profile', profile }
 }
 
 /**
@@ -232,6 +236,8 @@ function portWords(choice: StudioPort): string {
       return `${port}, the studio port of the profile ${choice.profile},`
     case 'default':
       return `${port}, the studio's default port, which the profile ${choice.profile} does not change,`
+    case 'ephemeral':
+      return `the studio port of the profile ${choice.profile} is 0`
     default:
       return assertNever(choice.source)
   }
@@ -244,10 +250,11 @@ function portWords(choice: StudioPort): string {
  * on that port, the port is Delo's and the check passes.
  * @param choice - the port, where it came from and the profile.
  * @param ownStudioPort - the port of the studio this home's running home process for the profile serves, or `undefined` when none runs or it does not answer.
- * @returns the check's result: `fail` when another process holds the port or it cannot be bound, with its error code.
+ * @returns the check's result: `fail` when another process holds the port or it cannot be bound, with its error code; a port 0 passes without binding anything, because the system picks the port at start.
  */
 export function checkPort(choice: StudioPort, ownStudioPort: () => Promise<number | undefined>): Promise<CheckResult> {
   const words = portWords(choice)
+  if (choice.source === 'ephemeral') return Promise.resolve(outcome('port', 'pass', `${words}, so each start takes a free port the system chooses; \`delorun status\` shows the address.`))
   return new Promise<CheckResult | 'in-use'>((resolve) => {
     const server = createServer()
     server.once('error', (error: Error) => {
