@@ -55,6 +55,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   TrashOperationError: PLUGIN,
   OwnerNotesError: PLUGIN,
   MainChatToolError: PLUGIN,
+  CostMeterConfigError: 'raised while the cost meter loads its price table: the row does not start, and delorun reports it as an inactive Delo row',
   AcceptanceStoreError: PLUGIN,
   SupersededStoreError: PLUGIN,
   BuildRootBusyError: 'raised by the release tooling\'s closure build, which no runtime carries',

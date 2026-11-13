@@ -35,6 +35,7 @@ import { appendFileSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { prepareHome } from '@delo/cli/src/command.js'
+import { OPT_IN_ROWS } from '@delo/cli/src/delo-bundles.js'
 import { CliError } from '@delo/cli/src/exit.js'
 import { profileDirectory } from '@delo/cli/src/profile.js'
 import { startForeground, upstreamDependencies } from '@delo/cli/src/start.js'
@@ -65,7 +66,7 @@ try {
     },
   })
   rows = booted.rows()
-  process.stdout.write(JSON.stringify({ outcome: 'started', rows }) + '\\n')
+  process.stdout.write(JSON.stringify({ outcome: 'started', rows, optIn: [...OPT_IN_ROWS] }) + '\\n')
   await booted.shutdown(0)
   process.exit(0)
 } catch (error) {
@@ -86,7 +87,7 @@ function packageJsonFiles(directory: string): string[] {
 }
 
 describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout: 600_000 }, () => {
-  it('sets up a new home without linking, starts the CLI profile with every Delo row active, and presents the closure\'s title', (test) => {
+  it('sets up a new home without linking, starts the CLI profile with every Delo row active except the opt-in ones, and presents the closure\'s title', (test) => {
     const root = scratch(test, 'delo-closure-boot-')
     const extracted = join(root, 'closure')
     mkdirSync(extracted)
@@ -108,13 +109,14 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
     const driver = join(extracted, 'app/delo-boot-driver.mjs')
     writeFileSync(driver, START_DRIVER)
     const start = spawnSync(node, [driver], { cwd: root, env, encoding: 'utf8', timeout: 120_000 })
-    const report = JSON.parse(start.stdout.trim().split('\n').at(-1) ?? '{}') as { outcome?: string, message?: string, rows?: Array<{ id: string, name: string, state: string }> }
+    const report = JSON.parse(start.stdout.trim().split('\n').at(-1) ?? '{}') as { outcome?: string, message?: string, rows?: Array<{ id: string, name: string, state: string, disabled?: boolean }>, optIn?: string[] }
     expect(report.message).toBeUndefined()
     expect(report.outcome).toBe('started')
     expect(start.status, `signal ${String(start.signal)}: ${start.stderr}`).toBe(0)
     const delo = (report.rows ?? []).filter(row => row.name.startsWith('@delo/'))
     expect(delo.map(row => row.id)).toContain('delo-privacy')
-    expect(delo.filter(row => row.state !== 'active')).toEqual([])
+    // An opt-in row (the CLI's OPT_IN_ROWS) is inserted disabled; every other Delo row is active.
+    expect(delo.filter(row => row.state !== 'active' && !(row.disabled === true && report.optIn?.includes(row.id) === true))).toEqual([])
 
     // A closure built from existing artifacts carries the title the worktree's own artifact build used.
     if (EXISTING_ARTIFACTS) return

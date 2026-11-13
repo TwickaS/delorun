@@ -1,10 +1,20 @@
-/* Sidebar brand name: the product name as text, at the size of the sidebar's own brand row. */
+/* Sidebar brand: the hex jack mark and the product name, in the brand row's text colour, as upstream's brand row sets it. */
 
+.mark {
+  display: block;
+  flex: none;
+  color: inherit;
+}
+
+.plug {
+  fill: var(--dsw-alias-brand-primary);
+}
+
+/* The name at the studio's 16px size and the brand row's own weight, set slightly tight beside the mark. */
 .name {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: var(--dsw-font-base-16-font-size);
   line-height: 24px;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   color: inherit;
 }

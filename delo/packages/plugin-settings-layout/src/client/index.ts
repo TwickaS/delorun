@@ -2,8 +2,9 @@
  * Browser half of Delo's Settings layout: registers the layout with
  * upstream's Settings shell, sizes the panel and adds the Tool settings
  * section, which opens each tool's page in Plugins. It loads only while the
- * Delo look is on (the `deloStudio` service exists); disposing it restores
- * upstream's flat list and its panel size.
+ * Delo look is on (the `deloStudio` service exists) and upstream's general
+ * Settings provides `settingsLayout`; disposing it restores upstream's flat
+ * list and its panel size.
  * @module @delo/plugin-settings-layout/client
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -38,9 +39,11 @@ export const PLUGIN_ID = '@delo/plugin-settings-layout'
 
 /**
  * Services every registration needs. `deloStudio`, which `@delo/plugin-theme` provides only while the Delo look is on,
- * is injected inside {@link apply} instead, so the entry stays active under the stock look and registers nothing there.
+ * and `settingsLayout`, which upstream's general Settings provides, are injected inside {@link apply} instead, so the
+ * entry stays active under the stock look and where a plugin turns upstream's general Settings off, and registers
+ * nothing there.
  */
-export const inject = ['locale', 'settingsLayout', 'slots']
+export const inject = ['locale', 'slots']
 
 const NS = 'settings.deloLayout'
 
@@ -53,16 +56,17 @@ const NS = 'settings.deloLayout'
 export const PANEL_STYLE = ':root{--dsh-settings-panel-width:1080px;--dsh-settings-panel-height:88vh;--dsh-settings-nav-width:min(220px,40vw)}'
 
 /**
- * While the Delo look provides `deloStudio`, register the layout, the panel size and the Tool settings section.
+ * While the Delo look provides `deloStudio` and upstream's Settings shell provides `settingsLayout`, register the
+ * layout, the panel size and the Tool settings section.
  * @param ctx - the client context.
  */
 export function apply(ctx: Context): void {
-  ctx.inject(['deloStudio'], applyStudio)
+  ctx.inject(['deloStudio', 'settingsLayout'], applyStudio)
 }
 
 /**
- * Everything the plugin registers while the Delo look is on; disposed with the `deloStudio` service.
- * @param ctx - the browser plugin context, holding `deloStudio`.
+ * Everything the plugin registers while both services exist; disposed with either.
+ * @param ctx - the browser plugin context, holding `deloStudio` and `settingsLayout`.
  */
 export function applyStudio(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delo-settings-layout: dictionaries')

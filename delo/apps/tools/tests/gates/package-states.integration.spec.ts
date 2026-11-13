@@ -82,7 +82,7 @@ describe('gates:package-states workspace', () => {
         peerDependencies: { '@delo/b': '1' },
         optionalDependencies: { '@delo/c': '1' },
       }),
-      'delo/packages/a/package.json': manifest('@delo/a', { state: 'experimental', unreached: 'lane' }),
+      'delo/packages/a/package.json': manifest('@delo/a', { state: 'experimental', unreached: 'lane', connections: ['agent:codex'] }),
       'delo/packages/b/package.json': manifest('@delo/b', { state: 'shipped', extra: 1 }),
       'delo/packages/c/package.json': manifest('@delo/c', undefined),
       'delo/packages/spike/notes.md': 'x',

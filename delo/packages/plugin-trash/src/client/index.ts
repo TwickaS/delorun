@@ -13,11 +13,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: the ctx.contextMenus Context merge and the 'contextMenu.icon' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
-// Type-only: the 'settings.section' SlotMap entry.
+// Type-only: the 'settings.section' and 'settings.section.icon' SlotMap entries.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the ctx.uiWorkspace Context merge and the 'workspace' context-menu target.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { IconTrashOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconTrashOutlineMedium, IconTrashOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { localDrafts, TrashController } from './controller.ts'
 import { TrashLeave } from './leave.ts'
@@ -128,4 +128,6 @@ export function apply(ctx: Context): void {
     name: 'settings.section', id: TRASH_SECTION_ID, order: TRASH_SECTION_ORDER, label: () => t('nav'), locale: NS,
     inject: () => section,
   }, TrashSection))
+  // The navigation glyph for the section's row; without it Settings draws the generic gear for this id.
+  ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: TRASH_SECTION_ID }, IconTrashOutlineMedium))
 }

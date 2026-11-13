@@ -45,7 +45,7 @@ root 作用域的 `sidebar.panellist.actions` list 有注册项时，导航区�
 
 发行版可通过 `ctx.sidebarLayout.setPanelPlacement('footer')` 把面板列表移入侧边栏底部：此时面板为图标按钮，标签以 tooltip 显示，位于 `sidebar.settings` 行的末尾；收起的 rail 上则是其上方的一列。最近一次调用生效，直到其 disposer 运行；未调用时面板列表位于 New Session 之下。`ctx.sidebarLayout.setLeadPanel(panelId)` 让该面板的行位于侧边栏顶部，处于品牌行与 New Session 之间，且不再出现在面板列表中，直到其 disposer 运行；与 placement 一样，最近一次调用生效。第二个参数是布尔值的 observable，为 true 时该行同时标记为当前项，适用于把主视图交给其代表的 Session 的面板。
 
-`ctx.sidebarLayout.setNewSessionButton(false)` 为自带 New chat 列表的发行版隐藏展开侧边栏中的 New Session 按钮；收起的 rail 仍保留该按钮，最近一次调用生效，直到其 disposer 运行。`ctx.sidebarLayout.setFootRow(true)` 把展开侧边栏的底部排成一行：依次为 `sidebar.settings` 区域、位于底部时的面板列表，然后 `sidebar.footer.action` 条目占满其余空间，每个条目都带有 `inline: true`，以便紧凑绘制；否则底部操作堆叠在设置行上方。最近一次调用生效，直到其 disposer 运行。展开的侧边栏还会在品牌行之下的 80px 盒子中绘制单个 `sidebar.backdrop` slot；占用该 slot 时，品牌与切换按钮会变为浅色以便在图片上可读，除非占用方的顶层元素带有 `data-backdrop-plain`（如小徽章）。占用方填满该盒子，不接收指针事件，并与侧边栏渐融为一体。
+`ctx.sidebarLayout.setNewSessionButton(false)` 为自带 New chat 列表的发行版隐藏展开侧边栏中的 New Session 按钮；收起的 rail 仍保留该按钮，最近一次调用生效，直到其 disposer 运行。`ctx.sidebarLayout.setFootRow(true)` 把展开侧边栏的底部排成一行：依次为 `sidebar.settings` 区域、位于底部时的面板列表，然后 `sidebar.footer.action` 条目占满其余空间，每个条目都带有 `inline: true`，以便紧凑绘制；否则底部操作堆叠在设置行上方。最近一次调用生效，直到其 disposer 运行。展开的侧边栏还会在品牌行之下的 80px 盒子中绘制单个 `sidebar.backdrop` slot；条目在其中渲染元素时，品牌与切换按钮会变为浅色以便在图片上可读，除非占用方的某个元素带有 `data-backdrop-plain`（如小徽章）；渲染为空的条目让该盒子保持隐藏。在图片之上，品牌通过 id 为 `dsh-sidebar-backdrop-ink-brand` 的 SVG 滤镜绘制，切换按钮的图标通过 `dsh-sidebar-backdrop-ink-control` 绘制；占用方可以挂载这两个滤镜，为浅色墨迹描边以便在浅色图片上可读，未挂载时墨迹不描边。占用方填满该盒子，不接收指针事件，并与侧边栏渐融为一体。
 
 ### 折叠行为
 
@@ -54,6 +54,10 @@ root 作用域的 `sidebar.panellist.actions` list 有注册项时，导航区�
 侧栏收起时，顶部展开按钮承载可选、不可交互的 `sidebar.toggle.badge` slot。占用方提供状态和提示内容，不增加操作，也不改变按钮的导航行为。
 
 展开内容跟随框架的列宽及其过渡。实时收起时，内容固定在展开宽度淡出，上方控件共用同一段透明度渐变，并向左平移进入 56px 轨道，由布局的栏滑动结束整段动画。页面初始即为收起状态时会静态渲染轨道；减少动态效果模式会禁用两段过渡。固定在底部的 `sidebar.settings` 控件共用相同的透明度渐变时序，但不发生横向位移。
+
+### 悬停预览
+
+栏收起且设备的主指针支持悬停（`(hover: hover) and (pointer: fine)`）时，在轨道本身的表面上停留——或在平台隐藏轨道的屏幕左边缘停留（macOS 桌面与 Windows 顶栏即如此）——会把展开的侧栏作为临时浮层从框架中抬起。内容相同、宽度为展开列宽（框架的 `--dsh-sidebar-expanded-width`），以侧栏底色、相应分隔线和主题的层级阴影固定在页面上方，因此轨道与页面保持原位，持久化的收起状态不变。停在轨道自身的控件上永远不会打开预览，所以轨道上的每次点击含义不变；预览不写入任何状态。停留时间为 350 ms。指针离开面板后，关闭会等待 250 ms，在此宽限内移回面板则保持打开；随后面板经短暂淡出关闭。按 Escape 或键盘焦点离开面板会立即关闭，但进入面板打开的菜单或对话框除外。粗指针、触摸输入或已打开的手机抽屉没有预览。预览关闭时其展开内容完全不渲染，因此不会有隐藏内容仍可聚焦或被读出；减少动态效果模式会移除宽度过渡和淡入淡出。
 
 在 Windows Electron 中，`html[data-windows-titlebar]` 将两种状态下的侧栏开关固定在顶栏左上角，仅在展开态与新建会话按钮左边缘对齐。展开态品牌位于顶栏下方、新建会话按钮上方，按钮上方额外留出 8px。收起后，品牌和侧栏内容隐藏，新建会话按钮排在侧栏开关与 Desktop 菜单之间。侧栏在收起态将根元素的 `--dsh-windows-menu-start` 设为 84px；Desktop preload 使用它将菜单放在新建会话之后，展开态默认为 48px。顶栏图标按钮采用紧凑控件圆角的 28px 控件，图标为居中 16px，并从窗口拖拽区域中排除。侧栏开关与新建会话的悬停提示在顶栏下方展开，Desktop 菜单文字不会盖住它们；占用 `sidebar.toggle.badge` 的控件自行决定气泡展开方向。
 

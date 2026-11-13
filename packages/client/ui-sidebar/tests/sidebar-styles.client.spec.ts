@@ -93,4 +93,31 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.fallbackBrandName')?.get('font-size')).toBe('17px')
     expect(declarations('.fallbackBrandName')?.get('white-space')).toBe('nowrap')
   })
+
+  it('lifts the hover peek out of the frame at the open column width, matching its surface', () => {
+    const peek = declarations('.root.peeking')
+    // Fixed over the page: the frame keeps the rail's track, so no content moves.
+    expect(peek?.get('position')).toBe('fixed')
+    expect(peek?.get('inset')).toBe('var(--dsh-frame-chrome-top, 0px) auto 0 0')
+    expect(peek?.get('height')).toBe('auto')
+    // The open column's own width, published by the frame's track solve; the
+    // drawer's viewport margin keeps it inside a narrow window.
+    expect(peek?.get('width')).toBe('var(--dsh-sidebar-expanded-width, 280px)')
+    expect(peek?.get('max-width')).toBe('calc(100vw - 48px)')
+    // The surface the expanded sidebar has, since it no longer sits inside the
+    // frame's column that drew them.
+    expect(peek?.get('background')).toBe('var(--dsw-specific-sidebar-fill)')
+    // The shadow's hairline is the divider; a neutral border beside it would draw the edge twice.
+    expect(peek?.get('border-right')).toBeUndefined()
+    expect(peek?.get('box-shadow')).toBe('var(--dsw-shadow-lv2)')
+    expect(peek?.get('z-index')).toBe('90')
+    expect(peek?.get('transition')).toBe('width 140ms ease-out')
+    expect(peek?.get('animation')).toBe('peek-in 140ms ease-out')
+    expect(declarations('.root.peekClosing')?.get('animation')).toBe('peek-out 140ms ease-out forwards')
+    expect(declarations('.root.peekClosing')?.get('pointer-events')).toBe('none')
+    expect(css).toMatch(/@keyframes peek-in\s*\{\s*from\s*\{\s*opacity: 0;\s*}\s*}/)
+    expect(css).toMatch(/@keyframes peek-out\s*\{\s*to\s*\{\s*opacity: 0;\s*}\s*}/)
+    // Reduced motion removes both the width transition and the fades.
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?transition: none;\n    animation: none;/)
+  })
 })

@@ -21,7 +21,8 @@
  *   the bundle that declares it (upstream's `@deepseek-ai/dsh-base` for `sandbox`, a Delo bundle for a Delo row), and
  *   runs the plugin that bundle names; no other bundle, the profile's patch, the home's patch or an overlay inserts the
  *   id again, which would replace the row;
- * - each required row is enabled and active; safe mode's overlay never exempts one;
+ * - each required row is enabled and active, except that an opt-in row ({@link OPT_IN_ROWS}) may be disabled; safe
+ *   mode's overlay never exempts one;
  * - the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, its
  *   `escapeSocketDirectories` hold every directory the start names, its `privateTmp` is on, and it sets no
  *   `runnerCommand` or `runnerFailureSignatures`;
@@ -50,7 +51,7 @@ import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delo/contract-setup-answers'
 import type { CommandOutput } from './command.ts'
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
-import { deloRowIds, isDeloPackage, refuseSkippedDeloBundles, type BootedRow } from './delo-bundles.ts'
+import { deloRowIds, isDeloPackage, OPT_IN_ROWS, refuseSkippedDeloBundles, type BootedRow } from './delo-bundles.ts'
 import { CliError, EXIT } from './exit.ts'
 import { composedRow, isRecord, patchLayers, rowInserts, rowPatches, sourcesSetting, type PatchLayer } from './patch-layers.ts'
 import { deloPackagesRoot } from './package-manager.ts'
@@ -450,6 +451,7 @@ function violationsOf(composed: ComposedStart, rows: readonly BootedRow[]): Viol
       violations.push({ subject: id, problem: `runs the plugin ${JSON.stringify(row.name)}, not ${required.name}`, sources: sourcesSetting(composed.layers, id, patch => patch.name !== undefined && patch.name !== required.name) })
     }
     if (row.disabled) {
+      if (OPT_IN_ROWS.has(id)) continue
       violations.push({ subject: id, problem: 'is disabled', sources: sourcesSetting(composed.layers, id, patch => patch.disabled !== undefined && patch.disabled !== false) })
       continue
     }

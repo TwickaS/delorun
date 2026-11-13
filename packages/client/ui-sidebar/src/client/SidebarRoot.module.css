@@ -41,17 +41,27 @@
   pointer-events: none;
 }
 
-.backdrop:empty {
+/* The slot outlet always renders its `[data-slot]` anchor, and a crashed occupant leaves a `[data-slot-error]` face, so the box counts as empty while it holds nothing else. */
+.backdrop:not(:has(:not([data-slot], [data-slot-error]))) {
   display: none;
 }
 
-/* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. `:has()` may not nest inside `:has()`, so the plain-art test sits beside the first `:has()`, not inside it. */
-.root:has(> .backdrop:not(:empty)):not(:has(> .backdrop > [data-backdrop-plain])) .logoRow,
-.root:has(> .backdrop:not(:empty)):not(:has(> .backdrop > [data-backdrop-plain])) .topStrip {
+/* On the art the brand and the toggle read light, as on a photograph; art that marks itself `data-backdrop-plain`, such as a small badge, leaves them as they are. Both tests look through the slot's anchor, and `:has()` may not nest inside `:has()`, so the plain-art test sits beside the first `:has()`, not inside it. */
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .logoRow,
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .topStrip {
   color: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-primary: var(--dsw-static-neutral-bluish-00);
-  --dsw-alias-label-secondary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 82%, transparent);
+  --dsw-alias-label-secondary: var(--dsw-static-neutral-bluish-00);
   --dsw-alias-label-tertiary: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 72%, transparent);
+}
+
+/* Under the same test, the brand and the toggle's icon draw through the SVG filters the art supplies by these ids, which edge the light ink in a dark tone so it reads on light art. Art that supplies no such filter leaves the ink unedged, since browsers ignore a filter reference to a missing element. */
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .brandIdentity {
+  filter: url('#dsh-sidebar-backdrop-ink-brand');
+}
+
+.root:has(> .backdrop :not([data-slot], [data-slot-error])):not(:has(> .backdrop [data-backdrop-plain])) .toggle svg {
+  filter: url('#dsh-sidebar-backdrop-ink-control');
 }
 
 /* macOS desktop: the AppFrame column owns the translucent sidebar tint; an
@@ -65,6 +75,44 @@
    the whale's box (24px to the 24-wide whale glyph itself). */
 .root.collapsed {
   padding: 18px 10px 6px;
+}
+
+/* Hover peek: with the column collapsed, dwelling on the rail's own surface
+   lifts the expanded shell out of the frame as an overlay — the same content
+   at the open column's width (the frame publishes --dsh-sidebar-expanded-width
+   from its own solve), over the rail and the page. Fixed, so the frame's grid
+   track keeps the rail's width and no page content moves. The fill and shadow, whose
+   hairline is the divider, replace the column's own: on macOS the column is a translucent
+   vibrancy tint that cannot sit over content, so the overlay paints the
+   sidebar fill itself. */
+.root.peeking {
+  position: fixed;
+  inset: var(--dsh-frame-chrome-top, 0px) auto 0 0;
+  height: auto;
+  width: var(--dsh-sidebar-expanded-width, 280px);
+  max-width: calc(100vw - 48px);
+  z-index: 90;
+  background: var(--dsw-specific-sidebar-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  transition: width 140ms ease-out;
+  animation: peek-in 140ms ease-out;
+}
+
+/* Closing: fade first, then the shell unmounts the expanded content
+   (PEEK_SETTLE_MS in SidebarRoot.tsx). The panel stops taking the pointer at
+   once, so a click on the page beside it is never intercepted by the fade. */
+.root.peekClosing {
+  opacity: 0;
+  pointer-events: none;
+  animation: peek-out 140ms ease-out forwards;
+}
+
+@keyframes peek-in {
+  from { opacity: 0; }
+}
+
+@keyframes peek-out {
+  to { opacity: 0; }
 }
 
 /* The brand stays in the sidebar; fixed caption controls survive zero-width collapse. */
@@ -712,7 +760,9 @@
   .railIn .newSession,
   .railIn .panelList,
   .railIn .footArea,
-  .railIn .regionArea {
+  .railIn .regionArea,
+  .root.peeking,
+  .root.peekClosing {
     transition: none;
     animation: none;
   }

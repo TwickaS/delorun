@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   apply, Config, DEFAULT_SETTINGS, inject, MAX_ANSWERS_BYTES, name, NO_RECORD, ONBOARDING_ROW_ID, readSetupRecord, RECOMMENDED_LIMIT,
-  SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
+  KEY_TEST_PATH, READINESS_PATH, Readiness, RECOMMEND_PATH, SETUP_ANSWERS_FILENAME, SETUP_RECORD_PATH, SetupRecord, type OnboardingSettings,
 } from '../src/index.ts'
 import { PENDING_STARTERS, THEME_ROW_ID } from '../src/config.ts'
 import { THEME_ROW_ID as THEME_ROW } from '../../plugin-theme/src/config.ts'
@@ -28,13 +28,13 @@ const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
   const config = Config(value)
-  return { done: config.done.get(), step: config.step.get(), starterSession: config.starterSession.get(), plugins: [...config.plugins.get()] }
+  return { done: config.done.get(), step: config.step.get(), starterSession: config.starterSession.get(), starterKind: config.starterKind.get(), plugins: [...config.plugins.get()] }
 }
 
 describe('the configuration', () => {
   it('names the row, defaults to a profile that has not started and offers no packages', () => {
     expect(ONBOARDING_ROW_ID).toBe('delo-onboarding')
-    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', starterSession: '', plugins: [] })
+    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', starterSession: '', starterKind: '', plugins: [] })
     expect(plain(undefined)).toEqual(DEFAULT_SETTINGS)
   })
 
@@ -51,6 +51,9 @@ describe('the configuration', () => {
     ['a step id of a path', { step: '../look' }],
     ['a session id with a space', { starterSession: 'a b' }],
     ['a session id over 200 characters', { starterSession: 'a'.repeat(201) }],
+    ['a folder kind onboarding does not read', { starterKind: 'binary' }],
+    ['a registry that is not https', { registry: 'http://registry.example' }],
+    ['a timeout of zero', { keyTestTimeoutMs: 0 }],
     ['a package name with a capital', { plugins: ['Bad'] }],
     ['a package that is a path', { plugins: ['../x'] }],
     ['a package that is a URL', { plugins: ['https://example.test/p.tgz'] }],
@@ -61,8 +64,8 @@ describe('the configuration', () => {
 
   it('accepts scoped and plain package names and a session id', () => {
     expect(plain({ starterSession: PENDING_STARTERS }).starterSession).toBe('pending')
-    expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', step: 'thinking.reader', done: true }))
-      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', step: 'thinking.reader', done: true })
+    expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true }))
+      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], starterSession: 'ses_1:a.b-c', starterKind: 'code', step: 'thinking.reader', done: true })
   })
 })
 
@@ -187,7 +190,7 @@ async function mount(directory: string | undefined) {
   ctx.provide('settings', { configure } as never)
   if (directory !== undefined) ctx.provide('profileContext', { dir: directory } as never)
   const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
-  const fiber = ctx.plugin({ name, inject: [...inject], apply })
+  const fiber = ctx.plugin({ name, inject: [...inject], Config, apply })
   await fiber.await()
   onTestFinished(async () => { await ctx.fiber.dispose() })
   const route = routes.get(SETUP_RECORD_PATH)
@@ -196,14 +199,27 @@ async function mount(directory: string | undefined) {
 }
 
 describe('the route', () => {
-  it('is one exact GET route that serves the record uncached', async () => {
+  it('is one exact GET route that serves the record uncached, beside the guide\'s read-only routes', async () => {
     const { routes, route, get } = await mount(await profile(answers({ reach: { option: 'tailscale-private' }, sections: [{ id: 'reach', status: 'answered' }] })))
-    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH])
+    expect([...routes.keys()]).toEqual([SETUP_RECORD_PATH, READINESS_PATH, KEY_TEST_PATH, RECOMMEND_PATH])
     expect(SETUP_RECORD_PATH).toBe('/api/deloOnboarding.setupRecord')
     expect([route.methods, route.requestBody]).toEqual([['GET'], 'buffered'])
     const response = await get()
     expect([response.status, response.headers.get('cache-control'), response.headers.get('content-type')]).toEqual([200, 'no-store', 'application/json'])
     expect(await response.json()).toEqual({ sections: ['reach'], reachSetUp: true })
+  })
+
+  it('answers this computer\'s readiness and, without a model runtime, a key test that lists no provider', async () => {
+    // An empty home and a PATH without tailscale, so the answer does not depend on this computer.
+    const empty = await mkdtemp(join(tmpdir(), 'delo-onboarding-readiness-'))
+    onTestFinished(async () => { vi.unstubAllEnvs(); await rm(empty, { recursive: true, force: true }) })
+    vi.stubEnv('HOME', empty)
+    vi.stubEnv('PATH', empty)
+    vi.stubEnv('CODEX_HOME', '')
+    const { routes } = await mount(undefined)
+    const call = async (path: string, method: string) => (await routes.get(path)?.fetch(new Request('http://harness.test/api', { method })))?.json()
+    expect(Readiness.parse(await call(READINESS_PATH, 'GET'))).toEqual({ agents: { 'claude-code': 'missing', 'codex': 'missing' }, tailscale: { state: 'not-installed' } })
+    expect(await call(KEY_TEST_PATH, 'POST')).toEqual({ providers: [] })
   })
 
   it('serves a record that covers nothing without a profile directory', async () => {

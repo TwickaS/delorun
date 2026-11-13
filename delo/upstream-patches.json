@@ -672,7 +672,7 @@
       "path": "packages/client/ui-layout/src/client/AppFrame.tsx",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Reads the sidebar default width from the layout store, so a width set through ctx.layout.setSidebarWidths applies to the opened sidebar and to the drawer fallback."
+      "reason": "Reads the sidebar default width from the layout store, so a width set through ctx.layout.setSidebarWidths applies to the opened sidebar and to the drawer fallback. The frame hands the sidebar its expanded width so the peek matches the open column."
     },
     {
       "path": "packages/client/ui-layout/src/client/columns.ts",
@@ -834,7 +834,7 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration."
+      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/index.ts",
@@ -906,7 +906,7 @@
       "path": "packages/client/ui-settings/src/client/contract/slots.ts",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Adds the optional items list to the settings section owner props, so a grouped General card shows only the rows a layout names."
+      "reason": "Adds the optional items list to the settings section owner props, so a grouped General card shows only the rows a layout names. The `settings.onboarding` step props gain `renderSection` and `completeStep` for the guided first run."
     },
     {
       "path": "packages/client/ui-settings/src/client/index.ts",
@@ -930,13 +930,13 @@
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot."
+      "reason": "Styles the backdrop box, the lead panel row, the foot row and the panels placed in the foot. The peek sits fixed at the frame expanded width over the rail, with a short fade that prefers-reduced-motion turns off. The peek draws its edge with the level-two shadow only, without a separate border."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.tsx",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot and the backdrop slot."
+      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot and the backdrop slot. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/contract/slots.ts",

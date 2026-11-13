@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse, stringify } from 'yaml'
 import { prepareHome, type CommandContext } from '../src/command.ts'
 import { assertComposedInvariants, assertDeloInvariants, composeDeloProfile, composedRows, NO_APPROVED_CONTENT, ROW_SERVICES, TURN_GATE_SERVICE, type BootedHost, type ComposedStart, type ComposeKind, type ServiceProvider } from '../src/compose.ts'
-import type { BootedRow } from '../src/delo-bundles.ts'
+import { OPT_IN_ROWS, type BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import { composedRow, isRecord } from '../src/patch-layers.ts'
@@ -302,6 +302,16 @@ describe('safe mode', { timeout: 60_000 }, () => {
     const composed = await compose()
     expect(composed.safe).toBeDefined()
     expect(await refused(() => { assertDeloInvariants(composed, booted(composed, [{ id: 'delo-trash', name: '@delo/plugin-trash', disabled: true, state: 'active' }])) })).toContain('delo-trash is disabled')
+  })
+
+  it('lets an opt-in Delo row stay disabled, and still refuses a disabled row that is not opt-in', async () => {
+    const composed = await compose()
+    const optIn = [...OPT_IN_ROWS]
+    expect(optIn.length).toBeGreaterThan(0)
+    for (const id of optIn) expect(composed.required.map(row => row.id)).toContain(id)
+    const rowOf = (id: string): BootedRow => ({ id, name: composed.required.find(row => row.id === id)?.name ?? '', disabled: true, state: 'active' })
+    expect(() => { assertDeloInvariants(composed, booted(composed, optIn.map(rowOf))) }).not.toThrow()
+    expect(await refused(() => { assertDeloInvariants(composed, booted(composed, [rowOf('delo-trash')])) })).toContain('delo-trash is disabled')
   })
 
   it('composes the safe-mode overlay before the sandbox overlay', async () => {

@@ -9,7 +9,7 @@ import { useId, type CSSProperties } from 'react'
 import './art-palettes.css'
 import css from './StageArt.module.css'
 import { GENERATIVE_SCENES, GenerativeArt } from './GenerativeArt.tsx'
-import type { ArtStrength } from '../config.ts'
+import type { ArtFade, ArtStrength } from '../config.ts'
 
 const STAGE_BACKDROP_VIEW_BOX = '0 0 8192 96'
 
@@ -353,22 +353,67 @@ export const STAGE_SCENES = ['night', 'blueprint', ...GENERATIVE_SCENES] as cons
 /** One scene. */
 export type StageScene = typeof STAGE_SCENES[number]
 
-/**
- * The theme token the title's plate is filled with: a dark static grey, the same in both colour schemes, which the
- * theme's palettes recolour. The sidebar sets its title and toggle in `--dsw-static-neutral-bluish-00` over any art, and
- * that white reads on this grey at more than 4.5:1 in every palette.
- */
-export const TITLE_SCRIM_TOKEN = '--dsw-static-neutral-bluish-850'
-
-/** The fill of the title's plate, for the plate and for a tile that previews the title on the art. */
-export const TITLE_SCRIM_STYLE: CSSProperties = { background: `var(${TITLE_SCRIM_TOKEN})` }
+/** The static token the brand row's edge is drawn in: a near-black that stays dark in both colour schemes. */
+export const INK_EDGE_TOKEN = '--dsw-static-neutral-bluish-1000'
 
 /**
- * The plate under the sidebar's title and toggle, so they never sit directly on the art.
- * @returns the plate, hidden from assistive technology.
+ * The edge's opacity, in percent, around each part of upstream's brand row over the art: `brand` around the title and
+ * its mark, `control` around the toggle's icon. The filter fills the ink's grown shape, so the edge takes the share of
+ * the ink's own opacity; the toggle's ink is the title's opaque white, so each edge takes its own share whole. Upstream's
+ * sidebar draws the row in that white over art, and the filter draws the ink over its own edge; against that edge composited over every colour any
+ * scene draws in, in every art palette, strength, theme palette and colour scheme, and over the sidebar's fill the art
+ * fades into, the title reads at 4.5:1 or more and the toggle at 3:1 or more. Each share sits within four points of the
+ * smallest that does, so the edge stays as light as legibility allows; `title-contrast.client.spec.tsx` checks both.
  */
-export function TitleScrim() {
-  return <div className={css.scrim} data-title-scrim="" style={TITLE_SCRIM_STYLE} aria-hidden="true" />
+export const INK_EDGE_OPACITY = { brand: 60, control: 45 } as const
+
+/** One part of the brand row the edge is drawn around. */
+export type InkEdgePart = keyof typeof INK_EDGE_OPACITY
+
+/** The parts in a fixed order. */
+const INK_EDGE_PARTS = Object.keys(INK_EDGE_OPACITY) as readonly InkEdgePart[]
+
+/**
+ * The ids by which upstream's sidebar draws the brand (`brand`) and the toggle's icon (`control`) through the edge's
+ * filters while art lies behind them.
+ */
+export const INK_EDGE_IDS = { brand: 'dsh-sidebar-backdrop-ink-brand', control: 'dsh-sidebar-backdrop-ink-control' } as const satisfies Record<InkEdgePart, string>
+
+/** How far the edge reaches beyond the ink, in CSS pixels. */
+export const INK_EDGE_RADIUS = 1
+
+/** The soft shade under the edge, which smooths it into the art: its blur's standard deviation in CSS pixels and its opacity in percent. It adds contrast and the contrast check does not count it. */
+export const INK_EDGE_SHADE = { blur: 1.5, opacity: 24 } as const
+
+const flood = (opacity: number): CSSProperties => ({ floodColor: `var(${INK_EDGE_TOKEN})`, floodOpacity: opacity / 100 })
+
+/**
+ * The edge's SVG filters, one per part under the id given for it: the ink's shape grown by `INK_EDGE_RADIUS` and filled
+ * in `INK_EDGE_TOKEN` at the part's `INK_EDGE_OPACITY`, over a soft shade, with the ink itself on top. The art mounts
+ * them under `INK_EDGE_IDS`; a preview mounts them under ids of its own.
+ * @param props - the filter id for each part.
+ * @returns a zero-size SVG holding the filters, hidden from assistive technology.
+ */
+export function InkEdgeFilters({ ids }: { readonly ids: Readonly<Record<InkEdgePart, string>> }) {
+  return (
+    <svg className={css.inkEdge} width="0" height="0" aria-hidden="true" focusable="false" data-ink-edge="">
+      {INK_EDGE_PARTS.map(part => (
+        <filter key={part} id={ids[part]} x="-25%" y="-25%" width="150%" height="150%" colorInterpolationFilters="sRGB">
+          <feMorphology in="SourceAlpha" operator="dilate" radius={INK_EDGE_RADIUS} result="grown" />
+          <feGaussianBlur in="grown" stdDeviation={INK_EDGE_SHADE.blur} result="soft" />
+          <feFlood style={flood(INK_EDGE_SHADE.opacity)} />
+          <feComposite in2="soft" operator="in" result="shade" />
+          <feFlood style={flood(INK_EDGE_OPACITY[part])} />
+          <feComposite in2="grown" operator="in" result="edge" />
+          <feMerge>
+            <feMergeNode in="shade" />
+            <feMergeNode in="edge" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      ))}
+    </svg>
+  )
 }
 
 /** The art palettes: T3 Code's Blueprint, Rose, Grove, Ocean, Ember and Iris, and the studio's accent. */
@@ -379,10 +424,10 @@ export type StagePalette = typeof STAGE_PALETTES[number]
 
 /**
  * The art in its fading box, filling the nearest positioned ancestor.
- * @param props - the scene, the palette, the generated scenes' seed, its strength, `compact` for a small preview, and whether it fades.
+ * @param props - the scene, the palette, the generated scenes' seed, its strength, `compact` for a small preview, and how it fades.
  * @returns the backdrop, hidden from assistive technology.
  */
-export function StageBackdrop({ scene, palette, seed = 1, strength = 'standard', compact = false, fade = true }: {
+export function StageBackdrop({ scene, palette, seed = 1, strength = 'standard', compact = false, fade = 'soft' }: {
   readonly scene: StageScene
   /** The seed a generated scene is drawn from. */
   readonly seed?: number
@@ -390,11 +435,11 @@ export function StageBackdrop({ scene, palette, seed = 1, strength = 'standard',
   /** How strongly the art shows. */
   readonly strength?: ArtStrength
   readonly compact?: boolean
-  /** Whether the art fades into the sidebar below it; a swatch shows it whole. */
-  readonly fade?: boolean
+  /** How the art's bottom edge meets the sidebar below it; `false` shows the art whole, as a swatch does. */
+  readonly fade?: ArtFade | false
 }) {
   return (
-    <div className={css.backdrop} data-palette={palette} data-scene={scene} data-fade={fade} data-strength={strength} aria-hidden="true">
+    <div className={css.backdrop} data-palette={palette} data-scene={scene} data-fade={String(fade)} data-strength={strength} aria-hidden="true">
       {scene === 'night' ? <NightSkyArt compact={compact} /> : scene === 'blueprint' ? <BlueprintArt compact={compact} /> : <GenerativeArt scene={scene} seed={seed} />}
     </div>
   )

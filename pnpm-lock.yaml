@@ -1972,6 +1972,9 @@ importers:
       '@delo/plugin-chat-states':
         specifier: workspace:*
         version: link:../plugin-chat-states
+      '@delo/plugin-cost-meter':
+        specifier: workspace:*
+        version: link:../plugin-cost-meter
       '@delo/plugin-onboarding':
         specifier: workspace:*
         version: link:../plugin-onboarding
@@ -2315,6 +2318,85 @@ importers:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
 
+  delo/packages/plugin-cost-meter:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:~
+        version: link:../../../vendor/loader
+      '@deepseek-ai/dsh-api-session-controller':
+        specifier: workspace:*
+        version: link:../../../packages/api/session-controller
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: workspace:*
+        version: link:../../../packages/client/store
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-conversation
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-session':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-session
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../../packages/client/ui-slots
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
+      '@deepseek-ai/dsh-llm-retry':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm-retry
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../../packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../../packages/session/session-projection
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:*
+        version: link:../../../packages/subagent/subagent
+      '@delo/bundle-local':
+        specifier: workspace:*
+        version: link:../bundle-local
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+      tsdown:
+        specifier: ^0.22.2
+        version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.24)(tsx@4.23.13)(typescript@6.0.3)
+
   delo/packages/plugin-fetch-guard:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -2544,9 +2626,18 @@ importers:
 
   delo/packages/plugin-onboarding:
     dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-llm-deepseek':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm-deepseek
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delo/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../contract-reach-providers
       '@delo/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
@@ -2556,6 +2647,9 @@ importers:
       '@delo/home-auth':
         specifier: workspace:*
         version: link:../home-auth
+      '@delo/reach':
+        specifier: workspace:*
+        version: link:../reach
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -2617,6 +2711,12 @@ importers:
       '@deepseek-ai/dsh-client-ui-workspace':
         specifier: workspace:*
         version: link:../../../packages/client/ui-workspace
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../../packages/credentials/credentials
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../../packages/llm/llm
       '@deepseek-ai/dsh-package-manifest':
         specifier: workspace:*
         version: link:../../../packages/util/package-manifest
@@ -12438,7 +12538,7 @@ importers:
         version: 11.0.4
       serve-static:
         specifier: ^2.2.1
-        version: 2.2.1(supports-color@9.4.0)
+        version: 2.2.1(supports-color@10.2.2)
       ws:
         specifier: ^8.21.3
         version: 8.21.3
@@ -35925,22 +36025,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  send@1.2.1(supports-color@9.4.0):
-    dependencies:
-      debug: 4.4.3(supports-color@9.4.0)
-      encodeurl: 2.0.0
-      escape-html: 1.0.3
-      etag: 1.8.1
-      fresh: 2.0.0
-      http-errors: 2.0.1
-      mime-types: 3.0.2
-      ms: 2.1.3
-      on-finished: 2.4.1
-      range-parser: 1.3.0
-      statuses: 2.0.2
-    transitivePeerDependencies:
-      - supports-color
-
   serialize-error@7.0.1:
     dependencies:
       type-fest: 0.13.1
@@ -35952,15 +36036,6 @@ snapshots:
       escape-html: 1.0.3
       parseurl: 1.3.3
       send: 1.2.1(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  serve-static@2.2.1(supports-color@9.4.0):
-    dependencies:
-      encodeurl: 2.0.0
-      escape-html: 1.0.3
-      parseurl: 1.3.3
-      send: 1.2.1(supports-color@9.4.0)
     transitivePeerDependencies:
       - supports-color
 

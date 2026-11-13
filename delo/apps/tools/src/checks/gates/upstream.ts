@@ -16,15 +16,37 @@ import type { GateCheck } from '../types.ts'
 
 const VITEST = 'node_modules/.bin/vitest'
 
+/** The spec files one gate runs with `vitest run`, and the per-test timeout they need. */
+interface SpecsRun {
+  /** The spec files `vitest run` runs. */
+  readonly specs: readonly string[]
+  /**
+   * The per-test timeout vitest applies to these specs, in milliseconds (`--testTimeout`); absent, vitest's 5 s default
+   * applies. The locale-dictionaries specs walk every source file and take about 16 s on the reference host under
+   * concurrent load, against that default, so they set 60 s.
+   */
+  readonly testTimeoutMs?: number
+}
+
 /** One upstream gate: its id after `gates:`, the title, and the upstream package script or spec files it runs. */
 interface UpstreamGate {
   /** Upstream's gate id in `scripts/run-gates.ts`; the runner names it `gates:<id>`. */
   readonly id: string
   readonly title: string
   /** The root package script that `pnpm run` starts, or the spec files `vitest run` runs. */
-  readonly run: { readonly script: string } | { readonly specs: readonly string[] }
+  readonly run: { readonly script: string } | SpecsRun
   readonly tier?: GateCheck['tier']
   readonly builtArtifacts?: true
+}
+
+/**
+ * The argv of a spec gate: `vitest run`, the per-test timeout when the gate sets one, then its spec files.
+ * @param run - the gate's spec files and timeout.
+ * @returns the argv the runner executes from the repository root.
+ */
+function specsCommand(run: SpecsRun): string[] {
+  const timeout = run.testTimeoutMs === undefined ? [] : [`--testTimeout=${String(run.testTimeoutMs)}`]
+  return [VITEST, 'run', ...timeout, ...run.specs]
 }
 
 /** The upstream gates, in the order of upstream's `doc-sync`, `hygiene` and CI static lists. */
@@ -91,7 +113,7 @@ const UPSTREAM: readonly UpstreamGate[] = [
   {
     id: 'locale-dictionaries',
     title: 'Locale dictionaries agree across shipped languages',
-    run: { specs: ['scripts/locale-dictionary-parity.spec.ts', 'scripts/shipped-locales.spec.ts', 'packages/client/locale/tests/apply.client.spec.ts'] },
+    run: { specs: ['scripts/locale-dictionary-parity.spec.ts', 'scripts/shipped-locales.spec.ts', 'packages/client/locale/tests/apply.client.spec.ts'], testTimeoutMs: 60_000 },
   },
   { id: 'client-ui-i18n', title: 'Client UI copy goes through the locale dictionaries', run: { script: 'verify-client-ui-i18n' } },
   { id: 'client-route-resolution', title: 'App routes in browser code are document-relative', run: { script: 'verify-client-route-resolution' } },
@@ -115,7 +137,7 @@ const UPSTREAM: readonly UpstreamGate[] = [
 export const UPSTREAM_GATES: readonly GateCheck[] = UPSTREAM.map(gate => ({
   id: `gates:${gate.id}`,
   title: gate.title,
-  command: 'script' in gate.run ? ['pnpm', 'run', '--silent', gate.run.script] : [VITEST, 'run', ...gate.run.specs],
+  command: 'script' in gate.run ? ['pnpm', 'run', '--silent', gate.run.script] : specsCommand(gate.run),
   inputs: ['**'],
   ...gate.tier === undefined ? {} : { tier: gate.tier },
   ...gate.builtArtifacts === true ? { builtArtifacts: true } : {},
