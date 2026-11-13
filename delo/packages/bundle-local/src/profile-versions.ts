@@ -61,13 +61,16 @@ export interface VersionsWhere {
 
 /** A refusal the routes answer with its code. */
 export class VersionsError extends Error {
+  readonly code: VersionsRefusal
+
   /**
    * @param code - the refusal.
    * @param message - the sentence the person reads.
    * @param options - the cause, when one exists.
    */
-  constructor(readonly code: VersionsRefusal, message: string, options?: ErrorOptions) {
+  constructor(code: VersionsRefusal, message: string, options?: ErrorOptions) {
     super(message, options)
+    this.code = code
     this.name = 'VersionsError'
   }
 }
@@ -96,12 +99,15 @@ export function changesOf(plan: RestorePlan): VersionChanges {
 
 /** The versions service the routes call. */
 export class ProfileVersions {
+  private readonly where: () => VersionsWhere | undefined
   private queue: Promise<unknown> = Promise.resolve()
 
   /**
    * @param where - reads the profile's location when a call needs it; undefined while the Host has no profile.
    */
-  constructor(private readonly where: () => VersionsWhere | undefined) {}
+  constructor(where: () => VersionsWhere | undefined) {
+    this.where = where
+  }
 
   /**
    * The profile's versions, newest first.
