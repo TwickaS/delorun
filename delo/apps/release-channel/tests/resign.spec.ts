@@ -115,11 +115,14 @@ describe('timestamp re-signing', () => {
     expect(mark.writes).toEqual([])
   })
 
-  it('refuses a current timestamp with a channel key it does not know, writing nothing', async () => {
+  it('re-signs a current timestamp with a channel key it does not know, keeping that key byte-identical', async () => {
     const channel = signedChannel({ extra: { nightly: { release: '0.2.0-nightly.1' } } })
     const store = storeWith(channel)
-    await expect(resignTimestamp({ store, mark: new MemoryMark(), key: channel.keys.timestamp, now: FIRST + DAY })).rejects.toThrow(/Unrecognized key: "nightly"/u)
-    expect(store.writes).toEqual([])
+    await resignTimestamp({ store, mark: new MemoryMark(), key: channel.keys.timestamp, now: FIRST + DAY })
+    const after = JSON.parse(Buffer.from(store.objects.get('timestamp.json')!.bytes).toString()).signed
+    const before = JSON.parse(Buffer.from(channel.timestamp.bytes).toString()).signed
+    expect(JSON.stringify(after.nightly ?? after.channels)).toBe(JSON.stringify(before.nightly ?? before.channels))
+    expect(Object.keys(after)).toEqual(Object.keys(before))
   })
 
   it('re-signs from the signed JSON: every field but version, issued and expires is byte-identical', async () => {

@@ -152,7 +152,7 @@ afterAll(async () => {
 
 describe('reach on the Tailscale private address', () => {
   it('configures tailscale serve to the fixed listener port, never through sudo', () => {
-    expect(calls.map(call => call.slice(0, 2).join(' '))).toEqual(['version', 'status --json', 'serve status', 'serve --bg'])
+    expect(calls.map(call => call.slice(0, 2).join(' '))).toEqual(['status --json', 'version', 'status --json', 'serve status', 'serve --bg'])
     expect(calls.find(call => call[1] === '--bg')).toEqual(['serve', '--bg', '--https=443', `http://127.0.0.1:${String(reachPort)}`])
     expect(calls.flat()).not.toContain('sudo')
     expect(studio.ctx.reach.status()).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])

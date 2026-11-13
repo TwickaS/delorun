@@ -97,9 +97,9 @@ describe('the stylesheets of the sidebar', () => {
     expect(steps.size).toBeGreaterThan(5)
   })
 
-  it('declare each named length once per stylesheet', () => {
+  it('declare each named length once per stylesheet and media condition', () => {
     for (const file of FILES) {
-      const names = BY_FILE(file).filter(declaration => declaration.property.startsWith('--') && /\d(px|ch)$/.test(declaration.value)).map(declaration => declaration.property)
+      const names = BY_FILE(file).filter(declaration => declaration.property.startsWith('--') && /\d(px|ch)$/.test(declaration.value)).map(declaration => `${declaration.atRules.join(' ')} ${declaration.property}`)
       expect(names.filter((name, index) => names.indexOf(name) !== index), file).toEqual([])
     }
   })

@@ -25,7 +25,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { DELO_HOME_ENTRIES } from '../src/index.ts'
+import { DELO_HOME_ENTRIES, DELO_HOME_FILES } from '../src/index.ts'
 
 /** The `delo/` directory: three levels above this file (file → tests → package → packages → delo). */
 const DELO_ROOT = join(fileURLToPath(import.meta.url), '..', '..', '..', '..')
@@ -47,9 +47,20 @@ const REVIEWED: Readonly<Record<string, string>> = {
   'packages/archive/src/dsh-import/apply.ts: path': 'the stock-home import\'s paths under the Delo home: the upstream entries its plan carries (sessions/, attachments/, storages/, profiles/, skills/, .credentials.yaml, cordis.patch.yml, settings.yaml, AGENTS.md; DSH_HOME_ROOT_ENTRIES) and archive/ with archive/stock-import/',
   'packages/plugin-instruction-consent/src/classify.ts: HOME_SKILL_DIR': 'skills/, upstream\'s home skills directory',
   'packages/plugin-instruction-consent/src/classify.ts: name': 'AGENTS.md and the other instruction file names upstream loads from the harness home',
+  'packages/update/src/data-copy.ts: entry': 'entries of data-copies/ and data-set-aside/, which listKeptData reads',
   'packages/update/src/data-copy.ts: directory': 'sessions/ and storages/ (SESSION_DATA_DIRECTORIES), and data-copies/ and data-set-aside/ where kept data is listed',
   'packages/update/src/data-copy.ts: path': 'data-copies/<version> or data-set-aside/<name>, a kept-data path that listKeptData gave',
   'packages/update/src/data-copy.ts: step.directory': 'sessions/ and storages/, the directories a restore step names',
+}
+
+/**
+ * Names built from a fixed prefix and a stamp or random suffix, by `<file relative to delo/>: <segment expression>`:
+ * the entries of a repair that sets a store aside and the temporary file of an atomic write. Each was read by hand.
+ */
+const TRANSIENT: Readonly<Record<string, string>> = {
+  'apps/npm-launcher/src/repair.ts: `trust.set-aside-${stampNow}`': 'trust/ set aside by the launcher\'s repair',
+  'apps/npm-launcher/src/repair.ts: `${RUNTIMES_SET_ASIDE_PREFIX}${stampNow}`': 'runtimes/ set aside by the launcher\'s repair',
+  'packages/update/src/home-data-format.ts: `.${HOME_DATA_FORMAT_FILE}.tmp-${randomBytes(8).toString(\'hex\')}`': 'the temporary file that replaces data-format.json atomically',
 }
 
 /**
@@ -230,14 +241,19 @@ function scan(files: ReadonlyMap<string, string>): Use[] {
  * @returns one line per problem; empty when the tree is complete.
  */
 function problems(uses: readonly Use[]): string[] {
-  const allowed = new Set<string>([...Object.values(DELO_HOME_ENTRIES), ...UPSTREAM_ENTRIES])
+  const allowed = new Set<string>([...Object.values(DELO_HOME_ENTRIES), ...Object.values(DELO_HOME_FILES), ...UPSTREAM_ENTRIES])
   const lines: string[] = []
   const unresolved = new Set<string>()
   const elsewhere = new Set<string>()
+  const transient = new Set<string>()
   for (const use of uses) {
     const id = `${use.file}: ${use.expression}`
     if (NOT_THE_HOME[id] !== undefined) {
       elsewhere.add(id)
+      continue
+    }
+    if (TRANSIENT[id] !== undefined) {
+      transient.add(id)
       continue
     }
     if (use.entry === undefined) {
@@ -249,6 +265,7 @@ function problems(uses: readonly Use[]): string[] {
   }
   return lines.concat(
     Object.keys(REVIEWED).filter(id => !unresolved.has(id)).map(id => `${id} is reviewed but no longer occurs; remove it from REVIEWED`),
+    Object.keys(TRANSIENT).filter(id => !transient.has(id)).map(id => `${id} is listed as a transient name but no longer occurs; remove it from TRANSIENT`),
     Object.keys(NOT_THE_HOME).filter(id => !elsewhere.has(id)).map(id => `${id} is listed as another directory but no longer occurs; remove it from NOT_THE_HOME`),
   )
 }

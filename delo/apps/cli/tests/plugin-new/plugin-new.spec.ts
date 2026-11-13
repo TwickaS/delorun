@@ -124,7 +124,7 @@ describe('delorun plugin new', () => {
     let out = ''
     expect(await runPluginCheck([folder], { env: {}, stdout: (text) => { out += text }, stderr: () => {} }, RUNNING)).toBe(EXIT.ok)
     expect(out).toContain('engines.dsh "^0.2.2" admits DSH 0.2.2')
-    expect(out).toContain('Delo axis: engines.delo admits Delo 0.1.3.')
+    expect(out).toContain('Delorun axis: engines.delo admits Delorun 0.1.3.')
   })
 
   it('declares the bundle patch, both engines, and the DSH packages a tool shares with the host as peers', async () => {

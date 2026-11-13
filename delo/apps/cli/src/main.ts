@@ -69,13 +69,13 @@ export interface CommandEntry {
  */
 export const COMMANDS: readonly CommandEntry[] = [
   { name: 'setup', summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them', load: async () => (await import('./setup/index.ts')).setupCommand },
-  { name: 'start', summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses', load: async () => (await import('./start.ts')).startCommand },
+  { name: 'start', summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses; --patch adds overlays', load: async () => (await import('./start.ts')).startCommand },
   { name: 'open', summary: 'Open the studio in your browser, or print a link that signs in once with --print (--port for a forwarded port)', load: async () => (await import('./open/command.ts')).openCommand },
   { name: 'stop', summary: 'Stop the home process once running chats end, or at once with --now', load: async () => (await import('./stop.ts')).stopCommand },
   { name: 'status', summary: 'Show whether Delorun is running, its studio address and its running chats; --verbose adds process details', load: async () => (await import('./status.ts')).statusCommand },
   { name: 'doctor', summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check, your changes and the plugins', load: async () => (await import('./doctor/index.ts')).doctorCommand },
   { name: 'logs', summary: 'Show where each operational log is and its recent records; follow, clear or prune them', load: async () => (await import('./logs/command.ts')).logsCommand },
-  { name: 'update', summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --yes, --data-copy, --no-data-copy', load: async () => (await import('./update/command.ts')).updateCommand },
+  { name: 'update', summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --from installs a release from a folder or https address; --yes, --data-copy, --no-data-copy', load: async () => (await import('./update/command.ts')).updateCommand },
   { name: 'recover', summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>', load: async () => (await import('./recover.ts')).recoverCommand },
   { name: 'changes', summary: 'What waits for your review, and apply <id>, discard <id>, undo <id>, off <plugin>, on <plugin>, protection, work <plugin>, done <plugin>, edit-harness', load: async () => (await import('./changes/command.ts')).changesCommand },
   { name: 'reach', summary: 'Reach the studio from your phone over your own tailnet: status, on tailscale, off', load: async () => (await import('./reach/command.ts')).reachCommand },
@@ -87,7 +87,7 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'import', summary: 'Check an archive, show who signed it and what it holds, and import it after you confirm', load: async () => (await import('./import/command.ts')).importCommand },
   { name: 'import-home', summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delorun home after a preview; --dry-run only shows it', load: async () => (await import('./import-home/command.ts')).importHomeCommand },
   { name: 'verify', summary: 'Check the release against its signed manifest and the release log: --release <version>, --offline, --json', load: async () => (await import('./verify/index.ts')).verifyCommand },
-  { name: 'plugin', summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; new and dev help you write one; mirror on|off', load: async () => (await import('./upstream.ts')).pluginCommand },
+  { name: 'plugin', summary: 'Manage a profile\'s plugins, as dsh plugin does; check, new and dev help you write one; mirror on|off', load: async () => (await import('./upstream.ts')).pluginCommand },
   { name: 'headless', summary: 'Answer one task and exit, as dsh headless does, under Delorun\'s protections', load: async () => (await import('./upstream.ts')).headlessCommand },
 ]
 

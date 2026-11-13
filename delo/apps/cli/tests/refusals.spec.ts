@@ -71,6 +71,10 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   UpstreamUpdateError: TOOLS,
   NetworkGuardRefusal: TOOLS,
   SigningRefusal: RELEASE_PIPELINE,
+  PublishRefusal: 'the release channel\'s publish command under delo/apps/release-channel, which delorun does not import',
+  VersionsError: 'raised by the studio\'s version-history routes, which answer the browser over HTTP',
+  CreateRefusal: 'raised by the studio\'s create-plugin routes, which answer the browser over HTTP',
+  ScaffoldError: 'caught by delorun plugin new, which prints it as its own usage or failure refusal',
   FeedFailure: 'caught by the release\'s advisory check and the plugin install check, which report the feed as unreachable',
   LockfileError: 'caught by the plugin install check and delorun plugin, which report that the check could not run',
   BenchmarkUsageError: BENCHMARKS,
@@ -299,7 +303,7 @@ function refusalOf(error: unknown, profile?: string): Refusal {
 describe('a delorun refusal', () => {
   it('prints a CliError as it is and exits with its code', () => {
     expect(cliRefusal(new CliError(EXIT.usage, 'delorun: unknown command "x"'), [])).toEqual({ text: 'delorun: unknown command "x"\n', exit: EXIT.usage })
-    expect(cliRefusal(new SetupCancelled(), [])).toEqual({ text: 'delorun setup: cancelled\n', exit: EXIT.failed })
+    expect(cliRefusal(new SetupCancelled(), [])).toEqual({ text: 'Setup cancelled. Nothing was saved. Run delorun to start again.\n', exit: EXIT.interrupted })
     expect(cliRefusal(new Error('boom'), [])).toEqual({ text: 'Delorun stopped: boom\n', exit: EXIT.failed })
   })
 
