@@ -171,9 +171,11 @@ describe('a reach device through the Gateway', () => {
     const events = (await ctx.typertGateway.wireStream.open('$events', { args: {} }, (async function* () {})(), peer, abort.signal))[Symbol.asyncIterator]()
     try {
       await expect(events.next()).resolves.toMatchObject({ value: { type: 'ready' } })
-      // The plugin manager declares this event's type; this package does not compile against it. The name is joined
-      // from parts because the vendor rescope gate reads a quoted `cordis/...` text as a package specifier.
-      const retract = ['cordis', 'dynamic-retract'].join('/')
+      // The plugin manager declares this event's type; this package does not compile against it. The name comes from
+      // the elevated table's key, since the vendor rescope gate rewrites a quoted text that starts with the Cordis
+      // package name.
+      const retract = 'event:cordis/dynamic-retract'.slice('event:'.length)
+      expect(REACH_ELEVATED_ACTIONS).toHaveProperty([`event:${retract}`])
       ctx.emit(retract as never, { id: 'reach-dynamic' } as never)
       const created = await expectAllowed('session/create', { request: { workspaceId } }) as { readonly sessionId: SessionId }
       const seen: string[] = []
