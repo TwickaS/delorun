@@ -25,7 +25,8 @@
     "@delo/plugin-onboarding": "workspace:*",
     "@delo/plugin-settings-layout": "workspace:*",
     "@delo/plugin-sidebar": "workspace:*",
-    "@delo/plugin-theme": "workspace:*"
+    "@delo/plugin-theme": "workspace:*",
+    "@delo/plugin-thinking-rsvp": "workspace:*"
   },
   "devDependencies": {
     "@delo/contract-parity-composition": "workspace:*",
