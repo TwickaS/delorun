@@ -129,7 +129,6 @@ const MAX_IDENTITY_LENGTH = 200
 function printableHeader(value: string | string[] | undefined): string | undefined {
   if (typeof value !== 'string') return undefined
   const text = value.trim()
-  // eslint-disable-next-line no-control-regex -- the point is to refuse control characters
   if (text === '' || text.length > MAX_IDENTITY_LENGTH || /[\u0000-\u001f\u007f]/u.test(text)) return undefined
   return text
 }
