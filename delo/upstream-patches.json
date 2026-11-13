@@ -828,7 +828,7 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.module.css",
       "class": "delo-feature",
       "feature": "studio-seams",
-      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token."
+      "reason": "Styles the grouped Settings navigation, search, section cards and results, with spacing that follows the density token. Card headings read the `--dsh-settings-card-heading-*` custom properties (size, line height, weight, letter spacing, case, colour), each falling back to upstream's value, so a layout can restyle them."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
