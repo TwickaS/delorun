@@ -324,6 +324,16 @@ describe('the gate tiers', () => {
     expect(GATES.find(entry => entry.id === 'gates:docs')?.tier).toBe('agent')
   })
 
+  it('passes the per-test timeout only to the spec gate that sets one', () => {
+    const command = (id: string) => UPSTREAM_GATES.find(gate => gate.id === id)?.command
+    expect(command('gates:locale-dictionaries')).toEqual([
+      'node_modules/.bin/vitest', 'run', '--testTimeout=60000',
+      'scripts/locale-dictionary-parity.spec.ts', 'scripts/shipped-locales.spec.ts', 'packages/client/locale/tests/apply.client.spec.ts',
+    ])
+    expect(command('gates:doc-standard-tests')).toEqual(['node_modules/.bin/vitest', 'run', 'scripts/doc-standard.spec.ts'])
+    expect(UPSTREAM_GATES.filter(gate => gate.command.some(arg => arg.startsWith('--testTimeout=')))).toHaveLength(1)
+  })
+
   it('declares the documentation gate\'s own source among its inputs, so an edit to the gate reruns it', () => {
     expect(GATES.find(gate => gate.id === 'gates:docs')?.inputs).toContain('delo/apps/tools/src/checks/gates/docs.ts')
   })

@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { Context } from '@deepseek-ai/cordis'
 import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
@@ -495,7 +496,7 @@ describe('the plugin', () => {
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.section.icon': { kind: 'list', scope: 'root', inline: true }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject, apply }).await()
       const sections = slots.entries('settings.section').map(entry => entry.options)
@@ -509,6 +510,7 @@ describe('the plugin', () => {
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
       expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('settings.section.icon').map(entry => [entry.options.id, entry.component])).toEqual([[DEVICES_SECTION_ID, IconLinkOutlineRegular]])
       const browserFetch = vi.fn(async () => Response.json(READY.body))
       vi.stubGlobal('fetch', browserFetch)
       const devicesEntry = slots.entries('settings.section')[1]
