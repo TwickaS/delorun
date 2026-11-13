@@ -103,6 +103,30 @@ The steps: (1) `npm exec` of the packed launcher installs release 1 with the log
 
 The journey does not cover the npm registry and its attestation, the install script, the shipped root, the public release log, the tailnet, the desktop Host, other Node majors than the pinned one, or Windows and macOS.
 
+## The rehearsal
+
+`node_modules/.bin/tsx delo/apps/release/scripts/rehearsal.ts [--work <dir>] [--closure <dir>] [--only <id>,...] [--keep]` walks the update journey on this computer with the release tooling and no test harness, as a person would. It needs Node 24, `git`, `script` (util-linux) and a worktree whose tracked files are committed, because it builds release 1 with `build-closure.ts --artifacts existing`; `--closure` names a directory that already holds release 1's archive and file list (`0.1.0-rc.1`, `linux-x64`) from such a build. It uses no Docker machine, no model key and no network beyond loopback. Its home, `HOME` and npm cache sit under `--work` (a new directory under the system temporary directory by default), which it removes unless `--keep` is given.
+
+It signs `0.1.0-rc.1` and later test versions with throwaway keys (the production keys are refused) and `local-release.ts`, serves the channel and a stand-in release log over HTTP on loopback, packs `delo/apps/npm-launcher` with those origins and the run's root, and installs it as `npx --package=<tarball> -- delorun` does. The channel is HTTP because the launcher accepts `http:` only on loopback and `https:` for any host, but the launcher never passes `NODE_EXTRA_CA_CERTS` or `NODE_OPTIONS` to the runtime, so a runtime cannot update from a channel with a self-signed certificate. The release log is the stand-in of the test fixtures, not the public log.
+
+Its scenarios, in order, each printing `PASS` or `FAIL` with what the person saw:
+
+| Id | What it proves |
+| --- | --- |
+| `install` | `npx` of the packed launcher installs release 1, prints the progress lines and records the log check |
+| `setup` | the pinned command installs, `delorun setup --config` runs without questions, and Delorun starts |
+| `update` | `delorun update --yes` takes the next release and keeps the person's file |
+| `rollback-auto` | a release whose Host never answers rolls back on its own and names the failed criterion |
+| `tampered` | one changed archive byte is refused by a fresh install and by an update, and the store is left alone |
+| `clock` | the signer's clock is 4 days behind, so the timestamp has expired: an installed release starts, and `update --check` and a fresh install name the expiry |
+| `clock-ahead` | the launcher run with its clock 4 days ahead (a preload for `Date`; there is no `faketime` here) refuses a fresh install and starts an installed release |
+| `recover-signing` | the next signed timestamp makes the update work with no other action |
+| `repair` | `delorun repair` replaces a program whose file changed and keeps the data |
+| `from` | `delorun update --from <folder>` installs with the channel switched off, and a lower release is refused |
+| `by-hand` | the steps of [Last resort, by hand](../../docs/guide/troubleshooting.md#by-hand), typed literally, give a working program |
+
+The runtime never receives the clock preload, so a clock jump cannot be rehearsed inside the runtime itself; `clock` makes the same state by signing with a clock 4 days behind. The rehearsal does not cover Windows or macOS, the public release log, the npm registry or the production hosts.
+
 ## Rebuild comparison
 
 `node_modules/.bin/tsx delo/apps/release/src/compare-rebuild.ts <first> <second>` compares two output directories of the same release, such as the release workflow's and the targets-key holder's rebuild. It exits 0 when the two hold the same file names and every file matches, printing each difference that an entry of `rebuild-exceptions.json` accepts with that entry's id. It exits 1 on any other difference, printing each one, and signing refuses such a rebuild. It exits 2 on a usage error, an unreadable directory or an exceptions file that does not validate.
