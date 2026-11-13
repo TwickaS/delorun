@@ -234,7 +234,9 @@ export function apply(ctx: Context, config: Config): void {
         const key = reference === undefined ? undefined : JSON.stringify([target.name, reference])
         const earlier = target.pending === undefined && key !== undefined ? awaiting.get(key) : undefined
         check = earlier ?? await checkPackage({
-          profileDir: profile.dir, name: target.name, allowedAdvisories: [], knownNames: known, registries: await registries(), now: Date.now, compareFiles: target.pending === undefined,
+          profileDir: profile.dir, name: target.name, allowedAdvisories: [], knownNames: known, now: Date.now, compareFiles: target.pending === undefined,
+          // The registries this installation asked, such as one named for it alone, are audited beside the configured ones.
+          registries: [...await registries(), ...(target.registries ?? []).flatMap(registry => registry === null ? [] : [registry])],
           acceptsBlocking: (blocking) => {
             const digest = blockingDigest(target.name, blocking)
             if (!target.accepted.includes(digest)) return false

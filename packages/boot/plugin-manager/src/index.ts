@@ -1326,7 +1326,7 @@ export class PluginManager extends TypertRemoteService {
         if (providedByTarget.length > 0) throw this.protectionFailure(providedByTarget)
         if (audited) {
           // The lockfile names what will be installed; a refusal here leaves nothing fetched and no script run.
-          await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install')
+          await this.auditBundle(name, join(this.profile.dir, 'node_modules', name), undefined, options?.acceptedAudit, 'install', result.registries)
           const fetched = await this.runPnpm(['install', '--frozen-lockfile', ...registryArguments(used)], control.abort.signal, requestId, {
             manifest: files.get(join(this.profile.dir, 'package.json')), lockfile: files.get(join(this.profile.dir, 'pnpm-lock.yaml')),
           })
@@ -1540,18 +1540,21 @@ export class PluginManager extends TypertRemoteService {
 
   /**
    * Ask the distribution's plugin audit about a bundle's package, with the digests the user accepted for it and the one
-   * this call accepts, and what the change has yet to do for it; a distribution without one audits nothing.
+   * this call accepts, what the change has yet to do for it, and the registries an installation asked; a distribution
+   * without one audits nothing.
    * @returns The audit, or undefined without one.
    * @throws ManagementFailure `audit-refused` or `audit-findings` when the audit refuses the change.
    */
   private async auditBundle(
     name: string, dir: string, version: string | undefined, accepting?: string, pending?: 'install' | 'scripts',
+    registries?: Registry[],
   ): Promise<PluginAuditResult | undefined> {
     const audit = this.ownerContext.get('pluginAudit')
     if (audit === undefined) return undefined
     const accepted = [...await acceptedAudits(this.profile.dir, name), ...accepting === undefined ? [] : [accepting]]
     const result = await audit.audit({
       name, ...version === undefined ? {} : { version }, dir, accepted, ...pending === undefined ? {} : { pending },
+      ...registries === undefined ? {} : { registries: [...registries] },
     })
     switch (result.decision) {
       case 'clear':

@@ -868,7 +868,7 @@ it('runs no allowed install script of a package the audit refuses once the lockf
   const refused = await manager.installBundle('file:./addon', { enabled: false })
   expect(existsSync(marker)).toBe(false)
   expect(refused, JSON.stringify(refused)).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-refused' } })
-  expect(calls).toEqual([{ name: 'refused-fixture-addon', dir: join(dir, 'node_modules', 'refused-fixture-addon'), accepted: [], pending: 'install' }])
+  expect(calls).toEqual([{ name: 'refused-fixture-addon', dir: join(dir, 'node_modules', 'refused-fixture-addon'), accepted: [], pending: 'install', registries: [null] }])
   expect(existsSync(join(dir, 'node_modules', 'refused-fixture-addon'))).toBe(false)
   expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
 })
@@ -1910,6 +1910,32 @@ it('resolves, audits, then installs when an audit is composed, and runs one pnpm
   expect(single.mock.calls.map(call => call[1])).toEqual([['add', 'audited']])
 })
 
+it('tells the audit which registries an installation asked, the one that resolved it last', async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, bundle } = await fixture('live', false, auditing('needs-acceptance', calls))
+  const install = vi.spyOn(operations, 'runProfilePnpm')
+    .mockResolvedValueOnce({ exitCode: 1, output: 'ERR_PNPM_META_FETCH_FAIL  GET https://registry.npmjs.org/audited: ETIMEDOUT', truncated: false, logPath: join(dir, 'pnpm.log') })
+    .mockImplementation(async (_context, args) => {
+      if (args[0] === 'add') {
+        const profile = readProfileManifest('test', dir)
+        profile.dependencies = { ...profile.dependencies, audited: '1.0.0' }
+        writeFileSync(join(dir, 'package.json'), JSON.stringify(profile))
+      } else bundle('audited', [])
+      return { exitCode: 0, output: 'installed', truncated: false, logPath: join(dir, 'pnpm.log') }
+    })
+  onTestFinished(() => { install.mockRestore() })
+  expect(await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })).toMatchObject({ application: 'applied', registries: [null, MIRROR] })
+  expect(calls.map(call => call.registries)).toEqual([[null, MIRROR], undefined])
+})
+
+it('tells the audit about the registry one installation names', async () => {
+  const calls: PluginAuditTarget[] = []
+  const { manager, dir, bundle } = await fixture('live', false, auditing('needs-acceptance', calls))
+  installsAudited(dir, bundle)
+  expect(await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1', registry: 'http://registry.example.test/' })).toMatchObject({ application: 'applied' })
+  expect(calls[0]?.registries).toEqual(['http://registry.example.test/'])
+})
+
 it('refuses an installation the plugin audit finds against until the user accepts its findings, then remembers the acceptance', async () => {
   const calls: PluginAuditTarget[] = []
   const { manager, dir, bundle } = await fixture('live', false, auditing('needs-acceptance', calls))
@@ -1920,13 +1946,13 @@ it('refuses an installation the plugin audit finds against until the user accept
   expect(refused).toMatchObject({ application: 'failed', changed: false, error: { code: 'audit-findings', audit: { decision: 'needs-acceptance', digest: 'digest-1' } } })
   expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
   // Asked once the lockfile names the package, before pnpm installed anything.
-  expect(calls).toEqual([{ name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: [], pending: 'install' }])
+  expect(calls).toEqual([{ name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: [], pending: 'install', registries: [null] }])
   expect(existsSync(join(dir, 'node_modules', 'audited'))).toBe(false)
   const accepted = await manager.installBundle('audited', { enabled: false, acceptedAudit: 'digest-1' })
   expect(accepted).toMatchObject({ application: 'applied', changed: true, audit: { decision: 'accepted', digest: 'digest-1' } })
   // Asked again once it is installed and its builds have run.
   expect(calls.slice(1)).toEqual([
-    { name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: ['digest-1'], pending: 'install' },
+    { name: 'audited', dir: join(dir, 'node_modules', 'audited'), accepted: ['digest-1'], pending: 'install', registries: [null] },
     { name: 'audited', version: '1.0.0', dir: join(dir, 'node_modules', 'audited'), accepted: ['digest-1'] },
   ])
   expect(JSON.parse(readFileSync(join(dir, '.plugin-manager', 'audits.json'), 'utf8'))).toEqual({ audited: ['digest-1'] })

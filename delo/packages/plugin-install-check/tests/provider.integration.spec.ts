@@ -173,6 +173,12 @@ describe('the install check plugin', () => {
     expect(standIn.advisoryRequests).toHaveLength(requests + 1)
   })
 
+  it('warns about a plain-http registry named for one installation, as for a configured one', async () => {
+    const ctx = await mount(true)
+    const result = await ctx.get('pluginAudit')!.audit({ name: 'good-plugin', dir: `${dir}/node_modules/good-plugin`, accepted: [], pending: 'install', registries: [null, 'http://registry.example.test/'] })
+    expect(result.findings).toContainEqual(expect.objectContaining({ rule: 'delo.insecure-source', title: expect.stringContaining('http://registry.example.test/') as string }))
+  })
+
   it('refuses a critical advisory while the installation is only resolved, and accepts the same set when it is installed', async () => {
     standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'critical', '*')] }
     const ctx = await mount(true)

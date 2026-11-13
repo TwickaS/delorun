@@ -93,6 +93,11 @@ export interface PluginAuditTarget {
    * files answers `clear` while they are pending.
    */
   pending?: 'install' | 'scripts'
+  /**
+   * With `pending: 'install'`, the registries this installation asked, in order: the last one resolved the package, and
+   * any before it failed. `null` stands for the registry pnpm's own configuration names. Absent for any other question.
+   */
+  registries?: Registry[]
 }
 
 /**
