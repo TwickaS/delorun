@@ -5,7 +5,8 @@ import type {
   ClientBundleRegistration, ClientModuleCreateOptions, ClientModuleLoaderTarget, DshWindow,
   WebBootEntry,
 } from '@deepseek-ai/dsh-client-modules/client'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { RECOVERY_AFTER_MS, RECOVERY_ROUTES_GLOBAL } from '../src/boot-page.ts'
 import { AppWebEntry } from '../src/boot.ts'
 
 const MODULES_ID = '@deepseek-ai/dsh-client-modules'
@@ -297,4 +298,91 @@ it('draws the shared boot page before Host injections and resumes without replac
     await entry.dispose()
     vi.unstubAllGlobals()
   }
+})
+
+describe('the recovery screen', () => {
+  const STATE = { atComputer: true, lastStart: { at: '2026-11-10T10:00:00.000Z', plugins: [{ plugin: 'plug-a', loaded: false, error: 'boom' }] }, recent: [{ id: 'c0000000002', summary: 'Applied plug-a', state: 'applied', undoable: true }] }
+
+  beforeEach(() => {
+    vi.stubGlobal(RECOVERY_ROUTES_GLOBAL, '/delo/changes')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(STATE))))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('the recovery screen renders with every plugin\'s client code failing', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const container = document.createElement('div')
+    document.body.append(container)
+    installFacade()
+    const ids = ['@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-renderer', 'plug-a']
+    win.__DSH_BOOT__ = {
+      rev: 'graph',
+      entries: ids.map(id => ({ id, url: `/plugins/${id}/client.js`, rev: '1' })),
+      batches: [{ phase: 'application', url: '/application.js', rev: '1', entries: ids }],
+    }
+    // Every plugin bundle fails to load: no client plugin code runs, the renderer's included.
+    const entry = new AppWebEntry(container, { loadBundle: () => Promise.reject(new Error('bundle failed to load')) })
+    try {
+      await entry.run()
+      const screen = container.querySelector<HTMLElement>('[data-dsh-recovery]')
+      expect(screen).not.toBeNull()
+      await vi.waitFor(() => { expect(screen!.textContent).toContain('plug-a: boom') })
+      expect(container.textContent).toContain('Failed to load plugins')
+      expect([...screen!.querySelectorAll('button')].map(button => button.textContent)).toEqual(['Turn off', 'Undo', 'Start in safe mode'])
+    } finally {
+      await entry.dispose()
+    }
+  })
+
+  it('shows the recovery screen at /recovery and loads no client plugin', async () => {
+    window.history.replaceState(null, '', '/recovery')
+    const target = installFacade()
+    const create = vi.spyOn(target, 'create')
+    const container = document.createElement('div')
+    document.body.append(container)
+    const entry = new AppWebEntry(container)
+    await entry.run()
+    expect(container.querySelector('[data-dsh-recovery]')).not.toBeNull()
+    expect(create).not.toHaveBeenCalled()
+    await entry.dispose()
+  })
+
+  it('boots as usual at /recovery when the page names no recovery routes', async () => {
+    vi.stubGlobal(RECOVERY_ROUTES_GLOBAL, undefined)
+    window.history.replaceState(null, '', '/recovery')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const container = document.createElement('div')
+    document.body.append(container)
+    const entry = new AppWebEntry(container)
+    await entry.run()
+    expect(container.textContent).toContain('window.__ModuleLoader__ bootstrap facade is missing')
+    expect(container.querySelector('[data-dsh-recovery]')).toBeNull()
+    await entry.dispose()
+  })
+
+  it('offers the recovery screen when the application has not mounted in time', async () => {
+    vi.useFakeTimers()
+    const gate = Promise.withResolvers<undefined>()
+    vi.stubGlobal('__DSH_BOOT_READY__', gate)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const container = document.createElement('div')
+    document.body.append(container)
+    const entry = new AppWebEntry(container)
+    const boot = entry.run()
+    try {
+      await vi.advanceTimersByTimeAsync(RECOVERY_AFTER_MS - 1)
+      expect(container.querySelector('[data-dsh-recovery]')).toBeNull()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(container.querySelector('[data-dsh-recovery]')).not.toBeNull()
+    } finally {
+      gate.resolve(undefined)
+      await boot
+      await entry.dispose()
+    }
+  })
 })

@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { RuntimeVersion, StartId } from '@delo/contract-home-layout'
-import type { UpdateJournal } from '@delo/contract-home-process'
+import type { ChangesReloadOutcome, UpdateJournal } from '@delo/contract-home-process'
 import { ensureHomeTree, newStartId, processExists, readHomeLock, runDirectory, writeProtectedFile } from '@delo/home'
 import { Redactor, type DeloLogger } from '@delo/logs'
 import {
@@ -23,6 +23,7 @@ import {
   HomeProcess,
   HomeProcessError,
   type BootRow,
+  type HarnessCarry,
   type HealthExpectations,
   type HealthVerdict,
   type HomeCommand,
@@ -269,6 +270,36 @@ export class FixtureSnapshots implements ProfileSnapshots {
   }
 }
 
+/**
+ * A harness carry that records its calls: `check:<from>`, `carry:<from>>to` and `switched` once the switch it runs
+ * returned. A spec makes a change wait for review or the carry fail before the switch.
+ */
+export class FixtureHarness implements HarnessCarry {
+  /** Every call, in order. */
+  readonly calls: string[] = []
+  /** Whether a change waits for review, which `check` and `carry` refuse. */
+  pending = false
+  /** Whether the carry fails before it runs the switch. */
+  failCarry = false
+  /** The report each carry was given. */
+  readonly reports: unknown[] = []
+
+  async check(from: RuntimeVersion): Promise<void> {
+    this.calls.push(`check:${from}`)
+    if (this.pending) throw new HomeProcessError('HARNESS_CHANGES_PENDING', 'app/a.js waits for review')
+    return Promise.resolve()
+  }
+
+  async carry(from: RuntimeVersion, to: RuntimeVersion, report: unknown, switchRuntime: () => Promise<void>): Promise<void> {
+    this.calls.push(`carry:${from}>${to}`)
+    this.reports.push(report)
+    if (this.pending) throw new HomeProcessError('HARNESS_CHANGES_PENDING', 'app/a.js waits for review')
+    if (this.failCarry) throw new Error('the carry failed')
+    await switchRuntime()
+    this.calls.push('switched')
+  }
+}
+
 /** A rollback step a spec makes fail. */
 export type RollbackStep = 'data' | 'profile' | 'switch'
 
@@ -370,6 +401,11 @@ export class FixtureCopies implements SessionDataCopies {
 export class FixtureHost implements RunningHost {
   readonly chats = new CountingChatGate()
   closed = false
+  /** What the next `reload` answers. */
+  reloadOutcome: ChangesReloadOutcome = { ok: true }
+  /** How often `reload` was called. */
+  reloads = 0
+
   /** How it was asked to stop, in order: `close` as the process stops, `suspend` through its own teardown. */
   readonly stops: ('close' | 'suspend')[] = []
 
@@ -425,6 +461,11 @@ export class FixtureHost implements RunningHost {
     const present = this.rows().map(row => row.id)
     const gone = expect.previousRows.filter(row => !present.includes(row.id) && !expect.namedRows.includes(row.id)).map(row => row.id)
     return Promise.resolve(gone.length === 0 ? { passed: true } : { passed: false, criterion: 'H3-rows-kept', detail: gone.join(',') })
+  }
+
+  async reload(): Promise<ChangesReloadOutcome> {
+    this.reloads += 1
+    return Promise.resolve(this.reloadOutcome)
   }
 
   async close(): Promise<void> {
@@ -513,6 +554,7 @@ export interface InProcessHome {
   readonly store: FixtureStore | undefined
   readonly snapshots: FixtureSnapshots
   readonly copies: FixtureCopies
+  readonly harness: FixtureHarness
   readonly logger: MemoryLogger
   /** The signals the process listens for. */
   readonly signals: FixtureSignals
@@ -547,6 +589,7 @@ export interface StartHomeOptions {
 export interface StartParts {
   readonly copies: FixtureCopies
   readonly snapshots: FixtureSnapshots
+  readonly harness: FixtureHarness
   readonly hosts: FixtureHostRunner
   readonly store: FixtureStore | undefined
   readonly startId: StartId
@@ -568,6 +611,7 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const store = updates ? new FixtureStore(home, PROFILE) : undefined
   const snapshots = new FixtureSnapshots()
   const copies = new FixtureCopies(snapshots)
+  const harness = new FixtureHarness()
   const hostSuspend = options.hostSuspend
   const hosts = new FixtureHostRunner(() => ({ ...behaviourOf(home, running), ...hostSuspend === undefined ? {} : { suspend: hostSuspend } }))
   const logger = new MemoryLogger()
@@ -575,16 +619,16 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
   const listeners: (() => void)[] = []
   const startId = options.log?.startId ?? newStartId()
   const signals = new FixtureSignals()
-  options.configure?.({ copies, snapshots, hosts, store, startId, signals, exits })
+  options.configure?.({ copies, snapshots, harness, hosts, store, startId, signals, exits })
   const homeOptions: HomeProcessOptions = {
     home, profile: PROFILE, running, startId, host: hosts, preStart: () => copies.recover(), probe: updateChannelProbe(home, PROFILE), logger: options.logger ?? logger, redactor: options.log?.redactor ?? new Redactor(),
-    updates: store === undefined ? undefined : { store, snapshots, copies }, supervisor: options.supervisor,
+    updates: store === undefined ? undefined : { store, snapshots, copies, harness }, supervisor: options.supervisor,
     onExit: (listener) => { listeners.push(listener) },
     onSignal: signals.listen,
     exit: (code) => { exits.push(code) },
   }
   const started = await HomeProcess.start(homeOptions)
-  return { process: started, hosts, store, snapshots, copies, logger, signals, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
+  return { process: started, hosts, store, snapshots, copies, harness, logger, signals, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
 }
 
 /**

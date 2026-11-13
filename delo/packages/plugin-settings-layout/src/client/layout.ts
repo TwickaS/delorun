@@ -8,7 +8,7 @@
  * @module @delo/plugin-settings-layout/client/layout
  */
 import {
-  IconAgentPresetOutlineMedium, IconClockOutlineMedium, IconCordisPluginOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium,
+  IconAgentPresetOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium, IconCordisPluginOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium,
   IconGlobeOutlineMedium, IconInfoOutlineMedium, IconInspectOutlineMedium, IconNewChatOutlineMedium, IconPanelLeftOutlineMedium,
   IconSettingsOutlineMedium, IconShieldOutlineMedium, IconSlidersTwoOutlineMedium, IconSparkleMedium, IconUserOutlineMedium,
   IconUsersOutlineMedium,
@@ -27,6 +27,7 @@ export const SECTIONS = {
   modes: 'agent-presets',
   toolSettings: 'delo-tool-settings',
   inventory: 'plugins',
+  createPlugin: 'delo-create-plugin',
   permissions: 'delo-permissions',
   externalAgents: 'delo-external-agents',
   network: 'delo-network',
@@ -34,6 +35,7 @@ export const SECTIONS = {
   devices: 'delo-devices',
   trash: 'delo-trash',
   setupVersions: 'delo-setup-versions',
+  changes: 'delo-changes',
   about: 'delo-about',
 } as const
 
@@ -161,7 +163,7 @@ export function deloSettingsLayout(
           },
           {
             id: 'plugins', label: text('page.plugins'), icon: IconCordisPluginOutlineMedium, keywords: text('page.plugins.keywords'),
-            blocks: [section(SECTIONS.inventory)],
+            blocks: [section(SECTIONS.inventory), section(SECTIONS.createPlugin)],
           },
         ],
       },
@@ -204,6 +206,10 @@ export function deloSettingsLayout(
           {
             id: 'setup-versions', label: text('page.setupVersions'), icon: IconClockOutlineMedium, keywords: text('page.setupVersions.keywords'),
             blocks: [section(SECTIONS.setupVersions)],
+          },
+          {
+            id: 'changes', label: text('page.changes'), icon: IconChecklistOutlineMedium, keywords: text('page.changes.keywords'),
+            blocks: [section(SECTIONS.changes)],
           },
           {
             id: 'about', label: text('page.about'), icon: IconInfoOutlineMedium, keywords: text('page.about.keywords'),

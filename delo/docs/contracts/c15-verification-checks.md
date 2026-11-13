@@ -129,6 +129,8 @@ A report is a JSON object with these fields.
 | `checks` | One object for each registry entry. | Each object has `id`, `result` and `detail`. |
 | `checks[].detail` | String of at most 512 characters. | Names the state and the fix. It never contains a secret, a token, an owner code, a cookie, a key or file content. |
 
+`delorun verify` also prints, after its check lines, the changes the person approved and anything present they did not approve, and its `--json` report adds them as `changes` ([C21](c21-changes.md#what-verify-and-doctor-report)).
+
 The home's report carries no signature. A machine report carries a `signature` made with that machine's key over the report's canonical JSON bytes without the `signature` field, and it carries the home's single-use challenge, which is a 32-byte value encoded as base64url.
 
 <a id="badge"></a>

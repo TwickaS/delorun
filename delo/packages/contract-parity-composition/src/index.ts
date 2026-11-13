@@ -324,6 +324,29 @@ export const PARITY_SWITCHES = [
     ],
   },
   {
+    id: 'approved_plugin_write_consent',
+    state: 'built',
+    registeredBy: 'Delo approval for writes to approved plugins',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delo-approved-plugin-write-consent',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delo/plugin-instruction-consent',
+      source: 'delo/packages/plugin-instruction-consent/src/index.ts',
+      key: 'approvedPluginWrites',
+    },
+    // The consent reaches the model through the approval ask and the typed
+    // refusal (WriteConsentRefusedError) its intent listeners throw, not
+    // through a registration; these files are the ones whose runtime behaviour
+    // the switch turns off at its parity value.
+    sources: [
+      'delo/packages/plugin-instruction-consent/src/index.ts',
+      'delo/packages/plugin-instruction-consent/src/plugin-folders.ts',
+    ],
+  },
+  {
     id: 'mcp_add_consent',
     state: 'built',
     registeredBy: 'Delo MCP server add flow',
@@ -486,6 +509,25 @@ export const PARITY_SWITCHES = [
       key: 'enabled',
     },
     sources: [],
+  },
+  {
+    id: 'plugin_changes_pending',
+    state: 'built',
+    registeredBy: '@delo/plugin-changes',
+    defaultValue: true,
+    parityValue: false,
+    modelVisible: true,
+    scenario: 'session/delo-plugin-changes-pending',
+    scenarioState: 'pending recording',
+    field: {
+      module: '@delo/plugin-changes',
+      source: 'delo/packages/plugin-changes/src/index.ts',
+      key: 'enabled',
+    },
+    // The plugin registers its `tools/pre-execute` listener and its tool guard
+    // behind the switch: off, it registers nothing, so every plugin_manager
+    // call runs and asks as upstream's does.
+    sources: ['delo/packages/plugin-changes/src/index.ts'],
   },
 ] as const satisfies readonly ParitySwitchEntry[]
 

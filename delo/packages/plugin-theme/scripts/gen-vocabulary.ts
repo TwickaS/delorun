@@ -28,6 +28,7 @@ export const SOURCES: readonly { readonly ns: string; readonly module: string }[
   { ns: 'trajectory', module: 'packages/client/ui-trajectory/src/client/locales.ts' },
   { ns: 'chat', module: 'packages/client/ui-chat/src/client/locale.ts' },
   { ns: 'subagent', module: 'packages/client/ui-subagent/src/client/locales.ts' },
+  { ns: 'pluginManager', module: 'packages/client/ui-plugin-manager/src/client/locales.ts' },
 ]
 
 /** Where the vocabulary is written, from the repository's root. */

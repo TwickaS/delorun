@@ -1,10 +1,11 @@
 /**
  * Upstream's profile commands that `delorun` offers: `delorun plugin …` runs upstream's `dsh plugin` command line in
- * this process unchanged, with the Delo home as `DSH_HOME` and an installed Delo's own pnpm
+ * this process, with the Delo home as `DSH_HOME` and an installed Delo's own pnpm
  * ([package manager](./package-manager.ts)); upstream's parser refuses the desktop app's profile for
  * `plugin`, as it does for `dsh`. `delorun headless …` boots upstream's `headless` profile through Delo's composition
  * ([headless](./headless.ts)), not through upstream's command line.
- * `delorun plugin check` is Delo's own and reaches upstream's command line not at all.
+ * `delorun plugin check`, `new` and `dev` are Delo's own ([plugin check](./plugin-check.ts),
+ * [plugin new](./plugin-new/index.ts), [plugin dev](./plugin-dev.ts)) and reach upstream's command line not at all.
  *
  * `delorun plugin` boots no Host and has no composition: no sandbox overlay, no sandbox invariants and no pre-start
  * steps. Under upstream's profile file lock it runs pnpm in the profile directory with the person's arguments and this
@@ -17,6 +18,15 @@
  * installed is recorded ([install check](./plugin-install-check.ts)); `--allow-advisory <id>` lets a known critical
  * advisory through. `delorun plugin mirror on|off` sets the profile's npm mirror.
  *
+ * After upstream's plugin operation, whether it succeeded or not, `delorun plugin` makes the plugins that the profile
+ * it selects ([profile](./profile.ts)) links from folders, missing ones included, load from their active directories at once, as the running Host checks before every
+ * reload (`prepareReload` of `@delo/changes`): with protection off, `delorun plugin --profile <name> add link:<folder>`
+ * links the plugin to its active directory holding the folder's content, approved and logged as loaded without review;
+ * with protection on, to its empty active directory with the folder's content waiting for review. Either is said on
+ * standard error. A profile whose first
+ * start under Changes has not run is left to that start. The command exits 0 when upstream's operation succeeded and
+ * the profile is what Changes keeps, and 1 otherwise.
+ *
  * Both commands register as shared users of the home's stores first and refuse while `delorun trash`, `export`,
  * `import` or an offline `delorun recover rollback` runs, or an update, a rollback or a restore of the chat data is in
  * progress ([home exclusion](./home-exclusion.ts)); an update's prepare, copy, restore and rollback, and those
@@ -25,8 +35,11 @@
  *
  * @module @delo/cli/upstream
  */
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { runDirectory } from '@delo/home'
+import { isChangesError, prepareReload, readChangeLog, startNotice } from '@delo/changes'
+import { isCarriedPackage } from './changes/start.ts'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { CliError, EXIT, type ExitCode } from './exit.ts'
 import { HEADLESS_PROFILE, refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
@@ -35,11 +48,15 @@ import { requiredModelKey, resolveModelKey } from './model-key.ts'
 import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, pnpmCommand, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
 import { readProfileRegistry } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { ensureCopyImport } from './pnpm-import.ts'
-import { profileDirectory, selectCommandProfile } from './profile.ts'
+import { hasCliProfile, profileDirectory, selectCommandProfile } from './profile.ts'
 import { runUpstreamProfile, upstreamDependencies } from './start.ts'
 import { shippedPackageManager } from './package-manager.ts'
 import { withBrandedStderr } from './upstream-output.ts'
 import { runPluginCheck } from './plugin-check.ts'
+import { realDevDependencies, runPluginDev } from './plugin-dev.ts'
+import { runPluginNew } from './plugin-new/index.ts'
+import { capturesOutput, capturingPackageManager, decideBuilds, takeAllowBuild, takeCapture, terminalConfirm, type ConfirmBuild } from './plugin-builds.ts'
+import { printable } from './terminal-text.ts'
 
 /** What `delorun plugin` runs outside this module; specs replace it. */
 export interface PluginDependencies {
@@ -68,6 +85,8 @@ export interface PluginDependencies {
   readonly installAnchor: () => Promise<string>
   /** Registers the shared registration's release for this process's exit. */
   readonly onExit: (listener: () => void) => void
+  /** Asks the person whether to allow one build pnpm refused; when the field is absent, the terminal's, none without one. */
+  readonly confirmBuild?: ConfirmBuild | undefined
 }
 
 /** What upstream's plugin command takes for one step of an installation split into resolution and installation. */
@@ -76,6 +95,41 @@ export interface UpstreamOperation {
   readonly activateNewBundles?: boolean
   /** For the installation: the profile's `package.json` and lockfile text from before the resolution. */
   readonly baseline?: { readonly manifest: string | undefined, readonly lockfile: string | undefined }
+  /** The file that keeps pnpm's output ([plugin builds](./plugin-builds.ts)); pnpm owns the terminal without it. */
+  readonly capture?: string
+}
+
+/** What upstream's command line threw in place of exiting the process, so the plugin command can finish its part. */
+class UpstreamExit extends Error {
+  /** The exit code upstream asked for. */
+  readonly code: number
+
+  /**
+   * @param code - the exit code upstream asked for.
+   */
+  constructor(code: number) {
+    super(`upstream exited with ${String(code)}`)
+    this.code = code
+  }
+}
+
+/**
+ * Run upstream's command line, which ends by exiting the process, and keep its exit code instead.
+ * @param runUpstream - runs upstream's command line.
+ * @returns the exit code upstream asked for; 0 when it returned without exiting.
+ */
+async function upstreamExitCode(runUpstream: () => Promise<void>): Promise<number> {
+  const exit = process.exit
+  process.exit = ((code?: number | string | null) => { throw new UpstreamExit(Number(code ?? 0)) }) as typeof process.exit
+  try {
+    await runUpstream()
+    return 0
+  } catch (error) {
+    if (!(error instanceof UpstreamExit)) throw error
+    return error.code
+  } finally {
+    process.exit = exit
+  }
 }
 
 /**
@@ -92,7 +146,9 @@ async function runUpstreamPlugin(argv: readonly string[], operation?: UpstreamOp
   const { runPlugin } = await import('@deepseek-ai/dsh/lib/plugin.js')
   const invocation = parseDshArgs(argv, getDshRuntimeVersion())
   if (invocation.mode !== 'plugin') throw new Error(`delorun plugin: upstream read ${JSON.stringify(argv)} as a ${invocation.mode} command`)
-  return withBrandedStderr(() => runPlugin(invocation.profile, invocation.args, shippedPackageManager(), operation))
+  const { capture, ...upstreamOperation } = operation ?? {}
+  const shipped = shippedPackageManager()
+  return withBrandedStderr(() => runPlugin(invocation.profile, invocation.args, capture === undefined ? shipped : capturingPackageManager(shipped, capture), operation === undefined ? undefined : upstreamOperation))
 }
 
 /** The time pnpm gets to name the profile's registry. */
@@ -148,6 +204,65 @@ function restoreProfileFiles(profileDir: string, before: ReadonlyMap<string, str
 }
 
 /**
+ * Run one upstream step. When the step's output is kept ([plugin builds](./plugin-builds.ts)), the file is read back and
+ * removed, also when upstream throws.
+ * @param dependencies - upstream's plugin command.
+ * @param argv - the arguments `dsh` would receive.
+ * @param operation - the step's options.
+ * @param capture - the file that keeps pnpm's output; none to leave pnpm the terminal.
+ * @returns pnpm's exit code and the output kept, empty without a file.
+ */
+async function runStep(dependencies: PluginDependencies, argv: readonly string[], operation: UpstreamOperation | undefined, capture: string | undefined): Promise<{ readonly code: number, readonly output: string }> {
+  if (capture === undefined) return { code: await dependencies.runUpstream(argv, operation), output: '' }
+  let code: number
+  try {
+    code = await dependencies.runUpstream(argv, { ...operation, capture })
+  } catch (error) {
+    await takeCapture(capture)
+    throw error
+  }
+  return { code, output: await takeCapture(capture) }
+}
+
+/**
+ * Record the builds pnpm refused and allow the ones the person allows.
+ * @param profileDir - the profile directory.
+ * @param output - pnpm's output of the failed step.
+ * @param allowed - the names `--allow-build` gave.
+ * @param confirm - the confirmation, or `undefined` without a terminal.
+ * @param context - the environment and output.
+ * @returns the decision: both lists empty when pnpm refused no build.
+ * @throws {CliError} when the profile's `pnpm-workspace.yaml` cannot record the decision.
+ */
+async function decideRefusedBuilds(profileDir: string, output: string, allowed: readonly string[], confirm: ConfirmBuild | undefined, context: CommandContext): ReturnType<typeof decideBuilds> {
+  try {
+    return await decideBuilds({ profileDir, output, allowed, confirm, stderr: context.stderr })
+  } catch (error) {
+    throw new CliError(EXIT.failed, `delorun plugin: pnpm refused a build, and the build decision cannot be recorded in ${join(profileDir, 'pnpm-workspace.yaml')}: ${printable(error instanceof Error ? error.message : String(error))}; correct its allowBuilds mapping and run the command again`)
+  }
+}
+
+/**
+ * After upstream's plugin operation, move the profile's links to folders to their active directories, as the running
+ * Host's check before a reload does, and say what waits for review.
+ * @param home - the Delo home.
+ * @param profile - the profile the operation changed.
+ * @param context - the command's output.
+ * @returns whether the profile is what Changes keeps.
+ */
+async function keepPluginChanges(home: string, profile: string, context: Pick<CommandContext, 'stderr'>): Promise<boolean> {
+  if (!hasCliProfile(home, profile)) return true
+  try {
+    if ((await readChangeLog(home, profile)).migratedAt === undefined) return true
+    context.stderr(startNotice(await prepareReload({ home, profile, profileDir: profileDirectory(home, profile), harnessLink: isCarriedPackage })))
+    return true
+  } catch (error) {
+    context.stderr(`delorun: ${isChangesError(error) ? error.detail : String(error)}\n`)
+    return false
+  }
+}
+
+/**
  * Run `delorun plugin`: register as a shared user of the home's stores, set the profile's package import method to
  * copies ([pnpm import](./pnpm-import.ts)), and run upstream's `dsh plugin` with these arguments, `--profile` first
  * with the selected profile when they name none. With the profile's
@@ -158,67 +273,125 @@ function restoreProfileFiles(profileDir: string, before: ReadonlyMap<string, str
  * lockfile is resolved and checked, and installs nothing. A known critical advisory that no `--allow-advisory <id>`
  * names, or a check that cannot run, puts the profile's `package.json` and lockfile back as they were, before anything was
  * fetched into the profile or any script ran, and fails the command.
+ *
+ * When pnpm refuses a package's build, `delorun plugin` keeps pnpm's output, records the refusal, and allows the build
+ * only when the person confirms it or `--allow-build <name>` names the package ([plugin builds](./plugin-builds.ts)).
+ * With the check on, only the installation step is kept and run again, installing the same checked lockfile; the
+ * resolution and the check never run twice, and a lockfile that differs from the checked one is refused and the profile
+ * put back. With the check off the whole operation runs again.
  * @param args - the arguments after `plugin`.
  * @param context - the environment and output.
  * @param dependencies - upstream's plugin command and profile boot, and the exit hook; the real ones by default.
  * @returns pnpm's exit code as the command's, or {@link EXIT.failed} for a refused installation.
  * @throws {CliError} while an exclusive user runs or an update, a rollback or a restore is in progress, or for a wrong
- *   `--allow-advisory`; upstream's command line has not run then.
+ *   `--allow-advisory` or `--allow-build`; upstream's command line has not run then. Also when pnpm refused a build
+ *   and the profile's `pnpm-workspace.yaml` cannot record the decision.
  */
 export async function plugin(args: readonly string[], context: CommandContext, dependencies: PluginDependencies = UPSTREAM_PLUGIN): Promise<number> {
+  const { args: withoutBuilds, allowed: allowedBuilds } = takeAllowBuild(args)
   // Upstream's parser reads `--profile` under its own, looser rule, so every value it could read is held to C1's first.
-  const profile = selectCommandProfile('plugin', args, context.env)
-  const { allowed, rest } = takeAllowedAdvisories(args)
+  const profile = selectCommandProfile('plugin', withoutBuilds, context.env)
+  const taken = takeAllowedAdvisories(withoutBuilds)
   const { home } = await prepareHome(context, undefined)
   const release = await useHomeShared(home.path, 'plugin')
   dependencies.onExit(release)
   try {
-    const profileDir = profileDirectory(home.path, profile)
-    await ensureCopyImport(profileDir)
-    const check = await dependencies.checkSettings(home.path, profileDir)
-    if (check === undefined || !installsPackages(rest)) {
-      const code = await dependencies.runUpstream(['plugin', ...withProfile(rest, profile)])
-      if (code === 0 && check !== undefined) await forgetRemovedPlugins(profileDir, context)
-      if (code === 0 && LIST_COMMANDS.has(pnpmCommand(rest) ?? '') && hasNoPlugins(profileDir)) {
-        context.stdout(`No plugins added to the profile ${profile}.\n`)
-      }
-      return code
-    }
-    // The registry is read before the resolution, so between the resolution and the installation only the check runs,
-    // and it refuses on any error.
-    const urls = registryUrls(rest)
-    const own = urls.length > 0 ? null : await dependencies.profileRegistry(profileDir)
-    const before = readRestoredFiles(profileDir)
-    const resolved = await dependencies.runUpstream(['plugin', ...resolveOnly(withProfile(rest, profile))], { activateNewBundles: false })
-    if (resolved !== 0) return resolved
-    const outcome = await checkResolved({ profileDir, check, allowedAdvisories: allowed, registries: [...urls, ...own === null ? [] : [own]], output: context })
-    if (outcome.refused.length > 0 || outcome.checkFailed) {
-      restoreProfileFiles(profileDir, before)
-      context.stderr(`delorun plugin: the profile ${profile} is back as it was before this command; nothing was installed into it and no install script ran\n`)
-      return EXIT.failed
-    }
-    // A person who asked for the lockfile only gets it checked, and nothing installed.
-    if (rest.includes('--lockfile-only')) return EXIT.ok
-    // Upstream compares, restores, and activates bundles against the profile as it was before the resolution.
-    const baseline = { manifest: before.get('package.json'), lockfile: before.get('pnpm-lock.yaml') }
-    let installed: number
-    try {
-      installed = await dependencies.runUpstream(['plugin', '--profile', profile, 'install', '--frozen-lockfile', ...carriedOptions(rest)], { baseline })
-    } catch (error) {
-      // A failed installation must not leave the resolved plugin in package.json and the lockfile, unrecorded.
-      restoreProfileFiles(profileDir, before)
-      throw error
-    }
-    if (installed !== 0) {
-      restoreProfileFiles(profileDir, before)
-      context.stderr(`delorun plugin: the installation failed, so the profile ${profile} is back as it was before this command\n`)
-      return installed
-    }
-    await recordAfterInstall(profileDir, outcome.pending, check.settings.maxFiles, context)
-    return EXIT.ok
+    const code = await operatePlugin(home.path, profile, taken, allowedBuilds, context, dependencies)
+    const kept = await keepPluginChanges(home.path, profile, context)
+    return code === EXIT.ok && !kept ? EXIT.failed : code
   } finally {
     release()
   }
+}
+
+/**
+ * Run upstream's plugin operation with the install check and the build decisions around it.
+ * @param home - the Delo home.
+ * @param profile - the selected profile.
+ * @param taken - the arguments after `plugin`, without and with the `--allow-advisory` values.
+ * @param allowedBuilds - the package names `--allow-build` named.
+ * @param context - the environment and output.
+ * @param dependencies - upstream's plugin command and profile boot.
+ * @returns pnpm's exit code, or {@link EXIT.failed} for a refused installation.
+ */
+async function operatePlugin(home: string, profile: string, taken: ReturnType<typeof takeAllowedAdvisories>, allowedBuilds: readonly string[], context: CommandContext, dependencies: PluginDependencies): Promise<number> {
+  const { allowed, rest } = taken
+  const profileDir = profileDirectory(home, profile)
+  await ensureCopyImport(profileDir)
+  const confirm = 'confirmBuild' in dependencies ? dependencies.confirmBuild : terminalConfirm()
+  const capture = capturesOutput(rest) ? join(runDirectory(home, profile), `plugin-output-${String(process.pid)}.log`) : undefined
+  if (capture !== undefined) mkdirSync(runDirectory(home, profile), { recursive: true })
+  const check = await dependencies.checkSettings(home, profileDir)
+  if (check === undefined || !installsPackages(rest)) {
+    const decided = new Set<string>()
+    for (;;) {
+      const { code, output } = await runStep(dependencies, ['plugin', ...withProfile(rest, profile)], undefined, capture)
+      if (code === 0) {
+        if (check !== undefined) await forgetRemovedPlugins(profileDir, context)
+        if (LIST_COMMANDS.has(pnpmCommand(rest) ?? '') && hasNoPlugins(profileDir)) context.stdout(`No plugins added to the profile ${profile}.\n`)
+        return code
+      }
+      if (capture === undefined) return code
+      const decision = await decideRefusedBuilds(profileDir, output, allowedBuilds, confirm, context)
+      if (decision.allowed.length === 0 && decision.undecided.length === 0) return code
+      const fresh = decision.allowed.filter(key => !decided.has(key))
+      if (fresh.length === 0 || decision.undecided.length > 0) return EXIT.failed
+      for (const key of fresh) decided.add(key)
+      context.stderr(`delorun plugin: running the operation again with the build of ${fresh.map(key => printable(key)).join(', ')} allowed.\n`)
+    }
+  }
+  // The registry is read before the resolution, so between the resolution and the installation only the check runs,
+  // and it refuses on any error.
+  const urls = registryUrls(rest)
+  const own = urls.length > 0 ? null : await dependencies.profileRegistry(profileDir)
+  const before = readRestoredFiles(profileDir)
+  const resolved = await dependencies.runUpstream(['plugin', ...resolveOnly(withProfile(rest, profile))], { activateNewBundles: false })
+  if (resolved !== 0) return resolved
+  const outcome = await checkResolved({ profileDir, check, allowedAdvisories: allowed, registries: [...urls, ...own === null ? [] : [own]], output: context })
+  if (outcome.refused.length > 0 || outcome.checkFailed) {
+    restoreProfileFiles(profileDir, before)
+    context.stderr(`delorun plugin: the profile ${profile} is back as it was before this command; nothing was installed into it and no install script ran\n`)
+    return EXIT.failed
+  }
+  // A person who asked for the lockfile only gets it checked, and nothing installed.
+  if (rest.includes('--lockfile-only')) return EXIT.ok
+  // Upstream compares, restores, and activates bundles against the profile as it was before the resolution.
+  const baseline = { manifest: before.get('package.json'), lockfile: before.get('pnpm-lock.yaml') }
+  const checkedLockfile = readRestoredFiles(profileDir).get('pnpm-lock.yaml')
+  const installation = ['plugin', '--profile', profile, 'install', '--frozen-lockfile', ...carriedOptions(rest)]
+  const lockfileChanged = (): boolean => readRestoredFiles(profileDir).get('pnpm-lock.yaml') !== checkedLockfile
+  let installed: number
+  try {
+    const decided = new Set<string>()
+    let run = await runStep(dependencies, installation, { baseline }, capture)
+    for (;;) {
+      installed = run.code
+      if (run.code === 0 || capture === undefined) break
+      const decision = await decideRefusedBuilds(profileDir, run.output, allowedBuilds, confirm, context)
+      const fresh = decision.allowed.filter(key => !decided.has(key))
+      if (fresh.length === 0 || decision.undecided.length > 0) break
+      for (const key of fresh) decided.add(key)
+      if (lockfileChanged()) break
+      context.stderr(`delorun plugin: installing the checked lockfile again with the build of ${fresh.map(key => printable(key)).join(', ')} allowed.\n`)
+      run = await runStep(dependencies, installation, { baseline }, capture)
+    }
+    if (decided.size > 0 && lockfileChanged()) {
+      restoreProfileFiles(profileDir, before)
+      context.stderr(`delorun plugin: the lockfile of the profile ${profile} differs from the one the install check read, so the command was refused and the profile is back as it was before it\n`)
+      return EXIT.failed
+    }
+  } catch (error) {
+    // A failed installation must not leave the resolved plugin in package.json and the lockfile, unrecorded.
+    restoreProfileFiles(profileDir, before)
+    throw error
+  }
+  if (installed !== 0) {
+    restoreProfileFiles(profileDir, before)
+    context.stderr(`delorun plugin: the installation failed, so the profile ${profile} is back as it was before this command\n`)
+    return installed
+  }
+  await recordAfterInstall(profileDir, outcome.pending, check.settings.maxFiles, context)
+  return EXIT.ok
 }
 
 /**
@@ -239,15 +412,18 @@ export async function pluginMirror(args: readonly string[], context: CommandCont
 const PLUGIN_USAGE = 'Usage: delorun plugin [--profile <name>] <list | add <package> | remove <package> | update>\n       delorun plugin check <directory>\n       delorun plugin mirror on|off'
 
 /**
- * `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management; `delorun plugin check <directory>` is
- * Delo's own ([plugin check](./plugin-check.ts)), which needs no profile.
+ * `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management, then Changes' check of the profile;
+ * `delorun plugin check <directory>` is Delo's own ([plugin check](./plugin-check.ts)), which needs no profile; `new <name>` and
+ * `dev <folder>` are Delo's own too and handle their options themselves.
  */
 export const pluginCommand: CliCommand = {
   name: 'plugin',
-  summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; mirror on|off',
+  summary: 'Manage a profile\'s plugins, as dsh plugin does; check, new and dev help you write one; mirror on|off',
   run: async (args, context) => {
     if (args.length === 0) throw new CliError(EXIT.usage, `delorun plugin: name what to do.\n${PLUGIN_USAGE}`)
     if (args[0] === 'check') return runPluginCheck(args.slice(1), context)
+    if (args[0] === 'new') return runPluginNew(args.slice(1), context)
+    if (args[0] === 'dev') return runPluginDev(args.slice(1), context, realDevDependencies(context, plugin))
     if (args[0] === 'mirror') return pluginMirror(args.slice(1), context)
     // pnpm's exit code is the command's, which the CLI's exit codes do not list, so the process ends with it here.
     const code = await plugin(args, context)

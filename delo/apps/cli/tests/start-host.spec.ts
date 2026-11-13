@@ -95,24 +95,26 @@ describe('runningHost', () => {
         watchUpdates: () => Promise.resolve(),
         studio: () => studio,
         studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }),
+        reload: () => { calls.push('reload'); return Promise.resolve({ ok: true }) },
       },
     }
   }
 
   it('names the studio by its address, an IPv6 one in brackets, and none without a listener', () => {
-    expect(runningHost(profile({ host: '127.0.0.1', port: 3080 }).booted, { home: '/h', profile: 'default' }, [], () => Promise.resolve()).studio()).toBe('http://127.0.0.1:3080/')
-    expect(runningHost(profile({ host: '::1', port: 3080 }).booted, { home: '/h', profile: 'default' }, [], () => Promise.resolve()).studio()).toBe('http://[::1]:3080/')
-    expect(runningHost(profile(undefined).booted, { home: '/h', profile: 'default' }, [], () => Promise.resolve()).studio()).toBeUndefined()
+    expect(runningHost(profile({ host: '127.0.0.1', port: 3080 }).booted, { home: '/h', profile: 'default' }, [], () => Promise.resolve(), () => Promise.resolve()).studio()).toBe('http://127.0.0.1:3080/')
+    expect(runningHost(profile({ host: '::1', port: 3080 }).booted, { home: '/h', profile: 'default' }, [], () => Promise.resolve(), () => Promise.resolve()).studio()).toBe('http://[::1]:3080/')
+    expect(runningHost(profile(undefined).booted, { home: '/h', profile: 'default' }, [], () => Promise.resolve(), () => Promise.resolve()).studio()).toBeUndefined()
   })
 
-  it('counts chats, keeps the rows it had at boot and the ones that failed, and closes through the shutdown and suspends through the teardown', async () => {
+  it('counts chats, keeps the rows it had at boot and the ones that failed, reloads through the profile, and ends Changes\' part before it closes through the shutdown and suspends through the teardown', async () => {
     const { booted, calls } = profile(undefined)
-    const host = runningHost(booted, { home: '/nonexistent-home', profile: 'default' }, [], () => Promise.resolve())
+    const host = runningHost(booted, { home: '/nonexistent-home', profile: 'default' }, [], () => Promise.resolve(), () => { calls.push('end changes'); return Promise.resolve() })
     expect(calls).toEqual(['watch'])
     expect(host.rows()).toEqual([{ id: 'mcp', name: '@x/mcp', generated: false }, { id: 'ok', name: '@x/ok', generated: false }])
     expect(host.failedRows()).toEqual([{ id: 'mcp', name: '@x/mcp', generated: false }])
+    expect(await host.reload()).toEqual({ ok: true })
     await host.suspend()
     await host.close()
-    expect(calls).toEqual(['watch', 'dispose', 'shutdown 0'])
+    expect(calls).toEqual(['watch', 'reload', 'end changes', 'dispose', 'end changes', 'shutdown 0'])
   })
 })

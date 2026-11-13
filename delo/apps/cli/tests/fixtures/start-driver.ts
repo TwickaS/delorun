@@ -90,7 +90,7 @@ try {
       root = ctx
       const row = [...ctx.get('loader')?.entries() ?? []].find(entry => entry.options.id === 'session-log-deepseek')
       sessionLogEnabled = (row?.options.config as { enabled?: unknown } | undefined)?.enabled
-      const profile: BootedProfile = { configSchemas: configSchemasOf(ctx), settleSecretValues: (home, profile) => settleSecretValues(ctx, home, profile, configSchemasOf(ctx)), rows: () => (rowsAtBoot = bootedRows(ctx)), providerOf: name => serviceProvider(ctx, name), releaseTurns: () => { ctx.get('deloTurnGate')?.release() }, shutdown: code => shutdown.shutdown(code), dispose: async () => { await ctx.fiber.dispose() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }) }
+      const profile: BootedProfile = { configSchemas: configSchemasOf(ctx), settleSecretValues: (home, profile) => settleSecretValues(ctx, home, profile, configSchemasOf(ctx)), rows: () => (rowsAtBoot = bootedRows(ctx)), providerOf: name => serviceProvider(ctx, name), releaseTurns: () => { ctx.get('deloTurnGate')?.release() }, shutdown: code => shutdown.shutdown(code), dispose: async () => { await ctx.fiber.dispose() }, watchChats: () => {}, watchUpdates: () => Promise.resolve(), studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), reload: async () => Promise.resolve({ ok: true }) }
       booted = profile
       return profile
     },

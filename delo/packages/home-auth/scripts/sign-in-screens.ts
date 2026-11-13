@@ -23,7 +23,7 @@ import { parseArgs } from 'node:util'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { reachContentSecurityPolicy } from '@deepseek-ai/dsh-client-connection'
 import type { StudioAddress } from '@delo/contract-admission'
-import { stampListener } from '../src/arrival.ts'
+import { stampListener } from '@delo/home'
 import { assetHandler, REACH_PATHS, signInPageHandler } from '../src/reach-routes.ts'
 import { homeFixture } from '../tests/fixtures/home.ts'
 

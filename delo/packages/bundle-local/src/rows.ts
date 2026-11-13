@@ -35,7 +35,7 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'plugin-manager',
     kind: 'changed',
-    reason: 'Plugin management protects Delo\'s consent and guard rows, the update gate, the update check, the trust bill, the plugin install check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components. It asks the npmmirror registry only when the install check\'s `npmMirror` setting is on (`fallbackRegistries` reads `DELO_NPM_MIRROR`, which `delorun` sets at each start), where upstream asks it by default.',
+    reason: 'Plugin management protects Delo\'s consent and guard rows, the plugin changes held for review, the update gate, the update check, the trust bill, the plugin install check and the sandbox rows (`protectedPlugins`), so the `plugin_manager` tool, which full access runs without a prompt, can neither disable them, change their settings, nor deselect or remove this bundle; upstream protects only its management components. It asks the npmmirror registry only when the install check\'s `npmMirror` setting is on (`fallbackRegistries` reads `DELO_NPM_MIRROR`, which `delorun` sets at each start), where upstream asks it by default.',
     parity: { kind: 'upstream', reason: 'The replay runs upstream\'s protection: the overlay leaves the row out, so `plugin_manager` lists and refuses the recorded scenarios\' rows as upstream does.' },
   },
   {
@@ -129,8 +129,8 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
   {
     id: 'delo-instruction-consent',
     kind: 'added',
-    reason: 'The C16 switch `instruction_layer_consent` on: a model-authored write to a skill, a preset or an `AGENTS.md` asks, with the effect and the diff, before it commits; the plugin\'s own default, off, is the parity value.',
-    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: upstream\'s write path runs unasked, as the recorded scenarios ran it.' },
+    reason: 'The C16 switches `instruction_layer_consent` and `approved_plugin_write_consent` on: a model-authored write to a skill, a preset or an `AGENTS.md` asks, with the effect and the diff, before it commits, and the agent\'s first write in a chat to the folder of a plugin the person approved under Changes asks, naming the plugin, with the diff; the plugin\'s own defaults, off, are the parity values.',
+    parity: { kind: 'disabled', reason: 'Both switches\' parity values are off, and a disabled row mounts nothing: upstream\'s write path runs unasked, as the recorded scenarios ran it.' },
   },
   {
     id: 'delo-mcp-consent',
@@ -157,10 +157,22 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the fetchGuard service is absent, so the recorded fetch scenarios call their loopback fixtures as they did.' },
   },
   {
+    id: 'delo-plugin-authoring',
+    kind: 'added',
+    reason: 'The delo-plugin-authoring skill: it teaches the agent to scaffold a plugin in the chat\'s workspace with `delorun plugin new`, and that turning the plugin on is the person\'s step at the computer; upstream has no such skill.',
+    parity: { kind: 'disabled', reason: 'Recorded scenarios list upstream\'s skills, and a disabled row mounts nothing.' },
+  },
+  {
     id: 'delo-delegation-consent',
     kind: 'added',
     reason: 'The C16 switch `external_agent_consent` on: an external agent such as Claude Code or Codex starts only after the person approves it at the home\'s computer or allowed it for the workspace, a read-only chat never starts one, each run stops after its time limit, and the model cannot install or enable one through `plugin_manager`; the person turns it off in Settings, External agents, which setup\'s prompts answer does not change, and the plugin\'s own default, off, is the parity value.',
     parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: the delegationConsent service is absent, so external providers start and describe themselves as upstream\'s do.' },
+  },
+  {
+    id: 'delo-plugin-changes',
+    kind: 'added',
+    reason: 'The C16 switch `plugin_changes_pending` on: an agent\'s `plugin_manager` install or removal does not run, it is recorded in the profile\'s change log as a pending change for the person\'s review, and the model reads that nothing was installed; the plugin\'s own default, off, is the parity value.',
+    parity: { kind: 'disabled', reason: 'The switch\'s parity value is off, and a disabled row mounts nothing: no listener or guard holds plugin_manager back, so it installs and removes as upstream does, behind its own approval.' },
   },
   {
     id: 'delo-update-gate',

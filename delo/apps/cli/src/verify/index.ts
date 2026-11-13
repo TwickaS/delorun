@@ -11,7 +11,9 @@
  * C18 makes no failure: the command then prints the warning that the release was not checked against the log, since
  * when, and why. It is 1 otherwise. After the check lines it prints the bill of materials of this Delorun
  * ([bill text](./bill-text.ts)) and the statement that the checks run with the person's access, which a program running
- * with that access can change. A summary line states what was and was not checked, and the bill's badge state.
+ * with that access can change. Then it prints what it found about Changes ([changes](./changes.ts)): the command also
+ * exits 1 while content the person did not approve runs or an invariant of Changes does not hold. A summary line states
+ * what was and was not checked, the bill's badge state, and what is present that the person did not approve.
  *
  * After the release checks, every profile's installed plugins are compared with their install records, every file
  * hashed, and the profile's trust status written; a plugin whose files changed since it was installed is a warning on
@@ -21,19 +23,23 @@
  */
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { TrustBill } from '@delo/bundle-local/trust-bill'
 import { DELO_LAUNCHER_ROOTS_ENV } from '@delo/contract-home-layout'
 import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
 import type { DeloLogger } from '@delo/logs'
 import type { Fetch, RecordedCheck } from '@delo/release-verify'
-import { parseRuntimeVersion } from '@delo/runtime-store'
+import { parseRuntimeVersion, StorePaths } from '@delo/runtime-store'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput } from '../command.ts'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
+import { signedRuntimeOf } from '../update/signed-runtime.ts'
+import { runtimeOfFile } from '../update/runtime.ts'
 import { deloVersion } from '../version.ts'
 import { checkInstalledPlugins } from '../plugin-install-check.ts'
 import { installedPluginsCheck } from './plugin-bill.ts'
 import { runVerifyStage, type ChangesReader, type PluginInstallCheck } from './bill.ts'
 import { ACCESS_LINE, billLines, billSuffix } from './bill-text.ts'
+import { changesExit, changesLines, changesSuffix, readVerifyChanges, type VerifyChanges } from './changes.ts'
 import { NOT_RUN_HERE, VERIFY_MODE, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
 
 /** The `delorun verify --help` text. */
@@ -43,10 +49,11 @@ const VERIFY_USAGE = [
   'Checks the running release, or an installed one, against its signed manifest, the stored timestamp\'s',
   'freshness and its release-log entry, and proves the release log consistent online unless --offline.',
   'Prints one line per check: passed, failed or not run, with the reason, then the bill of materials of',
-  'this Delorun and how much of it was checked.',
+  'this Delorun and how much of it was checked, then the changes you approved and anything present that you did not',
+  'approve.',
   'Exit codes: 0 when no check failed and release-signature passed or could not reach the release log,',
-  '1 otherwise, 2 for a wrong command line. A release log that cannot be reached leaves the release not checked',
-  'against it, with a warning, and does not fail.',
+  '1 otherwise or while content you did not approve runs, 2 for a wrong command line. A release log that cannot be',
+  'reached leaves the release not checked against it, with a warning, and does not fail.',
   '',
   '  --release <version>  the installed release to check (default: the running one)',
   '  --offline            run no online check',
@@ -86,6 +93,12 @@ export interface VerifyEnvironment {
   readonly plugins?: PluginInstallCheck
   /** Changes; absent leaves the bill's changes `unknown`. */
   readonly changes?: ChangesReader
+  /**
+   * Whether this `delorun` runs from the runtime store.
+   * @param home - the resolved Delo home.
+   * @returns false for a source checkout or a development build.
+   */
+  readonly fromStore: (home: string) => boolean
 }
 
 /**
@@ -101,6 +114,16 @@ async function checkEveryProfile(home: string, output: CommandOutput): Promise<v
     if (!entry.isDirectory()) continue
     await checkInstalledPlugins({ home, profile: entry.name, profileDir: join(profiles, entry.name), installAnchor: INSTALL_ANCHOR, full: true, output })
   }
+}
+
+/**
+ * Whether this `delorun` runs from the runtime store of a home.
+ * @param home - the resolved Delo home.
+ * @returns true when this module lies under the home's `runtimes/<version>/`; false for a source checkout or a
+ *   development build.
+ */
+export function runsFromStore(home: string): boolean {
+  return runtimeOfFile(home, fileURLToPath(import.meta.url)).store
 }
 
 /** The bill's plugin install check over this installation's profile boot; the boot module loads when the check runs. */
@@ -119,6 +142,7 @@ const PROCESS_ENVIRONMENT: VerifyEnvironment = {
   running: deloVersion,
   checkPlugins: checkEveryProfile,
   plugins: processPluginsCheck,
+  fromStore: runsFromStore,
 }
 
 /**
@@ -161,16 +185,17 @@ export function originsLine(origins: ReleaseOrigins | undefined): string {
 }
 
 /**
- * The summary line: what was and was not checked, which no reader should take for more, and the bill's badge state.
+ * The summary line: what was and was not checked, which no reader should take for more, the bill's badge state, and what is present that the person did not approve.
  * @param results - one result per registered check.
  * @param bill - the run's bill, when it built one.
+ * @param changes - what the run found about Changes, when it read them.
  * @returns the line, ending with a newline.
  */
-export function summaryLine(results: readonly VerificationCheckResult[], bill?: TrustBill): string {
+export function summaryLine(results: readonly VerificationCheckResult[], bill?: TrustBill, changes?: VerifyChanges): string {
   const count = (result: VerificationResult): number => results.filter(entry => entry.result === result).length
   const parts = [`${String(count('pass'))} checks passed`, `${String(count('fail'))} failed`, `${String(count('unknown'))} not run`]
   if (count('not-enforced') > 0) parts.push(`${String(count('not-enforced'))} not enforced`)
-  return `${parts.join(', ')}${billSuffix(bill)}; this is not a full verification of this Delorun.\n`
+  return `${parts.join(', ')}${billSuffix(bill)}${changesSuffix(changes)}; this is not a full verification of this Delorun.\n`
 }
 
 /**
@@ -178,17 +203,18 @@ export function summaryLine(results: readonly VerificationCheckResult[], bill?: 
  * @param release - the release checked.
  * @param outcome - what the run found.
  * @param bill - the run's bill, when it built one.
+ * @param changes - what the run found about Changes, when it read them.
  * @returns the text: a heading, the root line, the origins line, the launcher line when the manifest verified, one
- *   line per check, the bill of materials, the access statement and the summary.
+ *   line per check, the bill of materials, the access statement, the Changes block and the summary.
  */
-export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins' | 'launcher'>, bill?: TrustBill): string {
+export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins' | 'launcher'>, bill?: TrustBill, changes?: VerifyChanges): string {
   const run = outcome.results.filter(result => result.detail !== NOT_RUN_HERE)
   const absent = outcome.results.length - run.length
   const width = Math.max(...run.map(result => result.id.length))
   const lines = run.map(result => `${LABELS[result.result].padEnd(7)}  ${result.id.padEnd(width)}  ${result.detail}`)
   if (absent > 0) lines.push(`Delorun does not include ${String(absent)} more ${absent === 1 ? 'check' : 'checks'}.`)
   const launcher = outcome.launcher === undefined ? '' : `Launcher: ${outcome.launcher}.\n`
-  return `Release ${release}, verification mode ${VERIFY_MODE}; checks run as your user.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${launcher}${lines.join('\n')}\n${bill === undefined ? '' : billLines(bill)}${ACCESS_LINE}${summaryLine(run, bill)}`
+  return `Release ${release}, verification mode ${VERIFY_MODE}; checks run as your user.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${launcher}${lines.join('\n')}\n${bill === undefined ? '' : billLines(bill)}${ACCESS_LINE}${changes === undefined ? '' : changesLines(changes)}${summaryLine(run, bill, changes)}`
 }
 
 /**
@@ -197,9 +223,10 @@ export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 
  * @param release - the release.
  * @param outcome - what the run found.
  * @param now - the clock, in Unix seconds.
+ * @param changes - what the run found about Changes.
  * @returns the report.
  */
-export function report(release: string, outcome: ReleaseCheckOutcome, now: number): VerificationReport & { readonly release: string, readonly root: RootAnchor | null, readonly releaseLog: RecordedCheck | null, readonly origins: ReleaseOrigins | null } {
+export function report(release: string, outcome: ReleaseCheckOutcome, now: number, changes: VerifyChanges): VerificationReport & { readonly release: string, readonly root: RootAnchor | null, readonly releaseLog: RecordedCheck | null, readonly origins: ReleaseOrigins | null, readonly changes: VerifyChanges } {
   return {
     schemaVersion: VERIFICATION_REPORT_SCHEMA_VERSION,
     mode: VERIFY_MODE,
@@ -213,6 +240,7 @@ export function report(release: string, outcome: ReleaseCheckOutcome, now: numbe
     root: outcome.root ?? null,
     releaseLog: outcome.recorded ?? null,
     origins: outcome.origins ?? null,
+    changes,
   }
 }
 
@@ -252,13 +280,16 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
         { home: home.path, profile, platform: environment.platform, running: environment.running(), env: context.env, now, ...environment.plugins === undefined ? {} : { plugins: environment.plugins }, ...environment.changes === undefined ? {} : { changes: environment.changes } },
         { release, fetch: values.offline ? undefined : environment.fetch, logger: stderrLogger(context) },
       )
-      if (values.json) context.stdout(`${JSON.stringify({ ...report(release, outcome, now), bill })}\n`)
-      else context.stdout(reportLines(release, outcome, bill))
+      const fromStore = environment.fromStore(home.path)
+      const signed = outcome.verified === undefined ? undefined : signedRuntimeOf(new StorePaths(home.path, outcome.verified.files.platform).version(release), outcome.verified)
+      const changes = await readVerifyChanges(home.path, profile, fromStore, fromStore ? { runtime: release, signed } : undefined)
+      if (values.json) context.stdout(`${JSON.stringify({ ...report(release, outcome, now, changes), bill })}\n`)
+      else context.stdout(reportLines(release, outcome, bill, changes))
       for (const notice of outcome.notices) context.stderr(`notice: ${notice}\n`)
       for (const warning of outcome.warnings) context.stderr(`warning: ${warning}\n`)
       // A changed plugin is a warning and fails nothing: the plugins are the person's, not the release's.
       await environment.checkPlugins?.(home.path, context)
-      return exitOf(outcome)
+      return exitOf(outcome) === EXIT.ok ? changesExit(changes) : EXIT.failed
     },
   }
 }

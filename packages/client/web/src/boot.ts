@@ -10,7 +10,7 @@ import type {
   BootManifest, ClientModuleCreateOptions, ClientModuleSystem, DshWindow,
 } from '@deepseek-ai/dsh-client-modules/client'
 import { bootClient } from './boot-client.ts'
-import { BootPage } from './boot-page.ts'
+import { BootPage, RECOVERY_AFTER_MS, RECOVERY_PATH } from './boot-page.ts'
 import { mountClient } from './mount.ts'
 import { getStaticModules } from './seed.ts'
 import { installWindowDragRecall } from './window-drag/recall.ts'
@@ -42,11 +42,16 @@ export class AppWebEntry {
 
   /**
    * Load and activate every client entry, then hand the mount point to the
-   * UI renderer. Plugin failures remain visible on the boot page.
+   * UI renderer. Plugin failures remain visible on the boot page. On a page
+   * that names recovery routes, the page at `/recovery` shows the recovery
+   * screen and loads no client entry, and without a carrier the recovery
+   * screen also shows when the application has not mounted in time.
    * @param onFailure - Optional carrier-owned fatal presentation; keeps the boot page visible.
    * @returns Resolves after application mount or failure reporting.
    */
   async run(onFailure?: (reason: unknown) => void): Promise<void> {
+    if (this.container.ownerDocument.defaultView?.location.pathname === RECOVERY_PATH && this.page.recover()) return
+    const late = onFailure === undefined ? setTimeout(() => { this.page.recover() }, RECOVERY_AFTER_MS) : undefined
     try {
       // Boot-readiness gate: whichever bootstrap applies the injection table
       // settles this deferred once every row has taken effect — the served
@@ -100,6 +105,8 @@ export class AppWebEntry {
       console.error(reason)
       if (onFailure !== undefined) onFailure(reason)
       else this.page.fail(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      clearTimeout(late)
     }
   }
 

@@ -19,11 +19,12 @@ import { OPT_IN_ROWS, type BootedRow } from '../src/delo-bundles.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { main } from '../src/main.ts'
 import { composedRow, isRecord } from '../src/patch-layers.ts'
+import { promptRows } from '../src/setup/prompt-switches.ts'
 import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts'
 import { HEADLESS_BUNDLE } from '@delo/bundle-local/profile'
 
 /** The rows of `@delo/bundle-headless`. */
-const HEADLESS_ROWS = ['delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent', 'delo-permission-defaults', 'delo-fetch-guard', 'delo-delegation-consent', 'delo-update-gate'] as const
+const HEADLESS_ROWS = ['delo-instruction-consent', 'delo-mcp-consent', 'delo-schedule-consent', 'delo-permission-defaults', 'delo-plugin-changes', 'delo-fetch-guard', 'delo-delegation-consent', 'delo-update-gate'] as const
 
 /** The services the headless bundle's rows provide and the row each comes from. */
 const HEADLESS_SERVICES = [
@@ -155,7 +156,8 @@ describe('a set-up CLI profile', { timeout: 60_000 }, () => {
     const answers = join(deloHome, 'profiles', 'default', 'setup-answers.json')
     writeFileSync(answers, JSON.stringify({ ...JSON.parse(readFileSync(answers, 'utf8')) as object, prompts: 'stock' }))
     rmSync(join(deloHome, 'cordis.patch.yml'))
-    for (const id of ['delo-instruction-consent', 'delo-mcp-consent', 'delo-permission-defaults', 'delo-schedule-consent', 'delo-delegation-consent']) appendToProfilePatch({ id, config: id === 'delo-permission-defaults' ? { enabled: false, fullAccessEverywhere: false } : { enabled: false } })
+    for (const row of promptRows('stock')) appendToProfilePatch({ id: row.id, config: row.config })
+    appendToProfilePatch({ id: 'delo-delegation-consent', config: { enabled: false } })
     const composed = await compose()
     expect(composed.prompts).toBe('stock')
     expect(() => { assertDeloInvariants(composed, booted(composed)) }).not.toThrow()
@@ -379,6 +381,37 @@ describe('the approved plugin content slot', { timeout: 60_000 }, () => {
   })
 })
 
+describe('the person\'s --patch overlays', { timeout: 60_000 }, () => {
+  it('apply over the profile\'s layers and under the approved content and the sandbox overlay', async () => {
+    const overlay = join(osHome, 'mine.patch.yml')
+    writePatch(overlay, [{ id: 'delo-trash', config: {} }])
+    const extra = join(osHome, 'approved.patch.yml')
+    writePatch(extra, [{ id: 'delo-trash', config: {} }])
+    const drafts: unknown[] = []
+    const composed = await composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, {
+      prepareProfile: upstreamDependencies().prepareProfile,
+      approvedPluginContent: (draft) => { drafts.push(draft.patchFiles); return Promise.resolve([extra]) },
+    })
+    expect(drafts).toEqual([[overlay]])
+    expect(composed.patchFiles).toEqual([overlay, extra, join(deloHome, 'run', 'default', 'sandbox.patch.yml')])
+  })
+
+  it('are held to the invariants, naming the overlay that breaks one', async () => {
+    const overlay = join(osHome, 'off.patch.yml')
+    writePatch(overlay, [{ id: 'delo-fetch-guard', disabled: true }])
+    expect(await refused(() => composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT }))).toContain(overlay)
+  })
+
+  it('are refused in safe mode, which says how to leave it', async () => {
+    expect(await main(['recover', 'safe-mode'], context)).toBe(EXIT.ok)
+    const overlay = join(osHome, 'mine.patch.yml')
+    writePatch(overlay, [])
+    const message = await refused(() => composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: context, env: {}, osHome, patchFiles: [overlay] }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT }))
+    expect(message).toContain('safe mode')
+    expect(message).toContain('delorun recover exit-safe-mode')
+  })
+})
+
 describe('the headless profile', { timeout: 60_000 }, () => {
   beforeEach(async () => {
     await upstreamAddHeadlessBundle(deloHome, context)
@@ -395,6 +428,7 @@ describe('the headless profile', { timeout: 60_000 }, () => {
       { id: 'delo-permission-defaults', name: '@delo/plugin-permission-defaults' },
       { id: 'delo-fetch-guard', name: '@delo/plugin-fetch-guard' },
       { id: 'delo-delegation-consent', name: '@delo/plugin-delegation-consent' },
+      { id: 'delo-plugin-changes', name: '@delo/plugin-changes' },
       { id: 'delo-update-gate', name: '@delo/bundle-local/update-gate' },
       { id: 'delo-plugin-install-check', name: '@delo/plugin-install-check' },
     ])

@@ -10,7 +10,7 @@
  * @module @delo/home-auth/computer-only
  */
 import type { ServerResponse } from 'node:http'
-import { isLoopbackHost } from './arrival.ts'
+import { isLoopbackHost } from '@delo/home'
 import { refusalBody } from './errors.ts'
 import type { HomeAuthService } from './service.ts'
 

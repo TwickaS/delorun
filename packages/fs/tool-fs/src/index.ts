@@ -20,7 +20,7 @@ import { FsSandboxController } from './sandbox.ts'
 
 export { FS_CONSENT_DENIED, WriteConsentRefusedError, applyWriteConsent, reviewWriteConsent } from './consent.ts'
 export { protectedReadCheck, refuseProtectedRead } from './read-target.ts'
-export type { WriteConsentDiff, WriteConsentRequest, WriteConsentReview, WriteConsentService, WriteConsentTool } from './consent.ts'
+export type { WriteConsentArgs, WriteConsentDiff, WriteConsentRequest, WriteConsentReview, WriteConsentService, WriteConsentTool } from './consent.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-fs'

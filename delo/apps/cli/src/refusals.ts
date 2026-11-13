@@ -7,6 +7,7 @@
  *
  * @module @delo/cli/refusals
  */
+import { changesDescriber } from '@delo/changes'
 import { archiveDescriber, dshImportDescriber } from '@delo/archive'
 import { StartCheckPendingError, UpdatePendingError } from '@delo/bundle-local/update-gate'
 import { codedReason, describeFailure, homeLayoutDescriber, profileOption, refusalDescriber, renderRefusal, type Refusal, type RefusalContext, type RefusalDescriber, type TextRedactor } from '@delo/home'
@@ -124,6 +125,7 @@ export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
     return { ...refusal, reason: refusal.reason === undefined ? teardown : `${refusal.reason}; ${teardown}` }
   }),
   homeLayoutDescriber,
+  changesDescriber,
   homeProcessDescriber,
   runtimeStoreDescriber,
   installDescriber,

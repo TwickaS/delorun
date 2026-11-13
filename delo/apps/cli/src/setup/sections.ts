@@ -4,7 +4,7 @@
  * section, whether it is asked in the main flow, left to the review screen's "More settings", or not asked at all.
  * Each section is also `delorun setup <id>`. Later packages add their sections through
  * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, the model provider and key
- * ([provider section](./provider-section.ts)), prompts, background, remote access and profile. Privacy shows its note in the main flow and asks about the release check under "More settings".
+ * ([provider section](./provider-section.ts)), prompts, background, remote access, changes protection and profile. Privacy shows its note in the main flow and asks about the release check under "More settings".
  *
  * @module @delo/cli/setup/sections
  */
@@ -34,6 +34,7 @@ import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
 import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
+import { CHANGES_PROTECTION_SECTION_ORDER, changesProtectionSection } from '../changes/setup-section.ts'
 
 /**
  * Where a section's question is asked: `main` is the flow every use case follows, `more` the review screen's "More
@@ -467,6 +468,7 @@ export function defaultRegistry(catalog: () => Promise<ProviderCatalog> = instal
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
   registry.register(reachSection(systemTailscale(), homeRuns), { order: REACH_SECTION_ORDER })
+  registry.register(changesProtectionSection(process), { order: CHANGES_PROTECTION_SECTION_ORDER })
   registry.register(profileSection, { order: 50 })
   return registry
 }

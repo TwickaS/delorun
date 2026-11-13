@@ -236,13 +236,13 @@ describe('the remembering case probe', () => {
 
 describe('the instruction_layer_consent switch', () => {
   it('defaults to off, the parity value', () => {
-    expect(Config()).toEqual({ enabled: false })
+    expect(Config()).toEqual({ enabled: false, approvedPluginWrites: false })
   })
 
   it('mounts the writeConsent service when on, and leaves the one mode-guard slot to its owner', () => {
     const ctx = new Context()
     try {
-      apply(ctx, { enabled: true })
+      apply(ctx, { enabled: true, approvedPluginWrites: false })
       expect(ctx.get('writeConsent')).toBeInstanceOf(InstructionConsent)
       // A135: the session-mode seam keeps one provider, the full-access consent
       // of @delo/plugin-permission-defaults, so this plugin mounts no guard. The
@@ -256,7 +256,7 @@ describe('the instruction_layer_consent switch', () => {
   it('mounts nothing when off, so the seam reads as unmounted', () => {
     const ctx = new Context()
     try {
-      apply(ctx, { enabled: false })
+      apply(ctx, { enabled: false, approvedPluginWrites: false })
       expect(ctx.get('writeConsent')).toBeUndefined()
       expect(ctx.get('sandboxModeGuard')).toBeUndefined()
     } finally {

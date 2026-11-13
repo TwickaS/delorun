@@ -48,15 +48,14 @@
 # plugin management protects only upstream's own components. The workspace-controller row is left out,
 # so the replay places the first-use workspace by upstream's own documents
 # lookup (C16 switch default_workspace_directory, a presence switch, off). The
-# five consent and guard rows, the update gate row, the update check row and
-# the plugin install check row are present and disabled: stock makes no request
-# for a newer release and audits no plugin, the
-# shipped composition mounts each
-# with its switch on, and a disabled row mounts nothing, which is each switch's
-# parity value. The
-# studio bundle and the permission
-# defaults are planned, and the preset default keeps
-# upstream's value (`standard`).
+# seven consent and guard rows (instruction consent, MCP consent, permission
+# defaults, schedule consent, fetch guard, delegation consent and plugin
+# changes), the update gate row, the update check row and the plugin install
+# check row are present and disabled: stock makes no request for a newer
+# release and audits no plugin, the shipped composition mounts each with its
+# switches on, and a disabled row mounts nothing, which is each switch's parity
+# value. The studio bundle and the permission defaults are planned, and the
+# preset default keeps upstream's value (`standard`).
 
 - id: tool-plugin-manager
   name: '@deepseek-ai/dsh-plugin-manager/tools'
@@ -80,6 +79,7 @@
       name: '@delo/plugin-instruction-consent'
       config:
         enabled: true
+        approvedPluginWrites: true
       disabled: true
 
     - id: delo-mcp-consent
@@ -106,10 +106,25 @@
         enabled: true
       disabled: true
 
+    - id: delo-plugin-authoring
+      name: '@delo/skill-plugin-authoring'
+      disabled: true
+
     - id: delo-delegation-consent
       name: '@delo/plugin-delegation-consent'
       config:
         enabled: true
+      disabled: true
+
+    - id: delo-plugin-changes
+      name: '@delo/plugin-changes'
+      config:
+        enabled: true
+        installationBundles:
+          - '@deepseek-ai/dsh-base'
+          - '@deepseek-ai/dsh-web-app'
+          - '@delo/bundle-local'
+          - '@delo/bundle-studio'
       disabled: true
 
 - insert:

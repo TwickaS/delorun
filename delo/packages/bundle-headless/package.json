@@ -1,6 +1,6 @@
 {
   "name": "@delo/bundle-headless",
-  "description": "Delo's headless bundle: the guard rows delorun headless mounts over upstream's headless profile, the fetch guard, the instruction write, MCP, schedule and full-access consents, the turn gate and the protection of those rows from plugin management",
+  "description": "Delo's headless bundle: the guard rows delorun headless mounts over upstream's headless profile, the fetch guard, the instruction write, MCP, schedule and full-access consents, the plugin changes held for review, the turn gate and the protection of those rows from plugin management",
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
@@ -22,6 +22,7 @@
   "dependencies": {
     "@delo/bundle-local": "workspace:*",
     "@delo/plugin-delegation-consent": "workspace:*",
+    "@delo/plugin-changes": "workspace:*",
     "@delo/plugin-fetch-guard": "workspace:*",
     "@delo/plugin-install-check": "workspace:*",
     "@delo/plugin-instruction-consent": "workspace:*",

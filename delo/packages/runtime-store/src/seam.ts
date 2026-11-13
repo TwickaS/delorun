@@ -111,9 +111,10 @@ export interface UpdateReporter {
   /**
    * Compute the report against an installed, verified version, installing nothing.
    * @param version - the installed target.
+   * @param purpose - `update` for {@link HomeRuntimeStore.prepare}, `rollback` for {@link HomeRuntimeStore.reportRollback}.
    * @returns the report.
    */
-  build(version: RuntimeVersion): Promise<UpdateReport>
+  build(version: RuntimeVersion, purpose: 'update' | 'rollback'): Promise<UpdateReport>
 }
 
 /** What a {@link HomeRuntimeStore} needs. */
@@ -303,7 +304,7 @@ export class HomeRuntimeStore {
       version = resolved.version
     }
     phase('reporting')
-    const report = await this.options.report.build(version)
+    const report = await this.options.report.build(version, 'update')
     return { version, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
   }
 
@@ -339,7 +340,7 @@ export class HomeRuntimeStore {
     }
     return this.options.store.shareChecks(async () => {
       await this.options.store.checkRuntime(target, await this.options.root())
-      const report = await this.options.report.build(target)
+      const report = await this.options.report.build(target, 'rollback')
       return { version: target, report: report.report, health: report.health, dataDiffers: report.dataDiffers }
     })
   }

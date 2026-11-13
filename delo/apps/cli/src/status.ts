@@ -2,12 +2,17 @@
  * `delorun status`: the home, the CLI profile, an inherited `DSH_HOME` that `delorun` ignored (contract C1, "The
  * home directory"), and the home process's own `status` answer over the update channel (contract C19, "Commands"):
  * its state, process id, start id, the `current`, `previous` and running runtime versions, the running chats, the
- * update in progress and the studio's loopback address, with the command that opens the studio. The address is printed
- * without any query, fragment or credentials, so no token reaches the output. `--json` prints the `status` answer alone. It creates nothing. Exit codes follow C19: 0 when
+ * update in progress, whether its debugger is open (`delorun start --inspect`, [inspector](./inspector.ts)) and the studio's loopback address, with the command that opens the studio. The address is printed
+ * without any query, fragment or credentials, so no token reaches the output. `--json` prints the `status` answer, with an `inspector` field while the debugger is open. It creates nothing. Exit codes follow C19: 0 when
  * a home process runs, 3 when none runs, 1 on an error, such as a live lock holder whose channel does not answer.
+ * While a work session is open (contract C21, "Work sessions"), the text output names its plugin, start and end time.
+ * It also names the plugins approved at upgrade that no terminal has shown yet, the changes waiting for review and a
+ * lowered protection setting (C21, "What verify and doctor report"), since `delorun start` shows its start's notice
+ * only in the log.
  *
  * @module @delo/cli/status
  */
+import { workSessionFact } from '@delo/changes'
 import { DSH_HOME_ENV, HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { HomeStatus } from '@delo/contract-home-process'
 import { holderAlive, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
@@ -15,7 +20,26 @@ import { queryHomeStatus } from '@delo/home-process'
 import { EXIT } from './exit.ts'
 import { parseOptions, type CliCommand } from './command.ts'
 import { profileDirectory, selectProfile } from './profile.ts'
+import { readInspectorRecord, type InspectorRecord } from './inspector.ts'
 import { dangerousModeLine } from './setup/dangerous.ts'
+import { printable } from './terminal-text.ts'
+import { changesNotice } from './verify/changes.ts'
+
+/**
+ * The line that names the profile's open work session.
+ * @param home - the Delo home.
+ * @param profile - the profile's name.
+ * @returns the line with its line ending; empty when no session is open.
+ */
+async function workSessionLine(home: string, profile: string): Promise<string> {
+  try {
+    const session = await workSessionFact(home, profile)
+    return session === undefined ? '' : `work session: ${printable(session.plugin)} since ${session.startedAt}, ends at ${session.endsAt}\n`
+  } catch (error) {
+    // workSessionFact refuses a record Delo did not write with a ChangesError, whose message is its detail.
+    return `work session: unreadable: ${printable((error as Error).message)}\n`
+  }
+}
 
 /** The line that follows the studio's address. */
 export const OPEN_HINT = 'Run delorun open to open the studio in your browser.'
@@ -41,9 +65,10 @@ export function studioAddress(studio: string | undefined): URL | undefined {
  * The lines `delorun status` prints for a home process's answer.
  * @param status - the answer.
  * @param verbose - whether to add the process id, the start id and the previous version.
+ * @param inspector - the debugger the home process keeps open, if any.
  * @returns the lines.
  */
-function statusLines(status: HomeStatus, verbose: boolean): string {
+function statusLines(status: HomeStatus, verbose: boolean, inspector: InspectorRecord | undefined): string {
   const studio = studioAddress(status.studio)
   return [
     `Delorun is ${status.state}.`,
@@ -53,6 +78,7 @@ function statusLines(status: HomeStatus, verbose: boolean): string {
     ...status.update === undefined ? [] : [`Update: ${status.update.phase} to ${status.update.target}`],
     ...verbose ? [`Process id: ${String(status.pid)}`, `Start id: ${status.startId}`] : [],
     ...studio === undefined ? [] : [OPEN_HINT],
+    ...inspector === undefined ? [] : [`inspector: open at ${inspector.url} since ${inspector.openedAt}; any process on this computer, including commands the agent runs inside the sandbox, can run code as Delorun outside the sandbox until Delo restarts without --inspect`],
     '',
   ].join('\n')
 }
@@ -75,6 +101,8 @@ export const statusCommand: CliCommand = {
       if (home.ignoredDshHome !== undefined) {
         context.stdout(`Note: ${DSH_HOME_ENV} is set to ${home.ignoredDshHome}; Delorun ignores it and uses ${DSH_HOME_ENV}=${home.path}\n`)
       }
+      context.stdout(await workSessionLine(home.path, profile))
+      context.stdout(await changesNotice(home.path, profile))
     }
     const record = readHomeLock(runDirectory(home.path, profile))
     if (record === undefined || !holderAlive(record)) {
@@ -93,7 +121,8 @@ export const statusCommand: CliCommand = {
       context.stderr(`delorun status: Delorun refused the request: ${String(answer.error)}. Run delorun logs to see why.\n`)
       return EXIT.failed
     }
-    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer })}\n` : statusLines(answer as HomeStatus, verbose))
+    const inspector = readInspectorRecord(home.path, profile, record.pid)
+    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer, ...inspector === undefined ? {} : { inspector: { url: inspector.url, openedAt: inspector.openedAt } } })}\n` : statusLines(answer as HomeStatus, verbose, inspector))
     return EXIT.ok
   },
 }

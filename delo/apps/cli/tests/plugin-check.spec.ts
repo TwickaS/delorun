@@ -11,7 +11,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SemanticVersion } from '@delo/contract-release-manifest'
 import { EXIT } from '../src/exit.ts'
-import { PLUGIN_MANIFEST_LIMIT, runPluginCheck, targetRange } from '../src/plugin-check.ts'
+import { targetRange } from '@delo/plugin-scaffold'
+import { PLUGIN_MANIFEST_LIMIT, runPluginCheck } from '../src/plugin-check.ts'
 import { pluginCommand } from '../src/upstream.ts'
 
 const RUNNING = { delo: brandString<SemanticVersion>('0.1.3'), dsh: brandString<SemanticVersion>('0.2.2') }

@@ -9,7 +9,8 @@
  *
  * 1. upstream's profile preparation, the refusal of a profile that skipped a Delo bundle, and for `delorun headless` the
  *    refusal of a `headless` profile that does not load `@delo/bundle-headless`;
- * 2. safe mode's filtered layers and overlay, when its marker is set;
+ * 2. safe mode's filtered layers and overlay, when its marker is set; otherwise the person's `--patch` overlays of
+ *    `delorun start`, in the order given, which safe mode refuses;
  * 3. the approved plugin content step ({@link ApprovedPluginContent}), whose overlays apply after safe mode's;
  * 4. C1's sandbox overlay, the last overlay, so it applies over every layer
  *    ([sandbox protection](./sandbox-protection.ts));
@@ -83,6 +84,11 @@ export interface ComposeRequest {
   readonly osHome?: string
   /** The user id that names the runtime and tmux directories C1 hides; this process's by default. */
   readonly uid?: number
+  /**
+   * The person's overlays from `delorun start --patch`, absolute, in order. They apply over the profile's layers and
+   * under the approved plugin content and the sandbox overlay, so the composition's invariants hold over them.
+   */
+  readonly patchFiles?: readonly string[]
 }
 
 /** The composition so far, which the approved plugin content step reads. */
@@ -106,14 +112,14 @@ export interface CompositionDraft {
  */
 export type ApprovedPluginContent = (draft: CompositionDraft) => Promise<readonly string[]>
 
-/** The step that adds nothing, which every real start passes until a start-path feature fills the slot. */
+/** The step that adds nothing and refuses nothing. */
 export const NO_APPROVED_CONTENT: ApprovedPluginContent = () => Promise.resolve([])
 
 /** What a composition calls outside this module; specs replace them. */
 export interface ComposeDependencies {
   /** Loads the profile and reports its skipped bundles, as upstream's boot does. */
   readonly prepareProfile: (profile: string) => Promise<ResolvedProfileRuntime>
-  /** The approved plugin content step; a real start passes {@link NO_APPROVED_CONTENT} until the slot is filled. */
+  /** The approved plugin content step; Changes' `changesApprovedContent` in a real start ([changes](./changes/start.ts)). */
   readonly approvedPluginContent: ApprovedPluginContent
 }
 
@@ -182,11 +188,12 @@ const PROMPT_ANSWER_LABELS = { safer: 'Ask me first', stock: 'Ask less (like Dee
  * answer changes there.
  */
 export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
-  'delo-instruction-consent': { enabled: true },
+  'delo-instruction-consent': { enabled: true, approvedPluginWrites: true },
   'delo-mcp-consent': { enabled: true },
   'delo-schedule-consent': { enabled: true },
   'delo-permission-defaults': { enabled: true },
   'delo-delegation-consent': { enabled: true },
+  'delo-plugin-changes': { enabled: true },
   ...GUARD_ROWS,
 }
 
@@ -234,11 +241,13 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   const deloRows = deloRowIds(resolvedProfile.profile)
   // Safe mode boots the same profile with its third-party layers and rows left out, and edits none of its files.
   const safe = safeModeStart({ home: request.home, profile: request.profile, resolvedProfile })
+  const overlays = request.patchFiles ?? []
   if (safe !== undefined) {
+    if (overlays.length > 0) throw new CliError(EXIT.failed, `delorun: the profile ${request.profile} is in safe mode, which leaves out everything but Delo's and upstream's own plugins, so it does not apply --patch ${overlays.join(', ')}; start without --patch, or leave safe mode with delorun recover exit-safe-mode`)
     request.output.stdout(safeModeNotice(safe))
     resolvedProfile = safe.resolvedProfile
   }
-  const before = safe?.patchFiles ?? []
+  const before = safe?.patchFiles ?? overlays
   const approved = await dependencies.approvedPluginContent({ request, resolvedProfile, patchFiles: before, safe })
   const protection = await sandboxProtection(request.home, request.profile, request.env, request.osHome ?? homedir(), request.uid ?? process.getuid?.())
   const others = [...before, ...approved]

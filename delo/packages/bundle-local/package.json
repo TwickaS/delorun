@@ -69,6 +69,7 @@
     "@delo/contract-update-report": "workspace:*",
     "@delo/home-auth": "workspace:*",
     "@delo/plugin-delegation-consent": "workspace:*",
+    "@delo/plugin-changes": "workspace:*",
     "@delo/plugin-fetch-guard": "workspace:*",
     "@delo/plugin-install-check": "workspace:*",
     "@delo/plugin-instruction-consent": "workspace:*",
@@ -77,6 +78,7 @@
     "@delo/plugin-schedule-consent": "workspace:*",
     "@delo/plugin-trash": "workspace:*",
     "@delo/profile-safety": "workspace:*",
+    "@delo/skill-plugin-authoring": "workspace:*",
     "@delo/reach": "workspace:*",
     "@delo/settings-controls": "workspace:*",
     "zod": "4.4.3"

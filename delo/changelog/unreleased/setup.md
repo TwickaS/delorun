@@ -3,7 +3,7 @@ area: Setup
 section: Added
 ---
 
-- `delorun setup` asks the model provider with its key and how careful prompts should be, and its More settings choice asks whether Delorun keeps running in the background and the profile's name and port. A typed key is checked with one live request to the provider before it is stored, and a failed check says why and lets you enter the key again or continue. Every question can return to the one before it, and a review screen lists the answers before anything is written.
+- `delorun setup` asks the model provider with its key and how careful prompts should be, and its More settings choice asks whether Delorun keeps running in the background and the profile's name and port. Changes protection is asked there too: it holds changes to your plugins and to Delorun itself for your review, and setup never turns it off. A typed key is checked with one live request to the provider before it is stored, and a failed check says why and lets you enter the key again or continue. Every question can return to the one before it, and a review screen lists the answers before anything is written.
 - "Ask me first" and "Ask less (like DeepSeek Harness)" take effect: they set Delo's consent and permission defaults to their Delo or stock values in the new profile.
 - `delorun setup <section>` runs one section again, and `delorun setup --list` lists them.
 - A terminal setup ends by printing the next steps and starts nothing; `delorun` starts Delorun in the background, which keeps running after the terminal closes, with the commands `delorun status`, `delorun logs --follow` and `delorun stop`.

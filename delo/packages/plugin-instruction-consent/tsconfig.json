@@ -12,11 +12,27 @@
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../../packages/boot/app-boot" },
+    { "path": "../../../packages/boot/plugin-manager" },
     { "path": "../../../packages/context/agent-instructions" },
+    { "path": "../../../packages/core/agent" },
+    { "path": "../../../packages/core/session" },
+    { "path": "../../../packages/core/system-prompt" },
+    { "path": "../../../packages/core/tool-executor-native" },
+    { "path": "../../../packages/core/tools" },
+    { "path": "../../../packages/fs/fs" },
+    { "path": "../../../packages/fs/fs-local" },
+    { "path": "../../../packages/fs/fs-observation-policy" },
     { "path": "../../../packages/fs/tool-fs" },
+    { "path": "../../../packages/interaction/user-approval" },
+    { "path": "../../../packages/llm/llm" },
     { "path": "../../../packages/sandbox/sandbox-policy" },
+    { "path": "../../../packages/session/session-projection" },
     { "path": "../../../packages/skill/skill" },
     { "path": "../../../packages/skill/skill-filesystem" },
+    { "path": "../../../packages/test-support/agent-loop-testkit" },
+    { "path": "../../../packages/test-support/tool-testkit" },
+    { "path": "../../../packages/util/atomic-write" },
+    { "path": "../../../packages/util/brand" },
     { "path": "../../../packages/util/home-paths" }
   ]
 }

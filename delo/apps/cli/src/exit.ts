@@ -17,6 +17,11 @@ export const EXIT = {
   notRunning: 3,
   /** The person interrupted the command (Ctrl-C); 128 plus signal 2, as shells report it. */
   interrupted: 130,
+  /**
+   * A home process `delorun start` started detached did not start and left the newest change out; its starter starts
+   * it once more without that change ([retry](./changes/retry.ts)).
+   */
+  changeLeftOut: 4,
 } as const
 
 /** One of {@link EXIT}'s codes. */

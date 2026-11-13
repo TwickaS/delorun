@@ -343,7 +343,7 @@ When an unlock request fails, the phone says one of: "The code expired before yo
 
 ## When nothing here fits
 
-Run `delorun doctor`. It checks Docker, the model key's format, your home, the studio's port, the release-log check and the last update check, and prints one line for each. Run `delorun logs home` to read the running Delorun's recent records; [Where Delorun keeps its logs](logs.md) explains each log.
+Run `delorun doctor`. It checks Docker, the model key's format, your home, the studio's port, the release-log check, the last update check, your changes and your CLI profile's plugins, and prints one line for each. Run `delorun logs home` to read the running Delorun's recent records; [Where Delorun keeps its logs](logs.md) explains each log.
 
 A refusal that says "Report this" means Delorun found something it cannot explain. Report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
 

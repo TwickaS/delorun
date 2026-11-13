@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "tests"],
+  "references": [
+    { "path": "../../../packages/boot/plugin-manager" },
+    { "path": "../../../packages/util/atomic-write" },
+    { "path": "../../../packages/util/brand" }
+  ]
+}

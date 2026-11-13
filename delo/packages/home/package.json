@@ -12,6 +12,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-home-paths": "workspace:*",
+    "@delo/contract-admission": "workspace:*",
     "@delo/contract-home-layout": "workspace:*"
   },
   "delo": {

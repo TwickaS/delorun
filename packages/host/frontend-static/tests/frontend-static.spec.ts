@@ -233,7 +233,7 @@ describe('real Loader composition', () => {
       expect(base).toBeLessThan(got.body.indexOf('<script>window.__T__=1</script>'))
     }
     // An authenticated browser renders for the owner's shared browser Peer.
-    expect(renderedFor).toEqual([loaded.connection.browserPeer, loaded.connection.browserPeer, loaded.connection.browserPeer])
+    expect(renderedFor).toEqual(Array.from({ length: 3 }, () => loaded.connection.browserPeer))
     offRows()
     expect(await request(port, '/', authenticated({ method: 'HEAD' }))).toEqual({
       status: 200,
@@ -353,6 +353,28 @@ describe('real Loader composition', () => {
     await writeFile(manifest, JSON.stringify({ icons: [{ src: 'icon-512.png' }] }))
     expect((await request(port, '/icon-192.png')).status).toBe(401)
     expect(manifestReads.count).toBe(2)
+  })
+
+  it('/recovery is not served when Delo\'s Changes service is not mounted', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const port = loaded.webServer.port
+    const { authenticated } = await signIn(loaded)
+    // Pins the recovery row check: without it `/recovery` renders the index for a composition that names no recovery
+    // routes, whose boot page then offers no recovery screen.
+    expect(await request(port, '/recovery', authenticated())).toEqual({ status: 404, type: null, body: '' })
+    expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
+    // A distribution that names its recovery routes, as `@delo/plugin-changes` does, gets the page behind the index fence.
+    const offRecovery = loaded.on('webserver/index-inject', (rows) => {
+      rows.push({ kind: 'global', name: FrontendStatic.RECOVERY_ROUTES_GLOBAL, value: '/delo/changes' })
+    })
+    expect(await request(port, '/recovery')).toMatchObject({ status: 401 })
+    const page = await request(port, '/recovery', authenticated())
+    expect(page).toMatchObject({ status: 200, type: 'text/html; charset=utf-8' })
+    expect(page.body).toContain('shell')
+    expect(page.body).toContain('globalThis["dshRecoveryRoutes"] = "/delo/changes"')
+    expect(page.body.match(/<base\b/g)).toHaveLength(1)
+    offRecovery()
+    expect((await request(port, '/recovery', authenticated())).status).toBe(404)
   })
 
   it('answers in-process reads for the given Peer without browser authentication', { timeout: 60_000 }, async () => {

@@ -1,0 +1,15 @@
+# C16 switch plugin_changes_pending on: a plugin_manager call with action
+# install_bundle or remove_bundle does not run; it is recorded in the profile's
+# change log as a pending change, and the model reads a denial that names the
+# change and says nothing was installed.
+- id: plugin-changes
+  name: '@delo/plugin-changes'
+  config:
+    enabled: true
+# Pins the corpus model. model.cordis.yml pins the model only when a primary Session
+# exists, so a first record needs this row.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash

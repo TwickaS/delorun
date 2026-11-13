@@ -2,14 +2,18 @@
  * Shared fixtures for the `delorun doctor` specs: a DeepSeek key in the format
  * the check accepts, loopback ports held by a listener, a probe for a leaked
  * secret, the fake `docker` and `bwrap` programs that the specs write into
- * temporary directories, and the check names a run prints on this platform.
+ * temporary directories, the planted profile and installation of the plugin lines, and the
+ * check names a run prints on this platform.
  * Nothing here calls a service or a real Docker engine.
  *
  * @module @delo/cli/tests/doctor/fixtures
  */
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { VersionOutput } from '@delo/contract-plugin-versions'
+import type { SemanticVersion } from '@delo/contract-release-manifest'
 
 /** Whether the host has POSIX modes and shell scripts; the Windows lane skips the cases that need them. */
 export const POSIX = process.platform !== 'win32'
@@ -37,7 +41,7 @@ export function usableBwrap(directory: string): void {
 }
 
 /** The check names one run prints, sorted, without the import line: the `sandbox` line is printed on Linux only. */
-export const CHECK_NAMES: readonly string[] = ['docker', 'home', 'key', 'port', 'release-log', ...process.platform === 'linux' ? ['sandbox'] : [], 'update']
+export const CHECK_NAMES: readonly string[] = ['docker', 'home', 'key', 'plugins', 'plugins', 'port', 'release-log', ...process.platform === 'linux' ? ['sandbox'] : [], 'update']
 
 /** A fake `docker`'s body for an installed program whose engine is not running. */
 export const FAILING_DOCKER = [
@@ -88,4 +92,28 @@ export function leaksPartOf(text: string, secret: string): boolean {
     if (text.includes(secret.slice(start, start + 6))) return true
   }
   return false
+}
+
+/** The running versions the plugin lines check ranges against. */
+export const RUNNING_VERSIONS: VersionOutput = { delo: brandString<SemanticVersion>('0.4.0'), dsh: brandString<SemanticVersion>('0.2.2') }
+
+/**
+ * Write a JSON file, creating its directories.
+ * @param path - the file.
+ * @param value - its content.
+ */
+export function writeJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, `${JSON.stringify(value, undefined, 2)}\n`)
+}
+
+/**
+ * Plant a fake dsh installation that ships one bundle, `@deepseek-ai/dsh-base`.
+ * @param directory - the installation's directory.
+ * @returns its `package.json`, the anchor upstream resolves shipped bundles from.
+ */
+export function plantInstallation(directory: string): string {
+  writeJson(join(directory, 'package.json'), { name: '@deepseek-ai/dsh', version: '0.2.2' })
+  writeJson(join(directory, 'node_modules', '@deepseek-ai', 'dsh-base', 'package.json'), { name: '@deepseek-ai/dsh-base', version: '0.2.2', dsh: { bundle: { patch: 'cordis.patch.yml' } } })
+  return join(directory, 'package.json')
 }

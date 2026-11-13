@@ -1,13 +1,15 @@
 /**
  * The runtime this CLI runs as, and the handover a home process inherits when an update started it (contract C19):
  * a file of this package under `<home>/runtimes/<version>/` runs C1's stored runtime, which updates and rollbacks
- * apply to; anywhere else it runs as this package's own version, as in a source checkout.
+ * apply to, and so does one under a composed tree of that runtime, `<home>/changes/harness/<version>/run/<digest>/`
+ * (contract C21, "Harness edits"); anywhere else it runs as this package's own version, as in a source checkout.
  *
  * @module @delo/cli/update/runtime
  */
 import { fstatSync, readFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import { CHANGES_ENTRIES, harnessDirectory } from '@delo/changes'
 import { DELO_HOME_ENTRIES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { HANDOVER_FD } from '@delo/contract-home-process'
 import { openHandoverPipe, type HandoverPipe } from '@delo/home-process'
@@ -19,6 +21,11 @@ export interface RunningRuntime {
   readonly version: RuntimeVersion
   /** Whether it runs from C1's runtime store, so updates and rollbacks apply. */
   readonly store: boolean
+  /**
+   * The composed tree it runs from, `<home>/changes/harness/<version>/run/<digest>`, when the person's approved changes
+   * to the harness are in place (contract C21, "Harness edits"); absent when it runs the signed installation.
+   */
+  readonly composed?: string
 }
 
 /**
@@ -30,20 +37,33 @@ export function runningVersion(): RuntimeVersion {
   return brandString<RuntimeVersion>(manifest.version)
 }
 
+/** A composed tree's digest: 64 lowercase hexadecimal digits. */
+const TREE_DIGEST = /^[0-9a-f]{64}$/u
+
 /**
  * The runtime a file of this package runs from: the store's version when the file lies under `<home>/runtimes/<version>/`,
- * otherwise this package's own version, as in a source checkout.
+ * or under a composed tree `<home>/changes/harness/<version>/run/<digest>/` of that version, otherwise this package's
+ * own version, as in a source checkout.
  * @param home - the resolved Delo home.
  * @param file - a file of this package.
- * @returns the version and whether it runs from the store.
+ * @returns the version, whether it runs from the store, and the composed tree it runs from.
  */
 export function runtimeOfFile(home: string, file: string): RunningRuntime {
   const root = join(home, DELO_HOME_ENTRIES.runtimes) + sep
-  if (!file.startsWith(root)) return { version: runningVersion(), store: false }
-  const rest = file.slice(root.length)
-  const end = rest.indexOf(sep)
-  const version = parseRuntimeVersion(end === -1 ? rest : rest.slice(0, end))
-  if (version !== undefined) return { version, store: true }
+  if (file.startsWith(root)) {
+    const rest = file.slice(root.length)
+    const end = rest.indexOf(sep)
+    const version = parseRuntimeVersion(end === -1 ? rest : rest.slice(0, end))
+    if (version !== undefined) return { version, store: true }
+  }
+  const harness = harnessDirectory(home) + sep
+  if (file.startsWith(harness)) {
+    const [name = '', run, digest, ...below] = file.slice(harness.length).split(sep)
+    const version = parseRuntimeVersion(name)
+    if (version !== undefined && run === CHANGES_ENTRIES.harnessRun && digest !== undefined && TREE_DIGEST.test(digest) && below.length > 0) {
+      return { version, store: true, composed: join(harness, name, run, digest) }
+    }
+  }
   return { version: runningVersion(), store: false }
 }
 

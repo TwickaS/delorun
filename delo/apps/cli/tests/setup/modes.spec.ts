@@ -126,6 +126,7 @@ describe('the main flow', { timeout: TIMEOUT_MS }, () => {
     })
     expect(byId.has('delo-fetch-guard')).toBe(false)
     expect(byId.has('delo-delegation-consent')).toBe(false)
+    expect(byId.has('delo-plugin-changes')).toBe(false)
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })
 
@@ -398,6 +399,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
       { id: 'prompts', status: 'skipped' },
       { id: 'background', status: 'skipped' },
       { id: 'reach', status: 'skipped' },
+      { id: 'changes-protection', status: 'skipped' },
       { id: 'profile', status: 'skipped' },
     ])
     expect(screen()).toContain('Delorun is set up. Nothing is running yet.')

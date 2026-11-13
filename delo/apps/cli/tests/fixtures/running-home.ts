@@ -42,6 +42,7 @@ export async function startRunningHome(home: string, profile: string, studio: st
     check: () => Promise.resolve({ passed: true }),
     suspend: () => Promise.resolve(),
     close: () => Promise.resolve(),
+    reload: () => Promise.resolve({ ok: true }),
   }
   const listeners: (() => void)[] = []
   const started = await HomeProcess.start({

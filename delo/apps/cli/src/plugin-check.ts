@@ -14,8 +14,8 @@ import { join, resolve } from 'node:path'
 import { evaluatePluginCompatibility, pluginCompatibilityWarning } from '@deepseek-ai/dsh-app-boot'
 import type { VersionOutput } from '@delo/contract-plugin-versions'
 import { messageOf } from '@delo/install'
+import { targetRange } from '@delo/plugin-scaffold'
 import { evaluatePluginAxes, type AxisDecision } from '@delo/update'
-import semver from 'semver'
 import { CliError, EXIT } from './exit.ts'
 import type { CommandContext, CommandResult } from './command.ts'
 import { printable } from './terminal-text.ts'
@@ -69,35 +69,27 @@ export async function readRegularFile(path: string, limit: number): Promise<stri
 /**
  * Read a plugin's manifest without importing anything.
  * @param directory - the plugin's directory.
+ * @param command - the command that reads it, for the refusal; `delorun plugin check` by default.
  * @returns the parsed `package.json`.
  * @throws {CliError} when the file is missing, a link, not a regular file, larger than {@link PLUGIN_MANIFEST_LIMIT}, not
  *   JSON or not an object.
  */
-async function readManifest(directory: string): Promise<Record<string, unknown>> {
+export async function readPluginManifest(directory: string, command = 'delorun plugin check'): Promise<Record<string, unknown>> {
   const path = join(directory, 'package.json')
   let text: string
   try {
     text = await readRegularFile(path, PLUGIN_MANIFEST_LIMIT)
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun plugin check: ${printable(path)} cannot be read: ${printable(messageOf(error))}`)
+    throw new CliError(EXIT.failed, `${command}: ${printable(path)} cannot be read: ${printable(messageOf(error))}`)
   }
   let value: unknown
   try {
     value = JSON.parse(text)
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun plugin check: ${printable(path)} is not JSON: ${printable(messageOf(error))}`)
+    throw new CliError(EXIT.failed, `${command}: ${printable(path)} is not JSON: ${printable(messageOf(error))}`)
   }
-  if (!isObject(value)) throw new CliError(EXIT.failed, `delorun plugin check: ${printable(path)} is not a package manifest object`)
+  if (!isObject(value)) throw new CliError(EXIT.failed, `${command}: ${printable(path)} is not a package manifest object`)
   return value
-}
-
-/**
- * The range that targets a Delo release's minor: every patch of it, and no later minor.
- * @param delo - the running Delo version.
- * @returns `^<major>.<minor>.0`, which before 1.0 admits only that minor's patches.
- */
-export function targetRange(delo: string): string {
-  return `^${String(semver.major(delo))}.${String(semver.minor(delo))}.0`
 }
 
 /**
@@ -170,7 +162,7 @@ function deloLine(decision: AxisDecision, delo: string): string {
 export async function runPluginCheck(args: readonly string[], context: CommandContext, running: VersionOutput = versions()): Promise<CommandResult> {
   if (args.length !== 1 || args[0]!.startsWith('-')) throw new CliError(EXIT.usage, `delorun plugin check: ${USAGE}`)
   const directory = resolve(args[0]!)
-  const manifest = await readManifest(directory)
+  const manifest = await readPluginManifest(directory)
   const name = typeof manifest['name'] === 'string' ? manifest['name'] : '(no name)'
   const version = typeof manifest['version'] === 'string' ? manifest['version'] : '(no version)'
   const lines = [

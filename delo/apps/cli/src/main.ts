@@ -6,13 +6,14 @@
  * | --- | --- |
  * | `delorun [--profile <name>] [--foreground \| --background]` | runs setup on a home without the CLI profile; otherwise starts the home process detached from the terminal, or in this terminal, as `--background`, `--foreground` or else setup's answer says, and opens the studio |
  * | `delorun setup [<section>] [--profile <name>] [--list]` | setup by how you use Delorun, or one section again ([setup](./setup/index.ts)) |
- * | `delorun start [--foreground \| --background] [--open] [--profile <name>]` | the home process detached from the terminal, or in this terminal ([start](./start.ts)) |
+ * | `delorun start [--foreground \| --background] [--open] [--profile <name>] [--patch <file>]... [--inspect [--yes]]` | the home process detached from the terminal, or in this terminal, with the person's overlays and, once confirmed, a debugger port ([start](./start.ts), [inspector](./inspector.ts)) |
  * | `delorun open [--print] [--profile <name>]` | the studio in the browser with a link that signs in once, or that link printed ([open](./open/command.ts)) |
  * | `delorun stop [--now] [--profile <name>]` | stops the home process through its update channel ([stop](./stop.ts)) |
  * | `delorun status [--profile <name>] [--json]` | the home, the profile and its home process's state ([status](./status.ts)) |
  * | `delorun logs [<surface>] [options]` | each operational log's location and recent records, following, clearing and pruning them (contract C20; [logs](./logs/command.ts)) |
  * | `delorun update [--check \| --yes] [--data-copy \| --no-data-copy]` | the newest release's report, and the update through the home process (contracts C3, C19; [update](./update/command.ts)) |
  * | `delorun recover [status \| rollback [--profile-only] \| restore <version> \| safe-mode \| exit-safe-mode \| discard <path>]` | where the profile stands after an update, and the way back (contract C3; [recover](./recover.ts)) |
+ * | `delorun changes [list \| show <id> [--diff] \| apply <id> \| discard <id> \| undo <id> \| off <plugin> \| on <plugin> \| protection [block \| warn \| off]]` | what waits for your review, and the decisions about it (contract C21; [changes](./changes/command.ts)) |
  * | `delorun trash list \| restore <id> \| purge <id> \| empty` | the trash: what was deleted, restoring an item and deleting one or all forever (contract C8; [trash](./trash/command.ts)) |
  * | `delorun export <chat-or-workspace> --out <file>` | a chat, or a workspace with its chats, as an archive signed by this home (contract C8; [export](./export/command.ts)) |
  * | `delorun import <file>` | an archive checked, shown and imported after the person confirms (contract C8; [import](./import/command.ts)) |
@@ -24,7 +25,8 @@
  * | `delorun workspace external-agents [<folder> <agent> on \| off]` | the external agents, such as Claude Code, that start in a workspace without asking, allowed after a confirmation at this computer or revoked (contract C14; [external agents](./workspace/external-agents.ts)) |
  * | `delorun mcp list \| accept <server> \| decline <server> \| revoke <command>` | the stdio MCP servers the running studio holds stopped, answered at this computer, and the server commands it allows (contract C19; [mcp](./mcp/command.ts)) |
  * | `delorun --version [--json]` | Delo's version and the DSH version it runs on (contract C17; [version](./version.ts)) |
- * | `delorun plugin …`, `delorun headless …` | upstream's profile commands, passed through unchanged ([upstream](./upstream.ts)) |
+ * | `delorun plugin …`, `delorun headless …` | upstream's profile commands for the CLI profile, with a build approval for `plugin` ([upstream](./upstream.ts)) |
+ * | `delorun plugin new <name>`, `plugin dev <folder>`, `plugin check <directory>` | a new plugin package, the author's reload loop, and what a plugin's version ranges admit ([upstream](./upstream.ts)) |
  *
  * Every invocation but `--help` and `--version` first prunes the home's expired operational logs (contract C20;
  * [startup pruning](./logs/startup.ts)), and every one exports Delo's version as `DELO_VERSION` before any
@@ -71,10 +73,11 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'open', summary: 'Open the studio in your browser, or print a link that signs in once with --print (--port for a forwarded port)', load: async () => (await import('./open/command.ts')).openCommand },
   { name: 'stop', summary: 'Stop the home process once running chats end, or at once with --now', load: async () => (await import('./stop.ts')).stopCommand },
   { name: 'status', summary: 'Show whether Delorun is running, its studio address and its running chats; --verbose adds process details', load: async () => (await import('./status.ts')).statusCommand },
-  { name: 'doctor', summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check', load: async () => (await import('./doctor/index.ts')).doctorCommand },
+  { name: 'doctor', summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check, your changes and the plugins', load: async () => (await import('./doctor/index.ts')).doctorCommand },
   { name: 'logs', summary: 'Show where each operational log is and its recent records; follow, clear or prune them', load: async () => (await import('./logs/command.ts')).logsCommand },
   { name: 'update', summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --yes, --data-copy, --no-data-copy', load: async () => (await import('./update/command.ts')).updateCommand },
   { name: 'recover', summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>', load: async () => (await import('./recover.ts')).recoverCommand },
+  { name: 'changes', summary: 'What waits for your review, and apply <id>, discard <id>, undo <id>, off <plugin>, on <plugin>, protection, work <plugin>, done <plugin>, edit-harness', load: async () => (await import('./changes/command.ts')).changesCommand },
   { name: 'reach', summary: 'Reach the studio from your phone over your own tailnet: status, on tailscale, off', load: async () => (await import('./reach/command.ts')).reachCommand },
   { name: 'devices', summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code', load: async () => (await import('./devices/command.ts')).devicesCommand },
   { name: 'workspace', summary: 'A workspace\'s full access and the external agents that start there without asking, changed at this computer: full-access [<folder> on|off], external-agents [<folder> <agent> on|off]', load: async () => (await import('./workspace/command.ts')).workspaceCommand },
@@ -84,7 +87,7 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'import', summary: 'Check an archive, show who signed it and what it holds, and import it after you confirm', load: async () => (await import('./import/command.ts')).importCommand },
   { name: 'import-home', summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delorun home after a preview; --dry-run only shows it', load: async () => (await import('./import-home/command.ts')).importHomeCommand },
   { name: 'verify', summary: 'Check the release against its signed manifest and the release log: --release <version>, --offline, --json', load: async () => (await import('./verify/index.ts')).verifyCommand },
-  { name: 'plugin', summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; mirror on|off', load: async () => (await import('./upstream.ts')).pluginCommand },
+  { name: 'plugin', summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; new and dev help you write one; mirror on|off', load: async () => (await import('./upstream.ts')).pluginCommand },
   { name: 'headless', summary: 'Answer one task and exit, as dsh headless does, under Delorun\'s protections', load: async () => (await import('./upstream.ts')).headlessCommand },
 ]
 

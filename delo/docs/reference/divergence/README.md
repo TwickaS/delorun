@@ -47,6 +47,7 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 
 | Feature | What the edits do | Serves |
 | --- | --- | --- |
+| `changes` | The boot page's recovery screen and the `/recovery` index path (C21) | shipped `plugin-changes` |
 | `code-refusal-switch` | The loader's `refuseCode` option and the boot's forwarding of it | a switch, off; no Delo composition turns it on |
 | `settings-by-chat` | The config editor's `edited` event (C4) and its `before-save` hook (C1) | shipped `cli`, which refuses a value for a secret-role field |
 | `container-denial-marker` | The sandbox, shell and PTC fields that mark a denial by the environment | shipped confinement, behind a C16 switch |
@@ -61,7 +62,7 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | `late-projection-keys` | Projection keys registered after a Session's baseline reach open control streams | no Delo consumer on `v5` |
 | `parity-replay` | The snapshot harness applies the parity overlay (C16) | the parity replay lane of `tools` |
 | `permission-defaults` | Whether a Session holds no permission preset | shipped `plugin-permission-defaults` |
-| `plugin-manager-improvements` | Plugin-manager diagnostic reasons and opening a plugin's page | shipped `plugin-onboarding` (opening a plugin's page) |
+| `plugin-manager-improvements` | Plugin-manager diagnostic reasons, opening a plugin's page, and the build-script approval steps `operations` exports for a launcher's command line | shipped `cli` (`delorun plugin`) |
 | `plugin-version-axis` | A plugin's `engines.delo` range (C17) | shipped `update` and `contract-plugin-versions` |
 | `project-identity` | Delo Run's copyright line in the root `LICENSE`, under upstream's notice | the repository |
 | `preset-inspect` | The `preset_inspect` tool, its preset rows and its catalogue entry | a C16 switch, off |

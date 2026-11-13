@@ -5,7 +5,7 @@
  * Each test's comment names the check whose removal makes that test fail.
  */
 import { describe, expect, it } from 'vitest'
-import { REQUEST_LISTENER, isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, stampListener } from '../src/arrival.ts'
+import { REQUEST_LISTENER, isForeignFetchSite, isLoopbackHost, isSameLoopbackOrigin, listenerOf, loopbackAddressOf, stampListener } from '@delo/home'
 
 const PORT = 3080
 const port = (): number => PORT

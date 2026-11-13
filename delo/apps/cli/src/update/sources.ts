@@ -1,7 +1,8 @@
 /**
  * The readers behind contract C3's report for the CLI home: the running and the staged target runtime from C1's store,
- * the profile's plugins, bundle list, patch layers and exemption files, both installations' status records, and both
- * releases' data facts. Every fact is read from a file; no plugin module is imported. The target's bundle tables are
+ * the profile's plugins, bundle list, patch layers and exemption files, both installations' status records, both
+ * releases' data facts, and how each approved harness file of the running runtime meets the target's verified file
+ * (`./harness-items.ts`). Every fact is read from a file; no plugin module is imported. The target's bundle tables are
  * upstream's `@deepseek-ai/dsh-official-bundles`, read by the target runtime's own Node from its verified files; the
  * bundles of the list the target would load are read by `./bundle-layers.ts`, which reports the ones the target would
  * skip and the patch layer of each one it loads.
@@ -27,6 +28,8 @@ import semver from 'semver'
 import { z } from 'zod'
 import { bundleAnchors, readBundleLayers, type BundleLayerFacts, type BundleLayerOptions } from './bundle-layers.ts'
 import { recordedLogCheck } from './release-check.ts'
+import { signedRuntimeOf } from './signed-runtime.ts'
+import { readHarnessFacts } from './harness-items.ts'
 
 const run = promisify(execFile)
 
@@ -290,6 +293,10 @@ export function storeReportSources(options: StoreSourcesOptions): ReportSources 
         copy: await planDataCopy(home),
       }
     },
+    harness: async version => readHarnessFacts(home, options.running, async () => {
+      const runtime = await verified(version)
+      return signedRuntimeOf(store.paths.version(runtime.version), runtime)
+    }),
     now: () => brandString<UtcTimestamp>(new Date().toISOString()),
   }
 }

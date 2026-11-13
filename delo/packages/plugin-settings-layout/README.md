@@ -34,13 +34,14 @@ The navigation has five groups: General, Agent, Safety, Devices and Data. Each p
 | Agent | Models | Upstream's model providers | section `models` |
 | Agent | Modes | Upstream's agent presets | section `agent-presets` |
 | Agent | Tools | Tool settings: a link to each tool's page in Plugins | section `delo-tool-settings` |
-| Agent | Plugins | Upstream's inventory of built-in plugins | section `plugins` |
+| Agent | Plugins | Upstream's inventory of built-in plugins, then Create a plugin, which keeps its own heading because the page title names only the inventory | sections `plugins`, `delo-create-plugin` |
 | Safety | Permissions | A New chats card with the default permission mode, then Full access and MCP servers | row `permission`; section `delo-permissions` |
 | Safety | External agents | The delegation consent: the switch that asks before an external agent runs, its run time limit, and the agents allowed to start without asking, each with a revoke | section `delo-external-agents` |
 | Safety | Network | Each workspace's network access for sandboxed commands and `web_fetch` | section `delo-network` |
 | Safety | Privacy | The session-log upload switch, the desktop analytics line and feedback | section `delo-privacy` |
 | Devices | Devices | Remote access and the approved devices | section `delo-devices` |
 | Data | Trash | Deleted chats and workspaces | section `delo-trash` |
+| Data | Changes | The review of plugin and harness changes, with protection on or off | section `delo-changes` |
 | Data | Setup versions | The profile history's versions, what a switch changes, Save this setup and Switch to this version | section `delo-setup-versions` |
 | Data | About | A Versions card, then licences and project links | row `current-version`; section `delo-about` |
 

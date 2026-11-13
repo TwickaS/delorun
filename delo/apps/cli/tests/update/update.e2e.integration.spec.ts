@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import { composition, HARNESS_RECORD_SCHEMA, readHarnessLog, readHarnessRecord, storeFileVersion, withHarnessLock, writeHarnessRecord, type ChangeId, type HarnessRecord } from '@delo/changes'
 import { DELO_HOME_ENTRIES, TRUST_FILES, type RuntimeVersion } from '@delo/contract-home-layout'
 import { ensureHomeTree, newStartId, processExists, readHomeLock, runDirectory } from '@delo/home'
 import { CountingChatGate, HomeProcess, journalPath, readJournal, updateChannelProbe, type RunningHost } from '@delo/home-process'
@@ -94,7 +95,7 @@ interface Running {
 
 /** A Host that boots at once, counts no chats and passes the health check. */
 function host(): RunningHost {
-  return { chats: new CountingChatGate(), failedRows: () => [], rows: () => [], protection: () => undefined, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), check: async () => Promise.resolve({ passed: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve() }
+  return { chats: new CountingChatGate(), failedRows: () => [], rows: () => [], protection: () => undefined, studio: () => undefined, studioLink: () => ({ kind: 'unavailable', reason: 'the Host serves no studio' }), check: async () => Promise.resolve({ passed: true }), reload: async () => Promise.resolve({ ok: true }), close: async () => Promise.resolve(), suspend: async () => Promise.resolve() }
 }
 
 /**
@@ -205,10 +206,22 @@ describe('delorun update end to end', TIMEOUT, () => {
 
   it('c03-yes-takes-the-copy, then c03-pointer-swap-applies-the-table: the rollback restores the copy and sets the newer chat aside', async () => {
     channel.next = v('1.3.0')
+    // The person approved a change to a file of Delo 1.1.0 itself, which 1.3.0 ships unchanged.
+    const file = 'app/node_modules/@delo/cli/package.json'
+    const stored = async (text: string): Promise<Awaited<ReturnType<typeof storeFileVersion>>> => storeFileVersion(home, file, Buffer.from(text), false)
+    const approved: HarnessRecord = {
+      schema: HARNESS_RECORD_SCHEMA, runtime: '1.1.0',
+      files: { [file]: { version: await stored('{"name":"@delo/cli","type":"module","edited":true}\n'), signed: await stored('{"name":"@delo/cli","type":"module"}\n'), change: 'c0123456789' as ChangeId, approvedAt: '2026-11-11T00:00:00.000Z' } },
+    }
+    await withHarnessLock(home, async () => writeHarnessRecord(home, approved))
+    const composed = await composition(home, '1.1.0')
     const running = await startHome()
     try {
       const result = await delorun(['update', '--yes'])
       expect(result.code).toBe(EXIT.ok)
+      expect(result.stdout).toContain(`Your change to ${file} carries over to Delorun 1.3.0.`)
+      expect((await readHarnessRecord(home, '1.3.0')).files[file]?.version).toBe(approved.files[file]!.version)
+      expect((await readHarnessLog(home)).entries).toMatchObject([{ state: 'applied', decidedFrom: 'update', subject: { file, runtime: '1.3.0' } }])
       expect(result.stdout).toContain('Without the copy, Delorun cannot go back to 1.1.0 after 1.3.0 first starts.')
       expect(result.stdout).toContain('The chat data from before is copied in data-copies/1.3.0.')
       await until(async () => (await readJournal(journalPath(home, PROFILE)).catch(() => undefined))?.phase === 'committed', 'the successor\'s commit')
@@ -229,6 +242,9 @@ describe('delorun update end to end', TIMEOUT, () => {
     expect(chat('opened-by-1.3.0')).toBe(false)
     expect(chat('from-before')).toBe(true)
     expect(readdirSync(join(home, 'data-set-aside')).some(name => name.startsWith('1.3.0-'))).toBe(true)
+    // Delo 1.1.0 runs its own approved files again: the update wrote nothing of its harness.
+    expect(await readHarnessRecord(home, '1.1.0')).toEqual(approved)
+    expect(await composition(home, '1.1.0')).toEqual(composed)
     // The record goes once Delo 1.1.0 starts healthy, which the next round's start does.
     expect(await readJournal(journalPath(home, PROFILE))).toMatchObject({ phase: 'rolling-back', from: '1.1.0', to: '1.3.0' })
   })

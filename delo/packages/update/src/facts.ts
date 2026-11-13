@@ -11,6 +11,7 @@ import type { ExemptionRecord, VersionAxis } from '@delo/contract-plugin-version
 import type { SemanticVersion, Sha256Hex, UtcTimestamp } from '@delo/contract-release-manifest'
 import type { Installation, InstallationStatus, ItemVerification, LogCheckResult, ReleaseCheckResult, ReportVersions, UncheckedSource } from '@delo/contract-update-report'
 import type { DataFacts } from './data-formats.ts'
+import type { HarnessFact } from './harness-items.ts'
 import type { InstalledPluginFact } from './manifest.ts'
 
 /** The target release's manifest digest and the result of each check C2 and C18 give it. */
@@ -140,6 +141,8 @@ export interface ReportInput {
   readonly statuses: InstallationStatusFacts
   /** Both releases' data facts and the size of the session-data copy (C3, "Data formats"). */
   readonly data: DataFacts
+  /** Each approved harness file of the running runtime and how it meets the target's file; none for a rollback's report. */
+  readonly harness: readonly HarnessFact[]
   /** When the report was built. */
   readonly generated: UtcTimestamp
 }
