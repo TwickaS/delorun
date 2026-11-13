@@ -86,7 +86,7 @@ While it runs, `plugin dev` adds one entry, marked with a comment, to your profi
 delorun plugin check ./my-plugin
 ```
 
-A plugin declares the versions it runs on in `package.json`: `engines.dsh` for DeepSeek Harness and `engines.delo` for Delo. Delo refuses to install or load a plugin whose ranges exclude the running versions. `delorun plugin check` reads the folder's `package.json` without running any of its files, says what each range admits and prints the range that targets the running Delo. [What a Delo version promises a plugin](../contracts/c22-delo-plugin-interface.md) says what may change between releases: before Delo 1.0, `^0.y.0` admits one minor version and its patches.
+A plugin declares the versions it runs on in `package.json`: `engines.dsh` for DeepSeek Harness and `engines.delo` for Delo. Delo refuses to install or load a plugin whose ranges exclude the running versions. `delorun plugin check` reads the folder's `package.json` without running any of its files, says what each range admits and prints the range that targets the running Delo. When an update would turn a plugin off because of its range, see [Update Delorun with many plugins](updating-with-plugins.md). [What a Delo version promises a plugin](../contracts/c22-delo-plugin-interface.md) says what may change between releases: before Delo 1.0, `^0.y.0` admits one minor version and its patches.
 
 ## Install it
 
