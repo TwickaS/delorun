@@ -37,8 +37,8 @@ export interface Config {
 
 /** The schema of {@link Config}; `enabled` defaults to the switch's parity value, off. */
 export const Config: z<Partial<DelegationConsentSettings>, Config> = z.object({
-  enabled: z.boolean().default(false).volatile(),
-  runTimeoutMinutes: z.natural().min(RUN_TIMEOUT_MINUTES.min).max(RUN_TIMEOUT_MINUTES.max).default(RUN_TIMEOUT_MINUTES.default).volatile(),
+  enabled: z.boolean().volatile().default(false),
+  runTimeoutMinutes: z.natural().min(RUN_TIMEOUT_MINUTES.min).max(RUN_TIMEOUT_MINUTES.max).volatile().default(RUN_TIMEOUT_MINUTES.default),
 })
 
 /**
