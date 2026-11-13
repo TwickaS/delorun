@@ -174,6 +174,9 @@ const GUARD_ROWS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = 
   'delo-update-gate': { enabled: true, holdUntilChecked: true },
 }
 
+/** The prompts answers as a refusal names them. */
+const PROMPT_ANSWER_LABELS = { safer: 'Safer prompts', stock: 'Same as stock', dangerous: 'Dangerous' } as const
+
 /**
  * The values each row of `@delo/bundle-headless` must have in the `headless` profile: Delo's defaults, which no setup
  * answer changes there.
@@ -469,7 +472,7 @@ function violationsOf(composed: ComposedStart, rows: readonly BootedRow[]): Viol
       if (actual === value) continue
       const because = composed.request.kind === 'headless'
         ? 'which a delorun headless run always has'
-        : id in GUARD_ROWS ? 'which stays on whatever the prompts answer' : `which the recorded prompts answer "${composed.prompts === 'stock' ? 'Same as stock' : 'Safer prompts'}" sets`
+        : id in GUARD_ROWS ? 'which stays on whatever the prompts answer' : `which the recorded prompts answer "${PROMPT_ANSWER_LABELS[composed.prompts ?? 'safer']}" sets`
       violations.push({ subject: id, problem: `has ${key} ${JSON.stringify(actual)}, not ${JSON.stringify(value)}, ${because}`, sources: sourcesSetting(composed.layers, id, patch => isRecord(patch.config) && key in patch.config && patch.config[key] !== value) })
     }
   }

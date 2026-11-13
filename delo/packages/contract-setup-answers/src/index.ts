@@ -69,11 +69,21 @@ export interface ReachAnswer {
   readonly identityFactor: IdentityFactor | null
 }
 
-/** The prompts answers. `safer` keeps Delo's consent and permission defaults; `stock` sets them to upstream's behaviour. */
-export const PROMPTS_OPTIONS = ['safer', 'stock'] as const
+/**
+ * The prompts answers. `safer` keeps Delo's consent and permission defaults; `stock` sets them to upstream's behaviour;
+ * `dangerous` sets them to upstream's behaviour too and makes full access available to every chat without a
+ * per-workspace consent (see {@link DANGEROUS_PHRASE}). A reader that does not know an answer reads `safer`.
+ */
+export const PROMPTS_OPTIONS = ['safer', 'stock', 'dangerous'] as const
 
 /** One prompts answer of {@link PROMPTS_OPTIONS}. */
 export type PromptsAnswer = (typeof PROMPTS_OPTIONS)[number]
+
+/**
+ * The exact text a person types at the second step of the interactive `dangerous` answer; any other entry cancels and
+ * keeps the previous answer.
+ */
+export const DANGEROUS_PHRASE = 'full access everywhere' as const
 
 /** Port the studio listens on when the person does not choose one; upstream's Web profile default. */
 export const SETUP_DEFAULT_PORT = 3080 as const

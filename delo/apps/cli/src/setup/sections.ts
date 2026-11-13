@@ -23,6 +23,7 @@ import { CliError, EXIT } from '../exit.ts'
 import type { KeyCheck } from './key-check.ts'
 import { providerSection } from './provider-section.ts'
 import { installedCatalog, type ProviderCatalog } from './providers.ts'
+import { askDangerousConsent, refuseDangerousAsRoot, removeDangerousGrant, writeDangerousGrant } from './dangerous.ts'
 import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
@@ -247,7 +248,7 @@ export const privacySection: SetupSection = {
   },
 }
 
-const PROMPT_LABELS: Readonly<Record<PromptsAnswer, string>> = { safer: 'Safer prompts', stock: 'Same as stock' }
+const PROMPT_LABELS: Readonly<Record<PromptsAnswer, string>> = { safer: 'Safer prompts', stock: 'Same as stock', dangerous: 'Dangerous: full access without asking' }
 
 /** The prompts section: Delo's consent and permission defaults, or upstream's. */
 export const promptsSection: SetupSection = {
@@ -260,13 +261,28 @@ export const promptsSection: SetupSection = {
     const choice = await io.select<PromptsAnswer>('How should Delorun ask before it changes things?', [
       { value: 'safer', label: PROMPT_LABELS.safer, hint: 'asks before giving full access or starting a new MCP server, and before instruction edits and scheduled work' },
       { value: 'stock', label: PROMPT_LABELS.stock, hint: 'behaves as DeepSeek Harness does' },
+      { value: 'dangerous', label: PROMPT_LABELS.dangerous, hint: 'any chat can switch to full access, from any surface, with no question; asks you to confirm twice' },
     ], draft.answers.prompts)
-    return choice === BACK ? BACK : { answers: { prompts: choice }, status: 'answered' }
+    if (choice === BACK) return BACK
+    if (choice !== 'dangerous') return { answers: { prompts: choice }, status: 'answered' }
+    const accepted = await askDangerousConsent(io)
+    if (accepted === BACK) return BACK
+    if (!accepted) {
+      io.note(`Dangerous mode was not chosen. The prompts answer stays ${PROMPT_LABELS[draft.answers.prompts]}.`, 'Prompts')
+      // A declined consent is no answer: `seen` lets `apply` leave a grant that an earlier consent wrote, and never write one.
+      return { answers: { prompts: draft.answers.prompts }, status: 'seen' }
+    }
+    return { answers: { prompts: choice }, status: 'answered' }
   },
   review: answers => `Prompts: ${PROMPT_LABELS[answers.prompts]}`,
-  apply(context, answers) {
+  async apply(context, answers) {
+    refuseDangerousAsRoot(answers.prompts, 'delorun setup')
     writePromptRows(join(context.directory, 'cordis.patch.yml'), answers.prompts)
-    return Promise.resolve(undefined)
+    // The grant follows the rows, so a failed row write never leaves a grant behind; any other answer withdraws it.
+    // A `seen` record on a dangerous answer is a declined consent, which keeps the earlier answer and writes no grant.
+    if (answers.prompts !== 'dangerous') await removeDangerousGrant(context.home)
+    else if (answers.sections.find(record => record.id === 'prompts')?.status !== 'seen') await writeDangerousGrant(context.home)
+    return undefined
   },
 }
 

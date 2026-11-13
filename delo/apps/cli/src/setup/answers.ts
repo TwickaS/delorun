@@ -27,6 +27,7 @@ import {
 } from '@delo/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
 import { selectProfile } from '../profile.ts'
+import { refuseDangerousAsRoot } from './dangerous.ts'
 import { isSetupProviderId, SETUP_PROVIDERS, type ProviderCatalog } from './providers.ts'
 
 /** An environment variable name. A credential value never matches it, so one passed as a name is refused. */
@@ -103,6 +104,8 @@ const answersSchema = z.strictObject({
   ...answerFields,
   updateCheck: z.boolean().default(SETUP_DEFAULTS.updateCheck),
   sections,
+  /** A `--config` document's statement that it has read what dangerous mode allows; {@link readAnswersDocument} requires it with `prompts: "dangerous"` and drops it. */
+  acceptDangerousMode: z.boolean().optional(),
 })
 
 /** The version-3 document, which has no provider question, read as the current version with DeepSeek as its provider. */
@@ -174,12 +177,15 @@ export function modelIdProblem(value: string): string | undefined {
   return MODEL_ID.test(value) ? undefined : 'Enter the model id: letters, digits and . _ : / @ ~ + -.'
 }
 
+/** A parsed answers document: the answers, and a `--config` document's `acceptDangerousMode`, which {@link readAnswersDocument} consumes. */
+export type ParsedAnswers = SetupAnswers & { readonly acceptDangerousMode?: boolean | undefined }
+
 /**
  * Check answers against the schema of their declared version; a version-2 document comes back as the current version.
  * @param document - a parsed JSON value: an answers document, or the answers of a setup record.
  * @returns zod's result, whose data is current-version answers.
  */
-export function parseAnswers(document: unknown): z.ZodSafeParseResult<SetupAnswers> {
+export function parseAnswers(document: unknown): z.ZodSafeParseResult<ParsedAnswers> {
   return schemaFor(document).safeParse(document)
 }
 
@@ -233,7 +239,11 @@ export function readAnswersDocument(path: string): SetupAnswers {
     if (field === 'schemaVersion') throw refusal(field, `must be ${String(SETUP_ANSWERS_SCHEMA_VERSION)}, or ${SETUP_ANSWERS_EARLIER_SCHEMA_VERSIONS.join(' or ')} for an earlier document; setup refuses any other version`)
     throw refusal(field === '' ? 'the document' : field, 'is not a value the answers document accepts')
   }
-  const answers = checked.data
+  const { acceptDangerousMode, ...answers } = checked.data
+  // The two-step consent of the terminal is stood in for by this field, so a document cannot select dangerous mode without it.
+  if (answers.prompts === 'dangerous' && acceptDangerousMode !== true) throw refusal('acceptDangerousMode', 'must be true when prompts is "dangerous": dangerous mode lets any chat switch to full access without asking, so the document has to state that you accepted it (delorun setup prompts shows the warning)')
+  if (answers.prompts !== 'dangerous' && acceptDangerousMode !== undefined) throw refusal('acceptDangerousMode', 'applies to prompts "dangerous" only; remove it from the document')
+  refuseDangerousAsRoot(answers.prompts, 'delorun setup --config')
   // Reach is switched on in the interactive form only, so a document cannot enable it.
   if (answers.reach.option !== 'none') throw refusal('reach.option', 'must be "none" in --config: reach is set up in the studio, not by a document')
   if (answers.modelProvider?.credential.source === 'prompt') throw refusal('modelProvider.credential.source', 'must be "environment" in --config: a document cannot take the key at a prompt')

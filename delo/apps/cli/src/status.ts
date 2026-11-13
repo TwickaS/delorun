@@ -14,7 +14,8 @@ import { holderAlive, readHomeLock, resolveDeloHome, runDirectory } from '@delo/
 import { queryHomeStatus } from '@delo/home-process'
 import { EXIT } from './exit.ts'
 import { parseOptions, type CliCommand } from './command.ts'
-import { selectProfile } from './profile.ts'
+import { profileDirectory, selectProfile } from './profile.ts'
+import { dangerousModeLine } from './setup/dangerous.ts'
 
 /** The line that follows the studio's address. */
 export const OPEN_HINT = 'Run delorun open to open the studio in your browser.'
@@ -66,6 +67,8 @@ export const statusCommand: CliCommand = {
     const json = values.json === true
     if (!json) {
       context.stdout(`home: ${home.path}\nprofile: ${profile}\n`)
+      const dangerous = await dangerousModeLine(home.path, profileDirectory(home.path, profile))
+      if (dangerous !== undefined) context.stdout(`${dangerous}\n`)
       if (home.ignoredDshHome !== undefined) {
         context.stdout(`note: ${DSH_HOME_ENV} is set to ${home.ignoredDshHome}; delorun ignores it and runs with ${DSH_HOME_ENV}=${home.path}\n`)
       }

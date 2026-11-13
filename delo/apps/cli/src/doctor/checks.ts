@@ -20,7 +20,7 @@ import { checkPrivateDirectory, HomeLayoutError, resolveDeloHome, runDirectory, 
  * A check's name, as `delorun doctor` prints it; `release-log` and `import` are the record lines of [records](./records.ts),
  * and `sandbox` is the Linux line of [sandbox](./sandbox.ts).
  */
-export type CheckName = 'home' | 'docker' | 'key' | 'port' | 'sandbox' | 'release-log' | 'import' | 'update'
+export type CheckName = 'home' | 'docker' | 'key' | 'port' | 'sandbox' | 'release-log' | 'import' | 'update' | 'dangerous-mode'
 
 /**
  * A check's verdict. `pass` needs nothing. `warn` names something optional or

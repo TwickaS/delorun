@@ -2,7 +2,9 @@
  * The prompts answer as profile rows. "Safer prompts" sets each prompt switch of the parity registry
  * (contract C16) to the value of Delo's default composition, and "Same as stock" to its parity value, by writing
  * the `config` of the row that `@delo/bundle-local` inserts for the switch into the profile's `cordis.patch.yml`,
- * which loads after the bundle.
+ * which loads after the bundle. "Dangerous" sets the three consent switches to their parity values, keeps the
+ * permission defaults on, and sets `fullAccessEverywhere` on their row; the plugin honours it only while the grant
+ * file written by [dangerous mode](./dangerous.ts) is valid.
  *
  * @module @delo/cli/setup/prompt-switches
  */
@@ -25,6 +27,9 @@ export const PROMPT_SWITCH_ROWS = {
   scheduled_task_consent: 'delo-schedule-consent',
 } as const
 
+/** The `delo-permission-defaults` config key that makes full access available to every chat; the plugin also needs the grant file. */
+export const FULL_ACCESS_EVERYWHERE_KEY = 'fullAccessEverywhere'
+
 /**
  * The patch rows an answer writes.
  * @param answer - the prompts answer.
@@ -36,7 +41,10 @@ export function promptRows(answer: PromptsAnswer, registry: readonly ParitySwitc
   return Object.entries(PROMPT_SWITCH_ROWS).map(([switchId, rowId]) => {
     const entry = registry.find(candidate => candidate.id === switchId)
     if (entry?.state !== 'built') throw new Error(`delorun setup: parity switch ${switchId} is not built, so the prompts answer cannot set it`)
-    return { id: rowId, config: { [entry.field.key]: answer === 'safer' ? entry.defaultValue : entry.parityValue } }
+    // Dangerous keeps the permission defaults on: full access is available everywhere, and a chat still starts on its workspace's preset.
+    const value = answer === 'safer' || (answer === 'dangerous' && switchId === 'permission_defaults') ? entry.defaultValue : entry.parityValue
+    const config = { [entry.field.key]: value }
+    return { id: rowId, config: switchId === 'permission_defaults' ? { ...config, [FULL_ACCESS_EVERYWHERE_KEY]: answer === 'dangerous' } : config }
   })
 }
 

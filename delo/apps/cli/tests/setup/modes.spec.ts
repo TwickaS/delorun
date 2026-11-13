@@ -143,6 +143,7 @@ const QUICK_TRANSCRIPT = `? How do you want to set up Delorun?
 ? How should Delorun ask before it changes things?
 > Safer prompts (asks before giving full access or starting a new MCP server, and before instruction edits and scheduled work)
   Same as stock (behaves as DeepSeek Harness does)
+  Dangerous: full access without asking (any chat can switch to full access, from any surface, with no question; asks you to confirm twice)
   ← Back
 = Safer prompts
 # Review
@@ -173,7 +174,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
     expect(await interactive(QUICK_SCRIPT)).toBe(EXIT.ok)
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: TYPED_KEY } })
     expect(patchOf()).toEqual([
-      { id: 'delo-permission-defaults', config: { enabled: true } },
+      { id: 'delo-permission-defaults', config: { enabled: true, fullAccessEverywhere: false } },
       { id: 'delo-instruction-consent', config: { enabled: true } },
       { id: 'delo-mcp-consent', config: { enabled: true } },
       { id: 'delo-schedule-consent', config: { enabled: true } },
@@ -201,7 +202,7 @@ describe('Quick setup', { timeout: TIMEOUT_MS }, () => {
       return entry?.state === 'built' ? entry.parityValue : true
     }
     expect(Object.fromEntries(byId)).toEqual({
-      'delo-permission-defaults': { enabled: parityOf('permission_defaults') },
+      'delo-permission-defaults': { enabled: parityOf('permission_defaults'), fullAccessEverywhere: false },
       'delo-instruction-consent': { enabled: parityOf('instruction_layer_consent') },
       'delo-mcp-consent': { enabled: parityOf('mcp_add_consent') },
       'delo-schedule-consent': { enabled: parityOf('scheduled_task_consent') },
@@ -387,6 +388,7 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
 ? How should Delorun ask before it changes things?
 > Safer prompts (asks before giving full access or starting a new MCP server, and before instruction edits and scheduled work)
   Same as stock (behaves as DeepSeek Harness does)
+  Dangerous: full access without asking (any chat can switch to full access, from any surface, with no question; asks you to confirm twice)
   ← Back
 = Safer prompts
 ? Keep Delorun running in the background after the terminal closes?

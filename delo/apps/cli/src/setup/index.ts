@@ -23,8 +23,9 @@ import { linkDeloBundles, type BundleLinking } from '../delo-bundles.ts'
 import { hasCliProfile, profileDirectory } from '../profile.ts'
 import { runDirectory } from '@delo/home'
 import { Redactor, resolveSurface, SurfaceLog } from '@delo/logs'
-import { SETUP_DEFAULTS, type ModelProviderAnswer, type SetupAnswers } from '@delo/contract-setup-answers'
+import { PROMPTS_OPTIONS, SETUP_DEFAULTS, type ModelProviderAnswer, type PromptsAnswer, type SetupAnswers } from '@delo/contract-setup-answers'
 import { baseURLWarning, checkCatalogModel, chosenProvider, parseAnswers, readAnswersDocument, yesAnswers, type ProviderChoice } from './answers.ts'
+import { promptsFromFlags } from './dangerous.ts'
 import { computerEnding, finishSetup, type Ending } from './ending.ts'
 import { askAnswers } from './interactive.ts'
 import { liveKeyCheck, type KeyCheck } from './key-check.ts'
@@ -76,6 +77,8 @@ export interface SetupRequest {
   readonly catalog?: () => Promise<ProviderCatalog>
   /** The provider `--provider` and its flags name, for `--yes` and for `delorun setup key`. */
   readonly providerChoice?: ProviderChoice
+  /** The prompts answer `--prompts` names for `--yes`; `--yes` keeps setup's default without it, and never selects `dangerous` on its own. */
+  readonly promptsAnswer?: PromptsAnswer
   /** Whether a key read from the environment is checked too (`--check-key`). */
   readonly checkEnvironmentKey?: boolean
   /** Whether the release check is turned off whatever the form says (`--no-update-check`); Full asks with No preselected. */
@@ -206,7 +209,7 @@ async function collectAnswers(request: SetupRequest, registry: SectionRegistry):
   const { form, env } = request
   const flags: Partial<SetupAnswers> = request.noUpdateCheck === true ? { updateCheck: false } : {}
   if (form.kind === 'yes') {
-    const answers = { ...yesAnswers(env, request.providerChoice), ...flags, sections: unattendedRecord(registry.all()) }
+    const answers = { ...yesAnswers(env, request.providerChoice), ...request.promptsAnswer === undefined ? {} : { prompts: request.promptsAnswer }, ...flags, sections: unattendedRecord(registry.all()) }
     await checkUnattendedProvider(request, answers.modelProvider, FLAGS_FORM('delorun setup --yes'))
     return { answers, secret: undefined }
   }
@@ -425,7 +428,7 @@ export function providerChoiceFromFlags(values: Readonly<Partial<Record<(typeof 
   return { id: values.provider, model: values.model, baseURL: values['base-url'], keyEnv: values['key-env'] }
 }
 
-/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--check-key] [--no-update-check] [--list]`. */
+/** `delorun setup [<section>] [--profile <name>] [--yes | --config <file>] [--provider <id> [--model <id>] [--base-url <url>] [--key-env <NAME>]] [--prompts <safer|stock|dangerous> [--accept-dangerous-mode]] [--check-key] [--no-update-check] [--list]`. */
 export const setupCommand: CliCommand = {
   name: 'setup',
   summary: 'Set up Delorun (Quick or Full), or run one section again: delorun setup <section>; --list lists them',
@@ -436,6 +439,7 @@ export const setupCommand: CliCommand = {
           'profile': { type: 'string' }, 'yes': { type: 'boolean', default: false }, 'config': { type: 'string' }, 'check-key': { type: 'boolean', default: false },
           'no-update-check': { type: 'boolean', default: false }, 'list': { type: 'boolean', default: false },
           'provider': { type: 'string' }, 'model': { type: 'string' }, 'base-url': { type: 'string' }, 'key-env': { type: 'string' },
+          'prompts': { type: 'string' }, 'accept-dangerous-mode': { type: 'boolean', default: false },
         }, strict: true, allowPositionals: true })
       } catch (error) {
         // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
@@ -452,11 +456,13 @@ export const setupCommand: CliCommand = {
     if (values['no-update-check'] && positionals.length > 0) throw new CliError(EXIT.usage, 'delorun setup: --no-update-check applies to a whole setup; delorun setup privacy asks about the release check')
     const [section] = positionals
     const providerChoice = providerChoiceFromFlags(values, section, values.yes)
+    const promptsAnswer = promptsFromFlags({ prompts: values.prompts, acceptDangerousMode: values['accept-dangerous-mode'] }, values.yes, PROMPTS_OPTIONS)
     const { home, profile } = await prepareHome(context, values.profile)
     const form = formFromFlags(values.yes, values.config)
     const request: SetupRequest = {
       home: home.path, profile, output: context, env: context.env, form, registry, checkEnvironmentKey: values['check-key'], noUpdateCheck: values['no-update-check'],
       ...providerChoice === undefined ? {} : { providerChoice },
+      ...promptsAnswer === undefined ? {} : { promptsAnswer },
     }
     return section === undefined ? runSetup(request) : runSection(request, section)
   },
