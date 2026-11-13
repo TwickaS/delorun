@@ -161,6 +161,22 @@ async function readLockRecord(lockPath: string): Promise<string | undefined> {
 }
 
 /**
+ * Remove a takeover claim older than {@link INCOMPLETE_LOCK_GRACE_MS}: its claimant was killed between creating it and
+ * removing it, and the claim's name repeats for the same lock record, so it would block every later takeover. A
+ * live claimant finishes well inside the grace.
+ */
+async function removeStaleClaim(claim: string): Promise<void> {
+  try {
+    if (Date.now() - (await stat(claim)).mtimeMs > INCOMPLETE_LOCK_GRACE_MS) await rm(claim, { force: true })
+  /* v8 ignore start -- a claim removed between the failed create and this stat; no spec can time it. */
+  } catch (error) {
+    // A claim that vanished or that Windows refuses to remove is not stale to this contender; the next attempt asks again.
+    void error
+  }
+  /* v8 ignore stop */
+}
+
+/**
  * Remove the lock when its recorded holder exited. Contenders that read the
  * same record serialize on a claim file named after it. Under the claim, the
  * claimant re-reads the lock and probes its PID again, and removes it only
@@ -179,7 +195,11 @@ async function takeOverExitedLock(lockPath: string): Promise<boolean> {
   } catch (error) {
     // Another contender owns the claim for this record, or Windows still deletes the claim it released.
     const code = (error as NodeJS.ErrnoException).code
-    if (code === 'EEXIST' || code === 'EPERM') return false
+    if (code === 'EEXIST') {
+      await removeStaleClaim(claim)
+      return false
+    }
+    if (code === 'EPERM') return false
     throw error
   }
   try {

@@ -452,6 +452,21 @@ describe('withFileLock', () => {
     expect(await readFile(`${target}.lock`, 'utf8')).toBe(held)
   })
 
+  it('takes over an exited holder\'s lock after a claimant killed mid-claim left its claim past the grace', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    probeExited()
+    const held = record(EXITED_PID)
+    await writeFile(`${target}.lock`, held)
+    const claim = `${target}.lock.takeover-${createHash('sha256').update(held).digest('hex').slice(0, 16)}`
+    await writeFile(claim, '1\n')
+    const old = new Date(Date.now() - 60_000)
+    await utimes(claim, old, old)
+
+    await withFileLock(target, async () => {}, { waitMs: 2_000 })
+    expect(await readdir(dir)).toEqual([])
+  })
+
   it('keeps a lock that another contender acquired while this one claimed the exited record', async () => {
     probeExited()
     const dir = await scratch()
