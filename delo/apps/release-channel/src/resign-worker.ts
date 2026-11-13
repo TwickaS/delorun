@@ -20,6 +20,7 @@ export interface ResignEnv {
   readonly TIMESTAMP_KEY: string
 }
 
+/** The re-signing Worker: `fetch` answers 404; `scheduled` re-signs the timestamp and logs the outcome. */
 export default {
   fetch: (): Response => new Response('Not found\n', { status: 404 }),
   scheduled: async (controller: { readonly scheduledTime: number }, env: ResignEnv): Promise<void> => {

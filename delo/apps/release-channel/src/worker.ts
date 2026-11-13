@@ -12,6 +12,7 @@ export interface PublicEnv {
   readonly RELEASES: ReadOnlyBucket
 }
 
+/** The public Worker: `fetch` answers the channel's read-only requests from the release bucket. */
 export default {
   fetch: async (request: Request, env: PublicEnv): Promise<Response> => await handleChannelRequest(request, env.RELEASES),
 }

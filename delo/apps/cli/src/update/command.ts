@@ -89,7 +89,11 @@ export const TERMINAL_PROMPTS: UpdatePrompts = {
  */
 export type ManualInstall = (options: { readonly home: string, readonly from: string, readonly yes: boolean, readonly confirm: InstallFromOptions['confirm'], readonly line: (text: string) => void, readonly env: Readonly<Record<string, string | undefined>> }) => Promise<RuntimeVersion>
 
-/** {@link installFrom} over this machine's store and the launcher's roots. */
+/**
+ * {@link installFrom} over this machine's store and the launcher's roots.
+ * @param options - the home, the source, `--yes`, the question, the output line and the environment.
+ * @returns the version to prepare.
+ */
 export const MANUAL_INSTALL: ManualInstall = async ({ home, from, yes, confirm: ask, line, env }) => {
   const running = runtimeOfFile(home, fileURLToPath(import.meta.url))
   if (!running.store) throw new CliError(EXIT.failed, 'delorun update --from: this Delo does not run from the runtime store, so it has no release to replace; install Delo with its launcher.')
@@ -317,6 +321,7 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
  * @param context - the environment and output.
  * @param prompts - the questions; the terminal's by default.
  * @param checks - what `--check` reads; the real runtime and contract C2's publication by default.
+ * @param manual - the installer a `--from` source runs; this machine's store by default.
  * @returns 0 when the update committed, nothing needed updating, `--check` verified the channel, `--report` printed the
  *   report or the person declined; 1 when it was refused, rolled back or failed, or `--check` failed; 2 for a wrong command line; 3 when no
  *   home process runs.

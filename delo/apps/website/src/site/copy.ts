@@ -13,6 +13,7 @@ export interface Feature {
   readonly linkText: string
 }
 
+/** Every string the home page shows, with the documentation link each claim points to. */
 export const COPY = {
   siteTitle: 'Delorun',
   tagline: 'Your harness. No limits.',
