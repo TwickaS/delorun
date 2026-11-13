@@ -5,10 +5,9 @@
  * are absent because they are terms of art or valid in both spellings).
  */
 
-import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { isEntryPoint, trackedDeloFiles } from './tracked-delo-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -162,16 +161,8 @@ export function findUsSpellings(source: string, options: { file?: string; markdo
   return violations
 }
 
-function trackedMarkdown(repoRoot: string): string[] {
-  return execFileSync('git', ['ls-files', '-z', '--', 'delo'], { cwd: repoRoot, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
-    .split('\0')
-    .filter(isBritishEnglishFile)
-}
-
-const invokedPath = process.argv[1]
-const isMain = invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href
-if (isMain) {
-  const files = trackedMarkdown(root)
+if (isEntryPoint(import.meta.url)) {
+  const files = trackedDeloFiles(root, isBritishEnglishFile)
   const violations = files.flatMap(file => findUsSpellings(readFileSync(resolve(root, file), 'utf8'), { file }))
   if (violations.length === 0) {
     console.log(`verify-british-english: ${String(files.length)} file(s) checked, no US spellings.`)

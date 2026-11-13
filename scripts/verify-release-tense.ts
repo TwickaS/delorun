@@ -4,10 +4,9 @@
  * and the changelog fragments, which the gate skips.
  */
 
-import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { isEntryPoint, trackedDeloFiles } from './tracked-delo-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -71,16 +70,8 @@ export function findReleaseTenseViolations(file: string, source: string): Releas
   return violations
 }
 
-function trackedMarkdown(repoRoot: string): string[] {
-  return execFileSync('git', ['ls-files', '-z', '--', 'delo'], { cwd: repoRoot, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
-    .split('\0')
-    .filter(isReleaseTenseFile)
-}
-
-const invokedPath = process.argv[1]
-const isMain = invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href
-if (isMain) {
-  const files = trackedMarkdown(root)
+if (isEntryPoint(import.meta.url)) {
+  const files = trackedDeloFiles(root, isReleaseTenseFile)
   const violations = files.flatMap(file => findReleaseTenseViolations(file, readFileSync(resolve(root, file), 'utf8')))
   if (violations.length === 0) {
     console.log(`verify-release-tense: ${String(files.length)} file(s) checked, no release-status phrases.`)
