@@ -130,6 +130,18 @@
       disabled: true
 
 - insert:
+    - id: delo-trust
+      name: '@delo/bundle-local/trust'
+      config:
+        enabled: true
+      disabled: true
+
+- insert:
+    - id: delo-profile-versions
+      name: '@delo/bundle-local/profile-versions'
+      disabled: true
+
+- insert:
     - id: delo-plugin-install-check
       name: '@delo/plugin-install-check'
       config:

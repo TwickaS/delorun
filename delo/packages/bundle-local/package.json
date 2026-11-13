@@ -19,8 +19,11 @@
     "./rows": "./src/rows.ts",
     "./update-gate": "./src/update-gate.ts",
     "./update-check": "./src/update-check.ts",
+    "./trust": "./src/trust.ts",
     "./profile-versions": "./src/profile-versions.ts",
     "./statements": "./src/client/locales.ts",
+    "./trust-bill": "./src/client/trust-bill.ts",
+    "./trust-schema": "./src/client/trust-schema.ts",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -35,9 +38,12 @@
     "src/rows.ts",
     "src/update-gate.ts",
     "src/update-check.ts",
+    "src/trust.ts",
     "src/profile-versions.ts",
     "src/client/versions-api.ts",
-    "src/client/locales.ts"
+    "src/client/locales.ts",
+    "src/client/trust-bill.ts",
+    "src/client/trust-schema.ts"
   ],
   "dsh": {
     "bundle": {

@@ -190,6 +190,18 @@
         intervalHours: 24
         timeoutSeconds: 15
 
+# The trust bill (C15): what this Delo runs and how much of it was checked, which
+# the studio's sidebar badge and its panel show. `delorun` attaches the bill's
+# source to the deloTrust service this row provides: the row serves the start
+# bill, which the launcher's start check and the stored release-log record make
+# without hashing again, to the studio and to approved devices, and runs the
+# `verify` stage when the person chooses Check now at the home's own computer.
+- insert:
+    - id: delo-trust
+      name: '@delo/bundle-local/trust'
+      config:
+        enabled: true
+
 # Setup versions: the profile history's versions listed, compared and saved, and
 # the switch to another version, as routes under /api/deloVersions.*. Reading
 # answers any signed-in studio; saving and switching answer only the loopback
@@ -199,14 +211,14 @@
     - id: delo-profile-versions
       name: '@delo/bundle-local/profile-versions'
 
-# Plugin management protects the guard rows and the update check above, remote
+# Plugin management protects the guard rows, the update check and the trust bill above, remote
 # access and the home's sign-in (so no chat turns remote access on or points
 # its records elsewhere), the plugin install check, and the sandbox rows, as it
 # protects its own components: the `plugin_manager` tool, which runs without a
 # prompt in full access, cannot disable a protected row, change its settings, or
 # deselect or remove a bundle that carries one, this bundle included, so no chat
-# in one workspace turns a guard off, or silences the update check, for every
-# workspace. Settings → General → Updates writes the update check's switch, and
+# in one workspace turns a guard off, or silences the update check or the trust
+# bill, for every workspace. Settings → General → Updates writes the update check's switch, and
 # Settings → External agents the external-agent consent's switch and run time
 # limit, through the settings service, which this list does not govern.
 #
@@ -231,6 +243,7 @@
       - '@delo/plugin-delegation-consent'
       - '@delo/bundle-local/update-gate'
       - '@delo/bundle-local/update-check'
+      - '@delo/bundle-local/trust'
       - '@delo/plugin-install-check'
       - '@delo/reach'
       - '@delo/home-auth'

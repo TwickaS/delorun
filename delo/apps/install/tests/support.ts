@@ -159,6 +159,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
   const releaseVersion = options.version ?? VERSION
   const entries: ArchiveEntry[] = [
     { path: 'app/node_modules/@delo/cli/src/bin.js', mode: '0644', data: Buffer.from('// the runtime entry\n') },
+    { path: 'app/package.json', mode: '0644', data: Buffer.from('{"name":"@delo/runtime-closure"}\n') },
     { path: 'node/bin/node', mode: '0755', data: Buffer.from('#!/bin/sh\nexit 0\n') },
   ]
   const archive = await tarGz(entries)

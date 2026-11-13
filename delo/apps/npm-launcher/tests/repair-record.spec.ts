@@ -46,7 +46,7 @@ describe('the repair mark', () => {
   /** A launch of `profile` whose store holds an installed runtime and whose spawn is recorded. */
   function launch(profile: string): LauncherOptions {
     const store: LauncherStore = {
-      prepareLaunch: (): Promise<LaunchPlan> => Promise.resolve({ command: 'node', args: ['entry.js'], env: {}, version: version('0.1.0') }),
+      prepareLaunch: (): Promise<LaunchPlan> => Promise.resolve({ command: 'node', args: ['entry.js'], env: {}, version: version('0.1.0'), check: { full: true, hashed: 0, files: 0, fullCheckAt: 1_700_000_000_000 } }),
       install: () => Promise.reject(new Error('a start installs nothing here')),
       retain: () => Promise.resolve({ removed: [], failed: [] }),
       pointers: () => Promise.reject(new Error('no pointers')),
@@ -55,6 +55,7 @@ describe('the repair mark', () => {
     }
     return {
       home, profile, platform: 'linux-x64', args: [], passedThrough: [], mode: 'enforce', fullCheckDays: 7, repairMarkGraceSeconds: GRACE, store,
+      identity: { version: '0.3.0', path: '/launcher', now: () => 1_800_000_000_000 },
       channel: { resolve: () => Promise.reject(new Error('no channel')), fill: () => Promise.reject(new Error('no channel')) },
       roots: fixture.roots, logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined },
       spawn: (command) => { spawned.push(command); return Promise.resolve(0) },

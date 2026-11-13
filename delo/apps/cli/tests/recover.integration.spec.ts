@@ -304,6 +304,7 @@ describe('the launcher\'s rollback after the current runtime failed its start ch
       mode: 'enforce',
       fullCheckDays: 7,
       repairMarkGraceSeconds: 5,
+      identity: { version: '0.2.0', path: join(deloHome, 'launcher'), now: Date.now },
       roots: fixture.roots,
       logger: { error: () => undefined, warn: () => undefined, info: () => undefined, debug: () => undefined },
       channel: { resolve: () => Promise.reject(new Error('no install')), fill: () => Promise.reject(new Error('no install')) },

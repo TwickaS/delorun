@@ -62,6 +62,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   FilePinError: PLUGIN,
   BuildRootBusyError: 'raised by the release tooling\'s closure build, which no runtime carries',
   HomeAuthError: 'raised by the home process\'s Web sign-in, which answers the browser over HTTP',
+  TrustError: 'raised by the home process\'s trust bill routes, which answer the studio over HTTP',
   RelayError: 'raised by the relay server under delo/apps/relay, which delorun does not run',
   UsageError: TOOLS,
   BatchError: TOOLS,

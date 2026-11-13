@@ -56,8 +56,8 @@
     },
     {
       "id": "verify",
-      "purpose": "delorun verify's online release-log check.",
-      "sources": ["delo/apps/cli/src/verify/index.ts"]
+      "purpose": "delorun verify's online release-log check, and the same check when the person presses Check now in the studio's trust panel.",
+      "sources": ["delo/apps/cli/src/verify/index.ts", "delo/apps/cli/src/verify/trust-host.ts"]
     },
     {
       "id": "egress-proxy",

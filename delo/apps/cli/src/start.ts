@@ -73,6 +73,7 @@ import { loadDeloEnvironment } from './launch-environment.ts'
 import { registerFatalRelease } from './last-resort.ts'
 import { runtimePlatformOf } from './update/channel.ts'
 import { startNoticeLine, watchUpdates, type UpdateWatchOptions } from './update/notice-host.ts'
+import { PROCESS_FETCH, TRUST_STAGES, watchTrust, type TrustWatchOptions } from './verify/trust-host.ts'
 
 /**
  * Adds `@delo/bundle-studio` to a profile setup created before it existed ({@link addStudioBundle}).
@@ -215,6 +216,12 @@ export interface BootedProfile {
    * @returns once the check is attached, or its record removed when the person switched it off.
    */
   readonly watchUpdates: (options: UpdateWatchOptions) => Promise<void>
+  /**
+   * Attach the trust bill's source to the Host ([trust host](./verify/trust-host.ts)); absent where the Host serves no
+   * bill.
+   * @param options - the home, the profile, the platform, the running version, the environment, the log and the fetch.
+   */
+  readonly watchTrust?: (options: TrustWatchOptions) => void
   /**
    * The studio's loopback listener.
    * @returns its host and port, or `undefined` when the profile serves no studio.
@@ -382,6 +389,7 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
     consents: () => localConsents(ctx),
     reach: rows => localReach(ctx, rows),
     watchUpdates: async options => watchUpdates(ctx, options),
+    watchTrust: (options) => { watchTrust(ctx, options, TRUST_STAGES) },
     // The CLI profile's invariants require the service, so it is absent only in a profile that holds no turn.
     releaseTurns: () => { ctx.get('deloTurnGate')?.release() },
     studio: () => {
@@ -632,6 +640,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   booted.releaseTurns()
   if (stored !== undefined) {
     await booted.watchUpdates({ home: request.home, profile: request.profile, platform: runtimePlatformOf(process.platform, process.arch), running: stored, anchor: launcherAnchor(request.home, request.env), line: (text) => { request.output.stdout(`${text}\n`) }, log: (text) => { logger.warn(text) } })
+    booted.watchTrust?.({ home: request.home, profile: request.profile, platform: `${process.platform}-${process.arch}`, running: stored, env: request.env, logger, node: process.execPath, fetch: PROCESS_FETCH, now: () => Math.floor(Date.now() / 1000), elapsed: () => performance.now() })
   }
   return runningHost(booted, request, composed.startOnlySockets, async () => {
     if (stored !== undefined) await checkStoredRuntime(request.home, stored, logger, launcherAnchor(request.home, request.env).root, fullCheckDaysOf(request.env))

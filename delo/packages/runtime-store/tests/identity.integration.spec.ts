@@ -14,10 +14,26 @@ import { acquireStoreLock } from '../src/lock.ts'
 import { identityOf, installedFileMode, resolveFullCheckDays, RuntimeStoreError, SUPPORTED, type FilledRelease } from '../src/index.ts'
 import { IDENTITY_SCHEMA, readIdentityRecord, trustedFileSystem } from '../src/identity.ts'
 import { describeProblems, examineTree } from '../src/tree.ts'
-import { closureFiles, fixtureHome, PLATFORM, releaseFiles, version, writeClosure, type FixtureHome } from './support.ts'
+import { closureFiles, fixtureHome, PLATFORM, releaseFiles, version, writeClosure, type FixtureFile, type FixtureHome } from './support.ts'
 
 const V1 = version('0.1.0')
-const TARGET = 'app/node_modules/@delo/cli/src/bin.js'
+/** A runtime file the record can vouch for. */
+const TARGET = 'app/package.json'
+/** A file of a dependency of the `delorun` package. */
+const DEPENDENCY = 'app/node_modules/zod/index.js'
+/**
+ * The files a forged record hides from an ordinary start and `delorun verify` still finds: a manifest, the Node
+ * executable, the `delorun` package's entry and a dependency's file.
+ */
+const FORGEABLE = [TARGET, 'node/bin/node', 'app/node_modules/@delo/cli/src/bin.js', DEPENDENCY]
+
+/**
+ * {@link closureFiles} with a dependency of the `delorun` package.
+ * @returns the files by relative path.
+ */
+function dependencyClosure(): Record<string, FixtureFile> {
+  return { ...closureFiles(V1), [DEPENDENCY]: { content: 'export const marker = 1\n' } }
+}
 const DAY_MS = 86_400_000
 
 let fixture: FixtureHome
@@ -82,9 +98,10 @@ async function refusal(promise: Promise<unknown>): Promise<RuntimeStoreError> {
 /**
  * Install 0.1.0 with whole-second times on the target file, then let the racy window pass and run the full check, so
  * the record vouches for every file.
+ * @param files - the closure's files; {@link closureFiles} by default.
  */
-async function settledInstall(): Promise<void> {
-  await fixture.install(V1)
+async function settledInstall(files: Record<string, FixtureFile> = closureFiles(V1)): Promise<void> {
+  await fixture.install(V1, files)
   utimesSync(file(TARGET), 1_700_000_000, 1_700_000_000)
   advance(3_000)
   await fixture.store.checkRuntime(V1, fixture.root)
@@ -111,11 +128,15 @@ function changeInPlace(path: string): void {
   expect([after.ino, after.size, after.mode, after.mtimeNs]).toEqual([BigInt(before.ino), BigInt(before.size), BigInt(before.mode), 1_700_000_000_000_000_000n])
 }
 
-/** Change the target in place and write a record whose entry vouches for its new identity, as a forger would. */
-function forgeRecord(): RecordJson {
-  changeInPlace(TARGET)
+/**
+ * Change a file in place and write a record whose entry vouches for its new identity, as a forger would.
+ * @param path - the list path; the target by default.
+ * @returns the forged record.
+ */
+function forgeRecord(path = TARGET): RecordJson {
+  changeInPlace(path)
   const record = readRecord()
-  record.files[indexOf(TARGET)] = identityOf(lstatSync(file(TARGET), { bigint: true }))
+  record.files[indexOf(path)] = identityOf(lstatSync(file(path), { bigint: true }))
   writeRecord(record)
   return record
 }
@@ -170,7 +191,7 @@ describe('a start with a settled record', () => {
   it('c02-start-catches-renamed-replacement: a file renamed over the original with its size, mode and times stops the start', async () => {
     await settledInstall()
     const original = lstatSync(file(TARGET))
-    const parent = join(installation(), 'app/node_modules/@delo/cli/src')
+    const parent = join(installation(), 'app')
     chmodSync(parent, 0o755)
     const replacement = join(parent, 'replacement')
     writeFileSync(replacement, `X${readFileSync(file(TARGET), 'utf8').slice(1)}`, { mode: original.mode & 0o777 })
@@ -289,10 +310,36 @@ describe('a start with a settled record', () => {
 })
 
 describe('the documented limit and the full hash', () => {
-  it('c02-start-record-forgery-out-of-scope: a record rewritten to a changed file\'s identity lets the start pass', async () => {
+  it.each(FORGEABLE)('c02-start-record-forgery-out-of-scope: a record rewritten to the identity of a changed %s lets an ordinary start pass', async (path) => {
+    await settledInstall(dependencyClosure())
+    const record = forgeRecord(path)
+    record.fullCheckAt = Date.now()
+    writeRecord(record)
+    await expect(launch(30)).resolves.toMatchObject({ version: V1 })
+  })
+
+  it('hashes nothing at an ordinary start when the record vouches for every file, and leaves the record unwritten', async () => {
     await settledInstall()
-    forgeRecord()
-    await expect(launch()).resolves.toMatchObject({ version: V1 })
+    const before = lstatSync(recordPath(), { bigint: true })
+    const plan = await launch()
+    expect(plan.check).toEqual({ full: false, hashed: 0, files: Object.keys(closureFiles(V1)).length, fullCheckAt: readRecord().fullCheckAt })
+    expect(lstatSync(recordPath(), { bigint: true }).ino).toBe(before.ino)
+  })
+
+  it('reports a full pass when the start hashes every file', async () => {
+    await settledInstall()
+    const files = Object.keys(closureFiles(V1)).length
+    const plan = await launch(0)
+    expect(plan.check).toMatchObject({ full: true, hashed: files, files })
+    expect(plan.check.fullCheckAt).toBe(readRecord().fullCheckAt)
+  })
+
+  it.each(FORGEABLE)('c02-verify-start-hashes-every-file: an interval of 0, which the launcher gives delorun verify, finds a changed %s that a record forged with its full pass set to now vouches for', async (path) => {
+    await settledInstall(dependencyClosure())
+    const record = forgeRecord(path)
+    record.fullCheckAt = Date.now()
+    writeRecord(record)
+    expect((await refusal(launch(0))).message).toContain(`${path} (sha256)`)
   })
 
   it('c02-verify-always-hashes: the full check hashes every file even when every identity matches the record', async () => {

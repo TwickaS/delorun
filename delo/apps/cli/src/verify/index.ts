@@ -9,7 +9,9 @@
  * and the run names the root it anchored on; a root it could hold to its own signatures only is not a pass. The exit
  * code is 0 when no check failed and `release-signature` passed or fell short only of its online check, which contract
  * C18 makes no failure: the command then prints the warning that the release was not checked against the log, since
- * when, and why. It is 1 otherwise. A summary line states what was and was not checked.
+ * when, and why. It is 1 otherwise. After the check lines it prints the bill of materials of this Delorun
+ * ([bill text](./bill-text.ts)) and the statement that the checks run with the person's access, which a program running
+ * with that access can change. A summary line states what was and was not checked, and the bill's badge state.
  *
  * After the release checks, every profile's installed plugins are compared with their install records, every file
  * hashed, and the profile's trust status written; a plugin whose files changed since it was installed is a warning on
@@ -19,8 +21,9 @@
  */
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { DELO_LAUNCHER_ROOTS_ENV, DELO_LAUNCHER_VERSION_ENV } from '@delo/contract-home-layout'
-import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationMode, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
+import type { TrustBill } from '@delo/bundle-local/trust-bill'
+import { DELO_LAUNCHER_ROOTS_ENV } from '@delo/contract-home-layout'
+import { VERIFICATION_NOTICE, VERIFICATION_REPORT_SCHEMA_VERSION, type VerificationCheckResult, type VerificationReport, type VerificationResult } from '@delo/contract-verification-checks'
 import type { DeloLogger } from '@delo/logs'
 import type { Fetch, RecordedCheck } from '@delo/release-verify'
 import { parseRuntimeVersion } from '@delo/runtime-store'
@@ -28,13 +31,30 @@ import { parseOptions, prepareHome, type CliCommand, type CommandContext, type C
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { deloVersion } from '../version.ts'
 import { checkInstalledPlugins } from '../plugin-install-check.ts'
-import { checkRelease, NOT_RUN_HERE, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
+import { installedPluginsCheck } from './plugin-bill.ts'
+import { runVerifyStage, type ChangesReader, type PluginInstallCheck } from './bill.ts'
+import { ACCESS_LINE, billLines, billSuffix } from './bill-text.ts'
+import { NOT_RUN_HERE, VERIFY_MODE, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
 
-/**
- * The mode a run reports. `delorun verify` runs every check on request in every mode (contract C15), and nothing reads
- * `integrity.mode` yet, so a run reports the contract's default.
- */
-export const VERIFY_MODE: Exclude<VerificationMode, 'off'> = 'warn'
+/** The `delorun verify --help` text. */
+const VERIFY_USAGE = [
+  'Usage: delorun verify [--release <version>] [--offline] [--json]',
+  '',
+  'Checks the running release, or an installed one, against its signed manifest, the stored timestamp\'s',
+  'freshness and its release-log entry, and proves the release log consistent online unless --offline.',
+  'Prints one line per check: passed, failed or not run, with the reason, then the bill of materials of',
+  'this Delorun and how much of it was checked.',
+  'Exit codes: 0 when no check failed and release-signature passed or could not reach the release log,',
+  '1 otherwise, 2 for a wrong command line. A release log that cannot be reached leaves the release not checked',
+  'against it, with a warning, and does not fail.',
+  '',
+  '  --release <version>  the installed release to check (default: the running one)',
+  '  --offline            run no online check',
+  '  --json               print the report as JSON, with the bill of materials under "bill"',
+  '',
+].join('\n')
+
+export { VERIFY_MODE } from './checks.ts'
 
 /** How a result reads on a line. */
 const LABELS: Readonly<Record<VerificationResult, string>> = { 'pass': 'passed', 'fail': 'failed', 'not-enforced': 'not enforced', 'unknown': 'not run' }
@@ -62,6 +82,10 @@ export interface VerifyEnvironment {
    * @param output - where the warnings go.
    */
   readonly checkPlugins?: (home: string, output: CommandOutput) => Promise<void>
+  /** The plugin install check; absent leaves the bill's plugins `unknown`. */
+  readonly plugins?: PluginInstallCheck
+  /** Changes; absent leaves the bill's changes `unknown`. */
+  readonly changes?: ChangesReader
 }
 
 /**
@@ -79,6 +103,14 @@ async function checkEveryProfile(home: string, output: CommandOutput): Promise<v
   }
 }
 
+/** The bill's plugin install check over this installation's profile boot; the boot module loads when the check runs. */
+const processPluginsCheck: PluginInstallCheck = {
+  async check(home, profile) {
+    const { INSTALL_ANCHOR } = await import('@deepseek-ai/dsh/profile-boot')
+    return installedPluginsCheck(INSTALL_ANCHOR).check(home, profile)
+  },
+}
+
 /** This process's fetch, clock, platform and version. */
 const PROCESS_ENVIRONMENT: VerifyEnvironment = {
   fetch: globalThis.fetch.bind(globalThis),
@@ -86,6 +118,7 @@ const PROCESS_ENVIRONMENT: VerifyEnvironment = {
   platform: `${process.platform}-${process.arch}`,
   running: deloVersion,
   checkPlugins: checkEveryProfile,
+  plugins: processPluginsCheck,
 }
 
 /**
@@ -128,32 +161,34 @@ export function originsLine(origins: ReleaseOrigins | undefined): string {
 }
 
 /**
- * The summary line: what was and was not checked, which no reader should take for more.
+ * The summary line: what was and was not checked, which no reader should take for more, and the bill's badge state.
  * @param results - one result per registered check.
+ * @param bill - the run's bill, when it built one.
  * @returns the line, ending with a newline.
  */
-export function summaryLine(results: readonly VerificationCheckResult[]): string {
+export function summaryLine(results: readonly VerificationCheckResult[], bill?: TrustBill): string {
   const count = (result: VerificationResult): number => results.filter(entry => entry.result === result).length
   const parts = [`${String(count('pass'))} checks passed`, `${String(count('fail'))} failed`, `${String(count('unknown'))} not run`]
   if (count('not-enforced') > 0) parts.push(`${String(count('not-enforced'))} not enforced`)
-  return `${parts.join(', ')}; this is not a full verification of this Delorun.\n`
+  return `${parts.join(', ')}${billSuffix(bill)}; this is not a full verification of this Delorun.\n`
 }
 
 /**
  * The report's lines.
  * @param release - the release checked.
  * @param outcome - what the run found.
+ * @param bill - the run's bill, when it built one.
  * @returns the text: a heading, the root line, the origins line, the launcher line when the manifest verified, one
- *   line per check and the summary.
+ *   line per check, the bill of materials, the access statement and the summary.
  */
-export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins' | 'launcher'>): string {
+export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins' | 'launcher'>, bill?: TrustBill): string {
   const run = outcome.results.filter(result => result.detail !== NOT_RUN_HERE)
   const absent = outcome.results.length - run.length
   const width = Math.max(...run.map(result => result.id.length))
   const lines = run.map(result => `${LABELS[result.result].padEnd(7)}  ${result.id.padEnd(width)}  ${result.detail}`)
   if (absent > 0) lines.push(`Delorun does not include ${String(absent)} more ${absent === 1 ? 'check' : 'checks'}.`)
   const launcher = outcome.launcher === undefined ? '' : `Launcher: ${outcome.launcher}.\n`
-  return `Release ${release}, verification mode ${VERIFY_MODE}; checks run as your user.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${launcher}${lines.join('\n')}\n${summaryLine(run)}`
+  return `Release ${release}, verification mode ${VERIFY_MODE}; checks run as your user.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${launcher}${lines.join('\n')}\n${bill === undefined ? '' : billLines(bill)}${ACCESS_LINE}${summaryLine(run, bill)}`
 }
 
 /**
@@ -203,25 +238,22 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
     name: 'verify',
     summary: 'Check the release against its signed manifest and the release log: --release <version>, --offline, --json',
     async run(args: readonly string[], context: CommandContext): Promise<ExitCode> {
+      if (args.includes('--help') || args.includes('-h')) {
+        context.stdout(VERIFY_USAGE)
+        return EXIT.ok
+      }
       const values = parseOptions('verify', args, { release: { type: 'string' }, offline: { type: 'boolean', default: false }, json: { type: 'boolean', default: false } })
       const named = values.release ?? environment.running()
       const release = parseRuntimeVersion(named)
       if (release === undefined) throw new CliError(EXIT.usage, `delorun verify: ${JSON.stringify(named)} is not a Delorun release version`)
-      const { home } = await prepareHome(context, undefined)
+      const { home, profile } = await prepareHome(context, undefined)
       const now = environment.now()
-      const outcome = await checkRelease({
-        home: home.path,
-        release,
-        platform: environment.platform,
-        now,
-        fetch: values.offline ? undefined : environment.fetch,
-        mode: VERIFY_MODE,
-        launcherRoots: context.env[DELO_LAUNCHER_ROOTS_ENV],
-        launcherVersion: context.env[DELO_LAUNCHER_VERSION_ENV],
-        logger: stderrLogger(context),
-      })
-      if (values.json) context.stdout(`${JSON.stringify(report(release, outcome, now))}\n`)
-      else context.stdout(reportLines(release, outcome))
+      const { bill, outcome } = await runVerifyStage(
+        { home: home.path, profile, platform: environment.platform, running: environment.running(), env: context.env, now, ...environment.plugins === undefined ? {} : { plugins: environment.plugins }, ...environment.changes === undefined ? {} : { changes: environment.changes } },
+        { release, fetch: values.offline ? undefined : environment.fetch, logger: stderrLogger(context) },
+      )
+      if (values.json) context.stdout(`${JSON.stringify({ ...report(release, outcome, now), bill })}\n`)
+      else context.stdout(reportLines(release, outcome, bill))
       for (const notice of outcome.notices) context.stderr(`notice: ${notice}\n`)
       for (const warning of outcome.warnings) context.stderr(`warning: ${warning}\n`)
       // A changed plugin is a warning and fails nothing: the plugins are the person's, not the release's.

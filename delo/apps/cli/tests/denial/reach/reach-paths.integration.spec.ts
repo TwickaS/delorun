@@ -10,7 +10,7 @@
  * - `open-in-app` is refused to the device and still answers the loopback studio.
  * - A target whose text begins with a listed path but that the web server routes elsewhere is refused.
  * - Every exact Fetch route is on {@link FETCH_ROUTES} with the device's decision: each refused one answers the device
- *   403, and each of Delo's still answers the loopback studio.
+ *   403, each read-only one answers the device's read 200, and each of Delo's still answers the loopback studio.
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
@@ -72,11 +72,12 @@ const REACHED: Readonly<Record<string, string>> = {
 
 /**
  * One exact Fetch route's decision for a device: `refused` answers 403, `per-call` asks remote access on each request,
- * and `admitted` answers every device through the route's own `admitPeer`. A refused route answers upstream's
- * `forbidden` unless its own check refuses the device first, with `refusal`'s code.
+ * `read` admits a device's `GET` and nothing else, and `admitted` answers every device through the route's own
+ * `admitPeer`. A refused route answers upstream's `forbidden` unless its own check refuses the device first, with
+ * `refusal`'s code.
  */
 interface FetchDecision {
-  readonly device: 'refused' | 'per-call' | 'admitted'
+  readonly device: 'refused' | 'per-call' | 'read' | 'admitted'
   readonly reason: string
   readonly refusal?: string
 }
@@ -89,8 +90,8 @@ const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the 
 
 /**
  * Every exact Fetch route of the composition with the device's decision. Delo's routes default to refused; a device
- * keeps a read only to render a chat it can already read or to send the person to the computer, as the waiting MCP
- * servers' names do.
+ * keeps a read only to render a chat it can already read, to send the person to the computer, as the waiting MCP
+ * servers' names do, or when the studio shows it on every page, as the trust badge's bill.
  */
 const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloChatStates.list': { device: 'refused', reason: 'snooze and settle states order the chat list at the computer; a device renders every chat without them, and the client keeps its last states' },
@@ -106,6 +107,8 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloOnboarding.recommend': { device: 'refused', reason: 'the recommended plugins\' connections serve onboarding at the computer, and asking the registry is a network request the computer makes' },
   '/api/deloMainChat.open': { device: 'refused', reason: 'creates the main chat on its configured preset, which a device does not choose' },
   '/api/deloMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
+  '/api/deloTrust.bill': { device: 'read', reason: 'the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret' },
+  '/api/deloTrust.check': { device: 'refused', reason: 'Check now hashes the runtime and runs the release-log check, which only the home\'s computer starts' },
   '/api/deloUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },
   '/api/deloTrash.list': { device: 'refused', reason: TRASH },
   '/api/deloTrash.deleteChat': { device: 'refused', reason: TRASH },
@@ -302,6 +305,11 @@ describe('the routes a signed-in device reaches', () => {
     expect(routes.map(route => route.path).sort()).toEqual(Object.keys(FETCH_ROUTES).sort())
     for (const route of routes) {
       const decision = FETCH_ROUTES[route.path]
+      if (decision?.device === 'read') {
+        // Pins the route's `admitPeer`: without it Connection refuses the device's read with `forbidden`.
+        expect.soft({ path: route.path, methods: route.methods, status: (await asPhone(route.path)).status }).toEqual({ path: route.path, methods: ['GET'], status: 200 })
+        continue
+      }
       if (decision?.device === 'admitted') {
         const reply = await asPhone(route.path, { method: route.methods[0] ?? 'GET' })
         expect.soft({ path: route.path, status: reply.status }).toEqual({ path: route.path, status: 200 })
