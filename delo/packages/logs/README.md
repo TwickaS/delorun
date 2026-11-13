@@ -28,16 +28,16 @@ A surface owner does these steps as its process starts:
 1. Resolve the surface's location with `resolveSurface({ kind, home, profile })`. The relay's location is its container path and ignores the home.
 2. Create one `Redactor` for the process and register every secret value the process holds or reads as it loads it, with `register(value, kind)`, keeping the returned disposer for a value that is dropped.
 3. Open the log with `SurfaceLog.open({ location, redactor, pid, level, startId, onFailure, now })`. Opening creates the directory at 0700 and the active file at 0600 by exclusive creation, and checks an existing directory or file with `@delo/home`'s `checkPrivateDirectorySync` and `checkProtectedFileSync`, the one implementation of C1's refusal rule: a symbolic link, another user's path or one with a group or other permission bit throws `HomeLayoutError` with `HOME_MODE` or `SECRET_FILE_MODE` and its `chmod` fix, so a surface fails at its start instead of running without its log.
-4. Run `startAgeChecks({ home, now, onReport })`, which prunes every local surface at once and every 3,600 seconds. `delorun` prunes once at each invocation's start through `pruneLocalSurfaces`. No shipped process calls `startAgeChecks`, so while the home process runs, records past their retention stay until the next `delorun` invocation prunes them.
+4. Run `startAgeChecks({ home, now, onReport })`, which prunes every local surface at once and every 3,600 seconds. `delorun` prunes once at each invocation's start through `pruneLocalSurfaces`. The home process calls it at its start and stops it when it stops, so a home process that runs for weeks deletes expired records itself.
 5. Write Delo's own records through `log.logger(name)`, attach the Cordis application with `attachCordisLogs(ctx, log)` from `@delo/logs/cordis`, and capture upstream code's output with `LineCapture`, `captureStream` or `interceptStdio`.
 
-`SurfaceLog.write` never throws: a record that cannot be written is dropped and its `LogsError` or `HomeLayoutError` goes to `onFailure`, and the next record opens the file again. A surface that keeps upstream's console exporter and also captures its own standard output writes each Cordis message twice, so it keeps only one of the two.
+`SurfaceLog.write` never throws: a record that cannot be written is dropped and its `LogsError` or `HomeLayoutError` goes to `onFailure`, and the next record opens the file again. A surface that keeps upstream's console exporter and also captures its own standard output writes each Cordis message twice, so it keeps only one of the two; the shipped profile mounts no console exporter, so the home process's Cordis messages take the exporter path alone.
 
 ## Records and keys
 
 Each record is one JSON line of C20's fields, at most 16,384 bytes. A longer record is cut after redaction, from the end of `err.stack`, then `msg`, then `err.message`, and `truncated` counts the bytes removed, including bytes a capture dropped. Records from the Cordis exporter and from `log.logger(name)` carry `source: "delo"`; captured lines carry `source: "captured"` and `stdout` or `stderr` as their logger.
 
-A record names its keys with `keys`, or takes them from the log's key sources (`log.useKeys(source)`). `attachCordisLogs` adds a source that reads upstream's agent registry: while an agent drives a chat, `ctx.agents.currentInitiator()` names it, and the record carries that session's id and, while a turn is open, the number of its latest `turn/start`. This covers Cordis messages and output the process writes to its own streams during the turn. No shipped process calls `attachCordisLogs`, so the CLI home's records carry no session or turn keys. No session-log event changes, so upstream's session format and the parity replay stay as they are.
+A record names its keys with `keys`, or takes them from the log's key sources (`log.useKeys(source)`). `attachCordisLogs` adds a source that reads upstream's agent registry: while an agent drives a chat, `ctx.agents.currentInitiator()` names it, and the record carries that session's id and, while a turn is open, the number of its latest `turn/start`. This covers Cordis messages and output the process writes to its own streams during the turn. The CLI home process attaches it to the Host's root context, so its records carry those keys. No session-log event changes, so upstream's session format and the parity replay stay as they are.
 
 ## Redaction
 
@@ -66,7 +66,8 @@ The writer rotates before a write would take the active file past 10 MiB: `.3` t
 | `log-canary-patterns` | `denial.integration.spec.ts` | each surface in the suite |
 | `log-rotation` | `denial.integration.spec.ts` | size: each surface in the suite; age: the age check every surface runs |
 | `log-modes` | `denial.integration.spec.ts` | each surface in the suite |
-| `log-session-keys` | [`session-keys.spec.ts`](tests/denial/session-keys.spec.ts) | the Cordis exporter on upstream's production agent loop |
+| `log-session-keys` | [`session-keys.spec.ts`](tests/denial/session-keys.spec.ts), [`home-wiring.spec.ts`](tests/denial/home-wiring.spec.ts) | the Cordis exporter on upstream's production agent loop; the home surface's own wiring |
+| known values of the home process | `home-wiring.spec.ts` | each secret kind minted by the home-auth stores, the credential provider wrapper and the environment, planted raw and encoded as records and captured output, rotated files included |
 | `log-purge-clear` | `denial.integration.spec.ts` | the clear effect over each surface in the suite; purge itself is skipped until C8's purge is in the tree |
 | `log-desktop-host-file` | skipped | waits for the desktop Host's log file |
 | `log-confined-write-denied` | skipped | waits for Delo's sandbox profiles for C1's `home-write` rule |

@@ -11,6 +11,7 @@ import { readProtectedFile, writeProtectedFile } from '@delo/home'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { HOME_AUTH_FILES, type Base64Url, type HomeKeyId } from '@delo/contract-device-approval'
 import { HomeAuthError } from './errors.ts'
+import type { SecretSink } from '@delo/contract-operational-logs'
 
 /** The DER prefix of an Ed25519 SubjectPublicKeyInfo, before the 32 raw key bytes. */
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex')
@@ -28,11 +29,13 @@ export interface HomeKey {
 /**
  * Load the home key, generating it when the file does not exist.
  * @param directory - the secrets directory.
+ * @param secrets - where the private key is registered, with the base64 body of its PEM, which is a single 64-character
+ *   line that the redactor's key-body pattern does not match; none registers nothing.
  * @returns the key's public half.
  * @throws {HomeAuthError} `STORE_INVALID` when the file is refused by C1's protected-file check or is not an Ed25519
  *   private key.
  */
-export async function loadHomeKey(directory: string): Promise<HomeKey> {
+export async function loadHomeKey(directory: string, secrets?: SecretSink): Promise<HomeKey> {
   const file = join(directory, HOME_AUTH_FILES.homeKey)
   let pem: string
   try {
@@ -44,6 +47,9 @@ export async function loadHomeKey(directory: string): Promise<HomeKey> {
     const generated = generateKeyPairSync('ed25519')
     pem = generated.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
     await writeProtectedFile(file, pem)
+  }
+  for (const line of pem.split('\n')) {
+    if (line !== '' && !line.startsWith('-----')) secrets?.register(line.trim(), 'device-key')
   }
   let key: KeyObject
   try {

@@ -151,6 +151,7 @@ export class HomeAuthService extends Service {
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
       dangerousMode: () => this.dangerousMode(),
+      secrets: this.ctx.get('deloSecrets'),
     })
     await core.start()
     this.core = core

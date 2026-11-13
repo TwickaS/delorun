@@ -30,5 +30,22 @@ export function hostStudioLink(ctx: Context, port: number | undefined): StudioLi
   }
   const host = server.host.includes(':') ? `[${server.host}]` : server.host
   const link = connection.authenticatedUrl(`${server.protocol}//${host}:${String(port ?? server.port)}/`)
+  holdLaunchToken(ctx, link, connection.oneTimeLaunchTokens)
   return { kind: 'link', link: { url: link, oneTime: connection.oneTimeLaunchTokens } }
+}
+
+/** How long a one-time launch token stays registered: past its 60 seconds of life. */
+const ONE_TIME_TOKEN_REGISTERED_MS = 120_000
+
+/**
+ * Register the launch token a studio link carries with the home log's redactor. A reusable process token stays
+ * registered; a one-time token is dropped once it has expired.
+ * @param ctx - the Host's root context.
+ * @param link - the minted link.
+ * @param oneTime - whether the token is one-time.
+ */
+function holdLaunchToken(ctx: Context, link: string, oneTime: boolean): void {
+  const token = new URL(link).searchParams.get('token')
+  const release = token === null ? undefined : ctx.get('deloSecrets')?.register(token, 'session-secret')
+  if (release !== undefined && oneTime) setTimeout(release, ONE_TIME_TOKEN_REGISTERED_MS).unref()
 }

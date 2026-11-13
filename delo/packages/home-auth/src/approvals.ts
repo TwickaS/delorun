@@ -32,9 +32,10 @@ import {
 } from '@delo/contract-device-approval'
 import { HomeAuthError } from './errors.ts'
 import { AttemptLimiter } from './rate-limit.ts'
-import { matchCode, typedCodeMatches } from './match-code.ts'
+import { formatMatchCode, matchCode, typedCodeMatches } from './match-code.ts'
 import { mayAskWithoutWindow, type PairingSpec, type TailnetIdentity } from './pairing.ts'
 import { hashSecret, newSecret, secretMatches, type RandomBytes } from './secret.ts'
+import type { SecretSink } from '@delo/contract-operational-logs'
 
 const MINUTE_MS = 60 * 1000
 
@@ -97,6 +98,8 @@ export interface ApprovalsOptions {
   readonly homeKey: () => { readonly publicKey: Uint8Array; readonly publicKeyText: Base64Url }
   /** The resolved pairing choices, read per call so a change in Settings applies without a restart. */
   readonly pairing: () => PairingSpec
+  /** Where a request's secret and match code are registered while the request is kept; none registers nothing. */
+  readonly secrets?: SecretSink | undefined
 }
 
 /** Where a request arrived and who it names. */
@@ -114,6 +117,8 @@ export interface RequestOrigin {
 export class Approvals {
   private windowClosesAt: number | undefined
   private readonly requests = new Map<string, ApprovalRecord>()
+  /** The disposers of each kept request's registered secret and match code, by request id. */
+  private readonly held = new Map<string, readonly (() => void)[]>()
   private readonly sources: AttemptLimiter
   private readonly windowlessSources: AttemptLimiter
   /** The clock, the random source and the home key. */
@@ -204,6 +209,8 @@ export class Approvals {
     const homeNonce = brandString<Base64Url>(newSecret(nonceBytes, this.options.random))
     const key = this.options.homeKey()
     const createdAt = this.options.now()
+    const code = matchCode({ homePublicKey: key.publicKey, deviceId: input.deviceId, homeNonce, deviceNonce: input.deviceNonce, address: where.address })
+    this.hold(id, secret, code)
     const expiresAt = createdAt + this.options.pairing().requestExpiryMs
     this.requests.set(id, {
       id,
@@ -219,7 +226,7 @@ export class Approvals {
       expiresAt,
       identity: where.identity,
       windowless,
-      code: matchCode({ homePublicKey: key.publicKey, deviceId: input.deviceId, homeNonce, deviceNonce: input.deviceNonce, address: where.address }),
+      code,
       state: 'pending',
       wrongCodes: 0,
       lastReadAt: undefined,
@@ -314,6 +321,24 @@ export class Approvals {
   }
 
   /**
+   * Register a request's secret and its match code with the log's redactor. The code is 8 digits, the shortest value
+   * the redactor matches, and is shown in two groups of four, so both spellings are registered.
+   * @param id - the request id.
+   * @param secret - the request secret.
+   * @param code - the 8-digit match code.
+   */
+  private hold(id: string, secret: string, code: string): void {
+    const sink = this.options.secrets
+    if (sink === undefined) return
+    this.held.set(id, [
+      sink.register(secret, 'session-secret'),
+      sink.register(code, 'pairing-code'),
+      sink.register(formatMatchCode(code), 'pairing-code'),
+      sink.register(`${code.slice(0, 4)}-${code.slice(4)}`, 'pairing-code'),
+    ])
+  }
+
+  /**
    * Mark expired requests, and forget every request 5 minutes after its expiry, so the new device can still read how
    * its request ended.
    */
@@ -322,7 +347,11 @@ export class Approvals {
     for (const [id, record] of this.requests) {
       if (record.expiresAt > at) continue
       if (record.state === 'pending') record.state = 'expired'
-      if (record.expiresAt + this.options.pairing().requestExpiryMs <= at) this.requests.delete(id)
+      if (record.expiresAt + this.options.pairing().requestExpiryMs <= at) {
+        this.requests.delete(id)
+        for (const release of this.held.get(id) ?? []) release()
+        this.held.delete(id)
+      }
     }
   }
 }

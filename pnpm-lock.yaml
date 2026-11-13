@@ -2172,6 +2172,10 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../../packages/util/brand
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
 
   delo/packages/contract-parity-composition: {}
 
@@ -2295,6 +2299,9 @@ importers:
       '@delo/contract-oidc-passkeys':
         specifier: workspace:*
         version: link:../contract-oidc-passkeys
+      '@delo/contract-operational-logs':
+        specifier: workspace:*
+        version: link:../contract-operational-logs
       '@delo/contract-reach-providers':
         specifier: workspace:*
         version: link:../contract-reach-providers
@@ -2363,6 +2370,12 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: workspace:*
         version: link:../../../packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../../packages/credentials/credentials
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../../packages/llm/llm
@@ -2372,6 +2385,12 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../../packages/core/tools
+      '@delo/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
+      '@delo/contract-device-approval':
+        specifier: workspace:*
+        version: link:../contract-device-approval
 
   delo/packages/plugin-changes:
     dependencies:

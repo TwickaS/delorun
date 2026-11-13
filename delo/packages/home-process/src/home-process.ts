@@ -44,7 +44,7 @@ import {
   type HomeLock,
   type TokenSocket,
 } from '@delo/home'
-import type { DeloLogger, Redactor } from '@delo/logs'
+import { startAgeChecks, type DeloLogger, type Redactor } from '@delo/logs'
 import { listenUpdateChannel, updateSocketPath } from './channel.ts'
 import { exchangeLines } from './client.ts'
 import { HomeProcessError, isRollbackRefusal } from './errors.ts'
@@ -86,6 +86,8 @@ export interface HomeProcessOptions {
   readonly logger: DeloLogger
   /** The log's redactor, with which the start token is registered. */
   readonly redactor: Redactor
+  /** The clock of the hourly log age check, in milliseconds since the epoch; the system clock by default. */
+  readonly now?: () => number
   /** The runtime store and profile history, or `undefined` in a build without the runtime store: updates are refused. */
   readonly updates: UpdateSupport | undefined
   /** The supervisor's launch values, or `undefined` when the machine is not set up for Docker. */
@@ -155,6 +157,7 @@ export class HomeProcess implements HandshakeSubject {
   private signalled = false
   /** Removes the signal listener. */
   private stopSignals: (() => void) | undefined
+  private stopAgeChecks: (() => void) | undefined
   private readonly access: UpdateChannelAccess = {
     send: async (request, options) => {
       if (this.hostToken === undefined || this.channel === undefined) throw new Error('the update channel is not open')
@@ -219,6 +222,7 @@ export class HomeProcess implements HandshakeSubject {
       home.lock = await acquireHomeLock({ runDirectory: runDirectory(options.home, options.profile), runtime: options.running, probe: options.probe, startId: options.startId })
       options.onExit(() => { home.cleanUpSync() })
       home.listenSignals()
+      home.runAgeChecks()
       await options.preStart()
       await home.finishInterruptedUpdate()
       await home.listen()
@@ -234,14 +238,14 @@ export class HomeProcess implements HandshakeSubject {
       if (failure instanceof HostNotStoppedError) {
         // A Host that may still run keeps the data in use: nothing rolls it back or starts again, and the lock stays
         // held until the process ends. Without the signal listener, a signal ends the process as Node's default does.
-        home.stopSignals?.()
+        home.releaseListeners()
         options.logger.error('a Host may still run, so no rollback or new start runs and the lock stays held until this process ends')
         throw failure
       }
       // The rollback runs while the lock is held, so no other start runs a Host on the data while it changes.
       await home.rollBackInterruptedUpdate()
       home.lock?.release()
-      home.stopSignals?.()
+      home.releaseListeners()
       await home.startAgain()
       throw error
     }
@@ -263,6 +267,7 @@ export class HomeProcess implements HandshakeSubject {
     try {
       await home.checkDirectories()
       home.listenSignals()
+      home.runAgeChecks()
       let healthy = false
       let criterion: string | undefined
       try {
@@ -304,7 +309,7 @@ export class HomeProcess implements HandshakeSubject {
       const failure = await home.closeStarted(error)
       // A Host that may still run keeps the data in use, so a lock this successor adopted stays held until it ends.
       if (!(failure instanceof HostNotStoppedError)) home.lock?.release()
-      home.stopSignals?.()
+      home.releaseListeners()
       throw failure
     } finally {
       pipe.close()
@@ -375,7 +380,7 @@ export class HomeProcess implements HandshakeSubject {
       this.lock?.release()
       this.logger.info('stopped', { data: { code } })
     } finally {
-      this.stopSignals?.()
+      this.releaseListeners()
       this.options.exit(code)
     }
   }
@@ -504,6 +509,30 @@ export class HomeProcess implements HandshakeSubject {
       this.logger.warn('the stop\'s final line carries no status, which could not be read', { err: error })
       return {}
     }
+  }
+
+  /**
+   * Run the log retention check now and every hour while the process runs ({@link startAgeChecks}, contract C20): a home
+   * process that runs for weeks deletes records past 14 days without a `delorun` command to prune them. What a check
+   * deleted and what it could not delete go to the log.
+   */
+  private runAgeChecks(): void {
+    const { home, now, logger } = this.options
+    this.stopAgeChecks = startAgeChecks({
+      home,
+      now: now ?? Date.now,
+      onReport: (report) => {
+        if (report.deleted.length > 0) logger.info('deleted expired log files', { data: { files: report.deleted.length } })
+        for (const failure of report.failures) logger.warn('the log age check left a file as it was', { err: failure })
+      },
+    })
+  }
+
+  /** Remove the signal listener and stop the hourly log age check. */
+  private releaseListeners(): void {
+    this.stopSignals?.()
+    this.stopAgeChecks?.()
+    this.stopAgeChecks = undefined
   }
 
   private listenSignals(): void {
