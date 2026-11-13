@@ -10,12 +10,15 @@ export type ScaffoldErrorKind = 'usage' | 'failed'
 
 /** A scaffold that was refused or failed; the message names the cause and the correction, without a command prefix. */
 export class ScaffoldError extends Error {
+  readonly kind: ScaffoldErrorKind
+
   /**
    * @param kind - the refusal's kind.
    * @param message - what is wrong and what to do.
    */
-  constructor(readonly kind: ScaffoldErrorKind, message: string) {
+  constructor(kind: ScaffoldErrorKind, message: string) {
     super(message)
+    this.kind = kind
     this.name = 'ScaffoldError'
   }
 }

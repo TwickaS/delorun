@@ -61,7 +61,7 @@ Creating a plugin does not turn it on. Turn on records the plugin as a change wa
 
 Ask the agent for a plugin and it loads the `delo-plugin-authoring` skill: it scaffolds the plugin in the chat's workspace under `plugins/<name>` with `delorun plugin new`, edits the files, and checks them with `delorun plugin check` and the plugin's own tests. Its file writes and commands follow the chat's normal approvals. It cannot turn the plugin on, reload it or approve its build, so it tells you where the plugin is; turn it on at your computer as above, or with `delorun plugin add link:<folder>`.
 
-With changes protection on, a plugin you approved keeps running the approved files whoever edits its folder afterwards. An edit by the agent or by anyone else appears in Changes as a change waiting for your review and loads only after you approve it. With protection off, the default, a linked plugin reloads live as you save it, and each version is logged as a change decided without review.
+With changes protection on, a plugin you approved keeps running the approved files whoever edits its folder afterwards. An edit by the agent or by anyone else appears in Changes as a change waiting for your review and loads only after you approve it. Protection is off by default, so the agent's edits to a linked plugin reload live like yours and are logged as loaded without review; turn protection on and they wait for your approval.
 
 ## Run it while you work on it
 

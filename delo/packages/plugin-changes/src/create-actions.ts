@@ -39,13 +39,18 @@ export interface WorkspaceChoice {
 
 /** The refusal of a create action: a status, a code and the sentence the person reads. */
 export class CreateRefusal extends Error {
+  readonly status: number
+  readonly code: string
+
   /**
    * @param status - the HTTP status.
    * @param code - the refusal code.
    * @param message - the sentence.
    */
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(status: number, code: string, message: string) {
     super(message)
+    this.status = status
+    this.code = code
     this.name = 'CreateRefusal'
   }
 }

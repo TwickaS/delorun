@@ -5,7 +5,7 @@
  */
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyChange, attestTerminal, listChanges, setProtection } from '@delo/changes'
+import { applyChange, attestTerminal, listChanges, readChangeLog, readProtection, setProtection } from '@delo/changes'
 import { expect, it, vi } from 'vitest'
 import { active, bootProfile, bundleFolder, evaluated, linkFolder, PROFILE, profileHome, start, writeModule, type ProfileHome } from './reload-fixture.ts'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
@@ -89,4 +89,21 @@ it('an edit to a linked, approved plugin\'s folder loads on no reload and no sta
   await start(fx)
   await bootProfile(fx)
   expect(loadable(fx, name)).toContain('edited')
+})
+
+it('a fresh profile has protection off: an edit to a linked plugin loads at the next start and is logged as unreviewed', async () => {
+  const fx = profileHome()
+  const name = 'delo-linked-default'
+  const folder = bundleFolder(fx, name, 'approved')
+  linkFolder(fx, name, folder)
+  await start(fx)
+  expect(await readProtection(fx.home)).toBe('off')
+
+  writeModule(folder, fx.marker, 'edited')
+  await start(fx)
+  await (await bootProfile(fx)).ctx.fiber.dispose()
+  expect(loadable(fx, name)).toContain('edited')
+  expect(await pendingEdits(fx, name)).toEqual([])
+  const { entries } = await readChangeLog(fx.home, PROFILE)
+  expect(entries.some(entry => entry.decidedFrom === 'unreviewed' && entry.subject.plugin === name)).toBe(true)
 })

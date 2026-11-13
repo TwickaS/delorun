@@ -4,13 +4,13 @@
  * Changes, with the plugin not on.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { expect, it, onTestFailed, onTestFinished } from 'vitest'
 import { launchWebScaffold, webSnapshotMode } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, openDeloSettings, saveFailureShot } from './support.ts'
+import { newEnglishPage, openDeloSettings, revealNavigationDrawer, saveFailureShot } from './support.ts'
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url))
 const BUNDLE_LOCAL = join(REPO, 'delo/packages/bundle-local')
@@ -32,9 +32,26 @@ it.skipIf(webSnapshotMode() === 'record')('creates a plugin in the workspace and
   const page = await newEnglishPage(browser)
   onTestFailed(() => saveFailureShot(page, 'web-e2e-delo-create-plugin'))
   await page.goto(scaffold.authenticatedUrl)
-  await connectFreshWorkspace(page, scaffold.workspaceCwd)
+  // A fresh profile opens Delo's onboarding, whose dialog covers the sidebar until it is skipped.
+  const onboarding = page.getByRole('dialog')
+  await onboarding.getByRole('button', { name: 'Continue', exact: true }).click()
+  await onboarding.getByRole('button', { name: 'Skip for now', exact: true }).click()
+  await onboarding.waitFor({ state: 'detached' })
+  // The studio bundle words the composer placeholder differently, so the helper's wait for it does not apply: the
+  // picker's Open closes its dialog, which is the connection this scenario needs.
+  mkdirSync(join(scaffold.workspaceCwd, 'workspace'), { recursive: true })
+  await revealNavigationDrawer(page, 'en')
+  await page.getByRole('button', { name: 'Add workspace', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: 'Select Workspace Directory' })
+  await picker.waitFor({ timeout: 10_000 })
+  await picker.getByRole('button', { name: 'Edit path' }).click()
+  const pathInput = picker.getByRole('textbox', { name: 'Edit path' })
+  await pathInput.fill(join(scaffold.workspaceCwd, 'workspace'))
+  await pathInput.press('Enter')
+  await picker.getByRole('button', { name: 'Open', exact: true }).click()
+  await picker.waitFor({ state: 'detached' })
   await openDeloSettings(page)
-  await page.getByRole('button', { name: 'Plugins', exact: true }).click()
+  await page.getByLabel('Agent').getByRole('button', { name: 'Plugins' }).click()
   await page.getByRole('heading', { name: 'Create a plugin' }).waitFor()
   await page.getByLabel('Name', { exact: true }).fill('hello-e2e')
   await page.getByRole('button', { name: 'Create plugin', exact: true }).click()
