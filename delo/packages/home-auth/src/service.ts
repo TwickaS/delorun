@@ -176,7 +176,9 @@ export class HomeAuthService extends Service {
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
     // A mode that ends sets back at once what a device loosened under it, without waiting for a device call or a restart.
     this.ctx.inject(['reachFullAccessGrants'], (grants) => {
-      grants.effect(() => grants.reachFullAccessGrants.onDangerousModeEnd(() => { void this.endDangerousSettings() }), 'home-auth: dangerous-mode settings set back')
+      grants.effect(() => grants.reachFullAccessGrants.onDangerousModeEnd(() => { this.setBackLogged() }), 'home-auth: dangerous-mode settings set back')
+      // A provider that restarts with the mode already off never fires the ending, so the pass runs at once.
+      if (!this.readDangerousMode()) this.setBackLogged()
     })
     // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
     // stays out, being the person's own text.
@@ -308,6 +310,12 @@ export class HomeAuthService extends Service {
     // A setting a device loosened does not outlive the mode: the first read that finds it ended sets it back.
     if (!holds && this.lifts?.pending() === true) void this.endDangerousSettings()
     return holds
+  }
+
+  private setBackLogged(): void {
+    this.endDangerousSettings().catch((error: unknown) => {
+      this.ctx.logger.warn(`home-auth: dangerous-mode settings could not be set back: ${error instanceof Error ? error.message : String(error)}`)
+    })
   }
 
   private readDangerousMode(): boolean {

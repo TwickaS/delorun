@@ -319,6 +319,25 @@ describe('the homeAuth service', () => {
     }
   })
 
+  it('sets back what a device loosened when the permission-defaults service is injected again with the mode off', async () => {
+    const { ctx, fiber, directory } = await mount()
+    try {
+      const values: Record<string, unknown> = { enabled: true }
+      ctx.provide('settings', {
+        describe: () => [{ ns: 'delo-delegation-consent', value: values }],
+        update: (_ns: string, patch: Record<string, unknown>) => { Object.assign(values, patch); return Promise.resolve() },
+      } as never)
+      expect(ctx.homeAuth.recordLifts([{ ns: 'delo-delegation-consent', field: 'enabled', written: false }])).toBeUndefined()
+      values.enabled = false
+      // Pins the reconcile on injection: the new provider never fires an ending, and no device call follows.
+      ctx.provide('reachFullAccessGrants', { dangerousMode: () => false, onDangerousModeEnd: () => () => {} } as never)
+      await vi.waitFor(() => { expect(values.enabled).toBe(true) })
+    } finally {
+      await fiber.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('refuses to record a lift when the record cannot be saved', async () => {
     const { ctx, fiber, directory } = await mount()
     try {
