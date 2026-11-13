@@ -270,7 +270,7 @@ Upstream's sandbox dialects confine file writes only. In the CLI profile, which 
 
 - `delo/apps/cli`: the `delorun` command and the CLI profile, through `delo/packages/home`.
 - `delo/packages/home`: home resolution, the home tree and its modes, reading and writing protected files under the refusal rule, and the home lock.
-- `delorun verify` and `delorun doctor` (`delo/apps/cli`): `doctor` checks the home's directory modes; the `verify` checks of modes and of each confinement rule are not built.
+- `delorun verify` and `delorun doctor` (`delo/apps/cli`): `doctor` checks the home's directory modes and, on Linux, whether bwrap creates a sandbox, naming Ubuntu's AppArmor user-namespace restriction when it is on; the `verify` checks of modes and of each confinement rule are not built.
 - Upstream's `packages/sandbox/sandbox-local` and `packages/sandbox/sandbox`: the per-dialect profiles and the writable-root refusal.
 - `delo/apps/install` and `delo/apps/npm-launcher`: the download, verification and the launcher copy.
 - `delo/packages/runtime-store`: the store, the pointer files, install, switch and retention.

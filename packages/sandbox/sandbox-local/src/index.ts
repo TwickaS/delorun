@@ -22,9 +22,9 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { accessSync, constants as fsConstants, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
+import { basename, delimiter, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   LAUNCHER_BIN,
@@ -143,13 +143,52 @@ export interface Config {
   privateTmp?: boolean
 }
 
+/**
+ * Whether an executable `bwrap` is on `PATH`.
+ * @returns true when a `PATH` entry holds a `bwrap` this process may execute.
+ */
+function bwrapOnPath(): boolean {
+  return (process.env.PATH ?? '').split(delimiter).filter(isAbsolute).some((directory) => {
+    try {
+      accessSync(join(directory, 'bwrap'), fsConstants.X_OK)
+      return true
+    } catch (_absent) {
+      // Not in this PATH entry, or not executable there: the next entry decides.
+      return false
+    }
+  })
+}
+
+/**
+ * A `bwrap` probe's verdict: whether bwrap created the profile, or `timed-out` when it did not finish within the
+ * provider's `probeTimeoutMs`, which says nothing about whether it can.
+ */
+type BwrapProbe = boolean | 'timed-out'
+
+/**
+ * The fix the Landlock escape refusal names, by why the Linux chain fell to Landlock.
+ * @param probe - the `bwrap` probe's verdict, or `undefined` when the chain did not probe it.
+ * @param installed - whether an executable `bwrap` is on `PATH`, so its probe failed rather than found nothing.
+ * @param timeoutMs - the probe's time limit, which a timed-out probe names.
+ * @returns the refusal's closing advice.
+ */
+function bubblewrapAdvice(probe: BwrapProbe | undefined, installed: boolean, timeoutMs: number): string {
+  if (probe === 'timed-out') {
+    return `bubblewrap's check did not finish within ${String(timeoutMs)} ms, as can happen while the computer is busy; start again to check it again, or raise probeTimeoutMs`
+  }
+  return installed
+    ? 'bubblewrap (bwrap) is installed but could not create a sandbox here, which usually means this system blocks unprivileged user namespaces, as Ubuntu\'s AppArmor setting kernel.apparmor_restrict_unprivileged_userns does for a program no AppArmor profile allows; run `bwrap --ro-bind / / true` to see its error, let bwrap create user namespaces, then start again'
+    : 'install bubblewrap (the bwrap command, packaged as bubblewrap), then start again'
+}
+
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
-function defaultProbeBwrap(timeoutMs: number): boolean {
+function defaultProbeBwrap(timeoutMs: number): BwrapProbe {
   const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], {
     timeout: timeoutMs,
     stdio: 'ignore',
   })
-  return probe.status === 0
+  if (probe.status === 0) return true
+  return (probe.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ? 'timed-out' : false
 }
 
 /**
@@ -199,7 +238,9 @@ export interface SandboxInternals {
   /** Replaces the check whether the kernel offers virtual-machine sockets, which decides bwrap's seccomp filter. */
   vsockOffered?: () => boolean
   /** Replaces the functional `bwrap` probe (the Linux chain's first rung). */
-  probeBwrap?: () => boolean
+  probeBwrap?: () => BwrapProbe
+  /** Replaces the check whether an executable `bwrap` is on `PATH`, which chooses the escape refusal's advice. */
+  bwrapInstalled?: () => boolean
   /** Replaces the functional Landlock launcher probe (the Linux chain's second rung). */
   probeLandlock?: (launcher: string) => SandboxEnforcement | 'unusable'
   /** Replaces the functional Seatbelt probe (the darwin chain's sole rung — only consulted if that chain ever grows). */
@@ -430,6 +471,8 @@ export class LocalSandboxProvider extends SandboxProvider {
   private readonly escapeSocketDirectories: readonly string[]
   /** Cached chain verdict; undefined until the first confined wrap needs it. */
   private selectedRunner: SelectedRunner | 'unavailable' | undefined
+  /** The chain walk's `bwrap` probe verdict, which the Landlock escape refusal's advice names; undefined when unprobed. */
+  private bwrapProbe: BwrapProbe | undefined
   /**
    * Server-lifetime write grants (windows-acl rung): the STANDING
    * workspace-root grant per workspace (its ACE is the cross-session reuse
@@ -547,7 +590,11 @@ export class LocalSandboxProvider extends SandboxProvider {
     const selected = this.selectRunner(policy.mode)
     const escape = this.escapeSocketDirectories.find(directory => existsSync(directory))
     if (escape !== undefined && !RUNNER_PROTECTION[selected.runner].socketConnect) {
-      throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here; install bubblewrap so the sandbox can hide them`)
+      // Only the Linux chain falls back from bwrap; the advice is about bwrap, so another runner's refusal has none.
+      const advice = selected.runner === 'landlock'
+        ? `; ${bubblewrapAdvice(this.bwrapProbe, (this.internals.bwrapInstalled ?? bwrapOnPath)(), this.probeTimeoutMs)}`
+        : ''
+      throw new SandboxUnsupportedPolicyError(`the ${selected.runner} sandbox cannot deny the sockets in ${JSON.stringify(escape)}, through which a command could start programs outside the sandbox, so confined commands are refused here${advice}`)
     }
     const profileArgv = this.runnerArgv(selected.runner, policy, protection)
     // No mount rule hides virtual-machine sockets, the transport between a VM such as WSL and its host.
@@ -752,7 +799,8 @@ export class LocalSandboxProvider extends SandboxProvider {
     switch (runner) {
       case 'bwrap': {
         const probe = this.internals.probeBwrap ?? (() => defaultProbeBwrap(this.probeTimeoutMs))
-        return probe() ? 'full' : 'unusable'
+        this.bwrapProbe = probe()
+        return this.bwrapProbe === true ? 'full' : 'unusable'
       }
       case 'landlock': {
         const probe = this.internals.probeLandlock ?? (launcher => defaultProbeLandlock(launcher, { timeoutMs: this.probeTimeoutMs }))
