@@ -419,8 +419,8 @@
     {
       "path": "packages/client/connection/src/client/index.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end.",
-      "sha256": "d8e48b760494c0a67e4f92561578812468c4551d7a4956174bdaa9d593805e72"
+      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. A page served from a loopback Host also ignores the browser's online and offline events (`watchBrowserNetwork` takes `hostIsLoopback`), so a computer with its network off, or a browser in a namespace with only loopback, no longer shows the studio as Disconnected while its loopback connection works; a failed connection still reports disconnected. The Content Security Policy handling above is untouched. Offer upstream.",
+      "sha256": "0759d5fb91669d767afbc653299b63ce48b60a0b19a0eb2d75578f979ac83ca8"
     },
     {
       "path": "packages/client/connection/src/index.ts",
