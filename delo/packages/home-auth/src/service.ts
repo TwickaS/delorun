@@ -102,9 +102,13 @@ export class HomeAuthService extends Service {
       directory: this.config.secretsDirectory,
       closeReachConnections: match => this.ctx.get('connection')?.closeReachConnections(match) ?? 0,
       loopbackPort: () => this.ctx.webServer.port,
+      dangerousMode: () => this.dangerousMode(),
     })
     await core.start()
     this.core = core
+    // A switch a device turned on under a mode that has ended is turned off before the first terminal opens; without the
+    // permission-defaults provider the mode cannot be read yet, and the switch's own reads end it.
+    if (this.ctx.get('reachFullAccessGrants') !== undefined) await core.endDeviceTerminal()
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
     // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
     // stays out, being the person's own text.

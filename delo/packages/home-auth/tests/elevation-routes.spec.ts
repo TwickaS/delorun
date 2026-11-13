@@ -45,7 +45,7 @@ let dangerous = false
 
 beforeEach(async () => {
   dangerous = false
-  home = await homeFixture()
+  home = await homeFixture({ dangerousMode: () => dangerous })
   home.auth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   const issued = await home.auth.issueOwnerCode()
   const claimed = await home.auth.claim(claimOf(issued.code, { address: ADDRESS }))
@@ -222,6 +222,23 @@ describe('the terminal switch', () => {
     await unlockDevice()
     // Pins the mode check in the route.
     expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toEqual({ status: 200, body: { withoutUnlock: true } })
+    expect(home.auth.terminalWithoutUnlock()).toBe(true)
+  })
+
+  it('turns off a switch a device turned on when dangerous mode ends, and keeps the computer\'s', async () => {
+    dangerous = true
+    await unlockDevice()
+    await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })
+    expect(home.auth.terminalWithoutUnlock()).toBe(true)
+    dangerous = false
+    // Pins the withdrawal: the mode ended, so no locked device opens a terminal without an unlock.
+    expect(home.auth.terminalWithoutUnlock()).toBe(false)
+    await home.auth.endDeviceTerminal()
+    expect(await send('GET', ELEVATION_PATHS.terminal)).toEqual({ status: 200, body: { withoutUnlock: false } })
+    dangerous = true
+    expect(home.auth.terminalWithoutUnlock()).toBe(false)
+    await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true })
+    dangerous = false
     expect(home.auth.terminalWithoutUnlock()).toBe(true)
   })
 

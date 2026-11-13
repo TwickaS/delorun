@@ -15,7 +15,7 @@ import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it } from 'vitest'
 import { apply, Config, FULL_ACCESS_PRESET, permissionStorePath, PermissionDefaults, SAFER_PRESET } from '../src/index.ts'
 import {
-  DANGEROUS_WARNING_VERSION, dangerousGrantPath, readDangerousGrant, readDangerousGrantSync, removeDangerousGrant, serializePermissionStore,
+  DANGEROUS_WARNING_VERSION, dangerousGrantPath, deviceGrantsPath, readDangerousGrant, readDangerousGrantSync, removeDangerousGrant, serializePermissionStore,
   writeDangerousGrant,
 } from '../src/store.ts'
 import { workspaceKey } from '../src/workspace.ts'
@@ -175,6 +175,47 @@ describe('dangerous mode with the row and the grant file', () => {
     expect(presetOf(ctx, plain.session)).toBe(SAFER_PRESET)
     expect(presetOf(ctx, granted.session)).toBe(FULL_ACCESS_PRESET)
     expect(defaults.everywhere().on).toBe(false)
+  })
+
+  it('withdraws a grant a device minted when the mode ends, sets its chats back, and keeps the computer\'s grants', async () => {
+    const { ctx, harness, defaults, workspace, other, home } = await mounted({ everywhere: true, grant: 'valid', ownGrantInOther: true })
+    const minted = await harness.create(SessionId('chat-minted'), {}, { cwd: workspace })
+    const own = await harness.create(SessionId('chat-own'), {}, { cwd: other })
+    const review = defaults.reviewChat('chat-minted')
+    await defaults.setFullAccess({ workspace, reviewId: review.reviewId, on: true, confirmed: true, chat: 'chat-minted' }, 'device')
+    expect(presetOf(ctx, minted.session)).toBe(FULL_ACCESS_PRESET)
+    ctx.permissionPresets.set(own.session, FULL_ACCESS_PRESET)
+    expect(defaults.grantedFolders()).toContain(workspaceKey(workspace))
+    expect(existsSync(deviceGrantsPath(home))).toBe(true)
+    await removeDangerousGrant(home)
+    await defaults.reload()
+    expect(defaults.grantedFolders()).toEqual([workspaceKey(other)])
+    expect(presetOf(ctx, minted.session)).toBe(SAFER_PRESET)
+    expect(presetOf(ctx, own.session)).toBe(FULL_ACCESS_PRESET)
+    expect(existsSync(deviceGrantsPath(home))).toBe(false)
+  })
+
+  it('keeps a grant the computer made, and one it re-made over a device\'s, when the mode ends', async () => {
+    const { harness, defaults, workspace, home } = await mounted({ everywhere: true, grant: 'valid' })
+    await harness.create(SessionId('chat-computer'), {}, { cwd: workspace })
+    const review = defaults.reviewChat('chat-computer')
+    const device = await defaults.setFullAccess({ workspace, reviewId: review.reviewId, on: true, confirmed: true }, 'device')
+    const off = await defaults.setFullAccess({ workspace, reviewId: device.access.reviewId, on: false, confirmed: true }, 'computer')
+    await defaults.setFullAccess({ workspace, reviewId: off.access.reviewId, on: true, confirmed: true }, 'computer')
+    expect(existsSync(deviceGrantsPath(home))).toBe(false)
+    await removeDangerousGrant(home)
+    await defaults.reload()
+    expect(defaults.grantedFolders()).toEqual([workspaceKey(workspace)])
+  })
+
+  it('withdraws a device-made grant at start when the mode is off', async () => {
+    const { defaults, workspace, home } = await mounted({ everywhere: true, grant: 'valid' })
+    const store = permissionStorePath(home)
+    writeFileSync(store, serializePermissionStore(new Map([[workspaceKey(workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1 }]])), { mode: 0o600 })
+    writeFileSync(deviceGrantsPath(home), JSON.stringify({ v: 1, workspaces: [workspaceKey(workspace)] }), { mode: 0o600 })
+    await removeDangerousGrant(home)
+    await defaults.reload()
+    expect(defaults.grantedFolders()).toEqual([])
   })
 
   it('refuses again at the next decision once the grant file is gone', async () => {

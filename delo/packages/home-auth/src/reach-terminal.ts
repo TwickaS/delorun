@@ -22,7 +22,12 @@ export interface ReachTerminalRecord {
   readonly v: typeof REACH_TERMINAL_VERSION
   /** Whether a device opens a terminal without an unlock in every folder. */
   readonly withoutUnlock: boolean
+  /** `device` when a device turned the switch on while dangerous mode held; absent when the computer did. */
+  readonly by?: 'device'
 }
+
+/** Who turned the switch on, as the store records it. */
+export type ReachTerminalSetter = 'computer' | 'device'
 
 /** The open flags of the read: never follow a symbolic link where the platform can refuse one. */
 /* v8 ignore next -- the platform decides which side runs; the suite runs on Linux and macOS. */
@@ -45,9 +50,9 @@ function identityOf(path: string): string {
 /**
  * Read the switch from the file, off for anything but a readable record that says on.
  * @param path - the file's absolute path.
- * @returns whether the switch is on.
+ * @returns who turned the switch on, or `off`.
  */
-function readSwitch(path: string): boolean {
+function readSwitch(path: string): ReachTerminalSetter | 'off' {
   let text: string
   try {
     const checked = checkProtectedFileSync(path)
@@ -55,31 +60,32 @@ function readSwitch(path: string): boolean {
     try {
       const opened = fstatSync(fd)
       /* v8 ignore next -- a file renamed over the path between the check and the open; no test can order that. */
-      if (opened.dev !== checked.dev || opened.ino !== checked.ino) return false
+      if (opened.dev !== checked.dev || opened.ino !== checked.ino) return 'off'
       text = readFileSync(fd, 'utf8')
     } finally {
       closeSync(fd)
     }
   } catch (_unreadable: unknown) {
     // Missing, refused by the protected-file rule or unreadable: the unlock stays.
-    return false
+    return 'off'
   }
   let value: unknown
   try {
     value = JSON.parse(text)
   } catch (_notJson: unknown) {
     // A file that is not JSON keeps the unlock as well.
-    return false
+    return 'off'
   }
-  return typeof value === 'object' && value !== null
-    && Reflect.get(value, 'v') === REACH_TERMINAL_VERSION && Reflect.get(value, 'withoutUnlock') === true
+  if (typeof value !== 'object' || value === null
+    || Reflect.get(value, 'v') !== REACH_TERMINAL_VERSION || Reflect.get(value, 'withoutUnlock') !== true) return 'off'
+  return Reflect.get(value, 'by') === 'device' ? 'device' : 'computer'
 }
 
 /** The terminal switch of one home, read through the file's identity. */
 export class ReachTerminalStore {
   private readonly file: string
   private identity: string | undefined
-  private on = false
+  private state: ReachTerminalSetter | 'off' = 'off'
 
   /**
    * @param file - the absolute path of `reach-terminal.json`.
@@ -93,20 +99,35 @@ export class ReachTerminalStore {
    * @returns whether the switch is on.
    */
   withoutUnlock(): boolean {
+    return this.read() !== 'off'
+  }
+
+  /**
+   * Whether a device turned the switch on, as the file holds it now.
+   * @returns true while the switch is on and a device set it.
+   */
+  setByDevice(): boolean {
+    return this.read() === 'device'
+  }
+
+  private read(): ReachTerminalSetter | 'off' {
     const identity = identityOf(this.file)
     if (identity !== this.identity) {
       this.identity = identity
-      this.on = readSwitch(this.file)
+      this.state = readSwitch(this.file)
     }
-    return this.on
+    return this.state
   }
 
   /**
    * Write the switch.
    * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
+   * @param by - who turns it on; a device's setting is recorded so it ends with dangerous mode.
    */
-  async set(withoutUnlock: boolean): Promise<void> {
-    const record: ReachTerminalRecord = { v: REACH_TERMINAL_VERSION, withoutUnlock }
+  async set(withoutUnlock: boolean, by: ReachTerminalSetter): Promise<void> {
+    const record: ReachTerminalRecord = withoutUnlock && by === 'device'
+      ? { v: REACH_TERMINAL_VERSION, withoutUnlock, by }
+      : { v: REACH_TERMINAL_VERSION, withoutUnlock }
     await writeStoreFile(this.file, record)
   }
 }

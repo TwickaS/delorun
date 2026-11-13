@@ -26,10 +26,20 @@ describe('the terminal switch store', () => {
   it('is off without a file, and holds what it writes', async () => {
     const store = new ReachTerminalStore(file)
     expect(store.withoutUnlock()).toBe(false)
-    await store.set(true)
+    await store.set(true, 'computer')
     expect(store.withoutUnlock()).toBe(true)
-    await store.set(false)
+    await store.set(false, 'computer')
     expect(store.withoutUnlock()).toBe(false)
+  })
+
+  it('records who turned the switch on and clears the record when it turns off', async () => {
+    const store = new ReachTerminalStore(file)
+    await store.set(true, 'device')
+    expect([store.withoutUnlock(), store.setByDevice()]).toEqual([true, true])
+    await store.set(true, 'computer')
+    expect([store.withoutUnlock(), store.setByDevice()]).toEqual([true, false])
+    await store.set(false, 'device')
+    expect([store.withoutUnlock(), store.setByDevice()]).toEqual([false, false])
   })
 
   it('reads a change another profile of the home wrote', async () => {
@@ -37,7 +47,7 @@ describe('the terminal switch store', () => {
     const other = new ReachTerminalStore(file)
     expect(mine.withoutUnlock()).toBe(false)
     // Pins the identity check: a store that kept its first read would miss the other profile's change.
-    await other.set(true)
+    await other.set(true, 'computer')
     expect(mine.withoutUnlock()).toBe(true)
   })
 

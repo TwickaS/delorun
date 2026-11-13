@@ -125,6 +125,7 @@ export function registerPermissionRoutes(ctx: Context): void {
   }
   // The routes that grant, read and review consent: the computer, or an unlocked device while dangerous mode holds.
   const dangerousDevice = admitUnlockedDevice(() => ctx.get('homeAuth'))
+  const deviceRequests = new WeakSet<Request>()
   ctx.connection.fetch.register({
     path: PERMISSION_ROUTES.everywhere,
     methods: ['GET'],
@@ -167,11 +168,16 @@ export function registerPermissionRoutes(ctx: Context): void {
     path: PERMISSION_ROUTES.setFullAccess,
     methods: ['POST'],
     requestBody: 'buffered',
-    admitPeer: dangerousDevice,
+    // Only a device reaches `admitPeer`; the owner's Peer is the computer. The request object is the one `fetch` receives.
+    admitPeer: (request, peer) => {
+      if (!dangerousDevice(request, peer)) return false
+      deviceRequests.add(request)
+      return true
+    },
     fetch: async (request) => {
       const body = await bodyOf(request, SetFullAccessBody)
       if (body === undefined) return refusal('INVALID_REQUEST', 'the request must be JSON with the workspace, the review id, on and confirmed')
-      return answered(() => ctx.permissionDefaults.setFullAccess(body))
+      return answered(() => ctx.permissionDefaults.setFullAccess(body, deviceRequests.has(request) ? 'device' : 'computer'))
     },
   })
 }

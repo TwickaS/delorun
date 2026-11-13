@@ -5,7 +5,7 @@
  *
  * @module @delo/home-auth/terminal-switch
  */
-import type { HomeAuth } from './home-auth.ts'
+import type { HomeAuth, TerminalSwitchOrigin } from './home-auth.ts'
 import { ELEVATION_PATHS, deviceSession } from './elevation-routes.ts'
 import { HomeAuthError } from './errors.ts'
 import { personAtComputer, readMessage, sendError, sendJson, sendThrown, type LoopbackCredential, type RouteHandler } from './routes.ts'
@@ -27,11 +27,11 @@ export function terminalSwitchHandler(auth: HomeAuth, credential: LoopbackCreden
     const listener = auth.arrivalOf(request).listener
     const fromDevice = listener !== undefined && listener !== 'loopback'
     const method = request.method === 'POST' ? 'POST' : 'GET'
-    let asComputer = !fromDevice
+    let origin: TerminalSwitchOrigin = fromDevice ? 'device' : 'computer'
     if (fromDevice) {
       const device = deviceSession(auth, request, response, method)
       if (device === undefined) return
-      asComputer = dangerousMode() && auth.elevationOf(device.session.deviceId, device.listener) !== undefined
+      if (dangerousMode() && auth.elevationOf(device.session.deviceId, device.listener) !== undefined) origin = 'device-dangerous'
     } else {
       if (!personAtComputer(auth, credential, request, response, 'Changing the terminal switch', method === 'POST')) return
       if (request.method !== method) {
@@ -48,7 +48,7 @@ export function terminalSwitchHandler(auth: HomeAuth, credential: LoopbackCreden
       if (message === undefined) return
       const withoutUnlock = message.withoutUnlock
       if (typeof withoutUnlock !== 'boolean') throw new HomeAuthError('BAD_REQUEST', 'the terminal switch takes withoutUnlock, true or false')
-      await auth.setTerminalWithoutUnlock(withoutUnlock, asComputer ? 'computer' : 'device')
+      await auth.setTerminalWithoutUnlock(withoutUnlock, origin)
       sendJson(response, 200, { withoutUnlock: auth.terminalWithoutUnlock() })
     } catch (error) {
       sendThrown(response, error)

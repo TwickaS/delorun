@@ -49,7 +49,7 @@ import {
   writePermissionStore,
 } from '../src/index.ts'
 import { registerPermissionRoutes } from '../src/routes.ts'
-import { dangerousGrantPath, writeDangerousGrant } from '../src/store.ts'
+import { dangerousGrantPath, deviceGrantsPath, writeDangerousGrant } from '../src/store.ts'
 
 const roots: string[] = []
 const originalHome = process.env['DELO_HOME']
@@ -149,7 +149,7 @@ describe('turning a workspace\'s full access on and off', () => {
     const agent = await harness.create(SessionId('chat-grant'), {}, { cwd: workspace })
     expect(() => { ctx.permissionPresets.set(agent.session, FULL_ACCESS_PRESET) }).toThrow('needs one consent for that workspace first')
     const shown = defaults.reviewChat('chat-grant')
-    const change = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const change = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     expect(change.chats).toBe(0)
     expect(change.access.grantedAt).toEqual(expect.any(Number))
     expect(change.access.reviewId).toBe(fullAccessReviewId(shown.workspace, true))
@@ -163,7 +163,7 @@ describe('turning a workspace\'s full access on and off', () => {
     const asking = await harness.create(SessionId('chat-asking'), {}, { cwd: workspace })
     const sibling = await harness.create(SessionId('chat-sibling'), {}, { cwd: workspace })
     const shown = defaults.reviewChat('chat-asking')
-    const change = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: 'chat-asking' })
+    const change = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: 'chat-asking' }, 'computer')
     expect(change.chats).toBe(1)
     expect(ctx.sandboxPolicy.resolve({ session: asking.session }).mode).toBe(FULL_ACCESS_PRESET)
     expect(ctx.sandboxPolicy.resolve({ session: sibling.session }).mode).toBe(SAFER_PRESET)
@@ -175,7 +175,7 @@ describe('turning a workspace\'s full access on and off', () => {
     await harness.create(SessionId('chat-nowhere'))
     const shown = defaults.reviewChat('chat-here')
     for (const chat of ['chat-nowhere', 'chat-unknown']) {
-      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat }))
+      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat }, 'computer'))
         .rejects.toThrow(expect.objectContaining({ code: 'UNKNOWN_CHAT' }))
     }
     expect(await storedGrants(home)).toEqual({})
@@ -185,7 +185,7 @@ describe('turning a workspace\'s full access on and off', () => {
     const { harness, defaults, home, workspace } = await mounted()
     await harness.create(SessionId('chat-unconfirmed'), {}, { cwd: workspace })
     const shown = defaults.reviewChat('chat-unconfirmed')
-    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: false }))
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: false }, 'computer'))
       .rejects.toThrow(expect.objectContaining({ code: 'UNCONFIRMED' }))
     expect(await storedGrants(home)).toEqual({})
     expect(defaults.granted(workspace)).toBe(false)
@@ -195,17 +195,17 @@ describe('turning a workspace\'s full access on and off', () => {
     const { harness, defaults, home, workspace } = await mounted()
     await harness.create(SessionId('chat-stale'), {}, { cwd: workspace })
     const shown = defaults.reviewChat('chat-stale')
-    await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     const granted = await storedGrants(home)
     // The first review showed the workspace without a grant; turning it off with that review is a stale answer.
-    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true }))
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true }, 'computer'))
       .rejects.toThrow(expect.objectContaining({ code: 'STALE_REVIEW' }))
     expect(await storedGrants(home)).toEqual(granted)
   })
 
   it('refuses a folder no surface shows', async () => {
     const { defaults, other } = await mounted()
-    await expect(defaults.setFullAccess({ workspace: other, reviewId: fullAccessReviewId(workspaceKey(other), false), on: true, confirmed: true }))
+    await expect(defaults.setFullAccess({ workspace: other, reviewId: fullAccessReviewId(workspaceKey(other), false), on: true, confirmed: true }, 'computer'))
       .rejects.toThrow(FullAccessChangeError)
     expect(defaults.granted(other)).toBe(false)
   })
@@ -214,9 +214,9 @@ describe('turning a workspace\'s full access on and off', () => {
     const { ctx, harness, defaults, home, workspace } = await mounted()
     const agent = await harness.create(SessionId('chat-withdraw'), {}, { cwd: workspace })
     const shown = defaults.reviewChat('chat-withdraw')
-    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     ctx.permissionPresets.set(agent.session, FULL_ACCESS_PRESET)
-    const off = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    const off = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')
     expect(off.chats).toBe(1)
     expect(off.access.grantedAt).toBeNull()
     expect(ctx.sandboxPolicy.resolve({ session: agent.session }).mode).toBe(SAFER_PRESET)
@@ -230,7 +230,7 @@ describe('turning a workspace\'s full access on and off', () => {
     mkdirSync(join(permissionStorePath(home), '..'), { recursive: true, mode: 0o700 })
     writeFileSync(permissionStorePath(home), serializePermissionStore(new Map([[workspaceKey(other), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1_700_000_000_000 }]])), { mode: 0o600 })
     const shown = defaults.reviewChat('chat-keep')
-    await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     expect(Object.keys(await storedGrants(home)).sort()).toEqual([workspaceKey(other), shown.workspace].sort())
   })
 })
@@ -252,7 +252,7 @@ describe('reading the store again', () => {
     const { ctx, harness, defaults, home, workspace } = await mounted()
     const agent = await harness.create(SessionId('chat-reload-off'), {}, { cwd: workspace })
     const shown = defaults.reviewChat('chat-reload-off')
-    await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     ctx.permissionPresets.set(agent.session, FULL_ACCESS_PRESET)
     writeFileSync(permissionStorePath(home), serializePermissionStore(new Map([[shown.workspace, { preset: SAFER_PRESET, fullAccessGrantedAt: null }]])), { mode: 0o600 })
     await defaults.reload()
@@ -276,6 +276,8 @@ interface FakeConnection {
   readonly fetch: (path: string, init?: RequestInit) => Promise<Response>
   /** The route's `admitPeer` answer for a Peer principal. */
   readonly admits: (path: string, principal: { kind: string, deviceId?: string, listener?: string }) => boolean
+  /** Admit a Peer on the route, then fetch with the same request object, as the Connection does. */
+  readonly fetchAs: (path: string, init: RequestInit, principal: { kind: string, deviceId?: string, listener?: string }) => Promise<Response>
 }
 
 /**
@@ -301,6 +303,11 @@ function routesOver(defaults: PermissionDefaults, listener: string | undefined, 
     hook: (request, response, next) => hook!(request, response, next),
     fetch: async (path, init) => routes.get(path)!.fetch(new Request(`http://localhost${path}`, init)),
     admits: (path, principal) => routes.get(path)!.admitPeer!(new Request(`http://localhost${path}`), { principal }),
+    fetchAs: async (path, init, principal) => {
+      const request = new Request(`http://localhost${path}`, init)
+      if (principal.kind !== 'owner' && routes.get(path)!.admitPeer?.(request, { principal }) !== true) return new Response('forbidden', { status: 403 })
+      return routes.get(path)!.fetch(request)
+    },
   }
 }
 
@@ -365,6 +372,22 @@ describe('the routes', () => {
     expect(reached).toBe(2)
   })
 
+  it('record a full access an unlocked device grants as the device\'s, and the owner\'s as the computer\'s', async () => {
+    const { harness, defaults, home, workspace } = await mounted()
+    await harness.create(SessionId('chat-origin'), {}, { cwd: workspace })
+    const device = routesOver(defaults, 'tailscale-private', ['unlocked-phone'], true)
+    const phone = { kind: 'reach-device', deviceId: 'unlocked-phone', listener: 'tailscale-private' }
+    const shown = defaults.reviewChat('chat-origin')
+    const body = (on: boolean, reviewId: string) => JSON.stringify({ workspace: shown.workspace, reviewId, on, confirmed: true })
+    const granted = await device.fetchAs(PERMISSION_ROUTES.setFullAccess, { method: 'POST', body: body(true, shown.reviewId) }, phone)
+    expect(granted.status).toBe(200)
+    expect(readFileSync(deviceGrantsPath(home), 'utf8')).toContain(shown.workspace)
+    const { access } = await granted.json() as { access: { reviewId: string } }
+    const owner = routesOver(defaults, 'loopback')
+    await owner.fetchAs(PERMISSION_ROUTES.setFullAccess, { method: 'POST', body: body(false, access.reviewId) }, { kind: 'owner' })
+    expect(existsSync(deviceGrantsPath(home))).toBe(false)
+  })
+
   it('turn full access on for a confirmed, current review, and refuse an unconfirmed or stale one with its code', async () => {
     const { harness, defaults, home, workspace } = await mounted()
     await harness.create(SessionId('chat-route'), {}, { cwd: workspace })
@@ -395,12 +418,12 @@ describe('a home shared by several Hosts', () => {
     const second = await mounted(first)
     await first.harness.create(SessionId('chat-first'), {}, { cwd: first.workspace })
     const shown = first.defaults.reviewChat('chat-first')
-    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     // The second Host counts the grant at its next decision: a chat there switches, and a new chat starts with it.
     const open = await second.harness.create(SessionId('chat-second'), {}, { cwd: second.workspace })
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
 
-    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')
 
     const fresh = await second.harness.create(SessionId('chat-second-new'), {}, { cwd: second.workspace })
     expect(second.ctx.sandboxPolicy.resolve({ session: fresh.session }).mode).toBe(SAFER_PRESET)
@@ -415,10 +438,10 @@ describe('a home shared by several Hosts', () => {
     const second = await mounted(first)
     await first.harness.create(SessionId('chat-a'), {}, { cwd: first.workspace })
     const shown = first.defaults.reviewChat('chat-a')
-    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     const open = await second.harness.create(SessionId('chat-b'), {}, { cwd: second.workspace })
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
-    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')
     expect(second.defaults.granted(second.workspace)).toBe(false)
     await new Promise(resolve => setImmediate(resolve))
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET)
@@ -449,7 +472,7 @@ describe('a home shared by several Hosts', () => {
     unreadableTokens(first.home)
     const asked = await first.harness.create(SessionId(`${chat}-first`), {}, { cwd: first.workspace })
     const shown = first.defaults.reviewChat(`${chat}-first`)
-    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: `${chat}-first` })
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: `${chat}-first` }, 'computer')
     const open = await second.harness.create(SessionId(chat), {}, { cwd: second.workspace })
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
     return { first, second, asked, open, on }
@@ -457,7 +480,7 @@ describe('a home shared by several Hosts', () => {
 
   it('a withdrawal in one profile\'s studio sets the other Host\'s open full-access chats back once the store changes, without a decision there', async () => {
     const { first, second, open, on } = await sharedGrant('chat-work')
-    await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')
     // No decision runs in the second Host: its watch of the store reads the withdrawal.
     await vi.waitFor(() => { expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(SAFER_PRESET) }, { timeout: 5000 })
   })
@@ -490,10 +513,10 @@ describe('a home shared by several Hosts', () => {
     expect(second.ctx.logger.buffer.some(message => message.type === 'warn' && String(message.args[0]).includes('the permission store is not watched (ENOSPC'))).toBe(true)
     await first.harness.create(SessionId('chat-unwatched-first'), {}, { cwd: first.workspace })
     const shown = first.defaults.reviewChat('chat-unwatched-first')
-    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const on = await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     const open = await second.harness.create(SessionId('chat-unwatched'), {}, { cwd: second.workspace })
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
-    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    await first.defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')
     // Unwatched, the second Host keeps the chat until a decision reads the store.
     await new Promise(resolve => setTimeout(resolve, 300))
     expect(second.ctx.sandboxPolicy.resolve({ session: open.session }).mode).toBe(FULL_ACCESS_PRESET)
@@ -504,7 +527,7 @@ describe('a home shared by several Hosts', () => {
   it('names a change it could not read again, and reads it at the next decision', async () => {
     const { first, second, open, on } = await sharedGrant('chat-reread')
     vi.spyOn(second.defaults, 'reload').mockRejectedValueOnce(new Error('the reread failed'))
-    await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+    await first.defaults.setFullAccess({ workspace: on.access.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')
     await vi.waitFor(() => {
       expect(second.ctx.logger.buffer.some(message => message.type === 'warn' && String(message.args[0]).includes('could not be read again (the reread failed)'))).toBe(true)
     }, { timeout: 5000 })
@@ -518,12 +541,12 @@ describe('a home shared by several Hosts', () => {
     const container = join(home, '..')
     const agent = await harness.create(SessionId('chat-container'), {}, { cwd: container })
     const shown = defaults.reviewChat('chat-container')
-    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer'))
       .rejects.toMatchObject({ code: 'UNKNOWN_WORKSPACE', message: expect.stringContaining('Nothing was changed.') })
     await expect(defaults.select(agent, FULL_ACCESS_PRESET)).rejects.toMatchObject({ code: 'UNKNOWN_WORKSPACE' })
     expect(await storedGrants(home)).toEqual({})
     // Turning full access off only takes access away, so it is not refused there.
-    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true })).resolves.toMatchObject({ chats: 0 })
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true }, 'computer')).resolves.toMatchObject({ chats: 0 })
   })
 })
 
@@ -534,9 +557,9 @@ describe('a change that cannot be recorded', () => {
     const shown = defaults.reviewChat('chat-nohome')
     // Upstream's ~/.dsh under the real OS home is a home resolveDeloHome refuses.
     process.env['DELO_HOME'] = join(homedir(), '.dsh')
-    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer'))
       .rejects.toMatchObject({ code: 'STORE_REFUSED', message: expect.stringContaining('the Delo home could not be resolved') })
-    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true }))
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: false, confirmed: true }, 'computer'))
       .rejects.toMatchObject({ code: 'STORE_REFUSED' })
     await expect(defaults.reload()).resolves.toMatchObject({ storeProblem: expect.stringContaining('could not be resolved') })
     expect(defaults.granted(workspace)).toBe(false)
@@ -559,7 +582,7 @@ describe('a change that cannot be recorded', () => {
     const shown = defaults.reviewChat('chat-lock')
     mkdirSync(join(permissionStorePath(home), '..'), { recursive: true, mode: 0o700 })
     writeFileSync(`${permissionStorePath(home)}.lock`, JSON.stringify({ v: 2 }), { mode: 0o600 })
-    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+    await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer'))
       .rejects.toMatchObject({ code: 'STORE_REFUSED', message: expect.stringContaining('is not a permission store lock record') })
     expect(await storedGrants(home)).toEqual({})
   })
@@ -572,7 +595,7 @@ describe('the service around its decisions', () => {
     const chat = await harness.create(SessionId('chat-titled'), {}, { cwd: workspace })
     expect(defaults.reviewChat('chat-titled').title).toBe('Site')
     const shown = defaults.reviewChat('chat-titled')
-    expect((await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })).access.title).toBe('Site')
+    expect((await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')).access.title).toBe('Site')
     const bare = await harness.create(SessionId('chat-bare'))
     expect(defaults.review(bare.session, FULL_ACCESS_PRESET)).toContain('a chat with no workspace folder')
     writeFileSync(permissionStorePath(home), '{ not json', { mode: 0o600 })
@@ -591,7 +614,7 @@ describe('the service around its decisions', () => {
       return new Map()
     })
     try {
-      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }))
+      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer'))
         .rejects.toMatchObject({ code: 'STORE_REFUSED' })
     } finally {
       chmodSync(directory, 0o700)
@@ -603,13 +626,13 @@ describe('the service around its decisions', () => {
     const { ctx, harness, defaults, workspace } = await mounted()
     const open = await harness.create(SessionId('chat-stuck'), {}, { cwd: workspace })
     const shown = defaults.reviewChat('chat-stuck')
-    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: 'chat-stuck' })
+    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true, chat: 'chat-stuck' }, 'computer')
     expect(on.chats).toBe(1)
     const set = vi.spyOn(ctx.permissionPresets, 'set').mockImplementation(() => { throw 'refused by another layer' })
     try {
-      const off = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })
+      const off = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')
       expect(off.chats).toBe(0)
-      const again = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: off.access.reviewId, on: true, confirmed: true, chat: 'chat-stuck' })
+      const again = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: off.access.reviewId, on: true, confirmed: true, chat: 'chat-stuck' }, 'computer')
       expect(again.chats).toBe(0)
       await expect(harness.create(SessionId('chat-seed-fails'), {}, { cwd: workspace })).resolves.toBeDefined()
     } finally {
@@ -622,12 +645,12 @@ describe('the service around its decisions', () => {
     const { ctx, harness, defaults, workspace } = await mounted()
     await harness.create(SessionId('chat-agents'), {}, { cwd: workspace })
     const shown = defaults.reviewChat('chat-agents')
-    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true })
+    const on = await defaults.setFullAccess({ workspace: shown.workspace, reviewId: shown.reviewId, on: true, confirmed: true }, 'computer')
     const get = ctx.get.bind(ctx)
     vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'agents' ? undefined : get(name as never))) as typeof ctx.get)
     try {
       expect(defaults.workspaces().workspaces.map(access => access.workspace)).toEqual([shown.workspace])
-      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true })).resolves.toMatchObject({ chats: 0 })
+      await expect(defaults.setFullAccess({ workspace: shown.workspace, reviewId: on.access.reviewId, on: false, confirmed: true }, 'computer')).resolves.toMatchObject({ chats: 0 })
     } finally {
       vi.restoreAllMocks()
     }

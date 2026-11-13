@@ -63,6 +63,9 @@ import {
   writePermissionStore,
   permissionStorePath,
   DANGEROUS_GRANT_FILE,
+  DEVICE_GRANTS_FILE,
+  readDeviceGrants,
+  writeDeviceGrants,
   readDangerousGrant,
   readDangerousGrantSync,
   type DangerousGrantRead,
@@ -200,6 +203,9 @@ export const Config: z<Config> = z.object({
 /** Stable failure code for a full-access consent the person refused, or no channel could carry. */
 export const FULL_ACCESS_CONSENT_REFUSED = 'PERMISSION_FULL_ACCESS_CONSENT_REFUSED'
 
+/** Who answered a workspace's full-access consent: the loopback computer, or an unlocked reach device under dangerous mode. */
+export type FullAccessOrigin = 'computer' | 'device'
+
 /**
  * A full-access consent that did not happen: nothing was recorded, and the
  * workspace keeps the safer preset. Typed so a caller that surfaces the
@@ -286,6 +292,10 @@ export class PermissionDefaults extends Service {
   private grantIdentity: string | undefined
   /** What the grant file held when it was read. */
   private grant: DangerousGrantRead = { kind: 'absent' }
+  /** The device-grants record's path, once the home was resolved. */
+  private deviceGrantsPath: string | undefined
+  /** The workspaces whose full-access grant a device minted under dangerous mode; the mode's end withdraws them. */
+  private deviceGrants: ReadonlySet<string> = new Set()
   /** Whether dangerous mode held when the open chats were last set; a lost mode sets the chats of ungranted workspaces back. */
   private appliedEverywhere = false
   /** Whether dangerous mode held at a decision since the open chats were last set. */
@@ -319,6 +329,7 @@ export class PermissionDefaults extends Service {
     await this.load()
     this.applied = this.entries
     this.appliedEverywhere = this.everywhereOn()
+    await this.serial(() => this.endDeviceGrants())
     this.watch()
     this.ctx.provide('sandboxModeGuard', this.guard())
     // A reach device opens a terminal without an unlock inside a workspace with a grant (`@delo/home-auth`, C14).
@@ -460,6 +471,9 @@ export class PermissionDefaults extends Service {
    * so the chat the person answered in stops asking. The change is written to the store before it is remembered, and
    * one line without the folder's path goes to the Host's log.
    * @param request - the workspace the consent named, the review id it was shown with, on or off, and the answer.
+   * @param from - who answered: `computer` for the loopback studio, `device` for an unlocked reach device while dangerous
+   *   mode holds. A grant a device mints is recorded as the device's and withdrawn when the mode ends; a grant the
+   *   computer made, or one the workspace already held, stays.
    * @returns the workspace's full access after the change, and how many open chats were set back.
    * @throws {FullAccessChangeError} `UNCONFIRMED` without the person's answer, `UNKNOWN_WORKSPACE` for a folder no
    *   surface shows or, when turning full access on, a folder Delo never adds as a workspace (a filesystem root, the
@@ -467,7 +481,7 @@ export class PermissionDefaults extends Service {
    *   workspace's full access changed after the consent was shown, and `STORE_REFUSED` when the store cannot be read or
    *   written; each records nothing.
    */
-  async setFullAccess(request: SetFullAccessRequest): Promise<FullAccessChange> {
+  async setFullAccess(request: SetFullAccessRequest, from: FullAccessOrigin): Promise<FullAccessChange> {
     if (!request.confirmed) throw new FullAccessChangeError('UNCONFIRMED', 'the person has not confirmed the change, so nothing is recorded')
     const workspace = workspaceKey(request.workspace)
     if (workspace === NO_WORKSPACE || !this.workspaces().workspaces.some(access => access.workspace === workspace)) {
@@ -484,6 +498,9 @@ export class PermissionDefaults extends Service {
         if (workspaceAccessOf(entries, workspace).reviewId !== request.reviewId) {
           throw new FullAccessChangeError('STALE_REVIEW', 'this workspace\'s full access changed after the consent was shown; look at it again before you answer')
         }
+        const mintedByDevice = request.on && from === 'device' && !fullAccessGranted(entries, workspace)
+        // Recorded before the grant, so a grant that is written is never missing from the record.
+        await this.markDeviceGrant(workspace, mintedByDevice ? 'add' : 'remove')
         await this.write(entries, workspace, request.on ? FULL_ACCESS_PRESET : SAFER_PRESET)
       })
       const chats = request.on ? this.switchChat(chat) : this.withdrawOpenChats(workspace)
@@ -506,6 +523,7 @@ export class PermissionDefaults extends Service {
     return this.serial(async () => {
       await this.load()
       const { added, lost } = this.reconcile()
+      await this.endDeviceGrants()
       const digest = permissionEntriesDigest(this.entries)
       const counts = { digest, added: added.length, lost: lost.length }
       return this.problem === undefined ? counts : { ...counts, storeProblem: this.problem }
@@ -545,7 +563,12 @@ export class PermissionDefaults extends Service {
     this.takeGrant(this.grantPath === undefined ? { kind: 'absent' } : readDangerousGrantSync(this.grantPath))
     this.grantIdentity = grantIdentity
     this.take(readPermissionStoreSync(this.path))
-    if (this.lost().length > 0 || this.lostEverywhere()) void this.serial(async () => { this.reconcile() })
+    if (this.lost().length > 0 || this.lostEverywhere()) {
+      void this.serial(async () => {
+        this.reconcile()
+        await this.endDeviceGrants()
+      })
+    }
   }
 
   /**
@@ -724,6 +747,7 @@ export class PermissionDefaults extends Service {
           throw new FullAccessConsentRefusedError(`full access for the workspace ${JSON.stringify(workspace)} was withdrawn while it was being selected, so nothing was recorded; select it again to be asked`)
         }
         withdrew = preset !== FULL_ACCESS_PRESET && fullAccessGranted(entries, workspace)
+        if (!everywhere) await this.markDeviceGrant(workspace, 'remove')
         await this.write(entries, workspace, preset, !everywhere)
       })
       if (withdrew) this.withdrawOpenChats(workspace)
@@ -922,8 +946,58 @@ export class PermissionDefaults extends Service {
     this.identity = permissionStoreIdentity(this.path)
     this.grantPath = join(dirname(this.path), DANGEROUS_GRANT_FILE)
     this.grantIdentity = permissionStoreIdentity(this.grantPath)
+    this.deviceGrantsPath = join(dirname(this.path), DEVICE_GRANTS_FILE)
+    const deviceGrants = await readDeviceGrants(this.deviceGrantsPath)
+    if (deviceGrants.problem !== undefined) {
+      this.ctx.logger.warn(`permission-defaults: ${deviceGrants.problem}, so no grant counts as a device's and dangerous mode's end withdraws none`)
+    }
+    this.deviceGrants = deviceGrants.workspaces
     this.takeGrant(await readDangerousGrant(this.grantPath))
     this.take(await readPermissionStore(this.path))
+  }
+
+  /**
+   * Record that a workspace's grant is a device's, or that it is not, in the device-grants record.
+   * @param workspace - the workspace key.
+   * @param change - `add` for a grant a device mints, `remove` for one the computer sets or withdraws.
+   * @throws {FullAccessChangeError} `STORE_REFUSED` when the record cannot be written; no grant is written then.
+   */
+  private async markDeviceGrant(workspace: string, change: 'add' | 'remove'): Promise<void> {
+    if (this.deviceGrantsPath === undefined || this.deviceGrants.has(workspace) === (change === 'add')) return
+    const next = new Set(this.deviceGrants)
+    if (change === 'add') next.add(workspace)
+    else next.delete(workspace)
+    try {
+      await writeDeviceGrants(this.deviceGrantsPath, next)
+    } catch (error) {
+      throw new FullAccessChangeError('STORE_REFUSED', `the record of device-made grants could not be written, so no permission is recorded (${reasonOf(error)})`, { cause: error })
+    }
+    this.deviceGrants = next
+  }
+
+  /**
+   * Withdraw the full-access grants a device minted once dangerous mode no longer holds: each workspace goes back to the
+   * safer preset and its open chats that run with full access are set back too. A grant the computer made is left. A
+   * failure is named in the Host's log and retried at the next reload.
+   * @returns when the grants are withdrawn.
+   */
+  private async endDeviceGrants(): Promise<void> {
+    if (this.deviceGrants.size === 0 || this.everywhereOn()) return
+    const ended = [...this.deviceGrants]
+    try {
+      await this.locked(async () => {
+        await this.readForChange()
+        for (const workspace of ended) {
+          if (fullAccessGranted(this.entries, workspace)) await this.write(this.entries, workspace, SAFER_PRESET)
+        }
+        for (const workspace of ended) await this.markDeviceGrant(workspace, 'remove')
+      })
+    } catch (error) {
+      this.ctx.logger.warn(`permission-defaults: the full-access grants a device made under dangerous mode could not be withdrawn (${reasonOf(error)}); they are withdrawn at the next reload`)
+      return
+    }
+    for (const workspace of ended) this.withdrawOpenChats(workspace)
+    this.ctx.logger.info(`permission-defaults: dangerous mode ended; ${String(ended.length)} full-access grant(s) a device made were withdrawn`)
   }
 
   /**

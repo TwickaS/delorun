@@ -480,3 +480,68 @@ export async function removeDangerousGrant(home: string): Promise<boolean> {
     return true
   })
 }
+
+/** File name of the record of grants a device minted under dangerous mode, beside the permission store. */
+export const DEVICE_GRANTS_FILE = 'device-grants.json'
+
+/** Format version of the device-grants record. */
+const DEVICE_GRANTS_VERSION = 1
+
+/**
+ * The device-grants record's path, next to the store and under the same lock.
+ * @param home - the resolved Delo home.
+ * @returns the absolute path.
+ */
+export function deviceGrantsPath(home: string): string {
+  return join(dirname(permissionStorePath(home)), DEVICE_GRANTS_FILE)
+}
+
+/** What reading the device-grants record found. */
+export interface DeviceGrantsRead {
+  /** The workspace keys whose full-access grant a device minted and dangerous mode's end withdraws. */
+  readonly workspaces: ReadonlySet<string>
+  /** Why a record that exists could not be read; its grants then count as the computer's, so none is withdrawn. */
+  readonly problem?: string
+}
+
+/**
+ * Read the device-grants record under contract C1's protected-file refusal rule.
+ * @param path - the record's absolute path.
+ * @returns the workspace keys; empty while the file is absent, with the problem when it is refused.
+ */
+export async function readDeviceGrants(path: string): Promise<DeviceGrantsRead> {
+  let bytes: Buffer
+  try {
+    bytes = await readProtectedFile(path)
+  } catch (error) {
+    if (isMissing(error)) return { workspaces: new Set() }
+    return { workspaces: new Set(), problem: problemOf(error) }
+  }
+  let document: unknown
+  try {
+    document = JSON.parse(bytes.toString('utf8'))
+  } catch {
+    // The parser's message quotes the text; the reason names the file only.
+    return { workspaces: new Set(), problem: 'the device-grants record holds no JSON document' }
+  }
+  const workspaces = isRecord(document) ? document['workspaces'] : undefined
+  if (!isRecord(document) || document['v'] !== DEVICE_GRANTS_VERSION || !Array.isArray(workspaces) || !workspaces.every(item => typeof item === 'string')) {
+    return { workspaces: new Set(), problem: 'the device-grants record is not in the format this version reads' }
+  }
+  return { workspaces: new Set(workspaces as string[]) }
+}
+
+/**
+ * Write the device-grants record, or remove it when it holds no workspace.
+ * @param path - the record's absolute path.
+ * @param workspaces - the workspace keys to record.
+ * @returns when the file is replaced or removed.
+ */
+export async function writeDeviceGrants(path: string, workspaces: ReadonlySet<string>): Promise<void> {
+  if (workspaces.size === 0) {
+    await rm(path, { force: true })
+    return
+  }
+  await mkdir(dirname(path), { recursive: true, mode: PRIVATE_DIR_MODE })
+  await writeProtectedFile(path, `${JSON.stringify({ v: DEVICE_GRANTS_VERSION, workspaces: [...workspaces].sort() }, null, 2)}\n`)
+}
