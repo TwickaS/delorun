@@ -1,21 +1,36 @@
 /**
- * Upstream's plugin operation prints one line that names `dsh`, the command it belongs to: it announces a profile it
- * initialized. `delorun` is the command a person ran, so the line is rewritten to name it, in the output of
- * `delorun plugin` and of the profile `delorun setup` links its bundles into. Upstream's source is unchanged.
+ * Upstream's plugin operation writes standard-error lines that name `dsh`, the command it belongs to: it announces a
+ * profile it initialized, warns, reports a failed command, and names `dsh plugin` in its hints. `delorun` is the command
+ * a person ran, so those lines are rewritten to name it, in the output of `delorun plugin` and of the profile
+ * `delorun setup` links its bundles into. Upstream's source is unchanged.
  *
  * @module @delo/cli/upstream-output
  */
 
-/** The start of the line upstream prints when a plugin operation initializes a profile. */
-const UPSTREAM_INITIALIZED = 'dsh: initialized profile '
+/** One rewrite of upstream's output: the text it matches and what it becomes. */
+interface OutputRewrite {
+  readonly pattern: RegExp
+  readonly replacement: string
+}
 
 /**
- * Rewrite upstream's profile-initialized line to name `delorun`; any other text passes through.
- * @param text - one write of upstream's operation output, as it passes it to `process.stderr` or to `onOutput`.
- * @returns the text, with `delorun:` in place of `dsh:` when it begins with the initialized line.
+ * The rewrites {@link brandUpstreamOutput} applies in order. The first names the command at the start of a line, such as
+ * `dsh: warning: …`; the second names the command in a hint, such as `dsh plugin allow-version …`, which
+ * `delorun plugin --profile <name> allow-version` runs through upstream's parser.
+ */
+const REWRITES: readonly OutputRewrite[] = [
+  { pattern: /^dsh: /gm, replacement: 'delorun: ' },
+  { pattern: /\bdsh plugin /g, replacement: 'delorun plugin ' },
+]
+
+/**
+ * Rewrite the parts of upstream's output that name `dsh` to name `delorun`; any other text passes through.
+ * @param text - one write of upstream's operation output, as it passes it to `process.stderr` or to `onOutput`; a write
+ *   can hold several lines.
+ * @returns the text with each {@link REWRITES} rule applied.
  */
 export function brandUpstreamOutput(text: string): string {
-  return text.startsWith(UPSTREAM_INITIALIZED) ? `delorun: ${text.slice('dsh: '.length)}` : text
+  return REWRITES.reduce((branded, { pattern, replacement }) => branded.replace(pattern, replacement), text)
 }
 
 /**
