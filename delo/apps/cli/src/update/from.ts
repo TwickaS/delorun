@@ -1,0 +1,100 @@
+/**
+ * `delorun update --from <folder|https-address>`: install the release that a person-supplied source holds, through the
+ * same verification as a channel update ([channel](./channel.ts)). The CLI process installs the verified release into
+ * the runtime store, which never switches `current`, and then asks the home process to prepare that installed version:
+ * the home process fetches nothing from the person's address, and the update channel's requests name no address.
+ *
+ * Only the freshness of the release channel's timestamp is relaxed, and only after the person agrees to the question
+ * below at a terminal. `--yes`, a missing terminal, a signature, the release-log bundle or a failed online check, the
+ * root chain and the downgrade floor refuse. The stored timestamp is not replaced, and the release-log check state is
+ * recorded `unchecked` when the online check did not run.
+ *
+ * @module @delo/cli/update/from
+ */
+import type { RuntimeVersion } from '@delo/contract-home-layout'
+import { isInstallError, LauncherChannel, manualSource, messageOf, newestManifestVersion, readChannelRecord } from '@delo/install'
+import type { RuntimeStore } from '@delo/runtime-store'
+import { CliError, EXIT } from '../exit.ts'
+import { installLines, recordedLogTransport } from './channel.ts'
+import type { LauncherAnchor } from './trusted-root.ts'
+
+/** What {@link installFrom} needs. */
+export interface InstallFromOptions {
+  /** The resolved Delo home. */
+  readonly home: string
+  /** The folder or `https:` address. */
+  readonly from: string
+  /** Whether the person passed `--yes`, which never confirms an unconfirmed release. */
+  readonly yes: boolean
+  /** The version this process runs, whose channel is the person's. */
+  readonly running: RuntimeVersion
+  /** The launcher's roots and the stored root anchored on them. */
+  readonly anchor: LauncherAnchor
+  /** The home's runtime store. */
+  readonly store: Pick<RuntimeStore, 'install' | 'pointers' | 'startCheckRuntime' | 'paths'>
+  /** The interval of the start check's full hash in days. */
+  readonly fullCheckDays: number
+  /**
+   * Ask the person a yes/no question.
+   * @param message - the question.
+   * @returns the answer, or `undefined` when there is no terminal to ask.
+   */
+  readonly confirm: (message: string) => Promise<boolean | undefined>
+  /** Writes each line of the install's progress. */
+  readonly line: (text: string) => void
+  /** The `fetch` of the release log; this process's by default. */
+  readonly fetch?: typeof globalThis.fetch
+  /** The clock in milliseconds; `Date.now` by default. */
+  readonly now?: () => number
+}
+
+/**
+ * Verify and install a release from a person-supplied source.
+ * @param options - the source, the store, the anchors and the question.
+ * @returns the version to prepare: the release installed, or the version that runs when the source holds that one.
+ * @throws {CliError} when `http:` or another scheme is named, a release file is missing (the file is named), a check
+ *   refuses, the release is below the floor, the release channel cannot confirm it and `--yes` or no terminal cannot
+ *   agree, or the person declines.
+ */
+export async function installFrom(options: InstallFromOptions): Promise<RuntimeVersion> {
+  const fail = (error: unknown): CliError => new CliError(EXIT.failed, isInstallError(error)
+    ? `delorun update --from: ${error.code} (${error.source}): ${error.message}. Nothing was installed.`
+    : `delorun update --from: ${messageOf(error)}. Nothing was installed.`)
+  try {
+    const manual = manualSource(options.from)
+    const { current } = await options.store.pointers()
+    const running = await options.store.startCheckRuntime(options.running, await options.anchor.root(), options.fullCheckDays)
+    const origins = await readChannelRecord(options.home) ?? {}
+    const fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
+    const version = await newestManifestVersion(options.from)
+    const channel = new LauncherChannel({
+      home: options.home,
+      platform: options.store.paths.platform,
+      roots: await options.anchor.shipped(),
+      channel: running.manifest.channel,
+      log: root => recordedLogTransport(origins, root, fetch),
+      productionRoot: origins.channelOrigin === undefined,
+      source: manual.source,
+      downloader: manual.downloader,
+      progress: installLines(options.line),
+      ...options.now === undefined ? {} : { now: options.now },
+      unconfirmed: {
+        ...version === undefined ? {} : { version },
+        floor: current,
+        allow: async ({ version: release, reason }) => {
+          if (options.yes) throw new CliError(EXIT.failed, `delorun update --from: the release channel cannot confirm that ${release} is current (${reason}), and --yes does not agree to that; run delorun update --from ${options.from} without --yes in a terminal. Nothing was installed.`)
+          const answer = await options.confirm(`The release channel cannot confirm that ${release} is current (${reason}). Install ${release} from ${options.from} on its signature and release-log entry alone?`)
+          if (answer === undefined) throw new CliError(EXIT.failed, `delorun update --from: the release channel cannot confirm that ${release} is current (${reason}), and agreeing needs a terminal to ask in, and there is none. Nothing was installed.`)
+          return answer
+        },
+      },
+    })
+    const release = await channel.resolve()
+    if (release.version === current) return release.version
+    await options.store.install({ version: release.version, root: release.root, fill: directory => channel.fill(release, directory) })
+    await channel.recordInstalled(release)
+    return release.version
+  } catch (error) {
+    throw error instanceof CliError ? error : fail(error)
+  }
+}

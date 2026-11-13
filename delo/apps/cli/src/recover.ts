@@ -49,7 +49,7 @@ const RECOVER_OPTIONS = {
 } as const
 
 /** The store's retention reports nothing here: a rollback removes no installation. */
-const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
+export const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
 
 /** The actions, in usage order. */
 const ACTIONS = ['status', 'rollback', 'restore', 'safe-mode', 'exit-safe-mode', 'discard'] as const
@@ -117,7 +117,7 @@ async function updateLines(home: string, profile: string): Promise<string[]> {
   const lines = record === undefined
     ? ['No update is recorded for a rollback.']
     : [`The recorded update from Delorun ${record.from} to Delorun ${record.to} is ${record.phase}; the chat data ${record.dataDiffers ? 'changes format' : 'keeps its format'}${record.dataDiffers ? `, and ${record.copy ? 'a copy was taken' : 'no copy was taken'}` : ''}.`]
-  for (const kept of await listKeptData(home)) lines.push(`${kept.kind === 'copy' ? 'Chat-data copy' : 'Set-aside chat data'}: ${kept.path} (${String(kept.bytes)} bytes); remove it with delorun recover discard ${kept.path}.`)
+  for (const kept of await listKeptData(home)) lines.push(`${kept.kind === 'copy' ? 'Chat-data copy' : kept.kind === 'runtimes' ? 'Set-aside program store' : 'Set-aside chat data'}: ${kept.path} (${String(kept.bytes)} bytes); remove it with delorun recover discard ${kept.path}.`)
   return lines
 }
 

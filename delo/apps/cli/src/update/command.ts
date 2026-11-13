@@ -12,12 +12,14 @@
  * - `--yes` confirms a report with no `disabled` or `removed` item, no unverified item and a release-log check that
  *   passed, and takes the copy when the data differs.
  * - `--data-copy` takes a copy when the data does not differ; `--no-data-copy` declines it when it does.
+ * - `--from <folder|https-address>` installs the release a person-supplied source holds ([from](./from.ts)) through the
+ *   same checks, then updates to it. It relaxes only the timestamp's freshness, after the person agrees at a terminal.
  *
  * @module @delo/cli/update/command
  */
 import { fileURLToPath } from 'node:url'
 import { confirm, isCancel, select } from '@clack/prompts'
-import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
+import { HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
 import type { UpdateReport } from '@delo/contract-update-report'
 import { queryHomeStatus, sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delo/home-process'
 import { historyGitProblem } from '@delo/profile-safety'
@@ -28,8 +30,12 @@ import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
 import { runtimePlatformOf } from './channel.ts'
 import { checkForUpdate, failureText, noticeLines, noticeOf, profileReader, runningRelease, type CheckOptions } from './notice.ts'
+import { installFrom, type InstallFromOptions } from './from.ts'
 import { runtimeOfFile, type RunningRuntime } from './runtime.ts'
+import { fullCheckDaysOf } from './store-support.ts'
 import { launcherAnchor } from './trusted-root.ts'
+import { RuntimeStore } from '@delo/runtime-store'
+import { SILENT } from '../recover.ts'
 
 /** The questions the command asks; specs answer them. */
 export interface UpdatePrompts {
@@ -45,6 +51,12 @@ export interface UpdatePrompts {
    * @returns true to take it.
    */
   copy(note: string): Promise<boolean>
+  /**
+   * Ask whether to install a release the release channel cannot confirm (`--from`).
+   * @param message - the question.
+   * @returns the answer; `undefined` when no terminal can ask.
+   */
+  agree(message: string): Promise<boolean | undefined>
 }
 
 /** The questions on a terminal; without one, nothing is confirmed. */
@@ -59,6 +71,31 @@ export const TERMINAL_PROMPTS: UpdatePrompts = {
     const answer = await select({ message: 'The chat data changes format. Take a copy first?', options: [{ value: true, label: 'Copy the chat data (recommended)' }, { value: false, label: 'Continue without the copy', hint: note }], initialValue: true })
     return isCancel(answer) ? true : answer
   },
+  async agree(message) {
+    if (process.stdin.isTTY !== true) return undefined
+    const answer = await confirm({ message, initialValue: false })
+    return !isCancel(answer) && answer
+  },
+}
+
+/**
+ * Install the release a person-supplied source holds into this home's runtime store.
+ * @param options - the source, `--yes` and the question.
+ * @returns the version to prepare.
+ */
+export type ManualInstall = (options: { readonly home: string, readonly from: string, readonly yes: boolean, readonly confirm: InstallFromOptions['confirm'], readonly line: (text: string) => void, readonly env: Readonly<Record<string, string | undefined>> }) => Promise<RuntimeVersion>
+
+/** {@link installFrom} over this machine's store and the launcher's roots. */
+export const MANUAL_INSTALL: ManualInstall = async ({ home, from, yes, confirm: ask, line, env }) => {
+  const running = runtimeOfFile(home, fileURLToPath(import.meta.url))
+  if (!running.store) throw new CliError(EXIT.failed, 'delorun update --from: this Delo does not run from the runtime store, so it has no release to replace; install Delo with its launcher.')
+  return installFrom({
+    home, from, yes, confirm: ask, line,
+    running: running.version,
+    anchor: launcherAnchor(home, env),
+    store: new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger: SILENT }),
+    fullCheckDays: fullCheckDaysOf(env),
+  })
 }
 
 /** What `delorun update --check` reads outside this module; specs replace them. */
@@ -117,6 +154,7 @@ const UPDATE_OPTIONS = {
   report: { type: 'boolean', default: false },
   'data-copy': { type: 'boolean' },
   'no-data-copy': { type: 'boolean' },
+  from: { type: 'string' },
 } as const
 
 /**
@@ -254,9 +292,12 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
  *   report or the person declined; 1 when it was refused, rolled back or failed, or `--check` failed; 2 for a wrong command line; 3 when no
  *   home process runs.
  */
-export async function runUpdate(args: readonly string[], context: CommandContext, prompts: UpdatePrompts = TERMINAL_PROMPTS, checks: UpdateCheckDependencies = CHECK_DEPENDENCIES): Promise<CommandResult> {
+export async function runUpdate(args: readonly string[], context: CommandContext, prompts: UpdatePrompts = TERMINAL_PROMPTS, checks: UpdateCheckDependencies = CHECK_DEPENDENCIES, manual: ManualInstall = MANUAL_INSTALL): Promise<CommandResult> {
   const values = parseOptions('update', args, UPDATE_OPTIONS)
   const { home, profile } = await prepareHome(context, values.profile)
+  if (values.from !== undefined && (values.check === true || values.report === true)) {
+    throw new CliError(EXIT.usage, 'delorun update: --from installs a release, so it takes neither --check nor --report')
+  }
   if (values.check === true) {
     if (values.yes === true || values['data-copy'] !== undefined || values['no-data-copy'] !== undefined) throw new CliError(EXIT.usage, 'delorun update: --check applies nothing, so it takes no --yes, --data-copy or --no-data-copy')
     if (values.report === true) throw new CliError(EXIT.usage, 'delorun update: choose --check or --report, not both')
@@ -276,7 +317,8 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   if (gitProblem !== undefined) {
     throw new CliError(EXIT.failed, `delorun update: Delorun saves the profile's history with git before it updates, so it can go back, and git cannot run here: ${gitProblem}. Install git, then run delorun update again. Nothing was fetched or changed.`)
   }
-  const prepared = await ask(home.path, profile, { op: 'update.prepare', args: {} }, context, { what: 'to prepare the update', field: 'reportId', unanswered: 'Nothing was applied.' })
+  const target = values.from === undefined ? undefined : await manual({ home: home.path, from: values.from, yes: values.yes === true, confirm: prompts.agree, line: text => { context.stdout(text) }, env: context.env })
+  const prepared = await ask(home.path, profile, { op: 'update.prepare', args: target === undefined ? {} : { target } }, context, { what: 'to prepare the update', field: 'reportId', unanswered: 'Nothing was applied.' })
   const report = prepared.report as UpdateReport
   const reportId = String(prepared.reportId)
   if (report.to.delo === report.from.delo) {
@@ -313,9 +355,9 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   }
 }
 
-/** `delorun update [--check | --report | --yes] [--data-copy | --no-data-copy] [--profile <name>]`. */
+/** `delorun update [--check | --report | --yes] [--from <folder|https-address>] [--data-copy | --no-data-copy] [--profile <name>]`. */
 export const updateCommand: CliCommand = {
   name: 'update',
-  summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --yes, --data-copy, --no-data-copy',
+  summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --from installs a release from a folder or https address; --yes, --data-copy, --no-data-copy',
   run: async (args, context) => runUpdate(args, context),
 }

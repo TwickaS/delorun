@@ -139,6 +139,24 @@ export interface DataFormats {
   readonly deloRecords: Readonly<Record<string, number>>
 }
 
+/** The `schema` value of the home's data-format record. */
+export const HOME_DATA_FORMAT_SCHEMA = 'delo.home-data-format/1'
+
+/** The home-root file that records which release's data formats last started over this home (contract C1). */
+export const HOME_DATA_FORMAT_FILE = 'data-format.json'
+
+/** The home's data-format record: the release that last started over the home and that release's data facts. */
+export interface HomeDataFormat {
+  /** Always {@link HOME_DATA_FORMAT_SCHEMA}. */
+  readonly schema: typeof HOME_DATA_FORMAT_SCHEMA
+  /** The Delo release that wrote the record. */
+  readonly delo: string
+  /** That release's DSH version. */
+  readonly dsh: string
+  /** That release's `data-formats.json`. */
+  readonly formats: DataFormats
+}
+
 /** Which part of the two releases' data facts differs. */
 export type DataFormatDifference = 'dsh' | 'persistence' | 'delo-records'
 

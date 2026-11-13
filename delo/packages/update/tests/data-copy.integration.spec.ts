@@ -403,6 +403,18 @@ describe('kept data', () => {
     expect(read('sessions/a')).toBe('12345')
   })
 
+  it('lists a program store that delorun repair set aside, beside the chat data, and removes it only when named', async () => {
+    put('runtimes.set-aside-20261113T120000Z/store.json', '12345678')
+    put('runtimes.set-aside-notes/store.json', 'not a set-aside store')
+    put('runtimes/store.json', 'the live store')
+    expect(await listKeptData(home)).toEqual([{ kind: 'runtimes', path: 'runtimes.set-aside-20261113T120000Z', bytes: 8 }])
+    await expect(discardKeptData(home, 'runtimes', FREE)).rejects.toSatisfy(error => isDataSafetyError(error, 'NOT_KEPT_DATA'))
+    await expect(discardKeptData(home, 'runtimes.set-aside-notes', FREE)).rejects.toSatisfy(error => isDataSafetyError(error, 'NOT_KEPT_DATA'))
+    await discardKeptData(home, 'runtimes.set-aside-20261113T120000Z', FREE)
+    expect(await listKeptData(home)).toEqual([])
+    expect(read('runtimes/store.json')).toBe('the live store')
+  })
+
   it('refuses to remove anything while a restore journal exists or a rollback runs, and a copy an update record refers to', async () => {
     await copy(NOW, '1.1.0')
     await copy(NOW, '1.2.0')

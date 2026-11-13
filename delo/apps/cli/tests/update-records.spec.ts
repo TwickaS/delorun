@@ -77,6 +77,8 @@ const DECLARATIONS: Readonly<Record<string, string | null>> = {
   VERIFICATION_REPORT_SCHEMA_VERSION: null,
   // A release's own signed file, read from the runtime closure, never from the home's data.
   'delo.data-formats': null,
+  // The home's data-format record, written by each start and read by `delorun repair`; a release that cannot read it treats it as absent, which repair reads as unknown.
+  'delo.home-data-format': null,
   // The release tool's inventory of plugin-facing interfaces, read from the repository at signing, never from the home.
   'delo.plugin-interface': null,
   // The update check's record, which the next check replaces; a release that cannot read it reads it as absent.

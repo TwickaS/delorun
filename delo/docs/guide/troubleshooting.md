@@ -21,6 +21,8 @@ Find yours by searching this page for the exact words or the code in the message
 - [Setup and the model key](#setup-and-the-model-key)
 - [Installs and release checks](#installs-and-release-checks)
 - [Updates and rollback](#updates-and-rollback)
+- [Repair the program and keep your data](#repair)
+- [Last resort, by hand](#by-hand)
 - [Protections and plugins](#protections-and-plugins)
 - [Remote access and devices](#remote-access-and-devices)
 - [What a phone shows when it cannot sign in](#what-a-phone-shows-when-it-cannot-sign-in)
@@ -83,6 +85,7 @@ A `.env` file in the folder you run `delorun` from, or in your Delorun home, may
 - **`HOME_UNRESPONSIVE`.** A process claims to be running this profile (it holds the profile's lock file) but did not answer within 2 seconds. Stop that process, or, if it is not `delorun`, remove the lock file the refusal names, then run `delorun start` again.
 - **`Delo is running for the profile … and uses the stores this command changes`.** Commands such as `delorun trash`, `export` and `import` change chat data that the running Delorun uses. Run `delorun stop` first, as the refusal says.
 - **`another process … holds the home lock`, or `Delo did not go ahead: another process uses the chat data`.** Another `delorun` command is changing the same data. Wait for it to finish, then run your command again.
+- **`Delorun is being repaired; wait for it to finish`.** `delorun repair` is running and replaces the program, so no start can run until it ends. Wait for it to finish, then run your command again. If no repair is running (it was killed), the next start reports the leftover mark, removes it and goes on.
 - **`the CLI profile default is not set up`.** Run `delorun setup`.
 - **`Delo found no folder for the default workspace`.** None of the folders Delorun tries for the default workspace can be used; the refusal lists each with the reason. Name a folder of your own in your profile's `cordis.patch.yml`, as the refusal shows, and start again.
 - **`UNAUTHENTICATED`.** The running Delorun refused a command that did not carry the token of its current start, which usually means another Delorun is running for the profile. Run `delorun status` to see which one.
@@ -181,6 +184,54 @@ A refusal that starts "Delo refused the change and left the profile as it was" p
 | `RESTORE_REFUSED`, `RECOVER_REFUSED` | An undo, restore, rollback or `delorun recover` action cannot be done as asked. |
 
 Its fixes come from this list: do not take this update; keep the item and wait for a release that carries it; update the plugin; keep the plugin disabled; [eject](../reference/glossary.md#eject) the plugin, which keeps its entries and settings in your profile; restore a profile history version with `delorun recover restore <version>`; go back with `delorun recover rollback`; or start in [safe mode](../reference/glossary.md#profile-history) with `delorun recover safe-mode`. Run `delorun recover status` first to see where the profile stands. A refusal that starts "Delo could not write the profile snapshot it takes before a change" (`SNAPSHOT_FAILED`) means nothing changed because the snapshot that makes the change undoable could not be written.
+
+<a id="repair"></a>
+
+## Repair the program and keep your data
+
+If Delorun will not start because the installed program fails its check, or `delorun update` cannot run, replace the program and keep everything you made:
+
+```sh
+npx delorun@latest repair
+```
+
+Run it in a terminal. Delorun checks the release it installs the way an update does, asks `Replace the installed program … with …? Your chats, settings and keys stay. [y/N]`, and puts the old program in `runtimes.set-aside-<time>/` instead of deleting it. `delorun recover status` lists it and `delorun recover discard runtimes.set-aside-<time>` removes it once you are happy. Your chats, settings, keys, devices and trust records are not touched. Repair has no `--yes`, and it refuses while Delorun is running: stop it with `delorun stop` first.
+
+<details>
+<summary>Edge cases</summary>
+
+- **`DATA_NEWER`.** A newer Delorun wrote your chats, and the release you asked for may not read them. Install the newer release (`npx delorun@latest repair`), or put back the copy the update took with `npx delorun@latest repair --release <old version> --restore-copy`. Today's chats are set aside, never deleted.
+- **`DATA_UNREADABLE`.** The home records which release wrote your chats, and Delorun cannot compare that with the release you asked for because the release's data formats or a version cannot be read. Nothing is changed. Install the release that wrote your chats or a newer one (`npx delorun@latest repair`).
+- **`DATA_COPY_NEWER`.** The copy for `--restore-copy` is not in a format the release reads, or its formats cannot be read. Nothing is changed. Install the newer release instead.
+- **`TARGET_LOWER`.** The release is older than one this home already installed. Go back with `delorun recover rollback`.
+- **`NO_TERMINAL`.** Run the command in a terminal, because Delorun must ask you.
+- **`RESET_TRUST_REFUSED`.** `--reset-trust` works only when the launcher you run ships release keys newer than the ones this home trusts. Install the newest launcher from npm and try again.
+- **`--reset-trust`.** Moves the home's `trust/` to `trust.set-aside-<time>/` so that the home trusts only the keys in the launcher. Use it only with a launcher you installed yourself from npm.
+- **`--from <folder or https address>`.** Verifies the release from files you downloaded from its release page instead of the channel; the same signature, release-log and digest checks apply. If the channel cannot confirm the release is current, or you name an older `--release` than this home has seen, Delorun asks you in a terminal first; nothing else is loosened. For the same option on `delorun update`, see [Update from files you downloaded](updates.md#update-from-files-you-downloaded).
+- **A repair and a start at the same time.** The repair holds the lock of each profile until it finishes, so a Delorun started meanwhile stops with a message that the profile is held; start it again once the repair ends. It never runs the program that was set aside.
+- **No data-format record.** A home made before Delorun recorded one has none. Repair says so, assumes your chats are in the formats of the release it installs, and carries on.
+- Every run adds one line to `logs/repair.log`.
+
+</details>
+
+<a id="by-hand"></a>
+
+## Last resort, by hand
+
+Use this only if `npx delorun@latest repair` cannot run. It needs no Delorun code.
+
+1. Stop Delorun: `delorun stop`, or end the `node` processes that run `@delo/cli`.
+2. Back up the whole home. On Linux or macOS: `cp -a ~/.delo ~/delo-backup-$(date +%F)`. On Windows: `robocopy %USERPROFILE%\.delo %USERPROFILE%\delo-backup /E /COPY:DAT`. `delorun export` saves single chats or workspaces only, so it is not a backup of settings and keys.
+3. Move the program aside, not your data: `mv ~/.delo/runtimes ~/.delo/runtimes.broken`, and `~/.delo/staging` too if it exists.
+4. Install again: `npx delorun@latest`. The program store is empty, so the launcher installs and checks the current release and starts it. Your chats, settings, keys and profiles are untouched.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the launcher refuses with `TRUST_STATE_INVALID` or a stored-root error, also move `~/.delo/trust` aside and run step 4 again. The home then trusts only the keys that npm's launcher ships.
+- If the new release cannot read your chats, move `sessions/` and `storages/` aside, put in the copy from `data-copies/<version>/`, and bring individual exported chats back with `delorun import`.
+
+</details>
 
 ## Protections and plugins
 

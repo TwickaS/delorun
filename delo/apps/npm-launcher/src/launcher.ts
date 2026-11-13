@@ -20,6 +20,7 @@ import type { DeloLogger } from '@delo/logs'
 import type { StartCheckResult } from '@delo/release-verify/start'
 import { RuntimeStoreError, SUPPORTED, type ChannelRelease, type InstallRequest, type LaunchCommand, type LaunchPlan, type LaunchRequest, type RetentionResult, type RuntimeChannel, type RuntimePointers, type VerifiedRuntime } from '@delo/runtime-store'
 import type { LauncherProgress } from './progress.ts'
+import { checkRepairRecord, REPAIR_RECORD_FILE, staleRepairText } from './repair-record.ts'
 import { LAUNCHER_EXIT, refusalFor, renderLauncherRefusal, type RemedyContext } from './refusals.ts'
 
 /** The runtime-store operations the launcher drives; `RuntimeStore` satisfies it. */
@@ -110,6 +111,8 @@ export interface LauncherOptions {
   readonly mode: VerificationMode
   /** The interval of the start check's full hash in days, as `resolveFullCheckDays` resolves it. */
   readonly fullCheckDays: number
+  /** The seconds a repair mark that does not parse still counts as a running repair, as `resolveRepairMarkGraceSeconds` resolves it. */
+  readonly repairMarkGraceSeconds: number
   /** The store, this home's `RuntimeStore` in a real run. */
   readonly store: LauncherStore
   /**
@@ -151,12 +154,39 @@ export type LauncherStartCheck = StartCheckResult & { readonly missingBundle?: s
 export async function runLauncher(options: LauncherOptions): Promise<number> {
   const context: RemedyContext = { home: options.home, profile: options.profile }
   try {
+    if (await refuseDuringRepair(options)) return LAUNCHER_EXIT.failed
     return await startOrInstall(options)
   } catch (error) {
     const refusal = refusalFor(error, context)
     options.output.stderr(refusal.text)
     return refusal.exit
   }
+}
+
+/**
+ * Refuse to start while `delorun repair` runs on this home, for any profile, new or not: the repair replaces the
+ * program a start would launch. A mark left by a repair that no longer runs is reported and removed, and the start goes on.
+ * @param options - the launch's inputs.
+ * @returns whether the start was refused, with the refusal already printed.
+ */
+async function refuseDuringRepair(options: LauncherOptions): Promise<boolean> {
+  const state = await checkRepairRecord(options.home, options.repairMarkGraceSeconds)
+  if (state.kind === 'stale') options.output.stderr(`${staleRepairText(state.record)}\n`)
+  if (state.kind === 'writing') {
+    options.output.stderr(renderLauncherRefusal({
+      lead: 'Delorun is being repaired; wait for it to finish.',
+      reason: 'REPAIR_RUNNING: a repair is writing its mark',
+      remedies: [`Run the same command again when delorun repair has finished. If no repair is running, remove ${REPAIR_RECORD_FILE} from the home's run folder.`],
+    }))
+    return true
+  }
+  if (state.kind !== 'running') return false
+  options.output.stderr(renderLauncherRefusal({
+    lead: 'Delorun is being repaired; wait for it to finish.',
+    reason: `REPAIR_RUNNING: process ${String(state.record.pid)} began the repair at ${state.record.startedAt}`,
+    remedies: [`Run the same command again when delorun repair has finished. If no repair is running, remove ${REPAIR_RECORD_FILE} from the home's run folder.`],
+  }))
+  return true
 }
 
 /** The arguments the launcher starts `previous` with when `current` fails its start check. */

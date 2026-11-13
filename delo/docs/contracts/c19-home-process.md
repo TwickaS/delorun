@@ -99,6 +99,7 @@ Start at login is not built: `delorun start` and `delorun stop` take no `--at-lo
 
 - Each item runs `<home>/bin/delorun start --foreground --profile <profile>` from [C1](c01-home-layout.md)'s launcher copy, so it needs neither npm nor the network.
 - After a failure the item restarts the process at most 3 times within 300 seconds, then stays stopped until the next login or a manual start.
+- **`npx delorun@latest repair`** is the launcher's own command, not a home-process command: it runs only in the launcher, from a terminal, while no home process of any profile runs (`HOME_RUNNING` names `delorun stop`). It takes no request from the update channel, the Connection routes or a remote device, and the channel's request set has no operation for it; the denial spec `apps/npm-launcher/tests/repair.spec.ts` holds this.
 
 ## The update channel
 

@@ -43,7 +43,7 @@ const RELEASES = new Map<string, FakeBehaviour>([
 ])
 
 const SILENT: DeloLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} }
-const NO_TERMINAL: UpdatePrompts = { confirm: async () => Promise.resolve(false), copy: async () => Promise.resolve(true) }
+const NO_TERMINAL: UpdatePrompts = { confirm: async () => Promise.resolve(false), copy: async () => Promise.resolve(true), agree: async () => Promise.resolve(undefined) }
 
 let base: string
 let home: string
