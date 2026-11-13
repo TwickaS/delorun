@@ -88,7 +88,7 @@ export function noticeFace(acknowledged = false) {
   const acknowledge = vi.fn(() => { done = true })
   const face: NoticeFace = {
     title: () => 'Preview',
-    paragraphs: () => ['Delo is a pre-release community fork.', 'It has no telemetry of its own.'],
+    paragraphs: () => ['Delorun is a pre-release community fork.', 'It has no telemetry of its own.'],
     acknowledged: () => done,
     acknowledge,
   }

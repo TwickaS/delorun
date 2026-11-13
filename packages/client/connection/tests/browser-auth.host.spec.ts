@@ -492,6 +492,35 @@ describe('one-time launch tokens', () => {
     expect(signsIn(res.state)).toBe(true)
   })
 
+  it('signs in a link a person taps from another site, and refuses it for anything a page could send', async () => {
+    const auth = await oneTimeAuth()
+    const tapped = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document', 'sec-fetch-user': '?1' }
+    expect(signsIn(present(auth, auth.authenticatedUrl(`http://${AUTHORITY}/`), tapped))).toBe(true)
+    const used = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    expect(signsIn(present(auth, used, tapped))).toBe(true)
+    expect(present(auth, used, tapped).status).toBe(401)
+    const notTapped: Record<string, string>[] = [
+      { ...tapped, 'sec-fetch-user': '' },
+      { ...tapped, 'sec-fetch-mode': 'no-cors' },
+      { ...tapped, 'sec-fetch-dest': 'image' },
+      { ...tapped, origin: 'http://evil.example' },
+    ]
+    for (const headers of notTapped) {
+      const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+      expect(present(auth, launchUrl, headers).status).toBe(401)
+      expect(present(auth, launchUrl).status).toBe(401)
+    }
+  })
+
+  it('keeps the token for the person when a browser prefetches the link first', async () => {
+    const auth = await oneTimeAuth()
+    const launchUrl = auth.authenticatedUrl(`http://${AUTHORITY}/`)
+    expect(present(auth, launchUrl, { 'sec-purpose': 'prefetch' }).status).toBe(401)
+    expect(present(auth, launchUrl, { purpose: 'prefetch' }).status).toBe(401)
+    expect(signsIn(present(auth, launchUrl))).toBe(true)
+    expect(present(auth, launchUrl).status).toBe(401)
+  })
+
   it('accepts no process token and keeps waiting tokens across a reload of the same process owner', async () => {
     const store = new RecordCredentials()
     const owner = {}

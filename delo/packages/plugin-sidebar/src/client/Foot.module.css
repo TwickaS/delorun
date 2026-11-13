@@ -107,3 +107,11 @@
     opacity: 0;
   }
 }
+
+/* Phone widths get 44px targets whatever the pointer reports. */
+@media (max-width: 767px) {
+  .utility,
+  .undo {
+    --foot-button: 44px;
+  }
+}

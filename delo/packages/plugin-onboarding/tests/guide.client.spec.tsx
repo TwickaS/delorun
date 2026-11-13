@@ -210,4 +210,15 @@ describe('the guide\'s requests', () => {
     expect(fetch.mock.calls[0]?.[0]).toBe(REACH_STATUS_PATH.slice(1))
     expect(hostApi.reach).toBe(readReach)
   })
+
+  it('reads a studio opened through reach, on any hostname but this computer\'s, as remote without asking the home', async () => {
+    const fetch = stub(() => json({ options: [{ state: 'off' }] }))
+    vi.stubGlobal('location', { hostname: 'laptop.tail1234.ts.net' })
+    expect(await readReach()).toBe('remote')
+    expect(fetch).not.toHaveBeenCalled()
+    for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
+      vi.stubGlobal('location', { hostname })
+      expect(await readReach()).toBe('off')
+    }
+  })
 })

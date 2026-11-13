@@ -641,3 +641,11 @@
 .shelfHeader:disabled {
   cursor: default;
 }
+
+/* Phone widths get 44px targets whatever the pointer reports. */
+@media (max-width: 767px) {
+  .root {
+    --list-control: 44px;
+    --list-icon-button: 44px;
+  }
+}

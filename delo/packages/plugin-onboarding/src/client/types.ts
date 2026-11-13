@@ -104,9 +104,10 @@ export type AppearanceTranslate = TranslateNS<'settings.deloAppearance'>
 
 /**
  * Whether the reach step applies, from the home's reach status: `absent` where this profile has no reach service or it
- * cannot be read, `set-up` once an option is ready, otherwise `off`.
+ * cannot be read, `set-up` once an option is ready, otherwise `off`. `remote` is a studio opened through reach: the person
+ * is already on the phone, and the computer's own setup steps do not apply.
  */
-export type ReachState = 'absent' | 'set-up' | 'off'
+export type ReachState = 'absent' | 'set-up' | 'off' | 'remote'
 
 /** Where the first chat opens unless the person chooses another folder. */
 export type StartTarget =

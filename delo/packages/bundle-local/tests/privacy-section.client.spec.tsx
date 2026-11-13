@@ -230,6 +230,9 @@ describe('the plugin', () => {
       slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.general.item': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject: [], apply: connectionApply }).await()
+      // Upstream's brand is already registered at the default priority when this bundle applies, as it is once the bundle also waits for `connection`.
+      slots.register({ name: 'sidebar.brand.mark' }, () => null)
+      slots.register({ name: 'sidebar.brand.name' }, () => null)
       await ctx.plugin({ inject, apply }).await()
       const [section] = slots.entries('settings.section')
       const about = slots.entries('settings.section').find(entry => entry.options.id === ABOUT_SECTION_ID)
@@ -244,8 +247,10 @@ describe('the plugin', () => {
       const noticeFace = noticeStep?.inject?.()
       if (noticeFace === undefined || !('t' in noticeFace) || typeof noticeFace.t !== 'function') throw new Error('no notice face')
       expect(noticeFace.t('notice.title')).toBe(en['notice.title'])
-      expect(slots.entries('sidebar.brand.name')).toHaveLength(1)
-      expect(slots.entries('sidebar.brand.mark')).toHaveLength(1)
+      // Delo's brand registers beside upstream's at a lower priority, which renders, instead of colliding with it.
+      for (const slot of ['sidebar.brand.name', 'sidebar.brand.mark'] as const) {
+        expect(slots.entries(slot).map(entry => entry.options.priority ?? 0).sort()).toEqual([-1, 0])
+      }
       // The document title upstream's frame reads in a build without DSH_CLIENT_TITLE.
       expect(locale.bind(COMMON_NS)(TITLE_KEY)).toBe('Delo')
       const sessionLog = vi.spyOn(ctx.configForms.get(OPT_IN_ROWS.sessionLog), 'set').mockResolvedValue(true)

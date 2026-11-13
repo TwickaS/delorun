@@ -264,8 +264,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => overrideTitle(ctx.locale), 'delo-privacy: the product name as the document title')
   ctx.slots.inject('sidebar.brand.mark', () =>
     ctx.slots.inject('sidebar.brand.name', function* () {
-      yield ctx.slots.register({ name: 'sidebar.brand.mark' }, DeloBrandMark)
-      yield ctx.slots.register({ name: 'sidebar.brand.name' }, DeloBrandName)
+      yield ctx.slots.register({ name: 'sidebar.brand.mark', priority: -1 }, DeloBrandMark)
+      yield ctx.slots.register({ name: 'sidebar.brand.name', priority: -1 }, DeloBrandName)
     }))
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',

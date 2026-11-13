@@ -133,12 +133,22 @@ function storedSecret(record: CredentialRecord | undefined): Buffer | undefined 
 }
 
 /**
+ * Whether the request is the person's own tap or click on a link: a top-level document navigation the browser marks
+ * user-activated (`Sec-Fetch-User: ?1`, a header a page cannot set) and not as a prefetch or prerender.
+ */
+function userNavigation(headers: ConnectionTrustRequest['headers']): boolean {
+  return header(headers, 'sec-fetch-mode') === 'navigate' && header(headers, 'sec-fetch-dest') === 'document'
+    && header(headers, 'sec-fetch-user') === '?1' && header(headers, 'sec-purpose') === undefined
+}
+
+/**
  * Whether a token exchange arrives from another site: a `Sec-Fetch-Site` other than `none` or `same-origin`, or an
- * `Origin` other than the request's own.
+ * `Origin` other than the request's own. A link opened from another site by a person ({@link userNavigation}), such as
+ * one tapped in a message, is not another site: the link already carries the secret, which a page cannot guess.
  */
 function crossSite(headers: ConnectionTrustRequest['headers'], host: string, secure: boolean): boolean {
   const site = header(headers, 'sec-fetch-site')
-  if (site !== undefined && site !== 'none' && site !== 'same-origin') return true
+  if (site !== undefined && site !== 'none' && site !== 'same-origin' && !userNavigation(headers)) return true
   const origin = header(headers, 'origin')
   return origin !== undefined && origin !== `${secure ? 'https' : 'http'}://${host}`
 }
@@ -322,6 +332,8 @@ export class BrowserAuth {
     if (this.launchTokens.kind === 'process') {
       return tokens.length === 1 && tokenMatches(tokens.join(''), this.launchTokens.token) ? { kind: 'accepted' } : { kind: 'refused' }
     }
+    // A browser's speculative load of the link is not the person opening it; it must not spend the token.
+    if (header(req.headers, 'sec-purpose') !== undefined || header(req.headers, 'purpose') !== undefined) return { kind: 'refused' }
     const host = header(req.headers, 'host')
     const redeemed = this.launchTokens.store.redeem(tokens, host)
     if (redeemed.kind !== 'accepted' || host === undefined) return redeemed
