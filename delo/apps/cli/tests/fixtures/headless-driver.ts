@@ -62,7 +62,7 @@ const dependencies: HeadlessDependencies = {
   loadEnvironment: upstream.loadEnvironment,
   fatalRelease: upstream.fatalRelease,
   cwd: () => process.cwd(),
-  modelKey: () => Promise.resolve('sk-test'),
+  missingModelKey: () => Promise.resolve(undefined),
   approvedPluginContent: () => {
     if (mode === 'permission-mode') return Promise.resolve([])
     const file = join(home.path, 'run', 'headless-driver-overlay.patch.yml')

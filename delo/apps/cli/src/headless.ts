@@ -21,6 +21,7 @@ import { NPM_MIRROR_ENV } from '@delo/bundle-local/profile'
 import { mkdirSync } from 'node:fs'
 import type { RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { HEADLESS_PROFILE, PRIVATE_DIR_MODE } from '@delo/contract-home-layout'
+import type { RequiredModelKey } from './model-key.ts'
 import { runDirectory, shellQuote } from '@delo/home'
 import { HostNotStoppedError, refuseBootedHost } from '@delo/home-process'
 import { FULL_ACCESS_PRESET, fullAccessGranted, permissionStorePath, readPermissionStore } from '@delo/plugin-permission-defaults/store'
@@ -42,11 +43,11 @@ export const REFUSED_LAUNCHER_OPTIONS = ['--profile', '--patch', '--from-default
 /** What a headless run calls outside this module; specs replace them. */
 export interface HeadlessDependencies extends ComposeDependencies {
   /**
-   * Finds the DeepSeek API key the way the model would, before anything boots.
+   * Finds the model key the headless profile's default model needs, the way the model would, before anything boots.
    * @param request - the home, the output and the environment.
-   * @returns the key, or `undefined` when no source sets it.
+   * @returns the key the profile needs and cannot find, or `undefined` when it has the key or needs none from the CLI.
    */
-  readonly modelKey: (request: HeadlessRequest) => Promise<string | undefined>
+  readonly missingModelKey: (request: HeadlessRequest) => Promise<RequiredModelKey | undefined>
   /** Loads the launch environment with upstream's `.env` layers. */
   readonly loadEnvironment: () => RunProfileOptions['environment']
   /** Boots the profile; upstream's `runProfile` in a real run. */
@@ -194,8 +195,9 @@ export function refuseLauncherOptions(args: readonly string[]): void {
  */
 export async function runHeadless(request: HeadlessRequest, dependencies: HeadlessDependencies): Promise<CommandResult> {
   refuseLauncherOptions(request.args)
-  if (await dependencies.modelKey(request) === undefined) {
-    throw new CliError(EXIT.failed, 'delorun headless: Delorun has no DeepSeek API key, so it cannot answer. Set DEEPSEEK_API_KEY in your shell, or run delorun setup key.')
+  const missing = await dependencies.missingModelKey(request)
+  if (missing !== undefined) {
+    throw new CliError(EXIT.failed, `delorun headless: Delorun has no ${missing.label} API key, so it cannot answer. Set ${missing.variable} in your shell, or run delorun setup key.`)
   }
   mkdirSync(runDirectory(request.home, HEADLESS_PROFILE), { recursive: true, mode: PRIVATE_DIR_MODE })
   await runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', successor: false, output: request.output })

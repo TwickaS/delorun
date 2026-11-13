@@ -10,6 +10,8 @@ import { readProtectedFile } from '@delo/home'
 import { parseDocument } from 'yaml'
 import type { CommandContext } from './command.ts'
 import { loadDeloEnvironment } from './launch-environment.ts'
+import { profileDirectory } from './profile.ts'
+import { profileModelSelection, routeKeyReference, SETUP_PROVIDERS, isSetupProviderId } from './setup/providers.ts'
 import { CREDENTIALS_FILENAME } from './setup/writes.ts'
 
 /** The layers `delorun start` loads after the stored reference, in the order the credential provider ranks them. */
@@ -67,4 +69,29 @@ export async function resolveModelKey(context: CommandContext, home: string, var
     if (value !== undefined && value.length > 0) return value
   }
   return undefined
+}
+
+/** The key a profile's default model needs before it can answer. */
+export interface RequiredModelKey {
+  /** The provider's name as the person knows it. */
+  readonly label: string
+  /** The variable, or credential reference, the key is read from. */
+  readonly variable: string
+}
+
+/**
+ * The key the profile's default model needs: the route of its `agent-default-model` row and that route's key variable.
+ * A route whose row names no key variable needs none from the CLI (a mock or keyless route finds its own).
+ * @param home - the resolved Delorun home.
+ * @param profile - the profile.
+ * @param command - the command that starts a refusal's message.
+ * @returns the required key, or `undefined` when the CLI cannot name one.
+ * @throws {CliError} `EXIT.failed` when the profile's patch is not a YAML patch list.
+ */
+export function requiredModelKey(home: string, profile: string, command: string): RequiredModelKey | undefined {
+  const patchPath = join(profileDirectory(home, profile), 'cordis.patch.yml')
+  const { provider } = profileModelSelection(patchPath, command)
+  const variable = routeKeyReference(patchPath, provider, command)
+  if (variable === undefined) return undefined
+  return { label: isSetupProviderId(provider) ? SETUP_PROVIDERS[provider].label : provider, variable }
 }

@@ -29,9 +29,9 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { EXIT, type ExitCode } from './exit.ts'
-import { refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
+import { HEADLESS_PROFILE, refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
 import { useHomeShared } from './home-exclusion.ts'
-import { resolveModelKey } from './model-key.ts'
+import { requiredModelKey, resolveModelKey } from './model-key.ts'
 import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
 import { readProfileRegistry } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { ensureCopyImport } from './pnpm-import.ts'
@@ -245,7 +245,10 @@ export function headlessDependencies(): HeadlessDependencies {
     approvedPluginContent: upstream.approvedPluginContent,
     preStartSteps: upstream.preStartSteps,
     cwd: () => process.cwd(),
-    modelKey: ({ home, env, output }) => resolveModelKey({ ...output, env }, home, 'DEEPSEEK_API_KEY'),
+    missingModelKey: async ({ home, env, output }) => {
+      const required = requiredModelKey(home, HEADLESS_PROFILE, 'delorun headless')
+      return required !== undefined && await resolveModelKey({ ...output, env }, home, required.variable) === undefined ? required : undefined
+    },
     runProfile: options => runUpstreamProfile(options, { signals: true, failLoud: false }),
     loadEnvironment: upstream.loadEnvironment,
     fatalRelease: upstream.fatalRelease,
