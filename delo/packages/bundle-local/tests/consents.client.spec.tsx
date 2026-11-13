@@ -1168,7 +1168,7 @@ describe('the External agents section', () => {
 
   it('turns the external-agent consent off and on, and writes a whole run time limit within its bounds', async () => {
     const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
-    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), settings)
     await settle()
     const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
     expect(ask.getAttribute('aria-checked')).toBe('true')
@@ -1199,7 +1199,7 @@ describe('the External agents section', () => {
   it('says a refused settings write was not saved and keeps the value the Host holds', async () => {
     const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
     settings.set.mockResolvedValueOnce(false)
-    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), {}, settings)
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: GRANTS([]) }), settings)
     await settle()
     fireEvent.click(screen.getByRole('switch', { name: en['agents.ask.title'] }))
     await settle()
@@ -1209,7 +1209,7 @@ describe('the External agents section', () => {
 
   it('on a remote studio, disables the external-agent settings and says turning the consent off needs the computer', async () => {
     const settings = agentSettingsForm({ enabled: true, runTimeoutMinutes: 30 })
-    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), {}, settings)
+    renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE }), settings)
     await settle()
     const ask = screen.getByRole('switch', { name: en['agents.ask.title'] })
     expect(ask.hasAttribute('disabled') || ask.getAttribute('aria-disabled') === 'true').toBe(true)

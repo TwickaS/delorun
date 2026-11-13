@@ -488,8 +488,8 @@ describe('the plugin', () => {
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
       expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([UNLOCK_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
-      // Each overlay, each section and the approval card's action read their store's view and actions.
-      for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section')]) expect(entry.inject?.()).toBeTypeOf('object')
+      // Each overlay and each section with a store (the About section has none) read their store's view and actions.
+      for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section').filter(section => section.options.id !== ABOUT_SECTION_ID)]) expect(entry.inject?.()).toBeTypeOf('object')
       // Each approval card action is bound to the card's chat.
       const actions = slots.entries('conversation.approval.action')
       expect(actions.map(entry => entry.options.id)).toEqual([FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])

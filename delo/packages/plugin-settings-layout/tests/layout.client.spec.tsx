@@ -75,7 +75,7 @@ describe("Delo's layout", () => {
   })
 
   it('leaves out External agents and Network where their sections are not registered', () => {
-    const absent = [SECTIONS.externalAgents, SECTIONS.network]
+    const absent: readonly string[] = [SECTIONS.externalAgents, SECTIONS.network]
     const nav = projectLayout(layout, SECTION_ROWS.filter(row => !absent.includes(row.id)), REGISTERED_ITEMS)
     expect(nav.groups.find(group => group.id === 'safety')?.pages.map(page => page.label)).toEqual(['Permissions', 'Privacy'])
   })

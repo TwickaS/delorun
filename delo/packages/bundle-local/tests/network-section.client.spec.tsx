@@ -11,7 +11,7 @@ import { makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { apply, inject, NETWORK_SECTION_ID, NETWORK_SECTION_ORDER, PERMISSIONS_SECTION_ORDER, readNetworks } from '../src/client/index.ts'
+import { apply, EXTERNAL_AGENTS_SECTION_ORDER, inject, NETWORK_SECTION_ID, NETWORK_SECTION_ORDER, readNetworks } from '../src/client/index.ts'
 import type { HostFetch } from '../src/client/host-api.ts'
 import {
   addedHosts, comparableHosts, hostLines, NETWORK_ROUTES, sameNetwork, setNetwork, type WorkspaceNetwork,
@@ -291,7 +291,7 @@ describe('the network requests', () => {
 })
 
 describe('the plugin', () => {
-  it('registers the Network section right after Permissions, with the browser\'s fetch', async () => {
+  it('registers the Network section right after External agents, with the browser\'s fetch', async () => {
     const ctx = new Context()
     try {
       await ctx.plugin(SlotRegistry).await()
@@ -306,7 +306,7 @@ describe('the plugin', () => {
       const entry = slots.entries('settings.section').find(section => section.options.id === NETWORK_SECTION_ID)
       if (entry === undefined) throw new Error('no Network section')
       expect(entry.options.order).toBe(NETWORK_SECTION_ORDER)
-      expect(NETWORK_SECTION_ORDER).toBe(PERMISSIONS_SECTION_ORDER + 1)
+      expect(NETWORK_SECTION_ORDER).toBe(EXTERNAL_AGENTS_SECTION_ORDER + 1)
       expect(typeof entry.options.label === 'function' ? entry.options.label() : entry.options.label).toBe(en.nav)
       const browserFetch = vi.fn(async () => Response.json(LIST.body))
       vi.stubGlobal('fetch', browserFetch)
