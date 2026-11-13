@@ -29,6 +29,7 @@ export function HeaderArt({ useSettings }: InjectFace<HeaderArtInjected>) {
   const scene = useSettings(settings => settings.headerArt)
   const palette = useSettings(settings => settings.artPalette)
   const strength = useSettings(settings => settings.artStrength)
+  const fade = useSettings(settings => settings.artFade)
   const style = useSettings(settings => settings.artStyle)
   const seed = useSettings(settings => settings.artSeed)
   if (scene === 'none') return null
@@ -41,7 +42,7 @@ export function HeaderArt({ useSettings }: InjectFace<HeaderArtInjected>) {
   }
   return (
     <>
-      <StageBackdrop scene={scene} palette={palette} seed={seed} strength={strength} />
+      <StageBackdrop scene={scene} palette={palette} seed={seed} strength={strength} fade={fade} />
       <InkEdgeFilters ids={INK_EDGE_IDS} />
     </>
   )

@@ -10,7 +10,7 @@ describe('the host half', () => {
       .toEqual(DEFAULT_SIDEBAR_SETTINGS)
     for (const field of Object.values(Config.dict ?? {})) expect(field.meta.volatile).toBe(true)
     for (const wrong of [
-      { headerArt: 'stars' }, { artPalette: 'teal' }, { view: 'list' }, { workingShelf: 'yes' }, { artStrength: 'loud' }, { artStyle: 'flag' },
+      { headerArt: 'stars' }, { artPalette: 'teal' }, { view: 'list' }, { workingShelf: 'yes' }, { artStrength: 'loud' }, { artFade: 'blur' }, { artStyle: 'flag' },
       { sort: 'name' }, { confirmUnpin: 1 }, { width: 200 }, { width: 500 }, { width: 257 }, { artSeed: 0 }, { artSeed: 2_147_483_648 },
       { workspaceIcons: ['folder'] }, { updateNoticeRefreshMinutes: 4 }, { updateNoticeRefreshMinutes: 1441 }, { updateNoticeRefreshMinutes: 7.5 },
     ]) {
