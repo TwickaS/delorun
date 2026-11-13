@@ -14,16 +14,16 @@ describe('the copy', () => {
     for (const key of Object.keys(en) as (keyof typeof en)[]) expect(placeholders(zh[key])).toEqual(placeholders(en[key]))
   })
 
-  it('names the product Delo, and uses sentence case for a step\'s name', () => {
-    for (const text of Object.values(en)) expect(text).not.toMatch(/\bDelo Run\b/)
+  it('names the product Delorun, and uses sentence case for a step\'s name', () => {
+    for (const text of Object.values(en)) expect(text).not.toMatch(/\bDelo\b(?! Run)/)
     expect(en['step.look']).toBe('Look')
     expect(en['step.plugins']).toBe('Recommended plugins')
     expect(en['step.reach']).toBe('Phone access')
   })
 
   it('says plainly what adding an agent means and claims no consent that is not built', () => {
-    expect(en['agents.confirm.outside']).toBe('It runs outside Delo\'s sandbox and permission prompts.')
-    expect(en['agents.confirm.handoff']).toContain('Delo asks here on this computer first')
+    expect(en['agents.confirm.outside']).toBe('It runs outside Delorun\'s sandbox and permission prompts.')
+    expect(en['agents.confirm.handoff']).toContain('Delorun asks here on this computer first')
     expect(en['agents.confirm.handoff']).not.toContain('does not ask')
     expect(en['agents.confirm.limits']).toContain('stop after 30 minutes')
     for (const text of Object.values(en)) expect(text).not.toMatch(/consent|each workspace/i)

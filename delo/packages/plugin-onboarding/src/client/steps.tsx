@@ -504,6 +504,16 @@ export function ReachStep({ services, guide }: StepProps): ReactNode {
   )
 }
 
+/**
+ * Phone access, for a studio opened through reach: one line saying that the phone is connected and that approvals and
+ * full access are decided at the computer.
+ * @param props - the services.
+ * @returns the step body.
+ */
+export function RemoteReachStep({ services }: StepProps): ReactNode {
+  return <p className={css.lead}>{services.t('reach.remote')}</p>
+}
+
 /** One line of the Ready checklist. */
 interface CheckLine {
   readonly key: string
