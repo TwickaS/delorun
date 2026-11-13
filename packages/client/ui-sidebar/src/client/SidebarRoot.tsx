@@ -531,7 +531,7 @@ export function SidebarRoot({
       data-sidebar-peek={peek === 'closed' ? undefined : peek}
       className={clsx(
         css.root, !wide && css.collapsed, !wide && animateRail.current && css.railIn,
-        // The peek's own overlay replaces the collapse crossfade: it is already
+        // The peek overlay replaces the collapse crossfade: it is already
         // the expanded shell, so nothing fades and nothing reflows.
         !drawer && collapsed && wide && !peeked && css.fading,
         peeked && css.peeking, peek === 'closing' && css.peekClosing,
@@ -561,9 +561,9 @@ export function SidebarRoot({
       onBlurCapture={(event) => {
         if (peek === 'closed') return
         const next = event.relatedTarget
-        // Focus moving between the panel's own controls stays inside; focus
-        // moving into a menu or dialog the panel opened is still the panel's
-        // task. Anything else has left the peek.
+        // Focus moving between controls of the panel stays inside; focus moving
+        // into a menu or dialog that the panel opened is still part of the
+        // panel task. Anything else has left the peek.
         if (next instanceof Node && (column.current?.contains(next) === true || isOverlayTarget(next))) return
         closePeek()
       }}
