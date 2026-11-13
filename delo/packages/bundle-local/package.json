@@ -41,6 +41,7 @@
     "src/trust.ts",
     "src/profile-versions.ts",
     "src/client/versions-api.ts",
+    "src/client/host-api.ts",
     "src/client/locales.ts",
     "src/client/trust-bill.ts",
     "src/client/trust-schema.ts"

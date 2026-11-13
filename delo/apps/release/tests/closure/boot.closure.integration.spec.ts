@@ -140,7 +140,7 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
     const entry = join(extracted, 'app/node_modules/@delo/cli/src/bin.js')
     execFileSync(node, [entry, 'setup', '--yes'], { cwd: root, env, encoding: 'utf8', timeout: 300_000 })
     const version = spawnSync(node, [entry, '--version'], { cwd: root, env, encoding: 'utf8', timeout: 50_000 })
-    expect(version.stdout, `signal ${String(version.signal)}: ${version.stderr}`).toMatch(/^Delo \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\nDSH \d+\.\d+\.\d+/u)
+    expect(version.stdout, `signal ${String(version.signal)}: ${version.stderr}`).toMatch(/^Delorun \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\nDSH \d+\.\d+\.\d+/u)
     // The default port belongs to whichever Host runs on this computer, so the profile asks the system for one.
     const bundle = readFileSync(join(extracted, 'app/node_modules/@deepseek-ai/dsh-web-app/cordis.patch.yml'), 'utf8').split('\n')
     const indent = (line: string): number => line.length - line.trimStart().length
@@ -201,7 +201,7 @@ describe.runIf(ARCHIVE !== undefined)('an extracted runtime closure', { timeout:
       return { status: result.status, output: `${result.stdout}${result.stderr}` }
     }
     expect(run(['setup', '--yes']).status).toBe(0)
-    expect(run(['--version']).output).toMatch(/^Delo \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\nDSH \d+\.\d+\.\d+/u)
+    expect(run(['--version']).output).toMatch(/^Delorun \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\nDSH \d+\.\d+\.\d+/u)
     // One invocation per command that needs no running home process and changes nothing outside the scratch home.
     const invocations: Readonly<Record<string, readonly string[]>> = {
       setup: ['setup', '--list'],
