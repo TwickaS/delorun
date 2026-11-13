@@ -10,7 +10,7 @@ Delo has no release yet; this page describes the first release.
 
 ## Summary
 
-You can reshape Delo at six levels, from a setting in the studio to the harness's own source. Each level reaches further than the one before it and costs more at each update, so choose the first one that can make your change. Every level but the last leaves Delo's signed release untouched, and an update shows what it would turn off before it does ([updates never take your work away](trust.md)).
+You can reshape Delo at six levels, from a setting in the studio to the harness's own source. Each level reaches further than the one before it and costs more at each update, so choose the first one that can make your change. None of them edits Delo's signed release, though the last runs files you changed, and an update shows what it would turn off before it does ([updates never take your work away](trust.md)).
 
 ## Contents
 
@@ -30,7 +30,7 @@ You can reshape Delo at six levels, from a setting in the studio to the harness'
 | Agent preset | The tools, instructions, skills and models an agent starts with | Presets made in Creator mode, kept in your profile | Little: a preset names plugins, so only a removed or renamed one breaks it |
 | Your own plugin | New tools, studio parts, services, plugin rows | A package installed into your profile | Its `engines` ranges: a range that excludes the new release turns the plugin off until you widen it and test |
 | Fork of a shipped plugin | How one of DeepSeek Harness's plugins behaves | A renamed copy installed into your profile, with the shipped row turned off | You merge every upstream change to that plugin yourself, and its interfaces can change in any minor release before 1.0 |
-| The harness itself | Anything, the plugin loop included | A source checkout of Delorun | You merge every release yourself, and you run code Delo did not sign |
+| The harness itself | Anything, the plugin loop included | Your own copy of the installed release's program files, made by `delorun changes edit-harness` | Each change belongs to the installed version, and the update report says how it carries over; you run code Delo did not sign |
 
 ## Change a plugin's settings
 
@@ -67,4 +67,4 @@ Delo's own plugins and the rows its protections need, such as the sandbox, canno
 
 ## Edit the harness itself
 
-A change to the plugin loop, the composition or Delo's protections needs a source checkout of Delorun: run it with `pnpm install` and `pnpm run build`, then start it as the repository's README explains. You merge every release into your checkout yourself, and Delo's signature and release log no longer describe the code you run, so `delorun verify` cannot vouch for it. Prefer a plugin wherever one can make the change.
+A change to the plugin loop, the composition or Delo's protections goes in your own copy of the installed Delo's program files: `delorun changes edit-harness` makes the copy and prints its folder, and each file you save there is a change to Delo itself that `delorun changes list` shows and `delorun changes undo` takes back. The installed release is never edited, but Delo's signature and release log no longer describe the code you run, and `delorun verify` lists the files you changed. [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) covers protection, which waits for your review before a change loads, and the studio's Changes section. Prefer a plugin wherever one can make the change.

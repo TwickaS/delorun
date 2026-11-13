@@ -88,7 +88,7 @@ The studio's Plugins page installs the same sources; a folder there needs its fu
 
 ## Builds pnpm refuses
 
-pnpm runs no package's build script until you allow it. A plugin installed from git builds itself on install through its `prepare` script, and a native dependency builds through its install script, so their first `add` stops. `delorun plugin` then asks, for each refused package, whether to allow that one package's build, and runs the command again when you do. Allowing it runs the package's code on this computer, now and at each later install, with your access and outside the sandbox. Without a terminal, or to answer in advance, name the package:
+pnpm runs no package's build script until you allow it. A plugin installed from git builds itself on install through its `prepare` script, and a native dependency builds through its install script, so their first `add` stops. `delorun plugin` then asks, for each refused package, whether to allow that one package's build, and runs the command again when you do. When Delo's install check is on, only the installation runs again, on the lockfile the check already read, and a lockfile that differs from it is refused and the profile put back. Allowing it runs the package's code on this computer, now and at each later install, with your access and outside the sandbox. Without a terminal, or to answer in advance, name the package:
 
 ```text
 delorun plugin add github:you/my-plugin#<commit> --allow-build my-plugin

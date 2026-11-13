@@ -21,7 +21,7 @@ import { prepareHome, type CommandContext } from '../src/command.ts'
 import { CliError, EXIT } from '../src/exit.ts'
 import { registerDataUser } from '../src/home-exclusion.ts'
 import { installsPackages, takeAllowedAdvisories, type ProfileCheckSettings } from '../src/plugin-install-check.ts'
-import { plugin, type PluginDependencies, type UpstreamOperation } from '../src/upstream.ts'
+import { plugin, pluginCommand, type PluginDependencies, type UpstreamOperation } from '../src/upstream.ts'
 
 // The check's own call can be made to throw; every other call passes through to the real check.
 vi.mock('@delo/plugin-install-check/check', async (importActual) => {
@@ -145,7 +145,7 @@ describe('delorun plugin', () => {
     expect(await plugin(['add', 'good-plugin'], context, dependencies(runs))).toBe(0)
     expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'good-plugin', '--lockfile-only', '--ignore-scripts'], ['plugin', '--profile', 'default', 'install', '--frozen-lockfile']])
     // The resolution activates no bundle; the installation compares and restores against the profile before it.
-    expect(runs.map(run => run.operation)).toEqual([{ activateNewBundles: false }, { baseline: { manifest: before, lockfile: undefined } }])
+    expect(runs.map(run => run.operation)).toEqual([{ activateNewBundles: false }, { baseline: { manifest: before, lockfile: undefined }, capture: expect.stringContaining('plugin-output-') }])
     expect(errors.join('')).toBe([
       'delorun: checked good-plugin 1.0.0: 1 warning, which you should read before you use it:\n',
       '  warning: GHSA-2222-3333-4444 (high) affects good-plugin@1.0.0: A flaw in the package (GHSA-2222-3333-4444) (pnpm-lock.yaml:13)\n',
@@ -317,6 +317,157 @@ describe('delorun plugin', () => {
     expect(await plugin(['add', 'good-plugin'], context, { ...dependencies([]), checkSettings: () => Promise.resolve(undefined) })).toBe(0)
     expect(errors).toEqual([])
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
+  })
+})
+
+/** The key pnpm prints for the git-hosted package the stand-in refuses to build. */
+const GIT_KEY = 'git-plug@git+file:///tmp/repo#8edca4e355d5677de0397415bf6ea4a7307bb076'
+
+/**
+ * Dependencies whose installation step prints pnpm's refusal of the git package's build into the kept output until the
+ * profile's `pnpm-workspace.yaml` allows the exact key.
+ * @param runs - receives each run's arguments and options.
+ * @param options - `check` to switch the install check off with `undefined`; `afterStep` runs after each installation step.
+ * @returns the dependencies.
+ */
+function refusingBuild(runs: Run[], options: { readonly check?: false, readonly afterStep?: (step: number) => void, readonly confirm?: (question: string) => Promise<boolean> | undefined } = {}): PluginDependencies {
+  const base = dependencies(runs)
+  let steps = 0
+  return {
+    ...base,
+    ...options.check === false ? { checkSettings: () => Promise.resolve(undefined) } : {},
+    confirmBuild: options.confirm,
+    runUpstream: (argv, operation) => {
+      if (!argv.includes('--frozen-lockfile') && !(options.check === false && operation?.capture !== undefined)) return base.runUpstream(argv, operation)
+      runs.push({ argv, registered: [], ...operation === undefined ? {} : { operation } })
+      writeProfileFiles(profileDir, [GOOD], { installed: false })
+      const workspace = join(profileDir, 'pnpm-workspace.yaml')
+      const allowed = existsSync(workspace) && readFileSync(workspace, 'utf8').includes(`${GIT_KEY}: true`)
+      if (operation?.capture !== undefined) writeFileSync(operation.capture, allowed ? 'Done\n' : `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED Failed to prepare git-hosted package\nallowBuilds:\n  ${GIT_KEY}: true\n`)
+      options.afterStep?.(steps++)
+      return Promise.resolve(allowed ? 0 : 1)
+    },
+  }
+}
+
+describe('a build pnpm refuses, with the install check on', () => {
+  const add = ['add', 'good-plugin']
+
+  beforeEach(async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+  })
+
+  it('is allowed after the person confirms, and only the installation step runs again, on the checked lockfile', async () => {
+    const runs: Run[] = []
+    const questions: string[] = []
+    expect(await plugin(add, context, refusingBuild(runs, { confirm: (question) => { questions.push(question); return Promise.resolve(true) } }))).toBe(0)
+    expect(runs.map(run => run.argv.includes('--lockfile-only'))).toEqual([true, false, false])
+    expect(runs[1]!.argv).toEqual(runs[2]!.argv)
+    expect(runs[2]!.argv).toContain('--frozen-lockfile')
+    expect(questions).toHaveLength(1)
+    expect(questions[0]).toContain(GIT_KEY)
+    expect(readFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')).toContain(`${GIT_KEY}: true`)
+    expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(true)
+  })
+
+  it('is not run when the person declines: the profile files go back and nothing is recorded or allowed', async () => {
+    const runs: Run[] = []
+    const before = readFileSync(join(profileDir, 'package.json'), 'utf8')
+    expect(await plugin(add, context, refusingBuild(runs, { confirm: () => Promise.resolve(false) }))).toBe(1)
+    expect(runs).toHaveLength(2)
+    expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(before)
+    expect(existsSync(join(profileDir, 'pnpm-lock.yaml'))).toBe(false)
+    expect(readFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')).not.toContain(`${GIT_KEY}: true`)
+    expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
+    expect(errors.join('')).toContain('--allow-build git-plug')
+  })
+
+  it('is not run without a terminal or --allow-build', async () => {
+    const runs: Run[] = []
+    expect(await plugin(add, context, refusingBuild(runs))).toBe(1)
+    expect(runs).toHaveLength(2)
+    expect(readFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')).not.toContain(`${GIT_KEY}: true`)
+  })
+
+  it('is allowed without a prompt by --allow-build naming the package, which pnpm never receives', async () => {
+    const runs: Run[] = []
+    expect(await plugin([...add, '--allow-build', 'git-plug'], context, refusingBuild(runs))).toBe(0)
+    expect(runs).toHaveLength(3)
+    expect(runs.flatMap(run => run.argv)).not.toContain('--allow-build')
+    expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(true)
+  })
+
+  it('is not allowed by --allow-build naming a package pnpm did not print', async () => {
+    const runs: Run[] = []
+    expect(await plugin([...add, '--allow-build', 'other'], context, refusingBuild(runs))).toBe(1)
+    expect(runs).toHaveLength(2)
+    expect(readFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')).not.toContain(': true')
+  })
+
+  it.each(['*', 'git-*', 'git-plug?', '!git-plug', ''])('refuses --allow-build %j before any step runs', async (name) => {
+    const runs: Run[] = []
+    await expect(plugin([...add, '--allow-build', name], context, refusingBuild(runs))).rejects.toThrow(CliError)
+    expect(runs).toEqual([])
+  })
+
+  it('refuses when the lockfile changed between the check and the rerun, and puts the profile back', async () => {
+    const runs: Run[] = []
+    const before = readFileSync(join(profileDir, 'package.json'), 'utf8')
+    const deps = refusingBuild(runs, { afterStep: () => { writeFileSync(join(profileDir, 'pnpm-lock.yaml'), 'lockfileVersion: changed\n') } })
+    expect(await plugin([...add, '--allow-build', 'git-plug'], context, deps)).toBe(EXIT.failed)
+    expect(runs).toHaveLength(2)
+    expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(before)
+    expect(existsSync(join(profileDir, 'pnpm-lock.yaml'))).toBe(false)
+    expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
+  })
+
+  it('refuses when the rerun itself changes the lockfile, and puts the profile back', async () => {
+    const runs: Run[] = []
+    const before = readFileSync(join(profileDir, 'package.json'), 'utf8')
+    const deps = refusingBuild(runs, { afterStep: (step) => { if (step === 1) writeFileSync(join(profileDir, 'pnpm-lock.yaml'), 'lockfileVersion: changed\n') } })
+    expect(await plugin([...add, '--allow-build', 'git-plug'], context, deps)).toBe(EXIT.failed)
+    expect(runs).toHaveLength(3)
+    expect(errors.join('')).toContain('differs from the one the install check read')
+    expect(readFileSync(join(profileDir, 'package.json'), 'utf8')).toBe(before)
+    expect(existsSync(join(profileDir, 'pnpm-lock.yaml'))).toBe(false)
+    expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
+  })
+
+  it('stops at an advisory refusal in the resolution, before any build prompt', async () => {
+    standIn.answers.advisories = { 'good-plugin': [advisory('GHSA-2222-3333-4444', 'critical', '*')] }
+    const runs: Run[] = []
+    const asked = vi.fn(() => Promise.resolve(true))
+    expect(await plugin([...add, '--allow-build', 'git-plug'], context, refusingBuild(runs, { confirm: asked }))).toBe(EXIT.failed)
+    expect(runs).toHaveLength(1)
+    expect(asked).not.toHaveBeenCalled()
+  })
+})
+
+describe('a build pnpm refuses, with the install check off', () => {
+  beforeEach(async () => {
+    await prepareHome(context, undefined)
+    writeEmptyProfile()
+  })
+
+  it('runs the whole operation again once the person allows the build', async () => {
+    const runs: Run[] = []
+    expect(await plugin(['add', 'git+file:///tmp/repo'], context, refusingBuild(runs, { check: false, confirm: () => Promise.resolve(true) }))).toBe(0)
+    expect(runs.map(run => run.argv)).toEqual([['plugin', '--profile', 'default', 'add', 'git+file:///tmp/repo'], ['plugin', '--profile', 'default', 'add', 'git+file:///tmp/repo']])
+  })
+
+  it('does not run it again when the person declines', async () => {
+    const runs: Run[] = []
+    expect(await plugin(['add', 'git+file:///tmp/repo'], context, refusingBuild(runs, { check: false, confirm: () => Promise.resolve(false) }))).toBe(EXIT.failed)
+    expect(runs).toHaveLength(1)
+  })
+})
+
+describe('the plugin command', () => {
+  it('sends check and dev to Delo\'s own commands, which refuse a wrong command line before any profile changes', async () => {
+    await expect(pluginCommand.run(['check'], context)).rejects.toThrow('usage: delorun plugin check <directory>')
+    await expect(pluginCommand.run(['dev'], context)).rejects.toThrow('usage: delorun plugin dev <folder>')
+    expect(existsSync(join(deloHome, 'profiles'))).toBe(false)
   })
 })
 
