@@ -10,12 +10,24 @@ import { Downloader, isInstallError } from '@delo/install'
 import { logEndpoints, tilesTransport } from '@delo/release-verify/transport'
 import { RELEASE_SOURCE, RELEASE_HOSTS } from '@delo/install'
 import { buildOrigin } from '@delo/install'
-import { BUILD_CONSTANTS, channelPlan, logPlan, platformOf, RELEASE_LOG_API_PREFIX } from '../src/platform.ts'
+import { BUILD_CONSTANTS, channelPlan, hostRefusal, logPlan, platformOf, RELEASE_LOG_API_PREFIX } from '../src/platform.ts'
 
 describe('the platform a machine installs', () => {
   it('names the closure of a pair contract C2 publishes, and refuses one it does not', () => {
     expect(platformOf('linux', 'x64')).toBe('linux-x64')
     expect(() => platformOf('plan9', 'vax')).toThrow(/^Delo has no runtime for plan9-vax; a release can publish one only for /u)
+  })
+})
+
+describe('the hosts Delorun 0.1.0 refuses before any download', () => {
+  it('names WSL2 for native Windows, a later release for macOS, and the guide for both', () => {
+    expect(hostRefusal('win32')).toMatch(/^Delorun 0\.1\.0 runs in WSL2, not on native Windows\. Nothing was downloaded\..*#windows-through-wsl2$/u)
+    expect(hostRefusal('darwin')).toMatch(/^Delorun 0\.1\.0 does not run on macOS yet; macOS joins in a later release\..*#windows-through-wsl2$/u)
+  })
+
+  it('leaves every other host to the release’s own platform list', () => {
+    expect(hostRefusal('linux')).toBeUndefined()
+    expect(hostRefusal('freebsd')).toBeUndefined()
   })
 })
 

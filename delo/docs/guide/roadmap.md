@@ -37,7 +37,7 @@ The stages below are in order. Everything in them is absent from Delorun today; 
 2. **Studio follow-ups.** Delorun's own phone sidebar.
 3. **Extra machines.** Run chats on a laptop, a server or a homelab machine from one studio: a small agent per machine, pairing, workspace copies, and continuing a chat on another machine.
 4. **In no fixed order.**
-   - **Apps and platforms.** A Delorun desktop app that manages WSL2, a Linux AppImage, and one profile shared by the desktop app and the command line. Releases for macOS.
+   - **Apps and platforms.** A Delorun desktop app that manages WSL2, a Linux AppImage, and one profile shared by the desktop app and the command line. Releases for macOS and for native Windows; Windows runs Delorun through WSL2 until then.
    - **Isolation.** Docker workspaces, where a workspace's commands run in a container, and a Docker mode for hosted homes that runs the harness and the workspaces in containers.
    - **Reach and sign-in.** Reach through Tailscale Funnel or through a relay you host on your own domain, and sign-in with a passkey or your own sign-in provider ([What each reach option shows its provider](trust.md#what-each-reach-option-shows-its-provider) compares them).
    - **Verification and plugins.** `delorun verify` checks of isolation, exposure, sign-in, plugins and data sharing; a community plugin [catalogue](../reference/glossary.md#catalogue) with "tested with Delorun X" badges; a revocation list for known-bad plugin versions; an optional plugin security review, an agent preset you can run on a plugin before installing it, which can share its findings with the community; and ejecting a plugin while keeping its settings in your profile.

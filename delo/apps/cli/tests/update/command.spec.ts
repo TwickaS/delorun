@@ -247,6 +247,18 @@ describe('runUpdate', () => {
     return runUpdate(args, context, answers)
   }
 
+  it.each([['win32', /runs in WSL2, not on native Windows\. Nothing was downloaded\./u], ['darwin', /macOS joins in a later release\. Nothing was downloaded\./u]])('stops on %s before it asks the home process for anything', async (platform, message) => {
+    const real = Object.getOwnPropertyDescriptor(process, 'platform')!
+    Object.defineProperty(process, 'platform', { ...real, value: platform })
+    try {
+      await expect(update([])).rejects.toThrow(message)
+      await expect(update(['--from', '/no/such/folder'])).rejects.toThrow(/^delorun update: Delorun 0\.1\.0 /u)
+    } finally {
+      Object.defineProperty(process, 'platform', real)
+    }
+    expect(requests).toEqual([])
+  })
+
   it('exits 3 and says to run delorun start when no home process answers', async () => {
     expect(await update([])).toBe(EXIT.notRunning)
     expect(output.stderr).toBe(`delorun update: Delorun is not running for the profile ${PROFILE}; run delorun start, then delorun update.\n`)

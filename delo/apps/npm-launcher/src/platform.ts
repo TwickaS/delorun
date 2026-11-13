@@ -37,6 +37,25 @@ export function platformOf(platform: string, arch: string): RuntimePlatform {
   return known
 }
 
+/** The guide section that explains how to run Delorun in WSL2; the refusals below link to it. */
+export const WSL_GUIDE = 'https://docs.delorun.com/guide/install#windows-through-wsl2'
+
+/**
+ * Why Delorun 0.1.0 does not run on a host, before any download.
+ * @param platform - Node's `process.platform`.
+ * @returns the refusal for native Windows or macOS, naming what works and the guide; `undefined` for every other host.
+ */
+export function hostRefusal(platform: string): string | undefined {
+  switch (platform) {
+    case 'win32':
+      return `Delorun 0.1.0 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: ${WSL_GUIDE}`
+    case 'darwin':
+      return `Delorun 0.1.0 does not run on macOS yet; macOS joins in a later release. Nothing was downloaded. Delorun 0.1.0 runs on Linux, and on Windows through WSL2: ${WSL_GUIDE}`
+    default:
+      return undefined
+  }
+}
+
 /**
  * The origins a build may replace, the same fields a home's channel record holds. An absent field keeps the production
  * value.

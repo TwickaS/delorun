@@ -6,7 +6,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseRuntimeVersion, StorePaths, type LaunchCommand } from '@delo/runtime-store'
 import { main, stderrLogger, type LauncherContext } from '../src/bin.ts'
@@ -86,6 +86,18 @@ async function surroundings(options: { readonly roots?: boolean } = {}): Promise
 }
 
 describe('the launcher’s main function', () => {
+  it.each([
+    ['win32', 'Delorun 0.1.0 runs in WSL2, not on native Windows. Nothing was downloaded. Open a WSL2 terminal and run it there: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
+    ['darwin', 'Delorun 0.1.0 does not run on macOS yet; macOS joins in a later release. Nothing was downloaded. Delorun 0.1.0 runs on Linux, and on Windows through WSL2: https://docs.delorun.com/guide/install#windows-through-wsl2\n'],
+  ])('stops on %s before it reads the channel or creates a home', async (hostPlatform, message) => {
+    const world = await surroundings()
+    expect(await main([], world.context({ hostPlatform }))).toBe(1)
+    expect(world.stderr.join('')).toBe(message)
+    expect(world.server.requests).toEqual([])
+    expect(world.started).toEqual([])
+    expect(await readdir(dirname(world.home))).not.toContain('home')
+  })
+
   it('installs the channel’s release, prints each step and the log warning, records the check, and starts the runtime', async () => {
     const world = await surroundings()
     expect(await main([], world.context())).toBe(0)

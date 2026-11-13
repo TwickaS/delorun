@@ -28,7 +28,7 @@ import { runLauncher, launcherProfile, runtimeCommand, type LauncherOutput, type
 import { progressLines, type LauncherProgress } from './progress.ts'
 import { LAUNCHER_EXIT, refusalFor } from './refusals.ts'
 import { readEmbeddedRoots, ROOTS_DIRECTORY } from './root.ts'
-import { BUILD_CONSTANTS, channelPlan, logPlan, platformOf, type BuildConstants } from './platform.ts'
+import { BUILD_CONSTANTS, channelPlan, hostRefusal, logPlan, platformOf, type BuildConstants } from './platform.ts'
 
 /** The launcher's own flag for the CLI profile, which it also passes to the runtime. */
 export const PROFILE_FLAG = '--profile'
@@ -206,6 +206,8 @@ export interface LauncherContext {
   readonly fetch?: typeof globalThis.fetch | undefined
   /** The clock, in milliseconds; `Date.now` by default. */
   readonly now?: (() => number) | undefined
+  /** The host's `process.platform`, which native Windows and macOS refuse before any download; this process's by default. */
+  readonly hostPlatform?: string | undefined
   /** Asks `delorun repair`'s yes/no question; `undefined` answers when there is no terminal. This process's terminal by default. */
   readonly confirm?: ((question: string) => Promise<boolean | undefined>) | undefined
 }
@@ -329,6 +331,11 @@ export async function main(argv: readonly string[], context: LauncherContext = {
     if (line.help) {
       context.output.stdout(usage())
       return LAUNCHER_EXIT.ok
+    }
+    const host = hostRefusal(context.hostPlatform ?? process.platform)
+    if (host !== undefined) {
+      context.output.stderr(`${host}\n`)
+      return LAUNCHER_EXIT.failed
     }
     profile = launcherProfile(line.profile, context.env)
     platform = platformOf(process.platform, process.arch)

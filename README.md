@@ -22,7 +22,7 @@ Review the [safety notice](SAFETY.md) before running the project. The [user guid
 
 ## Run
 
-Install Node.js 24.9 or later, then run `npx delorun`. [Install and first run](delo/docs/guide/install.md) walks through setup and the first chat.
+Delorun 0.1.0 runs on Linux (x64 and arm64) and on Windows through WSL2; macOS joins in a later release. Install Node.js 24.9 or later, then run `npx delorun`. [Install and first run](delo/docs/guide/install.md) walks through setup and the first chat.
 
 ### Run from source
 
