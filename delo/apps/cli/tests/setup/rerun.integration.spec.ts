@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -117,8 +117,22 @@ describe('setup on a finished profile in a terminal', { timeout: TIMEOUT_MS }, (
   it('resumes an interrupted re-run like a first run', async () => {
     await expect(run(['local', DS, 'keep', 'stock', 'save'], { afterStep: (step) => { if (step === sectionStep('privacy')) throw new Error('interrupted') } })).rejects.toThrow('interrupted')
     lines = []
-    expect(await run([KEY])).toBe(EXIT.ok)
+    expect(await run([])).toBe(EXIT.ok)
+    expect(recording.asked).toEqual([])
     expect(lines.join('')).toContain('Resuming the setup of default')
+    expect(readFileSync(credentialsPath(), 'utf8')).toContain(KEY)
+  })
+
+  it.each([
+    ['keep', [], []],
+    [undefined, [KEY], ['secret: Deepseek API key']],
+  ])('resumes before the key step with the credential source %s', async (credentialSource, script, asked) => {
+    const { version, ...answers } = JSON.parse(readFileSync(join(profileDirectory(home, PROFILE), 'setup-answers.json'), 'utf8')) as Record<string, unknown>
+    mkdirSync(join(home, 'run', PROFILE), { recursive: true })
+    writeFileSync(join(home, 'run', PROFILE, 'setup-progress.json'), JSON.stringify({ version, answers, completed: ['profile'], ...credentialSource === undefined ? {} : { credentialSource } }))
+    expect(await run(script)).toBe(EXIT.ok)
+    expect(recording.asked.map(question => question.replace(/^secret: .*API key$/u, 'secret: Deepseek API key'))).toEqual(asked)
+    expect(readFileSync(credentialsPath(), 'utf8')).toContain(KEY)
   })
 
   it('keeps today\'s message when no prompter or terminal is available', async () => {

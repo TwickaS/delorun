@@ -254,11 +254,30 @@ describe('the accepted path', { timeout: TIMEOUT_MS }, () => {
     expect(recordedPrompts()).toBe('safer')
   })
 
-  it('keeps an earlier grant when a later consent is declined, and writes none when the grant was turned off meanwhile', async () => {
+  it('skips the consent while the mode stays on and its grant is valid', async () => {
     expect(await interactive(ACCEPT_DANGEROUS)).toBe(EXIT.ok)
     const granted = readFileSync(dangerousGrantPath(home), 'utf8')
-    expect(await again(['dangerous', 'no'])).toBe(EXIT.ok)
+    recording.asked.length = 0
+    expect(await again(['dangerous'])).toBe(EXIT.ok)
+    expect(recording.asked.some(question => question.includes('Allow any chat'))).toBe(false)
     expect(readFileSync(dangerousGrantPath(home), 'utf8')).toBe(granted)
+    expect(recordedPrompts()).toBe('dangerous')
+  })
+
+  it.each([
+    ['the first confirmation', ['dangerous', 'no']],
+    ['the phrase', ['dangerous', 'yes', 'nothing']],
+  ])('leaves the mode off and writes no grant when %s is declined after Ask me first', async (_name, script) => {
+    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await again(script)).toBe(EXIT.ok)
+    expect(existsSync(dangerousGrantPath(home))).toBe(false)
+    expect(recordedPrompts()).toBe('safer')
+    expect(rows().get('delo-permission-defaults')).toEqual({ enabled: true, fullAccessEverywhere: false })
+    expect(screen()).toContain('Dangerous mode is off: it was not confirmed. Prompts stay on Ask me first.')
+  })
+
+  it('writes no grant when the grant was turned off meanwhile and the consent is declined', async () => {
+    expect(await interactive(ACCEPT_DANGEROUS)).toBe(EXIT.ok)
     await removeDangerousGrant(home)
     expect(await again(['dangerous', 'yes', 'nothing'])).toBe(EXIT.ok)
     expect(existsSync(dangerousGrantPath(home))).toBe(false)

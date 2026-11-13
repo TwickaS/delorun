@@ -34,6 +34,8 @@ export interface SetupProgress {
   readonly answers: SetupAnswers
   /** The steps that finished, in run order. */
   readonly completed: readonly SetupStep[]
+  /** `keep` when the run keeps the key already saved in the home, so a resumed run does not ask for it again; absent otherwise. */
+  readonly credentialSource?: 'keep' | undefined
 }
 
 const progressSchema = z.strictObject({
@@ -45,6 +47,7 @@ const progressSchema = z.strictObject({
     return z.NEVER
   }),
   completed: z.array(z.string()),
+  credentialSource: z.literal('keep').optional(),
 })
 
 /** The run record's file name inside the profile's run directory. */

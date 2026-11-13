@@ -333,13 +333,15 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
     const collected = await collectAnswers(request, registry, before)
     // A re-run changes the existing profile, whatever name the answers carry.
     const answers = finished ? { ...collected.answers, profile: { ...collected.answers.profile, name: null } } : collected.answers
-    progress = { answers, completed: finished ? [PROFILE_STEP] : [] }
+    progress = { answers, completed: finished ? [PROFILE_STEP] : [], ...collected.keepSavedKey ? { credentialSource: 'keep' } : {} }
     writeProgress(runDir, progress)
     secret = collected.secret
     keepSavedKey = collected.keepSavedKey
   } else {
     const provider = progress.answers.modelProvider
-    if (provider?.credential.source === 'prompt' && !progress.completed.includes(sectionStep('key'))) {
+    // The saved key is read at the key step, never held in the record; a key removed since the interruption is asked for again.
+    keepSavedKey = provider !== null && progress.credentialSource === 'keep' && hasStoredCredential(request.home, SETUP_PROVIDERS[provider.id].keyVariable)
+    if (provider?.credential.source === 'prompt' && !keepSavedKey && !progress.completed.includes(sectionStep('key'))) {
       if (request.form.kind !== 'interactive') throw new CliError(EXIT.failed, `delorun setup: the setup run for ${request.profile} is unfinished and needs the model key; run delorun setup in a terminal to finish it`)
       try {
         secret = await prompterFor(request.form).secret(`${SETUP_PROVIDERS[provider.id].label} API key`)
@@ -362,7 +364,7 @@ export async function runSetup(request: SetupRequest): Promise<ExitCode> {
       const note = await runStep(step, request, registry, profile, progress, secret, keepSavedKey)
       if (note !== undefined) request.output.stdout(`${note}\n`)
     }
-    const next: SetupProgress = { answers: progress.answers, completed: [...progress.completed, step] }
+    const next: SetupProgress = { ...progress, completed: [...progress.completed, step] }
     writeProgress(runDir, next)
     progress = next
     request.hooks?.afterStep?.(step)
