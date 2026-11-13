@@ -1,0 +1,8 @@
+node_modules/
+.source/
+.tanstack/
+.build/
+out/
+routeTree.gen.ts
+*.tsbuildinfo
+.alchemy/

@@ -1,0 +1,7 @@
+/*
+ * The design tokens the documentation site and the product site share: colours, radii and typography, from Fumadocs
+ * UI's neutral theme and its Tailwind preset. Token overrides for both sites belong in this file; components read the
+ * tokens through the `fd-` utilities. Each site's Vite config aliases `fumadocs-ui/css/` to its own installed copy.
+ */
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';

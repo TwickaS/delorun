@@ -1,11 +1,12 @@
 import { readFileSync, writeFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react from '@vitejs/plugin-react'
 import { fumadocsMdx } from 'fumadocs-mdx/vite'
 import { defineConfig, type Plugin } from 'vite'
-import { loadView, type ChangelogView } from './src/site/changelog.ts'
+import { loadView, type ChangelogView } from '../../packages/site-design/src/changelog.ts'
 import { repositoryRoot } from './src/site/doc-links.ts'
 import { prerenderPaths } from './src/site/pages.ts'
 
@@ -72,5 +73,11 @@ export default defineConfig({
     }),
     react(),
   ],
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    // The shared design's stylesheet imports Fumadocs UI's CSS from outside this directory, so the import resolves to this site's install.
+    alias: [{ find: /^fumadocs-ui\/css\//, replacement: fileURLToPath(new URL('./node_modules/fumadocs-ui/css/', import.meta.url)) }],
+    // The shared design's components import React from outside this directory; every copy must be this site's.
+    dedupe: ['react', 'react-dom'],
+  },
 })

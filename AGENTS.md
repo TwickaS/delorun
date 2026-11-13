@@ -100,10 +100,12 @@ delo/        Delo-owned code and documentation
   apps/release          closures, signing, release log
   apps/install, apps/npm-launcher  installers
   apps/docs             Fumadocs documentation website
+  apps/website          delorun.com product website
   apps/account          Delo Run pages and waitlist
   apps/relay            self-hostable passthrough relay
   apps/tools            check runner, gates, fork tooling
   packages/             @delo/* plugins and libraries
+  packages/site-design  design the two websites import by path
   docs/                 Delo's docs (docs/AGENTS.md)
   changelog/            changelog fragments
   upstream-patches.json divergence ledger

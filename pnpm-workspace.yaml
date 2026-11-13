@@ -13,6 +13,8 @@ packages:
   # The documentation site is its own workspace with its own lockfile: its React 19
   # and Next.js would otherwise change the peers the harness's packages resolve.
   - '!delo/apps/docs'
+  # The product website is its own workspace too, with the same Fumadocs UI CSS and TanStack Start versions as the documentation site.
+  - '!delo/apps/website'
   # Private package owning repository-level benchmark dependencies.
   - benchmarks
   - website

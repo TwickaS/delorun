@@ -132,7 +132,7 @@ describe('the catalog', () => {
 
 describe('selection', () => {
   it('runs every default check with no target, and neither the changed-upstream lane nor the native build by a tier of its own', () => {
-    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'generated:notices', 'generate:native', 'tests:fork', 'tests:fork:integration', 'tests:closure', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
+    expect(ids(select(CHECKS, TREE, NONE))).toEqual(['boundary', 'jsdoc', 'typecheck:upstream', 'typecheck:delo:control', 'typecheck:delo:control-tests', 'typecheck:delo:cell', 'typecheck:delo:control-protocol', 'typecheck:delo:providers', 'typecheck:delo:client-status', 'typecheck:delo:client-status-tests', 'docs-site', 'website-site', 'generated:notices', 'generate:native', 'tests:fork', 'tests:fork:integration', 'tests:closure', 'tests:snapshots', 'parity-switches', 'parity-replay', 'parity-replay:control'])
     expect(CHECKS.find(check => check.id === 'generate:native')?.tiers).toEqual([])
     expect(ids(select(CHECKS, TREE, { ...NONE, only: ['generate:native'] }))).toEqual(['generate:native'])
   })
@@ -415,7 +415,7 @@ describe('the documentation website check', () => {
       command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-docs-site.ts'],
       needs: [],
       tiers: ['changed', 'full'],
-      inputs: ['delo/apps/docs/**', 'delo/docs/**', 'delo/apps/release/package.json'],
+      inputs: ['delo/apps/docs/**', 'delo/packages/site-design/**', 'delo/docs/**', 'delo/apps/release/package.json'],
     })
     expect(BUDGETS.checks['docs-site']).toEqual({ memoryGiB: 2, seconds: 900 })
   })
@@ -423,6 +423,18 @@ describe('the documentation website check', () => {
   it('is selected by a change under the site, under delo/docs, or to the release version the site names, and by no other change', () => {
     for (const path of ['delo/apps/docs/source.config.ts', 'delo/docs/guide/trust.md', 'delo/docs/reference/divergence/README.zh.md', 'delo/apps/release/package.json']) expect(selected([path])).toContain('docs-site')
     for (const path of ['delo/apps/cell/src/index.ts', 'delo/apps/release/src/index.ts', 'packages/core/session/src/index.ts', 'docs/architecture.md']) expect(selected([path])).not.toContain('docs-site')
+  })
+
+  it('builds the product website through the same launcher with its name, and selects it for the site, the design both sites share and the changelog record', () => {
+    expect(CHECKS.find(check => check.id === 'website-site')).toMatchObject({
+      group: 'docs-site',
+      command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-docs-site.ts', 'website'],
+      inputs: ['delo/apps/website/**', 'delo/packages/site-design/**', 'delo/changelog/changelog.json'],
+    })
+    for (const path of ['delo/apps/website/src/site/copy.ts', 'delo/packages/site-design/src/mark.tsx', 'delo/changelog/changelog.json']) expect(selected([path])).toContain('website-site')
+    expect(selected(['delo/apps/docs/source.config.ts'])).not.toContain('website-site')
+    expect(selected(['delo/packages/site-design/src/mark.tsx'])).toContain('docs-site')
+    expect(packageDirOf('delo/apps/website/src/site/copy.ts')).toBeUndefined()
   })
 
   it('leaves the fork suite out of a change under the site, since the site is its own workspace with no fork specs', () => {

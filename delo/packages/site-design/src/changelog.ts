@@ -6,11 +6,11 @@
  * once it is assembled. This module reads files and imports the release tooling, so only the build imports its values;
  * the components import its types.
  *
- * @module @delo/docs/changelog
+ * @module @delo/site-design/changelog
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
-import { basedOnText, bulletPrefix, byArea, comparedText, parseData, type AreaItems, type ChangelogData, type PreviewEntry, type VersionEntry } from '../../../release/src/changelog/data.ts'
+import { basedOnText, bulletPrefix, byArea, comparedText, parseData, type AreaItems, type ChangelogData, type PreviewEntry, type VersionEntry } from '../../../apps/release/src/changelog/data.ts'
 
 /** The record's path relative to the repository root, which `delo/apps/release/src/changelog/paths.ts` names as `DATA_PATH`. */
 export const RECORD_PATH = 'delo/changelog/changelog.json'

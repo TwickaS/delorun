@@ -27,6 +27,7 @@
     "generate:native": { "memoryGiB": 1 },
     "benchmark:delo": { "memoryGiB": 6, "exclusive": true },
     "docs-site": { "memoryGiB": 2, "seconds": 900 },
+    "website-site": { "memoryGiB": 2, "seconds": 900 },
     "generated:notices": { "memoryGiB": 1, "seconds": 120 },
     "gates:lint": { "memoryGiB": 10.5 },
     "gates:package-dependencies": { "memoryGiB": 5 },

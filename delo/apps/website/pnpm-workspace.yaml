@@ -1,0 +1,8 @@
+# The site is its own workspace root with its own lockfile (the repository's root workspace excludes it).
+allowBuilds:
+  # Alchemy's local Workers runtime; deploying and planning the static site do not run it.
+  workerd: false
+# A config change purges node_modules; without a terminal pnpm would abort instead of reinstalling.
+confirmModulesPurge: false
+# Resolution takes no version published less than two weeks (in minutes) before the install, transitive ones included.
+minimumReleaseAge: 20160

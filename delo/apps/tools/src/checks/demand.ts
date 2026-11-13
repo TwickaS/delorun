@@ -24,7 +24,7 @@ const COMPILER_SLOTS = 2
  * @returns true for a disk-heavy check.
  */
 export function diskHeavy(check: Pick<Check, 'id' | 'group'>): boolean {
-  return check.group === 'generate' || check.id === 'docs-site' || isForkSuite(check.id)
+  return check.group === 'generate' || check.group === 'docs-site' || isForkSuite(check.id)
 }
 
 /**

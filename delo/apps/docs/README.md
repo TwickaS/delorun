@@ -50,7 +50,7 @@ node_modules/.bin/tsx delo/apps/docs/scripts/preview-record.ts 0.1.0 /tmp/docs-p
 
 ## Theme
 
-The site's look lives in `src/theme/`: the design tokens in [`tokens.css`](src/theme/tokens.css), the header in [`header.ts`](src/theme/header.ts) and the page footer in [`footer.tsx`](src/theme/footer.tsx). These files read no page, label or site setting; the site passes its own text and links to them, so another site can take the same theme with its own content.
+The site's look comes from [`delo/packages/site-design`](../../packages/site-design/src/tokens.css), which this site and the [product website](../website/README.md) import by path as `@design/*`: the design tokens, the page footer, the Delorun mark and the changelog view. Its files read no page, label or site setting; each site passes its own text and links. The header in [`src/theme/header.ts`](src/theme/header.ts) stays here because it adapts Fumadocs' layout options.
 
 ## Commands
 

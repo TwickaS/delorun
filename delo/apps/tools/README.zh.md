@@ -198,6 +198,7 @@ brief 中原有的链接也按同样方式改写。
 | `tests:web-changed` | 基于官方客户端构建运行的、变更所涉及的 `apps/web/tests` 下的 Chromium 端到端规范，至多 12 个规范（[`checks/web.ts`](src/checks/web.ts)） | 5 GiB，8 个 CPU，独占，1200 秒 | `changed` |
 | `generate:native` | 上游的原生系统插件（`pnpm run build:native-system`）；没有任何层级选中它，凡是加载该插件的通道（`tests:fork`、`tests:snapshots`、`tests:upstream-changed`、`parity-replay`）都在其 needs 中声明它 | 1 GiB，2 个 CPU | 无：作为上述通道的依赖，或 `--only generate:native` |
 | `docs-site` | Delo 文档网站可以构建，且其死链接检查通过（[`delo/apps/docs`](../docs/README.zh.md)）；在站点依赖安装之前拒绝运行（[`check-docs-site.ts`](src/check-docs-site.ts)） | 2 GiB，2 个 CPU，900 秒 | `changed`、`full` |
+| `website-site` | Delo 产品网站可以构建，其死链检查通过（[`delo/apps/website`](../website/README.md)）；与 `docs-site` 使用同一运行器，参数为 `website`；改动本站点、[`delo/packages/site-design`](../../packages/site-design/src/tokens.css) 或变更记录时选中 | 2 GiB，2 个 CPU，900 秒 | `changed`、`full` |
 | `generated:notices` | 已提交的 `THIRD_PARTY_NOTICES.md` 与上游生成器根据已安装清单写出的内容一致（`scripts/gen-third-party-notices.ts --check`）；任何 `package.json`、锁文件、声明文件或生成器的变更都会选中它 | 1 GiB，1 个 CPU，120 秒 | `changed`、`full` |
 | `parity-switches` | C16 的注册表与开关字段、对等覆盖层和对模型可见的贡献相符，以及开关清点（[`check-parity-switches.ts`](src/parity/composition/check-parity-switches.ts)） | 0.5 GiB，1 个 CPU | Delo 代码或上游编辑改动时为 `changed`；`full` |
 | `parity-replay` | 在 `DSH_SNAPSHOT_PATCH` 指向对等覆盖层时运行上游的录制会话回放（`pnpm run test:snapshot`） | 每个 worker 0.6 GiB，5 个 CPU，单独运行 | Delo 代码或上游编辑改动时为 `changed`；`full` |

@@ -1,7 +1,7 @@
 /**
  * The footer below a page's text: one line per child, in the muted small type. It reads no content.
  *
- * @module @delo/docs/theme/footer
+ * @module @delo/site-design/footer
  */
 import type { ReactNode } from 'react'
 

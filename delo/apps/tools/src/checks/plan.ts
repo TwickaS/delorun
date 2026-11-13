@@ -281,6 +281,10 @@ const TEST_ENV = ['LANG', 'LC_ALL', 'TZ']
 export const DOCS_SITE_DIR = 'delo/apps/docs'
 /** The check that builds the documentation website and its dead-link check. */
 export const DOCS_SITE_ID = 'docs-site'
+/** The product website, which is also its own workspace; it shares its design with the documentation site and reads the changelog record. */
+export const WEBSITE_DIR = 'delo/apps/website'
+/** The check that builds the product website and its dead-link check. */
+export const WEBSITE_ID = 'website-site'
 
 /** The check that the committed `THIRD_PARTY_NOTICES.md` matches what upstream's generator writes from the installed manifests. */
 export const NOTICES_ID = 'generated:notices'
@@ -501,7 +505,18 @@ function draft(tree: ForkTree, host: Host): Draft[] {
       cwd: '',
       command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-docs-site.ts'],
       needs: [],
-      inputs: [`${DOCS_SITE_DIR}/**`, 'delo/docs/**', 'delo/apps/release/package.json'],
+      inputs: [`${DOCS_SITE_DIR}/**`, 'delo/packages/site-design/**', 'delo/docs/**', 'delo/apps/release/package.json'],
+      tiers: ['changed', 'full'],
+      cpus: 2,
+    },
+    {
+      id: WEBSITE_ID,
+      group: DOCS_SITE_ID,
+      title: 'Delo\'s product website builds, and every internal link in it names a built file or id (`pnpm --dir website run build`)',
+      cwd: '',
+      command: ['node_modules/.bin/tsx', 'delo/apps/tools/src/check-docs-site.ts', 'website'],
+      needs: [],
+      inputs: [`${WEBSITE_DIR}/**`, 'delo/packages/site-design/**', 'delo/changelog/changelog.json'],
       tiers: ['changed', 'full'],
       cpus: 2,
     },
@@ -841,10 +856,10 @@ export function upstreamDependents(upstream: readonly UpstreamPackage[], names: 
 /**
  * The fork package directory a path lies in.
  * @param path - a repository-relative path.
- * @returns such as `delo/apps/cell`, or undefined outside `delo/apps` and `delo/packages` and for the documentation site.
+ * @returns such as `delo/apps/cell`, or undefined outside `delo/apps` and `delo/packages` and for the two websites.
  */
 export function packageDirOf(path: string): string | undefined {
-  if (path.startsWith(`${DOCS_SITE_DIR}/`)) return undefined
+  if (path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith(`${WEBSITE_DIR}/`)) return undefined
   return /^delo\/(?:apps|packages)\/[^/]+/.exec(path)?.[0]
 }
 
@@ -913,8 +928,11 @@ export function select(checks: readonly Check[], tree: ForkTree, selection: Sele
       const manifest = paths.find(affectsNotices)
       if (manifest !== undefined) pick(check, `a manifest, the lockfile or the notices changed (${manifest})`)
     } else if (check.id === DOCS_SITE_ID) {
-      const site = paths.find(path => path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith('delo/docs/') || path === 'delo/apps/release/package.json')
+      const site = paths.find(path => path.startsWith(`${DOCS_SITE_DIR}/`) || path.startsWith('delo/packages/site-design/') || path.startsWith('delo/docs/') || path === 'delo/apps/release/package.json')
       if (site !== undefined) pick(check, `the documentation site or its pages changed (${site})`)
+    } else if (check.id === WEBSITE_ID) {
+      const site = paths.find(path => path.startsWith(`${WEBSITE_DIR}/`) || path.startsWith('delo/packages/site-design/') || path === 'delo/changelog/changelog.json')
+      if (site !== undefined) pick(check, `the product website or the design it shares changed (${site})`)
     } else if (check.id === CLOSURE_CHECK_ID && selection.changed !== undefined) {
       const closure = paths.find(path => affectsParity(path) || path === 'pnpm-lock.yaml')
       if (closure !== undefined) pick(check, `a change reaches what the runtime closure carries (${closure})`)
