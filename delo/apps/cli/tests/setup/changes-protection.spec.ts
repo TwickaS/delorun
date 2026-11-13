@@ -25,8 +25,8 @@ const AT_TERMINAL: TerminalStreams = { stdin: { isTTY: true }, stdout: { isTTY: 
 const REDIRECTED: TerminalStreams = { stdin: { isTTY: true }, stdout: { isTTY: false } }
 const ON_NOTE = 'Changes protection is on: changes to your plugins and to Delo itself wait for your review in delorun changes list.'
 
-/** Full answers up to the protection question: environment key, safer prompts, background, no remote access. */
-const BEFORE: readonly Answer[] = ['full', 'on', 'environment', 'safer', 'yes', 'no']
+/** Full answers up to the protection question: DeepSeek's key from the environment with its model, safer prompts, background, no remote access. */
+const BEFORE: readonly Answer[] = ['full', 'on', 'deepseek-official', 'environment', 'deepseek-flash', 'safer', 'yes', 'no']
 /** Full answers after the protection question: the default name and port, save, no install. */
 const AFTER: readonly Answer[] = ['default', '3080', 'save', false]
 
@@ -133,7 +133,7 @@ describe('the changes protection question', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('is never asked in Quick setup, which leaves the home at the default', async () => {
-    expect(await runSetup(request(['quick', 'environment', 'safer', 'save', false]))).toBe(EXIT.ok)
+    expect(await runSetup(request(['quick', 'deepseek-official', 'environment', 'safer', 'save', false]))).toBe(EXIT.ok)
     expect(recording.asked).not.toContain(`select: ${PROTECTION_QUESTION}`)
     expect(screen()).not.toContain('Changes protection')
     expect(existsSync(protectionPath(home))).toBe(false)
@@ -186,7 +186,7 @@ describe('without a terminal proof', { timeout: TIMEOUT_MS }, () => {
 
 describe('delorun setup changes-protection', { timeout: TIMEOUT_MS }, () => {
   it('asks again on a profile that is set up, turns protection on and records the answer', async () => {
-    expect(await runSetup(request(['quick', 'environment', 'safer', 'save', false]))).toBe(EXIT.ok)
+    expect(await runSetup(request(['quick', 'deepseek-official', 'environment', 'safer', 'save', false]))).toBe(EXIT.ok)
     expect(await runSection(request([true]), 'changes-protection')).toBe(EXIT.ok)
     expect(protectionRecord()?.level).toBe('on')
     expect(recordedAnswer()).toBe(true)

@@ -12,7 +12,7 @@ import { activeDirectory, attestTerminal, readChangeLog, setProtection } from '@
 import type { CommandContext } from '../src/command.ts'
 import { startChanges } from '../src/changes/start.ts'
 import { EXIT } from '../src/exit.ts'
-import { pluginCommand } from '../src/upstream.ts'
+import { plugin, type PluginDependencies } from '../src/upstream.ts'
 
 /** What the mocked upstream command line does: the files `pnpm add` writes, then how it ends. */
 const upstream = vi.hoisted(() => ({
@@ -21,19 +21,29 @@ const upstream = vi.hoisted(() => ({
   end: 'exit-0' as 'exit-0' | 'exit-1' | 'exit-undefined' | 'return' | 'throw',
 }))
 
-vi.mock('@deepseek-ai/dsh/lib/bin.js', () => ({
-  runCli: ({ argv }: { argv: readonly string[] }) => {
+/** Upstream's plugin command line replaced by the mocked one; the install check is off, so one call runs per command. */
+const dependencies: PluginDependencies = {
+  runUpstream: async (argv) => {
     upstream.calls.push(argv)
     upstream.run()
-    switch (upstream.end) {
-      case 'exit-0': return process.exit(0)
-      case 'exit-1': return process.exit(1)
-      case 'exit-undefined': return process.exit()
-      case 'throw': return Promise.reject(new Error('upstream failed'))
-      case 'return': return Promise.resolve()
-    }
+    if (upstream.end === 'throw') throw new Error('upstream failed')
+    return upstream.end === 'exit-1' ? 1 : 0
   },
-}))
+  checkSettings: async () => undefined,
+  profileRegistry: async () => null,
+  installAnchor: async () => join(tmpdir(), 'package.json'),
+  onExit: () => {},
+}
+
+/**
+ * Run `delorun plugin` against the mocked upstream command line.
+ * @param args - the arguments after `plugin`.
+ * @param commandContext - the environment and output.
+ * @returns the command's exit code.
+ */
+function runPlugin(args: readonly string[], commandContext: CommandContext): Promise<number> {
+  return plugin(args, commandContext, dependencies)
+}
 
 const PROFILE = 'default'
 
@@ -103,7 +113,7 @@ describe('delorun plugin', () => {
   it('delorun plugin add link:<folder> links the plugin to its empty active directory and leaves the folder waiting for review', async () => {
     await firstStart()
     const folder = addingLink('plug')
-    expect(await pluginCommand.run(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.ok)
+    expect(await runPlugin(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.ok)
     expect(upstream.calls).toEqual([['plugin', '--profile', PROFILE, 'add', `link:${folder}`]])
     const active = activeDirectory(home, PROFILE, 'plug')
     expect(spec('plug')).toBe(`link:${active}`)
@@ -116,7 +126,7 @@ describe('delorun plugin', () => {
     rmSync(join(home, 'changes', 'protection.json'))
     await firstStart()
     const folder = addingLink('plug')
-    expect(await pluginCommand.run(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.ok)
+    expect(await runPlugin(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.ok)
     const active = activeDirectory(home, PROFILE, 'plug')
     expect(spec('plug')).toBe(`link:${active}`)
     expect(readFileSync(join(active, 'index.js'), 'utf8')).toBe('export default "not reviewed"\n')
@@ -129,7 +139,7 @@ describe('delorun plugin', () => {
     await firstStart()
     const folder = addingLink('plug')
     upstream.end = 'exit-1'
-    expect(await pluginCommand.run([`--profile=${PROFILE}`, 'add', `link:${folder}`], context)).toBe(EXIT.failed)
+    expect(await runPlugin([`--profile=${PROFILE}`, 'add', `link:${folder}`], context)).toBe(EXIT.failed)
     expect(spec('plug')).toBe(`link:${activeDirectory(home, PROFILE, 'plug')}`)
   })
 
@@ -137,7 +147,7 @@ describe('delorun plugin', () => {
     await firstStart()
     const folder = addingLink('plug')
     writeFileSync(join(profileDir, 'package.json.lock'), '1\n')
-    expect(await pluginCommand.run(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.failed)
+    expect(await runPlugin(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.failed)
     expect(context.errors.join('')).toContain(`delorun: Delo did not load the profile ${PROFILE}`)
     expect(spec('plug')).toBe(`link:${folder}`)
   })
@@ -145,30 +155,28 @@ describe('delorun plugin', () => {
   it('exits 1 and says why when the profile cannot be checked', async () => {
     await firstStart()
     mkdirSync(join(profileDir, 'package.json.lock'))
-    expect(await pluginCommand.run(['--profile', PROFILE, 'list'], context)).toBe(EXIT.failed)
+    expect(await runPlugin(['--profile', PROFILE, 'list'], context)).toBe(EXIT.failed)
     expect(context.errors.join('')).toContain('delorun: Error: EISDIR')
   })
 
   it('leaves a profile whose first start under Changes has not run to that start', async () => {
     const folder = addingLink('plug')
     upstream.end = 'exit-undefined'
-    expect(await pluginCommand.run(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.ok)
+    expect(await runPlugin(['--profile', PROFILE, 'add', `link:${folder}`], context)).toBe(EXIT.ok)
     expect(spec('plug')).toBe(`link:${folder}`)
     expect(context.errors).toEqual([])
   })
 
   it('leaves alone a profile the home does not have, and arguments that name none', async () => {
     upstream.end = 'return'
-    expect(await pluginCommand.run(['--profile', 'other', 'list'], context)).toBe(EXIT.ok)
-    expect(await pluginCommand.run(['list'], context)).toBe(EXIT.ok)
+    expect(await runPlugin(['--profile', 'other', 'list'], context)).toBe(EXIT.ok)
+    expect(await runPlugin(['list'], context)).toBe(EXIT.ok)
     expect(context.errors).toEqual([])
   })
 
-  it('passes on a failure of upstream\'s command line other than its exit, and puts process.exit back', async () => {
-    const exit = process.exit
+  it('passes on a failure of upstream\'s command line', async () => {
     upstream.end = 'throw'
-    await expect(pluginCommand.run(['--profile', PROFILE, 'list'], context)).rejects.toThrow('upstream failed')
-    expect(process.exit).toBe(exit)
+    await expect(runPlugin(['--profile', PROFILE, 'list'], context)).rejects.toThrow('upstream failed')
   })
 })
 
@@ -176,7 +184,7 @@ describe('the profile delorun plugin checks', () => {
   it('is the one DELO_PROFILE or the default selects when the arguments name none, as upstream\'s parser reads them', async () => {
     await firstStart()
     const folder = addingLink('plug')
-    expect(await pluginCommand.run(['add', `link:${folder}`], { ...context, env: { ...context.env, DELO_PROFILE: PROFILE } })).toBe(EXIT.ok)
+    expect(await runPlugin(['add', `link:${folder}`], { ...context, env: { ...context.env, DELO_PROFILE: PROFILE } })).toBe(EXIT.ok)
     expect(spec('plug')).toBe(`link:${activeDirectory(home, PROFILE, 'plug')}`)
   })
 })
