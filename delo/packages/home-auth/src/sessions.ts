@@ -16,6 +16,7 @@ import { IDENTITY_FACTORS, type IdentityFactor } from '@delo/contract-oidc-passk
 import { HomeAuthError } from './errors.ts'
 import { isRecord, isTime, readStoreFile, writeStoreFile } from './files.ts'
 import { SESSION_TOKEN_BYTES, hashSecret, newSecret, systemRandom, type RandomBytes } from './secret.ts'
+import type { SecretSink } from '@delo/contract-operational-logs'
 
 /** The store file's name under `~/.delo/secrets/home-auth/`, mode 0600. */
 export const SESSIONS_FILE = 'sessions.json'
@@ -91,12 +92,16 @@ export interface SessionStoreOptions {
   readonly now?: () => number
   /** The random source; the operating system's by default. */
   readonly random?: RandomBytes
+  /** Where a minted session token is registered while its session lives; none registers nothing. */
+  readonly secrets?: SecretSink | undefined
 }
 
 /** The live sessions of a home. */
 export class SessionStore {
   private readonly now: () => number
   private readonly random: RandomBytes
+  /** The disposer of each live session's registered token, by session id. */
+  private readonly held = new Map<string, () => void>()
 
   /** The file, the clock and the random source. */
   private readonly options: SessionStoreOptions
@@ -108,6 +113,29 @@ export class SessionStore {
     this.options = options
     this.now = options.now ?? Date.now
     this.random = options.random ?? systemRandom
+  }
+
+  /**
+   * Register a minted token with the log's redactor for as long as its session lives.
+   * @param token - the token handed to the device.
+   * @param id - the session id, the digest of the token.
+   */
+  hold(token: string, id: string): void {
+    const sink = this.options.secrets
+    if (sink !== undefined) this.held.set(id, sink.register(token, 'session-secret'))
+  }
+
+  /**
+   * Drop the registration of every token whose session is gone.
+   * @param live - the ids of the sessions that still exist.
+   */
+  sweep(live: Iterable<string>): void {
+    const keep = new Set(live)
+    for (const [id, release] of this.held) {
+      if (keep.has(id)) continue
+      release()
+      this.held.delete(id)
+    }
   }
 
   /**
@@ -123,11 +151,13 @@ export class SessionStore {
   async open(request: OpenSessionRequest): Promise<OpenedSession> {
     const token = newSecret(SESSION_TOKEN_BYTES, this.random)
     const sessionId = hashSecret(token)
+    this.hold(token, sessionId)
     const at = this.now()
     const sessions = await this.read()
     for (const [id, record] of Object.entries(sessions)) {
       if (record.expiresAt <= at) delete sessions[id]
     }
+    this.sweep([...Object.keys(sessions), sessionId])
     const replaced = request.replaces === undefined ? undefined : sessions[request.replaces]
     if (request.replaces !== undefined) delete sessions[request.replaces]
     const live = Object.values(sessions).filter(record => record.deviceId === request.deviceId).length

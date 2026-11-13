@@ -49,10 +49,22 @@ function format(log: SurfaceLog, message: Message): { msg: string; error?: Error
   return error instanceof Error ? { msg, error } : { msg }
 }
 
+/**
+ * Whether a Cordis logger name belongs to Delo: `delo`, a name beginning `delo-`, or a `@delo/` package name. Every
+ * other logger belongs to upstream or to a plugin Delo does not own.
+ * @param name - the Cordis logger name.
+ * @returns whether Delo owns the logger.
+ */
+export function isDeloLogger(name: string): boolean {
+  return name === 'delo' || name.startsWith('delo-') || name.startsWith('@delo/')
+}
+
 const TYPE_LEVEL: Readonly<Record<Message['type'], LogLevel>> = { error: 'error', warn: 'warn', info: 'info', debug: 'debug' }
 
 /**
  * Write a context's Cordis logger messages to a surface's log, and key records by the turn an agent is driving.
+ * A message from a logger Delo owns ({@link isDeloLogger}) is `source: "delo"`; a message from any other logger is
+ * `source: "captured"`, because upstream warnings and errors can quote chat text, which Delo's own records never hold.
  * Both registrations are effects of `ctx` and end when it is disposed. A surface that also keeps upstream's console
  * exporter and captures its own output writes each message twice; such a surface removes one of the two.
  * @param ctx - the root context of the surface's Cordis application.
@@ -66,7 +78,7 @@ export function attachCordisLogs(ctx: Context, log: SurfaceLog): () => void {
     levels: { default: LEVEL_RANK[log.level] },
     export: (message) => {
       const { msg, error } = format(log, message)
-      log.write({ level: TYPE_LEVEL[message.type], logger: message.name, source: 'delo', msg, ...error === undefined ? {} : { error } })
+      log.write({ level: TYPE_LEVEL[message.type], logger: message.name, source: isDeloLogger(message.name) ? 'delo' : 'captured', msg, ...error === undefined ? {} : { error } })
     },
   })
   return () => {

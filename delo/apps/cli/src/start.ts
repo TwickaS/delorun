@@ -85,6 +85,7 @@ import { inheritedHandover, runtimeOfFile, type RunningRuntime } from './update/
 import { fullCheckDaysOf, storeUpdateSupport } from './update/store-support.ts'
 import { launcherAnchor } from './update/trusted-root.ts'
 import { loadDeloEnvironment } from './launch-environment.ts'
+import { attachHomeLogs, registerEnvironment } from './log-secrets.ts'
 import { registerFatalRelease } from './last-resort.ts'
 import { runtimePlatformOf } from './update/channel.ts'
 import { startNoticeLine, watchUpdates, type UpdateWatchOptions } from './update/notice-host.ts'
@@ -419,7 +420,10 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
   const { ctx, shutdown } = await runProfile({
     ...options, signals: handlers.signals, failLoud: handlers.failLoud, ...packageManager === undefined ? {} : { packageManager },
     // Before the Loader mounts its first row, so an edit a plugin saves while it starts is guarded too.
-    prepare: (root) => { guardSecretFields(root, configSchemasOf(root)) },
+    prepare: (root) => {
+      guardSecretFields(root, configSchemasOf(root))
+      options.prepare?.(root)
+    },
   })
   serveHealth(ctx)
   const configSchemas = configSchemasOf(ctx)
@@ -566,7 +570,9 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
   const startId = handover?.handover.startId ?? newStartId()
   const homeLog = openHomeLog({ home: request.home, profile: request.profile, startId, level: HOME_LOG_LEVEL, onFailure: () => {} })
   const restoreOutput = dependencies.captureOutput(homeLog)
+  const dropEnvironment = registerEnvironment(request.env, homeLog.redactor)
   const closeLog = (): void => {
+    dropEnvironment()
     restoreOutput()
     homeLog.log.close()
   }
@@ -584,7 +590,7 @@ async function startHomeProcess(request: StartRequest, dependencies: StartDepend
       running,
       startId,
       host: {
-        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog.logger, retry),
+        boot: () => bootProfile(handover === undefined ? request : { ...request, open: false }, tracked, runtime.store ? { version: running, composed: runtime.composed } : undefined, homeLog, retry),
       },
       preStart: () => runPreStartSteps(dependencies.preStartSteps, {
         home: request.home,
@@ -660,6 +666,22 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
 }
 
 /**
+ * Run the composed profile as the home process's Host, with the home log attached: the `.env` layers load, their
+ * secret-named values are registered with the log's redactor, and the Host's root context receives `ctx.deloSecrets`,
+ * the credential registrations and the Cordis logger exporter before its first entry mounts.
+ * @param dependencies - the environment loader and the profile runner.
+ * @param homeLog - the home process's log.
+ * @param options - the run options except the environment and the preparation hook, which this function supplies.
+ * @returns the booted profile.
+ */
+export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>): Promise<BootedProfile> {
+  const environment = dependencies.loadEnvironment()
+  // The `.env` layers apply their names to this process's environment, so the secret-named values they add are read from it.
+  registerEnvironment(process.env, homeLog.redactor)
+  return dependencies.runProfile({ ...options, environment, prepare: (root) => { attachHomeLogs(root, homeLog) } })
+}
+
+/**
  * Compose the CLI profile and boot it: the home process's Host. The composition is the one every Host over a Delo home
  * goes through ([compose](./compose.ts)), with C1's confinement on its sandbox row, whose overlay exists while the Host
  * runs; the booted Host is held to the composition's invariants before it serves. Changes records which of its plugins
@@ -668,7 +690,7 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
  * @param dependencies - the profile preparation, runner and environment loader.
  * @param stored - the version this process runs from the store, whose files H1 checks, and the composed tree it runs
  *   from, which H1 checks too; `undefined` outside the store.
- * @param logger - the home process's logger.
+ * @param homeLog - the home process's log: its logger, and its redactor with which the Host registers its secrets.
  * @param retry - what leaves the newest change out when the boot fails or the booted Host is refused.
  * @returns the running Host, whose running chats feed the home process's gate and whose health check is C3's.
  * Before the boot it sets {@link DEFAULT_WORKSPACE_ENV} to the studio's first-use workspace folder
@@ -679,7 +701,8 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
  *   values for secret-role fields its patch files hold are moved into the credentials store ({@link settleSecrets}).
  * @throws {HostNotStoppedError} carrying the refusal when that teardown failed or overran.
  */
-async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: { readonly version: RuntimeVersion, readonly composed: string | undefined } | undefined, logger: DeloLogger, retry: StartRetry): Promise<RunningHost> {
+async function bootProfile(request: StartRequest, dependencies: StartDependencies, stored: { readonly version: RuntimeVersion, readonly composed: string | undefined } | undefined, homeLog: HomeLog, retry: StartRetry): Promise<RunningHost> {
+  const logger = homeLog.logger
   const composed = await composeDeloProfile({ home: request.home, profile: request.profile, kind: 'cli', output: request.output, env: request.env, ...request.patchFiles === undefined ? {} : { patchFiles: request.patchFiles } }, {
     prepareProfile: dependencies.prepareProfile,
     approvedPluginContent: dependencies.approvedPluginContent,
@@ -699,8 +722,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
   }
   let booted: BootedProfile
   try {
-    booted = await dependencies.runProfile({
-      environment: dependencies.loadEnvironment(),
+    booted = await runHost(dependencies, homeLog, {
       profile: request.profile,
       resolvedProfile: composed.resolvedProfile,
       patchFiles: composed.patchFiles,

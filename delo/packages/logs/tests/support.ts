@@ -126,7 +126,7 @@ export function randomFrom(alphabet: string, length: number): string {
 }
 
 /** Every registered-secret kind of the redactor's step 1. */
-export const SECRET_KINDS: readonly SecretKind[] = ['model-key', 'start-token', 'session-secret', 'cookie', 'owner-code', 'device-key', 'relay-key', 'helper-key', 'deploy-key', 'repository-token']
+export const SECRET_KINDS: readonly SecretKind[] = ['model-key', 'start-token', 'session-secret', 'cookie', 'owner-code', 'pairing-code', 'device-key', 'relay-key', 'helper-key', 'deploy-key', 'repository-token']
 
 /**
  * A fake registered secret of a kind: an obvious canary prefix and random text.

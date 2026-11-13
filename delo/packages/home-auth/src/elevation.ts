@@ -22,7 +22,9 @@
 import { timingSafeEqual } from 'node:crypto'
 import type { DeviceId, ReachListenerId } from '@delo/contract-admission'
 import { ELEVATION_LIMITS, type ElevationEndReason, type ElevationState } from '@delo/contract-oidc-passkeys'
+import type { SecretSink } from '@delo/contract-operational-logs'
 import { HomeAuthError } from './errors.ts'
+import { formatMatchCode } from './match-code.ts'
 import { newSecret, type RandomBytes } from './secret.ts'
 
 /** Who asked for an elevation: the device, the listener and the session its request arrived on. The computer names the device from its device list. */
@@ -68,11 +70,15 @@ export interface ElevationsOptions {
    * @param change - what changed.
    */
   readonly changed: (change: ElevationChange) => void
+  /** Where a pending request's 8-digit code is registered in each spelling while the request is kept; none registers nothing. */
+  readonly secrets?: SecretSink | undefined
 }
 
 /** A pending request and the wrong codes typed for it; the request changes only when its session rolls. */
 interface Pending {
   request: ElevationRequest
+  /** Drops the registrations of the request's code. */
+  readonly release: () => void
   wrongCodes: number
 }
 
@@ -124,7 +130,7 @@ export class Elevations {
       requestedAt: at,
       expiresAt: at + ELEVATION_LIMITS.requestLifetimeMs,
     }
-    this.requests.set(request.requestId, { request, wrongCodes: 0 })
+    this.requests.set(request.requestId, { request, release: this.hold(request.code), wrongCodes: 0 })
     return request
   }
 
@@ -171,12 +177,12 @@ export class Elevations {
     if (!codeMatches(typedCode, pending.request.code)) {
       pending.wrongCodes += 1
       const cancelled = pending.wrongCodes >= ELEVATION_LIMITS.wrongCodesPerRequest
-      if (cancelled) this.requests.delete(requestId)
+      if (cancelled) this.discard(requestId)
       throw new HomeAuthError('APPROVAL_CODE_MISMATCH', cancelled
         ? 'That code does not match, and the request was cancelled. Ask again from the device'
         : 'That code does not match the one the device shows. Type it again')
     }
-    this.requests.delete(requestId)
+    this.discard(requestId)
     const { request } = pending
     this.endFor(request.deviceId, request.listener, 'replaced')
     const record: ElevationRecord = {
@@ -200,7 +206,9 @@ export class Elevations {
    * @returns whether it was pending.
    */
   decline(requestId: string): boolean {
-    return this.requests.delete(requestId)
+    const pending = this.requests.has(requestId)
+    this.discard(requestId)
+    return pending
   }
 
   /**
@@ -314,7 +322,7 @@ export class Elevations {
    * @param reason - why they ended.
    */
   endAll(reason: ElevationEndReason): void {
-    this.requests.clear()
+    for (const id of [...this.requests.keys()]) this.discard(id)
     this.endWhere(() => true, reason)
   }
 
@@ -355,12 +363,34 @@ export class Elevations {
   }
 
   /**
+   * Forget a request and drop the registrations of its code.
+   * @param requestId - the request.
+   */
+  private discard(requestId: string): void {
+    this.requests.get(requestId)?.release()
+    this.requests.delete(requestId)
+  }
+
+  /**
+   * Register a request's code with the log's redactor in the spellings it is read and typed in: compact, in two groups
+   * of four separated by a space, and in two groups separated by a hyphen.
+   * @param code - the 8-digit code.
+   * @returns the disposer that drops the registrations.
+   */
+  private hold(code: string): () => void {
+    const sink = this.options.secrets
+    if (sink === undefined) return () => undefined
+    const releases = [code, formatMatchCode(code), `${code.slice(0, 4)}-${code.slice(4)}`].map(spelling => sink.register(spelling, 'pairing-code'))
+    return () => { for (const release of releases) release() }
+  }
+
+  /**
    * Drop the requests a predicate picks.
    * @param picks - the predicate.
    */
   private dropRequests(picks: (request: ElevationRequest) => boolean): void {
     for (const [id, { request }] of [...this.requests]) {
-      if (picks(request)) this.requests.delete(id)
+      if (picks(request)) this.discard(id)
     }
   }
 

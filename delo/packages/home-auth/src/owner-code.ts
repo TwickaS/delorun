@@ -13,6 +13,7 @@ import { DEVICE_APPROVAL_LIMITS, DEVICE_APPROVAL_VERSION } from '@delo/contract-
 import { HomeAuthError } from './errors.ts'
 import { isRecord, isTime, readStoreFile, writeStoreFile } from './files.ts'
 import { newOwnerCode, normaliseOwnerCode, hashSecret, secretMatches, systemRandom, type RandomBytes } from './secret.ts'
+import type { SecretSink } from '@delo/contract-operational-logs'
 
 /** The record `owner-code.json` holds. */
 export interface OwnerCodeRecord {
@@ -42,6 +43,8 @@ export interface OwnerCodeStoreOptions {
   readonly now?: () => number
   /** The random source; the operating system's by default. */
   readonly random?: RandomBytes
+  /** Where an issued code is registered, so no log holds it; none registers nothing. */
+  readonly secrets?: SecretSink | undefined
 }
 
 /** The one outstanding owner code of a home. */
@@ -68,6 +71,8 @@ export class OwnerCodeStore {
   async issue(): Promise<IssuedOwnerCode> {
     const issuedAt = this.now()
     const code = newOwnerCode(this.random)
+    // A replaced code stays registered: it can still be pasted into a log by the person who held it.
+    this.options.secrets?.register(code, 'owner-code')
     const record: OwnerCodeRecord = {
       v: DEVICE_APPROVAL_VERSION,
       hash: hashSecret(code),

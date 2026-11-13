@@ -47,6 +47,7 @@ import { SESSIONS_FILE, SessionStore, type OpenSessionRequest, type OpenedSessio
 import { SESSION_TOKEN_BYTES, hashSecret, newSecret, systemRandom, type RandomBytes } from './secret.ts'
 import { loadHomeKey, type HomeKey } from './home-key.ts'
 import { Challenges, signInVerifies } from './sign-in.ts'
+import type { SecretSink } from '@delo/contract-operational-logs'
 
 /** The length of one claim attempt window: a minute, which is C5's owner claim limit. */
 const CLAIM_WINDOW_MS = 60 * 1000
@@ -196,6 +197,8 @@ export interface HomeAuthOptions {
   readonly now?: () => number
   /** The random source; the operating system's by default. */
   readonly random?: RandomBytes
+  /** Where the secrets this home mints or loads are registered, so no log holds them; none registers nothing. */
+  readonly secrets?: SecretSink | undefined
   /**
    * Ends the reach connections a session or a device admitted. The provider passes Connection's
    * `closeReachConnections`; a home with no reach listener passes nothing.
@@ -239,6 +242,7 @@ export class HomeAuth {
   private readonly dangerousMode: () => boolean
   private resettingTerminal: Promise<void> | undefined
   private readonly random: RandomBytes
+  private readonly secrets: SecretSink | undefined
   private readonly served = new Map<ReachListenerId, ServedListener>()
   private readonly challenges: Challenges
   /** The approval window and its requests. */
@@ -276,12 +280,14 @@ export class HomeAuth {
     this.loopbackPort = options.loopbackPort ?? (() => undefined)
     this.dangerousMode = options.dangerousMode ?? (() => false)
     this.random = options.random ?? systemRandom
+    this.secrets = options.secrets
     this.challenges = new Challenges(this.now, this.random)
     this.pairingSpec = options.pairing ?? (() => PAIRING_DEFAULTS)
-    this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key(), pairing: this.pairingSpec })
+    this.approvals = new Approvals({ now: this.now, random: this.random, homeKey: () => this.key(), pairing: this.pairingSpec, secrets: options.secrets })
     this.elevations = new Elevations({
       now: this.now,
       random: this.random,
+      secrets: options.secrets,
       changed: (change) => {
         // The Gateway decides a stream once, when it opens, so a terminal or another elevated stream opened under an
         // unlock would outlive it: the device's reach connections close when it ends, and the studio reconnects
@@ -291,10 +297,10 @@ export class HomeAuth {
       },
     })
     const path = (name: string): string => join(options.directory, name)
-    this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), ...timed(options) })
+    this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), secrets: options.secrets, ...timed(options) })
     this.deviceStore = new DeviceStore({ file: path(HOME_AUTH_FILES.devices) })
     this.reachTerminal = new ReachTerminalStore(path(HOME_AUTH_FILES.reachTerminal))
-    this.sessions = new SessionStore({ file: path(SESSIONS_FILE), ...timed(options) })
+    this.sessions = new SessionStore({ file: path(SESSIONS_FILE), secrets: options.secrets, ...timed(options) })
     this.claims = new AttemptLimiter({
       limit: options.claimAttemptsPerMinute ?? DEVICE_APPROVAL_LIMITS.ownerClaimAttemptsPerMinutePerSource,
       windowMs: CLAIM_WINDOW_MS,
@@ -308,7 +314,7 @@ export class HomeAuth {
    */
   async start(): Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
-    this.homeKey = await loadHomeKey(this.directory)
+    this.homeKey = await loadHomeKey(this.directory, this.secrets)
     await this.refresh()
   }
 
@@ -910,6 +916,8 @@ export class HomeAuth {
   private roll(view: AdmissionView, oldId: string, used: SessionRecord, at: number): TokenAdmission {
     const token = newSecret(SESSION_TOKEN_BYTES, this.random)
     const newId = hashSecret(token)
+    this.sessions.sweep(view.sessions.keys())
+    this.sessions.hold(token, newId)
     const graceUntil = at + SESSION_LIMITS.reach.rollGraceMs
     const record: SessionRecord = { ...used, lastRolledAt: at }
     const graced: SessionRecord = { ...used, graceUntil }

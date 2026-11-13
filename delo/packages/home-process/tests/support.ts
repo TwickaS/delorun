@@ -583,6 +583,8 @@ export interface StartHomeOptions {
   readonly hostSuspend?: () => Promise<void>
   /** Runs before the start with the fixture parts and the start id, so a spec can watch a start that fails. */
   readonly configure?: (parts: StartParts) => void
+  /** The clock of the hourly log age check. */
+  readonly now?: () => number
 }
 
 /** The fixture parts of a start, which {@link StartHomeOptions.configure} receives before the start runs. */
@@ -626,6 +628,7 @@ export async function startHome(home: string, options: StartHomeOptions = {}): P
     onExit: (listener) => { listeners.push(listener) },
     onSignal: signals.listen,
     exit: (code) => { exits.push(code) },
+    ...options.now === undefined ? {} : { now: options.now },
   }
   const started = await HomeProcess.start(homeOptions)
   return { process: started, hosts, store, snapshots, copies, harness, logger, signals, exits, exit: () => { for (const listener of listeners.splice(0)) listener() } }
