@@ -323,6 +323,20 @@ describe('with protection off', () => {
     expect(manager.setPluginEnabled).toHaveBeenCalledTimes(1)
   })
 
+  it('leaves undo, restore and any turn-on that is not a boolean false to the person at every level, dangerous mode included', async () => {
+    for (const level of ['off', 'none'] as const) {
+      const { manager, approval, call } = await harness(true, true, true, level, 'danger-full-access')
+      for (const args of [
+        { action: 'undo' }, { action: 'restore', target: 'version-1' },
+        { action: 'set_plugin', target: 'p', enabled: 'true' }, { action: 'set_bundle', target: 'p', enabled: 1 },
+      ]) {
+        expect((await call(args)).error?.info, `${level} ${JSON.stringify(args)}`).toEqual({ name: 'PluginChangeAtComputer', code: plugin.PLUGIN_CHANGE_AT_COMPUTER })
+      }
+      for (const spy of [manager.undo, manager.restore, manager.setPluginEnabled, manager.setBundleEnabled]) expect(spy).not.toHaveBeenCalled()
+      expect(approval).not.toHaveBeenCalled()
+    }
+  })
+
   it('every other action that changes what runs goes to upstream too', async () => {
     const { manager, approval, call } = await harness(true, true, true, 'off')
     expect((await call({ action: 'set_bundle', target: 'installed-plugin', enabled: false })).isError).toBe(false)

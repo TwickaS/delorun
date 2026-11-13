@@ -538,6 +538,14 @@ describe('a terminal', () => {
     expect(decide({ terminalFoldersOf: () => [sibling, sibling] }, { ...OPEN, args: { cwd: granted, request: { cwd: granted } } })).toMatchObject({ kind: 'deny' })
   })
 
+  it('needs an unlock for every terminal action in dangerous mode, whatever the switch and the grants say, and admits an unlocked device', () => {
+    const mode = { dangerousMode: () => true, terminalWithoutUnlock: () => true, terminalFoldersOf: () => [granted, granted] }
+    for (const action of Object.keys(REACH_ELEVATED_ACTIONS).filter(name => name.startsWith('terminal/'))) {
+      expect(decide(mode, { ...OPEN, action: action as RemoteAccessAction }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+      expect(decide({ ...mode, elevationOf: () => ({ id: 'elevation-1' }) }, { ...OPEN, action: action as RemoteAccessAction }), action).toEqual(ALLOW)
+    }
+  })
+
   it('opens everywhere without an unlock while the terminal switch is on, and nothing else', () => {
     // Pins the switch: on, it drops the unlock for terminals in every folder and on every resource.
     expect(decide({ terminalWithoutUnlock: () => true, grantedFolders: () => [] })).toEqual(ALLOW)

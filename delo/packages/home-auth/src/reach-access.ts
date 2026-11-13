@@ -754,7 +754,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * The condition of one device's bindings on one listener, the single place an elevated action is decided. It refuses
  * an action of {@link REACH_ELEVATED_ACTIONS} with `elevation-required: <action>` unless the device holds a running
  * unlock on the principal's listener, for a call and for an event, a snapshot or a list filter alike, and logs each
- * call an unlock admits with the unlock's id. A `terminal/*` action needs no unlock where {@link terminalWithoutUnlock}
+ * call an unlock admits with the unlock's id. While dangerous mode holds, every `terminal/*` action needs an unlock. Otherwise a `terminal/*` action needs none where {@link terminalWithoutUnlock}
  * says so: the terminal switch is on, or the Session's terminal folders lie inside workspaces with a full-access grant.
  * It treats a `session/create` that starts a chat outside the known
  * workspaces (see {@link createsInKnownWorkspace}) the same way, with {@link CREATE_OUTSIDE_WORKSPACES}: a folder
@@ -812,7 +812,8 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }
-    if (ELEVATED_SET.has(action) && !(action.startsWith(TERMINAL_PREFIX) && terminalWithoutUnlock(facts, resource))) {
+    // Dangerous mode grants full access to every folder, so it never drops a terminal's unlock (A345).
+    if (ELEVATED_SET.has(action) && !(action.startsWith(TERMINAL_PREFIX) && !facts.dangerousMode() && terminalWithoutUnlock(facts, resource))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
     }

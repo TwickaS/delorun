@@ -14,11 +14,15 @@
  * their computer with `delorun changes` or in the studio. The tool offers no update action: the agent asks for an update
  * by installing a version of a plugin the profile has, which records a `plugin-update`.
  *
- * With protection off, the default, every such call passes to upstream exactly as with the switch off: the listener
+ * With protection off, the default, every such call passes to upstream as with the switch off, except the starts below: the listener
  * calls `next()`, and upstream's full-access approval alone decides. An install from a folder (`link:<folder>`) that
  * ran comes under Changes at the recomposition it causes: the check below links the plugin to its active directory and
  * logs the folder's content as an applied change decided `unreviewed`. A registry install or a removal is not under
  * Changes; the profile history upstream records for it is its record, and this plugin logs nothing for it.
+ *
+ * At every level a chat never starts a plugin that is not running: an install is recorded, and a turn-on (`enabled`
+ * anything but the boolean `false`), an `undo` and a `restore`, which can bring a plugin back, are denied with the
+ * words that the person makes them at their computer, in the studio or with `delorun plugin` or `delorun changes`.
  *
  * A protection record that cannot be read holds every such call: it is denied, naming that the setting cannot be read.
  *
@@ -279,15 +283,17 @@ export function apply(ctx: Context, config: Config): void {
 }
 
 /**
- * Whether a call would start a plugin that is not running: an install, or a turn-on of a bundle or a plugin.
+ * Whether a call could start a plugin that is not running: an install, a turn-on of a bundle or a plugin, or an undo
+ * or a restore, which can bring back a plugin the profile dropped or turned off.
  * @param exec - the pending call.
  * @param held - its held request, when it is one.
- * @returns true for an install and for `set_bundle` or `set_plugin` with `enabled` true.
+ * @returns true for an install, for `undo` and `restore`, and for `set_bundle` or `set_plugin` with `enabled` anything but the boolean false.
  */
 function startsPlugin(exec: Pick<ToolExecution, 'arguments'>, held: ReturnType<typeof heldRequest>): boolean {
   if (held !== undefined) return held.action === 'install'
   const args = exec.arguments as { action?: unknown, enabled?: unknown }
-  return (args.action === 'set_bundle' || args.action === 'set_plugin') && args.enabled === true
+  if (args.action === 'undo' || args.action === 'restore') return true
+  return (args.action === 'set_bundle' || args.action === 'set_plugin') && args.enabled !== false
 }
 
 /**
