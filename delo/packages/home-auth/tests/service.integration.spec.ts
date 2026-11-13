@@ -41,7 +41,6 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ['exact', ELEVATION_PATHS.pending],
   ['exact', ELEVATION_PATHS.approve],
   ['exact', ELEVATION_PATHS.revoke],
-  ['exact', ELEVATION_PATHS.terminal],
 ]
 import { ELEVATION_PATHS } from '../src/elevation-routes.ts'
 import { deviceIdOf } from '../src/records.ts'
@@ -220,8 +219,6 @@ describe('the homeAuth service', () => {
     expect(service.arrivalOf({ headers: { host: '127.0.0.1:3080' }, socket: { remoteAddress: '127.0.0.1', localAddress: '127.0.0.1', localPort: 3080 } }))
       .toEqual({ listener: undefined, host: '127.0.0.1:3080', source: 'unknown' })
     expect(service.servedListener('reach-tailscale-private')).toBeUndefined()
-    // The terminal switch only lowers protection, so it reads off until the home started.
-    expect(service.terminalWithoutUnlock()).toBe(false)
     expect(() => service.owner()).toThrow(/has not started/)
     expect(() => service.cancelApproval('request')).toThrow(/has not started/)
   })
@@ -267,23 +264,6 @@ describe('the homeAuth service', () => {
     } finally {
       await mounted.fiber.dispose()
       await rm(mounted.directory, { recursive: true, force: true })
-    }
-  })
-
-  it('reads the terminal switch from its own store, never from the plugin\'s configuration', async () => {
-    // A plugin row's configuration is what a settings save, a slash command, the plugin manager's configure, undo and
-    // restore, and the model's configuration tools write; none of it turns the switch on.
-    const { ctx, fiber, directory } = await mount({ config: { terminalWithoutUnlock: true, withoutUnlock: true, reachTerminal: true } })
-    try {
-      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
-      await ctx.homeAuth.setTerminalWithoutUnlock(true, 'computer')
-      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(true)
-      await expect(ctx.homeAuth.setTerminalWithoutUnlock(true, 'device')).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
-      await ctx.homeAuth.setTerminalWithoutUnlock(false, 'device')
-      expect(ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
-    } finally {
-      await fiber.dispose()
-      await rm(directory, { recursive: true, force: true })
     }
   })
 

@@ -23,7 +23,6 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from '../src/elevation-routes.ts'
-import { terminalSwitchHandler } from '../src/terminal-switch.ts'
 import type { RouteHandler } from '../src/routes.ts'
 import { claimOf, homeFixture, recordOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 import { DeviceStore } from '../src/devices.ts'
@@ -57,7 +56,6 @@ beforeEach(async () => {
     [ELEVATION_PATHS.pending]: elevationPendingHandler(home.auth, testCredential),
     [ELEVATION_PATHS.approve]: elevationApproveHandler(home.auth, testCredential),
     [ELEVATION_PATHS.revoke]: elevationRevokeHandler(home.auth, testCredential),
-    [ELEVATION_PATHS.terminal]: terminalSwitchHandler(home.auth, testCredential, () => dangerous),
   }
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? '/', 'http://server.invalid')
@@ -189,76 +187,5 @@ describe('the computer routes', () => {
     expect(await send('GET', ELEVATION_PATHS.approve)).toMatchObject({ status: 405 })
     expect(await send('GET', ELEVATION_PATHS.revoke)).toMatchObject({ status: 405 })
     expect(await send('POST', ELEVATION_PATHS.pending)).toMatchObject({ status: 405 })
-  })
-})
-
-describe('the terminal switch', () => {
-  it('starts off, and the computer turns it on and off', async () => {
-    expect(await send('GET', ELEVATION_PATHS.terminal)).toEqual({ status: 200, body: { withoutUnlock: false } })
-    expect(await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true })).toEqual({ status: 200, body: { withoutUnlock: true } })
-    expect(home.auth.terminalWithoutUnlock()).toBe(true)
-    expect(await send('GET', `${ELEVATION_PATHS.terminal}?reach`)).toEqual({ status: 200, body: { withoutUnlock: true } })
-    expect(await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: false })).toEqual({ status: 200, body: { withoutUnlock: false } })
-  })
-
-  it('lets a device turn it off and, outside dangerous mode, never on', async () => {
-    await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true })
-    // Pins the computer-only check: turning it on lowers protection, so a device is refused even while it is off.
-    await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: false })
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
-    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
-    // Pins the unlock check: an unlock alone lifts nothing while the mode is off.
-    await unlockDevice()
-    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
-  })
-
-  it('refuses a locked device turning it on in dangerous mode, and lets an unlocked one', async () => {
-    dangerous = true
-    // Pins the unlock check: the mode alone does not admit a device that holds no unlock.
-    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toMatchObject({ status: 403, body: { error: 'LOOPBACK_REQUIRED' } })
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
-    await unlockDevice()
-    // Pins the mode check in the route.
-    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })).toEqual({ status: 200, body: { withoutUnlock: true } })
-    expect(home.auth.terminalWithoutUnlock()).toBe(true)
-  })
-
-  it('turns off a switch a device turned on when dangerous mode ends, and keeps the computer\'s', async () => {
-    dangerous = true
-    await unlockDevice()
-    await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: true })
-    expect(home.auth.terminalWithoutUnlock()).toBe(true)
-    dangerous = false
-    // Pins the withdrawal: the mode ended, so no locked device opens a terminal without an unlock.
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
-    await home.auth.endDeviceTerminal()
-    expect(await send('GET', ELEVATION_PATHS.terminal)).toEqual({ status: 200, body: { withoutUnlock: false } })
-    dangerous = true
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
-    await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true })
-    dangerous = false
-    expect(home.auth.terminalWithoutUnlock()).toBe(true)
-  })
-
-  it('answers a device with a live session and the studio\'s own page only, and the computer with its credential only', async () => {
-    expect(await send('GET', `${ELEVATION_PATHS.terminal}?reach`, undefined, { cookie: 'other=1' })).toMatchObject({ status: 401 })
-    expect(await send('GET', `${ELEVATION_PATHS.terminal}?reach`, undefined, { cookie: undefined })).toMatchObject({ status: 401 })
-    expect(await send('POST', `${ELEVATION_PATHS.terminal}?reach`, { withoutUnlock: false }, { 'sec-fetch-site': 'cross-site' })).toMatchObject({ status: 403, body: { error: 'ORIGIN_MISMATCH' } })
-    // Pins the computer's credential: a local program without the studio's cookie cannot turn it on.
-    expect(await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true }, { cookie: 'other=1' })).toMatchObject({ status: 401 })
-    expect(await send('POST', ELEVATION_PATHS.terminal, { withoutUnlock: true }, { origin: 'https://elsewhere.example' })).toMatchObject({ status: 403 })
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
-  })
-
-  it('takes a literal true or false, and GET or POST only', async () => {
-    for (const body of [{ withoutUnlock: 'true' }, { withoutUnlock: 1 }, {}]) {
-      expect(await send('POST', ELEVATION_PATHS.terminal, body), JSON.stringify(body)).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } })
-    }
-    expect(await send('POST', ELEVATION_PATHS.terminal)).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } })
-    expect(await send('PUT', ELEVATION_PATHS.terminal)).toMatchObject({ status: 405 })
-    expect(await send('PUT', `${ELEVATION_PATHS.terminal}?reach`)).toMatchObject({ status: 405 })
-    expect(home.auth.terminalWithoutUnlock()).toBe(false)
   })
 })

@@ -79,8 +79,6 @@ interface Scenario {
   readonly request?: (now: number) => Stub
   /** `POST /auth/elevation/lock`. */
   readonly lock?: Stub
-  /** `GET /auth/elevation/terminal`: whether the terminal switch is on; off unless named. */
-  readonly terminal?: boolean
   /** Whether the page is the computer, which lists the requests of the devices. */
   readonly computer?: boolean
   /** The steps after the studio loaded. */
@@ -203,25 +201,6 @@ const SCENARIOS: Record<string, Scenario> = {
     state: elevated,
     steps: async (page) => { await openDevices(page); await page.getByText(/Unlocked until/u).first().waitFor() },
   },
-  'devices-terminal-refused': {
-    state: none,
-    steps: async (page) => {
-      await openDevices(page)
-      await page.getByRole('switch', { name: 'Terminal from phone without unlock' }).click()
-      await page.locator('[data-terminal-switch] [role="alert"]').waitFor()
-    },
-  },
-  'devices-terminal-on': {
-    state: none,
-    terminal: true,
-    steps: async (page) => { await openDevices(page); await page.locator('[data-terminal-switch="on"]').waitFor() },
-  },
-  'computer-terminal-on': {
-    state: () => ({ status: 421, body: { error: 'HOST_MISMATCH', message: 'This address is not a device address.' } }),
-    terminal: true,
-    computer: true,
-    steps: async (page) => { await openDevices(page); await page.locator('[data-terminal-switch="on"]').waitFor() },
-  },
   'computer-requests': {
     state: () => ({ status: 421, body: { error: 'HOST_MISMATCH', message: 'This address is not a device address.' } }),
     computer: true,
@@ -270,12 +249,6 @@ async function stub(page: Page, origin: string, scenario: Scenario): Promise<Stu
   await page.route(`${origin}${ELEVATION_ROUTES.state}`, route => answer(route, stubs.state))
   await page.route(`${origin}${ELEVATION_ROUTES.request}`, route => answer(route, scenario.request?.(Date.now()) ?? pending(Date.now())))
   await page.route(`${origin}${ELEVATION_ROUTES.lock}`, route => answer(route, scenario.lock ?? none()))
-  // The home turns the switch on only at the computer, and lets any studio turn it off.
-  await page.route(`${origin}${ELEVATION_ROUTES.terminal}`, route => answer(route, route.request().method() === 'GET'
-    ? { status: 200, body: { withoutUnlock: scenario.terminal === true } }
-    : JSON.parse(route.request().postData() ?? '{}').withoutUnlock === true && scenario.computer !== true
-      ? { status: 403, body: { error: 'LOOPBACK_REQUIRED', message: 'Only the computer turns this on.' } }
-      : { status: 200, body: { withoutUnlock: JSON.parse(route.request().postData() ?? '{}').withoutUnlock === true } }))
   await page.route(`${origin}${ELEVATION_ROUTES.pending}`, route => answer(route, {
     status: 200,
     body: {

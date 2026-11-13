@@ -261,14 +261,4 @@ describe('an unlocked device and the computer-only switches', () => {
     const schema = views.find(view => view.ns === 'bash-sandbox')?.schema
     expect(Object.keys(schema?.refs[String(schema.uid)]?.dict ?? {}).sort()).toEqual(['cwd', 'graceMs', 'maxOutputBytes', 'maxSpillBytes', 'maxTimeoutMs', 'timeoutMs'])
   })
-
-  it('never turns the terminal switch on, through any writer it reaches', async () => {
-    const created = await expectAdmitted('session/create', { request: { workspaceId } }) as { readonly ok: true; readonly value: { readonly sessionId: SessionId } }
-    for (const ns of protectedRows().map(row => row.rowId)) await call('settings/update', { ns, patch: { terminalWithoutUnlock: true, withoutUnlock: true } })
-    await call('commands/execute', { agentId: created.value.sessionId, line: '/config set withoutUnlock true', submittedAttachments: [] })
-    expect(studio.ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
-    // Pins the write point (A300): a caller that speaks for a device is refused the on-value.
-    await expect(studio.ctx.homeAuth.setTerminalWithoutUnlock(true, 'device')).rejects.toMatchObject({ code: 'LOOPBACK_REQUIRED' })
-    expect(studio.ctx.homeAuth.terminalWithoutUnlock()).toBe(false)
-  })
 })

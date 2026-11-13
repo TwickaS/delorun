@@ -334,7 +334,7 @@ export class PermissionDefaults extends Service {
     this.watch()
     this.ctx.provide('sandboxModeGuard', this.guard())
     // A reach device opens a terminal without an unlock inside a workspace with a grant (`@delo/home-auth`, C14).
-    this.ctx.provide('reachFullAccessGrants', { grantedFolders: () => this.grantedFolders(), dangerousMode: () => this.everywhere().on })
+    this.ctx.provide('reachFullAccessGrants', { dangerousMode: () => this.everywhere().on })
     // Prepend: the seed must land before upstream's pin, which fills every
     // still-unset knob with the deployment default on the same event.
     this.ctx.on('agent/created', ({ agent }) => { this.seed(agent.session) }, { prepend: true })

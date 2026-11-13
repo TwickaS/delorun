@@ -139,7 +139,7 @@ With an unlock, the phone can also:
 - change settings;
 - run the slash commands that change only the chat: `/compact`, `/export`, `/goal`, `/permission` and `/plan`; the phone runs no other slash command;
 - install, enable, update or remove plugins, and undo or restore a profile change. Delorun's own guard plugins and remote access cannot be turned off or changed this way, and an undo or restore that would change one is refused;
-- open a terminal in a folder outside the workspaces you put on full access;
+- open or attach to a terminal in any folder, full-access workspaces included;
 - browse folders with the folder picker, add a workspace, and start a chat in a folder that is not one of your workspaces;
 - run plugin code the model wrote.
 
@@ -161,7 +161,7 @@ A workspace that you already put on full access at your computer can still be dr
 <details>
 <summary>Edge cases</summary>
 
-- If a workspace is on full access, then the phone opens a terminal there without an unlock, because the model can already run any command there — a terminal opened that way keeps running when you take full access away; the next one needs an unlock.
+- If a workspace is on full access, then the phone still needs an unlock to open or attach to a terminal there, and so does dangerous mode: a terminal is a shell with your authority, so an unlocked phone is treated as your computer.
 - If a phone's session is idle for 12 hours, or 14 days have passed since it signed in, then the session ends and its open connections close — the phone signs in again from the sign-in page with its own key.
 - If you approve or remove any device, then every phone's open connections close — each phone signs in again by itself.
 - If a reply shows an image as a file on your computer, or you preview a file, then it does not show on the phone — images attached to messages do show.
@@ -172,7 +172,6 @@ A workspace that you already put on full access at your computer can still be dr
 <details>
 <summary>Go further</summary>
 
-- **Terminal from phone without unlock** in Settings, Devices on your computer lets a phone open a terminal in every folder without an unlock. Only your computer turns it on; the phone can turn it off.
 - **Ask before external agents run** in Settings, Safety, External agents stays a computer-only setting ([External agents](safety.md#external-agents)).
 
 </details>

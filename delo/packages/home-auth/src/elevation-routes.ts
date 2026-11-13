@@ -33,11 +33,6 @@ export const ELEVATION_PATHS = {
   approve: '/auth/elevation/approve',
   /** `POST` `{ id }`: the computer declines a request or ends an elevation. */
   revoke: '/auth/elevation/revoke',
-  /**
-   * `GET` `{ withoutUnlock }` and `POST` `{ withoutUnlock }`: whether a device opens a terminal without an unlock in every
-   * folder. Answered by `./terminal-switch.ts`.
-   */
-  terminal: '/auth/elevation/terminal',
 } as const
 
 /** A device's admitted session on the listener its request arrived on. */

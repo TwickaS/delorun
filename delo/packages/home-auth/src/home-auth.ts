@@ -37,7 +37,6 @@ import { Approvals, type ApprovalRequestInput, type PendingSummary } from './app
 import { PAIRING_DEFAULTS, tailnetIdentityOf, type PairingSpec, type PairingView, type TailnetIdentity } from './pairing.ts'
 import { isLoopbackHost, listenerOf, type LoopbackPort, type StampedRequest } from '@delo/home'
 import { DeviceStore } from './devices.ts'
-import { ReachTerminalStore } from './reach-terminal.ts'
 import { HomeAuthError } from './errors.ts'
 import { readStoreFile, writeStoreFile } from './files.ts'
 import { AttemptLimiter } from './rate-limit.ts'
@@ -211,7 +210,7 @@ export interface HomeAuthOptions {
    * a loopback request.
    */
   readonly loopbackPort?: LoopbackPort
-  /** Whether dangerous mode holds now; a terminal switch a device turned on ends when it does not. Never holds without it. */
+  /** Whether dangerous mode holds now. Never holds without it. */
   readonly dangerousMode?: () => boolean
   /** The resolved pairing choices ({@link resolvePairing}), read at each use; {@link PAIRING_DEFAULTS} when absent. */
   readonly pairing?: () => PairingSpec
@@ -223,12 +222,6 @@ export interface HomeAuthOptions {
  * The instance holds no state of its own besides the claim limit: every answer is read from the protected files of
  * {@link HomeAuthOptions.directory}, so two callers in one process never disagree and a restart keeps the answer.
  */
-/**
- * Who asks to change the terminal switch: the home's own computer, a device over a reach session, or an unlocked device
- * while dangerous mode holds (`device-dangerous`), whose setting ends with the mode.
- */
-export type TerminalSwitchOrigin = 'computer' | 'device' | 'device-dangerous'
-
 export class HomeAuth {
   /** The absolute path of the secrets directory. */
   readonly directory: string
@@ -240,7 +233,6 @@ export class HomeAuth {
   private readonly closeReachConnections: HomeAuthOptions['closeReachConnections']
   private readonly loopbackPort: LoopbackPort
   private readonly dangerousMode: () => boolean
-  private resettingTerminal: Promise<void> | undefined
   private readonly random: RandomBytes
   private readonly secrets: SecretSink | undefined
   private readonly served = new Map<ReachListenerId, ServedListener>()
@@ -262,9 +254,6 @@ export class HomeAuth {
   private readonly expiries = new Map<string, ArmedExpiry>()
   private readonly removalListeners = new Set<(deviceId: DeviceId) => void>()
   private readonly elevationListeners = new Set<(change: ElevationChange) => void>()
-  private readonly terminalListeners = new Set<() => void>()
-  /** Whether a device opens a terminal without an unlock everywhere. */
-  private readonly reachTerminal: ReachTerminalStore
   /** The elevations of this home and the requests waiting for the person at the computer (C14, "Elevation"). */
   private readonly elevations: Elevations
   /** The tail of the queue that serialises a claim and a revocation against each other. */
@@ -299,7 +288,6 @@ export class HomeAuth {
     const path = (name: string): string => join(options.directory, name)
     this.ownerCodes = new OwnerCodeStore({ file: path(HOME_AUTH_FILES.ownerCode), secrets: options.secrets, ...timed(options) })
     this.deviceStore = new DeviceStore({ file: path(HOME_AUTH_FILES.devices) })
-    this.reachTerminal = new ReachTerminalStore(path(HOME_AUTH_FILES.reachTerminal))
     this.sessions = new SessionStore({ file: path(SESSIONS_FILE), secrets: options.secrets, ...timed(options) })
     this.claims = new AttemptLimiter({
       limit: options.claimAttemptsPerMinute ?? DEVICE_APPROVAL_LIMITS.ownerClaimAttemptsPerMinutePerSource,
@@ -564,62 +552,6 @@ export class HomeAuth {
   onElevationChange(listener: (change: ElevationChange) => void): () => void {
     this.elevationListeners.add(listener)
     return () => { this.elevationListeners.delete(listener) }
-  }
-
-  /**
-   * Whether a device the home approved opens a terminal without an unlock in every folder, as the store holds it now;
-   * the reach-device policy reads it before each terminal action.
-   * @returns whether the switch is on.
-   */
-  terminalWithoutUnlock(): boolean {
-    if (this.reachTerminal.setByDevice() && !this.dangerousMode()) {
-      // A switch a device turned on does not outlive dangerous mode: it reads as off at once and is written off.
-      this.resettingTerminal ??= this.endDeviceTerminal().finally(() => { this.resettingTerminal = undefined })
-      return false
-    }
-    return this.reachTerminal.withoutUnlock()
-  }
-
-  /**
-   * Turn off a terminal switch a device turned on, once dangerous mode no longer holds; the computer's own setting stays.
-   * @returns when the switch is written; a failed write is retried at the next read, which reads the switch as off meanwhile.
-   */
-  async endDeviceTerminal(): Promise<void> {
-    if (!this.reachTerminal.setByDevice() || this.dangerousMode()) return
-    try {
-      await this.reachTerminal.set(false, 'computer')
-    } catch (_unwritable: unknown) {
-      // The switch still reads as off while its device-made record stays, so the next read retries the write.
-      return
-    }
-    for (const listener of this.terminalListeners) listener()
-  }
-
-  /**
-   * Turn the terminal switch on or off, the one place the switch is written. Turning it on lowers protection, so only
-   * the person at the home's own computer does it, or a device the terminal switch route admits while dangerous mode
-   * holds and the device is unlocked; any studio of the home's may turn it off. The switch is not a
-   * setting or a plugin's configuration, so no settings save, slash command, profile undo or restore, or model tool
-   * that writes configuration reaches it.
-   * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
-   * @param from - who asks: `computer` for the loopback studio or the person's own command, `device` for a reach session,
-   *   `device-dangerous` for an unlocked device while dangerous mode holds, whose setting ends with the mode.
-   * @throws {HomeAuthError} `LOOPBACK_REQUIRED` when a device asks to turn it on.
-   */
-  async setTerminalWithoutUnlock(withoutUnlock: boolean, from: TerminalSwitchOrigin): Promise<void> {
-    if (withoutUnlock && from === 'device') throw new HomeAuthError('LOOPBACK_REQUIRED', 'Turning this on needs you at your computer')
-    await this.reachTerminal.set(withoutUnlock, from === 'device-dangerous' ? 'device' : 'computer')
-    for (const listener of this.terminalListeners) listener()
-  }
-
-  /**
-   * Call a listener after this home turns the terminal switch on or off; the provider recomputes each device's access.
-   * @param listener - called after the change.
-   * @returns the disposer.
-   */
-  onTerminalSwitchChange(listener: () => void): () => void {
-    this.terminalListeners.add(listener)
-    return () => { this.terminalListeners.delete(listener) }
   }
 
   /**

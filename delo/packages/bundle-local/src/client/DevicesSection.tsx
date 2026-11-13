@@ -8,11 +8,11 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   approveDevice, approveElevation, cancelPendingDevice, ELEVATION_POLL_MS, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow,
-  PENDING_POLL_MS, readDevices, readElevationsAtComputer, readPendingDevices, readReachStatus, readTerminalSwitch, removeDevice, revokeElevation, setTerminalSwitch,
+  PENDING_POLL_MS, readDevices, readElevationsAtComputer, readPendingDevices, readReachStatus, removeDevice, revokeElevation,
   type ApprovalRequestId, type Device, type DeviceList, type ElevationId, type ElevationRequestId, type ElevationsAtComputer,
   type HostFetch, type PendingDevice, type PendingElevation, type ReachOptionStatus, type ReachStatus,
 } from './devices-api.ts'
@@ -24,7 +24,6 @@ import type { PairingRowSettings } from './pairing-writer.ts'
 import { PairingSettings, type PairingSettingsProps } from './PairingSettings.tsx'
 import type { UnlockSource, UnlockView } from './unlock.ts'
 import { clockTime, ELEVATE_COMMAND } from './UnlockOverlay.tsx'
-import { useDangerousMode } from './dangerous-mode.ts'
 import { failureSentence, type Loaded } from './host-api.ts'
 import css from './DevicesSection.module.css'
 
@@ -32,7 +31,7 @@ import css from './DevicesSection.module.css'
 export const REACH_ON_COMMAND = 'delorun reach on tailscale'
 
 /** What the section names in a refusal that needs the home's own computer. */
-export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockApprove' | 'unlockRevoke' | 'terminalOn' | 'terminalSwitch'
+export type DevicesAction = 'status' | 'list' | 'add' | 'approve' | 'cancel' | 'remove' | 'unlocks' | 'unlockApprove' | 'unlockRevoke'
 
 /** The request function and the unlock store the plugin supplies. */
 export interface DevicesSectionInjected {
@@ -132,7 +131,6 @@ export function DevicesSection({
       : <>
         <p className={css.intro}>{t('intro')}</p>
         {unlock.place === 'device' ? <DeviceUnlock t={t} view={unlock} open={openUnlock} lock={lockUnlock} /> : null}
-        {reach.kind === 'loading' || unlock.place === 'unknown' ? null : <TerminalSwitch t={t} fetch={fetch} />}
         {reach.kind === 'failed' ? <p className={css.failed} role="alert">{reach.text}</p> : null}
         {reach.kind === 'ready' ? reach.value?.options.map(option => <ReachLine key={option.option} t={t} status={option} />) : null}
         {reach.kind === 'loading' ? null : <PairingSettings t={t} time={at => formatTime(t, at)} state={pairing} form={pairingForm}
@@ -160,47 +158,6 @@ function DeviceUnlock({ t, view, open, lock }: { t: Translate; view: UnlockView;
         ? <Button variant="outline" onClick={() => { void lock() }}>{t('unlock.lockNow')}</Button>
         : <Button variant="primary" onClick={open}>{t(state.kind === 'pending' ? 'unlock.section.show' : 'unlock.start')}</Button>}
     </div>
-  </div>
-}
-
-/**
- * The terminal switch: whether a device opens a terminal without an unlock in every folder. Any studio reads it and
- * turns it off; the home refuses a device that turns it on unless dangerous mode holds and the device is unlocked, and
- * the refusal shows in place. A home without the switch
- * (404) shows nothing.
- * @param props - the copy and the request function.
- * @returns the block, or nothing.
- */
-function TerminalSwitch({ t, fetch }: { t: Translate; fetch: HostFetch }): ReactNode {
-  const [on, setOn] = useState<boolean | undefined>(undefined)
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | undefined>(undefined)
-  const dangerous = useDangerousMode(fetch)
-  useEffect(() => {
-    let current = true
-    readTerminalSwitch(fetch).then(
-      (value) => { if (current) setOn(value) },
-      (error: unknown) => { if (current) setFailure(failureText(t, error, 'terminalSwitch')) },
-    )
-    return () => { current = false }
-  }, [fetch, t])
-  const change = async (next: boolean): Promise<void> => {
-    setBusy(true)
-    setFailure(undefined)
-    try {
-      setOn(await setTerminalSwitch(fetch, next))
-    } catch (error) {
-      setFailure(failureText(t, error, next ? 'terminalOn' : 'terminalSwitch'))
-    } finally {
-      setBusy(false)
-    }
-  }
-  if (on === undefined && failure === undefined) return null
-  return <div className={css.unlock} data-terminal-switch={on === true ? 'on' : 'off'}>
-    <h3 className={css.subheading}>{t('terminal.title')}</h3>
-    {on === undefined ? null : <Switch checked={on} label={t('terminal.title')} disabled={busy} onChange={(next) => { void change(next) }} />}
-    <p className={css.line}>{t(dangerous ? 'terminal.explainDangerous' : 'terminal.explain')}</p>
-    {failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
   </div>
 }
 

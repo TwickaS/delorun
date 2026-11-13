@@ -299,7 +299,6 @@ export const ELEVATION_ROUTES = {
   pending: '/auth/elevation/pending',
   approve: '/auth/elevation/approve',
   revoke: '/auth/elevation/revoke',
-  terminal: '/auth/elevation/terminal',
 } as const
 
 /** The prefix of the reason remote access gives a call that needs an unlock. */
@@ -323,7 +322,6 @@ const isElevationsAtComputer = fields({
 })
 const isElevationRecord = fields({ id: isString, deviceId: isString, startedAt: isTime, endsAt: isTime })
 const isRevoked = fields({ revoked: isBoolean })
-const isTerminalSwitch = fields({ withoutUnlock: isBoolean })
 
 /**
  * Read this device's own unlock state.
@@ -395,32 +393,4 @@ export function approveElevation(fetch: HostFetch, requestId: ElevationRequestId
  */
 export async function revokeElevation(fetch: HostFetch, id: ElevationRequestId | ElevationId): Promise<boolean> {
   return (await call<{ revoked: boolean }>(fetch, ELEVATION_ROUTES.revoke, isRevoked, { id })).revoked
-}
-
-/**
- * Read whether a device opens a terminal without an unlock in every folder.
- * @param fetch - the request function.
- * @returns whether the switch is on, or undefined where the home has no such switch (404).
- * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
- */
-export async function readTerminalSwitch(fetch: HostFetch): Promise<boolean | undefined> {
-  try {
-    return (await call<{ withoutUnlock: boolean }>(fetch, ELEVATION_ROUTES.terminal, isTerminalSwitch)).withoutUnlock
-  } catch (error) {
-    const failure = hostFailureOf(error)
-    if (failure.kind !== 'unreachable' && failure.status === 404) return undefined
-    throw error
-  }
-}
-
-/**
- * Turn the terminal switch on or off. Only the computer turns it on; a device that asks is refused with
- * `LOOPBACK_REQUIRED`.
- * @param fetch - the request function.
- * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
- * @returns the switch after the change.
- * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
- */
-export async function setTerminalSwitch(fetch: HostFetch, withoutUnlock: boolean): Promise<boolean> {
-  return (await call<{ withoutUnlock: boolean }>(fetch, ELEVATION_ROUTES.terminal, isTerminalSwitch, { withoutUnlock })).withoutUnlock
 }

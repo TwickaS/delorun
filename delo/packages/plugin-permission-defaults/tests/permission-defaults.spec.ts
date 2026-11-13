@@ -242,26 +242,6 @@ describe('the full-access consent', () => {
     await expect(defaults.select(agent, FULL_ACCESS_PRESET)).rejects.toThrow('this chat has no workspace folder')
   })
 
-  it('provides the granted workspace folders to remote access, read again after each change', async () => {
-    const { ctx, home, workspace, other } = await mounted({ store: paths => serializePermissionStore(new Map([
-      [workspaceKey(paths.workspace), { preset: FULL_ACCESS_PRESET, fullAccessGrantedAt: 1 }],
-      [workspaceKey(paths.other), { preset: SAFER_PRESET, fullAccessGrantedAt: null }],
-    ])) })
-    const grants = ctx.get('reachFullAccessGrants')
-    // Pins the grant filter: a workspace that never held a grant is not listed.
-    expect(grants?.grantedFolders()).toEqual([workspaceKey(workspace)])
-    expect(workspaceKey(other)).not.toBe(workspaceKey(workspace))
-    // Another process withdraws the grant, as `delorun workspace full-access` does.
-    writeFileSync(permissionStorePath(home), serializePermissionStore(new Map([[workspaceKey(workspace), { preset: SAFER_PRESET, fullAccessGrantedAt: null }]])), { mode: 0o600 })
-    // Pins the refresh: a withdrawn grant is absent at the next read.
-    expect(grants?.grantedFolders()).toEqual([])
-  })
-
-  it('provides no granted folder while the permission store cannot be read', async () => {
-    const { ctx } = await mounted({ store: () => '{' })
-    expect(ctx.get('reachFullAccessGrants')?.grantedFolders()).toEqual([])
-  })
-
   it('refuses full access when the permission store cannot be read, naming the store\'s problem', async () => {
     const { ctx, harness, workspace } = await mounted({ store: () => '{' })
     const defaults = ctx.get('permissionDefaults') as PermissionDefaults

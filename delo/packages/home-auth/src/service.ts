@@ -22,7 +22,7 @@ import type { DeviceRecord } from './records.ts'
 import { PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, WINDOWLESS_MODES, type PairingConfig, type PairingView } from './pairing.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
-  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TerminalSwitchOrigin, type TokenAdmission,
+  HomeAuth, type ClaimArrival, type ClaimRequest, type ClaimResult, type DevicesListing, type RevocationResult, type ServedListener, type TokenAdmission,
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
@@ -44,7 +44,6 @@ import {
   elevationRevokeHandler,
   elevationStateHandler,
 } from './elevation-routes.ts'
-import { terminalSwitchHandler } from './terminal-switch.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -156,9 +155,6 @@ export class HomeAuthService extends Service {
     })
     await core.start()
     this.core = core
-    // A switch a device turned on under a mode that has ended is turned off before the first terminal opens; without the
-    // permission-defaults provider the mode cannot be read yet, and the switch's own reads end it.
-    if (this.ctx.get('reachFullAccessGrants') !== undefined) await core.endDeviceTerminal()
     this.ctx.effect(() => async () => { await core.stop() }, 'home-auth session store')
     // Every start and ending names the device, the listener and the elevation, so the log says who ended it; the label
     // stays out, being the person's own text.
@@ -193,7 +189,6 @@ export class HomeAuthService extends Service {
         server.register({ kind: 'exact', path: ELEVATION_PATHS.pending, handler: elevationPendingHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.approve, handler: elevationApproveHandler(core, credential) }),
         server.register({ kind: 'exact', path: ELEVATION_PATHS.revoke, handler: elevationRevokeHandler(core, credential) }),
-        server.register({ kind: 'exact', path: ELEVATION_PATHS.terminal, handler: terminalSwitchHandler(core, credential, () => this.dangerousMode()) }),
       ]
       return () => {
         for (const off of registered) off()
@@ -282,14 +277,6 @@ export class HomeAuthService extends Service {
   }
 
   /**
-   * Whether a device opens a terminal without an unlock in every folder.
-   * @returns whether the switch is on; off before the service started.
-   */
-  terminalWithoutUnlock(): boolean {
-    return this.core?.terminalWithoutUnlock() ?? false
-  }
-
-  /**
    * Whether dangerous mode holds now, read from the permission-defaults service when asked. While it does, an unlocked
    * device does what the computer does, except turn the mode on, approve a device and sign in.
    * @returns whether it holds; false without a permission-defaults service or while its store cannot be read.
@@ -321,24 +308,6 @@ export class HomeAuthService extends Service {
    */
   computerOnlySwitches(): readonly ComputerOnlySwitch[] {
     return [...this.switches]
-  }
-
-  /**
-   * Turn the terminal switch on or off.
-   * @param withoutUnlock - whether a device opens a terminal without an unlock everywhere.
-   * @param from - who asks; a device is refused turning it on.
-   */
-  async setTerminalWithoutUnlock(withoutUnlock: boolean, from: TerminalSwitchOrigin): Promise<void> {
-    await this.state().setTerminalWithoutUnlock(withoutUnlock, from)
-  }
-
-  /**
-   * Call a listener after this home turns the terminal switch on or off.
-   * @param listener - called after the change.
-   * @returns the disposer.
-   */
-  onTerminalSwitchChange(listener: () => void): () => void {
-    return this.state().onTerminalSwitchChange(listener)
   }
 
   /**

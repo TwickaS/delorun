@@ -226,7 +226,7 @@ describe('the authenticator provider', () => {
     const admitted = provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
     if (admitted.kind !== 'admitted') throw new Error('not admitted')
     let mode = true
-    let grants: object | undefined = { grantedFolders: () => [], dangerousMode: () => mode }
+    let grants: object | undefined = { dangerousMode: () => mode }
     vi.spyOn(ctx, 'get').mockImplementation(((name: string) => (name === 'reachFullAccessGrants' ? grants : Context.prototype.get.call(ctx, name as never))) as never)
     let unlocked = true
     vi.spyOn(ctx.homeAuth, 'elevationOf').mockImplementation(() => (unlocked ? { id: 'elevation-1' } as never : undefined))
@@ -244,7 +244,7 @@ describe('the authenticator provider', () => {
     grants = undefined
     expect(ctx.homeAuth.dangerousMode()).toBe(false)
     expect(() => { give('external-agent') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
-    grants = { grantedFolders: () => [], dangerousMode: () => { throw new Error('unreadable store') } }
+    grants = { dangerousMode: () => { throw new Error('unreadable store') } }
     expect(ctx.homeAuth.dangerousMode()).toBe(false)
     expect(() => { give('workspace-management') }).toThrow(expect.objectContaining({ code: 'LOOPBACK_REQUIRED' }))
   })
@@ -335,7 +335,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined, dangerousMode: () => false })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -426,7 +426,7 @@ describe('the authenticator provider', () => {
       }
     })
 
-    it('opens a terminal from the Session\'s folders, the granted workspaces and the switch, and recomputes the snapshot on a switch change', async () => {
+    it('needs an unlock for a terminal in every folder, whatever the workspaces and dangerous mode grant', async () => {
       const access = await fakeRemoteAccess()
       const outside = await mkdtemp(join(tmpdir(), 'delo-home-auth-terminal-'))
       try {
@@ -444,18 +444,11 @@ describe('the authenticator provider', () => {
         const binding = access.policy().bindings(device)
           .find((candidate): candidate is Extract<RemoteAccessBinding, { readonly resource: { readonly kind: 'session' } }> => candidate.resource.kind === 'session')
         const open = (id: string) => binding?.condition?.({ action: 'terminal/create', resource: { kind: 'session', id: id as SessionId }, args: {} } as never)
-        // Without a grant provider no workspace counts as granted.
-        expect(open('s-in')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
-        ctx.provide('reachFullAccessGrants', { grantedFolders: () => [granted] } as never)
-        // Pins the folder facts: a live Session's current and original folders, checked against the granted workspaces.
-        expect(open('s-in')).toEqual({ kind: 'allow' })
-        expect(open('s-out')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
-        expect(open('s-gone')).toEqual({ kind: 'deny', reason: 'elevation-required: terminal/create' })
-        const before = access.invalidated.length
-        await ctx.homeAuth.setTerminalWithoutUnlock(true, 'computer')
-        // Pins the switch fact and its invalidation: the device's snapshot is recomputed when the switch changes.
-        expect(open('s-out')).toEqual({ kind: 'allow' })
-        expect(access.invalidated.slice(before)).toEqual([device])
+        const denied = { kind: 'deny', reason: 'elevation-required: terminal/create' }
+        expect(open('s-in')).toEqual(denied)
+        // Pins the lock: neither a workspace the home granted full access, nor dangerous mode, waives a locked device's unlock.
+        ctx.provide('reachFullAccessGrants', { dangerousMode: () => true } as never)
+        for (const id of ['s-in', 's-out', 's-gone']) expect(open(id), id).toEqual(denied)
       } finally {
         await rm(outside, { recursive: true, force: true })
       }
