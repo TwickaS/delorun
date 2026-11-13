@@ -244,6 +244,8 @@
     "apps/web/tests/delo-studio-connected.e2e.ts",
     "apps/web/tests/delo-reach.ts",
     "apps/web/tests/delo-reach-listener.e2e.ts",
+    "apps/web/tests/delo-dangerous-mode.e2e.ts",
+    "apps/web/tests/delo-pairing.e2e.ts",
     "delo/apps/tools/src/stack/certificates.ts",
     "apps/web/stress-tests/reasoning-chunks.stress.ts",
     "apps/cli/tests/**/*.ts",

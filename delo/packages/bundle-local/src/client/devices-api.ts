@@ -5,6 +5,7 @@
  * @module @delo/bundle-local/client/devices-api
  */
 import type { Branded } from '@deepseek-ai/dsh-brand'
+import { REQUEST_DISPLAYS, WINDOWLESS_MODES, type PairingView } from '@delo/home-auth/wire'
 import {
   call, fields, hostFailureOf, isBoolean, isRefused, isString, isTime, listOf, optional, orNull, readServedRoute, type Check, type HostFetch,
 } from './host-api.ts'
@@ -74,6 +75,20 @@ export interface PendingDevice {
   readonly createdAt: number
   /** Milliseconds since the epoch. */
   readonly expiresAt: number
+  /** The Tailscale user the request named, a hint to compare with who the person expects; null when it named none. */
+  readonly identity: PairingIdentity | null
+  /** Whether the request arrived outside an approval window. */
+  readonly windowless: boolean
+  /** The wrong codes typed so far; the third cancels the request. */
+  readonly wrongCodes: number
+}
+
+/** The Tailscale user a request named. */
+export interface PairingIdentity {
+  /** The login name, such as `person@example.com`. */
+  readonly login: string
+  /** The display name; the login when the request carried none. */
+  readonly name: string
 }
 
 /** What `GET /auth/devices/pending` answers. */
@@ -81,6 +96,8 @@ export interface PendingDevices {
   /** When the approval window closes, in milliseconds since the epoch; null while it is closed. */
   readonly windowClosesAt: number | null
   readonly pending: readonly PendingDevice[]
+  /** The pairing choices the home runs with. */
+  readonly pairing: PairingView
 }
 
 /** What `POST /auth/devices/approve` answers. */
@@ -134,7 +151,13 @@ const isPendingDevices = fields({
   windowClosesAt: orNull(isTime),
   pending: listOf(fields({
     requestId: isString, label: isString, platform: isString, address: isString, createdAt: isTime, expiresAt: isTime,
+    identity: orNull(fields({ login: isString, name: isString })), windowless: isBoolean, wrongCodes: isTime,
   })),
+  pairing: fields({
+    mayAskWithoutWindow: value => (WINDOWLESS_MODES as readonly unknown[]).includes(value),
+    showRequest: value => (REQUEST_DISPLAYS as readonly unknown[]).includes(value),
+    windowMinutes: isTime, requestExpiryMinutes: isTime, pendingPerIdentity: isTime,
+  }),
 })
 const isApprovedDevice = fields({ device: fields({ id: isString, label: isString, address: isString }) })
 const isCancelledRequest = fields({ cancelled: isString })

@@ -7,6 +7,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./wire": "./src/wire.ts",
     "./assets/sign-in.js": "./assets/sign-in.js"
   },
   "dependencies": {

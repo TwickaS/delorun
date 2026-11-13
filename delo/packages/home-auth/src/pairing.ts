@@ -17,32 +17,9 @@
  */
 import type { IncomingHttpHeaders } from 'node:http'
 import { DEVICE_APPROVAL_LIMITS } from '@delo/contract-device-approval'
+import { PAIRING_BOUNDS, REQUEST_DISPLAYS, WINDOWLESS_MODES, type PairingConfig, type RequestDisplay, type WindowlessMode } from './wire.ts'
 
-/** Who may ask to pair without an approval window: the computer's own Tailscale user, any device on the tailnet, or no one. */
-export const WINDOWLESS_MODES = ['own-user', 'tailnet', 'window-only'] as const
-
-/** One of {@link WINDOWLESS_MODES}. */
-export type WindowlessMode = (typeof WINDOWLESS_MODES)[number]
-
-/** How a window-less request is shown at the computer: a notice, the code box at once, or only in the lists. */
-export const REQUEST_DISPLAYS = ['notice', 'dialog', 'none'] as const
-
-/** One of {@link REQUEST_DISPLAYS}. */
-export type RequestDisplay = (typeof REQUEST_DISPLAYS)[number]
-
-/** The pairing fields as `cordis.yml` holds them; an absent field takes Delorun's default in {@link resolvePairing}. */
-export interface PairingConfig {
-  /** Who may ask without a window. */
-  readonly mayAskWithoutWindow?: WindowlessMode
-  /** How a request is shown at the computer. */
-  readonly showRequest?: RequestDisplay
-  /** How long an approval window stays open, in minutes. */
-  readonly windowMinutes?: number
-  /** How long a request waits before it expires, in minutes. */
-  readonly requestExpiryMinutes?: number
-  /** How many requests one Tailscale identity may have waiting without a window. */
-  readonly pendingPerIdentity?: number
-}
+export { PAIRING_BOUNDS, REQUEST_DISPLAYS, WINDOWLESS_MODES, type PairingConfig, type PairingView, type RequestDisplay, type WindowlessMode } from './wire.ts'
 
 /** The pairing values the home uses. */
 export interface PairingSpec {
@@ -53,23 +30,7 @@ export interface PairingSpec {
   readonly pendingPerIdentity: number
 }
 
-/** The pairing choices as the loopback studio and the commands read them. */
-export interface PairingView {
-  readonly mayAskWithoutWindow: WindowlessMode
-  readonly showRequest: RequestDisplay
-  readonly windowMinutes: number
-  readonly requestExpiryMinutes: number
-  readonly pendingPerIdentity: number
-}
-
 const MINUTE_MS = 60 * 1000
-
-/** The inclusive bounds of each numeric field. */
-export const PAIRING_BOUNDS = {
-  windowMinutes: { min: 1, max: 15 },
-  requestExpiryMinutes: { min: 1, max: 10 },
-  pendingPerIdentity: { min: 1, max: 5 },
-} as const
 
 /** Delorun's pairing values. */
 export const PAIRING_DEFAULTS: PairingSpec = {

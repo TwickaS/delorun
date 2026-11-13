@@ -73,6 +73,10 @@ import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAct
 import { ExternalAgentAction, type ExternalAgentActionInjected } from './ExternalAgentAction.tsx'
 import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation } from './FullAccessConsent.tsx'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
+import { PairingNotice, type PairingNoticeInjected } from './PairingNotice.tsx'
+import { createPairingSource } from './pairing-source.ts'
+import { PairingWriter, type PairingRowSettings } from './pairing-writer.ts'
+import { HOME_AUTH_ROW } from '@delo/home-auth/wire'
 import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
 import { DangerousBadge, type DangerousBadgeInjected } from './DangerousBadge.tsx'
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
@@ -233,6 +237,9 @@ export const FULL_ACCESS_CONSENT_ID = 'delo-full-access-consent'
 /** The `shell.overlay` id of the MCP server review. */
 export const MCP_REVIEW_ID = 'delo-mcp-review'
 
+/** The `shell.overlay` id of the notice and code box for a device that asks to connect without an approval window. */
+export const PAIRING_NOTICE_ID = 'delo-pairing-notice'
+
 /** The `shell.overlay` id of the notice that an MCP server waits. */
 export const MCP_WAITING_NOTICE_ID = 'delo-mcp-waiting'
 
@@ -358,7 +365,26 @@ export function apply(ctx: Context): void {
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
   const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
-  const devicesFace = (): DevicesSectionInjected => ({ fetch: browserFetch, hooks: unlock.hooks, openUnlock: unlock.open, lockUnlock: unlock.lock })
+  const pairing = createPairingSource(browserFetch)
+  const pairingWriter = new PairingWriter(ctx.configForms.get<PairingRowSettings>(HOME_AUTH_ROW))
+  const devicesFace = (): DevicesSectionInjected => ({
+    fetch: browserFetch,
+    hooks: { unlock: unlock.hooks.unlock, pairing: pairing.hooks.pairing, pairingForm: pairingWriter.form, pairingMutation: pairingWriter.state },
+    openUnlock: unlock.open,
+    lockUnlock: unlock.lock,
+    startPairing: pairing.start,
+    setPairing: (field, value) => pairingWriter.set(field, value),
+    openPairingCode: pairing.openCode,
+    declinePairing: pairing.decline,
+  })
+  if ((ctx.get('connection') as ConnectionHandle).isLoopback) {
+    ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+      name: 'shell.overlay',
+      id: PAIRING_NOTICE_ID,
+      locale: DEVICES_NS,
+      inject: (): PairingNoticeInjected => pairing,
+    }, PairingNotice))
+  }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: DEVICES_SECTION_ID,
