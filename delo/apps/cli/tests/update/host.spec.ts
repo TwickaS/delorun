@@ -638,7 +638,7 @@ describe('checkHealth', () => {
      */
     const sandbox = (protection: SandboxProtection, layerSockets: readonly string[] = [], change: Record<string, unknown> = {}): BootedRow => ({
       id: 'sandbox', name: '@deepseek-ai/dsh-sandbox-local', disabled: false, state: 'active',
-      config: { networkAccess: false, protectedHome: protection.protectedHome, protectedHomeReadable: [...protection.protectedHomeReadable], deniedSockets: [...new Set([...layerSockets, ...protection.deniedSockets])], escapeSocketDirectories: [...protection.escapeSocketDirectories], ...change },
+      config: { networkAccess: false, protectedHome: protection.protectedHome, protectedHomeReadable: [...protection.protectedHomeReadable], deniedSockets: [...new Set([...layerSockets, ...protection.deniedSockets])], escapeSocketDirectories: [...protection.escapeSocketDirectories], privateTmp: protection.privateTmp, ...change },
     })
     /**
      * The expectations a Host booted with a sandbox row hands its successor.
@@ -662,9 +662,9 @@ describe('checkHealth', () => {
       mkdirSync(join(machine, 'run'))
       symlinkSync(join(machine, 'run'), join(machine, 'var-run'))
       const env = { DOCKER_HOST: `unix://${join(machine, 'var-run', 'docker.sock')}`, DOCKER_CONFIG: join(machine, 'no-config') }
-      const before = await sandboxProtection(machine, 'default', env, machine)
+      const before = await sandboxProtection(machine, 'default', env, machine, 4242)
       writeFileSync(join(machine, 'run', 'docker.sock'), '')
-      const after = await sandboxProtection(machine, 'default', env, machine)
+      const after = await sandboxProtection(machine, 'default', env, machine, 4242)
       expect(after.observedSockets).toEqual([join(machine, 'var-run', 'docker.sock'), join(machine, 'run', 'docker.sock')])
       return { machine, before, after }
     }
@@ -691,7 +691,8 @@ describe('checkHealth', () => {
 
     it.each([
       ['a dropped supervisor socket', (protection: SandboxProtection) => ({ deniedSockets: protection.deniedSockets.filter(socket => !socket.endsWith('supervisor.sock')) }), 'no longer denies'],
-      ['a dropped escape directory', () => ({ escapeSocketDirectories: [] }), 'no longer hides /run/WSL'],
+      ['a dropped escape directory', () => ({ escapeSocketDirectories: [] }), 'no longer hides /run/WSL, /run/user/4242'],
+      ['the host\'s /tmp shown again', () => ({ privateTmp: false }), 'shows confined commands the host\'s /tmp'],
       ['a wider read exemption', (protection: SandboxProtection) => ({ protectedHomeReadable: [...protection.protectedHomeReadable, 'secrets'] }), 'lets confined commands read secrets'],
       ['another protected home', () => ({ protectedHome: '/elsewhere' }), 'protects /elsewhere instead of'],
       ['no protected home', () => ({ protectedHome: undefined }), 'sets no protected home'],
@@ -707,7 +708,7 @@ describe('checkHealth', () => {
       const port = await studioAnswering(204)
       const { machine, before } = await dockerAppears()
       const listed = [join(machine, 'var-run', 'docker.sock')]
-      const switched = await sandboxProtection(machine, 'default', { DOCKER_HOST: 'tcp://127.0.0.1:2375', DOCKER_CONFIG: join(machine, 'no-config') }, machine)
+      const switched = await sandboxProtection(machine, 'default', { DOCKER_HOST: 'tcp://127.0.0.1:2375', DOCKER_CONFIG: join(machine, 'no-config') }, machine, 4242)
       expect(switched.observedSockets).toEqual([])
       const verdict = await checkHealth(facts(port, { rows: () => [manager, sandbox(switched)] }), handedOver([manager, sandbox(before, listed)], before, listed))
       expect(verdict).toEqual({ passed: false, criterion: 'H3-only-named-disabled', detail: `the sandbox row's protection is weaker than before the update: it no longer denies ${listed.join(', ')}` })

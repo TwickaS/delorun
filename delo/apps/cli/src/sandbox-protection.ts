@@ -1,18 +1,20 @@
 /**
  * C1's confinement of the CLI profile's commands, which the home process sets when it starts the profile: upstream's
  * local sandbox provider (row `sandbox`, `@deepseek-ai/dsh-sandbox-local`) receives the canonical Delo home as
- * `protectedHome`, C1's read exemptions as `protectedHomeReadable`, and as `deniedSockets` the update channel's and
- * the supervisor's sockets under `run/<profile>/`, the active Docker context's socket with its real path, and Docker
- * Desktop's macOS sockets under `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present, and as
- * `escapeSocketDirectories` WSL's interop directory `/run/WSL`, whose sockets let a command start Windows programs
- * outside every Linux namespace: the provider hides it under bwrap and refuses confined commands on a runner that
- * cannot, whenever it exists at a wrap. The settings travel as an overlay patch the start writes to `run/<profile>/sandbox.patch.yml` and hands to upstream's
+ * `protectedHome`, C1's read exemptions as `protectedHomeReadable`, `privateTmp` on, and as `deniedSockets` the update
+ * channel's and the supervisor's sockets under `run/<profile>/`, the daemon sockets of {@link DAEMON_SOCKETS}, the
+ * active Docker context's socket with its real path, Docker Desktop's macOS sockets under
+ * `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` when present, and the ssh-agent socket
+ * `SSH_AUTH_SOCK` names with its real path, and as `escapeSocketDirectories` the directories
+ * of {@link escapeDirectories}, whose sockets let a command start programs outside the sandbox or act with the
+ * person's authority: the provider hides each under bwrap and refuses confined commands on a runner that cannot,
+ * whenever one exists at a wrap. The settings travel as an overlay patch the start writes to `run/<profile>/sandbox.patch.yml` and hands to upstream's
  * profile runner as its last `--patch` overlay, so the overlay applies over every layer that composes the row, in
  * upstream's order (`readProfilePatches` in `@deepseek-ai/dsh-app-boot`): the bundle layers, the profile's own
  * `cordis.patch.yml`, the home's `cordis.patch.yml`, which upstream applies over every profile, and the start's other
  * overlays. A patch's `config` replaces the row's whole config (`applyPatches` in `@deepseek-ai/cordis-plugin-include`),
- * so the overlay carries over the composed config, which the last layer that sets one gives, with Delo's three keys
- * replaced; its `deniedSockets` and `escapeSocketDirectories` keep the entries every layer lists. A layer that sets the runner itself
+ * so the overlay carries over the composed config, which the last layer that sets one gives, with `protectedHome`,
+ * `protectedHomeReadable` and `privateTmp` replaced; its `deniedSockets` and `escapeSocketDirectories` keep the entries every layer lists. A layer that sets the runner itself
  * (`runnerCommand`, `runnerFailureSignatures`) on the row is refused, even when a later layer replaces it: a non-empty
  * runner command asserts full enforcement and skips the built-in selection, which would boot the row unconfined while
  * the provider reports full.
@@ -21,7 +23,7 @@
  */
 import { realpathSync } from 'node:fs'
 import { realpath, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { composeEntries, type Profile } from '@deepseek-ai/dsh-app-boot'
 import { READ_EXEMPTIONS } from '@delo/contract-home-layout'
 import { runDirectory, writeProtectedFile } from '@delo/home'
@@ -43,7 +45,7 @@ export interface SandboxProtection {
   readonly protectedHome: string
   /** C1's read exemptions, relative to the home. */
   readonly protectedHomeReadable: readonly string[]
-  /** The sockets confined commands cannot connect to: the home's own and those in {@link observedSockets}. */
+  /** The sockets confined commands cannot connect to: the home's own, {@link DAEMON_SOCKETS} and those in {@link observedSockets}. */
   readonly deniedSockets: readonly string[]
   /**
    * The entries of {@link deniedSockets} the start found on this computer: the Docker context's socket with its real
@@ -51,8 +53,10 @@ export interface SandboxProtection {
    * across an update; the rest of the protection is fixed by the release and the home.
    */
   readonly observedSockets: readonly string[]
-  /** The directories whose sockets start programs outside the sandbox; see {@link WSL_INTEROP_DIRECTORIES}. */
+  /** The directories whose sockets start programs outside the sandbox; see {@link escapeDirectories}. */
   readonly escapeSocketDirectories: readonly string[]
+  /** Whether bwrap hides the host's `/tmp` from `read-only` commands and every other mount of it; always on. */
+  readonly privateTmp: true
 }
 
 /**
@@ -64,6 +68,60 @@ export interface SandboxProtection {
  * variable, and no state at start, decides whether a command is protected.
  */
 export const WSL_INTEROP_DIRECTORIES = ['/run/WSL'] as const
+
+/**
+ * The directories, besides {@link WSL_INTEROP_DIRECTORIES}, whose sockets let a confined command start a program
+ * outside the sandbox or act with the person's authority, named on every machine whatever exists at start:
+ * - `/run/user/<uid>`, the person's runtime directory (`$XDG_RUNTIME_DIR` under logind, elogind and WSLg): the session
+ *   bus `bus` and the user manager's `systemd/private`, through which `systemd-run --user` starts any program as a
+ *   user unit outside every namespace, gpg-agent and its ssh socket, the keyring, the display and audio servers,
+ *   editors' and terminals' control sockets, and rootless Docker and Podman;
+ * - `/run/dbus`, the system bus, which acts with the polkit authorizations of the person's session;
+ * - `/tmp/tmux-<uid>` and `/run/screen`, whose servers run commands in the person's terminal sessions;
+ * - `/tmp/.X11-unix`, the X server, which takes input for the person's other windows;
+ * - `/mnt/wslg`, WSLg's display and audio sockets and its second mounts of the runtime directory and of `/`;
+ * - `/mnt/wsl/docker-desktop/shared-sockets` and `~/.docker/desktop`, Docker Desktop's control sockets under WSL and on
+ *   Linux, among them its backend's API, whose routes include its settings, the engine's `daemon.json` and container
+ *   actions.
+ * A runtime directory elsewhere, which `XDG_RUNTIME_DIR` or `TMUX_TMPDIR` may name, is not listed, so that the list
+ * depends only on the user id and the OS home, and the next start compares it whatever its environment. Where the
+ * platform has no user id, as on Windows, the directories named by the user id and Docker Desktop's are left out.
+ * @param uid - the person's user id, or `undefined` where the platform has none.
+ * @param osHome - the OS home directory, under which Docker Desktop for Linux keeps its control sockets.
+ * @returns the absolute directories, in this order.
+ */
+export function escapeDirectories(uid: number | undefined, osHome: string): string[] {
+  const own = uid === undefined ? [] : [`/run/user/${String(uid)}`]
+  const tmux = uid === undefined ? [] : [`/tmp/tmux-${String(uid)}`]
+  const dockerDesktop = uid === undefined ? [] : ['/mnt/wsl/docker-desktop/shared-sockets', join(osHome, '.docker', 'desktop')]
+  return [...WSL_INTEROP_DIRECTORIES, ...own, '/run/dbus', ...tmux, '/run/screen', '/tmp/.X11-unix', '/mnt/wslg', ...dockerDesktop]
+}
+
+/**
+ * The daemon sockets C1 denies on every machine with a user id, whether or not they exist at start: Docker Desktop's
+ * `/run/docker-cli.sock` under WSL, which serves its backend's API to the `docker` group, and tailscaled's LocalAPI
+ * socket on Linux and macOS, through which its operator changes the node's settings. The runner shadows those that
+ * exist at each wrap.
+ */
+export const DAEMON_SOCKETS = ['/run/docker-cli.sock', '/run/tailscale/tailscaled.sock', '/var/run/tailscaled.socket'] as const
+
+/**
+ * The ssh-agent socket the launch environment names, and its real path, for `deniedSockets`: an agent signs with the
+ * person's keys for any client that connects. Confined commands do not inherit `SSH_AUTH_SOCK`, and no setting
+ * forwards the agent to them.
+ * @param env - the launch environment, read for `SSH_AUTH_SOCK`.
+ * @returns the spellings; none when the variable is unset or not an absolute path.
+ */
+async function agentSockets(env: Readonly<Record<string, string | undefined>>): Promise<string[]> {
+  const path = env.SSH_AUTH_SOCK
+  if (path === undefined || !isAbsolute(path)) return []
+  try {
+    return [...new Set([path, await realpath(path)])]
+  } catch (_absent) {
+    // No agent listens there now: its configured path is denied, and the runner shadows what exists at a wrap.
+    return [path]
+  }
+}
 
 /**
  * The Docker context's socket and its real path, for `deniedSockets`.
@@ -119,18 +177,21 @@ async function dockerDesktopSockets(osHome: string): Promise<string[]> {
  * @param profile - the CLI profile.
  * @param env - the launch environment.
  * @param osHome - the OS home directory, under which Docker Desktop for macOS keeps its sockets.
+ * @param uid - the person's user id, which names the runtime and tmux directories; `undefined` where there is none.
  * @returns the settings.
  */
-export async function sandboxProtection(home: string, profile: string, env: Readonly<Record<string, string | undefined>>, osHome: string): Promise<SandboxProtection> {
+export async function sandboxProtection(home: string, profile: string, env: Readonly<Record<string, string | undefined>>, osHome: string, uid: number | undefined): Promise<SandboxProtection> {
   const canonical = realpathSync.native(home)
-  const fixed = [updateSocketPath(canonical, profile), supervisorSocketPath(canonical, profile)]
-  const observed = [...new Set([...await dockerSockets(env), ...await dockerDesktopSockets(osHome)])].filter(socket => !fixed.includes(socket))
+  const fixed = [updateSocketPath(canonical, profile), supervisorSocketPath(canonical, profile), ...uid === undefined ? [] : DAEMON_SOCKETS]
+  const found = [...await dockerSockets(env), ...await dockerDesktopSockets(osHome), ...await agentSockets(env)]
+  const observed = [...new Set(found)].filter(socket => !fixed.includes(socket))
   return {
     protectedHome: canonical,
     protectedHomeReadable: [...READ_EXEMPTIONS],
     deniedSockets: [...new Set([...fixed, ...observed])],
     observedSockets: observed,
-    escapeSocketDirectories: [...WSL_INTEROP_DIRECTORIES],
+    escapeSocketDirectories: escapeDirectories(uid, osHome),
+    privateTmp: true,
   }
 }
 
@@ -150,7 +211,7 @@ export function missingEscapeSocketDirectories(protection: Pick<SandboxProtectio
 }
 
 /** The keys of a sandbox row's config that hold its protection, which H3 compares by {@link protectionWeakenings}. */
-const PROTECTION_KEYS: readonly string[] = ['protectedHome', 'protectedHomeReadable', 'deniedSockets', 'escapeSocketDirectories']
+const PROTECTION_KEYS: readonly string[] = ['protectedHome', 'protectedHomeReadable', 'deniedSockets', 'escapeSocketDirectories', 'privateTmp']
 
 /**
  * A sandbox row's settings without its protection, which C3's H3 hashes: the protection is compared by
@@ -177,13 +238,14 @@ export function hostProtectionOf(config: unknown, observed: readonly string[]): 
     protectedHomeReadable: strings(config.protectedHomeReadable),
     deniedSockets: strings(config.deniedSockets).filter(socket => !observed.includes(socket)),
     escapeSocketDirectories: strings(config.escapeSocketDirectories),
+    privateTmp: config.privateTmp === true,
   }
 }
 
 /**
  * How a protection is weaker than an earlier one: another protected home, a read exemption the earlier one did not
- * have, or a denied socket or hidden escape directory it no longer names. A protection that only adds denied sockets or
- * escape directories, or drops read exemptions, is not weaker.
+ * have, a denied socket or hidden escape directory it no longer names, or the host's `/tmp` shown again. A protection
+ * that only adds denied sockets or escape directories, drops read exemptions or turns `privateTmp` on is not weaker.
  * @param before - the earlier protection.
  * @param after - the later one, with every socket its row denies.
  * @returns one clause per weakening, in that order; none when the later protection is at least as strict.
@@ -198,6 +260,7 @@ export function protectionWeakenings(before: HostProtection, after: HostProtecti
   if (sockets.length > 0) weakenings.push(`no longer denies ${sockets.join(', ')}`)
   const escapes = added(before.escapeSocketDirectories, after.escapeSocketDirectories)
   if (escapes.length > 0) weakenings.push(`no longer hides ${escapes.join(', ')}`)
+  if (before.privateTmp && !after.privateTmp) weakenings.push('shows confined commands the host\'s /tmp')
   return weakenings
 }
 
@@ -218,7 +281,7 @@ function isPlain(value: unknown): boolean {
 const RUNNER_KEYS = ['runnerCommand', 'runnerFailureSignatures'] as const
 
 /** The keys whose values the overlay replaces outright, so a layer's value for them, expressions included, is dropped. */
-const REPLACED_KEYS: readonly string[] = ['protectedHome', 'protectedHomeReadable']
+const REPLACED_KEYS: readonly string[] = ['protectedHome', 'protectedHomeReadable', 'privateTmp']
 
 /**
  * The configs that patches or composed entries give the `sandbox` row, in order.
@@ -324,6 +387,7 @@ export async function writeSandboxOverlay(home: string, name: string, profile: P
     protectedHomeReadable: [...protection.protectedHomeReadable],
     deniedSockets: [...new Set([...listed('deniedSockets'), ...protection.deniedSockets])],
     escapeSocketDirectories: [...new Set([...listed('escapeSocketDirectories'), ...protection.escapeSocketDirectories])],
+    privateTmp: protection.privateTmp,
   }
   const path = sandboxOverlayPath(home, name)
   await writeProtectedFile(path, stringify([{ id: SANDBOX_ROW, config }]))

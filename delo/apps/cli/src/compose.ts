@@ -23,8 +23,8 @@
  *   id again, which would replace the row;
  * - each required row is enabled and active; safe mode's overlay never exempts one;
  * - the `sandbox` row's `protectedHome` is the home's real path, its `deniedSockets` hold every socket C1 denies, its
- *   `escapeSocketDirectories` hold every directory the start names, and it sets no `runnerCommand` or
- *   `runnerFailureSignatures`;
+ *   `escapeSocketDirectories` hold every directory the start names, its `privateTmp` is on, and it sets no
+ *   `runnerCommand` or `runnerFailureSignatures`;
  * - in the CLI profile, each prompt row's switch has the value the recorded prompts answer gives it ("Safer prompts"
  *   Delo's default, "Same as stock" the parity value), and the guard rows `delo-fetch-guard` and `delo-update-gate`
  *   are on; in the `headless` profile, which has no setup answer, each row of `@delo/bundle-headless` has Delo's
@@ -68,10 +68,12 @@ export interface ComposeRequest {
   readonly kind: ComposeKind
   /** Where safe mode's notice is written. */
   readonly output: CommandOutput
-  /** The launch environment, read for the Docker context whose socket C1 denies. */
+  /** The launch environment, read for the Docker context and the ssh-agent whose sockets C1 denies. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** The OS home directory, under which Docker Desktop for macOS keeps its sockets; the user's by default. */
   readonly osHome?: string
+  /** The user id that names the runtime and tmux directories C1 hides; this process's by default. */
+  readonly uid?: number
 }
 
 /** The composition so far, which the approved plugin content step reads. */
@@ -204,7 +206,7 @@ export async function composeDeloProfile(request: ComposeRequest, dependencies: 
   }
   const before = safe?.patchFiles ?? []
   const approved = await dependencies.approvedPluginContent({ request, resolvedProfile, patchFiles: before, safe })
-  const protection = await sandboxProtection(request.home, request.profile, request.env, request.osHome ?? homedir())
+  const protection = await sandboxProtection(request.home, request.profile, request.env, request.osHome ?? homedir(), request.uid ?? process.getuid?.())
   const others = [...before, ...approved]
   const overlay = await writeSandboxOverlay(request.home, request.profile, resolvedProfile.profile, others, protection)
   const startOnly = startOnlySockets(request.home, resolvedProfile.profile, others, protection)
@@ -379,6 +381,7 @@ function sandboxViolations(composed: ComposedStart, row: BootedRow): Violation[]
   if (missing.length > 0) violations.push({ subject: SANDBOX_ROW, problem: `does not deny ${missing.join(', ')}`, sources: sources('deniedSockets') })
   const unhidden = missingEscapeSocketDirectories(composed.protection, config)
   if (unhidden.length > 0) violations.push({ subject: SANDBOX_ROW, problem: `does not hide the escape directories ${unhidden.join(', ')}`, sources: sources('escapeSocketDirectories') })
+  if (config.privateTmp !== true) violations.push({ subject: SANDBOX_ROW, problem: 'shows confined commands the host\'s /tmp (privateTmp is not on)', sources: sources('privateTmp') })
   for (const key of ['runnerCommand', 'runnerFailureSignatures']) {
     if (config[key] !== undefined) violations.push({ subject: SANDBOX_ROW, problem: `sets ${key}`, sources: sources(key) })
   }

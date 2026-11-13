@@ -36,8 +36,10 @@ The rows are the guarantees a person reasonably expects of a native workspace. "
 | A confined command cannot read Delo's home (keys, tokens, credentials) | no | yes on Linux and macOS; no on Windows | as the CLI profile |
 | A confined command cannot read the rest of your account (`~/.ssh`, `~/.aws`, `/etc`) | no | no, as stock | no |
 | A confined command cannot reach the network | no | no, as stock | no |
-| A confined command cannot connect to the Docker socket | no | yes on bwrap and Seatbelt for the active context's socket; no on Landlock and Windows | as the CLI profile |
+| A confined command cannot connect to the Docker socket | no | yes on bwrap and Seatbelt for the active context's socket and, under WSL and on Linux, Docker Desktop's control sockets; no on Landlock and Windows | as the CLI profile |
 | A confined command cannot start a Windows program through WSL's interop sockets | no | yes under WSL on bwrap; on Landlock every confined command is refused while interop exists | as the CLI profile |
+| A confined command cannot start a program outside the sandbox through your session's services (`systemd-run --user`, the session or system bus, a tmux or screen server, the X server) | no | yes on bwrap and Seatbelt for their default sockets; on Landlock every confined command is refused while one of their directories exists; an X server's abstract socket and a session bus on an abstract address stay reachable | as the CLI profile |
+| A confined command cannot use your ssh-agent | no | yes on bwrap and Seatbelt for the agent `SSH_AUTH_SOCK` names at start and for agents under `/tmp` and the runtime directory; no on Landlock | as the CLI profile |
 | A program a confined command names in a repository's git settings, attributes or hooks never runs outside the sandbox when the harness summarises the turn's changed files | no | yes | not applicable: the change summary is not mounted |
 | `web_fetch` refuses loopback, link-local and private-network targets | no | yes | yes |
 | A model-authored write to instructions needs an approval that names the effect | no | through the file tools only; a shell command or PTC code writes without it | through the file tools only, and the write is refused because no one can answer |

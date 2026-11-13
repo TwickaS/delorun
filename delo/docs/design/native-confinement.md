@@ -27,7 +27,7 @@ English
 - `delorun start` runs no confinement probe. `delorun verify` reports the `confinement-rule` and `home-modes` checks as not run.
 - The prompt for full access is upstream's per-call approval prompt, which names the requested mode and the operation and does not name Delo's home. The per-workspace full-access consent of [`@delo/plugin-permission-defaults`](../../packages/plugin-permission-defaults/README.md) is asked at the home's computer, by the studio when the person picks full access, from the approval card of a request that asks for full access, or in Settings, Permissions, and by `delorun workspace full-access`; its words state that full access reaches Delo's home with its keys and tokens, the Docker supervisor and the update channel.
 - The instruction consent reviews writes that the file tools make. A shell command or PTC code under `workspace-write` writes an `AGENTS.md`, a skill or a preset inside a writable root without that review.
-- The sandbox provider can hide whole socket directories (`deniedSocketDirectories`), and `delorun start` does not pass Docker Desktop's control-socket directories to it.
+- `delorun start` hides Docker Desktop's control-socket directories under WSL and on Linux as escape socket directories ([C1](../contracts/c01-home-layout.md#confinement-rules)), and does not pass its macOS control directories to the provider.
 
 ## The rules
 
@@ -49,7 +49,7 @@ English
 
 ### Docker Desktop's control sockets
 
-8. `delorun start` passes Docker Desktop's control-socket directories as denied socket directories: under WSL `/mnt/wsl/docker-desktop/shared-sockets/host-services/` and `/mnt/wsl/docker-desktop/shared-sockets/guest-services/`, on Linux `~/.docker/desktop/`, and on macOS `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/`.
+8. `delorun start` passes Docker Desktop's macOS control-socket directories `~/Library/Containers/com.docker.docker/Data/` and `~/.docker/run/` as denied socket directories.
 
 ### Windows
 
@@ -64,7 +64,7 @@ English
 ## What this does not protect against
 
 - **Landlock and sockets.** Landlock cannot deny a connect to a pathname socket; with a rootful Docker socket, a confined command can reach the engine, which is equivalent to root. A report and the rootless offer are the only remedies on such a system.
-- **The network and other sockets.** Confined commands reach the network, the ssh-agent socket, D-Bus and the display server on every dialect.
+- **The network and other sockets.** Confined commands reach the network on every dialect, pathname sockets outside the directories [C1](../contracts/c01-home-layout.md#confinement-rules) hides, and abstract sockets.
 - **Full access.** A command under `danger-full-access` runs unconfined; the prompt states what it reaches and no rule applies.
 - **A process of the same user.** A program running as the person outside the sandbox can read and change the home, the probes and the checks.
 
@@ -81,9 +81,9 @@ English
 | `windows-home-read-label` | On Windows under windows-acl, with the no-read-up label on the home, a confined command fails to read a fixture secret and the start token and reads a file under `runtimes/`. |
 | `escalation-prompt-names-home` | The approval prompt for a fixture `danger-full-access` escalation contains the statement of rule 6; a declined prompt leaves the command confined, and its read of the start token fails. |
 | `landlock-rootful-docker-reported` | On a Landlock fixture with a rootful Docker socket, `delorun verify` reports `docker-connect` as `not-enforced` with the socket's path, and setup names that path and offers the rootless engine. |
-| `docker-desktop-control-sockets-denied` | Under bwrap, a confined command cannot connect to a fixture socket in a denied Docker Desktop control directory, including one created after the command starts. |
+| `docker-desktop-control-sockets-denied` | Under Seatbelt, a confined command cannot connect to a fixture socket in a denied Docker Desktop control directory, including one created after the command starts. |
 | `a shell write to AGENTS.md asks` | A confined shell command's write to a workspace `AGENTS.md` under `workspace-write` waits for the instruction consent, and a refused ask leaves the file unchanged. |
 
 ## What is built so far
 
-The write and read rules on bwrap, Landlock and Seatbelt, the socket rules on bwrap and Seatbelt, the refusal of a writable root that equals, lies inside or contains the home, the refusal of a lax home, `secrets/` or `run/<profile>/` directory and of a lax protected file on Linux and macOS, and the provider's support for denied socket directories are built, and [C1](../contracts/c01-home-layout.md) describes them. Rule 1 is built: `delorun headless` composes `@delo/bundle-headless` under the sandbox overlay or refuses to start, as `delorun` and `delorun start` compose the CLI profile's layer, and `delorun plugin` boots no Host. Rules 2 to 12 are not built.
+The write and read rules on bwrap, Landlock and Seatbelt, the socket rules on bwrap and Seatbelt, the refusal of a writable root that equals, lies inside or contains the home, the refusal of a lax home, `secrets/` or `run/<profile>/` directory and of a lax protected file on Linux and macOS, the provider's support for denied socket directories, and the hiding of Docker Desktop's control directories under WSL and on Linux are built, and [C1](../contracts/c01-home-layout.md) describes them. Rule 1 is built: `delorun headless` composes `@delo/bundle-headless` under the sandbox overlay or refuses to start, as `delorun` and `delorun start` compose the CLI profile's layer, and `delorun plugin` boots no Host. Rules 2 to 12 are not built.

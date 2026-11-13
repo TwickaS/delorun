@@ -50,6 +50,7 @@ kind: "package-reference"
 | `protectedHomeToolReadable` | `[]` | `protectedHome` 下、相对于它的路径，进程内读取工具只能读取其中授予它的部分（例如调用会话自己的 spill 目录），受限命令仍不可读取；在 `protectedReads` 中报告，任何 runner 都不授予；需要 `protectedHome` |
 | `deniedSockets` | `[]` | 受限命令不能连接的 Unix 套接字绝对路径，在能表达该规则的 runner 上生效 |
 | `deniedSocketDirectories` | `[]` | 只存放受限命令不能连接的套接字的目录的绝对路径，例如 Docker Desktop 的控制套接字目录；bwrap 隐藏整个目录，Seatbelt 拒绝包装时其中存在的每个套接字 |
+| `privateTmp` | `false` | bwrap 是否给 `read-only` 命令一个空的只读 `/tmp`（位于 `/tmp` 下的工作区根目录以只读方式绑定回去），如同 `workspace-write` 命令已得到一个空的可写 `/tmp`，并在两种模式下隐藏主机 `/tmp` 的每个其他挂载，例如 WSLg 的 `/mnt/wslg/distro/tmp`。Landlock 与 Seatbelt 不应用它。 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-sandbox-local)是每个受支持字段及其 JSDoc 的穷尽式真源。
 

@@ -87,6 +87,10 @@ export interface Protection {
    * bwrap hides under an empty read-only tmpfs.
    */
   readonly hiddenDirectories: readonly string[]
+  /** Whether bwrap gives `read-only` commands a private `/tmp` and hides every other mount of the host's `/tmp`. */
+  readonly privateTmp: boolean
+  /** With {@link privateTmp}, the other mounts that reach the host's `/tmp` found now, which bwrap hides. */
+  readonly tmpAliases: readonly string[]
 }
 
 /** No protected home and no denied socket: every profile is upstream's. */
@@ -99,6 +103,8 @@ export const NO_PROTECTION: Protection = {
   socketSpellings: [],
   shadowedSockets: [],
   hiddenDirectories: [],
+  privateTmp: false,
+  tmpAliases: [],
 }
 
 /** The provider's validated protection settings: the canonical home, its readable entries and the denied sockets. */
@@ -111,6 +117,8 @@ export interface ProtectionSettings {
   readonly deniedSockets: readonly string[]
   /** Absolute directories every socket in which is denied. */
   readonly deniedSocketDirectories: readonly string[]
+  /** Whether bwrap hides the host's `/tmp` from `read-only` commands too, and every other mount of it in both modes. */
+  readonly privateTmp: boolean
 }
 
 /** Whether `path` lies inside or above one of the protected paths. */
@@ -126,9 +134,11 @@ function touches(path: string, protectedPaths: readonly string[]): boolean {
  * @param settings - the provider's validated protection settings.
  * @param mounts - the mount table; read from this process when omitted.
  * @param dataVolume - where macOS mounts the Data volume that firmlinks point into.
- * @param platform - the operating system, which decides whether alias coverage is checked.
+ * @param platform - the operating system, which decides whether alias coverage is checked and whether the entries of
+ *   each denied socket directory are listed for Seatbelt's path rules.
  * @returns the protection the profile builders apply.
- * @throws {SandboxUnsupportedPolicyError} when the Linux mount table or a denied socket directory cannot be read.
+ * @throws {SandboxUnsupportedPolicyError} when the Linux mount table, or on macOS a denied socket directory, cannot be
+ *   read.
  */
 export function resolveProtection(
   settings: ProtectionSettings,
@@ -137,6 +147,7 @@ export function resolveProtection(
   platform: string = process.platform,
 ): Protection {
   const nothing = settings.home === undefined && settings.deniedSockets.length === 0 && settings.deniedSocketDirectories.length === 0
+    && !settings.privateTmp
   if (nothing) return NO_PROTECTION
   const table = mounts ?? readMountTable()
   const aliasesOf = (path: string): string[] => [
@@ -165,8 +176,10 @@ export function resolveProtection(
   const socketSpellings = new Set<string>()
   const shadowedSockets = new Set<string>()
   const hiddenDirectories = new Set<string>()
+  const tmp = canonicalPath('/tmp')
   const covered = [
     ...home === undefined ? [] : [home],
+    ...settings.privateTmp ? [tmp] : [],
     ...[...settings.deniedSockets, ...settings.deniedSocketDirectories].map(path => canonicalPath(path)),
   ]
   const directorySockets: string[] = []
@@ -176,7 +189,9 @@ export function resolveProtection(
     for (const path of [real, ...aliasesOf(real)]) {
       if (!protectedPaths.some(entry => pathWithin(path, entry))) hiddenDirectories.add(path)
     }
-    // Seatbelt has no directory rule for socket connects, so each entry present now is denied by its path.
+    // Seatbelt has no directory rule for socket connects, so on macOS each entry present now is denied by its path.
+    // Elsewhere the directory is hidden or refused whole, and another user's unlistable directory cannot block a wrap.
+    if (platform !== 'darwin') continue
     let entries: string[]
     try {
       entries = readdirSync(real)
@@ -206,6 +221,8 @@ export function resolveProtection(
     socketSpellings: [...socketSpellings],
     shadowedSockets: [...shadowedSockets],
     hiddenDirectories: [...hiddenDirectories],
+    privateTmp: settings.privateTmp,
+    tmpAliases: settings.privateTmp ? aliasesOf(tmp) : [],
   }
 }
 
@@ -214,25 +231,38 @@ export function resolveProtection(
  * its mount aliases outside the home is shadowed by binding `/dev/null` over that one path (never its directory,
  * which holds other sockets), each denied socket directory gets an empty read-only tmpfs, and the home is replaced
  * by an empty tmpfs carrying read-only binds of its readable entries, then remounted read-only; each alias of the
- * home gets an empty read-only tmpfs too.
+ * home gets an empty read-only tmpfs too. With {@link Protection.privateTmp}, a `read-only` command gets an empty
+ * `/tmp`, remounted read-only last, into which a workspace root under `/tmp` is bound read-only, as a
+ * `workspace-write` command gets an empty writable one, and every other mount of the host's `/tmp` gets an empty
+ * read-only tmpfs. A path inside a hidden directory needs no mount of its own, and bwrap could not create its mount
+ * point in the read-only tmpfs, so it is left out.
  * @param policy - file-effect policy to express as bwrap mounts.
  * @param protection - the protected home and denied sockets.
  * @returns profile arguments before the trailing separator and command argv.
  */
 export function bwrapProfileArgs(policy: SandboxPolicy, protection: Protection = NO_PROTECTION): string[] {
   const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent']
+  const privateReadOnlyTmp = protection.privateTmp && policy.mode === 'read-only'
   if (policy.mode === 'workspace-write') {
     args.push('--tmpfs', '/tmp')
     for (const root of workspaceWritableRoots(policy)) args.push('--bind', root, root)
+  } else if (privateReadOnlyTmp) {
+    args.push('--tmpfs', '/tmp')
+    if (pathWithin(policy.workspaceRoot, '/tmp')) args.push('--ro-bind', policy.workspaceRoot, policy.workspaceRoot)
   }
-  for (const socket of protection.shadowedSockets) args.push('--ro-bind', '/dev/null', socket)
-  for (const directory of protection.hiddenDirectories) args.push('--tmpfs', directory, '--remount-ro', directory)
+  const within = (path: string, others: readonly string[]): boolean => others.some(other => other !== path && pathWithin(path, other))
+  const hidden = protection.hiddenDirectories.filter(path => !within(path, protection.hiddenDirectories))
+  const exposed = (path: string): boolean => !hidden.some(directory => pathWithin(path, directory))
+  for (const socket of protection.shadowedSockets.filter(exposed)) args.push('--ro-bind', '/dev/null', socket)
+  for (const directory of hidden) args.push('--tmpfs', directory, '--remount-ro', directory)
   if (protection.home !== undefined) {
     args.push('--tmpfs', protection.home)
     for (const entry of protection.readable) args.push('--ro-bind', entry.source, entry.path)
     args.push('--remount-ro', protection.home)
-    for (const alias of protection.homeAliases) args.push('--tmpfs', alias, '--remount-ro', alias)
+    for (const alias of protection.homeAliases.filter(exposed)) args.push('--tmpfs', alias, '--remount-ro', alias)
   }
+  for (const alias of protection.tmpAliases.filter(exposed)) args.push('--tmpfs', alias, '--remount-ro', alias)
+  if (privateReadOnlyTmp) args.push('--remount-ro', '/tmp')
   return args
 }
 
