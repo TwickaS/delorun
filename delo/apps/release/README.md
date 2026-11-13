@@ -118,14 +118,15 @@ Its scenarios, in order, each printing `PASS` or `FAIL` with what the person saw
 | `update` | `delorun update --yes` takes the next release and keeps the person's file |
 | `rollback-auto` | a release whose Host never answers rolls back on its own and names the failed criterion |
 | `tampered` | one changed archive byte is refused by a fresh install and by an update, and the store is left alone |
-| `clock` | the signer's clock is 4 days behind, so the timestamp has expired: an installed release starts, and `update --check` and a fresh install name the expiry |
-| `clock-ahead` | the launcher run with its clock 4 days ahead (a preload for `Date`; there is no `faketime` here) refuses a fresh install and starts an installed release |
-| `recover-signing` | the next signed timestamp makes the update work with no other action |
-| `repair` | `delorun repair` replaces a program whose file changed and keeps the data |
+| `clock` | the launcher run with its clock 4 days ahead (a preload for `Date`; there is no `faketime` here) refuses a fresh install naming the expiry and starts an installed release |
+| `update-after-clock` | with the clock back, the next signed release updates with no other action |
+| `repair` | `delorun repair` replaces a program whose file changed and keeps the data, and `delorun recover status` and `recover discard` list and remove the program store it set aside |
 | `from` | `delorun update --from <folder>` installs with the channel switched off, and a lower release is refused |
 | `by-hand` | the steps of [Last resort, by hand](../../docs/guide/troubleshooting.md#by-hand), typed literally, give a working program |
 
-The runtime never receives the clock preload, so a clock jump cannot be rehearsed inside the runtime itself; `clock` makes the same state by signing with a clock 4 days behind. The rehearsal does not cover Windows or macOS, the public release log, the npm registry or the production hosts.
+The launcher removes `NODE_OPTIONS` from the runtime's environment, so the clock preload reaches the launcher and not the runtime; the runtime's own timestamp check at `delorun update` is covered by `c02-refuses-expired-timestamp` and by the launcher's identical check. The disk it needs is large: each release unpacks to about 1.5 GB, and the by-hand scenario copies the home as the guide's step 2 says, leaving out `runtimes/` when the disk could not hold the copy.
+
+`--windows <dir>` runs a shorter probe from WSL for Windows: `<dir>` holds a `build-closure.ts --version 0.1.0-rc.1 --platform win32-x64 --artifacts existing` archive and file list, and the packed launcher runs under the Windows `node.exe` (`REHEARSAL_WINDOWS_NODE` overrides `/mnt/c/nvm4w/nodejs/node.exe`) with a home in a new folder under the Windows temporary directory, reaching the channel in WSL through its loopback address. Its scenarios are `win-install` (install and start of release 1), `win-update-check` and `win-setup-start` (setup, start, status and stop). The folder is left in place for you to remove. The rehearsal does not cover macOS, the public release log, the npm registry or the production hosts.
 
 ## Rebuild comparison
 

@@ -7,6 +7,10 @@
  *
  * `tsx delo/apps/release/scripts/rehearsal.ts [--work <dir>] [--closure <dir>] [--only <id>,...] [--keep]`
  *
+ * `--windows <dir>` runs the Windows probe instead, from WSL: `<dir>` holds a `build-closure.ts --version 0.1.0-rc.1
+ * --platform win32-x64` archive and file list, and the launcher runs under the Windows `node.exe` in a folder under the
+ * Windows temporary directory, which nothing outside is touched by.
+ *
  * @module rehearsal
  */
 import { execFileSync, spawn } from 'node:child_process'
@@ -18,6 +22,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { buildBaseClosure, deriveInChild, launcher, publish, runTrust } from '../tests/journey/parts.ts'
+import { runEntryAsync } from '../tests/local/support.ts'
 import { serveJourneyLog } from '../tests/journey/servers.ts'
 
 /** The releases: the first signed release, a later one, one whose Host never answers, one with a changed archive byte, a recovery release, and one that only a folder carries. */
@@ -35,7 +40,7 @@ interface Finished {
   readonly stderr: string
 }
 
-const { values: options } = parseArgs({ options: { 'work': { type: 'string' }, 'closure': { type: 'string' }, 'only': { type: 'string' }, 'keep': { type: 'boolean' } } })
+const { values: options } = parseArgs({ options: { 'work': { type: 'string' }, 'closure': { type: 'string' }, 'only': { type: 'string' }, 'keep': { type: 'boolean' }, 'windows': { type: 'string' } } })
 const only = options.only?.split(',')
 const work = resolve(options.work ?? mkdtempSync(join(tmpdir(), 'delo-rehearsal-')))
 mkdirSync(work, { recursive: true })
@@ -250,6 +255,69 @@ mkdirSync(channel)
 const server = channelServer(channel)
 await server.start()
 say(`rehearsal: work ${work}; channel ${server.origin()} and log ${log.origin} (HTTP, loopback)`)
+
+if (options.windows !== undefined) {
+  // The Windows probe: the same signed release, the packed launcher run by the Windows Node, a home on the Windows disk.
+  const winNode = process.env['REHEARSAL_WINDOWS_NODE'] ?? '/mnt/c/nvm4w/nodejs/node.exe'
+  const winTemp = execFileSync('wslpath', ['-u', execFileSync('cmd.exe', ['/c', 'echo %TEMP%'], { encoding: 'utf8', cwd: '/mnt/c' }).trim()], { encoding: 'utf8' }).trim()
+  const winWork = join(winTemp, `delo-rehearsal-${String(Date.now())}`)
+  const winPath = (path: string): string => execFileSync('wslpath', ['-w', path], { encoding: 'utf8' }).trim()
+  mkdirSync(join(winWork, 'home'), { recursive: true })
+  const winChannel = join(work, 'win-channel')
+  mkdirSync(winChannel)
+  const winServer = channelServer(winChannel)
+  await winServer.start()
+  const signed = await runEntryAsync('local-release.ts', [
+    '--version', R1, '--summary', 'Windows rehearsal release', '--out', winChannel, '--root', trust.rootPath, '--targets-key', trust.targetsKey,
+    '--timestamp-key', trust.timestampKey, '--state', trust.state, '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint,
+    '--log-tiles', log.endpoints.tiles, '--log-poll-seconds', '0', '--platform', 'win32-x64', '--closures-from', resolve(options.windows),
+  ])
+  if (signed.status !== 0) throw new Error(`local-release.ts failed: ${signed.stderr}`)
+  const winLauncher = await launcher(trust, work, winServer.origin(), log.origin)
+  execFileSync('tar', ['-xzf', winLauncher.tarball, '-C', winWork])
+  const entry = winPath(join(winWork, 'package', 'dist', 'bin.js'))
+  const winEnv = { ...process.env, DELO_HOME: winPath(join(winWork, 'home')), WSLENV: 'DELO_HOME/w:DEEPSEEK_API_KEY', DEEPSEEK_API_KEY: 'sk-rehearsal-throwaway' }
+  const winRun = (args: readonly string[]): Promise<Finished> => new Promise((done) => {
+    const child = spawn(winNode, [entry, ...args], { env: winEnv, stdio: ['ignore', 'pipe', 'pipe'], cwd: '/mnt/c' })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString() })
+    child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+    const timer = setTimeout(() => child.kill('SIGKILL'), 300_000)
+    child.on('close', (status) => {
+      clearTimeout(timer)
+      appendFileSync(logFile, `$ node.exe ${args.join(' ')}\n[${String(status)}]\n${stdout}${stderr}\n`)
+      done({ status, stdout, stderr })
+    })
+  })
+  await scenario('win-install', 'the packed launcher under the Windows Node installs release 1 from the channel in WSL and starts it', async () => {
+    const first = await winRun(['--version'])
+    expect(first.status === 0 && first.stdout.includes(R1), `install failed: [${String(first.status)}] ${excerpt(first)}`)
+    return excerpt(first).slice(0, 300)
+  })
+  await scenario('win-update-check', 'delorun update --check runs under Windows and names the current release', async () => {
+    const checked = await winRun(['update', '--check'])
+    expect(checked.status === 0, `update --check failed: [${String(checked.status)}] ${excerpt(checked)}`)
+    return excerpt(checked).slice(0, 300)
+  })
+  await scenario('win-setup-start', 'setup runs without questions, Delorun starts in the background, status answers, and stop ends it', async () => {
+    const answers = join(winWork, 'answers.json')
+    writeFileSync(answers, `${JSON.stringify({ schemaVersion: 2, modelProvider: { id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' } }, prompts: 'safer', background: true, profile: { name: null, port: null }, reach: { option: 'none', identityFactor: null }, importStockHome: false }, undefined, 2)}\n`)
+    const setup = await winRun(['setup', '--config', winPath(answers)])
+    expect(setup.status === 0, `setup failed: [${String(setup.status)}] ${excerpt(setup)}`)
+    const started = await winRun([])
+    expect(started.status === 0, `start failed: [${String(started.status)}] ${excerpt(started)}`)
+    const status = await winRun(['status', '--json'])
+    const stopped = await winRun(['stop'])
+    expect(status.stdout.includes('"running"') && stopped.status === 0, `status or stop failed: ${excerpt(status)} | ${excerpt(stopped)}`)
+    return `setup, start, status and stop exit 0 (${excerpt(started).slice(0, 100)})`
+  })
+  await winServer.stop()
+  await log.close()
+  const failedWindows = results.filter(result => !result.ok)
+  say(`\nrehearsal (windows): ${String(results.length - failedWindows.length)} of ${String(results.length)} scenarios passed; Windows folder ${winWork}; log ${logFile}`)
+  process.exit(failedWindows.length === 0 ? 0 : 1)
+}
 
 const base = await buildBaseClosure(work, R1, options.closure)
 const derived = Promise.all([
