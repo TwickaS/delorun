@@ -22,7 +22,7 @@ You need Delorun installed ([Install and first run](install.md)) and, to copy a 
 - [Plugins after the import](#plugins-after-the-import)
 - [A home that already has chats](#a-home-that-already-has-chats)
 - [What changes when you switch](#what-changes-when-you-switch)
-- [Same as stock](#same-as-stock)
+- [Ask less (like DeepSeek Harness)](#ask-less-like-deepseek-harness)
 - [Going back](#going-back)
 - [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
@@ -110,7 +110,7 @@ Your chats and workspaces look as they did, and your plugins work as they did in
 - **Where Delorun runs.** `delorun` runs Delorun in the background and opens the studio; `delorun stop` stops it ([Daily use](daily-use.md)).
 - **Your home.** Delorun keeps its own home, `~/.delo`, and never writes `~/.dsh` ([Your Delorun home](home.md)).
 - **What commands can reach.** Commands the model runs cannot write, or read, Delorun's home, and every new workspace starts on Workspace Write ([What Delorun protects](safety.md)).
-- **Consents.** With setup's default Safer prompts, Delorun asks before the model writes instruction files or schedules work, holds a new MCP server that runs a command until you allow it, and asks once before a workspace gets full access ([Consents](safety.md#consents)).
+- **Consents.** With setup's default Ask me first, Delorun asks before the model writes instruction files or schedules work, holds a new MCP server that runs a command until you allow it, and asks once before a workspace gets full access ([Consents](safety.md#consents)).
 - **`web_fetch`.** It does not fetch addresses on your own computer or network ([The web_fetch guard](safety.md#the-web_fetch-guard)).
 - **Data sharing.** DeepSeek's session-log upload is off until you turn it on in Settings → Safety → Privacy.
 - **Updates.** Delorun checks for a newer release once a day, shows what an update would change before you confirm, and can go back ([Updates](updates.md)).
@@ -118,13 +118,13 @@ Your chats and workspaces look as they did, and your plugins work as they did in
 
 [Delorun and stock DeepSeek Harness](delo-vs-stock.md) lists every difference and what Delorun does not include, and the [parity checklist](../reference/parity.md) lists each changed default with its evidence.
 
-## Same as stock
+## Ask less (like DeepSeek Harness)
 
 Each of these returns one difference to DeepSeek Harness's behaviour, and you can change it back at any time:
 
 | Switch | Where | What it changes |
 | --- | --- | --- |
-| Prompts: **Same as stock** | `delorun setup prompts`, or the prompts question in setup | Turns off the full-access consent, the instruction-file consent, the MCP server consent and the scheduled-task consent. The `web_fetch` guard stays on. |
+| Prompts: **Ask less (like DeepSeek Harness)** | `delorun setup prompts`, or the prompts question in setup | Turns off the full-access consent, the instruction-file consent, the MCP server consent and the scheduled-task consent. The `web_fetch` guard stays on. |
 | Look: **Stock** | Settings → General → Look, or onboarding's studio look | The original look, without Delorun's theme, sidebar, chat states, settings layout and onboarding. **Delorun look** in Settings → General switches back. |
 | **Check for new releases** off | Settings → General → Updates, or `delorun setup privacy` | No release check request; `delorun update` still works when you run it. |
 | **DeepSeek session-log upload** on | Settings → Safety → Privacy | Each request to DeepSeek's API carries part of your session log, as in DeepSeek Harness. |

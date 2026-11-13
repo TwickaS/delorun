@@ -56,8 +56,8 @@ Delorun holds itself to these rules:
 | Updates | Incompatible plugins may be disabled at startup | A report of what would change before you confirm, a profile snapshot and an optional copy of your chat data first, a health check after, automatic rollback when it fails, and `delorun recover` to go back ([Updates](updates.md)) |
 | Your own changes | Profile layers | Profile layers, a history of your profile that `delorun recover restore` brings back, [safe mode](../reference/glossary.md#safe-mode), and update checks that refuse to drop a plugin, setting or local plugin you added |
 | What commands can reach | The [sandbox](../reference/glossary.md#sandbox) confines file writes | The same sandbox also keeps commands from writing to or reading Delorun's home and its secrets, and from reaching its control socket and Docker, where your system can enforce it ([What Delorun protects](safety.md#the-sandbox)) |
-| Permissions | One default for every workspace | Every new workspace starts on Workspace Write. With [Safer prompts](../reference/glossary.md#safer-prompts), [full access](../reference/glossary.md#full-access) needs your consent once per workspace, given at your computer ([Full access](safety.md#full-access)) |
-| Consents | — | With Safer prompts, the model's file-tool writes to `AGENTS.md`, skills and presets ask first, a scheduled task asks with its schedule and target, and a new [MCP server](../reference/glossary.md#mcp-server) that runs a command waits until you allow it at your computer ([Consents](safety.md#consents)) |
+| Permissions | One default for every workspace | Every new workspace starts on Workspace Write. With [Ask me first](../reference/glossary.md#ask-me-first), [full access](../reference/glossary.md#full-access) needs your consent once per workspace, given at your computer ([Full access](safety.md#full-access)) |
+| Consents | — | With Ask me first, the model's file-tool writes to `AGENTS.md`, skills and presets ask first, a scheduled task asks with its schedule and target, and a new [MCP server](../reference/glossary.md#mcp-server) that runs a command waits until you allow it at your computer ([Consents](safety.md#consents)) |
 | Network | Commands reach any host | Each workspace can be Open, Allowlist or Off in Settings, Safety, Network; the default is Open ([The network setting](safety.md#the-network-setting)) |
 | Cost | — | An optional meter under the message box shows what a chat has cost ([See what a chat costs](cost-meter.md)) |
 | Web fetch | Reaches loopback and private-network hosts in every mode | `web_fetch` refuses loopback, link-local and private-network addresses, cloud metadata addresses included. Commands are outside this guard |
@@ -74,7 +74,7 @@ Delorun holds itself to these rules:
 
 - If you run on Windows, then commands can read Delorun's home, its secrets and its token, though they cannot write there — treat the model's commands as able to read them ([What Delorun protects](safety.md#the-sandbox)).
 - If you run on Linux without bubblewrap on a desktop, then Delorun refuses to run sandboxed commands at all — install bubblewrap.
-- If you chose [**Same as stock**](../reference/glossary.md#same-as-stock) in setup, then the full-access, instruction-file, MCP server and scheduled-task consents are off, and the network setting is not available — run `delorun setup prompts` to choose Safer prompts again.
+- If you chose [**Ask less (like DeepSeek Harness)**](../reference/glossary.md#ask-less) in setup, then the full-access, instruction-file, MCP server and scheduled-task consents are off, and the network setting is not available — run `delorun setup prompts` to choose Ask me first again.
 - If you want the stock look, then choose Stock in Settings, General, Look — **Delorun look** in the same place switches back.
 
 </details>
@@ -84,11 +84,11 @@ Delorun holds itself to these rules:
 The [parity checklist](../reference/parity.md) lists each changed default with its evidence:
 
 - Delorun's studio additions are on; the stock look is one switch away in Settings, General, Look.
-- A new workspace starts on Workspace Write whatever the deployment default is, and with Safer prompts full access needs your consent once per workspace.
+- A new workspace starts on Workspace Write whatever the deployment default is, and with Ask me first full access needs your consent once per workspace.
 - DeepSeek's session-log upload is off until you turn it on.
 - `web_fetch` refuses loopback, link-local and private-network addresses.
 - Commands the model runs cannot write to or read Delorun's home, or reach its control socket, where your system enforces it.
-- With Safer prompts, the instruction-file, MCP server and scheduled-task consents apply. Setup's **Same as stock** answer turns them and the full-access refusal off ([Same as stock](switching.md#same-as-stock)).
+- With Ask me first, the instruction-file, MCP server and scheduled-task consents apply. Setup's **Ask less (like DeepSeek Harness)** answer turns them and the full-access refusal off ([Ask less (like DeepSeek Harness)](switching.md#ask-less-like-deepseek-harness)).
 - The default workspace is `Delo/default-workspace` in your Documents folder, or in your home folder when your system names no Documents folder.
 
 Other differences exist in the code but are off in the profile `delorun` runs, so DSH's behaviour stands for each. The [parity checklist](../reference/parity.md) names them.
@@ -116,7 +116,7 @@ The [roadmap](roadmap.md) says which of these are planned.
 
 - **From DSH:** setup offers to copy your chats and workspaces from `~/.dsh`, and `delorun import-home` does it any time and asks about your profiles, settings, instructions, skills and key one by one. `~/.dsh` is never changed ([Switching from DeepSeek Harness](switching.md)).
 - **Back to DSH:** your DSH home stays untouched, so stock DSH keeps working beside Delorun. `delorun export` writes chats and workspaces as files that another home imports.
-- **Stock behaviour inside Delorun:** turn off Delorun's studio additions for the stock look, and answer **Same as stock** in `delorun setup prompts` for DSH's prompts.
+- **Stock behaviour inside Delorun:** turn off Delorun's studio additions for the stock look, and answer **Ask less (like DeepSeek Harness)** in `delorun setup prompts` for DSH's prompts.
 
 <details>
 <summary>Edge cases</summary>

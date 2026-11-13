@@ -34,7 +34,7 @@ This page shows the commands you use every day and the choices you make about wh
 | `delorun stop` | Stops Delorun once running chats end their turns. |
 | `delorun stop --now` | Stops at once. It cancels running turns and background jobs. |
 
-`delorun` and `delorun start` run Delorun in the background, so it keeps running after you close the terminal, unless you answered No to the background question in Full setup. `delorun setup background` asks it again. A background start prints `Delo is running in the background for the profile default (process <pid>) at <address>`, then how to see, follow and stop it.
+`delorun` and `delorun start` run Delorun in the background, so it keeps running after you close the terminal, unless you answered No to the background question under More settings in setup. `delorun setup background` asks it again. A background start prints `Delo is running in the background for the profile default (process <pid>) at <address>`, then how to see, follow and stop it.
 
 `delorun stop` stops new turns, prints `Waiting for N running chat(s) to end…`, and waits up to 30 minutes before it stops anyway. When it is done it prints `Delo stopped for the profile default.` `delorun stop --now` cancels the running chats instead.
 
@@ -93,12 +93,12 @@ A workspace is a folder on your computer. Every chat works in one. The workspace
 
 Commands the model runs in a Workspace Write workspace cannot write under your Delorun home, read its secrets or tokens, or connect to its control sockets, where your system enforces those rules ([What Delorun protects](safety.md#the-sandbox)).
 
-With setup's default **Safer prompts**, Delorun asks you once for each workspace before it gives it full access. You answer on the computer Delorun runs on: pick Full access in a chat, use Settings → Safety → Permissions, or choose Allow for this chat on an approval card that asks for it ([Full access](safety.md#full-access)). Other [consents](../reference/glossary.md#consent) ask before the model edits instruction files, adds an MCP server or schedules work ([Consents](safety.md#consents)).
+With setup's default **Ask me first**, Delorun asks you once for each workspace before it gives it full access. You answer on the computer Delorun runs on: pick Full access in a chat, use Settings → Safety → Permissions, or choose Allow for this chat on an approval card that asks for it ([Full access](safety.md#full-access)). Other [consents](../reference/glossary.md#consent) ask before the model edits instruction files, adds an MCP server or schedules work ([Consents](safety.md#consents)).
 
 <details>
 <summary>Edge cases</summary>
 
-- If you choose **Same as stock** in `delorun setup prompts`, then a workspace switches to full access as in DeepSeek Harness, after the studio's own confirmation.
+- If you choose **Ask less (like DeepSeek Harness)** in `delorun setup prompts`, then a workspace switches to full access as in DeepSeek Harness, after the studio's own confirmation.
 - If a chat was copied from DeepSeek Harness or another home and ran with full access there, then it opens on Workspace Write. Turn full access on for its workspace again.
 - If you pick a folder that Delorun refuses as a workspace, then it names the reason. Refused folders are the filesystem root, your home folder itself, your Delorun home, DeepSeek Harness's home, and a folder that contains either.
 - If you use the studio from a phone, then it cannot grant full access ([Reach the studio from your phone](reach.md)).

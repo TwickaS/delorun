@@ -1,5 +1,5 @@
 ---
-description: "Install Delorun with npx delorun and take it from nothing to a first chat: what you need, what the launcher checks before it installs, Quick and Full setup, the studio and its first-run guide, the default workspace, and opening the studio from a machine without a browser."
+description: "Install Delorun with npx delorun and take it from nothing to a first chat: what you need, what the launcher checks before it installs, setup by how you will use Delorun, the studio and its first-run guide, the default workspace, and opening the studio from a machine without a browser."
 ---
 
 # Install and first run
@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-This page takes you from nothing to your first chat. You run one command, `npx delorun`. It downloads Delorun, checks that the download is genuine, asks a few questions, starts Delorun and opens it in your browser. Everything then runs on your own computer. You need a computer that Delorun supports, Node.js to run the command, and a key for the AI model you want to talk to. A chat needs the key; the studio opens without one, so you can look around first.
+This page takes you from nothing to your first chat. You run one command, `npx delorun`. It downloads Delorun, checks that the download is genuine, asks a few questions and sets Delorun up. You then start it with `delorun`, and it opens in your browser. Everything then runs on your own computer. You need a computer that Delorun supports, Node.js to run the command, and a key for the AI model you want to talk to. A chat needs the key; the studio opens without one, so you can look around first.
 
 Delorun is a community fork of [DeepSeek Harness](../reference/glossary.md#stock), the open-source program that lets an AI model work on files and run commands on your computer.
 
@@ -17,7 +17,7 @@ Delorun is a community fork of [DeepSeek Harness](../reference/glossary.md#stock
 - [Before you start](#before-you-start)
 - [Install](#install)
 - [What the launcher verifies](#what-the-launcher-verifies)
-- [Setup: Quick or Full](#setup-quick-or-full)
+- [Setup: how you will use Delorun](#setup-how-you-will-use-delorun)
 - [The studio and your first chat](#the-studio-and-your-first-chat)
 - [The default workspace](#the-default-workspace)
 - [A computer without a browser](#a-computer-without-a-browser)
@@ -95,59 +95,103 @@ You can run these checks again at any time with `delorun verify` ([Daily use](da
 
 </details>
 
-## Setup: Quick or Full
+## Setup: how you will use Delorun
 
-The first `delorun` on a new home runs setup. It asks one question at a time. Every question after the first offers **← Back**. Nothing is written until you choose **Save and set up** at the end, and **Cancel** there writes nothing.
+The first `delorun` on a new home runs setup. It asks one question at a time, and every question after the first offers **← Back**. Nothing is written until you choose **Save and set up** on the last screen; **Cancel** there writes nothing.
 
-The first question picks how many questions you get:
+The first question asks how you will use Delorun. Its answer sets the defaults and decides which questions come next. Each choice shows what it does, who it suits and how to change it later, and the recommended choice is marked:
 
 ```text
-How do you want to set up Delorun?
-  Quick   the model provider and its key, and how careful prompts are
-  Full    also the release check, background running, the profile name and the port
+How will you use Delorun?
+● Just me, on this computer (recommended)
+○ Also from my phone or another device
+○ For scripts and automation
 ```
 
-If you are unsure, choose Quick. Both forms ask these questions, in this order:
+If you are unsure, choose the first. Most people then answer three questions: the model provider, its key, and how much Delorun asks.
 
-1. **Privacy.** A note, no question: Delorun has no telemetry of its own. DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on. Once a day Delorun checks whether a newer release exists, and sends nothing about your installation. Full asks `Check for new releases?`; Quick leaves the check on.
-2. **Import.** Only if you used DeepSeek Harness before: `Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.` The answer starts on No ([Switching from DeepSeek Harness](switching.md)).
-3. **Model provider.** `Which model provider should Delorun use?` Choose DeepSeek, another provider, or **None for now**. Then you give the key, or say it comes from an environment variable. Setup checks a typed key with one request to the provider ([Model providers](providers.md)).
-4. **Prompts.** `How should Delorun ask before it changes things?` **Safer prompts**, the default, asks before instruction edits, new MCP servers, scheduled work and full access. **Same as stock** behaves as DeepSeek Harness does ([What Delorun protects](safety.md#consents)).
+| You choose | Delorun runs | Setup also asks |
+| --- | --- | --- |
+| **Just me, on this computer** | In the background, and opens in your browser on this computer. Nothing outside this computer can reach it. | Nothing more. |
+| **Also from my phone or another device** | As above, plus a private address on your own [Tailscale network](../reference/glossary.md#tailnet). A device you approve here with a code can read and reply to chats. | Whether to open Delorun from your phone over Tailscale ([Reach the studio from your phone](reach.md)). |
+| **For scripts and automation** | With no studio. You run `delorun headless "task"` from scripts or CI, with your key in an environment variable such as `DEEPSEEK_API_KEY`. | Neither the import question nor the background question. |
 
-Full also asks:
+Every choice then asks these questions, in this order:
 
-5. **Background.** `Keep Delorun running in the background after the terminal closes?` Yes by default. No runs Delorun in the terminal, and closing the terminal stops it.
-6. **Remote access.** `Reach this studio from your phone over your own tailnet (Tailscale)?` No by default ([Reach the studio from your phone](reach.md)).
-7. **Profile name.** `default` unless you want another.
-8. **Port.** The studio's port, 3080 by default. Setup says when the port is in use, and asks again.
+1. **Privacy.** A note, no question. It says that Delorun has no [telemetry](../reference/glossary.md#telemetry) of its own, that DeepSeek Harness's desktop analytics and DeepSeek's session-log upload are off unless you turn them on, and that once a day Delorun checks whether a newer release exists and sends nothing about your installation. The note ends: `Delorun checks for new releases once a day. To turn that off before Delorun first starts, choose More settings on the last screen, or run delorun setup privacy later.`
+2. **Import.** Only if you used DeepSeek Harness before and this Delorun home has no chats: `Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.` The answer starts on No ([Switching from DeepSeek Harness](switching.md)). The automation choice never asks it.
+3. **Model provider.** `Which model provider should Delorun use?` lists **DeepSeek (recommended)**, **More providers** (Anthropic, OpenAI, Google Gemini and others, or any server that speaks the OpenAI API) and **Choose later**.
+4. **Model key.** The question names the provider's page for creating an [API key](../reference/glossary.md#api-key), then asks `How should Delorun get the DeepSeek API key?` You can **paste it now**, and Delorun stores it in your Delorun folder where only you can read it, or **use `DEEPSEEK_API_KEY`**, which Delorun reads each time it starts. An environment variable is a named setting that your terminal passes to the programs it starts. If you choose the variable and it is not set in this terminal, setup says so at once and tells you how to set it. Setup checks a typed key with one request to the provider ([Model providers](providers.md)).
+5. **Prompts.** `How much should Delorun ask before it changes things?` This is the [prompts answer](../reference/glossary.md#prompts-answer). It has three choices:
 
-A review screen then lists your answers. You should see `Save these answers and set up Delorun?`. Choose **Save and set up**.
+   ```text
+   ● Ask me first (recommended)
+   ○ Ask less (like DeepSeek Harness)
+   ○ Never ask (dangerous)
+   ```
+
+   **Ask me first** asks before a chat gets full access to a folder, adds a tool server, edits its own instructions or schedules work, and you can allow each once. **Ask less (like DeepSeek Harness)** behaves as DeepSeek Harness does: few questions, and commands still run in a [sandbox](../reference/glossary.md#sandbox) ([What Delorun protects](safety.md#consents)). **Never ask (dangerous)** lets any chat switch to full access with no question; it prints a warning, asks you to confirm twice and to type `full access everywhere` ([Consents](safety.md#consents)). It is always listed last.
+
+A review screen then lists every answer, for example for the first choice:
+
+```text
+How you use Delorun: just me, on this computer
+Release check: on, once a day
+Model: DeepSeek, default model. Key: read from DEEPSEEK_API_KEY at each start.
+Prompts: Ask me first
+Keep running in the background: yes
+Remote access: off
+Setup name: default, studio port 3080
+
+Nothing is saved until you choose Save and set up.
+```
+
+You should see `Save these answers and set up Delorun?` with **Save and set up**, **More settings**, **Cancel** and **← Back**. Choose **Save and set up**.
+
+Setup then writes your answers, prints the next steps and starts nothing:
+
+```text
+Delorun is set up. Nothing is running yet.
+
+Next:
+  1. Set DEEPSEEK_API_KEY in your terminal, then run delorun stop and delorun start if Delorun is running. It is the DeepSeek key you chose.
+  2. Start Delorun and open the studio: delorun
+     Send a first message in a new chat. The install guide's section on your first chat walks through it: https://docs.delorun.com/guide/install#the-studio-and-your-first-chat
+
+Change an answer later: delorun setup <section> (delorun setup --list shows the sections).
+If something looks wrong: delorun doctor.
+```
+
+Step 1 appears only while the key variable you chose is not set. The steps differ by choice. The phone choice adds `Add your phone or another device: delorun devices approve, then type the code it shows.`, or, when Tailscale was not ready, `Remote access is off. Fix what the Tailscale note said, then run delorun reach on tailscale.` The automation choice replaces step 2 with `Run a task from a script or CI: delorun headless "your task"` and adds `To use the studio as well, start it any time with delorun.` When the launcher started setup, the first step installs the `delorun` command at the same version, with `npm install -g delorun@<version>`.
 
 <details>
 <summary>Edge cases</summary>
 
-- If you choose **None for now**, then no provider is set up and chats cannot answer yet. Setup says so. New chats start on `deepseek-flash` from DeepSeek, which reads its key from `DEEPSEEK_API_KEY`. Add a provider later with `delorun setup key` or in the studio's Settings → Agent → Models.
+- If you choose **Choose later**, then no provider is set up and chats cannot answer yet. Setup says so. New chats start on `deepseek-flash` from DeepSeek, which reads its key from `DEEPSEEK_API_KEY`. Add a provider later with `delorun setup key` or in the studio's Settings → Agent → Models.
 - If the provider refuses your key, then setup does not store it unless you choose **Continue without a successful check**. The review screen then says the key is not verified.
-- If you pick Quick and port 3080 is already used by another program, then setup does not ask about the port, and the start fails. `delorun start` prints `the home process exited with code 1 before it was running; see its log` and the log's path. `delorun doctor` shows `fail port` and the fix. Run `delorun setup profile` to choose another port, then `delorun start`.
+- If you press Ctrl-C at any question, then setup prints `Setup cancelled. Nothing was saved. Run delorun to start again.` and exits with code 130. Closing the terminal before you save also writes nothing.
+- If you choose **← Back** at the dangerous-mode confirmation, then you return to the prompts question.
+- If you did not choose More settings and port 3080 is already used by another program, then setup does not ask about the port, and the start fails. `delorun start` prints `the home process exited with code 1 before it was running; see its log` and the log's path. `delorun doctor` shows `fail port` and the fix. Run `delorun setup profile` to choose another port, then `delorun start`.
 - If `~/.dsh` does not exist, or your Delorun home already has chats, then the import question is skipped.
-- If you cancel, or close the terminal, before the review, then nothing is written. Run `delorun` again.
-- If setup runs without a terminal, then it cannot ask; use `delorun setup --yes` or `--config` (below).
-- If you chose to run in the terminal (background: No), then closing the terminal stops Delorun.
+- If setup runs without a terminal, then it cannot ask; use `delorun setup --yes` or `--config` (see Go further below).
+- If you run setup with `--yes` and no `--provider`, then it sets up no model provider and prints how to add one. A script that runs `delorun headless` needs the key variable set in its own environment, because setup never stores a key it did not ask for.
+- If you run setup as the root user, then **Never ask (dangerous)** is refused, by the question, by `--prompts dangerous` and by an answers document.
+- If you chose to run in the terminal (background: No, under More settings), then closing the terminal stops Delorun.
 
 </details>
 
 <details>
 <summary>Go further</summary>
 
+- **More settings** on the review screen asks the rest: whether to check for new releases (Yes by default), whether Delorun keeps running in the background, remote access, and the [profile](../reference/glossary.md#profile) name and the studio's port (3080 by default). Setup says when the port is in use, and asks again. Run setup with another profile name for several setups side by side ([Your Delorun home](home.md#profiles)).
 - Change one answer later with `delorun setup <section>`. `delorun setup --list` lists the sections: `privacy`, `import`, `key`, `prompts`, `background`, `reach` and `profile`.
-- For scripts, `delorun setup --yes` takes every default and reads the key from `DEEPSEEK_API_KEY`. `delorun setup --config <file>` reads the answers from a JSON file. Neither turns on remote access or imports `~/.dsh`, and neither starts Delorun: run `delorun` afterwards. `--check-key` checks a key that comes from the environment ([Model providers](providers.md#set-up-without-questions)).
-- Several setups side by side: run Full setup with another profile name ([Your Delorun home](home.md#profiles)).
+- For scripts, `delorun setup --yes` takes every default and reads the key from `DEEPSEEK_API_KEY`. `delorun setup --config <file>` reads the answers from a JSON file, which may name `"useCase": "local" | "remote" | "automation"`. Neither turns on remote access or imports `~/.dsh`, and neither starts Delorun: run `delorun` afterwards. `--check-key` checks a key that comes from the environment ([Model providers](providers.md#set-up-without-questions)).
 
 </details>
 
 ## The studio and your first chat
 
-When setup ends, Delorun starts and opens the studio in your browser. The [studio](../reference/glossary.md#studio) is Delorun's web page for chatting with the model. Setup prints its address and three commands:
+Run `delorun` after setup. It starts Delorun and opens the studio in your browser. The [studio](../reference/glossary.md#studio) is Delorun's web page for chatting with the model. It prints the studio address and three commands:
 
 ```text
 Delorun is running in the background and keeps running after you close this terminal.

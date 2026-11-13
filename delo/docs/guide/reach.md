@@ -42,7 +42,7 @@ Do this once, so that your phone has an address to open. In a terminal on your c
 delorun reach on tailscale
 ```
 
-You can also answer yes to "Remote access" in the Full mode of `delorun setup`.
+You can also choose "Also from my phone or another device" when `delorun setup` asks how you will use Delorun, or answer yes to its remote access question.
 
 The command checks Tailscale, saves the setting in your [profile](../reference/glossary.md#profile) and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. When Delorun is running, it applies the change at once and prints whether the address is ready. Otherwise remote access starts the next time you run `delorun start`.
 
@@ -68,7 +68,7 @@ If the command prints a refusal instead, find its words in [Troubleshooting](tro
 <summary>Go further</summary>
 
 - `delorun reach status` shows whether remote access is on and whether the address is ready, and prints the sign-in address with the steps for adding a phone.
-- Answer yes to "Remote access" in the Full mode of `delorun setup`, or run `delorun setup reach`, to turn it on while you set up.
+- Choose "Also from my phone or another device" in `delorun setup`, or run `delorun setup reach`, to turn it on while you set up.
 
 </details>
 

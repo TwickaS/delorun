@@ -80,7 +80,7 @@ Commands can still reach everything else your user can: other local sockets, fil
 
 Full access is a permission a chat can have: its commands run outside the sandbox, with everything your user can do, Delorun's home and secrets included. Every new workspace starts on Workspace Write instead. You grant full access to a workspace once, at the computer that runs Delorun, and chats in that workspace can then use it.
 
-With setup's [**Safer prompts**](../reference/glossary.md#safer-prompts), the default, you can grant it in four places:
+With setup's [**Ask me first**](../reference/glossary.md#ask-me-first), the default, you can grant it in four places:
 
 - **On an [approval card](../reference/glossary.md#approval-card).** When a command asks to run outside the sandbox, the studio shows a card with **Allow once**, which lets that one command run, and **Allow for this chat**, which switches the chat to the permission the command asked for. The chat stays there until you lower it in the composer. When the command asks for full access and the workspace has none yet, **Allow for this chat** opens the full-access dialog. **Allow full access** in the dialog records the grant for the workspace and switches the chat. When it worked, the card is answered and the command runs.
 - **In a chat.** Pick Full access in the chat's permission control. The same dialog opens, with a box to tick that you understand the risks. When it worked, the control shows Full access.
@@ -104,14 +104,14 @@ To take full access away, choose **Revoke** in Settings, Safety, Permissions, pi
 - If you run `delorun headless` in a folder without a grant, then it refuses with "which you have not granted full access" and does not start — run `delorun workspace full-access <folder> on`, or run without full access. A running headless task sees a revoke only when it next checks a permission.
 - If you choose the safer preset in a chat, then the workspace's grant is withdrawn and its other open chats on full access drop back too — grant it again to return.
 - If a single command asks to run outside the sandbox with no grant, then DeepSeek Harness asks you directly, and its question does not say the command can read Delorun's home — read it as if it did.
-- If you chose [**Same as stock**](../reference/glossary.md#same-as-stock) in setup, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
+- If you chose [**Ask less (like DeepSeek Harness)**](../reference/glossary.md#ask-less) in setup, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
 
 </details>
 
 <details>
 <summary>Go further</summary>
 
-- `delorun setup prompts` switches between Safer prompts and Same as stock.
+- `delorun setup prompts` switches between Ask me first and Ask less (like DeepSeek Harness).
 - Settings, Safety, Permissions, under New chats, sets the permission new chats start in.
 - `delorun workspace full-access` with no folder lists every workspace and its permission.
 
@@ -121,12 +121,14 @@ To take full access away, choose **Revoke** in Settings, Safety, Permissions, pi
 
 Setup's prompts question decides how Delorun asks before risky changes. `delorun setup prompts` changes the answer.
 
-| | Safer prompts (default) | Same as stock |
+| | Ask me first (default) | Ask less (like DeepSeek Harness) |
 | --- | --- | --- |
 | A workspace switched to full access | Asks once per workspace, as [Full access](#full-access) explains | Switches after the studio's confirmation |
 | The model writes `AGENTS.md`, a skill or a preset with its file tools | Asks first, says the text will load as instructions in every future chat it reaches, and shows the difference. Nothing is written until you allow it | Written like any file |
 | A new [MCP server](../reference/glossary.md#mcp-server) that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
 | The model creates or edits a scheduled task | Asks, showing the task's prompt, its schedule, the chat it runs in and that chat's [permission preset](../reference/glossary.md#permission-preset) | Created as in DeepSeek Harness |
+
+**Never ask (dangerous)** is a third answer. It turns the three consents off as Ask less does, and lets any chat switch to full access with no question, from the studio, a phone, a scheduled task or a script. Setup prints a warning, asks you to confirm twice and to type `full access everywhere`; it refuses the answer for the root user, and `--yes` never selects it. Choosing another answer with `delorun setup prompts` turns it off again.
 
 The `web_fetch` [guard](../reference/glossary.md#fetch-guard), the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or change Delorun's consent and guard plugins or the sandbox, in any mode.
 
@@ -142,7 +144,7 @@ The `web_fetch` [guard](../reference/glossary.md#fetch-guard), the update protec
 
 ### MCP servers
 
-An MCP server is a helper program that gives the model extra tools. One that runs a command runs it on your computer with your access, outside the sandbox. With Safer prompts, Delorun holds a new one stopped until you allow it in Settings, Safety, Permissions or with `delorun mcp accept <server>`. When it worked, the server shows as Allowed and running.
+An MCP server is a helper program that gives the model extra tools. One that runs a command runs it on your computer with your access, outside the sandbox. With Ask me first, Delorun holds a new one stopped until you allow it in Settings, Safety, Permissions or with `delorun mcp accept <server>`. When it worked, the server shows as Allowed and running.
 
 Before you answer you see its command, arguments, folder and the names of its environment variables, and the exact file that will run. Delorun asks again when any of these changes, including when the same command now finds a different file. To stop a server you allowed, choose Revoke in Settings, Safety, Permissions or run `delorun mcp revoke <server>`.
 
@@ -206,7 +208,7 @@ Each workspace has a network setting, **Open**, **Allowlist** or **Off**, that l
 - If the command has full access, then the setting does not apply — it runs outside the sandbox.
 - If the setting's file cannot be read, then every workspace counts as Off and changes are refused — repair or remove the file Settings names.
 - If you are on a phone, then the page cannot be opened — use the computer that runs Delorun.
-- If you chose **Same as stock** in setup, then the page says the setting is not available — run `delorun setup prompts` and choose Safer prompts.
+- If you chose **Ask less (like DeepSeek Harness)** in setup, then the page says the setting is not available — run `delorun setup prompts` and choose Ask me first.
 - If a command is already running, then it keeps the network it started with — restart the workspace's terminals and jobs after tightening.
 
 </details>
