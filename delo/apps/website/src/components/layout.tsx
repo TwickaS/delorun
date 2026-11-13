@@ -9,6 +9,7 @@ import { Link } from '@tanstack/react-router'
 import { Mark } from '@design/mark.tsx'
 import { DOCS_URL, GITHUB_URL, UPSTREAM_URL, SUPPORT_EMAIL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
+import { SignupForm } from '@/components/signup.tsx'
 
 /** Focus ring for every link and button on the site. */
 const FOCUS = 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-fd-foreground'
@@ -19,9 +20,10 @@ export const LINK = `underline decoration-fd-border decoration-2 underline-offse
 /**
  * The page frame.
  * @param props.children - the page's content, which supplies its own sections.
+ * @param props.signup - the path to record as the place of consent when the footer carries the sign-up form; false for a page without one (the home page has its own section, and the not-found page has no scripts).
  * @returns the frame.
  */
-export function Frame({ children }: { children: ReactNode }) {
+export function Frame({ children, signup = '/privacy' }: { children: ReactNode; signup?: string | false }) {
   const nav = COPY.nav
   return (
     <>
@@ -39,6 +41,12 @@ export function Frame({ children }: { children: ReactNode }) {
       <div id="content" tabIndex={-1} className="flex-1 outline-none">{children}</div>
       <footer className="mt-24 border-t border-fd-border">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 py-10 text-sm text-fd-muted-foreground sm:px-8">
+          {signup === false ? null : (
+            <section aria-labelledby="footer-updates" className="max-w-xl text-fd-foreground">
+              <h2 id="footer-updates" className="mb-4 text-base font-semibold">{COPY.signup.footerHeading}</h2>
+              <SignupForm page={signup} compact />
+            </section>
+          )}
           <nav aria-label={COPY.footer.footerNav}>
             <ul className="flex flex-wrap gap-x-6 gap-y-2">
               <li><a href={DOCS_URL} className={LINK}>{COPY.footer.docs}</a></li>

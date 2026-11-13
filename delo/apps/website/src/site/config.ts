@@ -22,3 +22,9 @@ export const SUPPORT_EMAIL = 'support@delorun.com'
 
 /** The site path of the image that link previews show. */
 export const OG_IMAGE_PATH = '/og.png'
+
+/** The sender of the sign-up confirmation message: an address on the domain that Cloudflare Email Service sends for. */
+export const UPDATES_EMAIL = 'updates@delorun.com'
+
+/** The trading name that signs the site's messages. */
+export const TRADING_NAME = 'Delo Run'

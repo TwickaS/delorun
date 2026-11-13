@@ -23,6 +23,14 @@ export function Privacy() {
         </ul>
         <h2 className="mt-12 text-xl font-semibold">{copy.hostHeading}</h2>
         <p className="mt-3 leading-7">{copy.host}</p>
+        <h2 id="updates" className="mt-12 text-xl font-semibold">{copy.updatesHeading}</h2>
+        <ul className="mt-3 list-disc space-y-2 pl-5 leading-7">
+          {copy.updates.map(line => <li key={line}>{line}</li>)}
+        </ul>
+        <p className="mt-3 leading-7">{copy.updatesRights}</p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 leading-7">
+          {copy.updatesLinks.map(link => <li key={link.href}><a href={link.href} className={LINK}>{link.text}</a></li>)}
+        </ul>
         <h2 className="mt-12 text-xl font-semibold">{copy.programHeading}</h2>
         <p className="mt-3 leading-7">{copy.program}</p>
         <ul className="mt-3 list-disc space-y-2 pl-5 leading-7">

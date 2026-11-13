@@ -7,6 +7,7 @@ import view from 'virtual:delo-changelog'
 import { DOCS_URL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
 import { Frame, LINK } from '@/components/layout.tsx'
+import { SignupSection } from '@/components/signup.tsx'
 
 /**
  * The install command and the first setup question, as a terminal would print them.
@@ -46,7 +47,7 @@ function WhatsNew() {
  */
 export function Home() {
   return (
-    <Frame>
+    <Frame signup={false}>
       <main>
         <section className="mx-auto grid w-full max-w-5xl gap-10 px-5 pt-10 sm:px-8 sm:pt-16 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:gap-14">
           <div>
@@ -72,6 +73,7 @@ export function Home() {
           </ul>
         </section>
         <WhatsNew />
+        <SignupSection />
       </main>
     </Frame>
   )
@@ -84,7 +86,7 @@ export function Home() {
  */
 export function NotFound() {
   return (
-    <Frame>
+    <Frame signup={false}>
       <main className="mx-auto w-full max-w-5xl px-5 pt-16 sm:px-8">
         <h1 className="text-3xl font-semibold tracking-tight">{COPY.notFound.title}</h1>
         <p className="mt-4 text-fd-muted-foreground">{COPY.notFound.text}</p>
