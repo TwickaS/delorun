@@ -31,7 +31,7 @@ The production release channel: the R2 bucket that holds the signed release file
 | Worker `Channel` | | The public Worker with the bucket binding `RELEASES`. |
 | Worker `Resign` | | The cron Worker, schedule `17 3 * * *` (UTC), with the bucket binding `RELEASES` and the secret `TIMESTAMP_KEY`. It has no workers.dev address. |
 
-The `prod` stage serves `releases.delo.run` (main) and `releases.delorun.com` (spare) from `Channel`; every other stage has only its workers.dev address. Only the owner deploys `prod`.
+The `prod` stage serves `releases.delorun.com` (main) and `releases.delo.run` (spare) from `Channel`; every other stage has only its workers.dev address. Only the owner deploys `prod`.
 
 An R2 binding cannot be read-only at Cloudflare, so the public Worker's read-only property is its code: it is typed against `head` and `get`, and `tests/routes.spec.ts` proves no route reaches a write. The credentials that write from outside are an S3 token, not a Worker secret.
 

@@ -1,7 +1,7 @@
 /**
  * The deployment of the release channel: an R2 bucket per stage, the public read-only Worker that serves it, and the
- * cron Worker that re-signs `timestamp.json` daily. The `prod` stage serves `releases.delo.run` (main) and
- * `releases.delorun.com` (spare); every other stage has only its workers.dev address. Stages never share a bucket.
+ * cron Worker that re-signs `timestamp.json` daily. The `prod` stage serves `releases.delorun.com` (main) and
+ * `releases.delo.run` (spare); every other stage has only its workers.dev address. Stages never share a bucket.
  *
  * The timestamp key is the Worker secret `DELO_TIMESTAMP_KEY`, read from the environment of the deploying process and
  * bound as `TIMESTAMP_KEY` on the cron Worker alone.
@@ -39,7 +39,7 @@ export default Alchemy.Stack(
     const channel = yield* Cloudflare.Worker('Channel', {
       main: source('worker.ts'),
       env: { RELEASES: releases },
-      domain: prod ? { name: 'releases.delo.run', aliases: ['releases.delorun.com'] } : undefined,
+      domain: prod ? { name: 'releases.delorun.com', aliases: ['releases.delo.run'] } : undefined,
     })
     yield* Cloudflare.Worker('Resign', {
       main: source('resign-worker.ts'),
