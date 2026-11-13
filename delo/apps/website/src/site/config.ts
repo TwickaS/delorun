@@ -14,6 +14,9 @@ export const DOCS_URL = 'https://docs.delorun.com'
 /** Delorun's repository. */
 export const GITHUB_URL = 'https://github.com/Delo-Run/delo'
 
+/** DeepSeek Harness, the project Delorun is a community fork of. */
+export const UPSTREAM_URL = 'https://github.com/deepseek-ai/deepseek-harness'
+
 /** The address that answers every question about Delorun, the site and its privacy. */
 export const SUPPORT_EMAIL = 'support@delorun.com'
 

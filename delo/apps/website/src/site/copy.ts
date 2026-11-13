@@ -82,6 +82,7 @@ export const COPY = {
     github: 'GitHub',
     privacy: 'Privacy',
     licence: 'MIT licence',
+    upstream: 'Built from DeepSeek Harness',
     owner: 'Delo Run',
     skip: 'Skip to the content',
     primaryNav: 'Main',

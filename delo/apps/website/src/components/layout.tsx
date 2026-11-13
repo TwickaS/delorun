@@ -7,7 +7,7 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Mark } from '@design/mark.tsx'
-import { DOCS_URL, GITHUB_URL, SUPPORT_EMAIL } from '@/site/config.ts'
+import { DOCS_URL, GITHUB_URL, UPSTREAM_URL, SUPPORT_EMAIL } from '@/site/config.ts'
 import { COPY } from '@/site/copy.ts'
 
 /** Focus ring for every link and button on the site. */
@@ -49,9 +49,14 @@ export function Frame({ children }: { children: ReactNode }) {
               <li><a href={`mailto:${SUPPORT_EMAIL}`} className={LINK}>{SUPPORT_EMAIL}</a></li>
             </ul>
           </nav>
-          <p>
-            {COPY.footer.owner} &middot; <a href={`${GITHUB_URL}/blob/v5/LICENSE`} className={LINK}>{COPY.footer.licence}</a>
-          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+            <p>
+              {COPY.footer.owner} &middot; <a href={`${GITHUB_URL}/blob/v5/LICENSE`} className={LINK}>{COPY.footer.licence}</a>
+            </p>
+            <p className="self-end text-xs opacity-75 sm:self-auto">
+              <a href={UPSTREAM_URL} className={LINK}>{COPY.footer.upstream}</a>
+            </p>
+          </div>
         </div>
       </footer>
     </>
