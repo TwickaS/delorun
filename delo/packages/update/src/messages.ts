@@ -21,10 +21,10 @@ export interface MessageVersions {
 /**
  * The label each axis carries in a sentence.
  * @param axis - the axis.
- * @returns `DSH` or `Delo`.
+ * @returns `DSH` or `Delorun`.
  */
 function axisLabel(axis: 'dsh' | 'delo'): string {
-  return axis === 'dsh' ? 'DSH' : 'Delo'
+  return axis === 'dsh' ? 'DSH' : 'Delorun'
 }
 
 /**
@@ -48,11 +48,11 @@ function pluginMessage(item: ReportItem & { readonly kind: 'plugin' }, versions:
   const { detail, reason } = item
   switch (reason) {
     case 'dsh-requirement-unmet':
-      return `${name} requires DSH ${detail.requirement ?? ''}; Delo ${versions.to.delo} runs DSH ${versions.to.dsh}.`
+      return `${name} requires DSH ${detail.requirement ?? ''}; Delorun ${versions.to.delo} runs DSH ${versions.to.dsh}.`
     case 'delo-requirement-unmet':
-      return `${name} requires Delo ${detail.requirement ?? ''}; the update installs Delo ${versions.to.delo}.`
+      return `${name} requires Delorun ${detail.requirement ?? ''}; the update installs Delorun ${versions.to.delo}.`
     case 'requirement-unreadable':
-      return `${name} declares engines.${detail.axis ?? ''} in a form Delo cannot read.`
+      return `${name} declares engines.${detail.axis ?? ''} in a form Delorun cannot read.`
     case 'requirement-exempted': {
       const axis = detail.axis ?? 'dsh'
       return `${name} requires ${axisLabel(axis)} ${detail.requirement ?? ''}; your exemption for this exact version covers ${axisVersion(versions.to, axis)}.`
@@ -66,7 +66,7 @@ function pluginMessage(item: ReportItem & { readonly kind: 'plugin' }, versions:
     case 'plugin-revoked':
       return `${name} is revoked: ${detail.revocation?.reason ?? ''}, ${detail.revocation?.message ?? ''}.`
     case 'manifest-unreadable':
-      return `Delo could not read ${name}'s package.json; it cannot predict what the update does to it.`
+      return `Delorun could not read ${name}'s package.json; it cannot predict what the update does to it.`
     default:
       // The other reasons are a bundle's or a row's; a plugin item never carries one.
       return name
@@ -122,8 +122,8 @@ function rowSentence(item: ReportItem & { readonly kind: 'row' }): string {
  */
 function dataMessage(item: ReportItem & { readonly kind: 'data' }, versions: MessageVersions): string {
   return item.reason === 'data-format-unknown'
-    ? `Delo cannot tell whether Delo ${versions.from.delo} reads the chat data Delo ${versions.to.delo} writes.`
-    : `Delo ${versions.to.delo} keeps chat data in a format Delo ${versions.from.delo} may not read.`
+    ? `Delorun cannot tell whether Delorun ${versions.from.delo} reads the chat data Delorun ${versions.to.delo} writes.`
+    : `Delorun ${versions.to.delo} keeps chat data in a format Delorun ${versions.from.delo} may not read.`
 }
 
 /**
@@ -132,13 +132,13 @@ function dataMessage(item: ReportItem & { readonly kind: 'data' }, versions: Mes
  * @returns the sentence.
  */
 export function dataCopyNote(versions: MessageVersions): string {
-  return `Without the copy, Delo cannot go back to ${versions.from.delo} after ${versions.to.delo} first starts.`
+  return `Without the copy, Delorun cannot go back to ${versions.from.delo} after ${versions.to.delo} first starts.`
 }
 
 /**
  * The sentence a report shows beside an unverified item, in C3's words: "Delo cannot predict this item".
  */
-export const UNVERIFIED_NOTE = 'Delo cannot predict this item.'
+export const UNVERIFIED_NOTE = 'Delorun cannot predict this item.'
 
 /** The sentence each source in a report's `notChecked` states, in C3's words. */
 const UNCHECKED_NOTES: Readonly<Record<UncheckedSource, string>> = {

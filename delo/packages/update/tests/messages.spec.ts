@@ -29,11 +29,11 @@ function only(name: string, at: string, engines: Readonly<Record<string, unknown
 
 describe('reasonMessage', () => {
   it('states a DSH mismatch with both target versions', () => {
-    expect(reasonMessage(report.items[0]!, report)).toBe('calendar requires DSH ^0.2.0; Delo 1.0.0 runs DSH 0.3.0.')
+    expect(reasonMessage(report.items[0]!, report)).toBe('calendar requires DSH ^0.2.0; Delorun 1.0.0 runs DSH 0.3.0.')
   })
 
   it('states an unreadable declaration with the axis it names', () => {
-    expect(reasonMessage(only('weird', '1.0.0', { dsh: 42 }), report)).toBe('weird declares engines.dsh in a form Delo cannot read.')
+    expect(reasonMessage(only('weird', '1.0.0', { dsh: 42 }), report)).toBe('weird declares engines.dsh in a form Delorun cannot read.')
   })
 
   it('states the exemption that covers the target', () => {
@@ -56,7 +56,7 @@ describe('reasonMessage', () => {
 
   it('states an unreadable manifest', () => {
     const built = buildUpdateReport(input({ profile: profile({ plugins: [{ name: 'broken', version: version('1.0.0') }] }) }))
-    expect(reasonMessage(built.items[0]!, built)).toBe("Delo could not read broken's package.json; it cannot predict what the update does to it.")
+    expect(reasonMessage(built.items[0]!, built)).toBe("Delorun could not read broken's package.json; it cannot predict what the update does to it.")
   })
 
   it('states a retired bundle, a normalised list and a skipped bundle', () => {
@@ -92,16 +92,16 @@ describe('reasonMessage', () => {
     const plugins = [installed('pinned', '1.0.0', { dsh: '^0.3.0', delo: '^0.9.0' })]
     const exempt = buildUpdateReport(input({ profile: profile({ plugins, exemptions: { dsh: {}, delo: { 'pinned@1.0.0': [version('1.0.0')] } } }) }))
     const stale = buildUpdateReport(input({ profile: profile({ plugins, exemptions: { dsh: {}, delo: { 'pinned@1.0.0': [exempt.from.delo] } } }) }))
-    expect(reasonMessage(exempt.items[0]!, exempt)).toBe('pinned requires Delo ^0.9.0; your exemption for this exact version covers 1.0.0.')
+    expect(reasonMessage(exempt.items[0]!, exempt)).toBe('pinned requires Delorun ^0.9.0; your exemption for this exact version covers 1.0.0.')
     expect(reasonMessage(stale.items[0]!, stale)).toBe(`pinned runs today under your exemption for ${exempt.from.delo}; the exemption does not cover 1.0.0.`)
   })
 
   it('leaves a fact out of the sentence when the item\'s detail does not carry it', () => {
     const plugin = (reason: ReportItem['reason']): ReportItem => ({ kind: 'plugin', subject: { name: 'bare', version: version('1.0.0') }, reason, effect: 'disabled', verification: 'verified', detail: {}, actions: [] })
     expect(['dsh-requirement-unmet', 'delo-requirement-unmet', 'requirement-unreadable', 'requirement-exempted', 'exemption-not-carried', 'plugin-revoked'].map(reason => reasonMessage(plugin(reason as ReportItem['reason']), report))).toEqual([
-      'bare requires DSH ; Delo 1.0.0 runs DSH 0.3.0.',
-      'bare requires Delo ; the update installs Delo 1.0.0.',
-      'bare declares engines. in a form Delo cannot read.',
+      'bare requires DSH ; Delorun 1.0.0 runs DSH 0.3.0.',
+      'bare requires Delorun ; the update installs Delorun 1.0.0.',
+      'bare declares engines. in a form Delorun cannot read.',
       'bare requires DSH ; your exemption for this exact version covers 0.3.0.',
       `bare runs today under your exemption for ${report.from.dsh}; the exemption does not cover 0.3.0.`,
       'bare is revoked: , .',
@@ -116,7 +116,7 @@ describe('reasonMessage', () => {
   })
 
   it('carries the sentence a report shows beside an unverified item', () => {
-    expect(UNVERIFIED_NOTE).toBe('Delo cannot predict this item.')
+    expect(UNVERIFIED_NOTE).toBe('Delorun cannot predict this item.')
   })
 
   it('states that the release publishes no revocation list when the report did not read one', () => {

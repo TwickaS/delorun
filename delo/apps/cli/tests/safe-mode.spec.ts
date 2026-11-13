@@ -76,7 +76,7 @@ describe('safeModeStart', () => {
     expect(start?.patchFiles).toEqual([overlay])
     expect(JSON.parse(readFileSync(overlay, 'utf8'))).toEqual([{ id: 'own-row', disabled: true }])
     expect(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')).toBe(patchBefore)
-    expect(safeModeNotice(start!)).toContain('Delo starts in safe mode: it leaves out @me/own-bundle.')
+    expect(safeModeNotice(start!)).toContain('Delorun starts in safe mode: it leaves out @me/own-bundle.')
     expect(existsSync(safeModePath(home, 'default'))).toBe(true)
   })
 

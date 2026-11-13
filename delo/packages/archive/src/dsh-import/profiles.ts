@@ -118,7 +118,7 @@ export function landManifest(manifest: unknown, profile: string, path: string, d
     plugins.push({ name, kind: 'plugin', ...dropped.has(name) ? notCarried(name, spec) : { status: 'install', note: `from the registry, ${spec}` } })
   }
   const added = deloBundles.filter(name => !bundles.includes(name))
-  for (const name of added) plugins.push({ name, kind: 'bundle', status: 'added', note: 'Delo\'s own bundle, which keeps Delo\'s privacy defaults in this profile' })
+  for (const name of added) plugins.push({ name, kind: 'bundle', status: 'added', note: 'Delorun\'s own bundle, which keeps Delorun\'s privacy defaults in this profile' })
   const landed = { name: `dsh-profile-${profile}`, private: true, dependencies, dsh: { profile: { bundles: [...bundles, ...added] } } }
   return { text: `${JSON.stringify(landed, undefined, 2)}\n`, bundles: landed.dsh.profile.bundles, plugins }
 }
@@ -133,7 +133,7 @@ export function landManifest(manifest: unknown, profile: string, path: string, d
 function bundleStatus(name: string, spec: string | undefined, dropped: boolean): Pick<DshImportPlugin, 'status' | 'note'> {
   if (!isPackageName(name)) return { status: 'not-carried', note: 'not a package name' }
   if (RETIRED_BUNDLES.has(name)) return { status: 'not-carried', note: 'retired by DeepSeek Harness' }
-  if (name.startsWith(DELO_SCOPE)) return { status: 'carried', note: 'ships with Delo' }
+  if (name.startsWith(DELO_SCOPE)) return { status: 'carried', note: 'ships with Delorun' }
   if (SHIPPED_BUNDLES.has(name)) return { status: 'carried', note: 'ships with DeepSeek Harness' }
   if (dropped) return notCarried(name, spec as string)
   if (spec !== undefined) return { status: 'install', note: `from the registry, ${spec}` }
@@ -222,8 +222,8 @@ export function carryRefusalNotes(refusal: CarryRefusal, ownHomePatch: boolean):
   if (!['UNNAMED_CHANGE', 'ROW_NOT_CARRIED', 'CONFIGURATION_NOT_CARRIED'].includes(refusal.code)) return []
   return refusal.subjects.map((subject) => {
     const what = `${subject.kind === 'row' ? 'row' : 'settings for'} ${subject.name}`
-    if (refusal.code === 'UNNAMED_CHANGE') return `The Delo home patch's ${what} will apply to this profile too.`
-    if (subject.layer === 'home-patch') return `The stock home patch's ${what} will not apply: ${ownHomePatch ? 'the Delo home keeps its own home patch' : 'it is held back'}.`
+    if (refusal.code === 'UNNAMED_CHANGE') return `The Delorun home patch's ${what} will apply to this profile too.`
+    if (subject.layer === 'home-patch') return `The stock home patch's ${what} will not apply: ${ownHomePatch ? 'the Delorun home keeps its own home patch' : 'it is held back'}.`
     return `${subject.kind === 'row' ? `The row ${subject.name} does` : `The settings for ${subject.name} do`} not land in this profile: ${subject.kind === 'row' ? 'it is' : 'they are'} held back.`
   })
 }

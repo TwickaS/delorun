@@ -447,7 +447,7 @@ describe('the preview an import shows', () => {
     expect(run.out).not.toMatch(/[\u001b\u202e]/)
   })
 
-  it('escapes every archive-controlled field, after the line Delo checked', () => {
+  it('escapes every archive-controlled field, after the line Delorun checked', () => {
     const lines = previewLines({
       state: 'unverified', reason: 'key-not-trusted', label: 'x', source: 'a\u009b.delo', signed: true, createdBy: 'v\u2066', exportedAt: 't\u202e',
       signer: { declaredKeyId: 'k', publicKey: 'p', fingerprint: 'f' },
@@ -513,8 +513,8 @@ describe('an import', () => {
     const { home, file } = await exportedChat()
     const running = await acquireHomeLock({ runDirectory: runDirectory(home, 'default'), runtime: RUNTIME, probe: async () => 'answered', startId: newStartId() })
     try {
-      expect((await refusal(importing(home, file, ['y']))).message).toContain('Delo is running for the profile default')
-      expect((await refusal(exporting(home, ['chat-a', '--out', join(fresh('out'), 'again.delo')]))).message).toContain('Delo is running for the profile default')
+      expect((await refusal(importing(home, file, ['y']))).message).toContain('Delorun is running for the profile default')
+      expect((await refusal(exporting(home, ['chat-a', '--out', join(fresh('out'), 'again.delo')]))).message).toContain('Delorun is running for the profile default')
     } finally {
       running.release()
     }

@@ -28,10 +28,12 @@ import {
 import { lstatSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
+import { parseFailure } from '../command.ts'
+import { CliError } from '../exit.ts'
 
 /** What `delorun logs` reads and writes through, supplied by the command's router. */
 export interface LogsIo {
-  /** The resolved Delo home. */
+  /** The resolved Delorun home. */
   readonly home: string
   /** The active CLI profile; `--profile` overrides it. */
   readonly profile: string
@@ -122,9 +124,10 @@ function resolveOptions(argv: readonly string[], io: LogsIo): Options {
   try {
     parsed = parseOptions(argv)
   } catch (error: unknown) {
-    // `parseArgs` reports an unknown option or a missing value as a TypeError carrying an ERR_PARSE_ARGS_* code.
-    if (error instanceof TypeError && String((error as NodeJS.ErrnoException).code).startsWith('ERR_PARSE_ARGS')) throw new UsageError(error.message)
-    throw error
+    const failure = parseFailure('logs', error)
+    // The usage text follows the message, so the message does not point to it.
+    if (failure instanceof CliError) throw new UsageError(failure.message.replace(/^delorun logs: /, '').replace(/\. Run delorun logs --help for usage\.$/, ''))
+    throw failure
   }
   const { values, positionals } = parsed
   if (positionals.length > 1) throw new UsageError(`expected at most one surface, got ${positionals.join(' ')}`)
@@ -213,7 +216,7 @@ function reportFailures(io: LogsIo, report: RetentionReport): LogsExit {
 function overview(io: LogsIo, profile: string): void {
   const fixed = [locate('home', io.home, profile), locate('supervisor', io.home, profile), locate('desktop-host', io.home, profile)]
   const found = localSurfaces(io.home).filter(location => !fixed.some(item => item.surface === location.surface))
-  io.stdout(`Operational logs (C20) under ${join(io.home, 'logs')}\n`)
+  io.stdout(`Logs under ${join(io.home, 'logs')}\n`)
   for (const location of [...fixed, ...found]) {
     let state: string
     try {
@@ -234,7 +237,6 @@ function overview(io: LogsIo, profile: string): void {
   }
   const reports = startupReports(io.home)
   io.stdout(`  startup  ${join(io.home, UPSTREAM_STARTUP_REPORTS)}  ${String(reports.length)} upstream startup report${reports.length === 1 ? '' : 's'}\n`)
-  io.stdout(`  relay  ${SURFACE_FILES.relay}  inside the self-hosted relay's container, not on this machine\n`)
 }
 
 function startup(io: LogsIo): void {

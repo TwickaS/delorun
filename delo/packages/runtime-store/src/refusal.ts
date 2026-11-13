@@ -39,7 +39,7 @@ function storeLead(error: RuntimeStoreError): string {
     case 'RUNTIME_CHANGED':
     case 'RUNTIME_INCOMPATIBLE':
     case 'ROOT_NOT_ANCHORED':
-      return 'Delo did not start the installed runtime.'
+      return 'Delorun did not start the installed runtime.'
     case 'NO_ACTIVE_RUNTIME':
       return 'Delo found no installed runtime to start.'
     case 'STORE_BUSY':

@@ -195,7 +195,7 @@ describe('delorun open', TIMEOUT, () => {
     await runHome(ctx)
     const printed = await open(['--print', '--profile', PROFILE], browserOpener([]))
     const [url = '', note] = printed.stdout.split('\n')
-    expect(note).toBe('This link signs in to the studio for as long as Delo runs; anyone who has it can use it, so keep it to yourself.')
+    expect(note).toBe('This link signs in to the studio for as long as Delorun runs; anyone who has it can use it, so keep it to yourself.')
     expect((await visit(url)).status).toBe(303)
     expect((await visit(url)).status).toBe(303)
   })
@@ -221,8 +221,8 @@ describe('delorun open', TIMEOUT, () => {
 
   it('reports a home process that serves no studio, a profile with no home process and a computer with no browser', async () => {
     const launched: string[] = []
-    expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delo is not running for the profile default; start it with delorun start.\n' })
-    expect(await open(['--print', '--profile', 'work'], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delo is not running for the profile work; start it with delorun start --profile work.\n' })
+    expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delorun is not running for the profile default; start it with delorun start.\n' })
+    expect(await open(['--print', '--profile', 'work'], browserOpener(launched))).toEqual({ code: EXIT.notRunning, stdout: '', stderr: 'Delorun is not running for the profile work; start it with delorun start --profile work.\n' })
     await runHome(undefined)
     expect(Reflect.get(await queryHomeStatus(home, PROFILE, HOME_STATUS_TIMEOUT_MS), 'studio')).toBeUndefined()
     expect(await open([], browserOpener(launched))).toEqual({ code: EXIT.failed, stdout: '', stderr: 'The home process for the profile default did not give a studio link (STUDIO_UNAVAILABLE: the Host serves no studio); see delorun status.\n' })

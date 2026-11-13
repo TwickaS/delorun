@@ -255,7 +255,7 @@ export async function relayEndpoint(listener: ReachListener, ca: string): Promis
  * @returns the PEM pair and the authority certificate a client trusts.
  */
 export async function relayTls(): Promise<{ readonly cert: string; readonly key: string; readonly ca: string }> {
-  const authority = await createTestAuthority('Delo admission suite')
+  const authority = await createTestAuthority('Delorun admission suite')
   const issued = await authority.issue({ dnsNames: [new URL(ADDRESSES['reach-self-hosted-relay']).hostname, 'other.example.org'] })
   if (issued.keyPem === undefined) throw new Error('the test authority returned no key')
   return { cert: issued.pem, key: issued.keyPem, ca: authority.certificate.pem }

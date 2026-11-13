@@ -270,7 +270,7 @@ export function checkPort(choice: StudioPort, ownStudioPort: () => Promise<numbe
     })
   }).then(async (found) => {
     if (found !== 'in-use') return found
-    if (await ownStudioPort() === choice.port) return outcome('port', 'pass', `${words} is in use by Delo's studio, which runs for the profile ${choice.profile}.`)
+    if (await ownStudioPort() === choice.port) return outcome('port', 'pass', `${words} is in use by Delorun's studio, which runs for the profile ${choice.profile}.`)
     return outcome('port', 'fail', choice.source === 'option'
       ? `port ${String(choice.port)} is in use; stop the other process or pass --port`
       : `${words} is in use by another process, so the studio cannot listen on it; stop that process, or choose another port with delorun setup profile${choice.profile === 'default' ? '' : ` --profile ${choice.profile}`}`)
@@ -322,14 +322,14 @@ export async function checkHome(env: Readonly<Record<string, string | undefined>
     throw error
   }
   if (process.platform === 'win32') {
-    return outcome('home', 'warn', `the Delo home at ${home.path} resolves; the Windows permission check is not implemented yet, so its access is not verified.`)
+    return outcome('home', 'warn', `the Delorun home at ${home.path} resolves; Delorun does not check Windows file permissions, so who can read it is not verified.`)
   }
   const root = await examineDirectory(home.path)
-  if (root.kind === 'missing') return outcome('home', 'warn', `the Delo home at ${home.path} does not exist yet; delorun setup creates it at mode 0700.`)
+  if (root.kind === 'missing') return outcome('home', 'warn', `the Delorun home at ${home.path} does not exist yet; delorun setup creates it at mode 0700.`)
   if (root.kind === 'refused') return outcome('home', 'fail', root.message)
   for (const path of [join(home.path, DELO_HOME_ENTRIES.secrets), runDirectory(home.path, profile)]) {
     const state = await examineDirectory(path)
     if (state.kind === 'refused') return outcome('home', 'fail', state.message)
   }
-  return outcome('home', 'pass', `the Delo home at ${home.path} resolves, and its private directories have no group or other access.`)
+  return outcome('home', 'pass', `the Delorun home at ${home.path} resolves, and its private directories have no group or other access.`)
 }

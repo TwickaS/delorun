@@ -120,7 +120,7 @@ describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
 
   it('--yes leaves reach and credential forwarding off and writes no row for either', async () => {
     expect(await setup({ kind: 'yes' })).toBe(EXIT.ok)
-    expect(lines.join('')).toContain('Delo has no telemetry of its own.')
+    expect(lines.join('')).toContain('Delorun has no telemetry of its own.')
     expect(lines.join('')).toContain('You can turn them on later in Settings → Privacy.')
     const patch = readFileSync(join(profileDirectory(home, PROFILE), 'cordis.patch.yml'), 'utf8')
     expect(patch).not.toMatch(/reach|forward/i)

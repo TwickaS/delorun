@@ -41,6 +41,7 @@
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
+import { asksForHelp, commandHelp } from './help.ts'
 import { pruneLogsAtStart } from './logs/startup.ts'
 import { applyDeloVersionEnvironment, versionCommand } from './version.ts'
 
@@ -69,22 +70,22 @@ export const COMMANDS: readonly CommandEntry[] = [
   { name: 'start', summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses', load: async () => (await import('./start.ts')).startCommand },
   { name: 'open', summary: 'Open the studio in your browser, or print a link that signs in once with --print (--port for a forwarded port)', load: async () => (await import('./open/command.ts')).openCommand },
   { name: 'stop', summary: 'Stop the home process once running chats end, or at once with --now', load: async () => (await import('./stop.ts')).stopCommand },
-  { name: 'status', summary: 'Show the home, the CLI profile and the state of its home process', load: async () => (await import('./status.ts')).statusCommand },
+  { name: 'status', summary: 'Show whether Delorun is running, its studio address and its running chats; --verbose adds process details', load: async () => (await import('./status.ts')).statusCommand },
   { name: 'doctor', summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check', load: async () => (await import('./doctor/index.ts')).doctorCommand },
   { name: 'logs', summary: 'Show where each operational log is and its recent records; follow, clear or prune them', load: async () => (await import('./logs/command.ts')).logsCommand },
   { name: 'update', summary: 'Fetch the newest release, show what it changes, and apply it: --check only says whether one exists; --report shows what it changes and applies nothing; --yes, --data-copy, --no-data-copy', load: async () => (await import('./update/command.ts')).updateCommand },
   { name: 'recover', summary: 'Where the profile stands after an update, and the way back: status, rollback [--profile-only], restore <version>, safe-mode, exit-safe-mode, discard <path>', load: async () => (await import('./recover.ts')).recoverCommand },
   { name: 'reach', summary: 'Reach the studio from your phone over your own tailnet: status, on tailscale, off', load: async () => (await import('./reach/command.ts')).reachCommand },
-  { name: 'devices', summary: 'The devices this home trusts: list, approve, elevate, remove, code', load: async () => (await import('./devices/command.ts')).devicesCommand },
+  { name: 'devices', summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code', load: async () => (await import('./devices/command.ts')).devicesCommand },
   { name: 'workspace', summary: 'A workspace\'s full access and the external agents that start there without asking, changed at this computer: full-access [<folder> on|off], external-agents [<folder> <agent> on|off]', load: async () => (await import('./workspace/command.ts')).workspaceCommand },
   { name: 'mcp', summary: 'The MCP servers waiting for your answer and the ones allowed: list, accept, decline, revoke', load: async () => (await import('./mcp/command.ts')).mcpCommand },
   { name: 'trash', summary: 'List deleted chats and workspaces; restore a chat, or delete one item or all forever', load: async () => (await import('./trash/command.ts')).trashCommand },
   { name: 'export', summary: 'Write a chat, or a workspace with its chats, as an archive signed by this home', load: async () => (await import('./export/command.ts')).exportCommand },
   { name: 'import', summary: 'Check an archive, show who signed it and what it holds, and import it after you confirm', load: async () => (await import('./import/command.ts')).importCommand },
-  { name: 'import-home', summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delo home after a preview; --dry-run only shows it', load: async () => (await import('./import-home/command.ts')).importHomeCommand },
+  { name: 'import-home', summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delorun home after a preview; --dry-run only shows it', load: async () => (await import('./import-home/command.ts')).importHomeCommand },
   { name: 'verify', summary: 'Check the release against its signed manifest and the release log: --release <version>, --offline, --json', load: async () => (await import('./verify/index.ts')).verifyCommand },
   { name: 'plugin', summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; mirror on|off', load: async () => (await import('./upstream.ts')).pluginCommand },
-  { name: 'headless', summary: 'Answer one task and exit, as dsh headless does, under Delo\'s protections', load: async () => (await import('./upstream.ts')).headlessCommand },
+  { name: 'headless', summary: 'Answer one task and exit, as dsh headless does, under Delorun\'s protections', load: async () => (await import('./upstream.ts')).headlessCommand },
 ]
 
 /**
@@ -97,17 +98,40 @@ function usage(): string {
     'Usage: delorun [--profile <name>] [--foreground | --background]',
     '       delorun <command> [options]',
     '',
-    'With no command, delorun sets up a new home, or starts Delo and opens the studio: --background detaches it from the',
-    'terminal and --foreground keeps it in this terminal; without either, setup\'s answer chooses (delorun setup background).',
+    'With no command, delorun sets up a new home, or starts Delorun and opens the studio: --background keeps it running after you',
+    'close the terminal and --foreground keeps it in this terminal; without either, setup\'s answer chooses (delorun setup background).',
     '',
     'Commands:',
     ...COMMANDS.map(command => `  ${command.name.padEnd(width)}  ${command.summary}`),
     '',
-    'The home is ~/.delo, or DELO_HOME; the CLI profile is default, or DELO_PROFILE or --profile.',
-    'delorun --version prints Delo\'s and DSH\'s versions; --json prints them as one JSON line.',
-    'Exit codes: 0 done, 1 failed, 2 wrong command line, 3 the home process is not running.',
+    'delorun <command> --help shows a command\'s options. delorun --version prints Delorun\'s and DSH\'s versions; --json prints them as one JSON line.',
+    '',
+    'Words used here:',
+    '  home       the folder where Delorun keeps your chats and settings: ~/.delo, or DELO_HOME',
+    '  profile    one named setup of Delorun on this computer: default, or DELO_PROFILE or --profile',
+    '  studio     the web page Delorun serves on this computer, where you chat',
+    '  workspace  a folder your chats work in',
+    '  full access  a workspace setting that lets chats run commands outside the sandbox',
+    '  reach      using the studio from your phone over your own Tailscale network',
+    '',
+    'Exit codes: 0 done, 1 failed, 2 wrong command line, 3 Delorun is not running.',
     '',
   ].join('\n')
+}
+
+/**
+ * `delorun help <command>`.
+ * @param names - the words after `help`.
+ * @param context - the output.
+ * @returns the exit code.
+ * @throws {CliError} with the usage code for a name that is not a command, or more than one name.
+ */
+function helpFor(names: readonly string[], context: CommandContext): CommandResult {
+  const [name, ...extra] = names
+  const text = name === undefined || extra.length > 0 ? undefined : commandHelp(name)
+  if (text === undefined) throw new CliError(EXIT.usage, `delorun help: ${names.length === 1 ? `${JSON.stringify(name)} is not a command` : 'name one command'}. Run delorun help to list them.`)
+  context.stdout(text)
+  return EXIT.ok
 }
 
 /**
@@ -148,16 +172,21 @@ export async function main(argv: readonly string[], context: CommandContext = {
 }): Promise<CommandResult> {
   const [first, ...rest] = argv
   try {
-    if (first === '--help' || first === '-h' || first === 'help') {
+    if (first === '--help' || first === '-h' || (first === 'help' && rest.length === 0)) {
       context.stdout(usage())
       return EXIT.ok
     }
+    if (first === 'help') return helpFor(rest, context)
     if (first === '--version' || first === '-v') return versionCommand(rest, context)
     applyDeloVersionEnvironment()
     await pruneLogsAtStart(context, Date.now())
     if (first === undefined || first.startsWith('-')) return await bare(argv, context)
     const entry = COMMANDS.find(candidate => candidate.name === first)
     if (entry === undefined) throw new CliError(EXIT.usage, `delorun: unknown command ${JSON.stringify(first)}\n\n${usage()}`)
+    if (asksForHelp(rest)) {
+      context.stdout(commandHelp(entry.name) ?? usage())
+      return EXIT.ok
+    }
     return await (await entry.load()).run(rest, context)
   } catch (error) {
     // Every failure reaches the person in the refusal format, redacted and without a stack: `delorun` keeps no log of

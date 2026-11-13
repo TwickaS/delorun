@@ -28,24 +28,7 @@ import { parseOptions, prepareHome, type CliCommand, type CommandContext, type C
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { deloVersion } from '../version.ts'
 import { checkInstalledPlugins } from '../plugin-install-check.ts'
-import { checkRelease, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
-
-/** The `delorun verify --help` text. */
-const VERIFY_USAGE = [
-  'Usage: delorun verify [--release <version>] [--offline] [--json]',
-  '',
-  'Checks the running release, or an installed one, against its signed manifest, the stored timestamp\'s',
-  'freshness and its release-log entry, and proves the release log consistent online unless --offline.',
-  'Prints one line per check: passed, failed or not run, with the reason.',
-  'Exit codes: 0 when no check failed and release-signature passed or could not reach the release log,',
-  '1 otherwise, 2 for a wrong command line. A release log that cannot be reached leaves the release not checked',
-  'against it, with a warning, and does not fail.',
-  '',
-  '  --release <version>  the installed release to check (default: the running one)',
-  '  --offline            run no online check',
-  '  --json               print the report as JSON',
-  '',
-].join('\n')
+import { checkRelease, NOT_RUN_HERE, type ReleaseCheckOutcome, type ReleaseOrigins, type RootAnchor } from './checks.ts'
 
 /**
  * The mode a run reports. `delorun verify` runs every check on request in every mode (contract C15), and nothing reads
@@ -129,7 +112,7 @@ export function rootLine(root: RootAnchor | undefined): string {
   if (root === undefined) return 'Trusted root: none read.\n'
   const keys = root.keyids.map(keyid => keyid.slice(0, 16)).join(', ')
   const anchored = root.anchored === 'shipped'
-    ? `anchored on the shipped roots of the launcher that started this Delo, in ${String(root.rootsDirectory)} (${DELO_LAUNCHER_ROOTS_ENV})`
+    ? `anchored on the shipped roots of the launcher that started this Delorun, in ${String(root.rootsDirectory)} (${DELO_LAUNCHER_ROOTS_ENV})`
     : 'anchored on the stored root only'
   return `Trusted root: version ${String(root.version)}, root keys ${keys}, ${anchored}.\n`
 }
@@ -141,7 +124,7 @@ export function rootLine(root: RootAnchor | undefined): string {
  */
 export function originsLine(origins: ReleaseOrigins | undefined): string {
   if (origins === undefined) return 'Release channel: unknown, because the home\'s channel record does not read.\n'
-  return `Release channel: ${origins.channel}; release log: ${origins.log}; as the launcher that installed this Delo recorded them.\n`
+  return `Release channel: ${origins.channel}; release log: ${origins.log}; as the launcher that installed this Delorun recorded them.\n`
 }
 
 /**
@@ -153,7 +136,7 @@ export function summaryLine(results: readonly VerificationCheckResult[]): string
   const count = (result: VerificationResult): number => results.filter(entry => entry.result === result).length
   const parts = [`${String(count('pass'))} checks passed`, `${String(count('fail'))} failed`, `${String(count('unknown'))} not run`]
   if (count('not-enforced') > 0) parts.push(`${String(count('not-enforced'))} not enforced`)
-  return `${parts.join(', ')}; this is not a full verification of this Delo.\n`
+  return `${parts.join(', ')}; this is not a full verification of this Delorun.\n`
 }
 
 /**
@@ -164,10 +147,13 @@ export function summaryLine(results: readonly VerificationCheckResult[]): string
  *   line per check and the summary.
  */
 export function reportLines(release: string, outcome: Pick<ReleaseCheckOutcome, 'results' | 'root' | 'origins' | 'launcher'>): string {
-  const width = Math.max(...outcome.results.map(result => result.id.length))
-  const lines = outcome.results.map(result => `${LABELS[result.result].padEnd(7)}  ${result.id.padEnd(width)}  ${result.detail}`)
+  const run = outcome.results.filter(result => result.detail !== NOT_RUN_HERE)
+  const absent = outcome.results.length - run.length
+  const width = Math.max(...run.map(result => result.id.length))
+  const lines = run.map(result => `${LABELS[result.result].padEnd(7)}  ${result.id.padEnd(width)}  ${result.detail}`)
+  if (absent > 0) lines.push(`Delorun does not include ${String(absent)} more ${absent === 1 ? 'check' : 'checks'}.`)
   const launcher = outcome.launcher === undefined ? '' : `Launcher: ${outcome.launcher}.\n`
-  return `Release ${release}, verification mode ${VERIFY_MODE}; ${VERIFICATION_NOTICE}.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${launcher}${lines.join('\n')}\n${summaryLine(outcome.results)}`
+  return `Release ${release}, verification mode ${VERIFY_MODE}; checks run as your user.\n${rootLine(outcome.root)}${originsLine(outcome.origins)}${launcher}${lines.join('\n')}\n${summaryLine(run)}`
 }
 
 /**
@@ -217,14 +203,10 @@ export function createVerifyCommand(environment: VerifyEnvironment): CliCommand 
     name: 'verify',
     summary: 'Check the release against its signed manifest and the release log: --release <version>, --offline, --json',
     async run(args: readonly string[], context: CommandContext): Promise<ExitCode> {
-      if (args.includes('--help') || args.includes('-h')) {
-        context.stdout(VERIFY_USAGE)
-        return EXIT.ok
-      }
       const values = parseOptions('verify', args, { release: { type: 'string' }, offline: { type: 'boolean', default: false }, json: { type: 'boolean', default: false } })
       const named = values.release ?? environment.running()
       const release = parseRuntimeVersion(named)
-      if (release === undefined) throw new CliError(EXIT.usage, `delorun verify: ${JSON.stringify(named)} is not a Delo release version`)
+      if (release === undefined) throw new CliError(EXIT.usage, `delorun verify: ${JSON.stringify(named)} is not a Delorun release version`)
       const { home } = await prepareHome(context, undefined)
       const now = environment.now()
       const outcome = await checkRelease({

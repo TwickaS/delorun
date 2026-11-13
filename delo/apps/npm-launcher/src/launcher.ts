@@ -233,7 +233,7 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
         options.output.stderr(rollbackRefusalText(options, error, rollback.current, rollback.previous))
         return LAUNCHER_EXIT.failed
       }
-      options.output.stderr(`Delo did not start release ${String(rollback.current)}: it failed its start check. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
+      options.output.stderr(`Delorun did not start release ${String(rollback.current)}: it failed its start check. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
       return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root }, ROLLBACK_ARGS)
     }
     if (!(error instanceof RuntimeStoreError && error.code === 'NO_ACTIVE_RUNTIME')) throw error
@@ -269,7 +269,7 @@ async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly
       if (check.missingBundle !== undefined && runsOneOf(args, options.passedThrough, [ROLLBACK_ARGS])) {
         const rollback = await previousRollback(options)
         if (rollback !== undefined && rollback.current === plan.version) {
-          options.output.stderr(`Delo did not start release ${String(plan.version)}: its release-log bundle is missing. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
+          options.output.stderr(`Delorun did not start release ${String(plan.version)}: its release-log bundle is missing. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
           return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root }, ROLLBACK_ARGS)
         }
       }
@@ -335,7 +335,7 @@ function rollbackRefusalText(options: Pick<LauncherOptions, 'args' | 'profile'>,
 export function failedStartText(version: RuntimeVersion, check: LauncherStartCheck, profile: string): string {
   if (check.missingBundle !== undefined) {
     return renderLauncherRefusal({
-      lead: `Delo did not start release ${String(version)}: the release-log bundle stored beside it is missing.`,
+      lead: `Delorun did not start release ${String(version)}: the release-log bundle stored beside it is missing.`,
       reason: codedReason(String(check.refusal), `no release-log bundle is stored at ${check.missingBundle}, and every install through the runtime store keeps the bundle it verified`),
       remedies: [
         `If an update installed release ${String(version)}, go back to the version before it: delorun ${ROLLBACK_ARGS.join(' ')}${profileOption({ profile })}`,
@@ -344,7 +344,7 @@ export function failedStartText(version: RuntimeVersion, check: LauncherStartChe
     })
   }
   return renderLauncherRefusal({
-    lead: `Delo did not start release ${String(version)}: its release-log check failed.`,
+    lead: `Delorun did not start release ${String(version)}: its release-log check failed.`,
     reason: codedReason(String(check.refusal), check.detail),
     remedies: [
       'Run delorun verify to see every check of this release, and reinstall Delo from its release page if the failure stays.',

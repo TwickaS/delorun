@@ -64,7 +64,7 @@ describe('profile migrations', () => {
       expect(await runProfileMigrations(home, 'default', [migration('a', runs, () => true)], output)).toEqual([])
       expect(runs).toEqual([])
       expect(readFileSync(path, 'utf8')).toBe(text)
-      expect(warnings.join('')).toContain(`delorun: Delo applied none of its one-time changes to the profile default, because ${path} does not read`)
+      expect(warnings.join('')).toContain(`delorun: Delorun applied none of its one-time changes to the profile default, because ${path} does not read`)
       expect(warnings.join('')).toContain('Removing that file lets the next start apply the changes')
     }
   })

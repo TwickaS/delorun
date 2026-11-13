@@ -98,5 +98,5 @@ function writeOverlay(home: string, profile: string, skippedRows: readonly strin
  */
 export function safeModeNotice(start: SafeModeStart): string {
   const left = start.skipped.length === 0 ? 'no third-party bundle' : start.skipped.join(', ')
-  return `Delo starts in safe mode: it leaves out ${left}. Your rows and settings are still in the profile; run \`delorun recover exit-safe-mode\` to load everything again.\n`
+  return `Delorun starts in safe mode: it leaves out ${left}. Your rows and settings are still in the profile; run \`delorun recover exit-safe-mode\` to load everything again.\n`
 }

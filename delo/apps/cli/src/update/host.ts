@@ -30,7 +30,7 @@ export const STUDIO_HEALTH_TIMEOUT_MS = 10_000
 export const HEALTH_PATH = '/delo/health'
 
 /** The reason a turn or a job cancelled by the gate carries. */
-export const STOP_REASON = 'Delo is stopping or updating'
+export const STOP_REASON = 'Delorun is stopping or updating'
 
 /**
  * Count the Host's running chats into the gate, and refuse new turns while it is held. A running chat is an agent

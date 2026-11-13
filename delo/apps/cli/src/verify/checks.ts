@@ -39,7 +39,7 @@ import { RuntimeStore, StorePaths } from '@delo/runtime-store'
 
 /** What one run of the checks reads. */
 export interface ReleaseCheckOptions {
-  /** The resolved Delo home, whose tree exists. */
+  /** The resolved Delorun home, whose tree exists. */
   readonly home: string
   /** The installed release to check. */
   readonly release: RuntimeVersion
@@ -110,7 +110,7 @@ interface Part {
 }
 
 /** The detail of a registry entry this command does not run yet. */
-export const NOT_RUN_HERE = 'delorun verify does not run this check yet'
+export const NOT_RUN_HERE = 'delorun verify does not include this check'
 
 /**
  * The words a failure gives.
@@ -286,7 +286,7 @@ const LAUNCHER_PACKAGE = 'delorun'
  *   version, or why the launcher could not be compared with the release.
  */
 export function launcherComparison(version: string | undefined, manifest: ReleaseManifest): string {
-  if (version === undefined) return `the launcher that started this Delo reported no version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${manifest.version} lists`
+  if (version === undefined) return `the launcher that started this Delorun reported no version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${manifest.version} lists`
   const listed = manifest.npm.filter(entry => entry.name === LAUNCHER_PACKAGE)
   const same = listed.find(entry => String(entry.version) === version)
   if (same !== undefined) return `${LAUNCHER_PACKAGE}@${version} as the launcher reported it, which release ${manifest.version}'s signed manifest lists with integrity ${String(same.integrity)}; compare it with npm view ${LAUNCHER_PACKAGE}@${version} dist.integrity`
@@ -442,7 +442,7 @@ export async function checkRelease(options: ReleaseCheckOptions): Promise<Releas
 async function releaseChecks(options: ReleaseCheckOptions): Promise<OwnChecks> {
   const platform = RUNTIME_PLATFORMS.find(candidate => candidate === options.platform)
   if (platform === undefined) {
-    const detail = `Delo publishes no runtime for ${options.platform}, so no installed release can be checked here`
+    const detail = `Delorun publishes no runtime for ${options.platform}, so no installed release can be checked here`
     return { parts: new Map([['release-signature', { result: 'fail', detail }], ['runtime-files', { result: 'fail', detail }]]) }
   }
   const rooted = await anchoredRoot(options)

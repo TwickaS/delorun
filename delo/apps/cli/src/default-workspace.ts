@@ -190,7 +190,7 @@ export async function resolveDefaultWorkspace(request: DefaultWorkspaceRequest):
     refusals.push(`${candidate.directory}: ${problemMessage(problem)}`)
   }
   throw new CliError(EXIT.failed, [
-    'delorun: Delo found no folder for the default workspace.',
+    'delorun: Delorun found no folder for the default workspace.',
     ...refusals,
     `Choose one in ${request.profilePatchPath}: add the row \`- id: ${WORKSPACE_CONTROLLER_ROW}\` with \`config: { defaultWorkspaceDirectory: <a folder of your own> }\`, then start again.`,
   ].join('\n'))

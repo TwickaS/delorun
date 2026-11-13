@@ -75,8 +75,8 @@ describe('the comparison', () => {
     }])
     expect(report.counts.data).toBe(1)
     expect(report.items.at(-1)?.kind).toBe('data')
-    expect(reasonMessage(items[0]!, { from: FROM, to: TO })).toBe('Delo 1.0.0 keeps chat data in a format Delo 0.9.0 may not read.')
-    expect(dataCopyNote({ from: FROM, to: TO })).toBe('Without the copy, Delo cannot go back to 0.9.0 after 1.0.0 first starts.')
+    expect(reasonMessage(items[0]!, { from: FROM, to: TO })).toBe('Delorun 1.0.0 keeps chat data in a format Delorun 0.9.0 may not read.')
+    expect(dataCopyNote({ from: FROM, to: TO })).toBe('Without the copy, Delorun cannot go back to 0.9.0 after 1.0.0 first starts.')
   })
 
   it('c03-unknown-data-format-is-unverified: a missing file is unverified, and --yes does not confirm it', () => {
@@ -84,7 +84,7 @@ describe('the comparison', () => {
     const item = report.items.find(entry => entry.kind === 'data')
     expect(item).toMatchObject({ reason: 'data-format-unknown', verification: 'unverified', detail: { unreadable: ['to'] } })
     expect(report.counts.unverified).toBeGreaterThanOrEqual(1)
-    expect(reasonMessage(item!, { from: FROM, to: TO })).toBe('Delo cannot tell whether Delo 0.9.0 reads the chat data Delo 1.0.0 writes.')
+    expect(reasonMessage(item!, { from: FROM, to: TO })).toBe('Delorun cannot tell whether Delorun 0.9.0 reads the chat data Delorun 1.0.0 writes.')
     const confirmable = { ...report, items: report.items.filter(entry => entry.kind === 'data'), counts: { ...report.counts } }
     expect(confirmsWithoutAsking(confirmable)).toBe(false)
     const both = compareDataFacts({ dsh: version('0.2.2'), formats: undefined }, { dsh: version('0.2.2'), formats: undefined })

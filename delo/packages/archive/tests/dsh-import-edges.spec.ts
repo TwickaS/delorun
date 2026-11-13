@@ -52,7 +52,7 @@ function lock(path: string, mode = 0o000): void {
   locked.push(path)
 }
 
-describe('a Delo home that changes after the plan', () => {
+describe('a Delorun home that changes after the plan', () => {
   it('refuses a workspace list that changed or went away, and puts nothing in place', async () => {
     homes.write('storages/workspace.json', registry({ w1: { path: '/work/proj', sessionIds: ['s1'] } }))
     homes.writeTarget('storages/workspace.json', registry({ d1: { path: '/work/delo', sessionIds: [] } }))
@@ -64,7 +64,7 @@ describe('a Delo home that changes after the plan', () => {
     expect(snapshot(homes.target).map(entry => entry.path)).toEqual(['storages'])
   })
 
-  it('refuses credentials that changed after the plan, or a Delo credentials document that became unreadable, and never quotes a value', async () => {
+  it('refuses credentials that changed after the plan, or a Delorun credentials document that became unreadable, and never quotes a value', async () => {
     mark(homes)
     homes.write('.credentials.yaml', `version: 1\nrefs:\n  DEEPSEEK_API_KEY: ${FIXTURE_SECRET}\n`, 0o600)
     const planned = await plan(homes)
@@ -88,7 +88,7 @@ describe('a Delo home that changes after the plan', () => {
 })
 
 describe('a directory the import cannot read or remove', () => {
-  it('refuses a Delo home directory it cannot read on the way to a file', async () => {
+  it('refuses a Delorun home directory it cannot read on the way to a file', async () => {
     mark(homes)
     homes.write('skills/review/SKILL.md', '# review\n')
     mkdirSync(join(homes.target, 'skills', 'other'), { recursive: true })
@@ -97,7 +97,7 @@ describe('a directory the import cannot read or remove', () => {
     await expect(applyDshHomeImport(planned, ALL)).rejects.toMatchObject({ code: 'DSH_IMPORT_TARGET_REFUSED', subject: 'skills/review' })
   })
 
-  it('refuses a Delo sessions root it cannot list, because a collision could not be found', async () => {
+  it('refuses a Delorun sessions root it cannot list, because a collision could not be found', async () => {
     homes.write(`sessions/${PROJECT}/s1/session.v4.jsonl.zstd`, 'x')
     homes.writeTarget('sessions/--a--/d1/session.v4.jsonl.zstd', 'x')
     lock(join(homes.target, 'sessions/--a--'))
@@ -138,7 +138,7 @@ describe('a directory the import cannot read or remove', () => {
 })
 
 describe('the plan\'s smaller cases', () => {
-  it('counts two Delo chats, names storage units it does not know, and leaves a linked attachment store behind', async () => {
+  it('counts two Delorun chats, names storage units it does not know, and leaves a linked attachment store behind', async () => {
     homes.write(`sessions/${PROJECT}/s1/session.v4.jsonl.zstd`, 'x')
     homes.writeTarget('sessions/--a--/d1/session.v4.jsonl.zstd', 'x')
     homes.writeTarget('sessions/--a--/d2/session.v4.jsonl.zstd', 'x')
@@ -247,9 +247,9 @@ describe('the stock home\'s reader', () => {
 describe('a placement that fails', () => {
   it('reads an existing path and a home without hard links as refusals, and passes any other failure on', () => {
     const failure = (code: string): Error => Object.assign(new Error(code), { code })
-    expect(publicationFailure('a', failure('EEXIST'))).toMatchObject({ code: 'DSH_IMPORT_TARGET_REFUSED', message: 'the Delo home gained "a" while the import ran, and an import never replaces a file' })
+    expect(publicationFailure('a', failure('EEXIST'))).toMatchObject({ code: 'DSH_IMPORT_TARGET_REFUSED', message: 'the Delorun home gained "a" while the import ran, and an import never replaces a file' })
     for (const code of ['EXDEV', 'EPERM', 'ENOTSUP', 'EOPNOTSUPP']) {
-      expect((publicationFailure('a', failure(code)) as DshImportError).message).toContain(`(${code}); the import needs the Delo home on one file system that supports hard links`)
+      expect((publicationFailure('a', failure(code)) as DshImportError).message).toContain(`(${code}); the import needs the Delorun home on one file system that supports hard links`)
     }
     const other = failure('EIO')
     expect(publicationFailure('a', other)).toBe(other)

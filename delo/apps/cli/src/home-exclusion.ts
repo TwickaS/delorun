@@ -184,7 +184,7 @@ export async function assertNoUpdateInProgress(home: string, homeProcess?: strin
   for (const profile of profilesOf(home)) {
     if (profile === homeProcess) continue
     const record = await readJournal(journalPath(home, profile))
-    if (record !== undefined && record.phase !== 'committed') throw new DataInUseError(`an update of the profile ${profile} from Delo ${record.from} to Delo ${record.to} is ${record.phase}; wait for it to end, or run delorun recover status`)
+    if (record !== undefined && record.phase !== 'committed') throw new DataInUseError(`an update of the profile ${profile} from Delorun ${record.from} to Delorun ${record.to} is ${record.phase}; wait for it to end, or run delorun recover status`)
   }
 }
 
@@ -307,7 +307,7 @@ export async function asSoleUser<T>(home: string, own: OwnRegistration, waiting:
  */
 export async function finishInterruptedRestore(home: string, profile: string): Promise<boolean> {
   if (!existsSync(join(home, DATA_COPIES_DIRECTORY, RESTORE_JOURNAL_FILE))) return recoverDataCopies(home)
-  return asSoleUser(home, { command: HOME_PROCESS_COMMAND, profile }, 'a restore of the chat data is unfinished and must complete before Delo starts', () => recoverDataCopies(home))
+  return asSoleUser(home, { command: HOME_PROCESS_COMMAND, profile }, 'a restore of the chat data is unfinished and must complete before Delorun starts', () => recoverDataCopies(home))
 }
 
 /** What taking a home's locks needs. */
@@ -328,13 +328,13 @@ export function homeExclusion(): HomeExclusion {
 
 /** One home a command runs against exclusively. */
 export interface ExclusiveHome {
-  /** The Delo home. */
+  /** The Delorun home. */
   readonly home: string
   /** The CLI profile the command was given, whose run directory is created when it is missing. */
   readonly profile: string
   /** The command's name, for its refusals. */
   readonly command: string
-  /** What a person can use instead while Delo runs, appended to the refusal; empty for nothing. */
+  /** What a person can use instead while Delorun runs, appended to the refusal; empty for nothing. */
   readonly instead: string
 }
 
@@ -387,7 +387,7 @@ async function takeLock(target: ExclusiveHome, profile: string, exclusion: HomeE
     const pid = holder === undefined ? '' : ` (process ${String(holder.pid)})`
     const instead = target.instead === '' ? '' : `, or ${target.instead}`
     throw new CliError(EXIT.failed, error.code === 'HOME_RUNNING'
-      ? `delorun ${target.command}: Delo is running for the profile ${profile}${pid} and uses the stores this command changes; run delorun stop --profile ${profile} first${instead}`
+      ? `delorun ${target.command}: Delorun is running for the profile ${profile}${pid} and uses the stores this command changes; run delorun stop --profile ${profile} first${instead}`
       : `delorun ${target.command}: another process${pid} holds the home lock of the profile ${profile}, such as another delorun trash, export or import; wait for it to finish, or stop it, and try again`)
   }
 }

@@ -24,7 +24,7 @@ function versionOf(schema: string): number {
   return Number(schema.split('/').at(-1))
 }
 
-/** The Delo source trees whose records live under the home. */
+/** The Delorun source trees whose records live under the home. */
 const SOURCE_ROOTS = [join(import.meta.dirname, '../../../packages'), join(import.meta.dirname, '../src')]
 
 /**

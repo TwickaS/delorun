@@ -113,7 +113,7 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(again.stdout).toContain('already set up')
   })
 
-  it('gives upstream the Delo home as DSH_HOME and leaves a fixture ~/.dsh byte-identical', () => {
+  it('gives upstream the Delorun home as DSH_HOME and leaves a fixture ~/.dsh byte-identical', () => {
     const before = snapshot(dshHome)
     expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
     const plugin = delorun(['plugin', '--profile', 'probe', 'version-exemptions'])
@@ -121,11 +121,11 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(plugin.status).toBe(0)
     // Upstream initialised the profile it was asked about under the Delo home, not under the inherited DSH_HOME.
     expect(lstatSync(join(deloHome, 'profiles', 'probe', 'package.json')).isFile()).toBe(true)
-    const status = delorun(['status'])
+    const status = delorun(['status', '--verbose'])
     expect(status.status).toBe(EXIT.notRunning)
-    expect(status.stdout).toContain(`home: ${deloHome}\n`)
-    expect(status.stdout).toContain(`DSH_HOME is set to ${dshHome}; delorun ignores it and runs with DSH_HOME=${deloHome}`)
-    expect(status.stdout).toContain('state: not running')
+    expect(status.stdout).toContain(`Home: ${deloHome}\n`)
+    expect(status.stdout).toContain(`DSH_HOME is set to ${dshHome}; Delorun ignores it and uses DSH_HOME=${deloHome}`)
+    expect(status.stdout).toContain('Delorun is not running')
     expect(snapshot(dshHome)).toEqual(before)
   })
 
@@ -180,10 +180,10 @@ describe('delorun', { timeout: 60_000 }, () => {
     rmSync(join(deloHome, 'profiles', 'default', 'node_modules', LOCAL_BUNDLE))
     const refused = delorun(['start', '--foreground'])
     expect(refused.status).toBe(EXIT.failed)
-    expect(refused.stderr).toContain('delorun: the profile default could not load Delo\'s bundle, so Delo did not start:')
+    expect(refused.stderr).toContain('delorun: the profile default could not load Delorun\'s bundle, so Delorun did not start:')
     expect(refused.stderr).toContain(`  ${LOCAL_BUNDLE}: Error: dsh: cannot resolve profile bundle "${LOCAL_BUNDLE}"`)
     expect(refused.stderr).toContain(`  To fix it, run: delorun plugin --profile default add link:${BUNDLE_LOCAL_DIR}`)
-    expect(refused.stderr).toContain('no Delo guard, and session logs uploaded to DeepSeek')
+    expect(refused.stderr).toContain('no Delorun guard, and session logs uploaded to DeepSeek')
     expect(refused.stdout).not.toContain('http://')
     expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
   })
@@ -211,7 +211,7 @@ describe('delorun', { timeout: 60_000 }, () => {
     expect(start.stderr).toContain('run: delorun setup')
     const stop = delorun(['stop'])
     expect(stop.status).toBe(EXIT.ok)
-    expect(stop.stdout).toContain('Delo is not running for the profile default.')
+    expect(stop.stdout).toContain('Delorun is not running for the profile default.')
   })
 
   it('reports wrong command lines with the usage code', () => {
@@ -316,14 +316,14 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     const lock = join(deloHome, 'run', 'default', 'home.lock')
     const refusing: StartDependencies = { ...recording([]), preStartSteps: realPreStartSteps(() => Promise.reject(new CliError(EXIT.failed, 'pnpm exited 1')), () => Promise.resolve(false)) }
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, refusing)).toBeUndefined()
-    expect(printed.join('')).toContain('delorun: the profile default starts in the stock look, because Delo\'s studio look could not be added: pnpm exited 1')
+    expect(printed.join('')).toContain('delorun: the profile default starts in the stock look, because Delorun\'s studio look could not be added: pnpm exited 1')
     rmSync(lock, { force: true })
     printed.length = 0
     const added: string[] = []
     const upgrading: StartDependencies = { ...recording([]), preStartSteps: realPreStartSteps((_home, profile) => { added.push(profile); return Promise.resolve(true) }, () => Promise.resolve(false)) }
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, upgrading)).toBeUndefined()
     expect(added).toEqual(['default'])
-    expect(printed.join('')).toContain('delorun: added Delo\'s studio look to the profile default')
+    expect(printed.join('')).toContain('delorun: added Delorun\'s studio look to the profile default')
     rmSync(lock, { force: true })
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output, env: context.env }, upgrading)).toBeUndefined()
     expect(added).toEqual(['default'])
@@ -355,7 +355,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     rmSync(join(deloHome, 'run', 'default', 'home.lock'), { force: true })
   })
 
-  it('boots the CLI profile with DSH_HOME set to the Delo home, and a second start leaves one holder', async () => {
+  it('boots the CLI profile with DSH_HOME set to the Delorun home, and a second start leaves one holder', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const prepared = await prepareHome(context, undefined)
     expect(prepared.home).toEqual({ path: deloHome, ignoredDshHome: dshHome })
@@ -378,7 +378,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(lock.pid).toBe(process.pid)
     const printed: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
-    expect(printed.join('')).toContain(`Delo is already running for the profile default (process ${String(process.pid)}`)
+    expect(printed.join('')).toContain('Delorun is already running for the profile default.')
     expect(printed.join('')).toContain('Run delorun open to open the studio in your browser.\n')
     const opening: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: { stdout: () => {}, stderr: text => void opening.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
@@ -422,7 +422,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(readdirSync(join(deloHome, 'run', 'default'))).toEqual([])
   })
 
-  it('refuses a Delo bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
+  it('refuses a Delorun bundle that resolves but fails to load, and still starts over a skipped upstream bundle', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const broken = join(osHome, 'bundle-broken')
     mkdirSync(broken)
@@ -431,7 +431,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     appendBundles('@delo/bundle-broken')
     const seen: { options: RunProfileOptions, dshHome: string | undefined }[] = []
     await expect(startForeground({ home: deloHome, profile: 'default', open: false, output: context, env: context.env }, recording(seen)))
-      .rejects.toThrow(/@delo\/bundle-broken: Error: dsh: profile bundle "@delo\/bundle-broken" declares no dsh.bundle[^\n]*\n {2}To fix it, reinstall Delo, or run: delorun plugin --profile default install/)
+      .rejects.toThrow(/@delo\/bundle-broken: Error: dsh: profile bundle "@delo\/bundle-broken" declares no dsh.bundle[^\n]*\n {2}To fix it, reinstall Delorun, or run: delorun plugin --profile default install/)
     expect(seen).toHaveLength(0)
     const manifest = JSON.parse(readFileSync(join(deloHome, 'profiles', 'default', 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
     manifest.dsh.profile.bundles = [...DELO_PROFILE_BUNDLES, '@deepseek-ai/dsh-not-installed']
@@ -440,7 +440,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(seen[0]!.options.resolvedProfile?.profile.skippedBundles.map(bundle => bundle.packageName)).toEqual(['@deepseek-ai/dsh-not-installed'])
   })
 
-  it('tears down and refuses a profile in which a row of a Delo bundle did not import, without upstream\'s process shutdown, and starts over inactive upstream rows', async () => {
+  it('tears down and refuses a profile in which a row of a Delorun bundle did not import, without upstream\'s process shutdown, and starts over inactive upstream rows', async () => {
     expect(await main(['setup', '--yes'], context)).toBe(EXIT.ok)
     const shutdowns: number[] = []
     const events: string[] = []
@@ -603,7 +603,7 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     expect(started.report.sessionLogEnabled).toBe(false)
   })
 
-  it('moves a plugin key a patch file holds into the credentials file and starts, so an update from a Delo that saved one commits', () => {
+  it('moves a plugin key a patch file holds into the credentials file and starts, so an update from a Delorun that saved one commits', () => {
     expect(delorun(['setup', '--yes']).status).toBe(EXIT.ok)
     const secret = 'sk-saved-by-an-earlier-delo'
     const patch = join(deloHome, 'profiles', 'default', 'cordis.patch.yml')
@@ -662,7 +662,7 @@ describe('starting a set-up home with the real profile runner', { timeout: 180_0
     const refused = startDriver()
     expect(refused.status).toBe(1)
     expect(refused.report.outcome).toBe('refused')
-    expect(refused.report.message).toContain('so Delo stopped:\n  delo-privacy (@delo/bundle-local) failed to import')
+    expect(refused.report.message).toContain('so Delorun stopped:\n  delo-privacy (@delo/bundle-local) failed to import')
     expect(refused.report.rows.find(row => row.id === 'delo-privacy')).toMatchObject({ state: 'not-imported', disabled: false })
     expect(refused.stderr).toContain('forced import failure')
     expect(refused.report.sessionLogEnabled).toBe(false)

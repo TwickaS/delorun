@@ -17,7 +17,7 @@ export const supervisorDescriber: RefusalDescriber<SupervisorError> = refusalDes
 
 /** How an {@link EngineError} reads: Delo could not use Docker, with the engine's message, and its HTTP status when it answered. */
 export const engineDescriber: RefusalDescriber<EngineError> = refusalDescriber(EngineError, error => ({
-  lead: 'Delo could not use the Docker engine.',
+  lead: 'Delorun could not use the Docker engine.',
   reason: error.status === 0 ? error.message : `${error.message} (HTTP ${String(error.status)})`,
   remedies: error.status === 0 ? ['Check that Docker is running, then run the same command again.'] : [],
 }))

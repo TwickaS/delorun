@@ -21,7 +21,7 @@ import { assertCopyFits, buildFromSources, discardCopy, keepOnlyCopy, isDataSafe
 
 /** What {@link homeUpdateSupport} needs. */
 export interface UpdateSupportOptions {
-  /** The resolved Delo home. */
+  /** The resolved Delorun home. */
   readonly home: string
   /** The CLI profile. */
   readonly profile: string
@@ -68,7 +68,7 @@ export function profileSnapshots(home: string, profile: string, now: () => Date,
   const profileDir = join(home, 'profiles', profile)
   return {
     save: (from, to, report) => withProfileLock(profileDir, 'SNAPSHOT_FAILED', async () => {
-      const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: `Before update to Delo ${to}`, changedBy: { kind: 'person' }, report, ...admit === undefined ? {} : { admit } })
+      const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: `Before update to Delorun ${to}`, changedBy: { kind: 'person' }, report, ...admit === undefined ? {} : { admit } })
       await writeSafetyRecord(profileDir, withUpdate(readSafetyRecord(profileDir), { from, to, at: now().toISOString(), state: 'applying', snapshot }))
       return snapshot
     }, lockWaitMs),
@@ -94,7 +94,7 @@ export function profileSnapshots(home: string, profile: string, now: () => Date,
  */
 export async function assertHistoryGit(): Promise<void> {
   const problem = await historyGitProblem({})
-  if (problem !== undefined) throw new HomeProcessError('GIT_UNAVAILABLE', `Delo saves and restores the profile's history with git, and git cannot run here: ${problem}; nothing was fetched or changed`)
+  if (problem !== undefined) throw new HomeProcessError('GIT_UNAVAILABLE', `Delorun saves and restores the profile's history with git, and git cannot run here: ${problem}; nothing was fetched or changed`)
 }
 
 /**
@@ -218,7 +218,7 @@ function soleDataUser(home: string): void {
 class CliHomeRuntimeStore extends HomeRuntimeStore {
   /** The CLI profile, which a refusal's remedies name. */
   private readonly profile: string
-  /** The resolved Delo home whose data users are checked. */
+  /** The resolved Delorun home whose data users are checked. */
   private readonly dataHome: string
 
   /**

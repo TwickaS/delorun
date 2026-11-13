@@ -69,7 +69,7 @@ export async function runOpen(args: readonly string[], context: CommandContext, 
   context.stdout(`${answer.link.url}\n`)
   context.stdout(answer.link.oneTime
     ? `This link signs in to the studio once, within one minute; run delorun open --print${profileFlag(profile)} again for another.\n`
-    : 'This link signs in to the studio for as long as Delo runs; anyone who has it can use it, so keep it to yourself.\n')
+    : 'This link signs in to the studio for as long as Delorun runs; anyone who has it can use it, so keep it to yourself.\n')
   return EXIT.ok
 }
 

@@ -209,7 +209,7 @@ describe('the recovery before a profile starts', () => {
 
   it('refuses to let a profile start while a journal it cannot read waits, and says what to do', async () => {
     homes.writeTarget(`${STOCK_IMPORT_DIRECTORY}/${STOCK_IMPORT_JOURNAL}`, '{')
-    await expect(recoverStockImport(homes.target)).rejects.toMatchObject({ code: 'DSH_IMPORT_STAGING_FAILED', message: expect.stringContaining('Delo does not start while an interrupted import may be half in place') as string })
+    await expect(recoverStockImport(homes.target)).rejects.toMatchObject({ code: 'DSH_IMPORT_STAGING_FAILED', message: expect.stringContaining('Delorun does not start while an interrupted import may be half in place') as string })
     rmSync(join(homes.target, 'archive'), { recursive: true })
     homes.writeTarget('archive', 'a file')
     await expect(recoverStockImport(homes.target)).rejects.toMatchObject({ code: 'DSH_IMPORT_TARGET_REFUSED' })

@@ -77,8 +77,10 @@ describe('delorun status', { timeout: 30_000 }, () => {
     running = await startRunningHome(home, PROFILE, 'http://127.0.0.1:4123/?token=fixture-token-value')
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
-    expect(result.stdout).toContain('state: running\n')
-    expect(result.stdout).toContain(`studio: http://127.0.0.1:4123/\n${OPEN_HINT}\n`)
+    expect(result.stdout).toContain('Delorun is running.\n')
+    expect(result.stdout).toContain(`Studio: http://127.0.0.1:4123/\n`)
+    expect(result.stdout).toContain(`\n${OPEN_HINT}\n`)
+    expect(result.stdout).not.toMatch(/Process id|Start id|Home:/)
     expect(OPEN_HINT).toBe('Run delorun open to open the studio in your browser.')
     expect(result.stdout).not.toContain('fixture-token-value')
     expect(result.stdout).not.toContain('token')
@@ -88,7 +90,7 @@ describe('delorun status', { timeout: 30_000 }, () => {
     running = await startRunningHome(home, PROFILE, undefined)
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
-    expect(result.stdout).toContain('chats: 0\n')
+    expect(result.stdout).toContain('Running chats: 0\n')
     expect(result.stdout).not.toContain('studio:')
     expect(result.stdout).not.toContain(OPEN_HINT)
   })
@@ -102,24 +104,24 @@ describe('delorun status', { timeout: 30_000 }, () => {
   })
 
   it('reports no home process, with and without --json, and a lock its exited holder left', async () => {
-    expect(await status()).toMatchObject({ code: EXIT.notRunning, stdout: expect.stringContaining('state: not running\n') as string })
+    expect(await status()).toMatchObject({ code: EXIT.notRunning, stdout: expect.stringContaining('Delorun is not running. Start it with delorun start.\n') as string })
     expect(await status(['--json'])).toMatchObject({ code: EXIT.notRunning, stdout: '{"ok":false,"state":"not-running"}\n' })
     const exited = spawnSync(process.execPath, ['-e', ''], { timeout: 30_000 })
     writeLock(exited.pid as number)
-    expect((await status()).stdout).toContain(`a lock left by process ${String(exited.pid)}, which has exited`)
+    expect((await status()).stdout).toContain('Delorun is not running.')
   })
 
   it('fails when the lock holder lives but its update channel does not answer', async () => {
     writeLock(process.pid)
     const result = await status()
     expect(result.code).toBe(EXIT.failed)
-    expect(result.stderr).toContain(`process ${String(process.pid)} holds the profile's lock but its update channel did not answer`)
+    expect(result.stderr).toContain(`Delorun looks to be running (process ${String(process.pid)}), but it did not answer`)
   })
 
   it('names a failure that is not an Error by its text', async () => {
     writeLock(process.pid)
     vi.mocked(queryHomeStatus).mockRejectedValueOnce('the channel closed')
-    expect((await status()).stderr).toContain('its update channel did not answer: the channel closed')
+    expect((await status()).stderr).toContain('but it did not answer: the channel closed')
   })
 
   it('fails when the home process refuses the request', async () => {
@@ -127,7 +129,7 @@ describe('delorun status', { timeout: 30_000 }, () => {
     vi.mocked(queryHomeStatus).mockResolvedValueOnce({ ok: false, error: 'UNAUTHENTICATED' })
     const result = await status()
     expect(result.code).toBe(EXIT.failed)
-    expect(result.stderr).toContain('the home process refused the request: UNAUTHENTICATED')
+    expect(result.stderr).toContain('Delorun refused the request: UNAUTHENTICATED')
   })
 
   it('prints the previous runtime and the update in progress beside the studio', async () => {
@@ -139,12 +141,20 @@ describe('delorun status', { timeout: 30_000 }, () => {
     } as Awaited<ReturnType<typeof queryHomeStatus>>)
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
-    expect(result.stdout).toContain('runtime: 1.0.0 (current 1.1.0, previous 1.0.0)\nchats: 2\nupdate: waiting to 1.1.0\nstudio: http://127.0.0.1:4123/\n')
+    expect(result.stdout).toContain('Version: 1.0.0\nRunning chats: 2\nUpdate: waiting to 1.1.0\n')
+    vi.mocked(queryHomeStatus).mockResolvedValueOnce({
+      state: 'running', pid: process.pid, startId: newStartId(),
+      runtime: { current: '1.1.0', previous: '1.0.0', running: '1.0.0' }, chats: 2,
+      studio: 'http://127.0.0.1:4123/', update: { phase: 'waiting', target: '1.1.0' },
+    } as Awaited<ReturnType<typeof queryHomeStatus>>)
+    const verbose = await status(['--verbose'])
+    expect(verbose.stdout).toContain('Version: 1.0.0 (previous 1.0.0)')
+    expect(verbose.stdout).toMatch(/Process id: \d+\nStart id: /)
   })
 
   it('names an inherited DSH_HOME that it ignores', async () => {
     let stdout = ''
     await statusCommand.run([], { env: { HOME: osHome, DELO_HOME: home, DSH_HOME: join(osHome, 'elsewhere') }, stdout: (text) => { stdout += text }, stderr: () => {} })
-    expect(stdout).toContain(`DSH_HOME is set to ${join(osHome, 'elsewhere')}; delorun ignores it`)
+    expect(stdout).toContain(`DSH_HOME is set to ${join(osHome, 'elsewhere')}; Delorun ignores it`)
   })
 })

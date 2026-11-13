@@ -59,7 +59,7 @@ export async function releaseLogStartCheck(home: string, platform: RuntimePlatfo
     transport: environment.transport(root),
   })
   if (check.stop) {
-    throw new HomeProcessError('VERIFY_FAILED', `release ${String(version)} failed its release-log check (${String(check.refusal)}): ${String(check.detail)}; Delo did not start it. Run delorun verify --release ${String(version)} to see every check`)
+    throw new HomeProcessError('VERIFY_FAILED', `release ${String(version)} failed its release-log check (${String(check.refusal)}): ${String(check.detail)}; Delorun did not start it. Run delorun verify --release ${String(version)} to see every check`)
   }
 }
 

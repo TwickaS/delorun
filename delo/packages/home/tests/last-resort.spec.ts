@@ -10,7 +10,7 @@ const SECRET = ['sk', '0123456789abcdef0123456789abcdef'].join('-')
 const MARK = { text: (text: string): string => text.replaceAll(SECRET, '[redacted:provider-key]') }
 
 class KnownFailure extends Error {}
-const known = refusalDescriber(KnownFailure, error => ({ lead: 'Delo stopped a known failure.', reason: error.message, remedies: ['Do this.'] }))
+const known = refusalDescriber(KnownFailure, error => ({ lead: 'Delorun stopped a known failure.', reason: error.message, remedies: ['Do this.'] }))
 
 /**
  * A handler installed on an emitter of its own, with what it wrote, recorded and exited with.
@@ -42,7 +42,7 @@ describe('the last-resort handler', () => {
     const { emitter, output, records, exits } = installed()
     const error = new TypeError(`the key ${SECRET} is not a function`)
     emitter.emit('uncaughtException', error)
-    expect(output.join('')).toBe('Delo stopped: the key [redacted:provider-key] is not a function\nWhat you can do:\n  See the log.\n')
+    expect(output.join('')).toBe('Delorun stopped: the key [redacted:provider-key] is not a function\nWhat you can do:\n  See the log.\n')
     expect(output.join('')).not.toContain('    at ')
     expect(records).toEqual([[error, 'uncaughtException']])
     expect(exits).toEqual([FATAL_EXIT])
@@ -53,7 +53,7 @@ describe('the last-resort handler', () => {
     const { emitter, output, records, exits } = installed()
     const error = new KnownFailure(`the key ${SECRET} was refused`)
     emitter.emit('unhandledRejection', error)
-    expect(output.join('')).toBe('Delo stopped a known failure.\nWhy: the key [redacted:provider-key] was refused\nWhat you can do:\n  Do this.\n  See the log.\n')
+    expect(output.join('')).toBe('Delorun stopped a known failure.\nWhy: the key [redacted:provider-key] was refused\nWhat you can do:\n  Do this.\n  See the log.\n')
     expect(records).toEqual([[error, 'unhandledRejection']])
     expect(exits).toEqual([1])
   })
@@ -62,13 +62,13 @@ describe('the last-resort handler', () => {
     const logRedactor = { text: (text: string): string => text.replaceAll('start-token-value', '[redacted:start-token]') }
     const { emitter, output } = installed((): FatalRecord => ({ pointer: 'See the home log.', redactor: logRedactor }))
     emitter.emit('uncaughtException', new Error('token start-token-value leaked'))
-    expect(output.join('')).toBe('Delo stopped: token [redacted:start-token] leaked\nWhat you can do:\n  See the home log.\n')
+    expect(output.join('')).toBe('Delorun stopped: token [redacted:start-token] leaked\nWhat you can do:\n  See the home log.\n')
   })
 
   it('still prints and exits 1 when recording the detail throws, and says the detail is lost', () => {
     const { emitter, output, exits } = installed(() => { throw new Error('the log is gone') })
     emitter.emit('uncaughtException', new Error('boom'))
-    expect(output.join('')).toBe(`Delo stopped: boom\nWhat you can do:\n  ${UNRECORDED_POINTER}\n`)
+    expect(output.join('')).toBe(`Delorun stopped: boom\nWhat you can do:\n  ${UNRECORDED_POINTER}\n`)
     expect(exits).toEqual([1])
   })
 
@@ -93,6 +93,6 @@ describe('the last-resort handler', () => {
   })
 
   it('renders a fatal report as the refusal with the pointer last', () => {
-    expect(renderFatal('plain text', { pointer: 'See the log.' }, { describers: [], context: {}, redactor: MARK })).toBe('Delo stopped: plain text\nWhat you can do:\n  See the log.\n')
+    expect(renderFatal('plain text', { pointer: 'See the log.' }, { describers: [], context: {}, redactor: MARK })).toBe('Delorun stopped: plain text\nWhat you can do:\n  See the log.\n')
   })
 })

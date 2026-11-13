@@ -296,7 +296,7 @@ describe('the routes a signed-in device reaches', () => {
     }
   })
 
-  it('decides every exact Fetch route for the device, and Delo\'s still answer the loopback studio', async () => {
+  it('decides every exact Fetch route for the device, and Delorun\'s still answer the loopback studio', async () => {
     const routes = fetchRoutes()
     // Pins FETCH_ROUTES: a route without a decision fails here, as does a stale entry.
     expect(routes.map(route => route.path).sort()).toEqual(Object.keys(FETCH_ROUTES).sort())

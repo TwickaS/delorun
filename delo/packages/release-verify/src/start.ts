@@ -79,7 +79,7 @@ export interface StartCheckResult {
  * @returns the warning text.
  */
 export function uncheckedWarning(version: string): string {
-  return `Release ${version} has not been checked against the release log; Delo checks it at the next connection.`
+  return `Release ${version} has not been checked against the release log; Delorun checks it at the next connection.`
 }
 
 /**

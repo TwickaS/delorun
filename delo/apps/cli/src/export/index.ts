@@ -27,6 +27,7 @@ import { ARCHIVE_CUSTOMISATION_SCHEMA_VERSION } from '@delo/contract-archive-and
 import { exportArchive, loadHomeKey, signManifest, type ArchiveExportInput, type ExportWorkspace, type SecretFinding } from '@delo/archive'
 import { attachmentDigests, attachmentPaths, encodeSegment, generationFiles, readGeneration } from '@delo/trash'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
+import { parseFailure } from '../command.ts'
 import { quoted } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 
@@ -35,9 +36,9 @@ export const EXPORT_USAGE = 'Usage: delorun export <chat-or-workspace-id> --out 
 
 /** What `delorun export` runs with. */
 export interface ExportIo {
-  /** The Delo home. */
+  /** The Delorun home. */
   readonly home: string
-  /** The Delo version that writes the archive. */
+  /** The Delorun version that writes the archive. */
   readonly version: string
   /** Write to standard output. */
   readonly stdout: (text: string) => void
@@ -225,7 +226,7 @@ export async function runExport(args: readonly string[], io: ExportIo): Promise<
   try {
     parsed = parseArgs({ args: [...args], options: { out: { type: 'string' } }, strict: true, allowPositionals: true })
   } catch (error: unknown) {
-    throw new CliError(EXIT.usage, `delorun export: ${(error as Error).message}\n${EXPORT_USAGE}`)
+    throw parseFailure('export', error)
   }
   const [target, ...extra] = parsed.positionals
   const out = parsed.values.out

@@ -23,7 +23,7 @@
  * @module @delo/cli/start
  */
 import { spawn } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { closeSync, openSync, readSync, fstatSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -42,7 +42,7 @@ import { readReachRow } from './reach/row.ts'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
-import { HomeLayoutError, newStartId, readHomeLock, runDirectory, type HolderProbe } from '@delo/home'
+import { HomeLayoutError, newStartId, type HolderProbe } from '@delo/home'
 import { DEFAULT_WORKSPACE_ENV, defaultWorkspaceRequest, resolveDefaultWorkspace } from './default-workspace.ts'
 import { NPM_MIRROR_ENV } from '@delo/bundle-local/profile'
 import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type RowState } from './delo-bundles.ts'
@@ -175,7 +175,7 @@ export function realPreStartSteps(add: AddStudioBundle, addHeadless: AddHeadless
 }
 
 
-/** A booted profile, as the start's audit of Delo's rows reads it. */
+/** A booted profile, as the start's audit of Delorun's rows reads it. */
 export interface BootedProfile {
   /** The Loader's rows after startup settled, with their configs; empty when the tree was already disposed. */
   readonly rows: () => readonly BootedRow[]
@@ -316,7 +316,7 @@ export function serviceProvider(ctx: Context, name: string): ServiceProvider | u
 
 /** What a foreground start runs. */
 export interface StartRequest {
-  /** The prepared Delo home. */
+  /** The prepared Delorun home. */
   readonly home: string
   /** The CLI profile. */
   readonly profile: string
@@ -416,7 +416,7 @@ export async function upstreamAddStudioBundle(home: string, profile: string, out
 export async function upstreamAddHeadlessBundle(home: string, output: CommandOutput): Promise<boolean> {
   const log = openSetupLog(home, HEADLESS_PROFILE)
   try {
-    return await addHeadlessBundle(home, () => upstreamLinking(home, HEADLESS_PROFILE), { log, progress: (text) => { output.stdout(text) } })
+    return await addHeadlessBundle(home, () => upstreamLinking(home, HEADLESS_PROFILE), { log, progress: (text) => { output.stderr(text) } })
   } finally {
     log.close()
   }
@@ -530,8 +530,7 @@ export async function startForeground(request: StartRequest, dependencies: Start
       throw error
     }
     if (!(error instanceof HomeLayoutError) || error.code !== 'HOME_RUNNING') throw error
-    const holder = readHomeLock(runDirectory(request.home, request.profile))
-    request.output.stdout(`Delo is already running for the profile ${request.profile}${holder === undefined ? '' : ` (process ${String(holder.pid)}, started ${holder.startedAt})`}.\n`)
+    request.output.stdout(`Delorun is already running for the profile ${request.profile}.\n`)
     await announceStudio(request.home, request.profile, request.open, request.output, dependencies.opener)
     return EXIT.ok
   }
@@ -562,7 +561,7 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
   try {
     settlement = await booted.settleSecretValues(home, profile)
   } catch (error) {
-    settlement = { moved: [], notices: [`Delo could not check the patch files of the profile ${profile} for plugin keys: ${error instanceof Error ? error.message : String(error)}. The profile history saves no version that holds one.`] }
+    settlement = { moved: [], notices: [`Delorun could not check the patch files of the profile ${profile} for plugin keys: ${error instanceof Error ? error.message : String(error)}. The profile history saves no version that holds one.`] }
   }
   reportSecretSettlement(settlement, output, log)
 }
@@ -722,7 +721,7 @@ export async function startDetached(home: string, profile: string, output: Comma
   if (!hasCliProfile(home, profile)) throw new CliError(EXIT.failed, `delorun: the CLI profile ${profile} is not set up in ${home}; run: delorun setup`)
   const running = await answeringStatus(home, profile)
   if (running !== undefined) {
-    output.stdout(`Delo is already running for the profile ${profile} (process ${String(running.pid)}, ${running.state}).\n`)
+    output.stdout(`Delorun is already running for the profile ${profile}.\n`)
     await announceStudio(home, profile, open, output, opener)
     return EXIT.ok
   }
@@ -740,7 +739,7 @@ export async function startDetached(home: string, profile: string, output: Comma
       const notice = await startNoticeLine(home, profile, process.env)
       const dangerous = await dangerousModeLine(home, profileDirectory(home, profile))
       output.stdout([
-        `Delo is running in the background for the profile ${profile} (process ${String(status.pid)})${status.studio === undefined ? '' : ` at ${status.studio}`}; it keeps running after this terminal closes.`,
+        `Delorun is running in the background for the profile ${profile}${status.studio === undefined ? '' : ` at ${status.studio}`}; it keeps running after this terminal closes.`,
         'See it with delorun status, follow its log with delorun logs --follow, and stop it with delorun stop.',
         ...dangerous === undefined ? [] : [dangerous],
         ...notice === undefined ? [] : [notice],
@@ -750,13 +749,59 @@ export async function startDetached(home: string, profile: string, output: Comma
       return EXIT.ok
     }
     if (exitCode !== undefined) {
-      output.stderr(`delorun start: the home process exited with code ${String(exitCode)} before it was running; see its log: ${log}\n`)
+      output.stderr(startFailure(profile, `Delorun stopped with exit code ${String(exitCode)} before it was running`, log))
       return EXIT.failed
     }
     await sleep(100)
   }
-  output.stderr(`delorun start: the home process did not report running within ${String(START_WAIT_MS / 1000)} seconds; see its log: ${log}\n`)
+  output.stderr(startFailure(profile, `Delorun was not running after ${String(START_WAIT_MS / 1000)} seconds`, log))
   return EXIT.failed
+}
+
+/** How much of the end of the home log a failed start reads for its cause. */
+const FAILURE_LOG_BYTES = 65_536
+
+/**
+ * The failed-start report: what happened, a busy port when the log says so, and the commands that show why.
+ * @param profile - the CLI profile.
+ * @param what - what happened, as a sentence without a full stop.
+ * @param log - the home log's path.
+ * @returns the report, ending with a newline.
+ */
+export function startFailure(profile: string, what: string, log: string): string {
+  const flag = profileFlag(profile)
+  const busy = homeLogTail(log).some(line => /EADDRINUSE|address already in use/i.test(line))
+  return [
+    `delorun start: Delorun did not start. ${what}.`,
+    ...busy ? [`Another program is using the studio's port. Choose another port with delorun setup profile${flag}, or set the port to 0 in the profile so Delorun picks a free one.`] : [],
+    `Run delorun logs${flag} to see why, then delorun doctor${flag} to check your setup.`,
+    '',
+  ].join('\n')
+}
+
+/**
+ * The last lines of the home log.
+ * @param log - the log's path.
+ * @returns the lines; none when the log does not read.
+ */
+function homeLogTail(log: string): string[] {
+  let descriptor: number
+  try {
+    descriptor = openSync(log, 'r')
+  } catch (error: unknown) {
+    // A log that was never created has no cause to show; `delorun logs` says so.
+    void error
+    return []
+  }
+  try {
+    const size = fstatSync(descriptor).size
+    const length = Math.min(size, FAILURE_LOG_BYTES)
+    const buffer = Buffer.alloc(length)
+    readSync(descriptor, buffer, 0, length, size - length)
+    return buffer.toString('utf8').split('\n')
+  } finally {
+    closeSync(descriptor)
+  }
 }
 
 /**
@@ -812,7 +857,7 @@ export function startChoice(command: string, flags: StartFlags, profileDirectory
  */
 export function foregroundHint(profile: string): string {
   const flag = profileFlag(profile)
-  return `Delo runs in this terminal; closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background${flag}, or run delorun setup background${flag} to make that the default.\n`
+  return `Delorun runs in this terminal; closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background${flag}, or run delorun setup background${flag} to make that the default.\n`
 }
 
 /** `delorun start [--foreground | --background] [--open] [--profile <name>]`. */

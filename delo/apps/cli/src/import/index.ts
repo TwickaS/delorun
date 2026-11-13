@@ -35,6 +35,7 @@ import { ARCHIVE_LIMITS } from '@delo/contract-archive-and-trash'
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { ArchiveError, ArchiveImporter, DirectoryWorkspaceStore, loadHomeKey, type ArchiveImporterConfig, type ArchivePreview, type ArchiveSizeLimits } from '@delo/archive'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
+import { parseFailure } from '../command.ts'
 import { printable, quoted } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 
@@ -52,7 +53,7 @@ export const UNVERIFIED_CONFIRMATION = 'unverified'
 
 /** What `delorun import` runs with. */
 export interface ImportIo {
-  /** The Delo home. */
+  /** The Delorun home. */
   readonly home: string
   /** Write to standard output. */
   readonly stdout: (text: string) => void
@@ -113,7 +114,7 @@ export async function runImport(args: readonly string[], io: ImportIo): Promise<
   try {
     parsed = parseArgs({ args: [...args], options: {}, strict: true, allowPositionals: true })
   } catch (error: unknown) {
-    throw new CliError(EXIT.usage, `delorun import: ${(error as Error).message}\n${IMPORT_USAGE}`)
+    throw parseFailure('import', error)
   }
   const [file, ...extra] = parsed.positionals
   if (file === undefined || extra.length > 0) throw new CliError(EXIT.usage, IMPORT_USAGE)

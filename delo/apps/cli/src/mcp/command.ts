@@ -190,10 +190,10 @@ export const mcpCommand: CliCommand = createMcpCommand({
 async function listed(where: Where): Promise<Listed> {
   const { home, profile, dependencies } = where
   if (!dependencies.running(home, profile)) {
-    throw new CliError(EXIT.notRunning, 'delorun mcp: Delo is not running. The studio reviews each MCP server as it starts it; start Delo with delorun start, then run delorun mcp list')
+    throw new CliError(EXIT.notRunning, 'delorun mcp: Delorun is not running. The studio reviews each MCP server as it starts it; start Delorun with delorun start, then run delorun mcp list')
   }
   const answer = final(await dependencies.send(home, profile, { op: 'mcp.list' }))
-  if (answer.ok !== true) throw new CliError(EXIT.failed, `delorun mcp: the home refused: ${refusal(answer)}`)
+  if (answer.ok !== true) throw new CliError(EXIT.failed, `delorun mcp: Delorun refused: ${refusal(answer)}`)
   const servers = entriesOf(answer.servers, pendingOf)
   const accepted = entriesOf(answer.accepted, acceptedOf)
   if (servers === undefined || accepted === undefined) throw new CliError(EXIT.failed, 'delorun mcp: the home answered with a list of servers this command cannot read')
@@ -402,7 +402,7 @@ async function accept(where: Where, name: string): Promise<ExitCode> {
   if (!dependencies.terminal) {
     return failed(context, 'accepting a server asks you to confirm at a terminal, so nothing was accepted. Run the command in a terminal on this computer')
   }
-  context.stdout(`${startLines(server)}\nThis command runs on this computer with your access, outside the sandbox, each time Delo starts it.\n`)
+  context.stdout(`${startLines(server)}\nThis command runs on this computer with your access, outside the sandbox, each time Delorun starts it.\n`)
   if (await dependencies.confirm(`Accept ${printable(server.serverName)} and start it?`) !== true) {
     return failed(context, `nothing was accepted; ${printable(server.serverName)} stays stopped`)
   }
@@ -410,7 +410,7 @@ async function accept(where: Where, name: string): Promise<ExitCode> {
   if (answer.ok !== true) return failed(context, answerRefusal(answer, 'the server\'s start changed after it was shown, so nothing was recorded'))
   context.stdout(Number(answer.started) > 0
     ? `Accepted ${printable(server.serverName)}; it is running.\n`
-    : `Accepted ${printable(server.serverName)}; it starts the next time Delo starts.\n`)
+    : `Accepted ${printable(server.serverName)}; it starts the next time Delorun starts.\n`)
   return EXIT.ok
 }
 
@@ -461,7 +461,7 @@ async function revoke(where: Where, name: string): Promise<ExitCode> {
  */
 function answerRefusal(answer: ResponseLine, stale: string): string {
   if (answer.error === 'STALE_REVIEW') return `${stale}. Look at it again with delorun mcp list`
-  return `the home refused: ${refusal(answer)}`
+  return `Delorun refused: ${refusal(answer)}`
 }
 
 /**

@@ -78,7 +78,7 @@ describe('delorun recover', () => {
     expect(help.stdout).toContain('recover')
     const status = await delorun(['recover'])
     expect(status.code).toBe(EXIT.ok)
-    expect(status.stdout).toContain('This profile has not been through a Delo update yet.')
+    expect(status.stdout).toContain('This profile has not been through a Delorun update yet.')
     expect(status.stdout).toContain('Safe mode is off.')
   })
 
@@ -111,7 +111,7 @@ describe('delorun recover', () => {
       socket.setEncoding('utf8')
       socket.once('data', (chunk: string) => {
         const op = (JSON.parse(chunk.split('\n')[0]!) as { op: string }).op
-        const lines = op === 'status' ? [{ ok: true, status: {} }] : [{ ok: true, phase: 'switching' }, { ok: true, outcome: 'rolled-back', lines: ['Went back from Delo 0.3.0 to Delo 0.1.0.', '1 chat(s) created or changed since the update are set aside in data-set-aside/0.3.0-1.'] }]
+        const lines = op === 'status' ? [{ ok: true, status: {} }] : [{ ok: true, phase: 'switching' }, { ok: true, outcome: 'rolled-back', lines: ['Went back from Delorun 0.3.0 to Delorun 0.1.0.', '1 chat(s) created or changed since the update are set aside in data-set-aside/0.3.0-1.'] }]
         socket.end(lines.map(line => `${JSON.stringify(line)}\n`).join(''))
       })
     })
@@ -119,7 +119,7 @@ describe('delorun recover', () => {
     try {
       const rolled = await delorun(['recover', 'rollback'])
       expect(rolled.code).toBe(EXIT.ok)
-      expect(rolled.stdout).toBe('… switching\nWent back from Delo 0.3.0 to Delo 0.1.0.\n1 chat(s) created or changed since the update are set aside in data-set-aside/0.3.0-1.\nRolled back.\n')
+      expect(rolled.stdout).toBe('… switching\nWent back from Delorun 0.3.0 to Delorun 0.1.0.\n1 chat(s) created or changed since the update are set aside in data-set-aside/0.3.0-1.\nRolled back.\n')
     } finally {
       await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     }
@@ -129,7 +129,7 @@ describe('delorun recover', () => {
     for (const args of [['rollback', 'safe-mode'], ['undo'], ['restore'], ['status', '--profile-only'], ['rollback', '--reason', 'x'], ['--bogus']]) {
       const result = await delorun(['recover', ...args])
       expect(result.code).toBe(EXIT.usage)
-      expect(result.stderr).toContain('usage: delorun recover')
+      expect(result.stderr).toContain('Run delorun recover --help for usage.')
     }
   })
 
@@ -161,7 +161,7 @@ describe('a rollback that reaches a root', () => {
     const code = await main(['recover', 'rollback'], { env: environment, stdout: () => undefined, stderr: (text) => { stderr += text } })
     expect(code).toBe(EXIT.failed)
     expect(stderr).toContain('ROOT_NOT_ANCHORED')
-    expect(stderr).toContain('start Delo with its launcher')
+    expect(stderr).toContain('start Delorun with its launcher')
     expect(readFileSync(path, 'utf8')).toBe(before)
   })
 
@@ -177,7 +177,7 @@ describe('a rollback that reaches a root', () => {
       for (const args of [['recover', 'rollback'], ['recover', 'rollback', '--profile-only']]) {
         const result = await delorun(args)
         expect(result.code).toBe(EXIT.failed)
-        expect(result.stderr).toContain('GIT_UNAVAILABLE: Delo saves and restores the profile\'s history with git, and git cannot run here: no git command is on PATH')
+        expect(result.stderr).toContain('GIT_UNAVAILABLE: Delorun saves and restores the profile\'s history with git, and git cannot run here: no git command is on PATH')
         expect(result.stderr).toContain('Install git, then run the same command again.')
       }
     } finally {
@@ -323,7 +323,7 @@ describe('the launcher\'s rollback after the current runtime failed its start ch
       output: { stdout: (text) => { stdout += text }, stderr: (text) => { stderr += text } },
     })
     expect(status).toBe(EXIT.failed)
-    expect(stderr).toContain('Delo did not start release 0.2.0: it failed its start check. Starting release 0.1.0')
+    expect(stderr).toContain('Delorun did not start release 0.2.0: it failed its start check. Starting release 0.1.0')
     expect(stderr).toContain('NO_UPDATE_RECORD')
     expect(stdout).toBe('')
   })

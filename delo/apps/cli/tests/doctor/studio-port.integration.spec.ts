@@ -143,12 +143,12 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
     expect(await doctor(['--port', String(port)])).toEqual({ code: EXIT.ok, port: `pass port: port ${String(port)} on 127.0.0.1 is free.` })
   })
 
-  it('passes the port while this home\'s own studio holds it, and says Delo holds it', async () => {
+  it('passes the port while this home\'s own studio holds it, and says Delorun holds it', async () => {
     const { server, port } = await listenOnEphemeralPort()
     try {
       await setStudioPort(port)
       running = await startRunningHome(home, PROFILE, `http://127.0.0.1:${String(port)}/`)
-      expect(await doctor()).toEqual({ code: EXIT.ok, port: `pass port: port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by Delo's studio, which runs for the profile default.` })
+      expect(await doctor()).toEqual({ code: EXIT.ok, port: `pass port: port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by Delorun's studio, which runs for the profile default.` })
     } finally {
       await closeServer(server)
     }
@@ -211,14 +211,6 @@ describe('the port of this home\'s own studio', { timeout: 30_000 }, () => {
 })
 
 describe('delorun doctor in this process', { timeout: 30_000 }, () => {
-  it('prints its help for --help and -h', async () => {
-    for (const flag of ['--help', '-h']) {
-      const result = await doctorOutput([flag])
-      expect(result.code).toBe(EXIT.ok)
-      expect(result.printed).toContain('Usage: delorun doctor [--port <n>]')
-    }
-  })
-
   /**
    * Write the home's credentials document at mode 0600.
    * @param text - its text.

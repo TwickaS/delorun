@@ -24,7 +24,7 @@ import { parseOptions, type CommandContext } from './command.ts'
 /** The name of the file this module is in, for its messages: `version.ts`. */
 const MODULE = 'version.ts'
 
-/** A version Delo cannot read or validate, naming where it was read from and what to do about it. */
+/** A version Delorun cannot read or validate, naming where it was read from and what to do about it. */
 export class DeloVersionError extends Error {
   /** The file or variable the version was read from. */
   readonly source: string
@@ -51,13 +51,13 @@ export function deloVersion(filename: string = fileURLToPath(new URL('../package
   try {
     manifest = JSON.parse(fs.readFileSync(filename, 'utf8'))
   } catch (error) {
-    throw new DeloVersionError(filename, `${MODULE}: Delo's version cannot be read from ${filename} (${error instanceof Error ? error.message : String(error)}); reinstall Delo, or report the damaged installation, because delorun cannot tell which Delo this is.`)
+    throw new DeloVersionError(filename, `${MODULE}: Delorun's version cannot be read from ${filename} (${error instanceof Error ? error.message : String(error)}); reinstall Delorun, or report the damaged installation, because delorun cannot tell which Delorun this is.`)
   }
   const value = typeof manifest === 'object' && manifest !== null && Object.hasOwn(manifest, 'version')
     ? (manifest as Record<string, unknown>).version
     : undefined
   if (typeof value !== 'string' || semver.valid(value) === null) {
-    throw new DeloVersionError(filename, `${MODULE}: Delo's version in ${filename} is ${JSON.stringify(value)}, which is not a semantic version such as 1.0.0; reinstall Delo.`)
+    throw new DeloVersionError(filename, `${MODULE}: Delorun's version in ${filename} is ${JSON.stringify(value)}, which is not a semantic version such as 1.0.0; reinstall Delorun.`)
   }
   return value as SemanticVersion
 }
@@ -71,7 +71,7 @@ export function dshVersion(): SemanticVersion {
   try {
     return getDshRuntimeVersion() as SemanticVersion
   } catch (error) {
-    throw new DeloVersionError('@deepseek-ai/dsh-app-boot', `${MODULE}: DSH's version cannot be read from @deepseek-ai/dsh-app-boot (${error instanceof Error ? error.message : String(error)}); reinstall Delo.`)
+    throw new DeloVersionError('@deepseek-ai/dsh-app-boot', `${MODULE}: DSH's version cannot be read from @deepseek-ai/dsh-app-boot (${error instanceof Error ? error.message : String(error)}); reinstall Delorun.`)
   }
 }
 
@@ -85,7 +85,7 @@ export function versions(): VersionOutput {
 }
 
 /**
- * The two lines `delorun --version` prints (contract C17): `Delo <delo>`, then `DSH <dsh>`.
+ * The two lines `delorun --version` prints (contract C17): `Delorun <delo>`, then `DSH <dsh>`.
  * @param output - the versions.
  * @returns the lines, each ending in a newline.
  */

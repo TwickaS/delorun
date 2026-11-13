@@ -28,15 +28,17 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
-import { EXIT, type ExitCode } from './exit.ts'
-import { refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
+import { CliError, EXIT, type ExitCode } from './exit.ts'
+import { HEADLESS_PROFILE, refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
 import { useHomeShared } from './home-exclusion.ts'
-import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
+import { requiredModelKey, resolveModelKey } from './model-key.ts'
+import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, pnpmCommand, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
 import { readProfileRegistry } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { ensureCopyImport } from './pnpm-import.ts'
 import { profileDirectory, selectCommandProfile } from './profile.ts'
 import { runUpstreamProfile, upstreamDependencies } from './start.ts'
 import { shippedPackageManager } from './package-manager.ts'
+import { withBrandedStderr } from './upstream-output.ts'
 import { runPluginCheck } from './plugin-check.ts'
 
 /** What `delorun plugin` runs outside this module; specs replace it. */
@@ -90,7 +92,7 @@ async function runUpstreamPlugin(argv: readonly string[], operation?: UpstreamOp
   const { runPlugin } = await import('@deepseek-ai/dsh/lib/plugin.js')
   const invocation = parseDshArgs(argv, getDshRuntimeVersion())
   if (invocation.mode !== 'plugin') throw new Error(`delorun plugin: upstream read ${JSON.stringify(argv)} as a ${invocation.mode} command`)
-  return runPlugin(invocation.profile, invocation.args, shippedPackageManager(), operation)
+  return withBrandedStderr(() => runPlugin(invocation.profile, invocation.args, shippedPackageManager(), operation))
 }
 
 /** The time pnpm gets to name the profile's registry. */
@@ -103,6 +105,22 @@ const UPSTREAM_PLUGIN: PluginDependencies = {
   profileRegistry: profileDir => readProfileRegistry(profileDir, { ...shippedPackageManager(), timeoutMs: REGISTRY_LOOKUP_MS }),
   installAnchor: async () => (await import('@deepseek-ai/dsh/profile-boot')).INSTALL_ANCHOR,
   onExit: (listener) => { process.once('exit', listener) },
+}
+
+/** The words pnpm's list command answers to; pnpm prints nothing for a profile with no plugins. */
+const LIST_COMMANDS = new Set(['list', 'ls', 'la', 'll'])
+
+/**
+ * Whether a profile has no plugin in its `package.json`, the state in which pnpm's list prints nothing; a profile with no
+ * manifest has none either.
+ * @param profileDir - the profile directory.
+ * @returns true when the manifest is missing or lists no dependency.
+ */
+function hasNoPlugins(profileDir: string): boolean {
+  const manifest = join(profileDir, 'package.json')
+  if (!existsSync(manifest)) return true
+  const { dependencies = {} } = JSON.parse(readFileSync(manifest, 'utf8')) as { readonly dependencies?: Readonly<Record<string, string>> }
+  return Object.keys(dependencies).length === 0
 }
 
 /** The profile files a refused installation puts back. */
@@ -161,6 +179,9 @@ export async function plugin(args: readonly string[], context: CommandContext, d
     if (check === undefined || !installsPackages(rest)) {
       const code = await dependencies.runUpstream(['plugin', ...withProfile(rest, profile)])
       if (code === 0 && check !== undefined) await forgetRemovedPlugins(profileDir, context)
+      if (code === 0 && LIST_COMMANDS.has(pnpmCommand(rest) ?? '') && hasNoPlugins(profileDir)) {
+        context.stdout(`No plugins added to the profile ${profile}.\n`)
+      }
       return code
     }
     // The registry is read before the resolution, so between the resolution and the installation only the check runs,
@@ -214,6 +235,9 @@ export async function pluginMirror(args: readonly string[], context: CommandCont
   return runMirror(args, { home: home.path, profile, profileDir: profileDirectory(home.path, profile), installAnchor: await dependencies.installAnchor(), output: context })
 }
 
+/** The usage line of `delorun plugin`, shown when it is run without arguments. */
+const PLUGIN_USAGE = 'Usage: delorun plugin [--profile <name>] <list | add <package> | remove <package> | update>\n       delorun plugin check <directory>\n       delorun plugin mirror on|off'
+
 /**
  * `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management; `delorun plugin check <directory>` is
  * Delo's own ([plugin check](./plugin-check.ts)), which needs no profile.
@@ -222,6 +246,7 @@ export const pluginCommand: CliCommand = {
   name: 'plugin',
   summary: 'Manage a profile\'s plugins, as dsh plugin does; check <directory> shows what a plugin\'s version ranges admit; mirror on|off',
   run: async (args, context) => {
+    if (args.length === 0) throw new CliError(EXIT.usage, `delorun plugin: name what to do.\n${PLUGIN_USAGE}`)
     if (args[0] === 'check') return runPluginCheck(args.slice(1), context)
     if (args[0] === 'mirror') return pluginMirror(args.slice(1), context)
     // pnpm's exit code is the command's, which the CLI's exit codes do not list, so the process ends with it here.
@@ -244,6 +269,10 @@ export function headlessDependencies(): HeadlessDependencies {
     approvedPluginContent: upstream.approvedPluginContent,
     preStartSteps: upstream.preStartSteps,
     cwd: () => process.cwd(),
+    missingModelKey: async ({ home, env, output }) => {
+      const required = requiredModelKey(home, HEADLESS_PROFILE, 'delorun headless')
+      return required !== undefined && await resolveModelKey({ ...output, env }, home, required.variable) === undefined ? required : undefined
+    },
     runProfile: options => runUpstreamProfile(options, { signals: true, failLoud: false }),
     loadEnvironment: upstream.loadEnvironment,
     fatalRelease: upstream.fatalRelease,
@@ -266,9 +295,9 @@ export async function headless(args: readonly string[], context: CommandContext,
   return runHeadless({ home: home.path, args, output: context, env: context.env }, dependencies)
 }
 
-/** `delorun headless <task>`: upstream's one-task headless profile, composed as every Delo Host is. */
+/** `delorun headless <task>`: upstream's one-task headless profile, composed as every Delorun Host is. */
 export const headlessCommand: CliCommand = {
   name: 'headless',
-  summary: 'Answer one task and exit, as dsh headless does, under Delo\'s protections',
+  summary: 'Answer one task and exit, as dsh headless does, under Delorun\'s protections',
   run: (args, context) => headless(args, context),
 }

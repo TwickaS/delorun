@@ -41,7 +41,7 @@ export const SANDBOX_OVERLAY = 'sandbox.patch.yml'
 
 /** The provider settings C1's confinement adds. */
 export interface SandboxProtection {
-  /** The canonical Delo home. */
+  /** The canonical Delorun home. */
   readonly protectedHome: string
   /** C1's read exemptions, relative to the home. */
   readonly protectedHomeReadable: readonly string[]
@@ -371,13 +371,13 @@ export async function writeSandboxOverlay(home: string, name: string, profile: P
   })
   if (runner.length > 0) {
     const keys = runner.map(entry => entry.key).join(' and ')
-    throw new CliError(EXIT.failed, `delorun: the ${SANDBOX_ROW} row sets the runner itself (${runner.map(entry => `${entry.key} in ${entry.sources}`).join('; ')}); Delo's home protection requires the provider's built-in runner selection, so remove ${keys} from that row in each file named`)
+    throw new CliError(EXIT.failed, `delorun: the ${SANDBOX_ROW} row sets the runner itself (${runner.map(entry => `${entry.key} in ${entry.sources}`).join('; ')}); Delorun's home protection requires the provider's built-in runner selection, so remove ${keys} from that row in each file named`)
   }
   const composed = rowConfigs(composeEntries(layers.map(layer => layer.patches))).at(-1) ?? {}
   const carried = carriedSettings(composed)
   if (carried === undefined) {
     const sources = sourcesOf(layers, config => carriedSettings(config) === undefined)
-    throw new CliError(EXIT.failed, `delorun: the ${SANDBOX_ROW} row is configured with expressions (in ${sources}); Delo adds its home protection to that row at start and can carry over plain values only, so write its settings as plain YAML values`)
+    throw new CliError(EXIT.failed, `delorun: the ${SANDBOX_ROW} row is configured with expressions (in ${sources}); Delorun adds its home protection to that row at start and can carry over plain values only, so write its settings as plain YAML values`)
   }
   // A denied socket or escape directory only narrows what a confined command reaches, so every layer's entries stay.
   const listed = (key: 'deniedSockets' | 'escapeSocketDirectories'): string[] => layeredEntries(layers, key)

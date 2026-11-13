@@ -65,6 +65,7 @@ afterEach(() => {
 function recording(seen: RunProfileOptions[], stops: string[], overrides: readonly BootedRow[] = [], fatalRelease: HeadlessDependencies['fatalRelease'] = () => () => undefined): HeadlessDependencies {
   return {
     fatalRelease,
+    missingModelKey: () => Promise.resolve(undefined),
     prepareProfile: upstreamDependencies().prepareProfile,
     approvedPluginContent: NO_APPROVED_CONTENT,
     preStartSteps: upstreamDependencies().preStartSteps,
@@ -99,6 +100,24 @@ describe('delorun headless', { timeout: 60_000 }, () => {
     expect(seen[0]).toMatchObject({ profile: HEADLESS_PROFILE, args: ['--json', 'what is 2+2'], patchFiles: [join(deloHome, 'run', HEADLESS_PROFILE, 'sandbox.patch.yml')] })
     expect(existsSync(join(deloHome, 'run', HEADLESS_PROFILE, 'sandbox.patch.yml'))).toBe(true)
     expect(exits).toHaveLength(1)
+    exits[0]!()
+  })
+
+  it('refuses before booting when the profile\'s model needs a key that is not set, naming the provider and variable', async () => {
+    const seen: RunProfileOptions[] = []
+    const dependencies: HeadlessDependencies = { ...recording(seen, []), missingModelKey: () => Promise.resolve({ label: 'OpenAI', variable: 'OPENAI_API_KEY' }) }
+    const error: unknown = await headless(['task'], context, dependencies, () => undefined).then(() => undefined, (failure: unknown) => failure)
+    expect(error).toBeInstanceOf(CliError)
+    expect((error as CliError).message).toBe('delorun headless: Delorun has no OpenAI API key, so it cannot answer. Set OPENAI_API_KEY in your shell, or run delorun setup key.')
+    expect(seen).toEqual([])
+  })
+
+  it('boots without a key when the profile\'s model needs none from the CLI', async () => {
+    const seen: RunProfileOptions[] = []
+    const exits: (() => void)[] = []
+    const dependencies: HeadlessDependencies = { ...recording(seen, []), missingModelKey: () => Promise.resolve(undefined) }
+    expect(await headless(['task'], context, dependencies, (listener) => { exits.push(listener) })).toBeUndefined()
+    expect(seen).toHaveLength(1)
     exits[0]!()
   })
 
@@ -197,7 +216,7 @@ describe('delorun headless', { timeout: 60_000 }, () => {
   it('is the command delorun runs, over upstream\'s runner', () => {
     expect(headlessCommand.name).toBe('headless')
     expect(headlessDependencies().cwd()).toBe(process.cwd())
-    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'fatalRelease', 'loadEnvironment', 'preStartSteps', 'prepareProfile', 'runProfile'])
+    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'fatalRelease', 'loadEnvironment', 'missingModelKey', 'preStartSteps', 'prepareProfile', 'runProfile'])
   })
 })
 

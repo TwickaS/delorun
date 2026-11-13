@@ -9,7 +9,7 @@ describe('a supervisor refusal', () => {
   })
 
   it('offers to start Docker only when the engine did not answer', () => {
-    expect(describeFailure(new EngineError(0, 'connect ENOENT /var/run/docker.sock'), [engineDescriber])).toEqual({ lead: 'Delo could not use the Docker engine.', reason: 'docker engine: connect ENOENT /var/run/docker.sock', remedies: ['Check that Docker is running, then run the same command again.'] })
-    expect(describeFailure(new EngineError(404, 'no such container'), [engineDescriber])).toEqual({ lead: 'Delo could not use the Docker engine.', reason: 'docker engine: no such container (HTTP 404)', remedies: [] })
+    expect(describeFailure(new EngineError(0, 'connect ENOENT /var/run/docker.sock'), [engineDescriber])).toEqual({ lead: 'Delorun could not use the Docker engine.', reason: 'docker engine: connect ENOENT /var/run/docker.sock', remedies: ['Check that Docker is running, then run the same command again.'] })
+    expect(describeFailure(new EngineError(404, 'no such container'), [engineDescriber])).toEqual({ lead: 'Delorun could not use the Docker engine.', reason: 'docker engine: no such container (HTTP 404)', remedies: [] })
   })
 })

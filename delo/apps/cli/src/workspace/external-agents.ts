@@ -32,7 +32,7 @@ const AGENT_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
 
 /** What the subcommand needs. */
 export interface ExternalAgentsWhere {
-  /** The Delo home. */
+  /** The Delorun home. */
   readonly home: string
   /** The output. */
   readonly context: CommandContext
@@ -98,7 +98,7 @@ export async function externalAgents(where: ExternalAgentsWhere, args: readonly 
 async function list(where: ExternalAgentsWhere, path: string): Promise<ExitCode> {
   const read = await readGrantStore(path)
   if (read.kind === 'refused') {
-    throw new CliError(EXIT.failed, `${CLI_COMMAND}: Delo's record of external-agent approvals, ${path}, cannot be read (${read.problem}), so no approval counts. Repair or remove that file.`)
+    throw new CliError(EXIT.failed, `${CLI_COMMAND}: Delorun's record of external-agent approvals, ${path}, cannot be read (${read.problem}), so no approval counts. Repair or remove that file.`)
   }
   if (read.grants.length === 0) {
     where.context.stdout('No external agent may start without asking. Each one asks before every run.\n')

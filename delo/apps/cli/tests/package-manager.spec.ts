@@ -41,6 +41,6 @@ describe('the pnpm of upstream\'s package operations', () => {
   it('refuses a closure without its pnpm instead of falling back to one on PATH', (test) => {
     const { entry } = closure(test, false)
     expect(() => packageManagerFor({ entry, execPath: process.execPath, path: '' })).toThrow(CliError)
-    expect(() => packageManagerFor({ entry, execPath: process.execPath, path: '' })).toThrow(/lacks its pnpm .*; reinstall Delo/u)
+    expect(() => packageManagerFor({ entry, execPath: process.execPath, path: '' })).toThrow(/lacks its pnpm .*; reinstall Delorun/u)
   })
 })

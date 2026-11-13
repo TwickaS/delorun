@@ -46,7 +46,7 @@ export const HOLD_SENTENCES: Readonly<Record<HoldReason, string>> = {
   unparseable: 'the file is not YAML the import reads',
   anchors: 'the file uses YAML anchors, aliases or merge keys, so its rows cannot be told apart safely',
   shape: 'the file is not the list of rows, or the map of sections, its loader reads',
-  taken: 'the Delo home holds its own file of that name, which the import never replaces',
+  taken: 'the Delorun home holds its own file of that name, which the import never replaces',
 }
 
 /** One held-back row, as the preview lists it. */

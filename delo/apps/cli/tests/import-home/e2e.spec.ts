@@ -123,7 +123,7 @@ describe('delorun import-home end to end', () => {
     expect(await main(['import-home', '--dry-run'], { env: { HOME: person, DELO_HOME: target }, stdout: (text) => { out += text }, stderr: (text) => { err += text } })).toBe(EXIT.ok)
     expect(err).toBe('')
     expect(out).toContain('  Chats: 2 chats to copy')
-    expect(out).toContain('  Workspaces: 1 registration, copied as the Delo home\'s workspace list')
+    expect(out).toContain('  Workspaces: 1 registration, copied as the Delorun home\'s workspace list')
     expect(out).toContain('      carried      "@deepseek-ai/dsh-base" (ships with DeepSeek Harness)')
     expect(out).toContain('      to install   "third-party-plugin" (from the registry, ^1.0.0)')
     expect(out).toContain('    "DEEPSEEK_API_KEY": can be copied')

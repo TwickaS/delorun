@@ -25,7 +25,7 @@ describe('the install lines', () => {
   it('says the release log was not checked, why, and warns in the contract’s words', () => {
     expect(progressLines({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the release log did not answer: connection refused' })).toEqual([
       'Checking the release log: not checked (the release log did not answer: connection refused).\n',
-      'Warning: Release 0.1.0 has not been checked against the release log; Delo checks it at the next connection.\n',
+      'Warning: Release 0.1.0 has not been checked against the release log; Delorun checks it at the next connection.\n',
     ])
   })
 

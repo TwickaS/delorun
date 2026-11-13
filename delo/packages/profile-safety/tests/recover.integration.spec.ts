@@ -28,7 +28,7 @@ describe.skipIf(!hasGit)('recover', () => {
     try {
       const report = await recover({ profileDir: profile.profileDir, homeDir: profile.homeDir, profile: 'default', action: { kind: 'status' } })
       expect(report.action).toBe('status')
-      expect(report.lines[0]).toBe('This profile has not been through a Delo update yet.')
+      expect(report.lines[0]).toBe('This profile has not been through a Delorun update yet.')
       expect(report.lines).toContain('Safe mode is off.')
       expect(report.lines.some(line => line.includes('no version yet'))).toBe(true)
     } finally {
@@ -47,7 +47,7 @@ describe.skipIf(!hasGit)('recover', () => {
     try {
       const report = await recover({ profileDir: profile.profileDir, homeDir: profile.homeDir, profile: 'default', action: { kind: 'status' } })
       expect(report.lastUpdate?.state).toBe('failed')
-      expect(report.lines[0]).toBe('The last update, from Delo 1.0.0 to Delo 1.0.1, ended failed: H2-host-ready.')
+      expect(report.lines[0]).toBe('The last update, from Delorun 1.0.0 to Delorun 1.0.1, ended failed: H2-host-ready.')
       expect(report.lines).toContain('Its snapshot is profile version abc123.')
       expect(report.lines.some(line => line.includes('@me/revoked (it shipped a credential)'))).toBe(true)
     } finally {
@@ -63,7 +63,7 @@ describe.skipIf(!hasGit)('recover', () => {
     const profile = fixture({ record: { ...emptyRecord(), update: { from: '1.0.0', to: '1.0.1', at: '2026-01-04T00:00:00.000Z', state, snapshot: 'abc123' } } })
     try {
       const report = await recover({ profileDir: profile.profileDir, homeDir: profile.homeDir, profile: 'default', action: { kind: 'status' } })
-      expect(report.lines[0]).toBe(`The last update, from Delo 1.0.0 to Delo 1.0.1, ${words}`)
+      expect(report.lines[0]).toBe(`The last update, from Delorun 1.0.0 to Delorun 1.0.1, ${words}`)
       expect(report.lines[0]).not.toContain('ended')
     } finally {
       profile.remove()
@@ -81,7 +81,7 @@ describe.skipIf(!hasGit)('recover', () => {
       const snapshot = await recordSnapshot({
         profileDir: profile.profileDir,
         homeDir: profile.homeDir,
-        summary: 'Before update to Delo 1.0.1',
+        summary: 'Before update to Delorun 1.0.1',
         changedBy: { kind: 'person' },
         history,
       })
@@ -103,7 +103,7 @@ describe.skipIf(!hasGit)('recover', () => {
       const snapshot = await recordSnapshot({
         profileDir: profile.profileDir,
         homeDir: profile.homeDir,
-        summary: 'Before update to Delo 1.0.1',
+        summary: 'Before update to Delorun 1.0.1',
         changedBy: { kind: 'person' },
         history,
       })
@@ -123,7 +123,7 @@ describe.skipIf(!hasGit)('recover', () => {
       const snapshot = await recordSnapshot({
         profileDir: profile.profileDir,
         homeDir: profile.homeDir,
-        summary: 'Before update to Delo 1.0.1',
+        summary: 'Before update to Delorun 1.0.1',
         changedBy: { kind: 'person' },
       })
       writeFileSync(join(profile.profileDir, 'cordis.patch.yml'), '[]\n')

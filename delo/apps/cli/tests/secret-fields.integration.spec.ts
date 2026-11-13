@@ -218,7 +218,7 @@ describe('settling a start\'s patch files', () => {
     writeFileSync(profile.patchPath, text)
     const settled = await settle()
     expect(settled.moved).toEqual([])
-    expect(settled.notices).toEqual([expect.stringContaining(`which Delo left in place because storing it failed: no free credential name was found from ${base} to ${base}_${String(MAX_NAME_ATTEMPTS)}.`)])
+    expect(settled.notices).toEqual([expect.stringContaining(`which Delorun left in place because storing it failed: no free credential name was found from ${base} to ${base}_${String(MAX_NAME_ATTEMPTS)}.`)])
     expect(readFileSync(profile.patchPath, 'utf8')).toBe(text)
   })
 
@@ -228,8 +228,8 @@ describe('settling a start\'s patch files', () => {
     const settled = await settle()
     expect(settled.moved).toEqual([])
     expect(settled.notices).toEqual([
-      `${profile.patchPath} holds a value for the secret field requestHeaders.Authorization of headers, which Delo left in place because the plugin has no credential field to name a stored key. The profile history saves no new version until it is gone from the file. This field has no credential field beside it, so to give the plugin a key, export the key as an environment variable NAME where you start Delo and set the field to \`!!js process.env.NAME\`.`,
-      expect.stringContaining(`${profile.patchPath} holds a value for the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead), which Delo left in place because it is a \`!!js\` expression that does more than read an environment variable.`),
+      `${profile.patchPath} holds a value for the secret field requestHeaders.Authorization of headers, which Delorun left in place because the plugin has no credential field to name a stored key. The profile history saves no new version until it is gone from the file. This field has no credential field beside it, so to give the plugin a key, export the key as an environment variable NAME where you start Delorun and set the field to \`!!js process.env.NAME\`.`,
+      expect.stringContaining(`${profile.patchPath} holds a value for the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead), which Delorun left in place because it is a \`!!js\` expression that does more than read an environment variable.`),
     ])
     expect(readFileSync(profile.patchPath, 'utf8')).toBe(text)
   })

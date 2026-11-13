@@ -214,7 +214,7 @@ export async function recoverStockImport(home: string): Promise<DshImportRecover
     return await recoverDshImport(home)
   } catch (error: unknown) {
     if (!isDshImportError(error) || error.code !== 'DSH_IMPORT_STAGING_FAILED') throw error
-    throw new DshImportError('DSH_IMPORT_STAGING_FAILED', `${error.message}. Delo does not start while an interrupted import may be half in place: check the files ${STOCK_IMPORT_DIRECTORY}/${STOCK_IMPORT_JOURNAL} names, remove what you do not want, then move the journal aside`)
+    throw new DshImportError('DSH_IMPORT_STAGING_FAILED', `${error.message}. Delorun does not start while an interrupted import may be half in place: check the files ${STOCK_IMPORT_DIRECTORY}/${STOCK_IMPORT_JOURNAL} names, remove what you do not want, then move the journal aside`)
   }
 }
 
@@ -443,7 +443,7 @@ async function stage(plan: DshHomeImportPlan, options: DshImportApplyOptions, st
       await stager.write(REGISTRY_PATH, serializeRegistry(registry.registry), false)
     } else {
       const merged = mergeRegistries(parseRegistry(await readFile(join(plan.target, REGISTRY_PATH), 'utf8')), registry.registry)
-      if (merged === undefined) throw new DshImportError('DSH_IMPORT_TARGET_REFUSED', 'the Delo home\'s workspace list changed while the import ran; run the import again', REGISTRY_PATH)
+      if (merged === undefined) throw new DshImportError('DSH_IMPORT_TARGET_REFUSED', 'the Delorun home\'s workspace list changed while the import ran; run the import again', REGISTRY_PATH)
       await stager.write(REGISTRY_PATH, merged, true)
     }
   }
@@ -528,7 +528,7 @@ async function stageCredentials(plan: DshHomeImportPlan, stager: Stager): Promis
   try {
     const stock = readCredentials(await stager.read(plan.credentials.file), `the stock home's ${CREDENTIALS_PATH}`)
     const deloText = held ? await readFile(path, 'utf8') : undefined
-    const delo = deloText === undefined ? undefined : readCredentials(deloText, `the Delo home's ${CREDENTIALS_PATH}`)
+    const delo = deloText === undefined ? undefined : readCredentials(deloText, `the Delorun home's ${CREDENTIALS_PATH}`)
     names = compareCredentials(stock, delo).filter(entry => entry.state === 'offered').map(entry => entry.name)
     text = mergeCredentials(stock, deloText, names)
   } catch (error: unknown) {
@@ -602,9 +602,9 @@ async function publish(home: string, root: string, name: string, item: Item): Pr
  */
 export function publicationFailure(path: string, error: unknown): unknown {
   const code = systemCode(error)
-  if (code === 'EEXIST') return new DshImportError('DSH_IMPORT_TARGET_REFUSED', `the Delo home gained ${JSON.stringify(path)} while the import ran, and an import never replaces a file`, path)
+  if (code === 'EEXIST') return new DshImportError('DSH_IMPORT_TARGET_REFUSED', `the Delorun home gained ${JSON.stringify(path)} while the import ran, and an import never replaces a file`, path)
   if (['EXDEV', 'EPERM', 'ENOTSUP', 'EOPNOTSUPP'].includes(code)) {
-    return new DshImportError('DSH_IMPORT_TARGET_REFUSED', `the Delo home cannot hold ${JSON.stringify(path)} as a link from the import's staging directory (${code}); the import needs the Delo home on one file system that supports hard links`, path)
+    return new DshImportError('DSH_IMPORT_TARGET_REFUSED', `the Delorun home cannot hold ${JSON.stringify(path)} as a link from the import's staging directory (${code}); the import needs the Delorun home on one file system that supports hard links`, path)
   }
   return error
 }

@@ -17,7 +17,7 @@ import { runImportHome } from './index.ts'
 /** `delorun import-home` (contract C8). */
 export const importHomeCommand: CliCommand = {
   name: 'import-home',
-  summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delo home after a preview; --dry-run only shows it',
+  summary: 'Copy a DeepSeek Harness home (~/.dsh) into this Delorun home after a preview; --dry-run only shows it',
   async run(args, context) {
     const { profile: flag, rest } = takeProfile(args)
     const profile = selectProfile(flag, context.env)

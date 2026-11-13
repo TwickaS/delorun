@@ -143,7 +143,7 @@ describe('a chat\'s working folder', () => {
       ['ssh', 'a hidden folder of your home folder, where settings and keys live', 0],
       ['config', 'a hidden folder of your home folder, where settings and keys live', 0],
       ['stock', 'inside the DeepSeek Harness home', 0],
-      ['delo', 'inside the Delo home', 0],
+      ['delo', 'inside the Delorun home', 0],
       ['fine', undefined, 1],
       ['dotted', undefined, 1],
     ])
@@ -175,7 +175,7 @@ describe('a chat\'s working folder', () => {
     const planned = await plan(homes, { personHome: person })
     expect(planned.registry?.listed.map(workspace => [workspace.id, workspace.held])).toEqual([
       ['linked', 'a hidden folder of your home folder, where settings and keys live'],
-      ['delo', 'inside the Delo home'],
+      ['delo', 'inside the Delorun home'],
       ['dangling', undefined],
     ])
     expect(planned.chats).toEqual([])

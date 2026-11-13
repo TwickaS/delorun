@@ -65,12 +65,12 @@ describe('checkHome when the home fails unexpectedly', () => {
     await expect(checkHome({}, 'default')).rejects.toThrow('input/output error')
   })
 
-  it('warns on Windows that the permission check is not implemented', async () => {
+  it('warns on Windows that Delorun does not check file permissions', async () => {
     vi.mocked(resolveDeloHome).mockResolvedValueOnce(RESOLVED)
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')
     Object.defineProperty(process, 'platform', { value: 'win32' })
     try {
-      expect(await checkHome({}, 'default')).toEqual({ name: 'home', status: 'warn', message: 'the Delo home at /fixture/.delo resolves; the Windows permission check is not implemented yet, so its access is not verified.' })
+      expect(await checkHome({}, 'default')).toEqual({ name: 'home', status: 'warn', message: 'the Delorun home at /fixture/.delo resolves; Delorun does not check Windows file permissions, so who can read it is not verified.' })
     } finally {
       Object.defineProperty(process, 'platform', platform as PropertyDescriptor)
     }

@@ -7,11 +7,13 @@
  * @module @delo/cli/bin
  */
 import { main } from './main.ts'
+import { endQuietlyWhenStdoutCloses } from './stdout.ts'
 
 /** The first arguments that answer from text alone. */
 const TEXT_ONLY = new Set(['--help', '-h', 'help', '--version', '-v'])
 
 if (import.meta.main) {
+  endQuietlyWhenStdoutCloses()
   const argv = process.argv.slice(2)
   if (!TEXT_ONLY.has(argv[0] ?? '')) (await import('./last-resort.ts')).installCliLastResort(argv)
   const exit = await main(argv)

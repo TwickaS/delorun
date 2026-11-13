@@ -235,7 +235,7 @@ async function assertDataDirectories(home: string): Promise<void> {
       throw error
     }
     if (!entry.isDirectory()) {
-      throw new DataSafetyError('DATA_NOT_A_DIRECTORY', `${path} is ${entry.isSymbolicLink() ? 'a symbolic link' : 'not a directory'}; Delo copies only a real directory there, so move the data into ${path} itself`)
+      throw new DataSafetyError('DATA_NOT_A_DIRECTORY', `${path} is ${entry.isSymbolicLink() ? 'a symbolic link' : 'not a directory'}; Delorun copies only a real directory there, so move the data into ${path} itself`)
     }
   }
 }

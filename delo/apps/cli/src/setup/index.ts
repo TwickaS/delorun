@@ -37,6 +37,7 @@ import { SetupCancelled, terminalPrompter, type Prompter } from './prompts.ts'
 import { BACK, stepIO } from './steps.ts'
 import { hasStoredCredential } from './writes.ts'
 import { shippedPackageManager } from '../package-manager.ts'
+import { brandUpstreamOutput } from '../upstream-output.ts'
 
 /** How setup gets its answers. */
 export type SetupForm =
@@ -105,7 +106,10 @@ export async function upstreamLinking(home: string, profile: string): Promise<Bu
       const loaded = loadProfile('delorun', profile, INSTALL_ANCHOR, home)
       return { profile: loaded, resolution: await createRuntimeResolution({ installAnchor: INSTALL_ANCHOR, profile: loaded, home }) }
     },
-    runPluginCommand: (context, args, options) => runPluginCommand(context, args, { ...options, ...shippedPackageManager() }),
+    runPluginCommand: (context, args, options) => {
+      const { onOutput } = options
+      return runPluginCommand(context, args, { ...options, ...shippedPackageManager(), ...onOutput === undefined ? {} : { onOutput: (text, stream) => { onOutput(brandUpstreamOutput(text), stream) } } })
+    },
   }
 }
 

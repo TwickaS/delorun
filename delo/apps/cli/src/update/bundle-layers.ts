@@ -37,7 +37,7 @@ const NODE_PLATFORMS = ['aix', 'android', 'darwin', 'freebsd', 'haiku', 'linux',
 /** The peer ranges upstream reads as the running DSH itself. */
 const WORKSPACE_RANGES: readonly string[] = ['workspace:^', 'workspace:~', 'workspace:*']
 
-/** Why Delo could not read a bundle's metadata as upstream's format. */
+/** Why Delorun could not read a bundle's metadata as upstream's format. */
 export type BundleReadErrorCode =
   /** The bundle's `package.json` cannot be read or is not a JSON object. */
   | 'BUNDLE_MANIFEST_UNREADABLE'
@@ -46,7 +46,7 @@ export type BundleReadErrorCode =
   /** A patch file the bundle declares cannot be read, is not YAML, or is not a list of patch entries with named rows. */
   | 'BUNDLE_PATCH_UNREADABLE'
 
-/** A bundle whose metadata Delo could not read; the report names the bundle as an unverified skip. */
+/** A bundle whose metadata Delorun could not read; the report names the bundle as an unverified skip. */
 export class BundleReadError extends Error {
   /** Why. */
   readonly code: BundleReadErrorCode
@@ -74,7 +74,7 @@ export class BundleReadError extends Error {
 export interface BundleLayerOptions {
   /** The files upstream resolves bundles from, in order: the target's install anchor, then the profile's `package.json`. */
   readonly anchors: readonly string[]
-  /** The target's DSH and Delo versions. */
+  /** The target's DSH and Delorun versions. */
   readonly versions: { readonly dsh: SemanticVersion, readonly delo: SemanticVersion }
   /** The profile's DSH exemption file (`compatibility.json`). */
   readonly exemptions: ExemptionRecord
@@ -148,7 +148,7 @@ async function readManifest(bundle: string, directory: string): Promise<Record<s
   try {
     value = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
   } catch (error) {
-    throw new BundleReadError('BUNDLE_MANIFEST_UNREADABLE', bundle, `Delo could not read its package.json: ${firstLine(error)}`, { cause: error })
+    throw new BundleReadError('BUNDLE_MANIFEST_UNREADABLE', bundle, `Delorun could not read its package.json: ${firstLine(error)}`, { cause: error })
   }
   if (!isRecord(value)) throw new BundleReadError('BUNDLE_MANIFEST_UNREADABLE', bundle, 'its package.json is not a JSON object')
   return value
@@ -198,7 +198,7 @@ const identitySchema = z.looseObject({ name: z.string().refine(text => text.trim
  */
 function unmetRequirements(bundle: string, manifest: Record<string, unknown>, options: BundleLayerOptions): readonly string[] {
   const { dsh, delo } = options.versions
-  const malformed = (what: string): BundleReadError => new BundleReadError('BUNDLE_DECLARATION_MALFORMED', bundle, `its package.json declares ${what} in a form Delo cannot read`)
+  const malformed = (what: string): BundleReadError => new BundleReadError('BUNDLE_DECLARATION_MALFORMED', bundle, `its package.json declares ${what} in a form Delorun cannot read`)
   const engines = enginesSchema.safeParse(Object.hasOwn(manifest, 'engines') ? manifest['engines'] : {})
   if (!engines.success) throw malformed('engines')
   const dshUnmet: string[] = []
@@ -212,7 +212,7 @@ function unmetRequirements(bundle: string, manifest: Record<string, unknown>, op
       if (!WORKSPACE_RANGES.includes(range) && !satisfiesRange(dsh, range)) dshUnmet.push(`it requires ${name} ${range} and the target runs DSH ${dsh}`)
     }
   }
-  const deloUnmet = engines.data.delo !== undefined && !satisfiesRange(delo, engines.data.delo) ? [`it requires Delo ${engines.data.delo} and the target installs Delo ${delo}`] : []
+  const deloUnmet = engines.data.delo !== undefined && !satisfiesRange(delo, engines.data.delo) ? [`it requires Delorun ${engines.data.delo} and the target installs Delorun ${delo}`] : []
   if (dshUnmet.length === 0 && deloUnmet.length === 0) return []
   const identity = identitySchema.safeParse(manifest)
   if (!identity.success) throw malformed('its name or version')
@@ -255,7 +255,7 @@ async function readPatch(bundle: string, directory: string, file: string): Promi
     // `!!js` values stay unevaluated text: a row disabled by an expression counts as loading.
     parsed = parse(await readFile(join(directory, file), 'utf8'), { logLevel: 'error' })
   } catch (error) {
-    throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `Delo could not read its patch ${file}: ${firstLine(error)}`, { cause: error })
+    throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `Delorun could not read its patch ${file}: ${firstLine(error)}`, { cause: error })
   }
   if (!Array.isArray(parsed)) throw new BundleReadError('BUNDLE_PATCH_UNREADABLE', bundle, `its patch ${file} is not a list of patch entries`)
   return parsed.flatMap((entry): readonly RowFact[] => {

@@ -137,7 +137,7 @@ export async function rollbackUpdate(request: RollbackRequest): Promise<Rollback
   const { home, record } = request
   if (request.profileOnly) {
     await request.restoreProfile()
-    return { decision: 'profile-only', lines: [`Restored the profile from before the update to Delo ${record.to}; Delo ${record.to} keeps running.`] }
+    return { decision: 'profile-only', lines: [`Restored the profile from before the update to Delorun ${record.to}; Delorun ${record.to} keeps running.`] }
   }
   const resuming = record.phase === ROLLING_BACK_PHASE
   if (resuming) {
@@ -147,7 +147,7 @@ export async function rollbackUpdate(request: RollbackRequest): Promise<Rollback
   const copy = await usableCopy(home, record)
   const row = decideRollback(record, copy !== undefined, false)
   if (row === 'refuse' && !resuming) {
-    throw new DataSafetyError('ROLLBACK_NEEDS_DATA_COPY', `Delo ${record.to} has opened the chat data and keeps it in a format Delo ${record.from} may not read, and no copy was taken before this update, so going back to ${record.from} could lose chats. Run delorun recover rollback --profile-only to restore the profile and keep Delo ${record.to}.`)
+    throw new DataSafetyError('ROLLBACK_NEEDS_DATA_COPY', `Delorun ${record.to} has opened the chat data and keeps it in a format Delorun ${record.from} may not read, and no copy was taken before this update, so going back to ${record.from} could lose chats. Run delorun recover rollback --profile-only to restore the profile and keep Delorun ${record.to}.`)
   }
   if (!resuming) {
     await request.preflight()
@@ -158,7 +158,7 @@ export async function rollbackUpdate(request: RollbackRequest): Promise<Rollback
   const restored = copy !== undefined && row === 'restore-copy' ? await restoreDataCopy(home, copy, request.now) : undefined
   await request.restoreProfile()
   await request.switchRuntime()
-  const lines = [`Went back from Delo ${record.to} to Delo ${record.from} and restored the profile from before the update.`]
+  const lines = [`Went back from Delorun ${record.to} to Delorun ${record.from} and restored the profile from before the update.`]
   if (restored !== undefined) {
     lines.push(`${String(restored.changedChats)} chat(s) created or changed since the update are set aside in ${restored.setAside}, not deleted; the chats from before the update are back.`)
   } else if (decision === 'restore-copy') {

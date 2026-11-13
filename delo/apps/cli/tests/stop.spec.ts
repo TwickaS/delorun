@@ -141,7 +141,7 @@ describe('delorun stop --now', () => {
     expect(run.system.requests).toEqual([{ request: { op: 'stop', args: { mode: 'cancel' } }, options: expect.objectContaining({ timeoutMs: STOP_NOW_ANSWER_MS }) as ExchangeOptions }])
     expect(run.system.signals).toEqual([{ pid: PID, signal: 'SIGTERM', at: 0 }])
     expect(run.stdout).toContain(`Process ${String(PID)} did not answer the stop over its update channel`)
-    expect(run.stdout).toContain(`Process ${String(PID)} exited after SIGTERM. Delo stopped for the profile default.`)
+    expect(run.stdout).toContain(`Process ${String(PID)} exited after SIGTERM. Delorun stopped for the profile default.`)
   })
 
   it('sends SIGKILL once the grace after SIGTERM passes for a confirmed holder that ignores SIGTERM', async () => {
@@ -151,7 +151,7 @@ describe('delorun stop --now', () => {
     expect(run.system.signals[1]!.at).toBeGreaterThanOrEqual(STOP_TERM_GRACE_MS)
     expect(run.system.signals[1]!.at).toBeLessThan(STOP_TERM_GRACE_MS + 1_000)
     expect(run.stdout).toContain(`had not exited ${String(STOP_TERM_GRACE_MS / 1000)} seconds after SIGTERM; sent it SIGKILL.`)
-    expect(run.stdout).toContain('exited after SIGKILL. Delo stopped for the profile default.')
+    expect(run.stdout).toContain('exited after SIGKILL. Delorun stopped for the profile default.')
   })
 
   it('reports a confirmed holder that survives SIGKILL as a failure', async () => {
@@ -187,7 +187,7 @@ describe('delorun stop --now', () => {
     })
     expect(run.code).toBe(EXIT.ok)
     expect(run.system.signals).toEqual([])
-    expect(run.stdout).toBe('Delo stopped for the profile default.\n')
+    expect(run.stdout).toBe('Delorun stopped for the profile default.\n')
   })
 
   it('refuses to signal a live process whose start identity differs from the lock\'s', async () => {
@@ -202,7 +202,7 @@ describe('delorun stop --now', () => {
     expect(run.code).toBe(EXIT.failed)
     expect(run.system.signals).toEqual([])
     expect(run.stderr).toContain(`process ${String(PID)} did not answer the stop over its update channel`)
-    expect(run.stderr).toContain(`Delo did not send it SIGTERM: process ${String(PID)} has another start identity than the profile's lock records`)
+    expect(run.stderr).toContain(`Delorun did not send it SIGTERM: process ${String(PID)} has another start identity than the profile's lock records`)
   })
 
   // The property this change guards: without a recorded start identity a reused process id cannot be told apart, so
@@ -211,7 +211,7 @@ describe('delorun stop --now', () => {
     const run = await stop(['--now'], { record: lockRecord({ pidNamespace: NAMESPACE }), answer: silent })
     expect(run.code).toBe(EXIT.failed)
     expect(run.system.signals).toEqual([])
-    expect(run.stderr).toContain(`Delo did not send it SIGTERM: the profile's lock records no start identity for process ${String(PID)}`)
+    expect(run.stderr).toContain(`Delorun did not send it SIGTERM: the profile's lock records no start identity for process ${String(PID)}`)
     expect(run.stderr).toContain(`Check that process ${String(PID)} is delorun's home process before ending it yourself.`)
   })
 
@@ -226,7 +226,7 @@ describe('delorun stop --now', () => {
     const run = await stop(['--now'], { platform: 'win32', record: lockRecord({}), answer: silent })
     expect(run.code).toBe(EXIT.failed)
     expect(run.system.signals).toEqual([])
-    expect(run.stderr).toContain(`on win32 Delo records no start identity for a process, so it cannot tell the home process from another process that reuses the id ${String(PID)}`)
+    expect(run.stderr).toContain(`on win32 Delorun records no start identity for a process, so it cannot tell the home process from another process that reuses the id ${String(PID)}`)
   })
 
   it('refuses to signal a holder whose lock cannot be read', async () => {
@@ -251,7 +251,7 @@ describe('delorun stop --now', () => {
     })
     expect(run.code).toBe(EXIT.failed)
     expect(run.system.signals.map(({ signal }) => signal)).toEqual(['SIGTERM'])
-    expect(run.stderr).toContain(`Delo did not send it SIGKILL: the profile's lock no longer names process ${String(PID)}; it names process ${String(PID + 1)}`)
+    expect(run.stderr).toContain(`Delorun did not send it SIGKILL: the profile's lock no longer names process ${String(PID)}; it names process ${String(PID + 1)}`)
   })
 
   it('sends no signal to a home process that refuses the stop', async () => {
@@ -278,7 +278,7 @@ describe('delorun stop --now, after a signal', () => {
     expect(replaced).toBe(true)
     expect(run.code).toBe(EXIT.ok)
     expect(run.system.signals.map(({ signal }) => signal)).toEqual(['SIGTERM'])
-    expect(run.stdout).toContain('Delo stopped for the profile default.')
+    expect(run.stdout).toContain('Delorun stopped for the profile default.')
     expect(run.stderr).toBe('')
   })
 
@@ -315,7 +315,7 @@ describe('delorun stop with a holder whose start identity cannot be read', () =>
     expect(run.code).toBe(EXIT.failed)
     expect(run.system.requests).toHaveLength(1)
     expect(run.system.signals).toEqual([])
-    expect(run.stderr).toContain(`Delo did not send it SIGTERM: the start identity of process ${String(PID)} cannot be read now`)
+    expect(run.stderr).toContain(`Delorun did not send it SIGTERM: the start identity of process ${String(PID)} cannot be read now`)
     expect(run.stderr).toContain(`Check that process ${String(PID)} is delorun's home process before ending it yourself.`)
   })
 })
@@ -357,10 +357,10 @@ describe('delorun stop', () => {
     expect(run.stderr).toContain(`process ${String(PID)} accepted the stop but has not exited`)
   })
 
-  it('prints that Delo is not running, and sends nothing, when the lock\'s holder has exited', async () => {
+  it('prints that Delorun is not running, and sends nothing, when the lock\'s holder has exited', async () => {
     const run = await stop(['--now'], { running: false, record: lockRecord({ processStart: START, pidNamespace: NAMESPACE }), answer: silent })
     expect(run.code).toBe(EXIT.ok)
-    expect(run.stdout).toBe('Delo is not running for the profile default.\n')
+    expect(run.stdout).toBe('Delorun is not running for the profile default.\n')
     expect(run.system.requests).toEqual([])
     expect(run.system.signals).toEqual([])
   })

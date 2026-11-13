@@ -89,7 +89,7 @@ export const CHECK_DEPENDENCIES: UpdateCheckDependencies = {
 async function runCheck(home: string, profile: string, context: CommandContext, dependencies: UpdateCheckDependencies): Promise<CommandResult> {
   const runtime = dependencies.runtime(home)
   if (!runtime.store) {
-    context.stderr('delorun update --check: this Delo does not run from the runtime store, so it has no release channel to check; install Delo with its launcher.\n')
+    context.stderr('delorun update --check: this copy of Delorun was not installed by the launcher, so it cannot check for updates. Install it with npx delorun.\n')
     return EXIT.failed
   }
   const platform = runtimePlatformOf(process.platform, process.arch)
@@ -136,7 +136,7 @@ function mebibytes(bytes: number): string {
 export function reportLines(report: UpdateReport): readonly string[] {
   const versions = { from: report.from, to: report.to }
   const lines = [
-    `Update from Delo ${report.from.delo} (DSH ${report.from.dsh}) to Delo ${report.to.delo} (DSH ${report.to.dsh}) on the ${report.to.channel} channel.`,
+    `Update from Delorun ${report.from.delo} (DSH ${report.from.dsh}) to Delorun ${report.to.delo} (DSH ${report.to.dsh}) on the ${report.to.channel} channel.`,
     `Release checks: signature ${report.release.signature}, freshness ${report.release.freshness}, log ${report.release.log}.`,
     ...report.release.log === 'unchecked' ? ['The release log could not be reached when this release was installed, so it is not yet known to be the release the public log holds.'] : [],
     `Installations: ${report.installations.map(entry => `${entry.id} ${entry.delo ?? ''} ${entry.state}`.replace(/ +/gu, ' ')).join('; ')}.`,
@@ -224,12 +224,12 @@ async function decide(report: UpdateReport, values: { readonly yes?: boolean, re
   if (values['data-copy'] === true && values['no-data-copy'] === true) throw new CliError(EXIT.usage, 'delorun update: choose --data-copy or --no-data-copy, not both')
   const data = report.items.find(item => item.kind === 'data')
   if (values.yes === true && report.release.log !== 'passed') {
-    throw new CliError(EXIT.failed, `delorun update: the release-log check of Delo ${report.to.delo} did not complete, so nothing shows it is the release the public log holds, and --yes does not confirm it; run delorun update without --yes to decide, or again once the log answers`)
+    throw new CliError(EXIT.failed, `delorun update: the release-log check of Delorun ${report.to.delo} did not complete, so nothing shows it is the release the public log holds, and --yes does not confirm it; run delorun update without --yes to decide, or again once the log answers`)
   }
   if (values.yes === true && !confirmsWithoutAsking(report)) {
-    throw new CliError(EXIT.failed, 'delorun update: the report disables or removes something, or holds an item Delo cannot predict, so --yes does not confirm it; run delorun update without --yes to decide')
+    throw new CliError(EXIT.failed, 'delorun update: the report disables or removes something, or holds an item Delorun cannot predict, so --yes does not confirm it; run delorun update without --yes to decide')
   }
-  const apply = values.yes === true || await prompts.confirm(`Apply the update to Delo ${report.to.delo}?`)
+  const apply = values.yes === true || await prompts.confirm(`Apply the update to Delorun ${report.to.delo}?`)
   if (!apply) return { apply, dataCopy: false }
   let dataCopy: boolean
   if (values['no-data-copy'] === true) dataCopy = false
@@ -269,22 +269,22 @@ export async function runUpdate(args: readonly string[], context: CommandContext
     await queryHomeStatus(home.path, profile, HOME_STATUS_TIMEOUT_MS)
   } catch (_notRunning) {
     // No token, socket or answer: the update needs the home process.
-    context.stderr(`delorun update: Delo is not running for the profile ${profile}; run delorun start, then delorun update.\n`)
+    context.stderr(`delorun update: Delorun is not running for the profile ${profile}; run delorun start, then delorun update.\n`)
     return EXIT.notRunning
   }
   const gitProblem = await historyGitProblem({})
   if (gitProblem !== undefined) {
-    throw new CliError(EXIT.failed, `delorun update: Delo saves the profile's history with git before it updates, so it can go back, and git cannot run here: ${gitProblem}. Install git, then run delorun update again. Nothing was fetched or changed.`)
+    throw new CliError(EXIT.failed, `delorun update: Delorun saves the profile's history with git before it updates, so it can go back, and git cannot run here: ${gitProblem}. Install git, then run delorun update again. Nothing was fetched or changed.`)
   }
   const prepared = await ask(home.path, profile, { op: 'update.prepare', args: {} }, context, { what: 'to prepare the update', field: 'reportId', unanswered: 'Nothing was applied.' })
   const report = prepared.report as UpdateReport
   const reportId = String(prepared.reportId)
   if (report.to.delo === report.from.delo) {
-    context.stdout(`Delo ${report.from.delo} is the newest release on the ${report.from.channel} channel.\n`)
+    context.stdout(`Delorun ${report.from.delo} is the newest release on the ${report.from.channel} channel.\n`)
     return EXIT.ok
   }
   if (semver.valid(report.to.delo) === null || semver.valid(report.from.delo) === null || semver.lt(report.to.delo, report.from.delo)) {
-    throw new CliError(EXIT.failed, `delorun update: the update's target, Delo ${report.to.delo}, is not newer than Delo ${report.from.delo}, which runs now; an update never goes to a lower version, and nothing was applied. delorun recover rollback goes back to the version before the last update`)
+    throw new CliError(EXIT.failed, `delorun update: the update's target, Delorun ${report.to.delo}, is not newer than Delorun ${report.from.delo}, which runs now; an update never goes to a lower version, and nothing was applied. delorun recover rollback goes back to the version before the last update`)
   }
   for (const line of reportLines(report)) context.stdout(`${line}\n`)
   if (values.report === true) {
@@ -299,13 +299,13 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   const final = await ask(home.path, profile, { op: 'update.apply', args: { reportId, wait: 'drain', dataCopy: decision.dataCopy } }, context, { what: 'to apply the update', field: 'outcome', unanswered: 'Whether the update applied is unknown; delorun status shows which version runs.' })
   switch (final.outcome) {
     case 'committed':
-      context.stdout(`Delo ${report.to.delo} runs now.${decision.dataCopy ? ` The chat data from before is copied in data-copies/${report.to.delo}.` : ''}\n`)
+      context.stdout(`Delorun ${report.to.delo} runs now.${decision.dataCopy ? ` The chat data from before is copied in data-copies/${report.to.delo}.` : ''}\n`)
       return EXIT.ok
     case 'rolled-back':
-      context.stderr(`delorun update: Delo ${report.to.delo} failed its health check (${String(final.criterion ?? final.reason ?? 'no reason')}); Delo ${report.from.delo} runs again with the profile from before. See delorun logs.\n`)
+      context.stderr(`delorun update: Delorun ${report.to.delo} failed its health check (${String(final.criterion ?? final.reason ?? 'no reason')}); Delorun ${report.from.delo} runs again with the profile from before. See delorun logs.\n`)
       return EXIT.failed
     case 'failed':
-      context.stderr(`delorun update: Delo ${report.to.delo} failed its health check, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.\n`)
+      context.stderr(`delorun update: Delorun ${report.to.delo} failed its health check, and going back needs the chat-data copy that was not taken. Run delorun recover rollback --profile-only, or delorun recover safe-mode.\n`)
       return EXIT.failed
     default:
       context.stderr(`delorun update: the update ended ${String(final.outcome)}${typeof final.reason === 'string' ? ` (${final.reason})` : ''}; nothing changed.\n`)

@@ -232,6 +232,17 @@ function commandIndexOf(args: readonly string[]): number | undefined {
 }
 
 /**
+ * The pnpm command word of `delorun plugin`'s arguments.
+ * @param args - the arguments after `plugin`, without `--allow-advisory`.
+ * @returns the command word, or `undefined` when there is none or it cannot be told apart from an option's value.
+ */
+export function pnpmCommand(args: readonly string[]): string | undefined {
+  const pnpm = pnpmArguments(args)
+  const index = commandIndexOf(pnpm)
+  return index === undefined ? undefined : pnpm[index]
+}
+
+/**
  * Whether `delorun plugin`'s arguments may change the profile's packages or lockfile, so the install check runs before
  * anything is installed. Exempt are the read-only commands, `audit` without `--fix`, `config get` and `config list`, and
  * no arguments or arguments that ask only for usage or version output, which pnpm answers without changing anything.
@@ -336,7 +347,7 @@ export function setNpmMirror(home: string, profileDir: string, installAnchor: st
   if (!existsSync(join(profileDir, 'package.json'))) throw new CliError(EXIT.failed, `delorun plugin mirror: ${profileDir} holds no profile; run delorun setup first`)
   const profile = loadProfileDirectory('delorun', profileDir, installAnchor)
   const row = composedRow(patchLayers(home, profile, []), INSTALL_CHECK_ROW)
-  if (row === undefined) throw new CliError(EXIT.failed, `delorun plugin mirror: the profile ${profile.name} has no ${INSTALL_CHECK_ROW} row, which holds the setting; it does not load Delo's bundle`)
+  if (row === undefined) throw new CliError(EXIT.failed, `delorun plugin mirror: the profile ${profile.name} has no ${INSTALL_CHECK_ROW} row, which holds the setting; it does not load Delorun's bundle`)
   const config = isRecord(row.config) ? row.config : {}
   if (!Object.values(config).every(isPlainValue)) throw new CliError(EXIT.failed, `delorun plugin mirror: the ${INSTALL_CHECK_ROW} row in ${profile.patchPath} sets a value with an expression; set npmMirror: ${String(on)} there by hand`)
   setPatchRow(profile.patchPath, { id: INSTALL_CHECK_ROW, config: { ...config, npmMirror: on } })

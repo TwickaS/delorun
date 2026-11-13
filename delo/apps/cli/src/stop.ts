@@ -70,7 +70,7 @@ export const SYSTEM_STOP_DEPENDENCIES: StopDependencies = {
 }
 
 /** What `stop` tells the person after `SIGKILL`: the home process cannot end the commands it started in their own scope. */
-const SURVIVORS_NOTE = 'Commands Delorun started may still be running: a command started in its own systemd scope survives the home process, so check for them before you start Delo again.\n'
+const SURVIVORS_NOTE = 'Commands Delorun started may still be running: a command started in its own systemd scope survives the home process, so check for them before you start Delorun again.\n'
 
 /** What the lock and the process table say about the process a `--now` stop would signal (a closed union). */
 type SignalTarget =
@@ -90,7 +90,7 @@ function unconfirmedText(reason: UnconfirmedHolder, record: HomeLockRecord, proc
   const yourself = `Check that process ${pid} is delorun's home process before ending it yourself`
   switch (reason) {
     case 'no-start-reader':
-      return { why: `on ${processes.platform} Delo records no start identity for a process, so it cannot tell the home process from another process that reuses the id ${pid}`, check: yourself }
+      return { why: `on ${processes.platform} Delorun records no start identity for a process, so it cannot tell the home process from another process that reuses the id ${pid}`, check: yourself }
     case 'no-start-identity':
       return { why: `the profile's lock records no start identity for process ${pid}, so it cannot be told from another process that reuses the id`, check: yourself }
     case 'other-namespace':
@@ -127,7 +127,7 @@ function signalTarget(record: HomeLockRecord, directory: string, dependencies: S
     case 'exited':
       return { kind: 'gone' }
     case 'replaced':
-      return signalled ? { kind: 'gone' } : { kind: 'refused', why: `process ${pid} has another start identity than the profile's lock records, so it is another process that reuses the id`, check: `Run delorun status to see whether Delo still runs` }
+      return signalled ? { kind: 'gone' } : { kind: 'refused', why: `process ${pid} has another start identity than the profile's lock records, so it is another process that reuses the id`, check: `Run delorun status to see whether Delorun still runs` }
     case 'unconfirmed':
       return { kind: 'refused', ...unconfirmedText(check.reason, record, dependencies.processes) }
     case 'confirmed':
@@ -141,7 +141,7 @@ function signalTarget(record: HomeLockRecord, directory: string, dependencies: S
     return { kind: 'refused', why: `the profile's lock cannot be read: ${unreadable.message}`, check: `Check the lock file in ${directory}` }
   }
   if (current?.startId !== record.startId || current.pid !== record.pid) {
-    return { kind: 'refused', why: `the profile's lock no longer names process ${pid}${current === undefined ? '' : `; it names process ${String(current.pid)}`}`, check: `Run delorun status to see whether Delo still runs` }
+    return { kind: 'refused', why: `the profile's lock no longer names process ${pid}${current === undefined ? '' : `; it names process ${String(current.pid)}`}`, check: `Run delorun status to see whether Delorun still runs` }
   }
   return { kind: 'confirmed' }
 }
@@ -192,10 +192,10 @@ function sendSignal(pid: number, signal: StopSignal, dependencies: StopDependenc
  */
 async function endBySignal(record: HomeLockRecord, directory: string, profile: string, failure: string, output: CommandOutput, dependencies: StopDependencies): Promise<ExitCode> {
   const pid = String(record.pid)
-  const stopped = `Delo stopped for the profile ${profile}.\n`
+  const stopped = `Delorun stopped for the profile ${profile}.\n`
   const gone = (): boolean => { const { kind } = checkHolder(record, dependencies.processes); return kind === 'exited' || kind === 'replaced' }
   const refuse = (target: Extract<SignalTarget, { kind: 'refused' }>, signal: StopSignal): ExitCode => {
-    output.stderr(`delorun stop: process ${pid} ${failure}, and Delo did not send it ${signal}: ${target.why}. ${target.check}.\n`)
+    output.stderr(`delorun stop: process ${pid} ${failure}, and Delorun did not send it ${signal}: ${target.why}. ${target.check}.\n`)
     return EXIT.failed
   }
   for (const [signal, waitMs] of [['SIGTERM', STOP_TERM_GRACE_MS], ['SIGKILL', STOP_KILL_WAIT_MS]] as const) {
@@ -243,7 +243,7 @@ export function createStopCommand(dependencies: StopDependencies): CliCommand {
       const record = dependencies.readLock(directory)
       const holderRuns = (): boolean => record !== undefined && !['exited', 'replaced'].includes(checkHolder(record, dependencies.processes).kind)
       if (record === undefined || !holderRuns()) {
-        context.stdout(`Delo is not running for the profile ${profile}.\n`)
+        context.stdout(`Delorun is not running for the profile ${profile}.\n`)
         return EXIT.ok
       }
       let lines
@@ -267,7 +267,7 @@ export function createStopCommand(dependencies: StopDependencies): CliCommand {
         return EXIT.failed
       }
       if (await waitUntilGone(() => holderRuns() && dependencies.readLock(directory)?.startId === record.startId, START_WAIT_MS, dependencies)) {
-        context.stdout(`Delo stopped for the profile ${profile}.\n`)
+        context.stdout(`Delorun stopped for the profile ${profile}.\n`)
         return EXIT.ok
       }
       if (now) return endBySignal(record, directory, profile, `accepted the stop but had not exited ${String(START_WAIT_MS / 1000)} seconds later`, context, dependencies)

@@ -97,7 +97,7 @@ describe('rollbackUpdate', () => {
   it('c03-rollback-preflight-failure-changes-nothing: a failing preflight reaches the caller and no other step runs', async () => {
     await takeCopy()
     newerChats()
-    const failure = new Error('Delo 1.0.0 failed its start check')
+    const failure = new Error('Delorun 1.0.0 failed its start check')
     await expect(roll(RECORD, false, { preflight: async () => { throw failure } })).rejects.toBe(failure)
     expect(steps).toEqual([])
     expect(existsSync(join(home, 'sessions/after'))).toBe(true)
@@ -111,7 +111,7 @@ describe('rollbackUpdate', () => {
     expect(steps).toEqual([])
     expect(existsSync(join(home, 'sessions/after'))).toBe(true)
     const result = await roll(RECORD, true)
-    expect(result).toEqual({ decision: 'profile-only', lines: ['Restored the profile from before the update to Delo 1.1.0; Delo 1.1.0 keeps running.'] })
+    expect(result).toEqual({ decision: 'profile-only', lines: ['Restored the profile from before the update to Delorun 1.1.0; Delorun 1.1.0 keeps running.'] })
     expect(steps).toEqual(['profile'])
     expect(existsSync(join(home, 'sessions/after'))).toBe(true)
   })
@@ -181,7 +181,7 @@ describe('rollbackUpdate resuming a rollback', () => {
   it('completes a data restore a kill interrupted before deciding, and runs nothing when its preflight fails', async () => {
     await takeCopy()
     newerChats()
-    const failure = new Error('Delo 1.0.0 is not installed')
+    const failure = new Error('Delorun 1.0.0 is not installed')
     await expect(roll(RESUMED, false, { preflight: async () => { throw failure } })).rejects.toBe(failure)
     expect(steps).toEqual([])
     expect(existsSync(join(home, 'sessions/after'))).toBe(true)

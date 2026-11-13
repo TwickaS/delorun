@@ -198,7 +198,7 @@ describe('delorun import-home over recorded stock homes', () => {
     expect(holding(target, 'House rules')).toEqual([])
   }, 120_000)
 
-  it('refuses a second import into the same Delo home and changes nothing; with --merge it copies nothing again', async () => {
+  it('refuses a second import into the same Delorun home and changes nothing; with --merge it copies nothing again', async () => {
     const { source, target, env } = recorded('terminal-home')
     expect((await runCommand(['--from', source], { home: target, env, answer: yesToAll })).code).toBe(EXIT.ok)
     const imported = snapshot(target)
@@ -206,7 +206,7 @@ describe('delorun import-home over recorded stock homes', () => {
     const again = await runCommand(['--from', source], { home: target, env, answer: yesToAll })
 
     expect(again.code).toBeUndefined()
-    expect(String(again.error)).toContain('DSH_IMPORT_HOME_HAS_CHATS: the Delo home already holds 2 chats; to add these beside them, run the import again with --merge')
+    expect(String(again.error)).toContain('DSH_IMPORT_HOME_HAS_CHATS: the Delorun home already holds 2 chats; to add these beside them, run the import again with --merge')
     expect(again.asked).toEqual([])
     expect(snapshot(target)).toEqual(imported)
 
@@ -214,7 +214,7 @@ describe('delorun import-home over recorded stock homes', () => {
 
     expect(merged.code).toBe(EXIT.ok)
     expect(merged.out).toContain('Imported 0 chats, 0 attachment files, 0 workspace registrations, 0 profiles, 0 documents, 0 skills and 0 stored keys.')
-    expect(merged.out).toContain('    "DEEPSEEK_API_KEY": already in the Delo home')
+    expect(merged.out).toContain('    "DEEPSEEK_API_KEY": already in the Delorun home')
     // Only the import's own record and a fresh copy of the held-back rows are new.
     expect(snapshot(target).filter(entry => !entry.startsWith('archive/stock-import/'))).toEqual(imported.filter(entry => !entry.startsWith('archive/stock-import/')))
   }, 120_000)

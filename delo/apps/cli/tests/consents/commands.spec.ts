@@ -124,7 +124,7 @@ describe('delorun workspace full-access', () => {
     expect(await grants()).toEqual({ [workspaceKey(folder)]: 1 })
   })
 
-  it('refuses a folder Delo never adds as a workspace, and a path that is no folder', async () => {
+  it('refuses a folder Delorun never adds as a workspace, and a path that is no folder', async () => {
     for (const refused of [osHome, deloHome, join(osHome, 'missing')]) {
       const { command } = workspace({ answers: [true] })
       await expect(command.run(['full-access', refused, 'on'], context)).rejects.toMatchObject({ exit: EXIT.failed })
@@ -150,14 +150,14 @@ describe('delorun workspace full-access', () => {
     await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
     expect(await grants()).toEqual({ [workspaceKey(folder)]: null })
     expect(out.stdout).toContain(`Full access is off for ${workspaceKey(folder)}`)
-    expect(out.stdout).toContain('Delo runs in profile cli, work: running chats there switch to the safer preset within a second.')
+    expect(out.stdout).toContain('Delorun runs in profile cli, work: running chats there switch to the safer preset within a second.')
     expect(out.stderr).toBe('')
     // Turning full access on, or off when it is already off, names no profile.
     out.stdout = ''
     await expect(command.run(['full-access', folder, 'off'], context)).resolves.toBe(EXIT.ok)
     const on = workspace({ runningProfiles: () => ['cli'], answers: [true] })
     await expect(on.command.run(['full-access', folder, 'on'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).not.toContain('Delo runs in profile')
+    expect(out.stdout).not.toContain('Delorun runs in profile')
   })
 
   it('records nothing and says so when the record cannot be written or another command holds it', async () => {
@@ -170,7 +170,7 @@ describe('delorun workspace full-access', () => {
       writeFileSync(join(osHome, 'unused'), '')
       const { command } = workspace({ answers: [true] })
       await expect(command.run(['full-access', folder, 'on'], context)).rejects.toMatchObject({
-        exit: EXIT.failed, message: expect.stringContaining('nothing was recorded, because Delo\'s record of full-access grants'),
+        exit: EXIT.failed, message: expect.stringContaining('nothing was recorded, because Delorun\'s record of full-access grants'),
       })
     } finally {
       chmodSync(directory, 0o700)
@@ -204,7 +204,7 @@ describe('delorun workspace full-access', () => {
     expect(out.stdout).toContain('Full access is already on')
     await expect(again.run(['full-access'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toContain('/elsewhere  safer preset')
-    await expect(again.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose an action') })
+    await expect(again.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose what to change') })
   })
 
   it('asks at the terminal, reading a cancel as no answer', async () => {
@@ -447,7 +447,7 @@ describe('delorun mcp', () => {
     expect(out.stderr).toContain('the allowed server changed after it was shown, so nothing was revoked. Look at it again with delorun mcp list')
   })
 
-  it('needs Delo to run, and a server that waits', async () => {
+  it('needs Delorun to run, and a server that waits', async () => {
     await expect(mcp({ running: () => false }).command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.notRunning })
     await expect(mcp({ lines: [[{ ok: true, servers: [], accepted: [] }]] }).command.run(['accept', 'files'], context)).rejects.toMatchObject({ exit: EXIT.failed })
     await expect(mcp().command.run(['accept'], context)).rejects.toMatchObject({ exit: EXIT.usage })
@@ -479,8 +479,8 @@ describe('delorun mcp', () => {
       await expect(mcp({ lines: [[line]] }).command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('cannot read') })
     }
     await expect(mcp({ lines: [[{ ok: false, error: 'CONSENT_UNAVAILABLE', detail: 'no consent' }]] }).command.run(['list'], context))
-      .rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun mcp: the home refused: CONSENT_UNAVAILABLE (no consent)' })
-    await expect(mcp({ lines: [] }).command.run(['list'], context)).rejects.toMatchObject({ message: 'delorun mcp: the home refused: NO_ANSWER' })
+      .rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun mcp: Delorun refused: CONSENT_UNAVAILABLE (no consent)' })
+    await expect(mcp({ lines: [] }).command.run(['list'], context)).rejects.toMatchObject({ message: 'delorun mcp: Delorun refused: NO_ANSWER' })
   })
 
   it('prints none for a start without arguments or environment variables', async () => {
@@ -493,10 +493,10 @@ describe('delorun mcp', () => {
   it('says when an accepted server starts later, a refused answer, and a revoke of a server that was not running', async () => {
     const later = mcp({ answers: [true], lines: [LISTED, [{ ok: true, started: 0 }]] })
     await expect(later.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).toContain('Accepted files; it starts the next time Delo starts.')
+    expect(out.stdout).toContain('Accepted files; it starts the next time Delorun starts.')
     const refused = mcp({ answers: [true], lines: [LISTED, [{ ok: false, error: 'CONSENT_FAILED' }]] })
     await expect(refused.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('delorun mcp: the home refused: CONSENT_FAILED\n')
+    expect(out.stderr).toContain('delorun mcp: Delorun refused: CONSENT_FAILED\n')
     const declined = mcp({ lines: [LISTED, [{ ok: false, error: 'STALE_REVIEW' }]] })
     await expect(declined.command.run(['decline', 'files'], context)).resolves.toBe(EXIT.failed)
     const idle = mcp({ answers: [true], lines: [LISTED, [{ ok: true, stopped: 0 }]] })
@@ -551,7 +551,7 @@ describe('delorun workspace external-agents', () => {
     expect(out.stderr).toContain('asks you to confirm at a terminal')
   })
 
-  it('refuses a usage error, a missing folder, a folder Delo never adds and an unreadable grants file', async () => {
+  it('refuses a usage error, a missing folder, a folder Delorun never adds and an unreadable grants file', async () => {
     const { command } = workspace({ answers: [true] })
     await expect(command.run(['external-agents', folder], context)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(command.run(['external-agents', folder, 'Bad Agent', 'on'], context)).rejects.toMatchObject({ exit: EXIT.usage })

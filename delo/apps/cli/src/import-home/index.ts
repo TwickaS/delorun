@@ -22,12 +22,14 @@
  *
  * @module @delo/cli/import-home
  */
+import { existsSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { join } from 'node:path'
 import { expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import { applyDshHomeImport, DSH_IMPORT_CATEGORIES, isDshImportError, planDshHomeImport, recoverDshImport, resolveDshImportLimits, type DshHomeImportPlan, type DshImportCategory } from '@delo/archive/dsh-import'
 import { UPSTREAM_HOME_DIR_NAME } from '@delo/contract-home-layout'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
+import { parseFailure } from '../command.ts'
 import { printable, quoted } from '../terminal-text.ts'
 import { isYes } from '../trash/terminal.ts'
 import { categoryOffered, categoryQuestion, categoryText, counted, previewText, reportText, skillInstructionLines } from './preview.ts'
@@ -37,13 +39,13 @@ export const IMPORT_HOME_USAGE = 'Usage: delorun import-home [--from <dir>] [--d
 
 /** What `delorun import-home` runs with. */
 export interface ImportHomeIo {
-  /** The Delo home. */
+  /** The Delorun home. */
   readonly home: string
   /** The CLI profile, which a stock profile of the same name never takes. */
   readonly profile: string
   /** The environment, whose home directory locates the default stock home. */
   readonly env: Readonly<Record<string, string | undefined>>
-  /** The bundles Delo appends to every carried profile. */
+  /** The bundles Delorun appends to every carried profile. */
   readonly deloBundles: readonly string[]
   /** Write to standard output. */
   readonly stdout: (text: string) => void
@@ -125,13 +127,16 @@ export async function runImportHome(args: readonly string[], io: ImportHomeIo): 
   try {
     values = parseArgs({ args: [...args], options: { from: { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, merge: { type: 'boolean', default: false }, 'max-size': { type: 'string' } }, strict: true, allowPositionals: false }).values
   } catch (error: unknown) {
-    throw new CliError(EXIT.usage, `delorun import-home: ${(error as Error).message}\n${IMPORT_HOME_USAGE}`)
+    throw parseFailure('import-home', error)
   }
   const source = values.from === undefined ? stockHomeOf(io.env) : expandHomePath(values.from)
   if (source === undefined) throw new CliError(EXIT.usage, `delorun import-home: no home directory is set, so give the DeepSeek Harness home with --from\n${IMPORT_HOME_USAGE}`)
   const maxSize = values['max-size']
   if (maxSize !== undefined && !(/^[1-9]\d{0,15}$/u.test(maxSize) && Number.isSafeInteger(Number(maxSize)))) {
     throw new CliError(EXIT.usage, `delorun import-home: --max-size takes a whole number of bytes, such as 8589934592 for 8 GiB\n${IMPORT_HOME_USAGE}`)
+  }
+  if (!existsSync(source)) {
+    throw new CliError(EXIT.failed, `delorun import-home: there is no DeepSeek Harness folder at ${source}, so there is nothing to copy. If yours is somewhere else, run delorun import-home --from <folder>.`)
   }
   const plan = (): Promise<DshHomeImportPlan> => planDshHomeImport({
     sourceHome: source,
@@ -153,11 +158,11 @@ export async function runImportHome(args: readonly string[], io: ImportHomeIo): 
     return io.exclusive(async () => {
       const recovered = await recoverDshImport(io.home)
       if (recovered.withdrawn.length > 0) io.stdout(`Withdrew an import that was interrupted: ${counted(recovered.withdrawn.length, 'file')} it had placed.\n`)
-      if (recovered.kept.length > 0) io.stdout(`Left in place because Delo wrote to them since: ${recovered.kept.map(quoted).join(', ')}.\n`)
+      if (recovered.kept.length > 0) io.stdout(`Left in place because Delorun wrote to them since: ${recovered.kept.map(quoted).join(', ')}.\n`)
       const planned = await plan()
       io.stdout(previewText(planned, PREVIEW))
       refuseBlocked(planned)
-      if (!isYes(await io.ask('Copy your chats, attachments and workspace list into the Delo home? [y/N] '))) throw new CliError(EXIT.failed, 'delorun import-home: nothing was imported')
+      if (!isYes(await io.ask('Copy your chats, attachments and workspace list into the Delorun home? [y/N] '))) throw new CliError(EXIT.failed, 'delorun import-home: nothing was imported')
       const include: Partial<Record<DshImportCategory, boolean>> = {}
       for (const category of DSH_IMPORT_CATEGORIES) {
         if (!categoryOffered(planned, category)) continue

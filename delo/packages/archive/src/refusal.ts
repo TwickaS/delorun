@@ -11,7 +11,7 @@ import { ArchiveError } from './errors.ts'
 
 /** How an {@link ArchiveError} reads: Delo refused the archive and wrote nothing, with C8's code and the refused entry. */
 export const archiveDescriber: RefusalDescriber<ArchiveError> = refusalDescriber(ArchiveError, error => ({
-  lead: 'Delo refused the archive and changed nothing.',
+  lead: 'Delorun refused the archive and changed nothing.',
   reason: codedReason(error.code, error.message),
   remedies: [],
 }))
@@ -21,7 +21,7 @@ export const archiveDescriber: RefusalDescriber<ArchiveError> = refusalDescriber
  * could not withdraw, with the import's code and detail.
  */
 export const dshImportDescriber: RefusalDescriber<DshImportError> = refusalDescriber(DshImportError, error => ({
-  lead: 'Delo stopped at the stock DeepSeek Harness home import.',
+  lead: 'Delorun stopped at the stock DeepSeek Harness home import.',
   reason: codedReason(error.code, error.message),
   remedies: [],
 }))

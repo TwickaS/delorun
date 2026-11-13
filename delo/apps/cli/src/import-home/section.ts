@@ -27,7 +27,7 @@ export const IMPORT_SECTION_ID = 'import'
 
 /** What the section runs with. */
 export interface ImportSectionOptions {
-  /** The bundles Delo appends to every carried profile. */
+  /** The bundles Delorun appends to every carried profile. */
   readonly deloBundles: readonly string[]
   /** Runs the import while this process holds every profile's home lock; {@link withHomeExclusive} by default. */
   readonly exclusive?: <T>(home: string, profile: string, run: () => Promise<T>) => Promise<T>
@@ -113,7 +113,7 @@ export function importSection(options: ImportSectionOptions): SetupSection {
         return await exclusive(context.home, basename(context.directory), async () => {
           await recoverDshImport(context.home)
           // The plan was shown before the lock was held; a chat the Delo home gained since would make this a merge nobody asked for.
-          if (homeHasChats(context.home)) throw new CliError(EXIT.failed, 'delorun setup: the DeepSeek Harness home was not imported, because the Delo home gained chats after the preview; run delorun import-home --merge to add them beside those')
+          if (homeHasChats(context.home)) throw new CliError(EXIT.failed, 'delorun setup: the DeepSeek Harness home was not imported, because the Delorun home gained chats after the preview; run delorun import-home --merge to add them beside those')
           return reportText(await applyDshHomeImport(planned, { include: {} }), planned).trimEnd()
         })
       } catch (error: unknown) {

@@ -71,8 +71,8 @@ describe('watchChats', () => {
 
     await gate.cancelAll()
 
-    expect(first.cancellations).toEqual([{ kind: 'hook', reason: 'Delo is stopping or updating' }])
-    expect(second.cancellations).toEqual([{ kind: 'hook', reason: 'Delo is stopping or updating' }])
+    expect(first.cancellations).toEqual([{ kind: 'hook', reason: 'Delorun is stopping or updating' }])
+    expect(second.cancellations).toEqual([{ kind: 'hook', reason: 'Delorun is stopping or updating' }])
   })
 })
 

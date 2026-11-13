@@ -38,12 +38,12 @@ describe('delorun on a new home', () => {
     const context = { env: { DELO_HOME: join(osHome, '.delo') }, stdout: (text: string) => void lines.push(text), stderr: (text: string) => void lines.push(text) }
     vi.mocked(runSetup).mockRejectedValueOnce(new TypeError('x is undefined'))
     expect(await main([], context)).toBe(EXIT.failed)
-    expect(lines.join('')).toBe('Delo stopped: x is undefined\n')
+    expect(lines.join('')).toBe('Delorun stopped: x is undefined\n')
     lines.length = 0
     vi.mocked(runSetup).mockRejectedValueOnce(new HomeProcessError('ROLLBACK_NEEDS_DATA_COPY', 'the data differs and no copy exists'))
     expect(await main(['--profile', 'work'], context)).toBe(EXIT.failed)
     expect(lines.join('')).toBe([
-      'Delo did not roll back: going back would hand newer chat data to an older release, and no copy of the older data exists.',
+      'Delorun did not roll back: going back would hand newer chat data to an older release, and no copy of the older data exists.',
       'Why: ROLLBACK_NEEDS_DATA_COPY: the data differs and no copy exists',
       'What you can do:',
       '  Restore the profile and keep this release: delorun recover rollback --profile-only --profile work',
