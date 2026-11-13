@@ -156,7 +156,7 @@ describe('a Delo CLI profile', () => {
     expect(destinations).toContain('dsh-otel-collector.deepseeksvc.com')
     expect(destinations.filter(host => host?.includes('delo') === true)).toEqual([])
     const deloRows = rows.filter(row => strings([row.name]).some(name => name.startsWith('@delo/')))
-    const studioRows = ['delo-theme', 'delo-settings-layout', 'delo-chat-states', 'delo-sidebar', 'delo-onboarding', 'delo-cost-meter']
+    const studioRows = ['delo-theme', 'delo-settings-layout', 'delo-chat-states', 'delo-sidebar', 'delo-onboarding', 'delo-cost-meter', 'delo-thinking-rsvp']
     expect(deloRows.map(row => row.id)).toEqual([...LOCAL_ROWS.filter(row => row.kind === 'added').map(row => row.id), ...studioRows])
     // The bundle's own browser half, each consent and guard plugin it mounts, its update gate, its update check, which fetches
     // the release channel's signed files and sends nothing about the person, the trust bill, which serves what the start check and the stored records say, the plugin install check, which asks the advisory
@@ -186,6 +186,7 @@ describe('a Delo CLI profile', () => {
       '@delo/plugin-sidebar',
       '@delo/plugin-onboarding',
       '@delo/plugin-cost-meter',
+      '@delo/plugin-thinking-rsvp',
     ])
   })
 })

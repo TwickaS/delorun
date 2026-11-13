@@ -60,6 +60,7 @@ Delorun holds itself to these rules:
 | Consents | — | With Ask me first, the model's file-tool writes to `AGENTS.md`, skills and presets ask first, a scheduled task asks with its schedule and target, and a new [MCP server](../reference/glossary.md#mcp-server) that runs a command waits until you allow it at your computer ([Consents](safety.md#consents)) |
 | Network | Commands reach any host | Each workspace can be Open, Allowlist or Off in Settings, Safety, Network; the default is Open ([The network setting](safety.md#the-network-setting)) |
 | Cost | — | An optional meter under the message box shows what a chat has cost ([See what a chat costs](cost-meter.md)) |
+| Thinking | — | An optional tab in the right sidebar shows the model's reasoning and reply word by word ([Read the model's thinking word by word](thinking-tab.md)) |
 | Web fetch | Reaches loopback and private-network hosts in every mode | `web_fetch` refuses loopback, link-local and private-network addresses, cloud metadata addresses included. Commands are outside this guard |
 | Reach from other devices | Your own certificate on a LAN address, or experimental Liveshare | Tailscale on your own tailnet, with each device approved at your computer by the code it shows ([Reach the studio from your phone](reach.md)) |
 | Verification | — | `delorun verify` checks the installed release's signature, its release-log entry and its files |

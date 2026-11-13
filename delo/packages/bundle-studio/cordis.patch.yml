@@ -55,3 +55,7 @@
     - id: delo-cost-meter
       name: '@delo/plugin-cost-meter'
       disabled: true
+
+    - id: delo-thinking-rsvp
+      name: '@delo/plugin-thinking-rsvp'
+      disabled: true

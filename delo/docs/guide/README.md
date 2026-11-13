@@ -39,6 +39,7 @@ The user guide is for people who install and use Delorun, the community fork of 
 - **Find where my data lives, move it, or use two profiles:** [Your Delorun home](home.md).
 - **Find out why something failed:** [Where Delorun keeps its logs](logs.md).
 - **See what a chat costs:** [See what a chat costs](cost-meter.md).
+- **Read the model's thinking word by word:** [Read the model's thinking word by word](thinking-tab.md).
 
 ## I want to choose or change the model
 

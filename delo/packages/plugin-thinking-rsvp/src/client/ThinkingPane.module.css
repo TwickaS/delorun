@@ -1,0 +1,172 @@
+/* The pane takes the tab's definite height: the page grows, the status line and toolbar keep their own. */
+.root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-family: var(--dsw-font-family);
+}
+
+/* What has been read, the band, and what is ahead share the height; the band never overlaps either side. */
+.page {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.read,
+.ahead {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px 16px;
+  overflow-y: auto;
+  line-height: 1.6;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+/* Short text sits against the band; once it overflows, the auto margin is spent and the region scrolls normally. */
+.read > :first-child {
+  margin-top: auto;
+}
+
+.read:focus-visible,
+.ahead:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+  outline-offset: calc(-1 * var(--dsw-focus-ring-width));
+}
+
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 500;
+  font-size: var(--dsw-font-xxs-12, 12px);
+}
+
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.run[data-part='reply'] .text {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The band: one word on a fixed axis, the pivot letter centred under the guide ticks. */
+.band {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 72px;
+  padding: 14px 16px;
+  container-type: inline-size;
+  background: var(--dsw-alias-bg-layer-1);
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.band::before,
+.band::after {
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  height: 8px;
+  background: var(--dsw-alias-border-l4);
+  content: '';
+}
+
+.band::before {
+  top: 0;
+}
+
+.band::after {
+  bottom: 0;
+}
+
+.axis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  width: 100%;
+  color: var(--dsw-alias-label-primary);
+  font-size: clamp(18px, 7cqi, 28px);
+  font-family: var(--ds-font-family-code, var(--dsw-font-mono, ui-monospace, monospace));
+  line-height: 1.25;
+}
+
+/* A word wider than its half of the band wraps rather than leaving the band. */
+.pre,
+.post {
+  overflow-wrap: anywhere;
+}
+
+.pre {
+  text-align: end;
+}
+
+.pivot {
+  color: var(--dsw-alias-state-business-primary);
+  font-weight: 500;
+  background: none;
+}
+
+.empty {
+  max-width: 32ch;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+/* Kept one line tall while empty, so the toolbar does not move when the state changes. */
+.status {
+  min-height: 1.5em;
+  margin: 0;
+  padding: 6px 16px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsw-font-xxs-12, 12px);
+  line-height: 1.5;
+}
+
+.toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 6px 12px 12px;
+}
+
+.transport {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  width: 100%;
+}
+
+.stepper {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.stepperValue,
+.rate {
+  min-width: 9ch;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xxs-12, 12px);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
