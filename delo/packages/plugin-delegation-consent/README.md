@@ -61,3 +61,5 @@ Every route answers only the home's own computer and refuses others with `LOOPBA
 ## When the service fails
 
 If the consent's service fails to start while `enabled` is on, the row stays active and mounts a service that refuses every external agent start. The refusal names the row `delo-delegation-consent` and the failure, and says to restart Delorun, read the logs or start in safe mode. With `enabled` off nothing is mounted and external agents start as stock.
+
+The stand-in mounts only when the row loads and its service fails. A row whose plugin never loads, or whose `inject` never resolves, leaves the seam absent while the Host runs; the boot check at `delorun start` is the only cover for those cases.

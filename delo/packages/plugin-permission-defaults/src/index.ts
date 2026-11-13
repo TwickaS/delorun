@@ -897,14 +897,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (ctx.get('sandboxNetwork') !== undefined) {
     throw new Error('permission-defaults: another plugin already provides the sandbox network resolver; the seam has one provider, so a composition turns on this per-workspace network or the other resolver, not both')
   }
-  const allowed = parseHostList(config.allowedHosts)
-  if ('problem' in allowed) throw new Error(`permission-defaults: allowedHosts is refused: ${allowed.problem}`)
-  for (const field of ['proxyConnectTimeoutMs', 'proxyMaxConnections', 'proxyIdleTimeoutMs'] as const) {
-    if (!(config[field] > 0)) throw new Error(`permission-defaults: ${field} must be a positive number`)
-  }
   const failedGuard = guardFailedRow(ctx)
   try {
-    await mountServices(ctx, config, allowed.hosts, failedGuard.track)
+    // Validated inside the guarded try: a hot reload does not run the boot check, so a refused value must mount the stand-ins too.
+    await mountServices(ctx, config, validatedHosts(config), failedGuard.track)
   } catch (error) {
     // The row fails loudly, and the seams its services decide answer their most restrictive value meanwhile, because
     // an absent seam reads as stock permissive.
@@ -914,6 +910,21 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     mountFailedRow(ctx, reason)
     throw error
   }
+}
+
+/**
+ * Check the row's allowlist and proxy limits.
+ * @param config - the row's configuration.
+ * @returns the validated default allowlist.
+ * @throws when `allowedHosts` has a refused entry or a proxy limit is not positive (0 would disable the timeout or refuse every connection).
+ */
+function validatedHosts(config: Config): readonly string[] {
+  const allowed = parseHostList(config.allowedHosts)
+  if ('problem' in allowed) throw new Error(`permission-defaults: allowedHosts is refused: ${allowed.problem}`)
+  for (const field of ['proxyConnectTimeoutMs', 'proxyMaxConnections', 'proxyIdleTimeoutMs'] as const) {
+    if (!(config[field] > 0)) throw new Error(`permission-defaults: ${field} must be a positive number`)
+  }
+  return allowed.hosts
 }
 
 /**

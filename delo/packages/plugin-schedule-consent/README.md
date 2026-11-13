@@ -52,3 +52,5 @@ English | [中文](README.zh.md)
 ## When the service fails
 
 If the consent's service fails to start while `enabled` is on, the row stays active and mounts a service that refuses every scheduled delivery. The refusal names the row `delo-schedule-consent` and the failure, and says to restart Delorun, read the logs or start in safe mode; the refused tasks are paused and need resuming. With `enabled` off nothing is mounted.
+
+The stand-in mounts only when the row loads and its service fails. A row whose plugin never loads, or whose `inject` never resolves, leaves the seam absent while the Host runs; the boot check at `delorun start` is the only cover for those cases.

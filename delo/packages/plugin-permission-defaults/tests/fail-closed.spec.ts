@@ -52,9 +52,10 @@ function crash(service: { readonly prototype: object }): void {
 /**
  * Mount the row over the services it needs.
  * @param enabled - the row's switch.
+ * @param overrides - configuration fields set over the defaults.
  * @returns the context.
  */
-async function mount(enabled: boolean): Promise<Context> {
+async function mount(enabled: boolean, overrides: Partial<Config> = {}): Promise<Context> {
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
@@ -63,7 +64,7 @@ async function mount(enabled: boolean): Promise<Context> {
   ctx.provide('shell', { sandboxMode: 'workspace-write', resolve() {}, run() {}, start() {} } as never)
   ctx.provide('approval', { config: { policy: 'ask' }, request: async () => 'allowed-once', setPolicy() {} } as never)
   await ctx.plugin(PermissionPresetService, { defaultPreset: SAFER_PRESET })
-  const row = ctx.plugin({ name: 'permission-defaults', apply: (scope: Context) => apply(scope, { ...Config(), enabled }) })
+  const row = ctx.plugin({ name: 'permission-defaults', apply: (scope: Context) => apply(scope, { ...Config(), enabled, ...overrides }) })
   await row.await().catch(() => {})
   await new Promise(resolve => setTimeout(resolve, 20))
   return ctx
@@ -101,6 +102,19 @@ describe('a permission-defaults row whose permission service failed', () => {
     expect(reason).toMatch(/restart/iu)
     expect(reason).toMatch(/safe mode/iu)
     expect(reason).toMatch(/logs/iu)
+    expect(guard?.(session, 'workspace-write')).toBeUndefined()
+  })
+})
+
+describe('a permission-defaults row refused by its own configuration checks, as on a hot reload', () => {
+  it.each([
+    ['proxyConnectTimeoutMs: 0', { proxyConnectTimeoutMs: 0 }],
+    ['an invalid allowedHosts entry', { allowedHosts: ['https://example.com/path'] }],
+  ])('refuses full access and turns the network off with %s', async (_name, overrides) => {
+    const ctx = await mount(true, overrides)
+    expect(ctx.sandboxNetwork({ workspaceRoot: '/work' })).toEqual({ mode: 'off' })
+    const guard = ctx.get('sandboxModeGuard')
+    expect(guard?.(session, 'danger-full-access')).toContain(PERMISSION_DEFAULTS_ROW)
     expect(guard?.(session, 'workspace-write')).toBeUndefined()
   })
 })

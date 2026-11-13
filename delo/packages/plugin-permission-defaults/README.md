@@ -67,3 +67,5 @@ Each workspace also has a network for the commands the model runs in the sandbox
 ## When a service fails
 
 If the permission or network service fails to start while `enabled` is on, the row fails to start and mounts, on the root context, a resolver that gives every confined command no network and, once the failed row's own services are removed, a guard that refuses `danger-full-access` whenever the real guard is missing, whichever service failed. The booted-Host check of the CLI reports each such stand-in as an unhealthy row. The log names the row and the failure; the answers are removed when the row starts again. With `enabled` off the row mounts nothing and commands share the host's network, as stock.
+
+The stand-ins also mount when the row refuses its own configuration (an invalid `allowedHosts` entry, or a proxy limit of 0, which has no meaning), including on a hot reload, which does not run the boot check. A row whose plugin never loads leaves the seams absent while the Host runs; the boot check at `delorun start` is the only cover for that case.
