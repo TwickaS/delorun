@@ -15,19 +15,23 @@ import { advisoryId, FeedFailure, queryFeed, type LockedPackage } from '@delo/re
 import semver from 'semver'
 import type { ClosurePackage } from './lockfile.ts'
 
+/** Every rule the install check can record, in the order a record lists them. */
+export const FINDING_RULES = [
+  'missing-integrity',
+  'unpinned-commit',
+  'advisory',
+  'advisory-unchecked',
+  'recent-publish',
+  'publish-time-unchecked',
+  'similar-name',
+  'insecure-source',
+  'changed-files',
+  'integrity-mismatch',
+  'integrity-unconfirmed',
+] as const
+
 /** What a finding is about. */
-export type FindingRule =
-  | 'missing-integrity'
-  | 'unpinned-commit'
-  | 'advisory'
-  | 'advisory-unchecked'
-  | 'recent-publish'
-  | 'publish-time-unchecked'
-  | 'similar-name'
-  | 'insecure-source'
-  | 'changed-files'
-  | 'integrity-mismatch'
-  | 'integrity-unconfirmed'
+export type FindingRule = typeof FINDING_RULES[number]
 
 /** One finding of the install check. */
 export interface InstallFinding {
