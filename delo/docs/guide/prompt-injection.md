@@ -97,6 +97,24 @@ A starter list for common package registries and Git hosts follows. Nothing on i
 
 ## Changing the setting
 
-Open Settings, Network, in the studio on the computer that runs Delo, and choose the setting for each workspace. Tightening applies at once. A change that lets commands reach more, such as `off` to `open` or a new host or port on a list, asks you to confirm it first. The setting is read and changed only at that computer: a phone over remote access cannot open it, the model has no tool that changes it, though a plugin it writes under the `cordis` preset runs with the harness's own access, and confined commands cannot read or write the file under `~/.delo` that holds it. If that file is damaged or other users can read it, every workspace counts as `off` until you fix it. The default for workspaces you have not chosen for is the `network` and `allowedHosts` setting of the `delo-permission-defaults` row in your profile's `cordis.yml`, which plugin management in a chat cannot change.
+Open Settings, Safety, Network, in the studio on the computer that runs Delo, and choose the setting for each workspace. Tightening applies at once. A change that lets commands reach more, such as `off` to `open` or a new host or port on a list, asks you to confirm it first. The setting is read and changed only at that computer: a phone over remote access cannot open it, the model has no tool that changes it, though a plugin it writes under the `cordis` preset runs with the harness's own access, and confined commands cannot read or write the file under `~/.delo` that holds it. If that file is damaged or other users can read it, every workspace counts as `off` until you fix it. The default for workspaces you have not chosen for is the `network` and `allowedHosts` setting of the `delo-permission-defaults` row in your profile's `cordis.yml`, which plugin management in a chat cannot change.
 
-The [threat model](../security/threat-model.md) gives the defences and limits in full.
+<details>
+<summary>Edge cases</summary>
+
+- If the file that holds the setting is damaged or other users can read it, then every workspace counts as `off` — repair or remove the file Settings, Safety, Network names.
+- If your sandbox is Landlock alone, Windows or macOS, then a workspace set to `allowlist` or `off` refuses to run commands — set it to `open` to run them.
+- If you chose **Same as stock** in setup, then the page says the setting is not available — run `delorun setup prompts` and choose Safer prompts.
+- If you are on a phone, then you cannot open the page — use the computer that runs Delorun.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- **Add common hosts** in the Allowlist editor adds the starter hosts above for npm, PyPI, GitHub, crates.io or Go. Review, then save.
+- The default for workspaces you have not chosen for is the `network` and `allowedHosts` setting of the `delo-permission-defaults` row.
+
+</details>
+
+**Next.** To see every protection together, read [What Delorun protects](safety.md). If a command is refused, find its message in [Troubleshooting](troubleshooting.md#protections-and-plugins). The [threat model](../security/threat-model.md) gives the defences and limits in full.

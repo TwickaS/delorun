@@ -6,7 +6,7 @@ description: "Reach the Delorun studio from your phone over your own tailnet: wh
 
 ## Summary
 
-Remote access lets you open the studio of the Delorun running on your computer from your phone or another device, over your own Tailscale tailnet. It uses no Delorun service: Tailscale carries the traffic, and your computer decides who may sign in. Any device on your tailnet can open the sign-in page, but only a device you approve at your computer, by typing the code it shows, can open your chats. Opening the address, or any page of it, on a device that is not signed in takes you to the sign-in page, and back to the page you opened once you are signed in. Remote access is off until you turn it on.
+This page helps you open your studio from your phone and keep control of who can. You need Delorun running on your computer, and Tailscale on both devices ([What you need](#what-you-need)). Remote access, which Delorun also calls reach, lets you open the studio of the Delorun running on your computer from your phone or another device. The studio is the page in your browser where you chat with the model. Remote access runs over your own Tailscale tailnet: Tailscale is a service that links your devices into a private network, and your tailnet is that network. It uses no Delorun service: Tailscale carries the traffic, and your computer decides who may sign in. Any device on your tailnet can open the sign-in page, but only a device you approve at your computer, by typing the code it shows, can open your chats. Opening the address, or any page of it, on a device that is not signed in takes you to the sign-in page, and back to the page you opened once you are signed in. Remote access is off until you turn it on.
 
 ## Contents
 
@@ -18,10 +18,12 @@ Remote access lets you open the studio of the Delorun running on your computer f
 - [Remove a device](#remove-a-device)
 - [Turn remote access off](#turn-remote-access-off)
 - [What Tailscale sees](#what-tailscale-sees)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## What you need
 
+- Delorun set up and working on your computer ([Install and first run](install.md)).
 - Tailscale installed on your computer and on your phone, both signed in to the same tailnet.
 - HTTPS certificates turned on for your tailnet, in the DNS page of the Tailscale admin console.
 - On Linux, permission for your user to configure `tailscale serve`. If your user does not have it, `delorun reach on tailscale` prints the one command to run yourself: `sudo tailscale set --operator=$USER`. Delorun never runs `sudo`.
@@ -34,7 +36,7 @@ Run `delorun reach on tailscale` in a terminal on your computer, or answer yes t
 
 A device is approved only at your computer.
 
-1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio under Settings → Devices. This opens an approval window for 5 minutes, which closes at the first approval. `delorun devices approve` needs Delorun running.
+1. On your computer, run `delorun devices approve`, or choose **Add a device** in the studio under Settings → Devices. This opens an approval window for 5 minutes, which closes at the first approval. `delorun devices approve` needs Delorun running. If it is not running, start it with `delorun start`.
 2. On your phone, open your address, check the device name it suggests and choose **Ask for approval**. The phone shows an 8-digit code and how long it stays valid. If the phone says your computer isn't ready, the approval window is not open: do step 1, then choose **Try again**. The page is in Chinese when your phone's browser prefers Chinese.
 3. On your computer, the command lists every waiting device with a number, a short request id, its name, platform and time. Type the number of the device whose screen you can see, then the code it shows. Type `c` and a number to cancel a request you do not recognise. In the Devices section, each waiting device has its own code field and a **Cancel request** button. Three wrong codes cancel only that request.
 
@@ -75,8 +77,8 @@ With an unlock, the phone can also:
 
 Never, even unlocked:
 
-- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's own computer", and the prompt keeps waiting for your computer;
-- accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Permissions on the phone says the same;
+- grant full access, whether a command asks to run outside the sandbox or a workspace asks to be put on full access; the approval card on the phone says "Approve this at your computer", an answer from the phone shows "This needs you at your computer: granting full access. Answer this prompt in the studio on the home's computer.", and the prompt keeps waiting for your computer;
+- accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Safety, Permissions on the phone says the same;
 - read or change your keys and other credentials, or your account;
 - turn off **Ask before external agents run**; the phone can still turn it on and change its run time limit;
 - loosen the permission new chats start in, such as moving it toward full access; the phone can still make it stricter;
@@ -113,6 +115,38 @@ If Delorun stops without cleaning up, for example when the computer loses power,
 ## What Tailscale sees
 
 Tailscale's coordination service sees your computer's name, the IP addresses of your computer and of each device, connection times and traffic volume. Tailscale can add a device to your tailnet unless Tailnet Lock is on, and it obtains the certificate for your address. Every device still needs your approval at your computer. See [What you trust when you use Delorun](trust.md).
+
+<details>
+<summary>Edge cases</summary>
+
+- If `delorun reach on tailscale` says Tailscale Funnel is on for the address, then it refuses — turn Funnel off with the command it prints, then run it again.
+- If your user may not configure `tailscale serve` on Linux, then nothing is written and the one command to run is printed: `sudo tailscale set --operator=$USER`.
+- If the phone says "Your computer isn’t ready yet", then the approval window is closed — run `delorun devices approve` or choose **Add a device** in Settings, Devices, then choose **Try again** on the phone.
+- If 5 requests already wait, then the phone is told so — cancel the ones you do not know at your computer, then ask again.
+- If you type the wrong code 3 times, then that request is cancelled — ask again from the phone for a new code.
+- If a code is older than 5 minutes, then it expired — ask again.
+- If Delorun is not running, then `delorun devices approve` and `delorun devices elevate` refuse and say to run `delorun start`.
+- If an unlock ends, then the phone reconnects and a terminal opened under it closes — unlock again.
+- If you lose a phone, then run `delorun devices remove <device id>`; it is signed out at once.
+- If Delorun stopped without cleaning up and you share the computer, then run `delorun reach off`.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- `delorun reach status` shows whether remote access is on and whether the address is ready.
+- `elevationMinutes` in the profile's reach row changes how long an unlock lasts, from 1 to 60 minutes.
+- **Terminal from phone without unlock** in Settings, Devices lets a phone open a terminal in every folder without an unlock. Only your computer turns it on.
+- **Ask before external agents run** in Settings, Safety, External agents stays a computer-only setting ([External agents](safety.md#external-agents)).
+
+</details>
+
+## Next
+
+- To see what stays protected when a phone is connected, read [What Delorun protects](safety.md).
+- To see what Tailscale and others can see, read [What you trust when you use Delorun](trust.md).
+- If something went wrong, find the code in [Troubleshooting](troubleshooting.md#remote-access-and-devices).
 
 ## For the technically curious
 

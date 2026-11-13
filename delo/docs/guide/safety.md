@@ -1,5 +1,5 @@
 ---
-description: "What Delorun protects and what it does not, in plain language: where its protections apply, the sandbox and the protected home on each platform, full access, the consents and the prompts setting, the web_fetch guard, release checks, and the stated limits, with links to the threat model."
+description: "What Delorun protects and what it does not, in plain language: where its protections apply, the sandbox on each platform, full access, the consents and the prompts setting, the network setting, the web_fetch guard, release checks, and the stated limits, with links to the threat model."
 ---
 
 # What Delorun protects
@@ -8,7 +8,11 @@ English
 
 ## Summary
 
-Delorun runs on your computer with your own access, and an agent that runs commands for you can do real damage when it is wrong or when text it reads tells it to. Delorun keeps DeepSeek Harness's approvals and sandbox and adds protections around them: commands the model runs cannot touch Delorun's own home, risky changes ask you first, `web_fetch` does not reach your local network, and releases are checked before they run. This page says what each protection does, where it applies and what it leaves open. For the exact rules, see [For the technically curious](#for-the-technically-curious).
+This page helps you understand what keeps the model from doing damage on your computer, and how to loosen or tighten each protection. You need Delorun installed and running ([Install and first run](install.md)). You do not need to change anything to be protected.
+
+Delorun runs on your computer with your own access. An agent that runs commands for you can do real damage when it makes a mistake, or when text it reads tells it to. Delorun keeps DeepSeek Harness's approvals and sandbox and adds more: commands the model runs cannot touch Delorun's own [home](../reference/glossary.md#home), risky changes ask you first, each workspace can limit its network, `web_fetch` does not reach your local network, and releases are checked before they run.
+
+Four words recur. A [workspace](../reference/glossary.md#workspace) is a folder you let the model work in. A [chat](../reference/glossary.md#chat) is one conversation with the model, and it belongs to one workspace. A command is a program the model runs for you in a chat, such as `git` or `npm`. The sandbox is a set of operating-system rules that limits what those commands can touch.
 
 ## Contents
 
@@ -16,98 +20,262 @@ Delorun runs on your computer with your own access, and an agent that runs comma
 - [The sandbox](#the-sandbox)
 - [Full access](#full-access)
 - [Consents](#consents)
+- [The network setting](#the-network-setting)
 - [The web_fetch guard](#the-web_fetch-guard)
 - [Release checks](#release-checks)
 - [What Delorun does not protect against](#what-delorun-does-not-protect-against)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Where the protections apply
 
-- **The studio that `delorun` starts** carries every protection on this page.
-- **`delorun headless`** carries the sandbox protection, the guards and the consents; a consent that would ask you refuses instead, because no one is there to answer.
-- **`delorun plugin`** carries none of them: it runs DeepSeek Harness's plugin installer as you.
-- **DeepSeek Harness's desktop app** is upstream's, unchanged, and none of Delorun's protections apply to it.
+- **The [studio](../reference/glossary.md#studio) that `delorun` starts** has every protection on this page.
+- **`delorun headless`**, which answers one task and exits, has the sandbox protection, the guards and the consents. A consent that would ask you refuses instead, because no one is there to answer.
+- **`delorun plugin`** has none of them. It runs DeepSeek Harness's plugin installer as you.
+- **DeepSeek Harness's desktop app** is upstream's, unchanged. None of Delorun's protections apply to it.
 
-Delorun refuses to start a profile whose settings turn one of its protections off, and names the setting and the file ([Troubleshooting](troubleshooting.md#protections-and-plugins)).
+Delorun will not start a [profile](../reference/glossary.md#profile) whose settings turn one of its protections off. It names the setting and the file, and you can fix it with [Troubleshooting](troubleshooting.md#protections-and-plugins).
 
 ## The sandbox
 
-DeepSeek Harness's sandbox confines the commands the model runs: in a Workspace Write workspace, they write only inside the workspace and the permitted temporary folders. Delorun adds rules that keep its own home, `~/.delo`, out of reach of those commands:
+The sandbox limits the commands the model runs. In a workspace on Workspace Write, which is where every new workspace starts, commands can write only inside the workspace and in the permitted temporary folders. Delorun adds rules that keep its own home folder, `~/.delo`, out of reach:
 
-- they cannot write anywhere under your Delorun home;
-- they cannot read it, except the installed releases, skills and runtimes they need, so they cannot read your keys, Delorun's secrets or the token that controls the running Delorun;
-- they cannot connect to the socket that controls the running Delorun or to Docker's socket.
+- Commands cannot write anywhere in your Delorun home.
+- Commands cannot read your keys, Delorun's secrets or the token that controls the running Delorun. They can read only the installed releases, skills and runtimes they need.
+- Commands cannot connect to the socket that controls the running Delorun, or to Docker's socket.
 
-The file tools, such as `read`, `grep` and `apply_patch`, refuse your Delorun home themselves. How much of this your computer enforces depends on the sandbox it can run:
+The file tools, such as `read`, `grep` and `apply_patch`, refuse your Delorun home themselves.
 
-| Sandbox | Where | What it enforces |
-| --- | --- | --- |
-| bwrap (bubblewrap, a Linux sandbox tool) | Linux, WSL2 included | Every rule above. It hides the sockets your session keeps as files, so commands cannot start programs through `systemd-run --user`, D-Bus, tmux, screen or the X server's socket file, or use your ssh-agent, gpg-agent or keyring, and it gives read-only commands an empty `/tmp`. It also hides Docker Desktop's control sockets and Tailscale's. Under WSL2 it also hides `/run/WSL` and WSLg, so commands cannot start Windows programs. Sockets that no file names stay reachable: on a Linux desktop the X server's, and a session bus started by `dbus-launch`. |
-| Landlock (a Linux kernel feature) | Linux without bwrap | The write and read rules. It cannot hide sockets, so on a machine with a desktop or login session, D-Bus, tmux or WSL it refuses to run commands at all. Elsewhere, such as in a container, commands can still connect to Delorun's control socket, which refuses them because they cannot read its token, to Docker's socket and to an ssh-agent. |
-| Windows access lists | Windows | Writes only: commands can read your Delorun home, its secrets and the token included. |
+On Linux, run `delorun doctor` to see which sandbox your computer runs. Its `sandbox` line names the sandbox in use, or why none can run. For a failure, see [Troubleshooting](troubleshooting.md#protections-and-plugins).
 
-Commands can still reach the network, local sockets outside the places the sandbox hides, such as one in your home folder, and everything else your user can read, such as `~/.ssh` and `~/.aws`. A command that needs your ssh-agent, such as `git push` over ssh, needs full access. The sandbox limits writes and protects Delorun's home; it does not hide the rest of your account.
+| Where you run Delorun | What the sandbox enforces |
+| --- | --- |
+| Linux with bubblewrap installed, WSL2 included | Every rule above. It also hides your login session's sockets, so commands cannot start programs through `systemd-run --user`, D-Bus, tmux or screen, or use your ssh-agent, gpg-agent or keyring. Under WSL2 it also stops commands from starting Windows programs. A few sockets stay reachable, such as the X server's on a Linux desktop. |
+| Linux without bubblewrap | The write and read rules only. It cannot hide your session's sockets, so on a computer with a desktop or login session Delorun refuses to run commands at all until you install bubblewrap. |
+| Windows | Writes only. Commands can read your Delorun home, its secrets and the token included. |
+
+Commands can still reach everything else your user can: other local sockets, files such as `~/.ssh` and `~/.aws`, and the network unless you limit it ([The network setting](#the-network-setting)). The sandbox limits writes and protects Delorun's home. It does not hide the rest of your account.
+
+<details>
+<summary>Edge cases</summary>
+
+- If a command needs your ssh-agent, such as `git push` over ssh, then it fails in the sandbox. Give that workspace full access, or push from your own terminal.
+- If you run Linux without bubblewrap on a desktop, then every sandboxed command is refused. Install the `bubblewrap` package and start Delorun again. If it is installed but cannot create a sandbox, see [Troubleshooting](troubleshooting.md#protections-and-plugins).
+- If you run under WSL2, then the Linux rules apply and commands cannot start Windows programs.
+- If you run on Windows, then commands can read Delorun's secrets and token. Treat the model's commands there as having read access to your Delorun home.
+- If a program you start yourself, outside the sandbox, reads your Delorun home, then nothing stops it. The sandbox covers the model's commands only.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- Run `delorun doctor` after installing bubblewrap or changing your system to check the `sandbox` line.
+- Limit the network per workspace with the [network setting](#the-network-setting).
+- Read the [threat model](../security/threat-model.md) for the sockets each sandbox hides.
+
+</details>
 
 ## Full access
 
-A workspace on full access runs the model's commands outside the sandbox, with everything your user can do, Delorun's home and secrets included. Every new workspace starts on Workspace Write instead.
+Full access is a permission a chat can have: its commands run outside the sandbox, with everything your user can do, Delorun's home and secrets included. Every new workspace starts on Workspace Write instead. You grant full access to a workspace once, at the computer that runs Delorun, and chats in that workspace can then use it.
 
-With setup's **Safer prompts**, the default, Delorun asks for full access once per workspace before it applies: pick Full access in a chat, choose "Allow for this chat" on an approval card that asks for full access, use Settings, Permissions, or run `delorun workspace full-access <folder> on`, and you answer on the home's own computer. A single command can still ask to run outside the sandbox: DeepSeek Harness asks you, and its question does not say that such a command can read Delorun's home. With **Same as stock**, a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness.
+With setup's **Safer prompts**, the default, you can grant it in four places:
 
-To take full access away, use Revoke in Settings, Permissions, pick Workspace Write in a chat of that workspace, or run `delorun workspace full-access <folder> off`. The workspace's open chats go back to Workspace Write within a second in every running profile, because each one watches the list of full-access grants. If a profile cannot watch it, its log says so, and its chats pick up the change the next time they check a permission. A running `delorun headless` task picks up the change only when it next checks a permission.
+- **On an approval card.** When a command asks to run outside the sandbox, the studio shows a card with **Allow once**, which lets that one command run, and **Allow for this chat**, which switches the chat to the permission the command asked for. The chat stays there until you lower it in the composer. When the command asks for full access and the workspace has none yet, **Allow for this chat** opens the full-access dialog. **Allow full access** in the dialog records the grant for the workspace and switches the chat. When it worked, the card is answered and the command runs.
+- **In a chat.** Pick Full access in the chat's permission control. The same dialog opens, with a box to tick that you understand the risks. When it worked, the control shows Full access.
+- **In Settings.** Open Settings, Safety, Permissions and choose **Allow full access** beside the workspace. When it worked, the workspace shows "Allowed" with the time.
+- **In a terminal.** Run `delorun workspace full-access <folder> on` and answer yes. When it worked, `delorun workspace full-access` with no folder lists the workspace.
+
+The dialog's **Details** list what full access can reach: your files outside the workspace, Delorun's home with its keys and tokens, and Delorun's update channel.
+
+To take full access away, choose **Revoke** in Settings, Safety, Permissions, pick Workspace Write in a chat of that workspace, or run `delorun workspace full-access <folder> off`. The workspace's open chats go back to Workspace Write within a second.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the workspace already has a grant, then the dialog is only "Switch this chat to full access?" — confirm it.
+- If you cancel the dialog on an approval card, then the card keeps waiting — choose Allow once, Allow for this chat again, or deny.
+- If the chat is already at or above the permission the card asks for, then **Allow for this chat** is not offered — use **Allow once**.
+- If you are on a phone signed in over [remote access](reach.md), then the card says "Approve this at your computer" and nothing you tap there grants it — answer at the computer that runs Delorun.
+- If the chat has no workspace folder, then the model is told to ask you to run `delorun workspace full-access <folder> on` — give the chat a folder first.
+- If the folder is a filesystem root, your home folder, your Delorun home or your DeepSeek Harness home, or contains one, then `delorun workspace full-access` refuses it — choose a project folder.
+- If the list of full-access grants cannot be read, then no grant counts and Settings, Safety, Permissions says so — repair or remove the file it names, then grant again.
+- If you run `delorun headless` in a folder without a grant, then it refuses with "which you have not granted full access" and does not start — run `delorun workspace full-access <folder> on`, or run without full access. A running headless task sees a revoke only when it next checks a permission.
+- If you choose the safer preset in a chat, then the workspace's grant is withdrawn and its other open chats on full access drop back too — grant it again to return.
+- If a single command asks to run outside the sandbox with no grant, then DeepSeek Harness asks you directly, and its question does not say the command can read Delorun's home — read it as if it did.
+- If you chose **Same as stock** in setup, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- `delorun setup prompts` switches between Safer prompts and Same as stock.
+- Settings, Safety, Permissions, under New chats, sets the permission new chats start in.
+- `delorun workspace full-access` with no folder lists every workspace and its permission.
+
+</details>
 
 ## Consents
 
-Setup's prompts question decides how Delorun asks before risky changes, and `delorun setup prompts` changes the answer:
+Setup's prompts question decides how Delorun asks before risky changes. `delorun setup prompts` changes the answer.
 
 | | Safer prompts (default) | Same as stock |
 | --- | --- | --- |
 | A workspace switched to full access | Asks once per workspace, as [Full access](#full-access) explains | Switches after the studio's confirmation |
-| The model writes `AGENTS.md`, a skill or a preset with its file tools | Asks first, says the text will load as instructions in every future chat it reaches, and shows the diff; nothing is written until you allow it | Written as any file |
+| The model writes `AGENTS.md`, a skill or a preset with its file tools | Asks first, says the text will load as instructions in every future chat it reaches, and shows the difference. Nothing is written until you allow it | Written like any file |
 | A new MCP server that runs a command | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
-| The model creates or edits a scheduled task | Asks with the task's prompt, its schedule, the chat it runs in and that chat's permission preset; a delivery is refused when that chat's preset has changed | Created as in DeepSeek Harness |
+| The model creates or edits a scheduled task | Asks, showing the task's prompt, its schedule, the chat it runs in and that chat's permission preset | Created as in DeepSeek Harness |
 
-The `web_fetch` guard, the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or reconfigure Delorun's consent and guard plugins or the sandbox, in any mode.
+The `web_fetch` guard, the update protections and the [external-agent](#external-agents) consent stay as they are with either answer. Plugin management cannot turn off, remove or change Delorun's consent and guard plugins or the sandbox, in any mode.
 
-A consent covers the tool it names. A shell command or code the model runs can still write `AGENTS.md` or a skill inside a writable workspace without asking.
+<details>
+<summary>Edge cases</summary>
+
+- If a shell command or code the model runs writes `AGENTS.md` or a skill inside a writable workspace, then no consent asks — a consent covers only the tool it names, so review what a chat changed.
+- If a scheduled task's chat changes its permission preset after you allowed the task, then its delivery is refused — ask the model to set the task up again so it asks you.
+- If you run `delorun headless`, then a consent that would ask refuses instead — allow it first in the studio, or run without it.
+- If you are on a phone, then you cannot answer a consent — answer at the computer that runs Delorun.
+
+</details>
 
 ### MCP servers
 
-An MCP server that runs a command runs it on your computer with your access, outside the sandbox. With Safer prompts, Delorun holds a new one stopped until you allow it in Settings, Permissions or with `delorun mcp accept <server>`. Before you answer you see its command, arguments, folder and environment variable names, and the exact file that will run and the folder it runs in, found the way the server would start. On Windows you also see the command shell that runs a `.cmd` or `.bat` file. Delorun asks again when any of these changes, including when the same command now finds a different file, for example after a folder earlier in `PATH` gains a program with that name. If the file changes between your look and your answer, your answer is refused and the review shows the new file. `delorun mcp revoke <server>` or Revoke in Settings, Permissions stops a server you allowed.
+An MCP server is a helper program that gives the model extra tools. One that runs a command runs it on your computer with your access, outside the sandbox. With Safer prompts, Delorun holds a new one stopped until you allow it in Settings, Safety, Permissions or with `delorun mcp accept <server>`. When it worked, the server shows as Allowed and running.
+
+Before you answer you see its command, arguments, folder and the names of its environment variables, and the exact file that will run. Delorun asks again when any of these changes, including when the same command now finds a different file. To stop a server you allowed, choose Revoke in Settings, Safety, Permissions or run `delorun mcp revoke <server>`.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the file changes between your look and your answer, then your answer is refused as stale — look at the new review and answer again.
+- If you decline or revoke a server, then it stays stopped until its start changes or you allow it again.
+- If you run `delorun mcp accept` without a terminal, then nothing is accepted — run it in a terminal on the computer that runs Delorun.
+- If Delorun is not running, then `delorun mcp` commands cannot reach it — start it with `delorun start`.
+- If you are on Windows and the server is a `.cmd` or `.bat` file, then the review also shows the command shell that runs it.
+- If a package runner such as `npx` starts the server, then the code it downloads each time is not checked — pin a version or install the program yourself.
+- If a chat can write to the folder the server runs from, then a chat can change what the server runs — keep servers in folders chats cannot write.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- `delorun mcp list` shows servers waiting and allowed, and what changed.
+- `delorun mcp decline <server>` sets a review aside without allowing it.
+
+</details>
 
 ### External agents
 
-Claude Code and Codex are optional delegation plugins: the model can hand a task to one of them. An external agent runs as its own program, outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home with its keys and tokens included, and it uses your own Claude Code or Codex sign-in and account, so any cost goes to that account.
+Claude Code and Codex are optional plugins that let the model hand a task to another agent program. That program runs outside Delorun's sandbox and approval prompts. It can read and change files in the workspace and anywhere else its own settings allow, your Delorun home included. It uses your own Claude Code or Codex sign-in, so any cost goes to that account.
 
-Delorun asks before each run on the home's own computer, whichever prompts answer you gave in setup; a phone signed in over remote access cannot answer. "Allow once" starts that run only. "Allow for this workspace" lets that agent start there without asking until you revoke it in Settings, External agents, or with `delorun workspace external-agents <folder> <agent> off`; `delorun workspace external-agents` lists what you allowed. A chat on Read Only never starts an external agent, a run cannot start outside the chat's workspace, and each run stops after 30 minutes. A chat on Full access refuses every approval without asking you, so there an agent starts only in a workspace where you allowed it; a chat on Auto asks you, as on Workspace Write. `delorun headless` cannot ask anyone either, so it starts an agent only where you allowed it. A chat without a workspace folder never starts one, and the approval names the folder the agent will run in. The model cannot install or turn on these plugins, or another external-agent plugin such as the ACP one, which can run any program, through plugin management; you add them from the Plugins page or the first-run setup. A full-access chat can run any command anyway. Settings, External agents turns this question off, so agents start without asking as in DeepSeek Harness, or changes the 30-minute limit, from 1 to 1440 minutes; a change applies from the next run. Only the home's own computer can turn the question off.
+Delorun asks before each run, at the computer that runs Delorun, whichever prompts answer you gave in setup. **Allow once** starts that run only. **Allow for this workspace** lets that agent start there without asking until you revoke it in Settings, Safety, External agents, or with `delorun workspace external-agents <folder> <agent> off`. Each run stops after 30 minutes.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the chat is on Read Only, then an external agent never starts — switch the chat's permission first.
+- If the chat is on Full access, then every approval is refused without asking, so an agent starts only in a workspace where you allowed it — allow it for the workspace.
+- If you run `delorun headless`, then no one can be asked, so an agent starts only where you allowed it.
+- If the chat has no workspace folder, then an agent never starts — give the chat a folder.
+- If you are on a phone, then you cannot answer the question — answer at the computer that runs Delorun.
+- If the model tries to install or turn on these plugins through plugin management, then it is refused — add them yourself from the Plugins page or the first-run setup.
+- If a run needs longer than 30 minutes, then it stops — raise the limit in Settings, Safety, External agents.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- Settings, Safety, External agents sets the run time limit from 1 to 1440 minutes, which applies from the next run.
+- The same page can turn the question off, so agents start without asking, as in DeepSeek Harness. Only the computer that runs Delorun can turn it off.
+- `delorun workspace external-agents` lists what you allowed.
+
+</details>
+
+## The network setting
+
+Each workspace has a network setting, **Open**, **Allowlist** or **Off**, that limits which hosts its sandboxed commands and `web_fetch` can reach. It starts on Open, as in DeepSeek Harness, so a fresh install changes nothing until you choose. Choose it in Settings, Safety, Network, at the computer that runs Delorun. Tightening applies at once. Letting a workspace reach more asks you to confirm. [Prompt injection and data exfiltration](prompt-injection.md#the-network-setting) explains what each choice closes and leaves open.
+
+<details>
+<summary>Edge cases</summary>
+
+- If your sandbox cannot enforce Allowlist or Off (anything but bubblewrap on Linux, WSL2 included), then the workspace's commands are refused rather than run with your network — set it back to Open to run them.
+- If the command has full access, then the setting does not apply — it runs outside the sandbox.
+- If the setting's file cannot be read, then every workspace counts as Off and changes are refused — repair or remove the file Settings names.
+- If you are on a phone, then the page cannot be opened — use the computer that runs Delorun.
+- If you chose **Same as stock** in setup, then the page says the setting is not available — run `delorun setup prompts` and choose Safer prompts.
+- If a command is already running, then it keeps the network it started with — restart the workspace's terminals and jobs after tightening.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- **Add common hosts** in the Allowlist editor adds the hosts for npm, PyPI, GitHub, crates.io or Go. Review the list, then save.
+- **Use default** returns a workspace to the default.
+
+</details>
 
 ## The web_fetch guard
 
-`web_fetch` refuses addresses on your own computer and network: loopback, link-local and private-network addresses, cloud metadata addresses included. It checks every redirect, connects only to the address it checked, and tells the model why it refused, for example `web fetch refused: the host "localhost" is a loopback address, which web_fetch does not fetch`. No setting turns the guard off.
+`web_fetch` is the tool the model uses to read a web page. It refuses addresses on your own computer and network: loopback, link-local and private-network addresses, cloud metadata addresses included. It checks every redirect and tells the model why it refused, for example `web fetch refused: the host "localhost" is a loopback address, which web_fetch does not fetch`. No setting turns the guard off.
 
-The guard covers the `web_fetch` tool only. Commands the model runs can reach any address, and a proxy or a remote fetch provider you configure resolves its target outside the guard.
+<details>
+<summary>Edge cases</summary>
+
+- If the model runs `curl` or another command, then the guard does not apply — use the network setting for commands.
+- If you configure a proxy or a remote fetch provider, then it resolves its target outside the guard.
+
+</details>
 
 ## Release checks
 
 - **Before install.** The launcher checks the release's signatures and its entry in the public release log, and installs nothing when either check fails ([What the launcher verifies](install.md#what-the-launcher-verifies)).
-- **At every start.** The installed files are checked against their signed list, and the release is checked against the release log again. A log that contradicts the release stops the start; a log that cannot be reached gives a warning, and the start goes on. No setting turns the release-log check off.
+- **At every start.** The installed files are checked against their signed list, and the release is checked against the release log again.
 - **Before an update.** The new release passes the same checks before it is installed beside the running one ([Updates](updates.md)).
 
-The release checks prove that you run the release Delorun's keys signed and logged publicly. They do not prove that the release has no defects.
+They prove that you run the release Delorun's keys signed and logged publicly. They do not prove that the release has no defects.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the release log contradicts the release at start, then the start stops — run `delorun verify` to see every check.
+- If the release log cannot be reached, then you get a warning and the start goes on — check your connection.
+- If you are offline and want to check anyway, then `delorun verify --offline` runs the checks that need no network.
+- No setting turns the release-log check off.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- `delorun verify --release <version>` checks a named release, and `--json` prints the result for scripts.
+
+</details>
 
 ## What Delorun does not protect against
 
 - **Programs running as you outside the sandbox.** Any program you run, and any command you let run with full access, can read and change everything in your Delorun home, use its token to approve a device or open the studio, and change the checks.
 - **Windows reads.** On Windows, the model's commands can read Delorun's secrets and token.
-- **Landlock sockets.** On a Linux system with Landlock but no bwrap, commands can connect to Docker's socket, which gives root on a rootful Docker.
-- **The network and other sockets.** Commands reach any network host and local sockets outside the places the sandbox hides, such as one in your home folder. On a Linux desktop an X server also listens on a socket no file path names, and a session bus that `dbus-launch` started can listen on one too; commands can still reach both, and through such a bus start programs outside the sandbox.
-- **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox, audit or revoke plugins. It checks a plugin's declared version ranges at install and at each start, but does not check a plugin's files again after install: a plugin from npm, git or a tarball whose files change on disk loads as it now is at the next start.
-- **Instructions in text the model reads.** Web pages, files, repositories and tool output can carry instructions; the consents and the sandbox limit what follows from them, and do not detect them.
+- **Linux without bubblewrap.** Where Delorun runs commands there at all, they can connect to Docker's socket, which gives root on a rootful Docker.
+- **The network and other sockets.** Commands reach any network host unless you limit it, and local sockets outside the places the sandbox hides, such as one in your home folder. On a Linux desktop an X server also listens on a socket no file names, and a session bus that `dbus-launch` started can too. Commands can reach both, and through such a bus start programs outside the sandbox.
+- **Plugins.** A plugin runs with the harness's own access. Delorun does not sandbox, audit or revoke plugins. It checks a plugin's declared version ranges at install and at each start, but not its files again after install. A plugin from npm, git or a tarball whose files change on disk loads as it now is at the next start.
+- **Instructions in text the model reads.** Web pages, files, repositories and tool output can carry instructions. The consents and the sandbox limit what follows from them. They do not detect them ([Prompt injection](prompt-injection.md)).
 - **The studio's sign-in.** A browser that signed in stays signed in for 30 days, across restarts, and the sign-in cannot be revoked.
 - **Your logs.** A secret in a form Delorun does not recognise can reach an operational log ([Where Delorun keeps its logs](logs.md)).
 
-With [Changes protection](https://docs.delorun.com/guide/changing-your-harness) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change; the change is recorded and can be undone. [What you trust when you use Delorun](trust.md) states what each party, Delorun's maintainers included, can and cannot do, and the [threat model](../security/threat-model.md) lists every limit.
+With [Changes protection](https://docs.delorun.com/guide/changing-your-harness) off, the default, anything that can write a plugin folder you linked can change what Delorun runs before you see the change. The change is recorded and can be undone. [What you trust when you use Delorun](trust.md) states what each party, Delorun's maintainers included, can and cannot do.
+
+## Next
+
+- To limit what a workspace can send out, read [Prompt injection and data exfiltration](prompt-injection.md).
+- To reach the studio from your phone, read [Reach the studio from your phone](reach.md).
+- To see what each party can see and do, read [What you trust when you use Delorun](trust.md).
+- If something went wrong, find the message in [Troubleshooting](troubleshooting.md).
 
 ## For the technically curious
 
-The [threat model](../security/threat-model.md) states every protection with the rules that define it and every limit, the [home layout contract](../contracts/c01-home-layout.md) defines the sandbox rules for Delorun's home, and the [parity checklist](../reference/parity.md) lists each consent and default with the switch that turns it back to stock.
+The [threat model](../security/threat-model.md) states every protection with the rules that define it, and every limit, including the sandbox rules per platform and the sockets each one hides. The [home layout contract](../contracts/c01-home-layout.md) defines the sandbox rules for Delorun's home. The [parity checklist](../reference/parity.md) lists each consent and default with the switch that turns it back to stock.

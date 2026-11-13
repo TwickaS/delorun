@@ -25,7 +25,7 @@ Delorun runs on your computer, as you. Nobody else runs it for you, and Delo Run
 ## What runs on your computer
 
 - **Delorun itself.** The studio, the harness and its plugins run as your user, with your user's access. Any other program you run as yourself can read everything in `~/.delo`, and Delorun cannot stop that.
-- **Commands the model runs.** They run with your access too, inside a sandbox: a set of operating-system rules that limits what a command can touch. The sandbox keeps them from writing into Delorun's home, and, where your system supports it, from reading Delorun's secrets and tokens or talking to its control socket and to Docker. Nothing tells you yet which of these rules your computer enforces; [What Delorun protects](safety.md#the-sandbox) lists them per sandbox. Commands can still use other local sockets, and the network unless you set the workspace's network to `allowlist` or `off` ([prompt injection and data exfiltration](prompt-injection.md)).
+- **Commands the model runs.** They run with your access too, inside a sandbox: a set of operating-system rules that limits what a command can touch. The sandbox keeps them from writing into Delorun's home, and, where your system supports it, from reading Delorun's secrets and tokens or talking to its control socket and to Docker. On Linux, `delorun doctor` shows whether the sandbox can run; [What Delorun protects](safety.md#the-sandbox) lists the rules per sandbox. Commands can still use other local sockets, and the network unless you set the workspace's network to `allowlist` or `off` ([prompt injection and data exfiltration](prompt-injection.md)).
 - **Docker workspaces**, which would run a workspace's commands in a container, are not available yet. Every workspace runs on your computer directly.
 - **Plugins** run with the harness's full access. When you install a plugin and at each start, Delorun checks which DeepSeek Harness and Delorun versions it says it supports. It does not check the plugin's files again after install: if a plugin you installed from npm, git or a tarball changes on disk, the changed version loads at the next start.
 
@@ -78,7 +78,7 @@ Each file these checks download is checked against its signature, so a server th
 
 `delorun setup --yes` and `--config` never turn on reach or DeepSeek's session-log upload.
 
-- **DeepSeek's session-log upload** is off until you turn it on in Settings → Privacy. When it is on, each request to DeepSeek's official API also carries the part of your chat's log not sent yet: your messages, the replies, tool calls with their results, workspace paths and feedback.
+- **DeepSeek's session-log upload** is off until you turn it on in Settings → Safety → Privacy. When it is on, each request to DeepSeek's official API also carries the part of your chat's log not sent yet: your messages, the replies, tool calls with their results, workspace paths and feedback.
 - **Desktop analytics** belong to DeepSeek Harness's desktop app. The profile `delorun` runs collects none, and Settings → Privacy says so.
 - **Feedback.** The profile `delorun` runs has no feedback dialog, so it sends no feedback.
 - **Model requests** go to the model provider you set up, and carry what the model receives for each turn.
@@ -93,6 +93,8 @@ Each file these checks download is checked against its signature, so a server th
 ## Reporting a problem
 
 Report a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and not in a public issue. Report other problems to support@delorun.com.
+
+**Next.** To see the protections themselves, read [What Delorun protects](safety.md). To reach your studio from your phone, read [Reach the studio from your phone](reach.md). If a check fails, find its message in [Troubleshooting](troubleshooting.md).
 
 ## For the technically curious
 

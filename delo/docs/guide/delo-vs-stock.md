@@ -56,13 +56,15 @@ Delorun holds itself to these rules:
 | Updates | Incompatible plugins may be disabled at startup | A report of what would change before you confirm, a profile snapshot and an optional copy of your chat data first, a health check after, automatic rollback when it fails, and `delorun recover` to go back ([Updates](updates.md)) |
 | Your own changes | Profile layers | Profile layers, profile history that `delorun recover restore` brings back, safe mode, and update checks that refuse to drop a plugin, setting or local plugin you added |
 | What commands can reach | The sandbox confines file writes | The same sandbox also keeps commands from writing or reading Delorun's home and its secrets, and from connecting to its control socket and Docker's socket, where your system can enforce it ([What Delorun protects](safety.md#the-sandbox)) |
-| Permissions | One default for every workspace | Every new workspace starts on Workspace Write; with Safer prompts, a switch of a workspace to full access is refused ([Full access](safety.md#full-access)) |
+| Permissions | One default for every workspace | Every new workspace starts on Workspace Write; with Safer prompts, full access needs your consent once per workspace, given at your computer ([Full access](safety.md#full-access)) |
 | Consents | — | With Safer prompts, the model's file-tool writes to `AGENTS.md`, skills and presets ask first, a scheduled task asks with its schedule and target, and a new MCP server that runs a command waits until you allow it at your computer ([Consents](safety.md#consents)) |
+| Network | Commands reach any host | Each workspace can be Open, Allowlist or Off in Settings, Safety, Network; the default is Open ([The network setting](safety.md#the-network-setting)) |
+| Cost | — | An optional meter under the message box shows what a chat has cost ([See what a chat costs](cost-meter.md)) |
 | Web fetch | Reaches loopback and private-network hosts in every mode | `web_fetch` refuses loopback, link-local and private-network targets, cloud metadata addresses included; commands are outside the guard |
 | Reach from other devices | Your own certificate on a LAN address, or experimental Liveshare | Tailscale on your own tailnet, with each device approved at your computer by the code it shows ([Reach the studio from your phone](reach.md)) |
 | Verification | — | `delorun verify` checks the installed release's signature, its release-log entry and its files |
 | Logs | Process output in the terminal | Operational logs per process, rotated, with secrets redacted, and `delorun logs` to find them ([Where Delorun keeps its logs](logs.md)) |
-| Data sharing | Desktop analytics and DeepSeek session-log upload on | No telemetry of Delorun's own; DeepSeek session-log upload off until you turn it on in Settings → Privacy, and no desktop analytics in the profile `delorun` runs |
+| Data sharing | Desktop analytics and DeepSeek session-log upload on | No telemetry of Delorun's own; DeepSeek session-log upload off until you turn it on in Settings → Safety → Privacy, and no desktop analytics in the profile `delorun` runs |
 | Workspaces | Local folders | Local folders, with a trash for deleted chats and workspaces and signed export files that move them between homes |
 | Documentation | DSH's docs | This guide, at [docs.delorun.com](https://docs.delorun.com) |
 | Contributions | Not accepted | Welcome to every part, under MIT with DCO sign-off; a pseudonym is fine |
@@ -72,7 +74,7 @@ Delorun holds itself to these rules:
 The [parity checklist](../reference/parity.md) lists each changed default with its evidence:
 
 - Delorun's studio additions are on; the stock look is one switch away in Settings → General → Look.
-- A new workspace starts on Workspace Write whatever the deployment default is, and with Safer prompts a switch to full access is refused.
+- A new workspace starts on Workspace Write whatever the deployment default is, and with Safer prompts full access needs your consent once per workspace.
 - DeepSeek's session-log upload is off until you turn it on.
 - `web_fetch` refuses loopback, link-local and private-network targets.
 - Commands the model runs cannot write or read Delorun's home, or reach its control socket, where your system enforces it.
@@ -91,7 +93,6 @@ These are part of Delorun's plans and are not in the code yet:
 
 - a Delorun desktop app, and macOS releases;
 - Docker workspaces, where a workspace's commands run in a container;
-- a full-access consent screen that grants full access for one workspace, and a way to accept a new MCP server;
 - reach through Tailscale Funnel or your own relay on your own domain, and sign-in with a passkey or your own sign-in provider;
 - `delorun verify` checks of isolation, exposure, sign-in, plugins and data sharing, which the report lists as `not run`;
 - a community plugin catalogue with "tested with Delorun X" badges, and a revocation list for known-bad plugin versions;
@@ -104,6 +105,8 @@ These are part of Delorun's plans and are not in the code yet:
 - **From DSH:** setup offers to copy your chats and workspaces from `~/.dsh`, and `delorun import-home` does it any time and asks about your profiles, settings, instructions, skills and key one by one; `~/.dsh` is never changed ([Switching from DeepSeek Harness](switching.md)).
 - **Back to DSH:** your DSH home stays untouched, so stock DSH keeps working beside Delorun. `delorun export` writes chats and workspaces as files that another home imports.
 - **Stock behaviour inside Delorun:** turn off Delorun's studio additions for the stock look, and answer **Same as stock** in `delorun setup prompts` for DSH's prompts.
+
+**Next.** To install Delorun, read [Install and first run](install.md). To keep your DeepSeek Harness work, read [Switching from DeepSeek Harness](switching.md).
 
 ## Roadmap
 

@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-When `delorun` or its npm launcher cannot do what you asked, it prints a refusal: what Delorun did or did not do, why, with an error code, and what you can do. Most refusals change nothing, so you can fix the cause and run the same command again. This page shows how to read a refusal and lists the common ones by code, with their fixes.
+This page helps you get unstuck when `delorun` or its npm launcher cannot do what you asked. It prints a refusal: what Delorun did or did not do, why, with an error code, and what you can do. Most refusals change nothing, so you can fix the cause and run the same command again. Find yours by searching this page for the exact words or the code in the message. Every entry ends with a fix, and [When nothing here fits](#when-nothing-here-fits) says how to ask for help. You need nothing else first.
 
 ## Contents
 
@@ -22,6 +22,7 @@ When `delorun` or its npm launcher cannot do what you asked, it prints a refusal
 - [Remote access and devices](#remote-access-and-devices)
 - [Archives, imports and the trash](#archives-imports-and-the-trash)
 - [When nothing here fits](#when-nothing-here-fits)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Reading a refusal
@@ -143,7 +144,12 @@ Its remedies come from this list: do not take this update; keep the item and wai
 - **`the profile default could not load Delo's bundle`** or **`plugins of Delo's bundles did not start`.** Delorun stops rather than start without its guards and privacy settings, because the profile would otherwise run with DeepSeek Harness's own defaults. The refusal names each package, the cause and the fix.
 - **`the landlock sandbox cannot deny the sockets in "<directory>"`.** Your Linux system has no working bubblewrap, so commands would run under Landlock, which cannot hide the sockets of your login session, and Delorun refuses every sandboxed command while such a directory exists. If the refusal says to install bubblewrap, install the `bubblewrap` package and start again. If it says bubblewrap's check did not finish in time, your computer was busy when Delorun started: start it again. If it says bubblewrap is installed but could not create a sandbox, `delorun doctor` shows why on its `sandbox` line, or run `bwrap --ro-bind / / true` to see why; on Ubuntu the usual cause is its AppArmor restriction on user namespaces (`kernel.apparmor_restrict_unprivileged_userns`), which [a profile for `bwrap`](#letting-bubblewrap-run-under-ubuntus-apparmor-restriction) lifts for `bwrap` alone. Turning the restriction off for the whole system also works, but lowers its protection for every program.
 - **`the sandbox row sets the runner itself`** or **`is configured with expressions`.** Delorun adds its home protection to the sandbox's settings at start, so those settings must leave the choice of sandbox to Delorun and use plain YAML values. Remove what the refusal names.
-- **`delorun headless: … asks for full access in "<folder>", which you have not granted full access`.** A headless task asked to run outside the sandbox in a folder you have not put on full access. Open the folder as a workspace in the studio and choose Full access once, or run the task without full access.
+- **`delorun headless: … asks for full access in "<folder>", which you have not granted full access`.** A headless task asked to run outside the sandbox in a folder you have not put on full access, so it did not start. Run `delorun workspace full-access <folder> on` at your computer, or turn it on in the studio's Settings, Safety, Permissions, then run the task again. Or run the task without full access.
+- **`full access for the workspace "<folder>" needs one consent for that workspace first`.** The model tried to switch a chat to full access in a workspace you have not allowed. It stays on the safer preset. Allow it with the approval card's **Allow for this chat**, in Settings, Safety, Permissions, or with the `delorun workspace full-access <folder> on` command the message prints; see [Full access](safety.md#full-access).
+- **"Approve this at your computer".** You tried to allow full access, an MCP server or another permission change from a phone. These answers are accepted only at the computer that runs Delorun. Do it there; see [What an approved phone can and cannot do](reach.md#what-an-approved-phone-can-and-cannot-do).
+- **`This needs a quick unlock from your computer`.** You tried a sensitive action on a phone. Choose **Unlock** on the phone and approve the code at your computer ([Unlock sensitive actions for a while](reach.md#unlock-sensitive-actions-for-a-while)).
+- **`The network setting could not be read, so every workspace's commands have no network`.** The file that holds the network setting is damaged or other users can read it. Settings, Safety, Network names the problem. Repair or remove the file it names; the workspaces count as Off until you do.
+- **A command is refused because the workspace network is Allowlist or Off.** Your sandbox cannot enforce those settings (only bubblewrap on Linux can), so Delorun refuses the command rather than run it with your network. Set the workspace back to Open in Settings, Safety, Network ([The network setting](safety.md#the-network-setting)).
 - **`Delo could not use the Docker engine`.** Docker did not answer, or refused the request with the HTTP status the refusal names. Start Docker and run the command again.
 
 ### Letting bubblewrap run under Ubuntu's AppArmor restriction
@@ -173,6 +179,15 @@ Load it with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, check that `bwrap 
 
 "Delo could not read or change what Tailscale serves for remote access" comes with Tailscale's own code and message. [Reach the studio from your phone](reach.md) explains what remote access needs.
 
+<details>
+<summary>Edge cases</summary>
+
+- If the same refusal repeats after you fixed its cause, then run `delorun doctor` and read its lines before trying again.
+- If a refusal names a file you cannot find, then it is inside your Delorun home, `~/.delo` or `DELO_HOME`; list it with `ls -la` there.
+- If you run `delorun headless`, then a consent or full-access question that would ask you is refused instead; the refusal names what to allow first.
+
+</details>
+
 ## Archives, imports and the trash
 
 - **"Delo refused the archive and changed nothing."** `delorun import` checks an archive before it writes anything; the code names the entry it refused.
@@ -182,6 +197,12 @@ Load it with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, check that `bwrap 
 ## When nothing here fits
 
 Run `delorun doctor` to check Docker, the model key's format, the home, the studio's port, the release-log check and the last update check, and `delorun logs home` to read the running Delorun's recent records. [Where Delorun keeps its logs](logs.md) explains each log. A refusal that says "Report this" means Delorun found something it cannot explain: report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
+
+## Next
+
+- To check your setup after a fix, run `delorun doctor`, then `delorun status`.
+- To understand what Delorun protects, read [What Delorun protects](safety.md).
+- To read how logs help you, read [Where Delorun keeps its logs](logs.md).
 
 ## For the technically curious
 
