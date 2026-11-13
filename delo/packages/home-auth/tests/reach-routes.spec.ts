@@ -5,16 +5,21 @@
  *
  * Each test's comment names the check whose removal makes that test fail.
  */
+import { generateKeyPairSync, sign } from 'node:crypto'
 import { once } from 'node:events'
 import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { StudioAddress } from '@delo/contract-admission'
+import { REACH_SESSION_COOKIE, type StudioAddress } from '@delo/contract-admission'
+import type { Base64Url, DevicePublicKeyJwk } from '@delo/contract-device-approval'
 import { stampListener } from '../src/arrival.ts'
+import { matchCode } from '../src/match-code.ts'
+import { deviceIdOf } from '../src/records.ts'
+import { signInMessage } from '../src/sign-in.ts'
 import {
-  approvalRequestHandler, approveHandler, assetHandler, challengeHandler, pathnameOf, pendingHandler, REACH_PATHS, SIGN_IN_ASSETS, sessionHandler,
-  landingOf, signInLocation, signInPageHandler, windowHandler,
+  approvalRequestHandler, approveHandler, assetHandler, challengeHandler, landingOf, pathnameOf, pendingHandler, REACH_PATHS, SIGN_IN_ASSETS,
+  SIGN_IN_PAGE, sessionHandler, signInLocation, signInPageHandler, windowHandler,
 } from '../src/reach-routes.ts'
 import type { RouteHandler } from '../src/routes.ts'
 import { homeFixture, keyOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
@@ -97,10 +102,18 @@ describe('the pre-login routes', () => {
     }
     const page = await send('GET', `${REACH_PATHS.signIn}?reach`)
     expect(page.status).toBe(200)
-    expect(page.body).toContain('Add a device')
-    expect(page.body).not.toMatch(/<script>|onerror|<style>/)
-    for (const name of SIGN_IN_ASSETS.keys()) expect((await send('GET', `${REACH_PATHS.assets}/${name}?reach`)).status).toBe(200)
+    expect(page.body).toBe(SIGN_IN_PAGE)
+    expect(page.headers['content-type']).toBe('text/html; charset=utf-8')
+    // The reach listener's gate sets the Content Security Policy; the route adds none that could replace or widen it.
+    expect(page.headers['content-security-policy']).toBeUndefined()
+    for (const [name, asset] of SIGN_IN_ASSETS) {
+      const served = await send('GET', `${REACH_PATHS.assets}/${name}?reach`)
+      expect({ status: served.status, type: served.headers['content-type'] }).toEqual({ status: 200, type: asset.type })
+      expect(served.headers['content-security-policy']).toBeUndefined()
+    }
     expect((await send('GET', `${REACH_PATHS.assets}/sign-in.js?reach`)).status).toBe(404)
+    // The page's markup is read by the route, never served as an asset under any name.
+    expect((await send('GET', `${REACH_PATHS.assets}/sign-in.html?reach`)).status).toBe(404)
     expect((await send('POST', `${REACH_PATHS.request}/some-id?reach`)).status).toBe(405)
     expect(pathnameOf({})).toBe('/')
   })
@@ -118,6 +131,18 @@ describe('the pre-login routes', () => {
     expect([signInLocation('/'), signInLocation('/chat?x=1'), signInLocation('//evil.example')])
       .toEqual(['/auth/sign-in', '/auth/sign-in?next=%2Fchat%3Fx%3D1', '/auth/sign-in'])
     expect([landingOf('/chat'), landingOf('/auth'), landingOf('/x\u0000')]).toEqual(['/chat', undefined, undefined])
+  })
+
+  it('serve a page that runs no inline code or style and loads only its own two assets', () => {
+    // Pins the page to what the reach policy allows without a nonce: no inline script, style element or handler.
+    expect(SIGN_IN_PAGE).not.toMatch(/<script(?![^>]*\bsrc=)|<style|\son[a-z]+=|javascript:/i)
+    const loaded = [...SIGN_IN_PAGE.matchAll(/\s(?:src|href)="([^"#][^"]*)"/g)].map(match => match[1])
+    expect(loaded).toEqual([...SIGN_IN_ASSETS.keys()].reverse().map(name => `${REACH_PATHS.assets}/${name}`).concat('https://docs.delorun.com/guide/reach'))
+    expect(SIGN_IN_PAGE).not.toContain('{{')
+    expect([...SIGN_IN_ASSETS.keys()]).toEqual([expect.stringMatching(/^sign-in-[0-9a-f]{12}\.js$/), expect.stringMatching(/^sign-in-[0-9a-f]{12}\.css$/)])
+    // Every internal reference names an icon of the page's own sprite.
+    for (const [, id] of SIGN_IN_PAGE.matchAll(/href="#([^"]+)"/g)) expect(SIGN_IN_PAGE).toContain(`<symbol id="${id ?? ''}"`)
+    expect(SIGN_IN_PAGE).toContain('<a href="https://docs.delorun.com/guide/reach" target="_blank" rel="noopener noreferrer">')
   })
 
   it('read and refuse request messages', async () => {
@@ -182,6 +207,36 @@ describe('the routes of the home\'s own computer', () => {
     expect((await send('GET', REACH_PATHS.approve)).status).toBe(405)
     // A foreign Host on the loopback port is a rebinding name, not the studio.
     expect(error(await send('GET', REACH_PATHS.pending, undefined, { host: 'rebind.example' }))).toBe('HOST_MISMATCH')
+  })
+
+  it('approve a device on loopback and sign it in on the reach route, rotating the session its cookie names', async () => {
+    const origin = { origin: `http://127.0.0.1:${String(port)}` }
+    const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+    const exported = pair.publicKey.export({ format: 'jwk' })
+    const jwk: DevicePublicKeyJwk = { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>(exported.x ?? ''), y: brandString<Base64Url>(exported.y ?? '') }
+    const deviceId = deviceIdOf(jwk)
+    const deviceNonce = brandString<Base64Url>(Buffer.alloc(16, 5).toString('base64url'))
+    expect((await send('POST', REACH_PATHS.window, undefined, origin)).status).toBe(200)
+    const requested = await send('POST', `${REACH_PATHS.request}?reach`, { v: 1, devicePublicKey: jwk, deviceNonce, label: 'Phone', platform: 'iOS' })
+    const accepted = JSON.parse(requested.body) as { requestId: string; homePublicKey: string; homeNonce: Base64Url }
+    const typedCode = matchCode({ homePublicKey: Buffer.from(accepted.homePublicKey, 'base64url'), deviceId, homeNonce: accepted.homeNonce, deviceNonce, address: ADDRESS })
+    const approved = await send('POST', REACH_PATHS.approve, { requestId: accepted.requestId, typedCode }, origin)
+    expect({ status: approved.status, device: (JSON.parse(approved.body) as { device: unknown }).device }).toEqual({ status: 200, device: { id: deviceId, label: 'Phone', address: ADDRESS } })
+    const signIn = async (cookie?: string): Promise<Reply> => {
+      const { challenge } = JSON.parse((await send('POST', `${REACH_PATHS.challenge}?reach`, { deviceId })).body) as { challenge: string }
+      const signature = sign('sha256', signInMessage(ADDRESS, challenge), { key: pair.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url')
+      return send('POST', `${REACH_PATHS.session}?reach`, { deviceId, challenge, signature }, cookie === undefined ? {} : { cookie })
+    }
+    expect((await signIn()).status).toBe(201)
+    const first = await signIn('theme=dark')
+    expect(first.status).toBe(201)
+    const tokenOf = (reply: Reply): string => new RegExp(`^${REACH_SESSION_COOKIE}=([^;]+);`).exec(String(reply.headers['set-cookie']))?.[1] ?? ''
+    const token = tokenOf(first)
+    expect(token).not.toBe('')
+    // A sign-in that carries the session cookie rotates that session to a new token.
+    const rotated = await signIn(`theme=dark; ${REACH_SESSION_COOKIE}=${token}`)
+    expect(rotated.status).toBe(201)
+    expect(tokenOf(rotated)).not.toBe(token)
   })
 
   it('a tailnet-route session cannot approve a device or open the window', async () => {
