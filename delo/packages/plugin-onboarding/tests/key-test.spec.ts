@@ -20,6 +20,7 @@ function deps(change: Partial<KeyTestDeps> = {}): KeyTestDeps {
   return {
     providers: () => [{ id: 'openai', name: 'OpenAI' }, { id: DEEPSEEK_ROUTE, name: 'DeepSeek' }],
     configurable: () => [{ provider: 'openai', settingsNs: 'llm.openai' }],
+    needsKey: () => true,
     credentialConfigured: vi.fn(async () => true),
     discover: vi.fn(async () => {}),
     deepseek: vi.fn(async () => 'works' as const),
@@ -61,6 +62,20 @@ describe('the key test', () => {
     expect((await testKeys(parts)).providers.map(each => each.result)).toEqual(['untested', 'no-key'])
     expect(credentialConfigured.mock.calls).toEqual([['custom'], ['unset']])
     expect(discover).toHaveBeenCalledExactlyOnceWith('llm.custom', 'custom', expect.any(AbortSignal))
+  })
+
+  it('sends a keyless route straight to discovery, without a credential check', async () => {
+    const credentialConfigured = vi.fn(async () => false)
+    const discover = vi.fn(async () => { throw coded('NO_DISCOVERY') })
+    const parts = deps({
+      providers: () => [{ id: 'local', name: 'Local server' }, { id: 'needy', name: 'Needy' }],
+      configurable: () => [{ provider: 'local', settingsNs: 'llm.local' }],
+      needsKey: provider => provider !== 'local',
+      credentialConfigured,
+      discover,
+    })
+    expect((await testKeys(parts)).providers.map(each => each.result)).toEqual(['untested', 'no-key'])
+    expect(credentialConfigured.mock.calls).toEqual([['needy']])
   })
 
   it('answers failed for a route whose credential cannot be read, and asks its discovery nothing', async () => {
@@ -186,6 +201,27 @@ describe('the key test in the harness', () => {
     controller.abort()
     expect(await result).toBe('unreachable')
     expect(String(fetch.mock.calls[0]?.[0])).toContain('api.deepseek.com')
+  })
+
+  describe('the needs-key check', () => {
+    /** A context whose configurable route `custom` has the given directory facts and settings profile. */
+    function needsContext(extra: object, profile: unknown) {
+      const ctx = new Context()
+      ctx.provide('llm', { listConfigurableProviders: () => [{ provider: 'custom', displayName: 'Custom', settingsNs: 'llm.custom', settingsPath: ['providers', 'custom'], ...extra }] } as never)
+      ctx.provide('settings', { describe: () => [{ ns: 'llm.custom', value: profile }] } as never)
+      return ctx
+    }
+
+    it('needs a key when the profile names a reference or the adapter reports environment variables', () => {
+      expect(keyTestDeps(needsContext({}, { providers: { custom: { apiKeyEnv: 'CUSTOM_API_KEY' } } }), 1000).needsKey('custom')).toBe(true)
+      expect(keyTestDeps(needsContext({ nativeAuth: { env: ['CUSTOM_API_KEY'], oauth: false } }, {}), 1000).needsKey('custom')).toBe(true)
+      expect(keyTestDeps(new Context(), 1000).needsKey('custom')).toBe(true)
+    })
+
+    it('is keyless when the profile names no reference and the adapter reports no environment variable', () => {
+      expect(keyTestDeps(needsContext({}, { providers: { custom: { baseURL: 'http://localhost:11434/v1' } } }), 1000).needsKey('custom')).toBe(false)
+      expect(keyTestDeps(needsContext({ nativeAuth: { env: [], oauth: true } }, {}), 1000).needsKey('custom')).toBe(false)
+    })
   })
 
   describe('the configured-credential check', () => {

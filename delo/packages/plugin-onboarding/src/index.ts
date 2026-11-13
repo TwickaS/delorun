@@ -131,6 +131,22 @@ export function apply(ctx: Context, config: Config): void {
 }
 
 /**
+ * The credential reference a configurable route's settings profile names.
+ * @param ctx - the plugin context.
+ * @param entry - the route's directory entry.
+ * @returns the reference, or undefined when the profile names none.
+ * @throws when the settings service is not mounted, so the profile cannot be read.
+ */
+function credentialRef(ctx: Context, entry: { readonly settingsNs: string; readonly settingsPath: readonly string[] }): string | undefined {
+  const settings = ctx.get('settings')
+  if (settings === undefined) throw new Error('the settings service is not mounted, so the route\'s credential reference cannot be read')
+  let profile: unknown = settings.describe({ redactSecrets: true }).find(row => row.ns === entry.settingsNs)?.value
+  for (const key of entry.settingsPath) profile = typeof profile === 'object' && profile !== null ? Reflect.get(profile, key) : undefined
+  const ref: unknown = typeof profile === 'object' && profile !== null ? Reflect.get(profile, 'apiKeyEnv') : undefined
+  return typeof ref === 'string' && ref !== '' ? ref : undefined
+}
+
+/**
  * The key test's parts in this harness: upstream's provider registry and discoveries, each configurable route's credential
  * as the credentials service describes its reference (`configured`, read without the value), and the official DeepSeek
  * route's listing with the key its credential reference resolves to (`DEEPSEEK_API_KEY`, through the credentials service,
@@ -145,15 +161,17 @@ export function keyTestDeps(ctx: Context, timeoutMs: number): KeyTestDeps {
     timeoutMs,
     providers: () => ctx.get('llm')?.listProviders() ?? [],
     configurable: () => ctx.get('llm')?.listConfigurableProviders() ?? [],
+    needsKey: (provider) => {
+      const entry = ctx.get('llm')?.listConfigurableProviders().find(each => each.provider === provider)
+      // A route the directory does not list is not known to be keyless.
+      if (entry === undefined) return true
+      return credentialRef(ctx, entry) !== undefined || (entry.nativeAuth?.env.length ?? 0) > 0
+    },
     credentialConfigured: async (provider) => {
       const entry = ctx.get('llm')?.listConfigurableProviders().find(each => each.provider === provider)
       if (entry === undefined) return false
-      const settings = ctx.get('settings')
-      if (settings === undefined) throw new Error('the settings service is not mounted, so the route\'s credential reference cannot be read')
-      let profile: unknown = settings.describe({ redactSecrets: true }).find(row => row.ns === entry.settingsNs)?.value
-      for (const key of entry.settingsPath) profile = typeof profile === 'object' && profile !== null ? Reflect.get(profile, key) : undefined
-      const ref: unknown = typeof profile === 'object' && profile !== null ? Reflect.get(profile, 'apiKeyEnv') : undefined
-      if (typeof ref !== 'string' || ref === '') return false
+      const ref = credentialRef(ctx, entry)
+      if (ref === undefined) return false
       const credentials = ctx.get('credentials')
       // Without the credentials service the launch environment is the store, as for the DeepSeek route below.
       if (credentials === undefined) return (env[ref] ?? '') !== ''

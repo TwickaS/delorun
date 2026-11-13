@@ -23,7 +23,7 @@ export interface KeyBannerInjected {
 
 /**
  * Whether the person has no working key: every provider is `no-key` or `rejected`, or there is no provider. A provider
- * that works, is unreachable, failed, or is `untested` (it has a credential or a sign-in whose models cannot be listed)
+ * that works, is unreachable, failed, or is `untested` (it has a credential or a sign-in whose models cannot be listed, or needs no key, as a local model server)
  * might work, so it counts as a key.
  * @param answer - the key test's answer, or undefined when it could not be read.
  * @returns true when the banner should show.

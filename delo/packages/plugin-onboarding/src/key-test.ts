@@ -1,9 +1,9 @@
 /**
  * The host half of the guide's key test: the {@link KEY_TEST_PATH} route tests each usable model provider route's key
- * with the provider's free model listing, never a completion, so it spends no tokens. A route with no configured
- * credential is `no-key` without a listing. A route whose adapter registered a model discovery (every pi-ai route) is
- * asked through upstream's `llm.discoverModels`, which supplies the stored key inside the harness; the official DeepSeek
- * route, which registers none, is asked through its own listing request with the key its credential reference resolves
+ * with the provider's free model listing, never a completion, so it spends no tokens. A route that needs a key and has
+ * no configured credential is `no-key` without a listing; a keyless route, such as a local model server, goes straight
+ * to discovery. A route whose adapter registered a model discovery (every pi-ai route) is asked through upstream's
+ * `llm.discoverModels`, which supplies the stored key inside the harness; the official DeepSeek route, which registers none, is asked through its own listing request with the key its credential reference resolves
  * to. The answer names each route and its result, never a key, an address or a provider's message.
  * @module @delo/plugin-onboarding/key-test
  */
@@ -19,6 +19,14 @@ export interface KeyTestDeps {
   readonly providers: () => readonly { readonly id: string; readonly name: string }[]
   /** @returns the routes a settings page can configure, with the namespace whose discovery serves each. */
   readonly configurable: () => readonly { readonly provider: string; readonly settingsNs: string }[]
+  /**
+   * Whether a route needs an API key: its settings profile names a credential reference, or the adapter reports
+   * environment variables its authentication reads. A route listed by neither, such as a local model server, is keyless.
+   * @param provider - the route.
+   * @returns true when the route needs a key.
+   * @throws the lookup's failure, such as an unmounted settings service.
+   */
+  readonly needsKey: (provider: string) => boolean
   /**
    * Whether a route has a configured credential: its settings profile names a credential reference and the credentials
    * service describes that reference as configured. Reads no value, and runs before the route's listing is tried.
@@ -88,7 +96,7 @@ export function listingResult(error: unknown): KeyResult {
 }
 
 /**
- * Test one route. A route without a configured credential is `no-key` before any discovery runs, since a discovery can
+ * Test one route. A route that needs a key and has no configured credential is `no-key` before any discovery runs, since a discovery can
  * answer for a route that holds no key, such as a catalog's installed models, or refuse a protocol before it reads the
  * key. The official DeepSeek route is decided by its own listing, which reports `no-key` while no key is configured.
  * @param deps - the harness's parts.
@@ -97,7 +105,7 @@ export function listingResult(error: unknown): KeyResult {
  */
 async function testRoute(deps: KeyTestDeps, provider: string): Promise<KeyResult> {
   const signal = AbortSignal.timeout(deps.timeoutMs)
-  if (provider !== DEEPSEEK_ROUTE && !(await deps.credentialConfigured(provider))) return 'no-key'
+  if (provider !== DEEPSEEK_ROUTE && deps.needsKey(provider) && !(await deps.credentialConfigured(provider))) return 'no-key'
   const namespace = deps.configurable().find(each => each.provider === provider)?.settingsNs
   if (namespace !== undefined) {
     try {

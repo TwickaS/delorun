@@ -22,6 +22,7 @@ describe('when the banner shows', () => {
     ['every provider is no-key', answer('no-key', 'no-key'), true],
     ['a provider has a credential but no listing, and no other provider works', answer('no-key', 'untested'), false],
     ['a provider has a credential but no listing, alone', answer('untested'), false],
+    ['a lone keyless local provider, which discovery cannot list', answer('untested'), false],
     ['a provider has no listing, and another works', answer('untested', 'works'), false],
     ['a provider cannot be reached', answer('unreachable'), false],
     ['a provider\'s test failed', answer('failed'), false],
