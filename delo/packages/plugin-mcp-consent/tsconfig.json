@@ -17,6 +17,7 @@
     { "path": "../../../packages/core/system-prompt" },
     { "path": "../../../packages/core/tools" },
     { "path": "../../../packages/core/tool-executor-native" },
+    { "path": "../../../packages/interaction/permission-presets" },
     { "path": "../../../packages/workspace/workspace" }
   ]
 }
