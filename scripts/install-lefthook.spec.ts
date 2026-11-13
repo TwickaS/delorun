@@ -484,6 +484,33 @@ syncBuiltinESMExports()
     expect(run('pre-commit').status).toBe(0)
   })
 
+  it.skipIf(process.platform === 'win32')('keeps refusing a push without lefthook-local.yml after Lefthook rewrites the hook file', async () => {
+    const fixture = createFixture()
+    installRealLefthook(fixture.main)
+    const upstream = readFileSync(new URL('../lefthook.yml', import.meta.url), 'utf8')
+    const prePush = upstream.slice(upstream.indexOf('\npre-push:\n')).replace('pnpm run typecheck', 'exit 0')
+    write(join(fixture.main, 'lefthook.yml'), `pre-commit:\n  jobs:\n    - run: "true"\n${prePush}`)
+    write(join(fixture.main, 'delo/lefthook.yml'), 'pre-push:\n  jobs: []\n')
+    const result = await runInstaller(fixture, fixture.main)
+    expect(result.status, result.stderr).toBe(0)
+    const hook = join(hooksPath(fixture, fixture.main), 'pre-push')
+    expect(readFileSync(hook, 'utf8')).toContain('dsh_root=')
+
+    // A bare `lefthook install`, or Lefthook's own sync when its checksum file differs, writes its plain template.
+    const sync = spawnSync(join(fixture.main, 'node_modules/.bin/lefthook'), ['install', '--force'], { cwd: fixture.main, encoding: 'utf8', env: fixture.env, timeout: 30_000 })
+    expect(sync.status, sync.stderr).toBe(0)
+    expect(readFileSync(hook, 'utf8')).not.toContain('dsh_root=')
+
+    const env = { ...fixture.env, LEFTHOOK_BIN: join(fixture.main, 'node_modules/.bin/lefthook') }
+    const run = () => spawnSync('sh', [hook], { cwd: fixture.main, encoding: 'utf8', env, timeout: 30_000 })
+    const refused = run()
+    expect(refused.status, refused.stdout + refused.stderr).toBe(1)
+    expect(refused.stdout + refused.stderr).toContain('run node delo/apps/tools/src/setup-worktree.ts')
+    write(join(fixture.main, 'lefthook-local.yml'), 'extends:\n  - delo/lefthook.yml\n')
+    const allowed = run()
+    expect(allowed.status, allowed.stdout + allowed.stderr).toBe(0)
+  })
+
   it('refuses a Lefthook template whose gating hooks lack the not-found branch, and restores the hook path', async () => {
     const fixture = createFixture()
     const result = await runInstaller(fixture, fixture.main, { DSH_TEST_LEFTHOOK_BARE_TEMPLATE: '1' })

@@ -1887,6 +1887,12 @@
       "sha256": "c498e8b69270ef080602c2003c3da87f119387d5113fac3770fe611c6465cedd"
     },
     {
+      "path": "lefthook.yml",
+      "class": "security",
+      "reason": "Trunk gate: the pre-push tier opens with a `delo hooks config` job that exits 1 and names setup-worktree.ts while a tree with delo/lefthook.yml has no lefthook-local.yml line extending it, since such a push runs upstream's hooks alone. Lefthook runs the job whichever hook template it has written, so its own re-sync of the hook file (a bare `lefthook install`, or the implicit sync when the shared checksum file differs) cannot drop the protection that scripts/install-lefthook.mjs adds to the hook file. A denial test in scripts/install-lefthook.spec.ts rewrites the hook with the installed Lefthook and fails without the job. Awaits the lead's review.",
+      "sha256": "04d6cad56c9812dde10d04e2b2bf09c31bfc621dd4aabf33916952aec4061107"
+    },
+    {
       "path": "apps/cli/src/profile-boot.ts",
       "class": "delo-feature",
       "feature": "home-process-signals",

@@ -45,5 +45,16 @@ pre-merge-commit:
 
 pre-push:
   jobs:
+    # Lefthook runs this job whichever hook template it has written, so a re-sync
+    # that drops the installer's guard from the hook file cannot let a push
+    # through without Delorun's checks. install-lefthook.mjs keeps the hook-file
+    # guard too, which refuses before Lefthook starts.
+    - name: delo hooks config
+      run: |
+        if [ -f delo/lefthook.yml ] && ! grep -Eqs '^[^#]*delo/lefthook[.]yml' lefthook-local.yml; then
+          echo "lefthook-local.yml does not extend delo/lefthook.yml, so Delorun's pre-push checks cannot run; run node delo/apps/tools/src/setup-worktree.ts, or write lefthook-local.yml with extends: [delo/lefthook.yml], and retry" >&2
+          exit 1
+        fi
+
     - name: typecheck
       run: pnpm run typecheck
