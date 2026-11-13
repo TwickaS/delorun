@@ -5,6 +5,7 @@
  */
 import Link from 'fumadocs-core/link'
 import { HomeLayout } from 'fumadocs-ui/layouts/home'
+import { WhatsNew } from '@/components/changelog.tsx'
 import { baseOptions } from '@/components/layout.tsx'
 import { PageFooter } from '@/theme/footer.tsx'
 import { COPY } from '@/site/copy.ts'
@@ -37,6 +38,7 @@ export function Home({ locale }: { locale: Locale }) {
             <p className="text-fd-muted-foreground">{copy.entries.developerText}</p>
           </li>
         </ul>
+        <WhatsNew locale={locale} />
         <PageFooter><p>{copy.describes(deloVersion())}</p></PageFooter>
       </main>
     </HomeLayout>

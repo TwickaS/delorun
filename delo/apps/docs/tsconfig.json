@@ -32,6 +32,8 @@
     "**/*.tsx"
   ],
   "exclude": [
+    "tests",
+    "scripts",
     "node_modules",
     "out",
     ".build",

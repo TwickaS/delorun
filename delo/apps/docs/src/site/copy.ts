@@ -25,6 +25,21 @@ export interface Copy {
     readonly developerTitle: string
     readonly developerText: string
   }
+  /** The changelog page and the home page's What's new section, which the build omits when no version is assembled. */
+  readonly changelog: {
+    /** The page's title, its heading and the header of the home section's link. */
+    readonly title: string
+    /** The page's opening sentence. */
+    readonly intro: string
+    /** The home section's heading. */
+    readonly whatsNew: string
+    /** The home section's latest-version line. */
+    readonly latest: (version: string, date: string) => string
+    /** The home section's link to the page. */
+    readonly full: string
+    /** The heading of the upstream block that ends each version. */
+    readonly fromUpstream: string
+  }
   readonly sectionNames: { readonly guide: string, readonly reference: string }
   readonly productLabel: string
   readonly notFoundTitle: string
@@ -49,6 +64,14 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
       developerTitle: "I'm a developer",
       developerText: 'The developer reference: how Delorun differs from DeepSeek Harness, the parity checklist and the other pages for maintainers.',
     },
+    changelog: {
+      title: 'Changelog',
+      intro: 'What changed in each Delorun version, newest first, and how Delorun differs from DeepSeek Harness. The entries are in English.',
+      whatsNew: "What's new",
+      latest: (version, date) => `Delorun ${version}, ${date}`,
+      full: 'Full changelog',
+      fromUpstream: 'From upstream',
+    },
     sectionNames: { guide: 'User guide', reference: 'Developer reference' },
     productLabel: 'Delo Run',
     notFoundTitle: 'Page not found',
@@ -69,6 +92,14 @@ export const COPY: Readonly<Record<Locale, Copy>> = {
       taskText: '用户指南的目录按你想做的事列出所有任务：日常使用、迁移、更新、远程访问、安全与故障排除。',
       developerTitle: '我是开发者',
       developerText: '参考资料：术语表、与上游的差异记录、一致性清单，以及面向维护者的其他页面。',
+    },
+    changelog: {
+      title: '更新日志',
+      intro: '每个 Delo 版本的变化（最新版本在前），以及 Delo 与 DeepSeek Harness 的差异。条目为英文。',
+      whatsNew: '新内容',
+      latest: (version, date) => `Delo ${version}，${date}`,
+      full: '完整更新日志',
+      fromUpstream: '来自上游',
     },
     sectionNames: { guide: '用户指南', reference: '开发者参考' },
     productLabel: 'Delo Run',
