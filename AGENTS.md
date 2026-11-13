@@ -98,6 +98,7 @@ website/     upstream's VitePress documentation projection, unmodified
 delo/        Delo-owned code and documentation
   apps/cli              `delorun` command
   apps/release          closures, signing, release log
+  apps/release-channel  production release channel on Cloudflare
   apps/install, apps/npm-launcher  installers
   apps/docs             Fumadocs documentation website
   apps/account          Delo Run pages and waitlist

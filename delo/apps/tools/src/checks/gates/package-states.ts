@@ -38,6 +38,7 @@ export const ROOT_DIRS = [
   'delo/apps/npm-launcher',
   'delo/apps/install',
   'delo/apps/release',
+  'delo/apps/release-channel',
   'delo/apps/tools',
   'delo/apps/docs',
 ] as const

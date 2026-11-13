@@ -1661,6 +1661,24 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
 
+  delo/apps/release-channel:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delo/contract-release-manifest':
+        specifier: workspace:*
+        version: link:../../packages/contract-release-manifest
+      '@delo/release':
+        specifier: workspace:*
+        version: link:../release
+      '@delo/release-formats':
+        specifier: workspace:*
+        version: link:../../packages/release-formats
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
+
   delo/apps/runtime-closure:
     dependencies:
       '@delo/cli':
@@ -24634,6 +24652,9 @@ packages:
   aws4@1.13.2:
     resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
 
+  aws4fetch@1.0.20:
+    resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
+
   b4a@1.8.1:
     resolution: {integrity: sha512-aiqre1Nr0B/6DgE2N5vwTc+2/oQZ4Wh1t4NznYY4E00y8LCt6NqdRv81so00oo27D8MVKTpUa/MwUUtBLXCoDw==}
     peerDependencies:
@@ -32471,6 +32492,8 @@ snapshots:
   aws-sign2@0.7.0: {}
 
   aws4@1.13.2: {}
+
+  aws4fetch@1.0.20: {}
 
   b4a@1.8.1: {}
 

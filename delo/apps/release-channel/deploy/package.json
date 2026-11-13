@@ -1,0 +1,22 @@
+{
+  "name": "@delo/release-channel-deploy",
+  "version": "0.0.0",
+  "description": "The release channel's Alchemy deployment, its own workspace so Alchemy's dependencies stay out of the repository's lockfile.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@alchemy.run/cloudflare": "2.0.0-beta.84",
+    "@effect/platform-node": "4.0.7",
+    "@types/node": "26.6.5",
+    "alchemy": "2.0.0-beta.84",
+    "effect": "4.0.7",
+    "typescript": "6.0.3"
+  },
+  "delo": {
+    "state": "shipped"
+  }
+}
