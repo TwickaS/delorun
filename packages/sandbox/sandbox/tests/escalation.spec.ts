@@ -113,6 +113,14 @@ describe('approveEscalation', () => {
     expect(seen[1]).not.toHaveProperty('grants')
   })
 
+  it('names the requested mode on the request so a presenter can offer to switch the session to it', async () => {
+    const seen: { escalatesTo?: string }[] = []
+    const sink = approver('allowed-once', r => seen.push(r as { escalatesTo?: string }))
+    await approveEscalation(req({ requestedMode: 'danger-full-access' }), ingredients({ approver: sink }))
+    await approveEscalation(req(), ingredients({ approver: sink }))
+    expect(seen.map(request => request.escalatesTo)).toEqual(['danger-full-access', 'workspace-write'])
+  })
+
   it.each(ESCALATION_TARGETS)('repeating %s succeeds without asking for approval', async (mode) => {
     const seen: unknown[] = []
     const request = req({ requestedMode: mode, effectiveMode: mode })
