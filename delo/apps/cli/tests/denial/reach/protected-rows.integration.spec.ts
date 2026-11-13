@@ -27,7 +27,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
 import {
-  DeviceStore, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
+  DEFAULT_PERMISSION_REFUSAL, DeviceStore, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
 } from '@delo/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delo/plugin-delegation-consent'
 import { DELEGATION_CONSENT_ROW } from '@delo/plugin-delegation-consent/wire'
@@ -238,6 +238,24 @@ describe('an unlocked device and the computer-only switches', () => {
     await expectDenied('settings/replace', { ns, section: { runTimeoutMinutes: 30 } }, off)
     await expectAdmitted('settings/update', { ns, patch: { runTimeoutMinutes: 45 } })
     expect(studio.ctx.get('delegationConsent')).toBeDefined()
+  })
+
+  it('never loosens the permission new chats start in, and may tighten it', async () => {
+    // The composition's new chats start in workspace-write, with approval asked.
+    expect(studio.ctx.get('permissionPresets')?.defaultPreset).toBe('workspace-write')
+    await expectDenied('settings/update', { ns: 'permission', patch: { defaultPreset: 'danger-full-access' } }, DEFAULT_PERMISSION_REFUSAL)
+    await expectDenied('settings/mutate', { ns: 'permission', ops: [{ op: 'unset', path: ['defaultPreset'] }] }, DEFAULT_PERMISSION_REFUSAL)
+    await expectAdmitted('settings/update', { ns: 'permission', patch: { defaultPreset: 'read-only' } })
+  })
+
+  it('finds only execution limits among the bash sandbox\'s live fields, none of which widens the sandbox', async () => {
+    // The sandbox mode and its writable roots belong to the sandbox-policy row, which has no live field; a live field
+    // the bash sandbox gains fails here until the reach policy decides whether a device may change it.
+    const described = await expectAdmitted('settings/describe', {}) as { readonly ok: true; readonly value: { readonly namespaces: readonly { readonly ns: string; readonly schema: { readonly uid: number; readonly refs: Record<string, { readonly dict?: Record<string, number> }> } }[] } }
+    const views = described.value.namespaces
+    expect(views.some(view => view.ns === 'sandbox-policy')).toBe(false)
+    const schema = views.find(view => view.ns === 'bash-sandbox')?.schema
+    expect(Object.keys(schema?.refs[String(schema.uid)]?.dict ?? {}).sort()).toEqual(['cwd', 'graceMs', 'maxOutputBytes', 'maxSpillBytes', 'maxTimeoutMs', 'timeoutMs'])
   })
 
   it('never turns the terminal switch on, through any writer it reaches', async () => {

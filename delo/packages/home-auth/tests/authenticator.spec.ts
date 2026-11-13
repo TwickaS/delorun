@@ -18,7 +18,7 @@ import type { RemoteAccessBinding, RemoteAccessPolicy } from '@deepseek-ai/dsh-a
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SESSION_LIMITS, type StudioAddress } from '@delo/contract-admission'
 import { HomeAuthService } from '../src/service.ts'
-import { EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
+import { defaultPermissionOf, EXTERNAL_AGENT_REFUSAL, FULL_ACCESS_REFUSAL, HomeAuthAuthenticator, matchesPreLogin, protectedEntryIdsOf, registerReachPolicy, WORKSPACE_MANAGEMENT_REFUSAL } from '../src/authenticator.ts'
 import { createReachAccessPolicy, REACH_ALLOWED_ACTIONS, reachDevicePrincipal, type ReachDevicePrincipal } from '../src/reach-access.ts'
 import { REQUEST_LISTENER } from '../src/arrival.ts'
 import { DeviceStore } from '../src/devices.ts'
@@ -307,7 +307,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [], protectedEntryIds: () => new Set() })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [], protectedEntryIds: () => new Set(), defaultPermission: () => undefined })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -465,6 +465,35 @@ describe('the authenticator provider', () => {
       entries[0] = { id: 'include:plugin-manager', options: { name: '@deepseek-ai/dsh-plugin-manager', config: { protectedPlugins: 'all' } } } as never
       expect(protectedEntryIdsOf(ctx)).toBeUndefined()
       expect(enable('include:delo-trash')).toEqual({ kind: 'deny', reason: 'loopback-required: changing a protected plugin row' })
+    })
+
+    it('reads the permission new chats start in from the running permission presets', async () => {
+      const access = await fakeRemoteAccess()
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
+      const condition = access.policy().bindings(device)[0]?.condition
+      const loosen = { ns: 'permission', patch: { defaultPreset: 'danger-full-access' } }
+      const decide = () => condition?.({ action: 'settings/update', resource: { kind: 'global' }, args: loosen } as never)
+      expect(defaultPermissionOf(ctx)).toBeUndefined()
+      expect(decide()).toEqual({ kind: 'deny', reason: 'elevation-required: settings/update' })
+      const levels: Record<string, { sandbox: string; approval: string }> = {
+        'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
+        'danger-full-access': { sandbox: 'danger-full-access', approval: 'never' },
+      }
+      let defaultPreset = 'workspace-write'
+      ctx.provide('permissionPresets', {
+        get defaultPreset() { if (!(defaultPreset in levels)) throw new Error('unknown default'); return defaultPreset },
+        resolve: (name: string) => { const level = levels[name]; if (level === undefined) throw new Error(`unknown preset ${name}`); return level },
+      } as never)
+      expect(defaultPermissionOf(ctx)?.namespaces).toEqual(new Set())
+      ctx.provide('loader', { entries: () => [{ id: 'include:permission', options: { id: 'permission', name: '@deepseek-ai/dsh-permission-presets' } }] } as never)
+      // Pins the presets fact: the namespace comes from the Loader row, the levels from the running presets.
+      expect(defaultPermissionOf(ctx)).toMatchObject({ namespaces: new Set(['permission']), current: levels['workspace-write'] })
+      expect(defaultPermissionOf(ctx)?.levelOf('nothing')).toBeUndefined()
+      expect(decide()).toEqual({ kind: 'deny', reason: 'loopback-required: loosening the permission new chats start in' })
+      defaultPreset = 'gone'
+      expect(defaultPermissionOf(ctx)?.current).toBeUndefined()
     })
 
     it('recomputes each admitted device\'s snapshot when a Session or a Workspace changes', async () => {

@@ -539,6 +539,91 @@ function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string
   }
 }
 
+/** The reason a settings write that would loosen the permission new chats start in is refused to a device, unlocked or not. */
+export const DEFAULT_PERMISSION_REFUSAL = 'loopback-required: loosening the permission new chats start in'
+
+/** A permission preset's sandbox mode and approval policy, which a device may tighten but not loosen. */
+export interface PermissionLevel {
+  readonly sandbox: string
+  readonly approval: string
+}
+
+/** The permission new chats start in, as the permission-preset rows hold it. */
+export interface DefaultPermission {
+  /** The settings namespaces of the permission-preset rows, whose `defaultPreset` names it. */
+  readonly namespaces: ReadonlySet<string>
+  /** The level of the preset new chats start in now; undefined when it cannot be read. */
+  readonly current: PermissionLevel | undefined
+  /**
+   * The level of one preset.
+   * @param name - the preset's key.
+   * @returns its level, or undefined for a name the rows do not hold.
+   */
+  readonly levelOf: (name: string) => PermissionLevel | undefined
+}
+
+/** Sandbox modes and approval policies from the strictest to the loosest. */
+const SANDBOX_ORDER: readonly string[] = ['read-only', 'workspace-write', 'danger-full-access']
+const APPROVAL_ORDER: readonly string[] = ['ask', 'never']
+
+/**
+ * Whether a level is looser than another in its sandbox mode or approval policy; an unknown value counts as loosest.
+ * @param next - the level a write would set.
+ * @param current - the level now.
+ * @returns whether it is.
+ */
+function looser(next: PermissionLevel, current: PermissionLevel): boolean {
+  const rank = (order: readonly string[], value: string): number => order.includes(value) ? order.indexOf(value) : order.length
+  return rank(SANDBOX_ORDER, next.sandbox) > rank(SANDBOX_ORDER, current.sandbox)
+    || rank(APPROVAL_ORDER, next.approval) > rank(APPROVAL_ORDER, current.approval)
+}
+
+/**
+ * The `defaultPreset` values a settings write sets: undefined for one that removes it, which falls back to an inferred
+ * preset, and for arguments the condition cannot read.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @returns the values, empty when the write leaves `defaultPreset` alone.
+ */
+function presetsWritten(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): readonly unknown[] {
+  const field = 'defaultPreset'
+  switch (action) {
+    case 'settings/mutate':
+      if (!Array.isArray(args.ops)) return [undefined]
+      return args.ops.flatMap((op: unknown) => {
+        if (!isObject(op) || !Array.isArray(op.path)) return [undefined]
+        const [head, ...rest] = op.path as unknown[]
+        if (head === undefined) return [op.op === 'set' && isObject(op.value) ? op.value[field] : undefined]
+        if (head !== field) return []
+        return [rest.length === 0 && op.op === 'set' ? op.value : undefined]
+      })
+    case 'settings/update':
+      if (!isObject(args.patch)) return [undefined]
+      return field in args.patch ? [args.patch[field]] : []
+    default:
+      // `settings/replace`, the only other member of SETTINGS_WRITES.
+      return [isObject(args.section) ? args.section[field] : undefined]
+  }
+}
+
+/**
+ * Whether a settings write could loosen the permission new chats start in: it writes a permission-preset row's
+ * `defaultPreset` to a preset whose sandbox mode or approval policy is looser than the current one, to a preset the
+ * rows do not hold, or away, or while the current preset cannot be read.
+ * @param action - the settings write.
+ * @param args - the call's arguments.
+ * @param permission - the permission new chats start in, or undefined without permission presets.
+ * @returns whether the write is refused to a device.
+ */
+function loosensDefaultPermission(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, permission: DefaultPermission | undefined): boolean {
+  if (permission === undefined || typeof args.ns !== 'string' || !permission.namespaces.has(args.ns)) return false
+  const { current } = permission
+  return presetsWritten(action, args).some((name) => {
+    const next = typeof name === 'string' ? permission.levelOf(name) : undefined
+    return next === undefined || current === undefined || looser(next, current)
+  })
+}
+
 /**
  * The plugin-manager calls whose arguments name one plugin row by its Loader entry id. Every other plugin-manager
  * change (bundles, installs, version exemptions, undo and restore) changes rows the policy cannot see from the call's
@@ -649,7 +734,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches' | 'protectedEntryIds'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches' | 'protectedEntryIds' | 'defaultPermission'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener } = principal
@@ -668,11 +753,12 @@ export function createCondition(
   }
   return ({ action, resource, args }) => {
     if (args !== undefined) {
-      // A computer-only switch stays on, a protected row stays as it is, and a command a device does not run stays
-      // unrun, so no unlock admits any of them.
+      // A computer-only switch stays on, new chats' permission stays as loose as it is, a protected row stays as it is,
+      // and a command a device does not run stays unrun, so no unlock admits any of them.
       if (SETTINGS_WRITES.has(action)) {
         const off = facts.computerOnlySwitches().find(target => turnsSwitchOff(action, args, target))
         if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
+        if (loosensDefaultPermission(action, args, facts.defaultPermission())) return { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
       }
       if (ROW_CALLS.has(action) && namesProtectedRow(facts, args)) return { kind: 'deny', reason: PROTECTED_ROW_REFUSAL }
       if (action === 'commands/execute' && !runsDeviceCommand(args)) return { kind: 'deny', reason: UNLISTED_COMMAND_REFUSAL }
@@ -766,6 +852,11 @@ export interface ReachAccessFacts {
    * @returns the ids, or undefined when the list cannot be read.
    */
   readonly protectedEntryIds: () => ReadonlySet<string> | undefined
+  /**
+   * The permission new chats start in, which a device's settings write may tighten but not loosen.
+   * @returns it, or undefined while no permission presets run.
+   */
+  readonly defaultPermission: () => DefaultPermission | undefined
 }
 
 /**

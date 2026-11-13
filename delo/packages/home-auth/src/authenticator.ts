@@ -28,6 +28,7 @@ import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-working-directory'
+import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from './full-access-grants.ts'
 import { Authenticator, LOOPBACK_LISTENER, type Admission, type ConnectionIndexRequest, type ListenerPolicy, type PreLoginRoute } from '@deepseek-ai/dsh-client-connection'
 import type { RemoteAnswerGuard, RemoteEventAnswer } from '@deepseek-ai/dsh-api-gateway'
@@ -38,7 +39,7 @@ import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc
 import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
 import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie, signInLocation, targetOf } from './reach-routes.ts'
-import { createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type ReachDevicePrincipal } from './reach-access.ts'
+import { createReachAccessPolicy, protectedPluginsIn, REACH_DEVICE, reachDevicePrincipal, type DefaultPermission, type PermissionLevel, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
 import { HOME_AUTH_HTTP_STATUS } from './errors.ts'
 
@@ -170,6 +171,36 @@ export function protectedEntryIdsOf(ctx: Context): ReadonlySet<string> | undefin
   return new Set(entries.filter(row => modules.has(row.options.name)).map(row => row.id))
 }
 
+/** The module of upstream's permission presets, whose rows' `defaultPreset` names the permission new chats start in. */
+const PERMISSION_PRESETS_MODULE = '@deepseek-ai/dsh-permission-presets'
+
+/**
+ * The permission new chats start in, read from the running permission presets when asked.
+ * @param ctx - a context of the running profile.
+ * @returns it, or undefined while no `permissionPresets` service runs.
+ */
+export function defaultPermissionOf(ctx: Context): DefaultPermission | undefined {
+  const presets = ctx.get('permissionPresets')
+  if (presets === undefined) return undefined
+  const levelOf = (name: string): PermissionLevel | undefined => {
+    try {
+      return presets.resolve(name)
+    } catch (_unknownPreset) {
+      // `resolve` throws for a name the presets do not hold, which the policy refuses.
+      return undefined
+    }
+  }
+  let current: PermissionLevel | undefined
+  try {
+    current = levelOf(presets.defaultPreset)
+  } catch (_unreadable) {
+    // A default preset the presets do not hold cannot be read; the policy refuses every change of it.
+    current = undefined
+  }
+  const rows = [...ctx.get('loader')?.entries() ?? []].filter(entry => entry.options.name === PERMISSION_PRESETS_MODULE)
+  return { namespaces: new Set(rows.map(entry => entry.options.id)), current, levelOf }
+}
+
 /** The provider. */
 export class HomeAuthAuthenticator extends Authenticator {
   static inject = ['homeAuth', 'connection']
@@ -216,6 +247,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         terminalWithoutUnlock: () => ctx.homeAuth.terminalWithoutUnlock(),
         computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
         protectedEntryIds: () => protectedEntryIdsOf(ctx),
+        defaultPermission: () => defaultPermissionOf(access),
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {

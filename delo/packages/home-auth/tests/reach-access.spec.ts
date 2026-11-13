@@ -18,6 +18,7 @@ import {
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
   CREATE_OUTSIDE_WORKSPACES,
+  DEFAULT_PERMISSION_REFUSAL,
   PROTECTED_ROW_REFUSAL,
   REACH_DEVICE_COMMANDS,
   UNLISTED_COMMAND_REFUSAL,
@@ -29,6 +30,8 @@ import {
   reachRefusal,
   switchOffRefusal,
   type ComputerOnlySwitch,
+  type DefaultPermission,
+  type PermissionLevel,
   type ReachAccessFacts,
 } from '../src/reach-access.ts'
 
@@ -42,6 +45,16 @@ const GLOBAL = { kind: 'global' } as const
 const CONSENT: ComputerOnlySwitch = { ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' }
 /** The Loader entry id of a row whose module the `plugin-manager` row protects. */
 const PROTECTED_ROW = 'include:delo-permission-defaults'
+
+/** The permission-preset row of a profile whose new chats start in `workspace-write`, with one preset per looser step. */
+const LEVELS: Readonly<Record<string, PermissionLevel>> = {
+  'read-only': { sandbox: 'read-only', approval: 'ask' },
+  'workspace-write': { sandbox: 'workspace-write', approval: 'ask' },
+  'workspace-never': { sandbox: 'workspace-write', approval: 'never' },
+  'danger-full-access': { sandbox: 'danger-full-access', approval: 'never' },
+  'odd-sandbox': { sandbox: 'container', approval: 'ask' },
+}
+const PERMISSION: DefaultPermission = { namespaces: new Set(['permission']), current: LEVELS['workspace-write'], levelOf: name => LEVELS[name] }
 
 function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
   return {
@@ -60,6 +73,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     terminalWithoutUnlock: () => false,
     computerOnlySwitches: () => [CONSENT],
     protectedEntryIds: () => new Set([PROTECTED_ROW]),
+    defaultPermission: () => PERMISSION,
     ...overrides,
   }
 }
@@ -282,6 +296,60 @@ describe('a session/create', () => {
     expect(create({ cwd: other }, unlocked)).toEqual(ALLOW)
     expect(create({ workspaceId: 'w-1' }, unlocked)).toEqual(ALLOW)
     expect(lines).toEqual([`home-auth: elevated action: device=device-1 listener=${LISTENER} action=session/create elevation=elevation-1`])
+  })
+})
+
+describe('the permission new chats start in', () => {
+  const LOOSER = { kind: 'deny', reason: DEFAULT_PERMISSION_REFUSAL }
+  const ALLOW = { kind: 'allow' }
+  const unlocked = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)
+  const write = (action: string, args: Record<string, unknown>) => unlocked({ action: action as RemoteAccessAction, resource: GLOBAL, args })
+  const ns = 'permission'
+
+  it('is never loosened from a device, even under an unlock, through any settings write', () => {
+    expect(DEFAULT_PERMISSION_REFUSAL).toBe('loopback-required: loosening the permission new chats start in')
+    for (const preset of ['danger-full-access', 'workspace-never', 'odd-sandbox', 'no-such-preset']) {
+      expect(write('settings/update', { ns, patch: { defaultPreset: preset } }), preset).toEqual(LOOSER)
+    }
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['defaultPreset'], value: 'danger-full-access' }] })).toEqual(LOOSER)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: [], value: { defaultPreset: 'danger-full-access' } }] })).toEqual(LOOSER)
+    expect(write('settings/replace', { ns, section: { defaultPreset: 'danger-full-access' } })).toEqual(LOOSER)
+    // A write that removes the field falls back to an inferred preset, and arguments it cannot read are refused.
+    for (const [action, args] of [
+      ['settings/mutate', { ns, ops: [{ op: 'unset', path: ['defaultPreset'] }] }],
+      ['settings/mutate', { ns, ops: [{ op: 'unset', path: [] }] }],
+      ['settings/mutate', { ns, ops: [{ op: 'set', path: ['defaultPreset', 'x'], value: 'read-only' }] }],
+      ['settings/mutate', { ns, ops: [null] }],
+      ['settings/mutate', { ns }],
+      ['settings/update', { ns, patch: [] }],
+      ['settings/update', { ns, patch: { defaultPreset: 3 } }],
+      ['settings/replace', { ns, section: {} }],
+      ['settings/replace', { ns }],
+    ] as const) {
+      expect(write(action, args), JSON.stringify(args)).toEqual(LOOSER)
+    }
+    // Without an unlock it is refused the same way.
+    expect(createCondition(facts(), DEVICE)({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { defaultPreset: 'danger-full-access' } } })).toEqual(LOOSER)
+  })
+
+  it('is tightened or kept from an unlocked device, and other fields and namespaces are ordinary writes', () => {
+    expect(write('settings/update', { ns, patch: { defaultPreset: 'read-only' } })).toEqual(ALLOW)
+    expect(write('settings/update', { ns, patch: { defaultPreset: 'workspace-write' } })).toEqual(ALLOW)
+    expect(write('settings/mutate', { ns, ops: [{ op: 'set', path: ['defaultPreset'], value: 'read-only' }, { op: 'set', path: ['other'], value: 1 }] })).toEqual(ALLOW)
+    expect(write('settings/replace', { ns, section: { defaultPreset: 'read-only' } })).toEqual(ALLOW)
+    expect(write('settings/update', { ns, patch: { other: 1 } })).toEqual(ALLOW)
+    expect(write('settings/update', { ns: 'bash-sandbox', patch: { defaultPreset: 'danger-full-access' } })).toEqual(ALLOW)
+    // From a full-access default, a device may step back to workspace-write.
+    const loose = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), defaultPermission: () => ({ ...PERMISSION, current: LEVELS['danger-full-access'] }) }), DEVICE)
+    expect(loose({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { defaultPreset: 'workspace-write' } } })).toEqual(ALLOW)
+  })
+
+  it('refuses every change of it while the current preset cannot be read, and decides nothing without permission presets', () => {
+    const unread = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), defaultPermission: () => ({ ...PERMISSION, current: undefined }) }), DEVICE)
+    expect(unread({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { defaultPreset: 'read-only' } } })).toEqual(LOOSER)
+    const none = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), defaultPermission: () => undefined }), DEVICE)
+    expect(none({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { defaultPreset: 'danger-full-access' } } })).toEqual(ALLOW)
+    expect(write('settings/update', { patch: { defaultPreset: 'danger-full-access' } })).toEqual(ALLOW)
   })
 })
 

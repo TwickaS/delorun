@@ -2141,6 +2141,9 @@ importers:
       '@deepseek-ai/dsh-commands':
         specifier: workspace:*
         version: link:../../../packages/interaction/commands
+      '@deepseek-ai/dsh-permission-presets':
+        specifier: workspace:*
+        version: link:../../../packages/interaction/permission-presets
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../../packages/core/session

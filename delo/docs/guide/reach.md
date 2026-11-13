@@ -79,6 +79,7 @@ Never, even unlocked:
 - accept, decline or revoke an MCP server; the phone names the servers waiting for your OK and says to approve them at your computer, and Settings, Permissions on the phone says the same;
 - read or change your keys and other credentials, or your account;
 - turn off **Ask before external agents run**; the phone can still turn it on and change its run time limit;
+- loosen the permission new chats start in, such as moving it toward full access; the phone can still make it stricter;
 - answer a prompt that would let the agent manage workspaces and their instructions;
 - open a file or folder in an application on your computer, or open the settings file in an editor there;
 - approve or remove devices, change remote access, unlock itself or make an unlock longer, or reset the home.
