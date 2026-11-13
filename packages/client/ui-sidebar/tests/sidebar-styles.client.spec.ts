@@ -107,7 +107,8 @@ describe('SidebarRoot.module.css', () => {
     // The surface the expanded sidebar has, since it no longer sits inside the
     // frame's column that drew them.
     expect(peek?.get('background')).toBe('var(--dsw-specific-sidebar-fill)')
-    expect(peek?.get('border-right')).toBe('0.5px solid var(--dsw-alias-border-l3)')
+    // The shadow's hairline is the divider; a neutral border beside it would draw the edge twice.
+    expect(peek?.get('border-right')).toBeUndefined()
     expect(peek?.get('box-shadow')).toBe('var(--dsw-shadow-lv2)')
     expect(peek?.get('z-index')).toBe('90')
     expect(peek?.get('transition')).toBe('width 140ms ease-out')
