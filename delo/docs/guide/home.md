@@ -8,7 +8,7 @@ English | [中文](home.zh.md)
 
 ## Summary
 
-Delorun keeps everything in one folder, your Delorun home: `~/.delo`, or `%USERPROFILE%\.delo` on Windows. Your chats, workspaces, profiles, keys and Delorun's own records all live there. `delorun` creates it the first time it runs and makes it readable by you alone. Back up that folder and you have backed up Delorun.
+This page tells you where Delorun keeps your data, how to move it, how profiles work, and what to do when Delorun refuses a file because other users can read it. You need nothing first; `delorun` creates the folder the first time it runs ([Install and first run](install.md)). Delorun keeps everything in one folder, your [Delorun home](../reference/glossary.md#home): `~/.delo`, or `%USERPROFILE%\.delo` on Windows. Your chats, workspaces, profiles, keys and Delorun's own records all live there. `delorun` creates it the first time it runs and makes it readable by you alone. Back up that folder and you have backed up Delorun.
 
 ## Contents
 
@@ -17,6 +17,7 @@ Delorun keeps everything in one folder, your Delorun home: `~/.delo`, or `%USERP
 - [Profiles](#profiles)
 - [Your DeepSeek Harness home](#your-deepseek-harness-home)
 - [Fixing permissions](#fixing-permissions)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Where the home is
@@ -35,7 +36,7 @@ The first `delorun` on a new home runs setup ([Install and first run](install.md
 
 ## Profiles
 
-A profile is one setup of Delorun: its plugins, their settings and its studio port. Most people need only the one setup creates, `default`. To use another, pass `--profile <name>` or set `DELO_PROFILE`:
+A [profile](../reference/glossary.md#profile) is one setup of Delorun: its plugins, their settings and its studio port. Most people need only the one setup creates, `default`. To use another, pass `--profile <name>` or set `DELO_PROFILE`:
 
 ```sh
 delorun --profile work          # sets up the profile the first time, then starts it
@@ -62,6 +63,36 @@ What you can do:
 ```
 
 Run the printed `chmod` command, then run `delorun` again. Delorun never changes these permissions for you, so a mistake stays visible. A home, folder or secret file that is a symbolic link, or belongs to another user, is refused too, with no command to fix it: move it away and let `delorun` create it again. On Windows, Delorun does not check these permissions yet.
+
+<details>
+<summary>Edge cases</summary>
+
+- If `DELO_HOME` is not an absolute path and does not start with `~`, then `delorun` refuses it.
+- If `DELO_HOME` names your home folder, the filesystem root, or `~/.dsh` or a folder inside it, then `delorun` refuses it.
+- If you set `DSH_HOME`, then `delorun` ignores it and `delorun status` says so.
+- If a profile name uses capitals, spaces or more than 32 characters, or is `desktop`, `headless` or a Windows device name such as `con`, then `delorun` refuses it.
+- If another user can read your home or a secret file, then Delorun refuses to use it and prints the `chmod` command that fixes it ([Fixing permissions](#fixing-permissions)).
+- If a file or folder in the home is a symbolic link or belongs to another user, then Delorun refuses it with no command to fix it. Move it away and let `delorun` create it again.
+- If you run Delorun on Windows, then it does not check these permissions yet.
+- If two commands change the home at once, then the second refuses with `another process … holds the home lock`. Wait, then run it again ([Starting and stopping](troubleshooting.md#starting-and-stopping)).
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- Keep a work setup apart from a personal one: `delorun --profile work`. Profiles share chats, workspaces and keys but keep their own plugins, settings and port.
+- Keep the whole home somewhere else, such as a larger disk: `DELO_HOME=~/work/delo delorun`.
+- Back up Delorun by copying the home folder while Delorun is stopped (`delorun stop`).
+- Move single chats or workspaces between homes with `delorun export` and `delorun import` ([Daily use](daily-use.md#trash-export-and-import)).
+
+</details>
+
+## Next
+
+- Start and stop Delorun: [Daily use](daily-use.md).
+- Read where logs live: [Where Delorun keeps its logs](logs.md).
+- If a file was refused: [The home and its files](troubleshooting.md#the-home-and-its-files).
 
 ## For the technically curious
 

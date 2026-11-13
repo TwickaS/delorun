@@ -1,5 +1,5 @@
 ---
-description: "Using Delorun day to day: starting, opening and stopping the studio, status, doctor, verify and logs, workspaces and what the model may change in them, the prompts setting, your own changes, safe mode and recovery, the trash and archives, and the plugin and headless commands."
+description: "Using Delorun day to day: starting, opening and stopping the studio, status, doctor, verify and logs, workspaces and what the model may change in them, your own changes, safe mode and recovery, the trash and archives, and the plugin and headless commands."
 ---
 
 # Daily use
@@ -8,7 +8,7 @@ English
 
 ## Summary
 
-Delorun runs as one background process per profile, the home process, which serves the studio in your browser. A handful of commands start, open, stop and check it. In the studio, each chat works in a workspace, a folder whose files the model may read and change; commands the model runs are confined to it, and Delorun keeps its own home out of reach. When something you added stops Delorun from starting, safe mode starts it without your plugins until you fix it.
+This page shows the commands you use every day and the choices you make about what the model may change. It assumes Delorun is installed and set up ([Install and first run](install.md)). Delorun runs as one background program per [profile](../reference/glossary.md#profile), the [home process](../reference/glossary.md#home-process), which serves the [studio](../reference/glossary.md#studio) in your browser. A few commands start, open, stop and check it. Each chat works in a [workspace](../reference/glossary.md#workspace), a folder whose files the model may read and change. When something you added stops Delorun from starting, safe mode starts it without your plugins until you fix it.
 
 ## Contents
 
@@ -19,53 +19,110 @@ Delorun runs as one background process per profile, the home process, which serv
 - [Safe mode and recovery](#safe-mode-and-recovery)
 - [Trash, export and import](#trash-export-and-import)
 - [The plugin and headless commands](#the-plugin-and-headless-commands)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Start, open and stop
 
 | Command | What it does |
 | --- | --- |
-| `delorun` | Starts Delorun and opens the studio; on a new home it runs setup first ([Install and first run](install.md)). |
-| `delorun start` | Starts Delorun without opening the studio; `--open` also opens it. |
-| `delorun start --foreground` | Runs Delorun in this terminal; Ctrl-C stops it. |
-| `delorun open` | Opens the studio in your browser with a link that signs in once; `--print` prints the link instead ([A computer without a browser](install.md#a-computer-without-a-browser)). |
-| `delorun status` | Shows the home, the profile, whether Delorun runs, its process, the running and previous release, running chats and the studio's address; `--json` prints it as JSON. |
+| `delorun` | Starts Delorun and opens the studio. On a new home it runs setup first ([Install and first run](install.md)). |
+| `delorun start` | Starts Delorun without opening the studio. `--open` also opens it. |
+| `delorun start --foreground` | Runs Delorun in this terminal. Ctrl-C stops it. |
+| `delorun open` | Opens the studio in your browser with a link that signs in once. `--print` prints the link instead ([A computer without a browser](install.md#a-computer-without-a-browser)). |
+| `delorun status` | Shows the home, the profile, whether Delorun runs, its process, the running and previous release, running chats and the studio's address. `--json` prints it as JSON. |
 | `delorun stop` | Stops Delorun once running chats end their turns. |
-| `delorun stop --now` | Stops at once: cancels running turns and background jobs. |
+| `delorun stop --now` | Stops at once. It cancels running turns and background jobs. |
 
-`delorun` and `delorun start` run Delorun in the background, where it keeps running after you close the terminal, unless you answered No to the background question in Full setup; `delorun setup background` asks it again. A background start prints `Delo is running in the background for the profile default (process <pid>) at <address>`, and a start when Delorun already runs says so and changes nothing.
+`delorun` and `delorun start` run Delorun in the background, so it keeps running after you close the terminal, unless you answered No to the background question in Full setup. `delorun setup background` asks it again. A background start prints `Delo is running in the background for the profile default (process <pid>) at <address>`, then how to see, follow and stop it.
 
-`delorun stop` refuses new turns, prints `Waiting for N running chat(s) to end…`, and waits up to 30 minutes for running chats before it stops anyway. `delorun stop --now` cancels them; if the process does not end, it is stopped with a signal, and Delorun then warns that commands it started may still be running.
+`delorun stop` stops new turns, prints `Waiting for N running chat(s) to end…`, and waits up to 30 minutes before it stops anyway. When it is done it prints `Delo stopped for the profile default.` `delorun stop --now` cancels the running chats instead.
 
-Most commands take `--profile <name>` after their name to act on another profile, such as `delorun status --profile work`, and `DELO_PROFILE` sets it for every command, `delorun doctor` included ([Your Delorun home](home.md#profiles)). A command that needs Delorun running exits with code 3 when it is not ([Troubleshooting](troubleshooting.md#reading-a-refusal)).
+Most commands take `--profile <name>` after their name to act on another profile, such as `delorun status --profile work`. `DELO_PROFILE` sets it for every command ([Your Delorun home](home.md#profiles)).
+
+<details>
+<summary>Edge cases</summary>
+
+- If Delorun already runs, then `delorun start` says so and changes nothing. Open it with `delorun open`.
+- If a command needs Delorun running and it is not, then the command exits with code 3. Start it with `delorun start`. Exit codes: 0 done, 1 failed, 2 wrong command line, 3 not running ([Troubleshooting](troubleshooting.md#reading-a-refusal)).
+- If `delorun start` ends with `the home process exited with code 1 before it was running; see its log`, then read `delorun logs`, and run `delorun doctor`. A busy studio port shows as `fail port` ([Starting and stopping](troubleshooting.md#starting-and-stopping)).
+- If `delorun stop --now` cannot end the process, then it stops it with a signal and warns that commands it started may still be running.
+- If you run a `delorun trash`, `export` or `import` command while Delorun runs, then it refuses and asks you to run `delorun stop` first.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- Run a second profile beside the first with `delorun --profile work` ([Your Delorun home](home.md#profiles)).
+- Keep Delorun in a terminal instead of the background with `delorun setup background`.
+- Reach the studio from your phone: [Reach the studio from your phone](reach.md). The commands are `delorun reach` and `delorun devices`.
+
+</details>
 
 ## Check the release and your setup
 
-- **`delorun doctor`** checks your home's permissions, whether Docker answers, the DeepSeek key's format (without sending it), whether the studio's port is free, on Linux whether bubblewrap can sandbox commands, the last release-log check and the last update check. Each line starts with `pass`, `warn` or `fail`; it exits with 1 when a check fails.
-- **`delorun verify`** checks the installed release against its signed manifest and the public release log. The first release runs two of its checks, the release signature and the installed files, and lists the others as `not run`; its report ends with `this is not a full verification of this Delo`. `--offline` skips the online log check, `--release <version>` checks another release, and `--json` prints the report as JSON. The checks run as you, so a program running as you could change them.
-- **`delorun logs`** prints where each log is and the recent records of the running Delorun; `delorun logs --follow` follows it ([Where Delorun keeps its logs](logs.md)).
+- **`delorun doctor`** checks your home's permissions, whether Docker answers, the format of your DeepSeek key (without sending it), whether the studio's port is free, on Linux whether bubblewrap can sandbox commands, the last release-log check and the last update check. Each line starts with `pass`, `warn` or `fail`. It exits with 1 when a check fails.
+- **`delorun verify`** checks the installed release against its signed manifest and the public release log. The first release runs two of its checks, the release signature and the installed files, and lists the others as `not run`. Its report ends with `this is not a full verification of this Delo`.
+- **`delorun logs`** prints where each log is and the recent records of the running Delorun ([Where Delorun keeps its logs](logs.md)).
 - **`delorun --version`** prints the Delorun version and the DeepSeek Harness version it runs on.
+
+<details>
+<summary>Edge cases</summary>
+
+- If `doctor` shows `warn key`, then no DeepSeek key is set. Run `delorun setup key`, or set `DEEPSEEK_API_KEY`.
+- If `doctor` shows `warn release-log`, then no release-log check is recorded yet. Run `delorun verify`.
+- If you run from a source checkout, then `doctor` reports that it checks no release channel.
+- If `verify` runs offline, then add `--offline` to skip the online log check. The checks run as you, so a program running as you could change them.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+`delorun verify --release <version>` checks another installed release. `delorun verify --json` and `delorun status --json` print JSON for scripts.
+
+</details>
 
 ## Workspaces and what the model may change
 
-A workspace is a folder on your computer. Every chat works in one, and the workspace's permission preset decides what the model's commands may do:
+A workspace is a folder on your computer. Every chat works in one. The workspace's permission preset decides what the commands the model runs may do:
 
-- **Workspace Write**, the preset every new workspace starts on, whatever the deployment default is. Commands may write inside the workspace and the permitted temporary folders. A command that needs more asks you first, and you approve or deny that one command.
-- **Full access**: commands run outside the sandbox and can write anywhere your user can, without asking.
+- **[Workspace Write](../reference/glossary.md#workspace-write).** The preset every new workspace starts on. Commands run in the [sandbox](../reference/glossary.md#sandbox), a fenced area: they may write inside the workspace and the permitted temporary folders. A command that needs more asks you first, and you approve or deny that one command.
+- **[Full access](../reference/glossary.md#full-access).** Commands run outside the sandbox and can write anywhere your user can, without asking.
 
-Commands the model runs in a Workspace Write workspace cannot write under your Delorun home, read its secrets or tokens, or connect to its control sockets, where your system enforces those rules ([What Delorun protects](safety.md#the-sandbox)). Delorun also refuses some folders as a workspace: the filesystem root, your home folder itself, your Delorun home or DeepSeek Harness's home, and a folder that contains either.
+Commands the model runs in a Workspace Write workspace cannot write under your Delorun home, read its secrets or tokens, or connect to its control sockets, where your system enforces those rules ([What Delorun protects](safety.md#the-sandbox)).
 
-With setup's default **Safer prompts**, Delorun asks once per workspace before full access, and other consents ask before the model edits instruction files, adds an MCP server or schedules work ([Consents](safety.md#consents)). A single command can still ask to run outside the sandbox, which you approve or deny. With **Same as stock**, chosen in `delorun setup prompts`, a workspace switches to full access as in DeepSeek Harness, after the studio's own confirmation.
+With setup's default **Safer prompts**, Delorun asks you once for each workspace before it gives it full access. You answer on the computer Delorun runs on: pick Full access in a chat, use Settings → Safety → Permissions, or choose Allow for this chat on an approval card that asks for it ([Full access](safety.md#full-access)). Other [consents](../reference/glossary.md#consent) ask before the model edits instruction files, adds an MCP server or schedules work ([Consents](safety.md#consents)).
 
-A chat you copied from DeepSeek Harness or another home that ran with full access opens on Workspace Write.
+<details>
+<summary>Edge cases</summary>
+
+- If you choose **Same as stock** in `delorun setup prompts`, then a workspace switches to full access as in DeepSeek Harness, after the studio's own confirmation.
+- If a chat was copied from DeepSeek Harness or another home and ran with full access there, then it opens on Workspace Write. Turn full access on for its workspace again.
+- If you pick a folder that Delorun refuses as a workspace, then it names the reason. Refused folders are the filesystem root, your home folder itself, your Delorun home, DeepSeek Harness's home, and a folder that contains either.
+- If you use the studio from a phone, then it cannot grant full access ([Reach the studio from your phone](reach.md)).
+- If you want full access off again, then use Revoke in Settings → Safety → Permissions, pick Workspace Write in a chat, or run `delorun workspace full-access <folder> off`.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- `delorun workspace full-access` lists the workspaces and their preset. `delorun workspace full-access <folder> on` shows what full access means and records it after you confirm in the terminal. `off` withdraws it without asking.
+- `delorun workspace external-agents` lists the external agents allowed to start in a workspace without asking. [What Delorun protects](safety.md#external-agents) explains them.
+- `delorun mcp list`, `accept`, `decline` and `revoke` answer MCP server questions from the terminal ([MCP servers](safety.md#mcp-servers)).
+- Limit what sandboxed commands can reach on the network in Settings → Safety → Network ([Prompt injection and data exfiltration](prompt-injection.md)).
+
+</details>
 
 ## Make Delorun yours
 
-Delorun is built to be reshaped: change plugin settings, build agent presets, skills and plugins in Creator mode, link your own plugins, or edit Delorun's own files. Delorun records each change to what it runs, so you can see it and undo it, and an update carries your changes to the new release or names, before you confirm, any it cannot carry ([Updates](updates.md)).
+Delorun is built to be reshaped. You can change plugin settings, build agent presets, skills and plugins in Creator mode, link your own plugins, or edit Delorun's own files. Delorun records each change to what it runs, so you can see it and undo it. An update carries your changes to the new release or names, before you confirm, any it cannot carry ([Updates](updates.md)).
 
 - [Where to customise what](https://docs.delorun.com/guide/customise) compares the ways to change Delorun and what each costs at an update.
 - [Write a plugin for Delo](https://docs.delorun.com/guide/plugins) goes from a new plugin to one that loads in your studio.
-- [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) explains what `delorun changes` records, protection, which is off by default so your changes load without review and stay undoable, `delorun changes protection on`, editing Delorun itself with `delorun changes edit-harness`, and undo.
+- [Changing your harness](https://docs.delorun.com/guide/changing-your-harness) explains what `delorun changes` records, protection, and undo.
 
 Every change Delorun makes to your profile is also a version of the profile's history, which `delorun recover` can restore.
 
@@ -79,29 +136,68 @@ delorun start
 delorun recover exit-safe-mode   # once it works: the next start loads everything again
 ```
 
-Safe mode leaves out every bundle and plugin you added, including plugins installed from a folder, and keeps DeepSeek Harness's own bundles and Delorun's. It changes no file: your plugins and their settings stay in your profile, and each start in safe mode says what it leaves out. `delorun recover safe-mode --reason <text>` records why you turned it on. Safe mode takes effect at the next start, so stop Delorun first if it runs. Delorun does not turn safe mode on by itself.
+Safe mode leaves out every bundle and plugin you added, including plugins installed from a folder, and keeps DeepSeek Harness's own bundles and Delorun's. It changes no file: your plugins and their settings stay in your profile, and each start in safe mode says what it leaves out. You should see that line at the start.
 
-`delorun recover` with no subcommand shows where your profile stands: whether safe mode is on, the last update, the profile versions you can restore, and the plugins you ejected or kept disabled. `delorun recover restore <version>` brings back a saved profile version, and `delorun recover rollback` goes back to the release before the last update ([Updates](updates.md#going-back)).
+`delorun recover` with no subcommand shows where your profile stands: whether safe mode is on, the last update, the profile versions you can restore, and the plugins you ejected or kept disabled.
 
-Delorun refuses to start a profile that would run without its protections, such as one whose settings turn off the sandbox, and names the setting and its file; remove it, or start in safe mode ([Troubleshooting](troubleshooting.md#protections-and-plugins)).
+<details>
+<summary>Edge cases</summary>
+
+- If Delorun runs, then stop it first: safe mode takes effect at the next start.
+- If you want to remember why, then use `delorun recover safe-mode --reason <text>`.
+- If your profile would run without its protections, for example because its settings turn off the sandbox, then Delorun refuses to start and names the setting and its file. Remove the setting, or start in safe mode ([Protections and plugins](troubleshooting.md#protections-and-plugins)).
+- If you wonder whether Delorun went into safe mode on its own, then it did not: it never turns safe mode on by itself.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+`delorun recover restore <version>` brings back a saved profile version. `delorun recover rollback` goes back to the release before the last update ([Going back](updates.md#going-back)).
+
+</details>
 
 ## Trash, export and import
 
 | Command | What it does |
 | --- | --- |
 | `delorun trash list` | Lists deleted chats and workspaces. |
-| `delorun trash restore <id>` | Restores a deleted chat; a workspace is restored in the studio. |
+| `delorun trash restore <id>` | Restores a deleted chat. A workspace is restored in the studio. |
 | `delorun trash purge <id>`, `delorun trash empty` | Deletes one item, or every item, forever. |
-| `delorun export <chat-or-workspace> --out <file>` | Writes a chat, or a workspace with its chats, as an archive signed by this home. It never overwrites a file, and asks first when the archive would hold something that looks like a secret. |
+| `delorun export <chat-or-workspace> --out <file>` | Writes a chat, or a workspace with its chats, as an archive signed by this home. |
 | `delorun import <file>` | Checks an archive, shows who signed it and what it holds, and imports it after you confirm. |
 
-These commands change chat data the studio uses, so stop Delorun first; they refuse while it runs.
+These commands change chat data the studio uses, so stop Delorun first. They refuse while it runs.
+
+<details>
+<summary>Edge cases</summary>
+
+- If the export file already exists, then `export` does not overwrite it.
+- If the archive would hold something that looks like a secret, then `export` asks first.
+- If you delete a chat for good, then pieces of it can stay in captured log output. Add `--clear-logs` to `trash purge` or `trash empty` ([Clearing logs](logs.md#clearing-logs)).
+- If you import an archive from someone else, then the chat shows a banner naming its source. Read it before you trust it ([Archives, imports and the trash](troubleshooting.md#archives-imports-and-the-trash)).
+
+</details>
 
 ## The plugin and headless commands
 
 - **`delorun plugin --profile <name> …`** runs DeepSeek Harness's `dsh plugin` inside your Delorun home, so plugins install as in stock. It applies none of Delorun's protections. `delorun plugin check <directory>` reads a plugin's `package.json`, runs none of its files, and says whether this release would accept the plugin's version ranges.
-- **`delorun headless …`** answers one task and exits, as `dsh headless` does, with Delorun's sandbox protection and guards. It refuses a task that asks for full access, with `--permission-mode` or its environment variable, in a folder without a full-access grant, and the studio cannot record such a grant yet.
+- **`delorun headless …`** answers one task and exits, as `dsh headless` does, with Delorun's sandbox protection and guards.
+
+<details>
+<summary>Edge cases</summary>
+
+- If a headless task asks for full access, with `--permission-mode` or its environment variable, in a folder without a full-access grant, then `delorun headless` refuses it. Grant full access at this computer first with `delorun workspace full-access <folder> on`.
+
+</details>
+
+## Next
+
+- Keep Delorun current: [Updates](updates.md).
+- Choose the model: [Model providers](providers.md).
+- Understand the protections: [What Delorun protects](safety.md).
+- If something went wrong: [Troubleshooting](troubleshooting.md).
 
 ## For the technically curious
 
-The [home process contract](../contracts/c19-home-process.md) defines start, stop, status and their exit codes, the [update report contract](../contracts/c03-update-report.md) defines safe mode and `delorun recover`, and the [archive and trash contract](../contracts/c08-archive-and-trash.md) defines the trash and archives.
+The [home process contract](../contracts/c19-home-process.md) defines start, stop, status and their exit codes. The [update report contract](../contracts/c03-update-report.md) defines safe mode and `delorun recover`. The [archive and trash contract](../contracts/c08-archive-and-trash.md) defines the trash and archives.

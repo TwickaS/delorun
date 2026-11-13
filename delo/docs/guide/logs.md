@@ -10,7 +10,7 @@ Delorun has no release yet; this page describes the first release.
 
 ## Summary
 
-When something goes wrong, the first place to look is a log. Delorun's own processes each write an operational log: a file that records what the process did, so you, or an agent you ask for help, can find out why something failed. These logs are separate from your chats, which Delorun keeps until you delete them. Run `delorun logs` to see where every log is and the latest records of the running Delorun. Secrets are removed from every record before it is written, each log is capped in size, and old log files are deleted after 14 days.
+This page helps you find out why something failed. You need Delorun installed ([Install and first run](install.md)). When something goes wrong, the first place to look is a log. Delorun's own processes each write an [operational log](../reference/glossary.md#operational-log): a file that records what the process did, so you, or an agent you ask for help, can find out why something failed. These logs are separate from your chats, which Delorun keeps until you delete them. Run `delorun logs` to see where every log is and the latest records of the running Delorun. Secrets are removed from every record before it is written, each log is capped in size, and old log files are deleted after 14 days.
 
 ## Contents
 
@@ -19,6 +19,7 @@ When something goes wrong, the first place to look is a log. Delorun's own proce
 - [How long logs are kept](#how-long-logs-are-kept)
 - [Reading logs with delorun logs](#reading-logs-with-delorun-logs)
 - [Clearing logs](#clearing-logs)
+- [Next](#next)
 - [For the technically curious](#for-the-technically-curious)
 
 ## Log locations
@@ -85,6 +86,33 @@ A record prints as `<time> <level> <log name> [<chat id>/<turn>] <message>`. Con
 - `delorun logs --clear <name>` asks first, then deletes that log's older files and empties its current file; a running Delorun keeps writing to the emptied file. `delorun logs --clear` without a name does this for every log on your computer and deletes DeepSeek Harness's startup reports. It needs a terminal to ask in.
 - `delorun logs --prune` deletes every expired file now and prints each one.
 - **After you delete a chat for good.** Pieces of it can remain in captured output until that log file is deleted. Add `--clear-logs` to `delorun trash purge <id>` or `delorun trash empty` to clear the logs and startup reports at the same time, as `delorun logs --clear` does.
+
+<details>
+<summary>Edge cases</summary>
+
+- If a log shows as not created, then the program that writes it has not run on this computer. Only the first row of the table is in use in the first release.
+- If you set `DELO_HOME` or `--profile`, then the paths and names change with them.
+- If a log line shows escaped characters, then the original had control characters; they are escaped so a log line cannot change what your terminal shows.
+- If you delete a chat for good, then pieces of it can stay in captured output. Add `--clear-logs` to `delorun trash purge <id>` or `delorun trash empty`.
+- If you give an agent a log to read, then check it first: captured output can quote your commands and files, and a secret Delorun never loaded and that looks like none of the known forms can get through.
+- If a startup report from DeepSeek Harness's own `dsh` command exists, then it can contain your keys. `delorun logs startup` lists them with that warning.
+
+</details>
+
+<details>
+<summary>Go further</summary>
+
+- Watch a problem as it happens: `delorun logs --follow`.
+- Narrow to one answer: `delorun logs --session <id> --turn <n>`.
+- Feed a script: `delorun logs --json` prints one JSON object per line, and `--path` prints only the current file's path.
+- Free disk now: `delorun logs --prune`, or `delorun logs --clear <name>` for one log.
+
+</details>
+
+## Next
+
+- Find a fix for what you saw: [Troubleshooting](troubleshooting.md).
+- Check your setup: [Daily use](daily-use.md#check-the-release-and-your-setup).
 
 ## For the technically curious
 
