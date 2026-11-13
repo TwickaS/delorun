@@ -1932,7 +1932,8 @@ it('refuses an installation the plugin audit finds against until the user accept
   expect(JSON.parse(readFileSync(join(dir, '.plugin-manager', 'audits.json'), 'utf8'))).toEqual({ audited: ['digest-1'] })
   expect(lstatSync(join(dir, '.plugin-manager', 'audits.json')).mode & 0o777).toBe(0o600)
   // Enabling it later asks the audit again, with the saved acceptance.
-  expect(await manager.setBundleEnabled('audited', true)).toMatchObject({ application: 'applied', changed: true })
+  // The findings it went on with are in the result, as an installation's are.
+  expect(await manager.setBundleEnabled('audited', true)).toMatchObject({ application: 'applied', changed: true, audit: { decision: 'accepted', digest: 'digest-1', findings: [{ rule: 'exfil.endpoint' }] } })
   expect(calls.at(-1)?.accepted).toEqual(['digest-1'])
 })
 

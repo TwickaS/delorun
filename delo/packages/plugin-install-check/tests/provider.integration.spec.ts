@@ -4,14 +4,30 @@
  * set; and `deloPluginTrust`, which reads and refreshes the trust status. With the switch off it provides neither.
  * A loopback stand-in answers for the advisory feed and the registry.
  */
-import { chmodSync, existsSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { PluginAuditResult } from '@deepseek-ai/dsh-plugin-manager'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { apply, blockingDigest, Config, inject, name, resolveSettings, type PluginTrust } from '../src/index.ts'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { apply, blockingDigest, checkFailedResult, Config, inject, name, resolveSettings, type PluginTrust } from '../src/index.ts'
 import { readInstallRecord, recordPath } from '../src/record.ts'
 import { advisory, OLD, removeProfile, startStandIn, writeProfile, writeProfileFiles, type StandIn } from './fixture.ts'
+
+/** The error the next `checkPackage` throws, when set. */
+const failure = vi.hoisted(() => ({ next: undefined as Error | undefined }))
+
+vi.mock('../src/check.ts', async (importActual) => {
+  const actual = await importActual<typeof import('../src/check.ts')>()
+  return {
+    ...actual,
+    checkPackage: async (...args: Parameters<typeof actual.checkPackage>) => {
+      const error = failure.next
+      failure.next = undefined
+      if (error !== undefined) throw error
+      return actual.checkPackage(...args)
+    },
+  }
+})
 
 let standIn: StandIn
 let dir: string
@@ -75,13 +91,40 @@ describe('the install check plugin', () => {
     expect(refused.digest).toBe(blockingDigest('good-plugin', [{ rule: 'advisory', advisory: 'GHSA-2222-3333-4444', package: 'good-plugin', version: '1.0.0', title: '', path: '', line: 0, severity: 'critical' }]))
   })
 
-  it('answers clear with a finding when the check itself fails, never refusing for its own failure', async () => {
+  it('needs acceptance when the check fails while the package is still to be installed, and accepts exactly that failure', async () => {
+    const ctx = await mount(true)
+    failure.next = new Error('the advisory parser broke')
+    const refused = await audit(ctx, [], 'install')
+    expect(refused).toMatchObject({ decision: 'needs-acceptance', findings: [{ rule: 'delo.check-failed', severity: 'critical', title: 'The install check could not run, so this package is not checked: the advisory parser broke', excerpt: 'good-plugin' }] })
+    failure.next = new Error('another cause')
+    expect(await audit(ctx, [refused.digest], 'install')).toMatchObject({ decision: 'needs-acceptance' })
+    failure.next = new Error('the advisory parser broke')
+    expect(await audit(ctx, [refused.digest], 'install')).toMatchObject({ decision: 'accepted', digest: refused.digest })
+    expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(false)
+  })
+
+  it('needs acceptance while the package is still to be built when the lockfile does not read', async () => {
+    const ctx = await mount(true)
+    writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: \'5.4\'\n')
+    expect(await audit(ctx, [], 'scripts')).toMatchObject({ decision: 'needs-acceptance', findings: [{ rule: 'delo.check-failed', severity: 'critical' }] })
+    expect(await audit(ctx)).toMatchObject({ decision: 'clear', findings: [{ rule: 'delo.missing-integrity', title: expect.stringMatching(/^Nothing was checked/u) as string }] })
+  })
+
+  it('binds the digest of a failed check to the package, its lockfile reference and the cause', () => {
+    const target = { name: 'good-plugin', dir, accepted: [], pending: 'install' as const }
+    const digest = checkFailedResult(target, 'cause', '1.0.0 sha512-a').digest
+    expect(checkFailedResult(target, 'cause', '1.0.1 sha512-b').digest).not.toBe(digest)
+    expect(checkFailedResult({ ...target, name: 'other-plugin' }, 'cause', '1.0.0 sha512-a').digest).not.toBe(digest)
+    expect(checkFailedResult(target, 'another cause', '1.0.0 sha512-a').digest).not.toBe(digest)
+  })
+
+  it('answers clear with a visible finding when the check fails for an installed package, never refusing it', async () => {
     const pluginDir = join(dir, 'node_modules', 'good-plugin')
     chmodSync(pluginDir, 0o000)
     try {
       const result = await audit(await mount(true))
       expect(result.decision).toBe('clear')
-      expect(result.findings).toEqual([{ rule: 'delo.check-failed', title: expect.stringMatching(/^The install check could not run: EACCES/u) as string, severity: 'warning', path: '', line: 0, excerpt: 'good-plugin' }])
+      expect(result.findings).toEqual([{ rule: 'delo.check-failed', title: expect.stringMatching(/^The install check could not run, so this package is not checked: EACCES/u) as string, severity: 'warning', path: '', line: 0, excerpt: 'good-plugin' }])
     } finally {
       chmodSync(pluginDir, 0o755)
     }

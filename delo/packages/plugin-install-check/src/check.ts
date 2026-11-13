@@ -226,6 +226,26 @@ function changedFinding(record: InstallRecord, changed: readonly string[]): Inst
 }
 
 /**
+ * The lockfile reference of a profile's dependency and its root entry's integrity, which name one resolution of it.
+ * @param profileDir - the profile directory.
+ * @param name - the dependency.
+ * @returns `<reference> <integrity>`, or `undefined` when the lockfile does not read or does not name the dependency.
+ */
+export async function lockedReference(profileDir: string, name: string): Promise<string | undefined> {
+  let lockfile: Lockfile
+  try {
+    lockfile = await readProfileLockfile(profileDir)
+  } catch (_unreadable) {
+    // A lockfile that does not read names no resolution; the caller keys nothing by it.
+    return undefined
+  }
+  const reference = lockfile.dependencies.get(name)
+  if (reference === undefined) return undefined
+  const key = packageKey(name, reference)
+  return `${reference} ${(key === undefined ? undefined : lockfile.packages.get(key)?.resolution.integrity) ?? ''}`
+}
+
+/**
  * Check one plugin of a profile. A plugin whose record names its current lockfile reference is compared with the
  * record and shows the findings recorded at its installation; any other is checked as a new installation.
  * @param request - the profile, the plugin, the allowed advisories, the known names and the clock.

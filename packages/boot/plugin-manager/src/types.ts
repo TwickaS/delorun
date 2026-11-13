@@ -257,7 +257,10 @@ export interface ChangeResult {
   pendingBuilds?: string[]
   /** Package script permissions saved before this installation attempt. */
   approvedBuilds?: string[]
-  /** What the plugin audit found in a bundle it let the change go on with: notices, or findings the user accepted. */
+  /**
+   * What the plugin audit found in a bundle it let an installation or an enablement go on with: notices, or findings the
+   * user accepted.
+   */
   audit?: PluginAuditResult
   /** The registries the installation asked, in order; `packageResult` is the last one's run. */
   registries?: Registry[]

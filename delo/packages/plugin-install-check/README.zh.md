@@ -8,7 +8,7 @@ description: "Delo 的插件安装检查与安装记录，供维护者修改安�
 
 ## 摘要
 
-`@delo/plugin-install-check` 提供上游的 `pluginAudit` 钩子和 `deloPluginTrust` 服务。[插件管理器](../../../packages/boot/plugin-manager/README.zh.md)在选入、启用或恢复组合包之前询问该钩子，即在组合包的任何插件代码加载之前。对插件及其安装向 profile 锁文件新增的每个包，它显示每一项发现：缺少完整性或 git 来源没有完整提交、明文 `http:` 注册表或下载 URL、GitHub 安全公告、发布时间短于可配置时长的版本，以及与 profile 或 Delo 已有名称相近的名称。检查在 pnpm 把安装解析进锁文件之后、任何文件下载进 profile 或任何安装脚本运行之前进行。已知的严重公告会拒绝安装，直到本人允许；其他发现都不拒绝。包安装完毕且允许的构建运行之后，它记录每个已安装文件的 SHA-256，每次启动以低成本比对，`delorun verify` 完整比对。`delorun plugin` 在其 pnpm 操作周围执行同样的步骤（[`plugin-install-check.ts`](../../apps/cli/src/plugin-install-check.ts)）。开关关闭时（对等值），它不提供任何服务，也不审计任何内容，与 stock 相同；`@delo/bundle-local` 和 `@delo/bundle-headless` 把它挂载为开启。
+`@delo/plugin-install-check` 提供上游的 `pluginAudit` 钩子和 `deloPluginTrust` 服务。[插件管理器](../../../packages/boot/plugin-manager/README.zh.md)在选入、启用或恢复组合包之前询问该钩子，即在组合包的任何插件代码加载之前。对插件及其安装向 profile 锁文件新增的每个包，它显示每一项发现：缺少完整性或 git 来源没有完整提交、明文 `http:` 注册表或下载 URL、GitHub 安全公告、发布时间短于可配置时长的版本，以及与 profile 或 Delo 已有名称相近的名称。检查在 pnpm 把安装解析进锁文件之后、任何文件下载进 profile 或任何安装脚本运行之前进行。已知的严重公告，以及在包安装之前无法运行的检查，会拒绝安装，直到本人允许；其他发现都不拒绝。包安装完毕且允许的构建运行之后，它记录每个已安装文件的 SHA-256，每次启动以低成本比对，`delorun verify` 完整比对。`delorun plugin` 在其 pnpm 操作周围执行同样的步骤（[`plugin-install-check.ts`](../../apps/cli/src/plugin-install-check.ts)）。开关关闭时（对等值），它不提供任何服务，也不审计任何内容，与 stock 相同；`@delo/bundle-local` 和 `@delo/bundle-headless` 把它挂载为开启。
 
 ## 目录
 
@@ -29,7 +29,7 @@ description: "Delo 的插件安装检查与安装记录，供维护者修改安�
 - **可信来源。** npm scope 或 git 所有者列在 `trustedSources` 中的插件只显示严重公告，严重公告仍会拒绝。
 - **安装记录。** `<profile>/delo-plugin-installs/records/<name>.json`（scope 名称中的 `/` 写作 `+`），权限 0600，位于 0700 的目录中：来源（`registry`、`tarball` 或 `git`，以及锁文件引用、完整性、提交与 URL）、版本、显示过的发现、允许的公告、插件闭包的锁文件条目，以及闭包中每个包的目录、每个文件的 SHA-256（链接为 `link:<target>`）与文件标识。被拒绝的安装不写记录。审计遇到记录指明其当前锁文件引用的插件时（例如再次启用），它比对文件，显示记录的发现，文件不同时再加一项 `changed-files` 发现，并保持记录不变。
 - **改动检查。** `checkProfileTrust` 把每个已记录插件的文件与其记录比对。每次启动在 Host 启动前运行快速检查，只对文件标识（`@delo/runtime-store/identity`：inode、模式、大小、修改与变更时间）与记录不同的文件计算哈希，或对标识无法作证的文件计算哈希：其变更时间距记录时间不足两秒，或其文件系统的变更时间并非只由本地内核设置；`delorun verify` 运行完整检查，对每个文件计算哈希。新增或删除的文件也算改动。计算哈希后发现未改动的文件，会重新记录其标识。
-- **不因自身失败而阻止。** 审计内部出错时答复 `clear` 并附 `delo.check-failed` 发现；启动时改动检查失败只打印警告并继续。
+- **安装之前失败即拒绝，安装之后只提示。** 在管理器尚未安装该包或尚未运行其脚本时，审计内部出错、锁文件无法读取或锁文件没有写明该包，都答复 `needs-acceptance` 并附严重（critical）的 `delo.check-failed` 发现，其摘要写明包、其锁文件引用与原因，因此一次接受只涵盖这一次失败。没有待办步骤时（例如启用已安装的组合包），同样的失败答复 `clear` 并把该发现作为警告，由改动的结果携带；启动时改动检查失败只打印警告并继续。
 
 <a id="the-trust-status"></a>
 

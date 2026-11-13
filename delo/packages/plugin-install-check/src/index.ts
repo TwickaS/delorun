@@ -10,7 +10,9 @@
  *
  * Every finding is shown and none blocks, except a known critical advisory: the audit then answers
  * `needs-acceptance`, and the studio's Plugins page shows the findings with an "Install anyway" confirmation that
- * accepts exactly that set. A linked or local folder is never checked. With the switch off — the default and the parity
+ * accepts exactly that set. A check that cannot run while the change has yet to install the package or run its scripts
+ * answers `needs-acceptance` too, with a `delo.check-failed` finding whose digest names the package, its lockfile
+ * reference and the cause; once nothing is pending, as when a bundle is enabled, it answers `clear` with that finding. A linked or local folder is never checked. With the switch off — the default and the parity
  * value — the plugin provides neither service, and the manager audits nothing, as stock does.
  *
  * @module @delo/plugin-install-check
@@ -23,7 +25,7 @@ import type { PluginAudit, PluginAuditFinding, PluginAuditResult, PluginAuditTar
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import z from '@deepseek-ai/schemastery'
 import { ADVISORY_FEED_URL } from '@delo/contract-release-manifest'
-import { checkPackage, checkProfileTrust, readPluginTrust, recordInstalled, type InstallCheckSettings, type InstallFinding, type PackageCheck, type PluginTrustStatus } from './check.ts'
+import { checkPackage, checkProfileTrust, lockedReference, readPluginTrust, recordInstalled, type InstallCheckSettings, type InstallFinding, type PackageCheck, type PluginTrustStatus } from './check.ts'
 
 export type { InstallFinding, PluginTrustEntry, PluginTrustState, PluginTrustStatus } from './check.ts'
 
@@ -172,6 +174,26 @@ export function auditResult(check: PackageCheck, acceptedDigest: string | undefi
 }
 
 /**
+ * The answer for a check that could not run: `needs-acceptance` while the change has yet to install the package or run
+ * its scripts, so nothing unchecked is fetched or built without the person's acceptance of exactly this failure, and
+ * `clear` with the same finding once nothing is pending.
+ * @param target - what the manager asked about.
+ * @param cause - why the check could not run.
+ * @param reference - the package's lockfile reference, when the lockfile read.
+ * @returns the answer, with one `delo.check-failed` finding.
+ */
+export function checkFailedResult(target: PluginAuditTarget, cause: string, reference: string | undefined): PluginAuditResult {
+  const pending = target.pending !== undefined
+  const findings: PluginAuditFinding[] = [{
+    rule: 'delo.check-failed', title: `The install check could not run, so this package is not checked: ${cause}`,
+    severity: pending ? 'critical' : 'warning', path: '', line: 0, excerpt: target.name,
+  }]
+  const digest = `sha256:${createHash('sha256').update(JSON.stringify(['check-failed', target.name, reference ?? null, cause])).digest('hex')}`
+  if (!pending) return { decision: 'clear', digest, findings, truncated: false }
+  return { decision: target.accepted.includes(digest) ? 'accepted' : 'needs-acceptance', digest, findings, truncated: false }
+}
+
+/**
  * Mount the plugin. On, it provides `pluginAudit` and `deloPluginTrust` for the profile; off, nothing.
  * @param ctx - the plugin context.
  * @param config - the configuration, after the schema.
@@ -211,6 +233,8 @@ export function apply(ctx: Context, config: Config): void {
             return true
           },
         }, settings)
+        if (target.pending !== undefined && check.kind === 'unchecked') return checkFailedResult(target, check.findings[0]?.title ?? 'the lockfile does not read', undefined)
+        if (target.pending !== undefined && check.kind === 'skipped' && check.reason === 'not-a-dependency') return checkFailedResult(target, 'the profile\'s lockfile does not name the package', undefined)
         if (earlier !== undefined && check.kind === 'checked' && check.findings.some(finding => finding.severity === 'critical')) {
           met = blockingDigest(target.name, check.findings.filter(finding => finding.severity === 'critical'))
         }
@@ -223,9 +247,9 @@ export function apply(ctx: Context, config: Config): void {
           }
         }
       } catch (error) {
-        // The check never blocks for its own failure: the person sees that it could not run, and the change goes on.
+        // While the package is still to be installed or built this refuses until accepted; once installed it is shown.
         ctx.logger.warn('The plugin install check failed', error)
-        return { decision: 'clear', digest: 'unchecked', findings: [{ rule: 'delo.check-failed', title: `The install check could not run: ${error instanceof Error ? error.message : String(error)}`, severity: 'warning', path: '', line: 0, excerpt: target.name }], truncated: false }
+        return checkFailedResult(target, error instanceof Error ? error.message : String(error), await lockedReference(profile.dir, target.name))
       }
       return auditResult(check, met)
     },

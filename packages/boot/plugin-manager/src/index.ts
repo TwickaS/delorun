@@ -1181,7 +1181,9 @@ export class PluginManager extends TypertRemoteService {
   @Remote
   setBundleEnabled(name: string, enabled: boolean): Promise<ChangeResult> {
     return this.change(result => this.configure(async () => {
-      await this.selectBundle(name, enabled)
+      const audit = await this.selectBundle(name, enabled)
+      // The findings an audit let the enablement go on with reach the person as an installation's do.
+      if (audit !== undefined && audit.findings.length > 0) result.audit = audit
       Object.assign(result, enabled ? await this.publishAndReload(this.bundleRows(name).map(row => row.id)) : await this.reload())
     }), { stage: 'enable', target: name, enabled }, 'bundle', () => `${enabled ? 'Turned on' : 'Turned off'} ${name}`)
   }
@@ -1562,9 +1564,11 @@ export class PluginManager extends TypertRemoteService {
     }
   }
 
-  private async selectBundle(name: string, enabled: boolean): Promise<void> {
+  /** Select or deselect a bundle; returns what the plugin audit answered for an enablement it let go on. */
+  private async selectBundle(name: string, enabled: boolean): Promise<PluginAuditResult | undefined> {
     const manifest = readProfileManifest('dsh', this.profile.dir)
     const previous = bundleSelection(manifest)
+    let audit: PluginAuditResult | undefined
     if (enabled || !previous.includes(name)) {
       const metadata = bundleManifest(name, this.profile.dir, this.profile.installAnchor)
       if (metadata === undefined) throw new ManagementFailure('not-bundle')
@@ -1572,7 +1576,7 @@ export class PluginManager extends TypertRemoteService {
         assertBundlePlatform(metadata.dsh?.bundle?.platforms, process.platform)
         const compatibility = evaluatePluginCompatibility(metadata, readProfileVersionExemptions(this.profile.dir))
         if (compatibility !== undefined && !compatibility.exempted) throw new ManagementFailure('incompatible-version', [incompatiblePlugin(compatibility)])
-        await this.auditBundle(name, resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir), metadata.version)
+        audit = await this.auditBundle(name, resolveBundleDir('dsh', name, this.profile.installAnchor, this.profile.dir), metadata.version)
         if (!previous.includes(name)) this.assertProtectedRowsKept(this.currentRows(), this.composedRows(name))
       }
     }
@@ -1580,10 +1584,11 @@ export class PluginManager extends TypertRemoteService {
       if (this.protectsManager(name)) throw this.bundleRefusal(name)
     }
     const bundles = enabled ? [...previous, ...previous.includes(name) ? [] : [name]] : previous.filter(item => item !== name)
-    if (JSON.stringify(previous) === JSON.stringify(bundles)) return
+    if (JSON.stringify(previous) === JSON.stringify(bundles)) return audit
     manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
     await saveManifest(this.profile.dir, manifest)
     if (enabled) this.protectsManager(name)
+    return audit
   }
 
   private bundleRows(name: string): EntryOptions[] {
