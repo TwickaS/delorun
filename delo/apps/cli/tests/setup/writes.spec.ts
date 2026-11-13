@@ -167,10 +167,11 @@ describe('the studio port a profile sets', () => {
     expect(profileStudioPort(directory, 'delorun doctor')).toBeUndefined()
   })
 
-  it('reads port 0, which asks the system for a free port at each start', () => {
+  it('reads port 0, which asks the system for a free port at each start, and a `!!js` expression beside it without a warning', () => {
     const path = join(directory, 'cordis.patch.yml')
-    writeFileSync(path, `- id: ${STUDIO_ROW_ID}\n  config:\n    port: 0\n`)
+    writeFileSync(path, `- id: ${STUDIO_ROW_ID}\n  config:\n    host: !!js ctx.webStartup.host\n    port: 0\n`)
     expect(profileStudioPort(directory, 'delorun doctor')).toBe(0)
+    expect(readPatchRow(path, STUDIO_ROW_ID, 'delorun doctor')).toEqual({ host: 'ctx.webStartup.host', port: 0 })
   })
 
   it.each([['a text', '"4100"'], ['a fraction', '4100.5'], ['a negative number', '-1'], ['a port above 65535', '65536'], ['null', 'null']])('refuses %s as the port, naming the row and the file', (_label, value) => {

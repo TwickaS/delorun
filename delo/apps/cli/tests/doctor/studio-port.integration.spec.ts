@@ -112,6 +112,25 @@ describe('the port delorun doctor checks', { timeout: 30_000 }, () => {
     expect(await doctor()).toEqual({ code: EXIT.ok, port: 'pass port: the studio port of the profile default is 0, so each start takes a free port the system chooses; `delorun status` shows the address.' })
   })
 
+  it('prints no YAML warning for a profile patch that holds a `!!js` expression', async () => {
+    const directory = profileDirectory(home, PROFILE)
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'cordis.patch.yml'), '- id: webserver\n  config:\n    host: !!js ctx.webStartup.host\n    port: 0\n')
+    const warnings: string[] = []
+    const onWarning = (warning: Error): void => { warnings.push(warning.message) }
+    process.on('warning', onWarning)
+    try {
+      const { code, printed } = await doctorOutput([])
+      // Node emits a process warning on the next tick.
+      await new Promise<void>((resolve) => { setImmediate(resolve) })
+      expect(code).toBe(EXIT.ok)
+      expect(printed).not.toContain('YAMLWarning')
+      expect(warnings.filter(message => message.includes('Unresolved tag'))).toEqual([])
+    } finally {
+      process.off('warning', onWarning)
+    }
+  })
+
   it('checks upstream\'s default port when the profile sets none', async () => {
     const result = await doctor()
     expect(result.port).toMatch(/^(?:pass|fail) port: port 3080 on 127\.0\.0\.1, the studio's default port, which the profile default does not change, is /u)
