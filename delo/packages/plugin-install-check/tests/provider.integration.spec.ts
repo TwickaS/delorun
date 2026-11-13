@@ -9,9 +9,9 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { PluginAuditResult, PluginOperationId } from '@deepseek-ai/dsh-plugin-manager'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apply, blockingDigest, checkFailedResult, Config, inject, name, resolveSettings, type PluginTrust } from '../src/index.ts'
+import { apply, blockingDigest, checkFailedResult, Config, inject, name, resolvedThroughMirror, resolveSettings, type PluginTrust } from '../src/index.ts'
 import { readInstallRecord, recordPath } from '../src/record.ts'
-import { advisory, OLD, removeProfile, startStandIn, writeProfile, writeProfileFiles, type StandIn } from './fixture.ts'
+import { advisory, INTEGRITY, OLD, removeProfile, startStandIn, writeProfile, writeProfileFiles, type StandIn } from './fixture.ts'
 
 /** The error the next `checkPackage` throws, when set. */
 const failure = vi.hoisted(() => ({ next: undefined as Error | undefined }))
@@ -177,6 +177,37 @@ describe('the install check plugin', () => {
     const ctx = await mount(true)
     const result = await ctx.get('pluginAudit')!.audit({ name: 'good-plugin', dir: `${dir}/node_modules/good-plugin`, accepted: [], pending: 'install', registries: [null, 'http://registry.example.test/'] })
     expect(result.findings).toContainEqual(expect.objectContaining({ rule: 'delo.insecure-source', title: expect.stringContaining('http://registry.example.test/') as string }))
+  })
+
+  it('refuses an installation a mirror resolved whose integrity the primary registry contradicts', async () => {
+    standIn.answers.integrities = { 'good-plugin': { '1.0.0': 'sha512-other' } }
+    const ctx = await mount(true)
+    const target = { name: 'good-plugin', dir: `${dir}/node_modules/good-plugin`, accepted: [], pending: 'install' as const, registries: [null, 'https://registry.npmmirror.com/'] }
+    const refused = await ctx.get('pluginAudit')!.audit(target)
+    expect(refused).toMatchObject({ decision: 'refused', findings: [{ rule: 'delo.integrity-mismatch', severity: 'critical' }] })
+    expect(await ctx.get('pluginAudit')!.audit({ ...target, accepted: [refused.digest] })).toMatchObject({ decision: 'refused' })
+    standIn.answers.integrities = { 'good-plugin': { '1.0.0': INTEGRITY } }
+    expect(await ctx.get('pluginAudit')!.audit(target)).toMatchObject({ decision: 'clear', findings: [] })
+  })
+
+  it('needs acceptance for an installation a mirror resolved while the primary registry cannot be reached', async () => {
+    standIn.answers.times = {}
+    const ctx = await mount(true)
+    const target = { name: 'good-plugin', dir: `${dir}/node_modules/good-plugin`, accepted: [], pending: 'install' as const, registries: [null, 'https://registry.npmmirror.com/'] }
+    const unconfirmed = await ctx.get('pluginAudit')!.audit(target)
+    expect(unconfirmed).toMatchObject({ decision: 'needs-acceptance' })
+    expect(unconfirmed.findings.map(finding => finding.rule)).toContain('delo.integrity-unconfirmed')
+    expect(await ctx.get('pluginAudit')!.audit({ ...target, accepted: [unconfirmed.digest] })).toMatchObject({ decision: 'accepted' })
+    // The primary registry resolved this one: an unreachable document stays a warning.
+    expect(await ctx.get('pluginAudit')!.audit({ ...target, registries: [null] })).toMatchObject({ decision: 'clear' })
+  })
+
+  it('reads a mirror resolution from the registries asked and the manager\'s fallbacks', () => {
+    expect(resolvedThroughMirror(undefined, [])).toBe(false)
+    expect(resolvedThroughMirror([null], ['https://registry.npmmirror.com/'])).toBe(false)
+    expect(resolvedThroughMirror(['https://registry.npmjs.org/'], ['https://registry.npmmirror.com/'])).toBe(false)
+    expect(resolvedThroughMirror([null, 'https://registry.npmmirror.com/'], [])).toBe(true)
+    expect(resolvedThroughMirror(['https://registry.npmmirror.com'], ['https://registry.npmmirror.com/'])).toBe(true)
   })
 
   it('refuses a critical advisory while the installation is only resolved, and accepts the same set when it is installed', async () => {

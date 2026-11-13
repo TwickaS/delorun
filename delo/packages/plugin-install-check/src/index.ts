@@ -49,7 +49,10 @@ export interface Config {
   readonly enabled: boolean
   /** npm's bulk advisory endpoint, which answers from the GitHub Advisory Database. */
   readonly advisoryFeed: string
-  /** The registry whose package documents give publish times; a trailing `/` is added when missing. */
+  /**
+   * The primary registry, whose package documents give publish times and confirm the integrity of a package a mirror
+   * resolved; a trailing `/` is added when missing.
+   */
   readonly registry: string
   /** A version published less than this many hours ago is a warning. */
   readonly minimumAgeHours: number
@@ -147,7 +150,7 @@ export function installationNames(installAnchor: string): Set<string> {
  * @returns the digest.
  */
 export function blockingDigest(pluginName: string, blocking: readonly InstallFinding[]): string {
-  const named = blocking.map(finding => `${finding.advisory ?? ''} ${finding.package}@${finding.version ?? ''}`).sort()
+  const named = blocking.map(finding => `${finding.advisory ?? finding.rule} ${finding.package}@${finding.version ?? ''}`).sort()
   return `sha256:${createHash('sha256').update(JSON.stringify([pluginName, named])).digest('hex')}`
 }
 
@@ -164,11 +167,12 @@ function auditFinding(finding: InstallFinding): PluginAuditFinding {
  * The audit's answer for a check.
  * @param check - the check.
  * @param acceptedDigest - the digest the person accepted, when the check met one.
- * @returns the answer: `needs-acceptance` while a critical advisory blocks, `accepted` once the person accepted it,
- *   `clear` otherwise.
+ * @returns the answer: `refused` for an integrity the primary registry contradicts, `needs-acceptance` while a critical
+ *   finding blocks, `accepted` once the person accepted it, `clear` otherwise.
  */
 export function auditResult(check: PackageCheck, acceptedDigest: string | undefined): PluginAuditResult {
   const findings = check.kind === 'skipped' ? [] : check.findings.map(auditFinding)
+  if (check.kind === 'checked' && check.refused.length > 0) return { decision: 'refused', digest: blockingDigest(check.name, check.refused), findings, truncated: false }
   const blocking = check.kind === 'checked' ? check.blocking : []
   if (check.kind === 'checked' && blocking.length > 0) return { decision: 'needs-acceptance', digest: blockingDigest(check.name, blocking), findings, truncated: false }
   if (acceptedDigest !== undefined) return { decision: 'accepted', digest: acceptedDigest, findings, truncated: false }
@@ -196,6 +200,20 @@ export function checkFailedResult(target: PluginAuditTarget, cause: string, refe
 }
 
 /**
+ * Whether a mirror resolved an installation: a registry after the first one it asked, or one of the plugin manager's
+ * fallback registries.
+ * @param asked - the registries the installation asked, the last one having resolved it; absent for any other question.
+ * @param fallbacks - the plugin manager's fallback registries.
+ * @returns true when the resolving registry is a fallback.
+ */
+export function resolvedThroughMirror(asked: readonly (string | null)[] | undefined, fallbacks: readonly string[]): boolean {
+  const last = asked?.at(-1)
+  if (asked === undefined || last === undefined) return false
+  const comparable = (url: string): string => (url.endsWith('/') ? url : `${url}/`).toLowerCase()
+  return asked.length > 1 || (last !== null && fallbacks.some(fallback => comparable(fallback) === comparable(last)))
+}
+
+/**
  * Mount the plugin. On, it provides `pluginAudit` and `deloPluginTrust` for the profile; off, nothing.
  * @param ctx - the plugin context.
  * @param config - the configuration, after the schema.
@@ -212,16 +230,20 @@ export function apply(ctx: Context, config: Config): void {
   const awaiting = new Map<string, PackageCheck>()
   // An operation that ended without its last question, failed or cancelled, leaves no answer for a later one.
   ctx.on('plugin-manager/operation', (operation) => { if (operation.phase !== 'started') awaiting.clear() })
-  const registries = async (): Promise<string[]> => {
+  /** The plugin manager's registries: every URL it may ask, and its fallbacks alone. */
+  const registries = async (): Promise<{ readonly urls: string[], readonly fallbacks: string[] }> => {
     const manager = ctx.get('pluginManager')
-    if (manager === undefined) return []
+    if (manager === undefined) return { urls: [], fallbacks: [] }
     try {
       const configured = await manager.registries()
-      return [...configured.registry === null ? configured.resolved === null ? [] : [configured.resolved] : [configured.registry], ...configured.fallbackRegistries]
+      return {
+        urls: [...configured.registry === null ? configured.resolved === null ? [] : [configured.resolved] : [configured.registry], ...configured.fallbackRegistries],
+        fallbacks: configured.fallbackRegistries,
+      }
     } catch (error) {
-      // pnpm's own registry could not be read; the configured ones are still compared below, and the check goes on.
+      // pnpm's own registry could not be read; the registries the installation asked are still compared, and the check goes on.
       ctx.logger.warn('The plugin install check could not read the plugin registries', error)
-      return []
+      return { urls: [], fallbacks: [] }
     }
   }
   const audit: PluginAudit = {
@@ -233,10 +255,12 @@ export function apply(ctx: Context, config: Config): void {
         const reference = await lockedReference(profile.dir, target.name)
         const key = reference === undefined ? undefined : JSON.stringify([target.name, reference])
         const earlier = target.pending === undefined && key !== undefined ? awaiting.get(key) : undefined
+        const configured = earlier === undefined ? await registries() : { urls: [], fallbacks: [] }
         check = earlier ?? await checkPackage({
           profileDir: profile.dir, name: target.name, allowedAdvisories: [], knownNames: known, now: Date.now, compareFiles: target.pending === undefined,
           // The registries this installation asked, such as one named for it alone, are audited beside the configured ones.
-          registries: [...await registries(), ...(target.registries ?? []).flatMap(registry => registry === null ? [] : [registry])],
+          registries: [...configured.urls, ...(target.registries ?? []).flatMap(registry => registry === null ? [] : [registry])],
+          confirmIntegrity: resolvedThroughMirror(target.registries, configured.fallbacks),
           acceptsBlocking: (blocking) => {
             const digest = blockingDigest(target.name, blocking)
             if (!target.accepted.includes(digest)) return false

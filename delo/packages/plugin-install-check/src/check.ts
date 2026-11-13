@@ -61,6 +61,8 @@ export interface PackageCheckRequest {
    * or not built yet, when only the recorded findings are shown. True when absent.
    */
   readonly compareFiles?: boolean
+  /** Whether a mirror resolved the installation, so its integrity is confirmed against the primary registry. */
+  readonly confirmIntegrity?: boolean
 }
 
 /** What an installation that passed the check leaves to record once it is installed and built. */
@@ -80,11 +82,12 @@ export type PackageCheck =
   /** The profile's lockfile does not read, so nothing was checked; the finding says why. */
   | { readonly kind: 'unchecked', readonly findings: readonly InstallFinding[] }
   /**
-   * The plugin was checked: `findings` lists every finding; `blocking` the critical advisories no allowance names, which
-   * refuse the installation; `trusted` whether its source is trusted. `pending` is what {@link recordInstalled} records
+   * The plugin was checked: `findings` lists every finding; `blocking` the critical findings no allowance names, which
+   * refuse the installation until accepted; `refused` the integrities the primary registry contradicts, which refuse it
+   * whatever is accepted; `trusted` whether its source is trusted. `pending` is what {@link recordInstalled} records
    * once the installation is in place, present when the installation passed and its record does not stand yet.
    */
-  | { readonly kind: 'checked', readonly name: string, readonly version?: string, readonly findings: readonly InstallFinding[], readonly blocking: readonly InstallFinding[], readonly trusted: boolean, readonly pending?: PendingRecord }
+  | { readonly kind: 'checked', readonly name: string, readonly version?: string, readonly findings: readonly InstallFinding[], readonly blocking: readonly InstallFinding[], readonly refused: readonly InstallFinding[], readonly trusted: boolean, readonly pending?: PendingRecord }
 
 /**
  * Read a profile's lockfile.
@@ -270,7 +273,7 @@ export async function checkPackage(request: PackageCheckRequest, settings: Insta
     const { changed, refreshed } = request.compareFiles === false ? { changed: [], refreshed: undefined } : await compareRecord(profileDir, record, { full: false, capturedAt, limit: settings.maxFiles })
     if (refreshed !== undefined) await writeInstallRecord(profileDir, refreshed)
     const trusted = isTrustedSource(record.name, record.source, settings.trustedSources)
-    return { kind: 'checked', name: record.name, ...record.version === undefined ? {} : { version: record.version }, findings: [...record.findings, ...changed.length === 0 ? [] : [changedFinding(record, changed)]], blocking: [], trusted }
+    return { kind: 'checked', name: record.name, ...record.version === undefined ? {} : { version: record.version }, findings: [...record.findings, ...changed.length === 0 ? [] : [changedFinding(record, changed)]], blocking: [], refused: [], trusted }
   }
   const closure = lockfileClosure(lockfile, request.name)
   const root = closure[0]
@@ -287,14 +290,15 @@ export async function checkPackage(request: PackageCheckRequest, settings: Insta
   ])
   const source = sourceOf(root)
   const trusted = isTrustedSource(request.name, source, settings.trustedSources)
-  const all = await findingsFor({ packages: brought, knownNames, registries: request.registries, now: request.now(), ...request.signal === undefined ? {} : { signal: request.signal } }, settings)
+  const all = await findingsFor({ packages: brought, knownNames, registries: request.registries, now: request.now(), confirmIntegrity: request.confirmIntegrity === true, ...request.signal === undefined ? {} : { signal: request.signal } }, settings)
   const findings = trusted ? all.filter(finding => finding.severity === 'critical') : all
+  const refused = findings.filter(finding => finding.rule === 'integrity-mismatch')
   const allowed = new Set(request.allowedAdvisories)
-  const unallowed = findings.filter(finding => finding.severity === 'critical' && !allowed.has(finding.advisory ?? ''))
+  const unallowed = findings.filter(finding => finding.severity === 'critical' && finding.rule !== 'integrity-mismatch' && !allowed.has(finding.advisory ?? ''))
   const blocking = unallowed.length > 0 && request.acceptsBlocking?.(unallowed) === true ? [] : unallowed
   const version = root.entry?.packageVersion ?? semver.valid(root.entry?.version ?? '') ?? undefined
-  const base = { kind: 'checked' as const, name: request.name, ...version === undefined ? {} : { version }, findings, blocking, trusted }
-  if (blocking.length > 0) return base
+  const base = { kind: 'checked' as const, name: request.name, ...version === undefined ? {} : { version }, findings, blocking, refused, trusted }
+  if (blocking.length > 0 || refused.length > 0) return base
   return {
     ...base,
     pending: {

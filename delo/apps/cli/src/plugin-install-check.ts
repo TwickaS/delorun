@@ -108,10 +108,13 @@ function findingLine(finding: InstallFinding): string {
 function printCheck(output: CommandOutput, name: string, check: PackageCheck): void {
   if (check.kind === 'skipped') return
   const subject = check.kind === 'checked' && check.version !== undefined ? `${printable(name)} ${printable(check.version)}` : printable(name)
-  if (check.kind === 'checked' && check.blocking.length > 0) {
-    output.stderr(`delorun: refused ${subject}: a known critical advisory affects it, so it was not installed:\n`)
+  if (check.kind === 'checked' && (check.blocking.length > 0 || check.refused.length > 0)) {
+    // Only an advisory can be allowed from the command line.
+    const ids = check.blocking.flatMap(finding => finding.advisory === undefined ? [] : [finding.advisory])
+    const allowable = check.refused.length === 0 && ids.length === check.blocking.length
+    output.stderr(`delorun: refused ${subject}: ${check.refused.length > 0 ? 'its integrity differs from the primary registry\'s' : allowable ? 'a known critical advisory affects it' : 'a critical finding affects it'}, so it was not installed:\n`)
     for (const finding of check.findings) output.stderr(findingLine(finding))
-    output.stderr(`  To install it anyway, run the same command with ${check.blocking.map(finding => `--allow-advisory ${finding.advisory ?? ''}`).join(' ')}\n`)
+    if (allowable) output.stderr(`  To install it anyway, run the same command with ${ids.map(id => `--allow-advisory ${id}`).join(' ')}\n`)
     return
   }
   if (check.findings.length === 0) {
@@ -124,7 +127,7 @@ function printCheck(output: CommandOutput, name: string, check: PackageCheck): v
 
 /** What the check of a resolved package operation found. */
 export interface ResolvedCheck {
-  /** The plugins refused for a known critical advisory. */
+  /** The plugins refused for a critical finding. */
   readonly refused: readonly string[]
   /** Whether the check could not run, which refuses the installation; the cause is printed. */
   readonly checkFailed: boolean
@@ -150,7 +153,7 @@ export async function checkResolved(request: { readonly profileDir: string, read
   }
   for (const { name, check } of result.checked) printCheck(request.output, name, check)
   return {
-    refused: result.checked.flatMap(({ name, check }) => check.kind === 'checked' && check.blocking.length > 0 ? [name] : []),
+    refused: result.checked.flatMap(({ name, check }) => check.kind === 'checked' && (check.blocking.length > 0 || check.refused.length > 0) ? [name] : []),
     checkFailed: false,
     pending: result.checked.flatMap(({ check }) => check.kind === 'checked' && check.pending !== undefined ? [check.pending] : []),
   }

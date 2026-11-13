@@ -106,6 +106,8 @@ export interface StandInAnswers {
   advisories: Record<string, unknown> | number
   /** Per package name, its publish times by version; a name without one answers 404. */
   times: Record<string, Record<string, string>>
+  /** Per package name, the integrity its document lists by version under `versions[v].dist`. */
+  integrities?: Record<string, Record<string, string>>
   /** Packages served with their tarballs, as a registry pnpm installs from serves them. */
   packages?: Record<string, PublishedPackage>
 }
@@ -183,7 +185,8 @@ export async function startStandIn(answers: StandInAnswers): Promise<StandIn> {
         response.writeHead(404).end()
         return
       }
-      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ name, time }))
+      const versions = Object.fromEntries(Object.entries(answers.integrities?.[name] ?? {}).map(([version, integrity]) => [version, { name, version, dist: { integrity } }]))
+      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ name, time, versions }))
     })
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))

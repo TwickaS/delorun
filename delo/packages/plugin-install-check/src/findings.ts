@@ -2,10 +2,12 @@
  * The install check's findings for the packages one installation brings: a package without a lockfile integrity or
  * with a git commit that is not a full 40-hex id; a GitHub advisory that affects a locked version, read from npm's bulk
  * advisory API; a version the registry published less than the configured age ago; a name close to a name the
- * profile or the installation already holds; and a registry, tarball or git source reached over plain `http:`, through
- * which a package could be altered in transit. A lookup that fails is a finding that says which check could not run, so
- * no check is skipped silently. Only a `critical` advisory blocks, and only until the person names it as allowed; every
- * other finding is a warning.
+ * profile or the installation already holds; a registry, tarball or git source reached over plain `http:`, through
+ * which a package could be altered in transit; and, for an installation a mirror resolved, a lockfile integrity that the
+ * primary registry's package document does not confirm. A lookup that fails is a finding that says which check could
+ * not run, so no check is skipped silently. A `critical` advisory, and a mirror-resolved integrity the primary registry
+ * could not confirm, block until the person accepts them; an integrity the primary registry contradicts refuses the
+ * installation; every other finding is a warning.
  *
  * @module @delo/plugin-install-check/findings
  */
@@ -24,6 +26,8 @@ export type FindingRule =
   | 'similar-name'
   | 'insecure-source'
   | 'changed-files'
+  | 'integrity-mismatch'
+  | 'integrity-unconfirmed'
 
 /** One finding of the install check. */
 export interface InstallFinding {
@@ -38,7 +42,10 @@ export interface InstallFinding {
   readonly path: string
   /** The 1-based line of `path` it is read at; 0 when it names the whole file. */
   readonly line: number
-  /** `critical` for a critical advisory, which blocks until allowed; `warning` otherwise. */
+  /**
+   * `critical` for a critical advisory or an integrity the primary registry did not confirm, which blocks until allowed,
+   * and for an integrity it contradicts, which refuses; `warning` otherwise.
+   */
   readonly severity: 'critical' | 'warning'
   /** The GHSA id, for `advisory`. */
   readonly advisory?: string
@@ -48,7 +55,10 @@ export interface InstallFinding {
 export interface FindingSettings {
   /** npm's bulk advisory endpoint. */
   readonly advisoryFeed: string
-  /** The registry whose package documents give publish times, ending in `/`. */
+  /**
+   * The primary registry, ending in `/`: its package documents give publish times, and confirm the integrity of a
+   * package a mirror resolved.
+   */
   readonly registry: string
   /** A version published less than this many hours ago is a warning. */
   readonly minimumAgeHours: number
@@ -76,6 +86,11 @@ export interface FindingInput {
   readonly now: number
   /** Ends every request early. */
   readonly signal?: AbortSignal
+  /**
+   * Whether a mirror, not the primary registry, resolved the installation, so each registry package's lockfile integrity
+   * is compared with the primary registry's.
+   */
+  readonly confirmIntegrity?: boolean
 }
 
 const LOCKFILE_PATH = 'pnpm-lock.yaml'
@@ -89,8 +104,9 @@ const FULL_COMMIT = /^[0-9a-f]{40}$/u
  */
 export async function findingsFor(input: FindingInput, settings: FindingSettings): Promise<InstallFinding[]> {
   const registryPackages = input.packages.flatMap(pkg => registryVersion(pkg) === undefined ? [] : [pkg])
-  const [advisories, ages] = await Promise.all([advisoryFindings(registryPackages, settings, input.signal), ageFindings(registryPackages, settings, input.now, input.signal)])
-  return [...insecureFindings(input), ...input.packages.flatMap(integrityFindings), ...advisories, ...ages, ...nameFindings(input.packages, input.knownNames, settings)]
+  const [advisories, documents] = await Promise.all([advisoryFindings(registryPackages, settings, input.signal), readDocuments(registryPackages, settings, input.signal)])
+  const confirmations = input.confirmIntegrity === true ? confirmationFindings(registryPackages, documents, settings) : []
+  return [...insecureFindings(input), ...input.packages.flatMap(integrityFindings), ...confirmations, ...advisories, ...ageFindings(registryPackages, documents, settings, input.now), ...nameFindings(input.packages, input.knownNames, settings)]
 }
 
 /** A URL over plain HTTP, `git+http:` included. */
@@ -194,17 +210,19 @@ export function documentUrl(registry: string, name: string): string {
   return `${registry}${name.replace('/', '%2f')}`
 }
 
+/** A package document the primary registry answered, or why it could not be read. */
+type DocumentRead = { readonly document: Record<string, unknown> } | { readonly error: string }
+
 /**
- * Read one package document's publish time of one version.
+ * Read one package document.
  * @param url - the document's URL.
- * @param version - the version.
  * @param settings - the time limit and size limit.
  * @param signal - ends the request early.
- * @returns the publish time in milliseconds.
- * @throws Error naming the URL when the registry cannot be reached, answers another status, a body too large or not
- *   JSON, or names no time for the version.
+ * @returns the document.
+ * @throws Error naming the URL when the registry cannot be reached, answers another status, or a body too large or not
+ *   a JSON object.
  */
-async function publishTime(url: string, version: string, settings: FindingSettings, signal: AbortSignal | undefined): Promise<number> {
+async function packageDocument(url: string, settings: FindingSettings, signal: AbortSignal | undefined): Promise<Record<string, unknown>> {
   const timeout = AbortSignal.timeout(settings.requestTimeoutMs)
   const response = await fetch(url, { headers: { accept: 'application/json' }, signal: signal === undefined ? timeout : AbortSignal.any([timeout, signal]) })
   if (response.status !== 200) throw new Error(`${url} answered HTTP ${String(response.status)}`)
@@ -218,47 +236,102 @@ async function publishTime(url: string, version: string, settings: FindingSettin
   } catch (error) {
     throw new Error(`${url} answered with a body that is not JSON`, { cause: error })
   }
-  const time = typeof document === 'object' && document !== null && 'time' in document && typeof document.time === 'object' && document.time !== null
-    ? (document.time as Record<string, unknown>)[version]
-    : undefined
-  const parsed = typeof time === 'string' ? Date.parse(time) : Number.NaN
-  if (Number.isNaN(parsed)) throw new Error(`${url} names no publish time for ${version}`)
-  return parsed
+  if (typeof document !== 'object' || document === null || Array.isArray(document)) throw new Error(`${url} answered with a body that is not a JSON object`)
+  return document as Record<string, unknown>
+}
+
+/**
+ * Read the primary registry's document of each registry package, a few at once.
+ * @param packages - the registry packages.
+ * @param settings - the registry, the concurrency and the limits.
+ * @param signal - ends the requests early.
+ * @returns each package's document, or why it could not be read.
+ */
+async function readDocuments(packages: readonly ClosurePackage[], settings: FindingSettings, signal: AbortSignal | undefined): Promise<Map<ClosurePackage, DocumentRead>> {
+  const documents = new Map<ClosurePackage, DocumentRead>()
+  const queue = [...packages]
+  const worker = async (): Promise<void> => {
+    for (let pkg = queue.shift(); pkg !== undefined; pkg = queue.shift()) {
+      try {
+        documents.set(pkg, { document: await packageDocument(documentUrl(settings.registry, pkg.entry!.name), settings, signal) })
+      } catch (error) {
+        documents.set(pkg, { error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(settings.requestConcurrency, packages.length) }, worker))
+  return documents
+}
+
+/**
+ * A field of a JSON object that is itself a JSON object.
+ * @param value - the object, or anything else.
+ * @param key - the field.
+ * @returns the field's object, or `undefined` when either is not an object.
+ */
+function objectField(value: unknown, key: string): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const field = (value as Record<string, unknown>)[key]
+  return typeof field === 'object' && field !== null && !Array.isArray(field) ? field as Record<string, unknown> : undefined
 }
 
 /**
  * The publish-time findings of the registry packages.
  * @param packages - the registry packages.
- * @param settings - the registry, the age, the limits.
+ * @param documents - their documents.
+ * @param settings - the age.
  * @param now - the clock, in milliseconds.
- * @param signal - ends the requests early.
  * @returns one finding per version younger than the configured age, and one finding naming the lookups that failed.
  */
-async function ageFindings(packages: readonly ClosurePackage[], settings: FindingSettings, now: number, signal: AbortSignal | undefined): Promise<InstallFinding[]> {
+function ageFindings(packages: readonly ClosurePackage[], documents: ReadonlyMap<ClosurePackage, DocumentRead>, settings: FindingSettings, now: number): InstallFinding[] {
   const findings: InstallFinding[] = []
   const failures: string[] = []
-  const queue = [...packages]
-  const worker = async (): Promise<void> => {
-    for (let pkg = queue.shift(); pkg !== undefined; pkg = queue.shift()) {
-      const entry = pkg.entry!
-      try {
-        const published = await publishTime(documentUrl(settings.registry, entry.name), entry.version, settings, signal)
-        const hours = (now - published) / 3_600_000
-        if (hours < settings.minimumAgeHours) {
-          findings.push({ rule: 'recent-publish', package: entry.name, version: entry.version, path: LOCKFILE_PATH, line: entry.line, severity: 'warning', title: `${entry.name}@${entry.version} was published ${hours < 1 ? 'less than an hour' : `${String(Math.floor(hours))} hours`} ago; a hijacked release is often caught in its first day` })
-        }
-      } catch (error) {
-        failures.push(`${entry.name}@${entry.version}: ${error instanceof Error ? error.message : String(error)}`)
-      }
+  for (const pkg of packages) {
+    const entry = pkg.entry!
+    const read = documents.get(pkg)!
+    const url = documentUrl(settings.registry, entry.name)
+    const time = 'document' in read ? objectField(read.document, 'time')?.[entry.version] : undefined
+    const published = typeof time === 'string' ? Date.parse(time) : Number.NaN
+    if (Number.isNaN(published)) {
+      failures.push(`${entry.name}@${entry.version}: ${'error' in read ? read.error : `${url} names no publish time for ${entry.version}`}`)
+      continue
+    }
+    const hours = (now - published) / 3_600_000
+    if (hours < settings.minimumAgeHours) {
+      findings.push({ rule: 'recent-publish', package: entry.name, version: entry.version, path: LOCKFILE_PATH, line: entry.line, severity: 'warning', title: `${entry.name}@${entry.version} was published ${hours < 1 ? 'less than an hour' : `${String(Math.floor(hours))} hours`} ago; a hijacked release is often caught in its first day` })
     }
   }
-  await Promise.all(Array.from({ length: Math.min(settings.requestConcurrency, packages.length) }, worker))
   findings.sort((a, b) => (a.package < b.package ? -1 : a.package > b.package ? 1 : 0))
   if (failures.length > 0) {
     failures.sort()
     findings.push({ rule: 'publish-time-unchecked', package: packages[0]!.name, path: LOCKFILE_PATH, line: 0, severity: 'warning', title: `The publish time of ${String(failures.length)} ${failures.length === 1 ? 'package' : 'packages'} could not be checked: ${failures[0]!}${failures.length > 1 ? ', and others' : ''}` })
   }
   return findings
+}
+
+/**
+ * The integrity confirmations of the registry packages a mirror resolved: each lockfile integrity is compared with the
+ * one the primary registry's document lists for the version.
+ * @param packages - the registry packages.
+ * @param documents - their primary registry documents.
+ * @param settings - the primary registry.
+ * @returns per package, a critical `integrity-mismatch` when the two differ, which refuses, or a critical
+ *   `integrity-unconfirmed` when either is missing or the document could not be read, which needs acceptance.
+ */
+function confirmationFindings(packages: readonly ClosurePackage[], documents: ReadonlyMap<ClosurePackage, DocumentRead>, settings: FindingSettings): InstallFinding[] {
+  return packages.flatMap((pkg): InstallFinding[] => {
+    const entry = pkg.entry!
+    const at = { package: entry.name, version: entry.version, path: LOCKFILE_PATH, line: entry.line, severity: 'critical' as const }
+    const read = documents.get(pkg)!
+    const primary = 'document' in read ? objectField(objectField(objectField(read.document, 'versions'), entry.version), 'dist')?.integrity : undefined
+    const locked = entry.resolution.integrity
+    if (typeof primary === 'string' && locked !== undefined && primary !== locked) {
+      return [{ ...at, rule: 'integrity-mismatch', title: `${entry.name}@${entry.version} came through a mirror whose integrity ${locked} differs from ${primary}, which the primary registry ${settings.registry} lists, so it is refused` }]
+    }
+    if (typeof primary === 'string' && locked !== undefined) return []
+    const why = 'error' in read ? read.error : typeof primary !== 'string' ? `${settings.registry} lists no integrity for ${entry.version}` : 'the lockfile records no integrity for it'
+    return [{ ...at, rule: 'integrity-unconfirmed', title: `The integrity of ${entry.name}@${entry.version}, which came through a mirror, is not confirmed against the primary registry: ${why}` }]
+  })
 }
 
 /**

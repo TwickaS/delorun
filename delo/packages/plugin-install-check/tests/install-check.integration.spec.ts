@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkPackage, checkProfileTrust, reconcileProfile, readPluginTrust, recordInstalled, type InstallCheckSettings, type PackageCheck } from '../src/check.ts'
 import { readInstallRecord, recordPath, trustPath } from '../src/record.ts'
-import { advisory, OLD, removeProfile, settingsFor, startStandIn, writeProfile, writeProfileFiles, type FixturePackage, type StandIn } from './fixture.ts'
+import { advisory, INTEGRITY, OLD, removeProfile, settingsFor, startStandIn, writeProfile, writeProfileFiles, type FixturePackage, type StandIn } from './fixture.ts'
 
 const NOW = Date.parse('2026-11-11T12:00:00.000Z')
 const PLUGIN: FixturePackage = { name: 'good-plugin', version: '1.0.0', direct: true, dependencies: { 'left-pad': '1.3.0' } }
@@ -48,8 +48,8 @@ function profile(packages: readonly FixturePackage[]): string {
  * @param extra - request fields to change.
  * @returns the check.
  */
-async function check(dir: string, name = 'good-plugin', extra: { allowedAdvisories?: string[], knownNames?: Set<string>, settings?: InstallCheckSettings, registries?: string[] } = {}): Promise<PackageCheck> {
-  const result = await checkPackage({ profileDir: dir, name, allowedAdvisories: extra.allowedAdvisories ?? [], knownNames: extra.knownNames ?? new Set(), registries: extra.registries ?? [], now: () => NOW }, extra.settings ?? settings)
+async function check(dir: string, name = 'good-plugin', extra: { allowedAdvisories?: string[], knownNames?: Set<string>, settings?: InstallCheckSettings, registries?: string[], confirmIntegrity?: boolean } = {}): Promise<PackageCheck> {
+  const result = await checkPackage({ profileDir: dir, name, allowedAdvisories: extra.allowedAdvisories ?? [], knownNames: extra.knownNames ?? new Set(), registries: extra.registries ?? [], now: () => NOW, confirmIntegrity: extra.confirmIntegrity === true }, extra.settings ?? settings)
   // The fixture's packages are already installed, as after pnpm's installation and its builds.
   if (result.kind === 'checked' && result.pending !== undefined) await recordInstalled(dir, result.pending, { now: () => NOW, maxFiles: 1000 })
   return result
@@ -181,6 +181,41 @@ describe('the install check', () => {
     standIn.advisoryRequests.length = 0
     await check(dir, 'second-plugin')
     expect(standIn.advisoryRequests).toEqual([{ 'second-plugin': ['2.0.0'] }])
+  })
+})
+
+describe('an installation a mirror resolved', () => {
+  it('passes when the primary registry lists the lockfile\'s integrity for every package', async () => {
+    standIn.answers.integrities = { 'good-plugin': { '1.0.0': INTEGRITY }, 'left-pad': { '1.3.0': INTEGRITY } }
+    const result = await check(profile([PLUGIN, DEPENDENCY]), 'good-plugin', { confirmIntegrity: true })
+    expect(findings(result)).toEqual([])
+    expect(result.kind === 'checked' && result.pending !== undefined).toBe(true)
+  })
+
+  it('refuses a package whose lockfile integrity the primary registry contradicts, whatever is allowed', async () => {
+    standIn.answers.integrities = { 'good-plugin': { '1.0.0': INTEGRITY }, 'left-pad': { '1.3.0': 'sha512-other' } }
+    const dir = profile([PLUGIN, DEPENDENCY])
+    const result = await check(dir, 'good-plugin', { confirmIntegrity: true })
+    expect(result).toMatchObject({ kind: 'checked', refused: [{ rule: 'integrity-mismatch', package: 'left-pad', severity: 'critical' }], blocking: [] })
+    expect(result.kind === 'checked' && result.pending).toBeUndefined()
+    expect(existsSync(recordPath(dir, 'good-plugin'))).toBe(false)
+  })
+
+  it('needs acceptance when the primary registry cannot be reached or lists no integrity, never passing silently', async () => {
+    standIn.answers.integrities = { 'good-plugin': { '1.0.0': INTEGRITY } }
+    standIn.answers.times = { 'good-plugin': { '1.0.0': OLD } }
+    const result = await check(profile([PLUGIN, DEPENDENCY]), 'good-plugin', { confirmIntegrity: true })
+    expect(result.kind === 'checked' && result.refused).toEqual([])
+    expect(result.kind === 'checked' && result.blocking.map(finding => [finding.rule, finding.package, finding.severity])).toEqual([['integrity-unconfirmed', 'left-pad', 'critical']])
+    expect(findings(result).find(finding => finding.rule === 'integrity-unconfirmed')?.title).toMatch(/^The integrity of left-pad@1\.3\.0, which came through a mirror, is not confirmed against the primary registry: .*answered HTTP 404$/u)
+    standIn.answers.times['left-pad'] = { '1.3.0': OLD }
+    const unlisted = await check(profile([PLUGIN, DEPENDENCY]), 'good-plugin', { confirmIntegrity: true })
+    expect(unlisted.kind === 'checked' && unlisted.blocking.map(finding => finding.rule)).toEqual(['integrity-unconfirmed'])
+  })
+
+  it('compares nothing for an installation the primary registry resolved', async () => {
+    standIn.answers.integrities = { 'good-plugin': { '1.0.0': 'sha512-other' } }
+    expect(findings(await check(profile([PLUGIN, DEPENDENCY])))).toEqual([])
   })
 })
 
