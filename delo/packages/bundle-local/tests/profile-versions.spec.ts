@@ -20,7 +20,8 @@ function stubService(): { service: ProfileVersions, calls: string[] } {
     save: vi.fn(async (name: string | undefined) => { calls.push(`save:${name ?? ''}`); return { id: 'a'.repeat(40), created: true } }),
     switch: vi.fn(async (id: string) => { calls.push(`switch:${id}`); return { changes: NO_CHANGES, restartNeeded: false } }),
   }
-  return { service: service as unknown as ProfileVersions, calls }
+  const partial: Partial<ProfileVersions> = service
+  return { service: partial as ProfileVersions, calls }
 }
 
 interface FakeConnection {

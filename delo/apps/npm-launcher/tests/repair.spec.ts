@@ -70,7 +70,7 @@ describe('delorun repair', () => {
         await mkdir(paths.version(target), { recursive: true })
         if (overrides.formats !== undefined || !('formats' in overrides)) await writeFile(join(paths.version(target), DATA_FORMATS_FILE), dataFormatsText(overrides.formats ?? FORMATS))
         await writeFile(join(paths.root, 'store.json'), 'fresh store')
-        return { version: target, manifest: { dsh: overrides.dsh ?? '0.2.2' } } as unknown as VerifiedRuntime
+        return { version: target, manifest: { dsh: overrides.dsh ?? '0.2.2' } } as VerifiedRuntime
       }),
     }
     const channel: RepairChannel = {

@@ -94,7 +94,8 @@ export type ManualInstall = (options: { readonly home: string, readonly from: st
  * @param options - the home, the source, `--yes`, the question, the output line and the environment.
  * @returns the version to prepare.
  */
-export const MANUAL_INSTALL: ManualInstall = async ({ home, from, yes, confirm: ask, line, env }) => {
+export const MANUAL_INSTALL: ManualInstall = async (options) => {
+  const { home, from, yes, confirm: ask, line, env } = options
   const running = runtimeOfFile(home, fileURLToPath(import.meta.url))
   if (!running.store) throw new CliError(EXIT.failed, 'delorun update --from: this Delo does not run from the runtime store, so it has no release to replace; install Delo with its launcher.')
   return installFrom({

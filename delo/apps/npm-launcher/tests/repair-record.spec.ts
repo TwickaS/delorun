@@ -2,6 +2,7 @@
  * The mark `delorun repair` keeps in `run/repair.json`: while it stands, no launcher start runs, whatever the profile,
  * and a mark left by a repair that died is reported and removed.
  */
+// spec-lanes-allow: one short-lived child that has exited gives a process id no process holds.
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
@@ -156,7 +157,7 @@ describe('the repair mark', () => {
       const install: RepairStore['install'] = async () => {
         expect(existsSync(repairRecordPath(home))).toBe(true)
         attempts.push(await runLauncher(launch('brand-new')))
-        return { version: version('0.1.1'), manifest: { dsh: '0.2.2' } } as unknown as VerifiedRuntime
+        return { version: version('0.1.1'), manifest: { dsh: '0.2.2' } } as VerifiedRuntime
       }
       expect(await runRepair(repairOptions(install))).toBe(0)
       expect(attempts).toEqual([1])

@@ -39,6 +39,15 @@ async function releaseFolder(fixture: Fixture, leave: readonly string[] = []): P
   return folder
 }
 
+/**
+ * A store that implements only the members {@link installFrom} reads in these specs.
+ * @param members - those members.
+ * @returns the store.
+ */
+function standIn(members: Partial<Record<keyof InstallFromOptions['store'], unknown>>): InstallFromOptions['store'] {
+  return members as InstallFromOptions['store']
+}
+
 /** A run of {@link installFrom} over a stand-in store, and what it did. */
 async function run(fixture: Fixture, change: { readonly from?: (folder: string) => string, readonly leave?: readonly string[], readonly current?: string, readonly yes?: boolean, readonly answer?: boolean | undefined, readonly late?: boolean } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'delo-from-home-'))
@@ -55,7 +64,7 @@ async function run(fixture: Fixture, change: { readonly from?: (folder: string) 
     yes: change.yes === true,
     running: '0.0.9' as RuntimeVersion,
     anchor: { shipped: async () => fixture.roots, root: async () => fixture.rootMetadata },
-    store: {
+    store: standIn({
       paths: { platform: fixture.platform },
       pointers: async () => ({ current: (change.current ?? '0.0.9') as RuntimeVersion }),
       startCheckRuntime: async () => ({ manifest: { channel: 'stable' } }),
@@ -66,7 +75,7 @@ async function run(fixture: Fixture, change: { readonly from?: (folder: string) 
         installed.push(request.version)
         return {}
       },
-    } as unknown as InstallFromOptions['store'],
+    }),
     fullCheckDays: 7,
     confirm: async (question) => { questions.push(question); return 'answer' in change ? change.answer : true },
     line: () => {},

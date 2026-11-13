@@ -43,7 +43,7 @@ const settle = (ms = 0): Promise<void> => act(async () => {
  */
 function renderNotice(host: ReturnType<typeof fakeHost>): PairingSource {
   const source = createPairingSource(host.fetch)
-  const props = { t, ...source, usePairing: <T,>(select: (state: ReturnType<typeof source.hooks.pairing.getSnapshot>) => T): T => useSyncState(source, select) } as unknown as PairingNoticeProps
+  const props = { t, ...source, usePairing: <T,>(select: (state: ReturnType<typeof source.hooks.pairing.getSnapshot>) => T): T => useSyncState(source, select) } as PairingNoticeProps
   render(<PairingNotice {...props} />)
   return source
 }
@@ -310,7 +310,7 @@ describe('the pairing controls in Settings → Devices', () => {
   })
 
   it('lists the devices asking, with Enter code and Decline', () => {
-    const pairing = renderSettings({ state: { requests: [ASKING as unknown as PendingDevice] } })
+    const pairing = renderSettings({ state: { requests: [ASKING as PendingDevice] } })
     const row = document.querySelector('[data-request-id="ask-1"]') as HTMLElement
     expect(within(row).getByText('Pixel 9')).toBeTruthy()
     fireEvent.click(within(row).getByRole('button', { name: en['pairing.waiting.enter'] }))
@@ -334,7 +334,10 @@ describe('the pairing controls in Settings → Devices', () => {
 describe('the writer', () => {
   /** A form over a fixed snapshot whose `mutate` answers as given. */
   function writerOver(value: unknown, mutate: (ops: unknown) => Promise<boolean>) {
-    const form = { getSnapshot: () => ({ value }), mutate: vi.fn(mutate) } as unknown as ConstructorParameters<typeof PairingWriter>[0]
+    type Form = ConstructorParameters<typeof PairingWriter>[0]
+    const snapshot = { value } as Partial<ReturnType<Form['getSnapshot']>>
+    const parts: Partial<Form> = { getSnapshot: () => snapshot as ReturnType<Form['getSnapshot']>, mutate: vi.fn(mutate) }
+    const form = parts as Form
     return { writer: new PairingWriter(form), mutate: form.mutate as ReturnType<typeof vi.fn> }
   }
 

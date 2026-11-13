@@ -39,7 +39,7 @@ function harness(options: { sending: boolean; turnstile?: 'passed' | 'failed' | 
   }
   return {
     env, db, sent, siteverify,
-    deps: { fetch: siteverify as unknown as typeof fetch, now: () => state.clock },
+    deps: { fetch: siteverify as typeof fetch, now: () => state.clock },
     get clock() { return state.clock },
     set clock(value) { state.clock = value },
   }
