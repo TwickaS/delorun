@@ -26,13 +26,29 @@ export type ResignOutcome =
   /** Another writer replaced `timestamp.json` after it was read; that write stands and the next run retries. */
   | { readonly outcome: 'raced' }
 
+/** What walking the root chain needs of a bucket: its keys and each object's bytes. */
+export interface RootSource {
+  /**
+   * List the keys below a prefix.
+   * @param prefix - the key prefix.
+   * @returns every key that starts with it.
+   */
+  list(prefix: string): Promise<string[]>
+  /**
+   * Read one object.
+   * @param key - the object key.
+   * @returns its bytes, or `undefined` when no such key exists.
+   */
+  read(key: string): Promise<{ readonly bytes: Uint8Array } | undefined>
+}
+
 /**
  * Walk the root chain the bucket stores.
  * @param store - the bucket.
  * @returns the newest root, after every root in the chain verified against the one before it.
  * @throws Error when the bucket holds no root, a root disappears while it is read, or the roots do not chain.
  */
-export async function newestRoot(store: Pick<ReplaceStore, 'read' | 'list'>): Promise<TrustedRoot> {
+export async function newestRoot(store: RootSource): Promise<TrustedRoot> {
   const numbered = (await store.list('root/')).map(name => /^root\/([1-9][0-9]*)\.root\.json$/u.exec(name)).filter(match => match !== null).map(match => ({ name: match[0], version: Number(match[1]) }))
   if (numbered.length === 0) throw new Error('the bucket holds no root/<n>.root.json')
   numbered.sort((a, b) => a.version - b.version)
