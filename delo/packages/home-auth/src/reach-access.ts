@@ -466,13 +466,27 @@ function terminalWithoutUnlock(facts: Pick<ReachAccessFacts, 'terminalWithoutUnl
 }
 
 /**
- * The settings namespace of the external-agent consent's profile row, the same id as `DELEGATION_CONSENT_ROW` of
- * `@delo/plugin-delegation-consent/wire`. Its `enabled` field only the home's own computer turns off (A299).
+ * A boolean setting only the home's own computer turns off, such as the external-agent consent (A299): a device's
+ * settings write to its namespace is refused, unlocked or not, unless it leaves the field a literal `true`. The plugin
+ * that owns the field registers it with `HomeAuthService.registerComputerOnlySwitch` while it is mounted.
  */
-export const DELEGATION_CONSENT_NAMESPACE = 'delo-delegation-consent'
+export interface ComputerOnlySwitch {
+  /** The settings namespace, the id of the plugin's profile row. */
+  readonly ns: string
+  /** The boolean field of the row's configuration. */
+  readonly field: string
+  /** What the field turns on, as the refusal names it, such as `the external-agent consent`. */
+  readonly label: string
+}
 
-/** The reason a settings write that turns the external-agent consent off is refused to a device, unlocked or not. */
-export const CONSENT_OFF_REFUSAL = 'loopback-required: turning the external-agent consent off'
+/**
+ * The reason a settings write that would turn a computer-only switch off is refused to a device, unlocked or not.
+ * @param label - the switch's {@link ComputerOnlySwitch.label}.
+ * @returns `loopback-required: turning <label> off`.
+ */
+export function switchOffRefusal(label: string): string {
+  return `loopback-required: turning ${label} off`
+}
 
 /** The settings writes whose arguments the condition reads for a field only the computer lowers. */
 const SETTINGS_WRITES: ReadonlySet<string> = new Set(['settings/mutate', 'settings/update', 'settings/replace'])
@@ -487,37 +501,40 @@ function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 /**
- * Whether one `settings/mutate` operation leaves the consent's `enabled` field on: an operation on another field, or
- * a `set` that writes a literal `true` to it, directly or in the whole section.
+ * Whether one `settings/mutate` operation leaves a switch's field on: an operation on another field, or a `set` that
+ * writes a literal `true` to it, directly or in the whole section.
+ * @param field - the switch's field.
  * @param op - the operation, as the call sent it.
- * @returns whether it keeps the consent on.
+ * @returns whether it keeps the switch on.
  */
-function opKeepsConsent(op: unknown): boolean {
+function opKeepsSwitch(field: string, op: unknown): boolean {
   if (!isObject(op) || !Array.isArray(op.path)) return false
   const [head, ...rest] = op.path as unknown[]
-  if (head === undefined) return op.op === 'set' && isObject(op.value) && op.value.enabled === true
-  if (head !== 'enabled') return true
+  if (head === undefined) return op.op === 'set' && isObject(op.value) && op.value[field] === true
+  if (head !== field) return true
   return rest.length === 0 && op.op === 'set' && op.value === true
 }
 
 /**
- * Whether a settings write could turn the external-agent consent off. A write to another namespace never does; a write
- * to its namespace does unless its arguments name `enabled` only as a literal `true`, and a `replace`, which rebuilds
- * the section, must name it so. Arguments the condition cannot read count as turning it off.
+ * Whether a settings write could turn a computer-only switch off. A write to another namespace never does; a write to
+ * its namespace does unless its arguments name the field only as a literal `true`, and a `replace`, which rebuilds the
+ * section, must name it so. Arguments the condition cannot read count as turning it off.
  * @param action - the settings write.
  * @param args - the call's arguments.
+ * @param target - the switch.
  * @returns whether the write is refused to a device.
  */
-function turnsConsentOff(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>): boolean {
-  if (args.ns !== DELEGATION_CONSENT_NAMESPACE) return false
+function turnsSwitchOff(action: RemoteAccessAction, args: Readonly<Record<string, unknown>>, target: ComputerOnlySwitch): boolean {
+  if (args.ns !== target.ns) return false
+  const { field } = target
   switch (action) {
     case 'settings/mutate':
-      return !Array.isArray(args.ops) || !args.ops.every(opKeepsConsent)
+      return !Array.isArray(args.ops) || !args.ops.every(op => opKeepsSwitch(field, op))
     case 'settings/update':
-      return !isObject(args.patch) || ('enabled' in args.patch && args.patch.enabled !== true)
+      return !isObject(args.patch) || (field in args.patch && args.patch[field] !== true)
     default:
       // `settings/replace`, the only other member of SETTINGS_WRITES.
-      return !isObject(args.section) || args.section.enabled !== true
+      return !isObject(args.section) || args.section[field] !== true
   }
 }
 
@@ -562,7 +579,7 @@ function createsInKnownWorkspace(facts: Pick<ReachAccessFacts, 'workspaces'>, ar
  * @returns the condition.
  */
 export function createCondition(
-  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders'>,
+  facts: Pick<ReachAccessFacts, 'workspaces' | 'workspaceRootOf' | 'deloHome' | 'elevationOf' | 'logElevated' | 'terminalWithoutUnlock' | 'terminalFoldersOf' | 'grantedFolders' | 'computerOnlySwitches'>,
   principal: ReachDevicePrincipal,
 ): ReachCondition {
   const { deviceId, listener } = principal
@@ -580,8 +597,13 @@ export function createCondition(
     return undefined
   }
   return ({ action, resource, args }) => {
-    // Turning the external-agent consent off stays at the computer, so no unlock admits it.
-    if (args !== undefined && SETTINGS_WRITES.has(action) && turnsConsentOff(action, args)) return { kind: 'deny', reason: CONSENT_OFF_REFUSAL }
+    if (args !== undefined) {
+      // A computer-only switch stays on, so no unlock admits a write that could turn it off.
+      if (SETTINGS_WRITES.has(action)) {
+        const off = facts.computerOnlySwitches().find(target => turnsSwitchOff(action, args, target))
+        if (off !== undefined) return { kind: 'deny', reason: switchOffRefusal(off.label) }
+      }
+    }
     if (ELEVATED_SET.has(action) && !(action.startsWith(TERMINAL_PREFIX) && terminalWithoutUnlock(facts, resource))) {
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined)
       if (refused !== undefined) return refused
@@ -661,6 +683,11 @@ export interface ReachAccessFacts {
    * @returns whether the switch is on.
    */
   readonly terminalWithoutUnlock: () => boolean
+  /**
+   * The computer-only switches the mounted plugins registered.
+   * @returns the switches.
+   */
+  readonly computerOnlySwitches: () => readonly ComputerOnlySwitch[]
 }
 
 /**

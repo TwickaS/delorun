@@ -23,6 +23,7 @@ import {
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
+import type { ComputerOnlySwitch } from './reach-access.ts'
 import type { ElevationState } from '@delo/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
@@ -69,6 +70,9 @@ export class HomeAuthService extends Service {
   static Config = Config
 
   private core: HomeAuth | undefined
+
+  /** The computer-only switches the mounted plugins registered, which the reach policy reads per call. */
+  private readonly switches = new Set<ComputerOnlySwitch>()
 
   /** The secrets directory. */
   private readonly config: Config
@@ -225,6 +229,26 @@ export class HomeAuthService extends Service {
    */
   terminalWithoutUnlock(): boolean {
     return this.core?.terminalWithoutUnlock() ?? false
+  }
+
+  /**
+   * Register a setting only the home's own computer turns off: the reach policy refuses a device's settings write that
+   * could turn it off, unlocked or not (C14, "What a device may call").
+   * @param target - the switch's namespace, field and label.
+   * @returns the disposer, which the registering plugin's scope holds while it is mounted.
+   */
+  registerComputerOnlySwitch(target: ComputerOnlySwitch): () => void {
+    const entry = { ...target }
+    this.switches.add(entry)
+    return () => { this.switches.delete(entry) }
+  }
+
+  /**
+   * The computer-only switches registered now.
+   * @returns the switches.
+   */
+  computerOnlySwitches(): readonly ComputerOnlySwitch[] {
+    return [...this.switches]
   }
 
   /**

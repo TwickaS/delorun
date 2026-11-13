@@ -17,7 +17,7 @@ import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { ExternalDelegationVerdict, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import ApprovalService, { setApprovalPolicy, type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, Config, DeloDelegationConsent, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
+import { apply, Config, DeloDelegationConsent, EXTERNAL_AGENT_CONSENT_SWITCH, DelegationConsentError, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict } from '../src/index.ts'
 import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames, type GuardProfile } from '../src/guard.ts'
 import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
@@ -414,6 +414,19 @@ describe('mounting', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  it('registers its switch as one only the home\'s computer turns off while it is mounted with the switch on', async () => {
+    const ctx = new Context()
+    const registered: object[] = []
+    let removed = 0
+    ctx.provide('homeAuth', { registerComputerOnlySwitch: (target: object) => { registered.push(target); return () => { removed += 1 } } } as never)
+    // Pins the registration the reach policy reads: without it an unlocked device could turn the consent off.
+    apply(ctx, configOf({ enabled: true }))
+    await vi.waitFor(() => { expect(registered).toEqual([{ ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' }]) })
+    expect(registered[0]).toBe(EXTERNAL_AGENT_CONSENT_SWITCH)
+    await ctx.fiber.dispose()
+    expect(removed).toBe(1)
   })
 
   it('reads no rows without a Loader', async () => {

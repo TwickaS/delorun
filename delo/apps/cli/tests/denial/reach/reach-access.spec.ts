@@ -7,7 +7,8 @@
  * - Each family C14 keeps for an unlock is refused without one, naming the action: plugin installation and enabling,
  *   profile history undo and restore, a settings write in every settings namespace, terminals, slash commands, dynamic
  *   plugin code, the directory picker, a new workspace, and a chat in a folder outside the known workspaces. Under an
- *   unlock each is admitted, and the never families (credentials, the account, the settings document) stay refused.
+ *   unlock each is admitted, and the never families (credentials, the account, the settings document) stay refused,
+ *   as does a settings write that would turn a registered computer-only switch, the external-agent consent, off.
  * - The reads a device needs to work the way it works at the computer succeed: the installed plugins and their profile
  *   history, the files of a chat's own workspace, the office previews of those files, and the composer's file names.
  *   A workspace-file call whose real path lies outside the workspace or in the Delo home, a link's target included,
@@ -31,7 +32,8 @@ import { remoteMethods, type PeerScope, type RemoteAccessResource } from '@deeps
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
-import { CONSENT_OFF_REFUSAL, CREATE_OUTSIDE_WORKSPACES, DELEGATION_CONSENT_NAMESPACE, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal } from '@delo/home-auth'
+import { CREATE_OUTSIDE_WORKSPACES, DeviceStore, HomeAuthService, REACH_ALLOWED_ACTIONS, REACH_DENIED_ACTIONS, REACH_ELEVATED_ACTIONS, reachDevicePrincipal, switchOffRefusal } from '@delo/home-auth'
+import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delo/plugin-delegation-consent'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { bootStudio, type Studio } from '../admission/studio.ts'
 
@@ -437,10 +439,15 @@ describe('an elevated reach device through the Gateway', () => {
     const expectConsentKept = async (endpoint: string, args: Record<string, unknown>): Promise<void> => {
       expect(await call(endpoint, args), endpoint).toMatchObject({
         ok: false,
-        error: { code: 'remote-access/denied', details: { action: endpoint, reason: CONSENT_OFF_REFUSAL } },
+        error: { code: 'remote-access/denied', details: { action: endpoint, reason: switchOffRefusal(EXTERNAL_AGENT_CONSENT_SWITCH.label) } },
       })
     }
-    const ns = DELEGATION_CONSENT_NAMESPACE
+    const { ns } = EXTERNAL_AGENT_CONSENT_SWITCH
+    // This composition leaves the consent's plugin out, so the spec registers the switch the plugin registers when mounted.
+    const unregister = studio.ctx.homeAuth.registerComputerOnlySwitch(EXTERNAL_AGENT_CONSENT_SWITCH)
+    // Without an unlock the same writes are refused for the switch, not for the unlock: no unlock would admit them.
+    await expectConsentKept('settings/update', { ns, patch: { enabled: false } })
+    await expectConsentKept('settings/replace', { ns, section: { enabled: false, runTimeoutMinutes: 30 } })
     const id = elevate()
     try {
       // Pins the argument check through the Gateway: each settings write that could turn it off is refused under an unlock.
@@ -457,6 +464,7 @@ describe('an elevated reach device through the Gateway', () => {
       await expectAdmitted('settings/replace', { ns, section: { enabled: true, runTimeoutMinutes: 45 } })
     } finally {
       studio.ctx.homeAuth.revokeElevation(id)
+      unregister()
     }
   })
 

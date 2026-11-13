@@ -193,6 +193,7 @@ export class HomeAuthAuthenticator extends Authenticator {
         },
         grantedFolders: () => access.get('reachFullAccessGrants')?.grantedFolders() ?? [],
         terminalWithoutUnlock: () => ctx.homeAuth.terminalWithoutUnlock(),
+        computerOnlySwitches: () => ctx.homeAuth.computerOnlySwitches(),
       }))
       // A device's snapshot lists the Sessions and Workspaces it may reach, so it is recomputed when they change.
       const invalidate = (): void => {

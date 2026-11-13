@@ -57,7 +57,7 @@ async function serviceWith(count: number): Promise<{ readonly access: RemoteAcce
     sessionIds: Array.from({ length: Math.min(PER_WORKSPACE, count - index * PER_WORKSPACE) },
       (__, offset) => brandString<SessionId>(`session-${String(index * PER_WORKSPACE + offset)}`)),
   }))
-  ctx.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({ admitted: () => true, workspaces: () => workspaces, liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false }))
+  ctx.remoteAccess.registerPolicy(REACH_DEVICE, createReachAccessPolicy({ admitted: () => true, workspaces: () => workspaces, liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [] }))
   return { access: ctx.remoteAccess, dispose: () => ctx.fiber.dispose(), sessionId: brandString<SessionId>(`session-${String(Math.floor(count / 2))}`) }
 }
 

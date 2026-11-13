@@ -307,7 +307,7 @@ describe('the authenticator provider', () => {
     it('registers the policy, which lets a device answer approval prompts, only while an answer guard is mounted', () => {
       const registered: string[] = []
       const registry = { registerPolicy: (kind: string) => { registered.push(kind); return () => {} } }
-      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false })
+      const policy = createReachAccessPolicy({ admitted: () => true, workspaces: () => [], liveSessions: () => [], workspaceRootOf: () => undefined, deloHome: '/nowhere', elevationOf: () => undefined, logElevated: () => {}, terminalFoldersOf: () => undefined, grantedFolders: () => [], terminalWithoutUnlock: () => false, computerOnlySwitches: () => [] })
       expect(Object.keys(REACH_ALLOWED_ACTIONS)).toContain('event:approval/request')
       // Pins the guard check: without it a device could answer every approval prompt with nothing to refuse a grant.
       expect(() => registerReachPolicy(undefined, registry, policy)).toThrow(/no remoteAnswerGuard is mounted/)
@@ -431,6 +431,24 @@ describe('the authenticator provider', () => {
       } finally {
         await rm(outside, { recursive: true, force: true })
       }
+    })
+
+    it('reads the computer-only switches registered now', async () => {
+      const access = await fakeRemoteAccess()
+      ctx.homeAuth.serve({ listener: 'reach-tailscale-private', address: ADDRESS, factor: 'tailnet-membership' })
+      provider().admit(request({ headers: { cookie: `__Host-delo-session=${await session(2)}` } }), 'reach-tailscale-private')
+      const device = reachDevicePrincipal(recordOf(2, ADDRESS).id, 'reach-tailscale-private')
+      const condition = access.policy().bindings(device)[0]?.condition
+      const decide = (action: string, args: Record<string, unknown>) => condition?.({ action, resource: { kind: 'global' }, args } as never)
+      const turnOff = { ns: 'delo-delegation-consent', patch: { enabled: false } }
+      const NO_UNLOCK = { kind: 'deny', reason: 'elevation-required: settings/update' }
+      expect(decide('settings/update', turnOff)).toEqual(NO_UNLOCK)
+      // Pins the registry fact: a registered switch is kept on while its registration holds.
+      const off = ctx.homeAuth.registerComputerOnlySwitch({ ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' })
+      expect(ctx.homeAuth.computerOnlySwitches()).toEqual([{ ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' }])
+      expect(decide('settings/update', turnOff)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the external-agent consent off' })
+      off()
+      expect(decide('settings/update', turnOff)).toEqual(NO_UNLOCK)
     })
 
     it('recomputes each admitted device\'s snapshot when a Session or a Workspace changes', async () => {

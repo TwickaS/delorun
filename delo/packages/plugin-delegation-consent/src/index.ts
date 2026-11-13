@@ -12,10 +12,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
+import type { ComputerOnlySwitch } from '@delo/home-auth'
 import { guardProfile, pluginManagerVerdict, type GuardRow } from './guard.ts'
 import { registerDelegationRoutes } from './routes.ts'
 import { DeloDelegationConsent } from './service.ts'
-import { RUN_TIMEOUT_MINUTES, type DelegationConsentSettings } from './wire.ts'
+import { DELEGATION_CONSENT_ROW, RUN_TIMEOUT_MINUTES, type DelegationConsentSettings } from './wire.ts'
 
 export { DeloDelegationConsent, DelegationConsentError } from './service.ts'
 export { isExternalAgentPackage, PLUGIN_MANAGER_REFUSAL, pluginManagerVerdict, targetPackageNames } from './guard.ts'
@@ -36,6 +37,17 @@ export const Config: z<Config> = z.object({
 })
 
 /**
+ * The consent's `enabled` field as a switch only the home's own computer turns off (A299). While the plugin is mounted
+ * it registers the switch with `@delo/home-auth`, whose reach policy then refuses a device's settings write that could
+ * turn it off, unlocked or not; the run time limit and turning it on stay ordinary settings writes.
+ */
+export const EXTERNAL_AGENT_CONSENT_SWITCH: ComputerOnlySwitch = Object.freeze({
+  ns: DELEGATION_CONSENT_ROW,
+  field: 'enabled',
+  label: 'the external-agent consent',
+})
+
+/**
  * Mount the plugin in the scope that loads it.
  * @param ctx - the scope.
  * @param config - the row's validated configuration.
@@ -50,5 +62,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['tools'], (scope) => { scope.tools.guard(exec => pluginManagerVerdict(exec, rows, profile)) })
   ctx.inject(['connection', 'delegationConsent'], (scope) => {
     registerDelegationRoutes(scope, scope.delegationConsent as DeloDelegationConsent)
+  })
+  ctx.inject(['homeAuth'], (scope) => {
+    scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(EXTERNAL_AGENT_CONSENT_SWITCH), 'delegation consent: computer-only switch')
   })
 }

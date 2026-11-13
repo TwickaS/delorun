@@ -17,14 +17,14 @@ import {
   REACH_DENIED_ACTIONS,
   REACH_DEVICE,
   REACH_ELEVATED_ACTIONS,
-  CONSENT_OFF_REFUSAL,
   CREATE_OUTSIDE_WORKSPACES,
-  DELEGATION_CONSENT_NAMESPACE,
   assertDisjoint,
   createCondition,
   createReachAccessPolicy,
   reachDevicePrincipal,
   reachRefusal,
+  switchOffRefusal,
+  type ComputerOnlySwitch,
   type ReachAccessFacts,
 } from '../src/reach-access.ts'
 
@@ -34,6 +34,8 @@ const LISTENER = 'reach-tailscale-private'
 const OTHER_LISTENER = 'reach-tailscale-funnel'
 const DEVICE = reachDevicePrincipal('device-1', LISTENER)
 const GLOBAL = { kind: 'global' } as const
+/** The switch `@delo/plugin-delegation-consent` registers while it is mounted. */
+const CONSENT: ComputerOnlySwitch = { ns: 'delo-delegation-consent', field: 'enabled', label: 'the external-agent consent' }
 
 function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
   return {
@@ -50,6 +52,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
     terminalFoldersOf: () => undefined,
     grantedFolders: () => [],
     terminalWithoutUnlock: () => false,
+    computerOnlySwitches: () => [CONSENT],
     ...overrides,
   }
 }
@@ -276,8 +279,8 @@ describe('a session/create', () => {
 })
 
 describe('the external-agent consent\'s settings row', () => {
-  const ns = DELEGATION_CONSENT_NAMESPACE
-  const OFF = { kind: 'deny', reason: CONSENT_OFF_REFUSAL }
+  const ns = CONSENT.ns
+  const OFF = { kind: 'deny', reason: switchOffRefusal(CONSENT.label) }
   const ALLOW = { kind: 'allow' }
   /** A device holding an unlock on its listener. */
   const unlocked = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }) }), DEVICE)
@@ -302,6 +305,20 @@ describe('the external-agent consent\'s settings row', () => {
     }
     // Without an unlock it is refused the same way: no unlock would admit it.
     expect(createCondition(facts(), DEVICE)({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { enabled: false } } })).toEqual(OFF)
+  })
+
+  it('names the switch it keeps on, and keeps any registered switch by its own field', () => {
+    expect(OFF.reason).toBe('loopback-required: turning the external-agent consent off')
+    // Pins the registry read: the rule follows the switches registered now, by namespace and field.
+    const other: ComputerOnlySwitch = { ns: 'delo-other', field: 'asks', label: 'the other consent' }
+    const condition = createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), computerOnlySwitches: () => [CONSENT, other] }), DEVICE)
+    expect(condition({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delo-other', patch: { asks: false } } }))
+      .toEqual({ kind: 'deny', reason: 'loopback-required: turning the other consent off' })
+    expect(condition({ action: 'settings/update', resource: GLOBAL, args: { ns: 'delo-other', patch: { enabled: false } } })).toEqual(ALLOW)
+    expect(condition({ action: 'settings/mutate', resource: GLOBAL, args: { ns: 'delo-other', ops: [{ op: 'set', path: [], value: { asks: true } }] } })).toEqual(ALLOW)
+    // Without a registration, as when the consent is off and so not mounted, the write is an ordinary settings write.
+    expect(createCondition(facts({ elevationOf: () => ({ id: 'elevation-1' }), computerOnlySwitches: () => [] }), DEVICE)({ action: 'settings/update', resource: GLOBAL, args: { ns, patch: { enabled: false } } }))
+      .toEqual(ALLOW)
   })
 
   it('takes the run time limit and turning the consent on from an unlocked device, and leaves other namespaces alone', () => {
