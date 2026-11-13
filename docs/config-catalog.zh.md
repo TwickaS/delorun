@@ -2425,7 +2425,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:116`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:124`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2443,6 +2443,14 @@ export interface StdioConfig {
   serverName: string
   /** Executable used to start the server. */
   command: string
+  /**
+   * The `argv[0]` the server sees when it differs from `command`. A reviewed
+   * start sets it to the configured `command` while `command` names the
+   * reviewed file, so a program that locates itself by its invoked name, such
+   * as a virtual-environment `python` link, still does; a reviewed start
+   * replaces any configured value. Absent, the server sees `command`.
+   */
+  argv0?: string
   /** Arguments passed directly, without shell interpolation. */
   args: string[]
   /** Extra env vars merged on top of scrubbed ambient env. */

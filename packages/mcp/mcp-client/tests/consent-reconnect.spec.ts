@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import type { Config } from '@deepseek-ai/dsh-mcp-client'
+import type { StdioConfig } from '@deepseek-ai/dsh-mcp-client'
 
 const { mockConnect, mockClose, mockListTools, MockClient, instances } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
@@ -45,6 +45,19 @@ vi.mock('@modelcontextprotocol/client/stdio', async importOriginal => ({
   ...await importOriginal<typeof import('@modelcontextprotocol/client/stdio')>(),
   StdioClientTransport: vi.fn(function () { return { close: () => Promise.resolve() } }),
 }))
+
+const startShell = vi.hoisted(() => ({ path: undefined as string | undefined }))
+
+vi.mock('@deepseek-ai/dsh-mcp-client/src/server-start.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@deepseek-ai/dsh-mcp-client/src/server-start.ts')>()
+  return {
+    ...original,
+    resolveServerStart: async (...params: Parameters<typeof original.resolveServerStart>) => {
+      const start = await original.resolveServerStart(...params)
+      return startShell.path === undefined ? start : { ...start, resolvedShell: startShell.path }
+    },
+  }
+})
 
 import { apply, inject } from '@deepseek-ai/dsh-mcp-client/src/index.ts'
 import { McpAddConsent } from '@deepseek-ai/dsh-mcp-client/src/consent.ts'
@@ -78,7 +91,7 @@ describe('the add-time consent before a reconnect', () => {
    * The server's configuration, a bare command found on the tree's PATH, reconnecting at once.
    * @returns the configuration.
    */
-  function config(): Config {
+  function config(): StdioConfig {
     return {
       transport: 'stdio',
       serverName: 'srv',
@@ -104,6 +117,7 @@ describe('the add-time consent before a reconnect', () => {
     vi.stubEnv('PATH', join(root, 'bin'))
     vi.spyOn(process, 'cwd').mockReturnValue(root)
     vi.clearAllMocks()
+    startShell.path = undefined
     instances.length = 0
     mockConnect.mockResolvedValue(undefined)
     mockClose.mockImplementation(function (this: { onclose?: () => void }) {
@@ -133,6 +147,7 @@ describe('the add-time consent before a reconnect', () => {
     await vi.waitFor(() => { expect(instances).toHaveLength(2) })
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
     expect(spawns()).toEqual([['tool', ''], ['tool', '']])
+    expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => params.argv0)).toEqual([undefined, undefined])
   })
 
   it('reviews the start again before a reconnect spawns the reviewed executable', async () => {
@@ -154,6 +169,25 @@ describe('the add-time consent before a reconnect', () => {
 
     await vi.waitFor(() => { expect(instances).toHaveLength(2) })
     expect(spawns()).toEqual([[join(root, 'pinned', 'tool-1'), root], [join(root, 'pinned', 'tool-2'), root]])
+  })
+
+  it('gives a reviewed spawn the configured command as its argv0 in place of a configured one', async () => {
+    new StubConsent(ctx, [() => Promise.resolve({ allow: true, spawnCommand: join(root, 'pinned', 'tool') })])
+    await apply(ctx, { ...config(), argv0: 'configured-name' })
+
+    expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => [params.command, params.argv0])).toEqual([
+      [join(root, 'pinned', 'tool'), 'tool'],
+    ])
+  })
+
+  it('leaves a reviewed start that a command shell runs with no argv0, dropping a configured one', async () => {
+    startShell.path = join(root, 'cmd.exe')
+    new StubConsent(ctx, [allow])
+    await apply(ctx, { ...config(), argv0: 'configured-name' })
+
+    expect(vi.mocked(StdioClientTransport).mock.calls.map(([params]) => [params.command, params.argv0])).toEqual([
+      [join(root, 'bin', 'tool'), undefined],
+    ])
   })
 
   it('stops reconnecting, unregisters the tools and spawns nothing when the consent refuses the reconnect', async () => {

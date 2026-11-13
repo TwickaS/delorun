@@ -1,0 +1,62 @@
+diff --git a/dist/stdio.cjs b/dist/stdio.cjs
+index bcd6f78c6eebd0653e490e2746acebb1aa674d1d..523462be65470ad9ec659bd362e0f821fe72608e 100644
+--- a/dist/stdio.cjs
++++ b/dist/stdio.cjs
+@@ -86,7 +86,8 @@ var StdioClientTransport = class {
+ 				],
+ 				shell: false,
+ 				windowsHide: node_process.default.platform === "win32",
+-				cwd: this._serverParams.cwd
++				cwd: this._serverParams.cwd,
++				argv0: this._serverParams.argv0
+ 			});
+ 			this._process.on("error", (error) => {
+ 				reject(error);
+diff --git a/dist/stdio.d.cts b/dist/stdio.d.cts
+index c682d09290c9f54f4bd75682c13a8bb1c2d47a15..07864bd7b9125e1861dd036805786e532e439241 100644
+--- a/dist/stdio.d.cts
++++ b/dist/stdio.d.cts
+@@ -8,6 +8,12 @@ type StdioServerParameters = {
+    * The executable to run to start the server.
+    */
+   command: string;
++  /**
++   * The value the server process sees as `argv[0]`, when it differs from
++   * `command`: for example the name a launcher typed while `command` is the
++   * file it resolved to. Defaults to `command`.
++   */
++  argv0?: string;
+   /**
+    * Command line arguments to pass to the executable.
+    */
+diff --git a/dist/stdio.d.mts b/dist/stdio.d.mts
+index 8e3b5df372af21665985059066d3e7f9be1f0da7..fc8035f82bf00656039c222e6928880886759d27 100644
+--- a/dist/stdio.d.mts
++++ b/dist/stdio.d.mts
+@@ -8,6 +8,12 @@ type StdioServerParameters = {
+    * The executable to run to start the server.
+    */
+   command: string;
++  /**
++   * The value the server process sees as `argv[0]`, when it differs from
++   * `command`: for example the name a launcher typed while `command` is the
++   * file it resolved to. Defaults to `command`.
++   */
++  argv0?: string;
+   /**
+    * Command line arguments to pass to the executable.
+    */
+diff --git a/dist/stdio.mjs b/dist/stdio.mjs
+index 30019b4d8bc460b5853414442d188fb02f87a430..4f37593000986c3a3c84981f8b9e3e0df9eef8ee 100644
+--- a/dist/stdio.mjs
++++ b/dist/stdio.mjs
+@@ -83,7 +83,8 @@ var StdioClientTransport = class {
+ 				],
+ 				shell: false,
+ 				windowsHide: process.platform === "win32",
+-				cwd: this._serverParams.cwd
++				cwd: this._serverParams.cwd,
++				argv0: this._serverParams.argv0
+ 			});
+ 			this._process.on("error", (error) => {
+ 				reject(error);

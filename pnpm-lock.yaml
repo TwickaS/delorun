@@ -16,6 +16,7 @@ patchedDependencies:
   '@electron/osx-sign@1.3.3': 280e7b2816caf01423097d24e79107a66afeb563a348630ce9928ae8499a5861
   '@fortune-sheet/core@1.0.4': 8791a230763dbf853fd65d627c68c31de37209992851377855e16cf08ea70532
   '@fortune-sheet/react@1.0.4': 2932e52e79afcd4ced08cfa123b5eded786c85043da32f622f3e80af6fc96c37
+  '@modelcontextprotocol/client@2.2.0': d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4
   '@yao-pkg/pkg@6.21.0': 236fb467509b18abae4c09b1727bbe0239e05a6fbb4d35f84fff3821ca2f6771
   app-builder-lib@26.17.0: b70dc2a2a78ffabb80a4f14fafc7c103237f2b0a207e1f296fa1c1387ea29348
   exceljs@4.4.0: c1bf8ac8f319dab382f08e3a669b715e691d46c703ac5a4163eb383fbedd1d48
@@ -2573,7 +2574,7 @@ importers:
         version: link:../../../packages/workspace/workspace
       '@modelcontextprotocol/client':
         specifier: 2.2.0
-        version: 2.2.0
+        version: 2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)
 
   delo/packages/plugin-onboarding:
     dependencies:
@@ -15785,7 +15786,7 @@ importers:
         version: link:../../../vendor/schemastery
       '@modelcontextprotocol/client':
         specifier: 2.2.0
-        version: 2.2.0
+        version: 2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -30414,7 +30415,7 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/client@2.2.0':
+  '@modelcontextprotocol/client@2.2.0(patch_hash=d7144dda019c55ddbaa3a79bd9f518d65584f6cbb38841814af90006591c9ad4)':
     dependencies:
       '@modelcontextprotocol/core': 2.2.0
       cross-spawn: 7.0.6

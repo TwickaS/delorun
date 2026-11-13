@@ -51,6 +51,7 @@ export function createTransport(config: Config): Transport {
     case 'stdio':
       return new StdioClientTransport({
         command: config.command,
+        ...config.argv0 === undefined ? {} : { argv0: config.argv0 },
         args: config.args,
         env: buildChildEnv(config.env),
         cwd: config.cwd,

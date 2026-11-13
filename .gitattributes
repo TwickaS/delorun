@@ -14,8 +14,8 @@ docs/persistence-changes/*.schema.json linguist-generated=true
 docs/persistence-changes/releases/*.schema.json linguist-generated=true
 docs/persistence-changes/historical-formats/*.schema.json linguist-generated=true
 
-# Unified patch blank context lines require their leading space.
-patches/*.patch whitespace=-blank-at-eol
+# Unified patch context lines require their leading space, also before a blank line's end or a tab indent.
+patches/*.patch whitespace=-blank-at-eol,-space-before-tab
 
 # The divergence ledger merges per entry through the delo-ledger driver, which each clone configures once
 # (delo/apps/tools/README.md#the-divergence-ledger).

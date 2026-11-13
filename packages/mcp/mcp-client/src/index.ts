@@ -72,6 +72,14 @@ export interface StdioConfig {
   serverName: string
   /** Executable used to start the server. */
   command: string
+  /**
+   * The `argv[0]` the server sees when it differs from `command`. A reviewed
+   * start sets it to the configured `command` while `command` names the
+   * reviewed file, so a program that locates itself by its invoked name, such
+   * as a virtual-environment `python` link, still does; a reviewed start
+   * replaces any configured value. Absent, the server sees `command`.
+   */
+  argv0?: string
   /** Arguments passed directly, without shell interpolation. */
   args: string[]
   /** Extra env vars merged on top of scrubbed ambient env. */
@@ -115,7 +123,7 @@ export interface StreamableHttpConfig {
 /** Configuration for one stdio or Streamable HTTP MCP server. */
 export type Config = StdioConfig | StreamableHttpConfig
 
-type StdioConfigInput = Omit<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>
+type StdioConfigInput = Omit<StdioConfig, 'argv0' | 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>
   & Partial<Pick<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>>
 type StreamableHttpConfigInput = Omit<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError'>
   & Partial<Pick<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError'>>
@@ -158,7 +166,9 @@ export const Config = z.union([
 /**
  * Resolve a stdio server's start, have the consent review it, and return the
  * config that spawns the reviewed executable, or the path the consent's
- * decision names for it, in the reviewed directory.
+ * decision names for it, in the reviewed directory. A file that runs directly
+ * sees the configured `command` as its `argv[0]`; a Windows batch shim keeps
+ * the command shell's own.
  * @param consent - the mounted consent.
  * @param config - the server's stdio configuration.
  * @returns the configuration to spawn.
@@ -169,7 +179,13 @@ async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promi
   const start = await resolveServerStart(config)
   const decision = await consent.review(start)
   if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
-  return { ...config, command: decision.spawnCommand ?? start.resolvedCommand, cwd: start.resolvedCwd }
+  const { argv0: _unreviewed, ...configured } = config
+  return {
+    ...configured,
+    command: decision.spawnCommand ?? start.resolvedCommand,
+    ...start.resolvedShell === undefined ? { argv0: config.command } : {},
+    cwd: start.resolvedCwd,
+  }
 }
 
 /**
