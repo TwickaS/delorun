@@ -22,7 +22,7 @@ import { guardProfile, isExternalAgentPackage, modulePackage, targetPackageNames
 import { agentName, askText, askTextZh, describeAgent, noSandboxPolicyRefusal, notApprovedRefusal, noWorkspaceRefusal } from '../src/copy.ts'
 import { registerDelegationRoutes } from '../src/routes.ts'
 import { changeGrantStore, grantStorePath, parseGrantStore, problemOf, readGrantStore } from '../src/store.ts'
-import { DELEGATION_CONSENT_ROUTES } from '../src/wire.ts'
+import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings } from '../src/wire.ts'
 
 const roots: string[] = []
 afterEach(() => {
@@ -75,7 +75,7 @@ async function mounted(options: {
   const agents = options.agents ?? []
   ctx.provide('agents', { get: (id: string) => agents.find(agent => agent.id === id) } as never)
   ctx.provide('subagents', { getProvider: (name: string) => options.providers?.[name] } as never)
-  await ctx.plugin(DeloDelegationConsent, { timeoutMs: 1_800_000, env: { DELO_HOME: paths.home }, now: () => 1_000 })
+  await ctx.plugin(DeloDelegationConsent, { timeoutMs: () => 1_800_000, env: { DELO_HOME: paths.home }, now: () => 1_000 })
   return { ctx, consent: ctx.get('delegationConsent') as DeloDelegationConsent, asks, ...paths }
 }
 
@@ -94,7 +94,7 @@ async function grant(home: string, workspace: string, provider = 'claude-code'):
  * @param value - the row's fields.
  * @returns the validated configuration.
  */
-const configOf = (value: Partial<Parameters<typeof apply>[1]>): Parameters<typeof apply>[1] => Config(value as Parameters<typeof apply>[1])
+const configOf = (value: Partial<DelegationConsentSettings>): Parameters<typeof apply>[1] => Config(value)
 
 describe('the review', () => {
   it('asks with the external-agent grant marker and allows once, recording nothing', async () => {
@@ -372,7 +372,8 @@ describe('the plugin_manager guard', () => {
 
 describe('mounting', () => {
   it('mounts nothing with the switch off, its parity value', async () => {
-    expect(configOf({})).toMatchObject({ enabled: false, runTimeoutMinutes: 30 })
+    const parity = configOf({})
+    expect([parity.enabled.get(), parity.runTimeoutMinutes.get()]).toEqual([false, 30])
     const ctx = new Context()
     apply(ctx, configOf({}))
     expect(ctx.get('delegationConsent')).toBeUndefined()
@@ -388,7 +389,7 @@ describe('mounting', () => {
     ctx.provide('tools', { guard: (guard: (exec: object) => string | undefined) => { guards.push(guard); return () => undefined } } as never)
     ctx.provide('connection', { fetch: { register: (route: { path: string }) => { routes.push(route.path) } } } as never)
     ctx.provide('loader', { entries: () => [{ id: 'e1', options: { id: 'subagent-codex', name: '@deepseek-ai/dsh-subagent-codex' } }] } as never)
-    apply(ctx, { enabled: true, runTimeoutMinutes: 5 })
+    apply(ctx, configOf({ enabled: true, runTimeoutMinutes: 5 }))
     await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
     await vi.waitFor(() => { expect(routes).toHaveLength(3) })
     expect(guards[0]?.({ name: 'plugin_manager', arguments: { action: 'set_plugin', target: 'e1', enabled: true } })).toBe(PLUGIN_MANAGER_REFUSAL)
@@ -407,7 +408,7 @@ describe('mounting', () => {
       await grant(paths.home, paths.workspace)
       const ctx = new Context()
       ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-      apply(ctx, { enabled: true, runTimeoutMinutes: 5 })
+      apply(ctx, configOf({ enabled: true, runTimeoutMinutes: 5 }))
       await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
       await expect(ctx.delegationConsent.review(review(chat(paths.workspace), paths.workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 300_000 })
       await ctx.fiber.dispose()
@@ -427,6 +428,33 @@ describe('mounting', () => {
     expect(registered[0]).toBe(EXTERNAL_AGENT_CONSENT_SWITCH)
     await ctx.fiber.dispose()
     expect(removed).toBe(1)
+  })
+
+  it('follows a saved change of either field without a restart', async () => {
+    const paths = folders()
+    vi.stubEnv('DELO_HOME', paths.home)
+    try {
+      await grant(paths.home, paths.workspace)
+      const saved = { enabled: false, runTimeoutMinutes: 5 }
+      const ctx = new Context()
+      ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
+      apply(ctx, { enabled: { get: () => saved.enabled }, runTimeoutMinutes: { get: () => saved.runTimeoutMinutes } })
+      expect(ctx.get('delegationConsent')).toBeUndefined()
+
+      saved.enabled = true
+      ctx.emit('loader/volatile-update', [['enabled']])
+      ctx.emit('loader/volatile-update', [['enabled']])
+      await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeDefined() })
+      saved.runTimeoutMinutes = 7
+      await expect(ctx.delegationConsent.review(review(chat(paths.workspace), paths.workspace))).resolves.toEqual({ kind: 'allow', timeoutMs: 420_000 })
+
+      saved.enabled = false
+      ctx.emit('loader/volatile-update', [['enabled']])
+      await vi.waitFor(() => { expect(ctx.get('delegationConsent')).toBeUndefined() })
+      await ctx.fiber.dispose()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('reads no rows without a Loader', async () => {
@@ -556,7 +584,7 @@ describe('through the subagent runtime', () => {
     let answer: ApprovalOutcome = 'rejected'
     ctx.provide('approval', { request: () => Promise.resolve(answer), config: {}, overrideOf: () => undefined } as never)
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'workspace-write' }) } as never)
-    await ctx.plugin(DeloDelegationConsent, { timeoutMs: 60_000, env: { DELO_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DeloDelegationConsent, { timeoutMs: () => 60_000, env: { DELO_HOME: paths.home }, now: () => 1 })
     const parent = await parentChat(ctx, paths.workspace)
     const result = Promise.withResolvers<SubagentResult>()
     const start = vi.fn(() => Promise.resolve({ id: SessionId('run'), result: result.promise, dispose: () => Promise.resolve() }))
@@ -592,7 +620,7 @@ describe('through the approval service', () => {
     ctx.provide('sandboxPolicy', { resolve: () => ({ mode: 'danger-full-access' }) } as never)
     const answerer = vi.fn(() => Promise.resolve<ApprovalOutcome>('allowed-once'))
     ctx.on('approval/request', answerer)
-    await ctx.plugin(DeloDelegationConsent, { timeoutMs: 60_000, env: { DELO_HOME: paths.home }, now: () => 1 })
+    await ctx.plugin(DeloDelegationConsent, { timeoutMs: () => 60_000, env: { DELO_HOME: paths.home }, now: () => 1 })
     const session = ctx.sessions.create(SessionId(randomUUID()), { meta: { cwd: paths.workspace } })
     session.append('turn/start', { turn: 1 })
     const parent: Agent = { id: session.id, session } as never

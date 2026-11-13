@@ -149,13 +149,15 @@ describe('an unlocked device and the protected plugin rows', () => {
     expect(protectedEntryIdsOf(studio.ctx)).toEqual(new Set(protectedRows().map(row => row.entryId)))
   })
 
-  it('finds no protected row among the settings namespaces, so no settings write reconfigures one', async () => {
+  it('finds among the settings namespaces only the protected rows whose live fields the reach policy decides', async () => {
     // The settings service writes only a row's live fields; a protected row that gains one fails here until the reach
     // policy decides its settings writes, as it does for the external-agent consent's switch.
     const described = await expectAdmitted('settings/describe', {}) as { readonly ok: true; readonly value: { readonly namespaces: readonly { readonly ns: string }[] } }
     const namespaces = described.value.namespaces.map(view => view.ns)
     expect(namespaces.length).toBeGreaterThan(0)
-    expect(namespaces.filter(ns => protectedRows().some(row => row.rowId === ns))).toEqual([])
+    const decided = studio.ctx.homeAuth.computerOnlySwitches().map(target => target.ns)
+    expect(namespaces.filter(ns => protectedRows().some(row => row.rowId === ns))).toEqual(decided)
+    expect(decided).toEqual([DELEGATION_CONSENT_ROW])
   })
 
   it('never switches a protected row off or on, and each stays enabled', async () => {

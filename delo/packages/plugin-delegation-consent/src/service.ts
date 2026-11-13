@@ -52,8 +52,8 @@ export class DelegationConsentError extends Error {
 
 /** What the service needs beyond its context. */
 export interface ConsentOptions {
-  /** The run time limit every allowed start carries, in milliseconds. */
-  readonly timeoutMs: number
+  /** The run time limit an allowed start carries, in milliseconds, read at each review. */
+  readonly timeoutMs: () => number
   /** The environment the Delo home is resolved from. */
   readonly env: Readonly<Record<string, string | undefined>>
   /** The clock a new grant records. */
@@ -105,7 +105,7 @@ export class DeloDelegationConsent extends Service implements DelegationConsentS
     if (!inside(workspace, cwd)) return { kind: 'refuse', reason: outsideRefusal(provider, workspace, review.cwd) }
     const read = await readGrantStore(await this.storePath())
     if (read.kind === 'refused') return { kind: 'refuse', reason: storeRefusal(provider, read.problem) }
-    const allowed = { kind: 'allow', timeoutMs: this.options.timeoutMs } as const
+    const allowed = { kind: 'allow', timeoutMs: this.options.timeoutMs() } as const
     if (grantOf(read.grants, workspace, provider) !== undefined) return allowed
     const approval = this.ctx.get('approval')
     if (approval === undefined) return { kind: 'refuse', reason: notApprovedRefusal(provider, 'no-approval', workspace) }
