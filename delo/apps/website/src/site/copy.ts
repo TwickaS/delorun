@@ -25,9 +25,10 @@ export const COPY = {
   terminalLabel: 'What the command prints',
   /** What `npx delorun` asks first on a new home, as the setup prints it. */
   terminal: `$ npx delorun
-? How do you want to set up Delorun?
-> Quick (the model key and how careful prompts are)
-  Full (also the release check, background running, the profile name and the port)`,
+? How will you use Delorun?
+> Just me, on this computer (recommended)
+  Also from my phone or another device
+  For scripts and automation`,
   guideLink: 'Read the install guide',
   featuresTitle: 'What you get',
   features: [
@@ -63,7 +64,7 @@ export const COPY = {
     },
     {
       title: 'Open source, MIT licensed',
-      text: 'Your DeepSeek Harness plugins, profiles and chats keep working, and a fresh install follows the stock workflow.',
+      text: 'Read and change every line. Coming from DeepSeek Harness? One command copies your chats, workspaces and, if you say so, your profiles and settings.',
       href: `${DOCS_URL}/guide/delo-vs-stock`,
       linkText: 'Delorun and stock DeepSeek Harness',
     },
