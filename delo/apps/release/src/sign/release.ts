@@ -44,7 +44,7 @@ import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { publicKeyEntry, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@delo/release-formats/sign/json'
-import { ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
+import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema } from '@delo/release-formats/sign/schemas'
 import { patchRuleProblem } from './patch-rule.ts'
 import { npmPackageProblem } from './npm-package.ts'
 import { productionKeyProblem, releaseBranchProblem, tagSignatureProblem } from './source.ts'
@@ -58,10 +58,10 @@ export class SigningRefusal extends Error {
  * The manifest the release workflow drafts: everything but the signing time and the rebuild, which signing adds. Unlike
  * a manifest a reader accepts, a draft must carry `security` and `summary`, so every manifest signing writes holds both.
  */
-export const ManifestDraftSchema = ManifestSchema.omit({ published: true, rebuild: true }).extend({ security: z.boolean(), summary: ReleaseSummarySchema })
+export const ManifestDraftSchema = ManifestSchema.omit({ published: true, rebuild: true }).extend({ security: z.boolean(), summary: ReleaseSummarySchema, desktop: DesktopSchema, images: ImagesSchema, install: InstallSchema })
 
 /** {@link ManifestDraftSchema}'s parsed value. */
-export type ManifestDraft = Omit<ReleaseManifest, 'published' | 'rebuild' | 'security' | 'summary'> & { readonly security: boolean, readonly summary: string }
+export type ManifestDraft = Omit<ReleaseManifest, 'published' | 'rebuild' | 'security' | 'summary' | 'desktop' | 'images' | 'install'> & Required<Pick<ReleaseManifest, 'desktop' | 'images' | 'install'>> & { readonly security: boolean, readonly summary: string }
 
 /** The name of the release workflow's manifest draft in the release directory. */
 export const MANIFEST_DRAFT_NAME = 'manifest-draft.json'

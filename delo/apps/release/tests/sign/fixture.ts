@@ -28,7 +28,7 @@ import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { publicKeyEntry, readSigningKey, signEnvelope } from '@delo/release-formats/sign/envelope'
 import { toJsonValue } from '@delo/release-formats/sign/json'
 import { signRelease, SigningRefusal } from '../../src/sign/release.ts'
-import { ManifestSchema } from '@delo/release-formats/sign/schemas'
+import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema } from '@delo/release-formats/sign/schemas'
 import { PERSISTENCE_SCHEMA_PATH } from '../../src/closure/data-formats.ts'
 import { CHANGELOG_SCHEMA } from '../../src/changelog/data.ts'
 import { DATA_PATH } from '../../src/changelog/paths.ts'
@@ -414,13 +414,13 @@ function contentRef(name: string, bytes: Uint8Array): FileRef {
   return { name, length: bytes.byteLength, sha256: sha256Hex(createHash('sha256').update(bytes).digest('hex')) }
 }
 
-export function manifestContent(version: string, archive: Uint8Array): ReleaseManifest {
+export function manifestContent(version: string, archive: Uint8Array): ReleaseManifest & Required<Pick<ReleaseManifest, 'desktop' | 'images' | 'install'>> {
   const digest = `sha256:${'b'.repeat(64)}`
   const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   const ref = contentRef('file', Buffer.from('x'))
   const desktop = { installer: { ...ref, sha512: 'A'.repeat(86) + '==' }, update: { ...ref, sha512: 'A'.repeat(86) + '==' }, blockmap: ref }
   const runtime = { archive: contentRef(`delorun-${version}-linux-x64.tar.gz`, archive), files: ref }
-  return ManifestSchema.parse({
+  return ManifestSchema.extend({ desktop: DesktopSchema, images: ImagesSchema, install: InstallSchema }).parse({
     schema: RELEASE_SCHEMAS.manifest,
     version,
     dsh: '0.2.2-rc.1',

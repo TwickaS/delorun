@@ -108,6 +108,7 @@ describe('listed images', () => {
     const other = { images: { ...manifest.images, s2: { ...manifest.images.s2, repository: 'docker.io/library/alpine' } } }
     expect(refusal(() => listedImage(other, 's2', 'linux/amd64')).code).toBe('IMAGE_NOT_IN_MANIFEST')
     expect(refusal(() => listedImage(manifest, 's2', undefined)).code).toBe('IMAGE_NOT_IN_MANIFEST')
+    expect(refusal(() => listedImage({}, 's2', 'linux/amd64')).code).toBe('IMAGE_NOT_IN_MANIFEST')
   })
 
   function engineWith(images: Readonly<Record<string, readonly string[]>>, pulled: string[]): Engine {

@@ -16,8 +16,8 @@ import { SupervisorError } from './errors.ts'
  * verification for the running runtime; the supervisor still refuses an entry that does not name C9's repository.
  */
 export interface VerifiedManifest {
-  /** The S2 and S3 images, by digest. */
-  readonly images: ReleaseManifest['images']
+  /** The S2 and S3 images, by digest; absent when the release lists none. */
+  readonly images?: NonNullable<ReleaseManifest['images']>
 }
 
 /** One image the supervisor may run: C9's repository at a digest the verified manifest lists. */
@@ -68,11 +68,12 @@ export function imagePlatform(architecture: string): ImagePlatform | undefined {
  * @param shape - the shape.
  * @param platform - the engine's platform, or `undefined` when the release builds none for it.
  * @returns the listed image.
- * @throws {SupervisorError} `IMAGE_NOT_IN_MANIFEST` when the entry names another repository, the platform has no
+ * @throws {SupervisorError} `IMAGE_NOT_IN_MANIFEST` when the manifest lists no images, the entry names another repository, the platform has no
  *   listed digest, or a digest is not an OCI SHA-256 digest.
  */
 export function listedImage(manifest: VerifiedManifest, shape: DockerShape, platform: ImagePlatform | undefined): ListedImage {
-  const entry = manifest.images[shape]
+  const entry = manifest.images?.[shape]
+  if (entry === undefined) throw new SupervisorError('IMAGE_NOT_IN_MANIFEST', `the manifest lists no ${shape} image`)
   if (entry.repository !== IMAGES[shape]) throw new SupervisorError('IMAGE_NOT_IN_MANIFEST', `the manifest's ${shape} image names ${entry.repository}, not ${IMAGES[shape]}`)
   if (platform === undefined) throw new SupervisorError('IMAGE_NOT_IN_MANIFEST', `the manifest lists no ${shape} image for this engine's architecture`)
   const chosen = entry.platforms[platform]

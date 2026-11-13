@@ -292,16 +292,16 @@ export interface ReleaseManifest {
    * entry is not in this release, and a client on it installs nothing.
    */
   readonly runtime: Readonly<Partial<Record<RuntimePlatform, RuntimeArtifacts>>>
-  /** Desktop files per platform. */
-  readonly desktop: Readonly<Record<DesktopPlatform, DesktopArtifacts>>
-  /** The Docker images contract C9 runs. */
-  readonly images: { readonly s2: ImageRef, readonly s3: ImageRef }
+  /** Desktop files per platform; absent from a release that publishes none. */
+  readonly desktop?: Readonly<Record<DesktopPlatform, DesktopArtifacts>>
+  /** The Docker images contract C9 runs; absent from a release that publishes none. */
+  readonly images?: { readonly s2: ImageRef, readonly s3: ImageRef }
   /** The release's SPDX 2.3 JSON SBOM. */
   readonly sbom: FileRef & { readonly format: 'SPDX-2.3+json' }
   /** The release's npm packages. */
   readonly npm: readonly NpmPackageRef[]
-  /** The install scripts. */
-  readonly install: { readonly sh: FileRef, readonly ps1: FileRef }
+  /** The install scripts; absent from a release that publishes none. */
+  readonly install?: { readonly sh: FileRef, readonly ps1: FileRef }
   /** The rebuild record and who rebuilt. */
   readonly rebuild: { readonly record: FileRef, readonly builders: readonly RebuildBuilder[] }
   /** The advisory check's report and every accepted advisory. */

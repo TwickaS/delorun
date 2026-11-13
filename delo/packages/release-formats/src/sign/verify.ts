@@ -62,6 +62,17 @@ export interface TrustedRoot {
   readonly sha256: Sha256Hex
 }
 
+/** A span in seconds as the largest whole unit with its remainder, such as `1 hour 5 minutes`. */
+function formatGap(gap: number): string {
+  const whole = Math.max(1, Math.round(gap))
+  const parts: string[] = []
+  for (const [unit, size] of [['day', 86_400], ['hour', 3_600], ['minute', 60], ['second', 1]] as const) {
+    const count = Math.floor(whole / size) % (unit === 'day' ? Infinity : unit === 'hour' ? 24 : 60)
+    if (count > 0) parts.push(`${String(count)} ${unit}${count === 1 ? '' : 's'}`)
+  }
+  return parts.slice(0, 2).join(' ')
+}
+
 function utcText(now: number): string {
   return new Date(now * 1000).toISOString().replace('.000Z', 'Z')
 }
@@ -160,7 +171,7 @@ export function verifyTimestamp(root: TrustedRoot, bytes: Uint8Array, now: numbe
   const keys = root.metadata.roles.timestamp
   requireThreshold('timestamp', asJson(envelope), roleKeys(root.metadata, keys.keyids), keys.threshold)
   if (seconds(timestamp.expires) - seconds(timestamp.issued) !== TIMESTAMP_LIFETIME_SECONDS) throw new VerificationError(`timestamp ${String(timestamp.version)} does not expire exactly ${String(TIMESTAMP_LIFETIME_SECONDS)} seconds after it was issued`)
-  if (seconds(timestamp.issued) > now + CLOCK_TOLERANCE_SECONDS) throw new VerificationError(`timestamp ${String(timestamp.version)} was issued at ${timestamp.issued}, after this machine's clock, which reads ${utcText(now)}`)
+  if (seconds(timestamp.issued) > now + CLOCK_TOLERANCE_SECONDS) throw new VerificationError(`timestamp ${String(timestamp.version)} was issued at ${timestamp.issued}, ${formatGap(seconds(timestamp.issued) - now)} after this machine's clock, which reads ${utcText(now)}. Check that the computer's clock and time zone are right`)
   if (options.allowExpired !== true && now > seconds(timestamp.expires) + CLOCK_TOLERANCE_SECONDS) {
     throw new VerificationError(`timestamp ${String(timestamp.version)} expired at ${timestamp.expires}; this machine's clock reads ${utcText(now)}`)
   }
