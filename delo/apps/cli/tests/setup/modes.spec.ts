@@ -549,7 +549,7 @@ describe('the release check', { timeout: TIMEOUT_MS }, () => {
     expect(patchOf()).toEqual([...prompts, OFF_ROW])
     expect(recordOf()).toMatchObject({ updateCheck: false })
     expect(recordOf().sections.find(record => record.id === 'privacy')?.status).toBe('answered')
-    expect(screen()).toContain('Delo has no telemetry of its own.')
+    expect(screen()).toContain('Delorun has no telemetry of its own.')
     expect(screen()).toContain('> Yes (recommended)')
     expect(screen()).toContain('Updated the privacy section of the profile default.')
     recording.screen.length = 0
