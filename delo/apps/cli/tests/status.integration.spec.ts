@@ -142,6 +142,11 @@ describe('delorun status', { timeout: 30_000 }, () => {
     const result = await status()
     expect(result.code).toBe(EXIT.ok)
     expect(result.stdout).toContain('Version: 1.0.0\nRunning chats: 2\nUpdate: waiting to 1.1.0\n')
+    vi.mocked(queryHomeStatus).mockResolvedValueOnce({
+      state: 'running', pid: process.pid, startId: newStartId(),
+      runtime: { current: '1.1.0', previous: '1.0.0', running: '1.0.0' }, chats: 2,
+      studio: 'http://127.0.0.1:4123/', update: { phase: 'waiting', target: '1.1.0' },
+    } as Awaited<ReturnType<typeof queryHomeStatus>>)
     const verbose = await status(['--verbose'])
     expect(verbose.stdout).toContain('Version: 1.0.0 (previous 1.0.0)')
     expect(verbose.stdout).toMatch(/Process id: \d+\nStart id: /)
