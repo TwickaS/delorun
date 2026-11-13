@@ -24,7 +24,7 @@ import {
 } from './home-auth.ts'
 import type { PendingSummary } from './approvals.ts'
 import type { ElevationChange, ElevationRecord } from './elevation.ts'
-import type { ComputerOnlySwitch } from './reach-access.ts'
+import { EVERY_FIELD, type ComputerOnlySwitch } from './reach-access.ts'
 import type { ElevationState } from '@delo/contract-oidc-passkeys'
 import type { OpenSessionRequest, OpenedSession, SessionRecord } from './sessions.ts'
 import { claimHandler, devicesHandler, DEVICE_REMOVE_PATH, DEVICES_PATH, OWNER_CLAIM_PATH, removeDeviceHandler, type LoopbackCredential } from './routes.ts'
@@ -79,8 +79,11 @@ export const Config: schema<Config> = schema.object({
   }).description('The pairing choices. Out-of-bounds values fail the load.'),
 })
 
-/** The settings write a reach device is refused: any write to the `pairing` section of the home-auth row. */
-export const PAIRING_SWITCH: ComputerOnlySwitch = { ns: 'delo-home-auth', field: 'pairing', label: 'the device pairing settings' }
+/** The settings writes a reach device is refused: any write to the home-auth row, whose `pairing` and `secretsDirectory` decide who is admitted. */
+export const HOME_AUTH_SWITCH: ComputerOnlySwitch = { ns: 'delo-home-auth', field: EVERY_FIELD, label: 'the home-auth settings' }
+
+/** The settings writes a reach device is refused: any write to the reach row, whose options decide what the home exposes. */
+export const REACH_SWITCH: ComputerOnlySwitch = { ns: 'delo-reach', field: EVERY_FIELD, label: 'the remote-access settings' }
 
 /** The `homeAuth` service. */
 export class HomeAuthService extends Service {
@@ -136,9 +139,9 @@ export class HomeAuthService extends Service {
       const ending = change.kind === 'ended' ? `ended (${change.reason})` : `started until ${new Date(change.elevation.endsAt).toISOString()}`
       this.ctx.logger.info(`home-auth: elevation ${ending}: device=${deviceId} listener=${listener} elevation=${id}`)
     }), 'home-auth elevation log')
-    // A reach device never writes the pairing section, unlocked or not: the switch's field is the section itself, and a
-    // write that names it other than as a literal `true`, which no valid section is, is refused.
-    this.ctx.effect(() => this.registerComputerOnlySwitch(PAIRING_SWITCH), 'home-auth: computer-only pairing settings')
+    // A reach device never writes the home-auth or reach rows, unlocked or not, in any mode.
+    this.ctx.effect(() => this.registerComputerOnlySwitch(HOME_AUTH_SWITCH), 'home-auth: computer-only home-auth settings')
+    this.ctx.effect(() => this.registerComputerOnlySwitch(REACH_SWITCH), 'home-auth: computer-only reach settings')
     const credential = loopbackCredentialOf(this.ctx)
     this.ctx.effect(() => {
       const server = this.ctx.webServer

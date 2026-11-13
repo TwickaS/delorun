@@ -68,7 +68,7 @@ export type { ReachFullAccessGrants } from './full-access-grants.ts'
 export { REACH_TERMINAL_VERSION, ReachTerminalStore, type ReachTerminalRecord } from './reach-terminal.ts'
 export { isElevationMinutes } from './elevation.ts'
 export { REACH_DEVICE_PATHS, plainPathname, reachesDevicePath, type ReachDevicePath, type ReachDevicePathMatch } from './reach-paths.ts'
-export { HomeAuthService, Config as HomeAuthConfig, PAIRING_SWITCH, type Config } from './service.ts'
+export { HomeAuthService, Config as HomeAuthConfig, HOME_AUTH_SWITCH, REACH_SWITCH, type Config } from './service.ts'
 export {
   mayAskWithoutWindow, PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, tailnetIdentityOf, WINDOWLESS_MODES,
   type PairingConfig, type PairingSpec, type PairingView, type RequestDisplay, type TailnetIdentity, type WindowlessMode,

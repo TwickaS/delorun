@@ -166,6 +166,30 @@ describe('the waiting requests of one identity', () => {
     await expect(ask(7, ME)).rejects.toMatchObject({ code: 'APPROVAL_PENDING_LIMIT', detail: expect.stringContaining('5 device requests') })
   })
 
+  it('lets one identity\'s repeated window-less asks neither spend the source budget nor stop a window request', async () => {
+    await start()
+    await ask(1, ME)
+    const perMinute = DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource
+    // Pins the order of the checks: each refusal here is the identity's quota, never the shared source limit.
+    for (let fill = 2; fill <= perMinute * 2; fill += 1) {
+      await expect(ask(fill, ME)).rejects.toMatchObject({ code: 'APPROVAL_PENDING_LIMIT' })
+    }
+    await home.auth.openApprovalWindow()
+    await expect(ask(perMinute * 2 + 1)).resolves.toMatchObject({ requestId: expect.any(String) })
+  })
+
+  it('keeps the window-less source budget apart from the window\'s', async () => {
+    await start(resolvePairing({ mayAskWithoutWindow: 'tailnet', pendingPerIdentity: 5 }))
+    await home.auth.openApprovalWindow()
+    for (let fill = 1; fill <= DEVICE_APPROVAL_LIMITS.approvalRequestsPerMinutePerSource; fill += 1) {
+      const accepted = await ask(fill)
+      home.auth.approvals.cancel(accepted.requestId)
+    }
+    await expect(ask(50)).rejects.toMatchObject({ code: 'APPROVAL_RATE_LIMITED' })
+    home.auth.approvals.closeWindow()
+    await expect(ask(51, SOMEONE)).resolves.toMatchObject({ requestId: expect.any(String) })
+  })
+
   it('shows the identity, the window-less mark and the wrong codes of a waiting request', async () => {
     await start()
     await ask(1, ME)
