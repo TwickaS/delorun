@@ -48,10 +48,10 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | Feature | What the edits do | Serves |
 | --- | --- | --- |
 | `code-refusal-switch` | The loader's `refuseCode` option and the boot's forwarding of it | a switch, off; no Delo composition turns it on |
-| `config-editor-events` | The config editor's `edited` event (C4) and its `before-save` hook (C1) | shipped `cli`, which refuses a value for a secret-role field |
+| `settings-by-chat` | The config editor's `edited` event (C4) and its `before-save` hook (C1) | shipped `cli`, which refuses a value for a secret-role field |
 | `container-denial-marker` | The sandbox, shell and PTC fields that mark a denial by the environment | shipped confinement, behind a C16 switch |
 | `custom-chat-display` | The Custom work-details mode and the presentation policy the chat renderers read | the studio lane |
-| `default-workspace-directory` | The operator-named path of the first-use Workspace | no Delo consumer on `v5` |
+| `default-workspace-directory` | The operator-named path of the first-use Workspace | shipped `bundle-local` and `cli` (`delorun start`), behind a C16 switch |
 | `delorun-launcher` | `runCli` takes its arguments from the launcher, and the CLI's argument parser and plugin command are built as entries a launcher imports | shipped `cli` |
 | `doctor` | The doctor checks, app, bundle and profile template | shipped `cli` |
 | `fork-gates` | Upstream's documentation and repository gates run over Delo's tree | repository tooling |
@@ -61,14 +61,14 @@ Each `delo-feature` and `generic-fix` entry names one feature by a kebab-case id
 | `late-projection-keys` | Projection keys registered after a Session's baseline reach open control streams | no Delo consumer on `v5` |
 | `parity-replay` | The snapshot harness applies the parity overlay (C16) | the parity replay lane of `tools` |
 | `permission-defaults` | Whether a Session holds no permission preset | shipped `plugin-permission-defaults` |
-| `plugin-manager-improvements` | Plugin-manager diagnostic reasons and opening a plugin's page | no Delo consumer on `v5` |
+| `plugin-manager-improvements` | Plugin-manager diagnostic reasons and opening a plugin's page | shipped `plugin-onboarding` (opening a plugin's page) |
 | `plugin-version-axis` | A plugin's `engines.delo` range (C17) | shipped `update` and `contract-plugin-versions` |
 | `project-identity` | Delo Run's copyright line in the root `LICENSE`, under upstream's notice | the repository |
 | `preset-inspect` | The `preset_inspect` tool, its preset rows and its catalogue entry | a C16 switch, off |
 | `product-name` | The build title in the iOS home-screen title and the web manifest | the Web build of `tools` and `release` |
 | `profile-history` | Profile history, safe mode and the plugin audit on install | shipped `cli` (`delorun recover`) and `profile-safety` |
 | `scheduled-task-consent` | The consent asked before a scheduled task wakes its Session | shipped `plugin-schedule-consent` |
-| `session-created-at` | Session list rows carry `createdAt` | no Delo consumer on `v5` |
+| `session-created-at` | Session list rows carry `createdAt` | shipped `plugin-sidebar` (sort by created) |
 | `studio-seams` | Settings layout, onboarding, theme, sidebar and one-list workspace seams (WP1.6) | the studio lane; `bundle-local` sets `welcomeNotice` |
 | `terminal-card-controls` | The terminal card's copy-command control, duration and open start | the studio lane |
 | `trash-purge` | Forgetting purged Sessions in the search index and projection cache (C8) | shipped `trash` |
@@ -105,3 +105,7 @@ The budget limits how far the ledger may grow in one release, and it names the c
 A substantial change to one upstream area gets its own divergence record, a page in this directory that explains how to merge the next upstream release for that area. The change that creates the divergence adds the page. No records exist yet.
 
 Upstream merges follow the [fork boundary](../../../../AGENTS.md#the-fork-boundary) rules in the root guide.
+
+## Where to go next
+
+The [parity checklist](../parity.md) records the status and evidence of each difference that the ledger accounts for. The [glossary](../glossary.md) defines the terms on this page. The [reference index](../README.md) lists the other developer pages.

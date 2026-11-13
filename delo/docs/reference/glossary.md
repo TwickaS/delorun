@@ -6,7 +6,7 @@ Delo has no release yet; this page describes the first release.
 
 The words every Delo document, skill, interface string and pull request uses, one canonical term per concept. It extends upstream's [glossary](../../../docs/glossary.md), which owns the harness's own terms (agent, session, turn, step, tool, preset, plugin, bundle, profile); this page owns what Delo adds.
 
-Each entry gives the term, what it means in plain words and, where they differ, the name the code uses. Interface text uses the term; code and maintainer docs may add the code name in backticks. A new concept gets its entry in the same pull request that introduces it.
+Each entry starts with one plain-English sentence, then adds a technical note where it helps and, where they differ, the name the code uses. Interface text uses the term; code and maintainer docs may add the code name in backticks. A new concept gets its entry in the same pull request that introduces it.
 
 ## Contents
 
@@ -22,6 +22,26 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 - [Words to avoid](#words-to-avoid)
 
 ## The product
+
+The words the [user guide](../guide/README.md) uses most come first, in plain English. Home, studio, workspace, chat, reach, trusted device, safe mode and trash are defined further down, in the sections named at the end of this list.
+
+- **plugin** — a piece of software that adds one feature to Delo, such as a sidebar, a tool the assistant can use or a connection to a model company. Delo is made of plugins, and you can turn each one on or off. Technical note: upstream's plugin is a Cordis plugin; `delorun plugin` installs one from the registry. <a id="plugin"></a>
+- **provider** — the company or service whose AI model answers your chats, such as DeepSeek or OpenAI. Setup asks which provider to use and stores your key for it; Settings → Models changes it later. Technical note: setup offers eleven providers ([C11](../contracts/c11-setup-answers.md#model-providers)). <a id="provider"></a>
+- **preset** — a saved choice of how the assistant works. Delo uses the word twice: an **agent preset** picks the assistant's tools and instructions (Standard is the default one; Settings → Modes lists them), and a **permission preset** picks what the assistant's commands may do: **Read Only**, **Workspace Write**, **Full access** or **Auto review**. Technical note: upstream's agent preset registry holds the first kind; the sandbox mode and the approval policy make up the second. <a id="preset"></a>
+- **sandbox** — a fence around the commands the assistant runs, so they can change files only where you allow and cannot reach Delo's own secrets. Technical note: the operating system enforces it (bwrap, Landlock, Seatbelt or Windows access lists), and what it enforces differs by system, as [Safety](../guide/safety.md#the-sandbox) lists. <a id="sandbox"></a>
+- **Workspace Write** — the permission preset every new workspace starts on: the assistant's commands run inside the sandbox and can write only inside that workspace and the permitted temporary folders. Technical note: the sandbox mode `workspace-write`, with the approval policy `ask`. <a id="workspace-write"></a>
+- **full access** — the permission preset that lets the assistant's commands run outside the sandbox, with everything your user account can do, Delo's home and secrets included. With setup's Safer prompts, Delo asks you once per workspace at your own computer before it applies. Technical note: the sandbox mode `danger-full-access`; the consent is the one `@delo/plugin-permission-defaults` records per workspace. <a id="full-access"></a>
+- **approval card** — the box in a chat that asks whether the assistant may do something, with the choices Reject, Allow once and, for a request that needs more access than the chat has, Allow for this chat. **Allow for this chat** switches that chat to the permission preset the request asked for, and later commands in that chat run in it without asking until you lower it. Technical note: upstream's approval card, with Delo's choice added through the `conversation.approval.choice` slot. <a id="approval-card"></a>
+- **consent** — a yes you give, at your own computer, before Delo does something risky, such as switching a workspace to full access, starting an added MCP server or letting an external agent run. A phone signed in over remote access cannot give one. Technical note: each consent is one parity switch with a plugin ([parity checklist](parity.md)). <a id="consent"></a>
+- **external agent** — another coding assistant, such as Claude Code or Codex, that Delo's assistant can hand a task to. It runs as its own program outside the sandbox and on your own account, so Delo asks before each run. Technical note: a delegation provider without a local child session; the consent is `@delo/plugin-delegation-consent`. <a id="external-agent"></a>
+- **MCP server** — a program that gives the assistant extra tools, which Delo starts on your computer. One that runs a command runs it with your access, outside the sandbox, so Delo holds a new one stopped until you allow it. Technical note: MCP is the Model Context Protocol; `delorun mcp accept` allows a server. <a id="mcp-server"></a>
+- **unlock** — a short permission you give a phone from your computer so that the phone can do sensitive things, such as changing settings. It lasts 15 minutes by default and ends early with Lock now. Technical note: the reach elevation; `elevationMinutes` in the profile's reach row sets 1 to 60. <a id="unlock"></a>
+- **device** — a browser or the desktop app that you approved to open your studio. See **trusted device** under [Signing in](#signing-in). <a id="device"></a>
+- **release** — one numbered version of Delo, signed so the launcher can check it before installing it. An **update** installs a newer release beside the running one and switches to it when the new one passes its health check. A **rollback** goes back to the release before, with the profile as it was before the update. Technical note: `delorun update` and `delorun recover rollback`; Delo keeps two releases installed. <a id="release"></a>
+- **cost meter** — an optional estimate under the message box of what a chat has cost, with the chats it started added up. It is off until you turn it on in the sidebar's Plugins page, and it makes no request of its own. Technical note: `@delo/plugin-cost-meter`; prices are a bundled table you can override. <a id="cost-meter"></a>
+- **prompts answer** — setup's choice between **Safer prompts**, the default, and **Same as stock**. Safer prompts turns on Delo's consents for full access, instruction files, added MCP servers and scheduled tasks; Same as stock leaves them off, as in DeepSeek Harness. `delorun setup prompts` changes it. <a id="prompts-answer"></a>
+
+Defined in other sections: home, studio, workspace and chat under [Where things run](#where-things-run), reach under [Reaching a studio](#reaching-a-studio), trusted device under [Signing in](#signing-in), and safe mode and trash under [Changing the harness](#changing-the-harness) and [Keeping work safe](#keeping-work-safe).
 
 - **Delo** — the open-source project, app, with the `delorun` command: a community fork of DeepSeek Harness. <a id="delo"></a>
 - **Delo Run** — the hosted service at delorun.com: the community pages and the waitlist, and, with the Delo relay (roadmap stage 2), its accounts (email code, GitHub, optional passkey), sign-in and device approvals through Delo. Public text names the contact support@delorun.com only. <a id="delo-run"></a>
@@ -79,7 +99,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 
 ## Changing the harness
 
-- **profile** — upstream's profile; the `delorun` command and the desktop app each keep their own, as upstream's do, and share chats and workspaces. **layer** — a bundle, the profile patch, the home patch or an overlay. <a id="profile"></a>
+- **profile** — a saved set of Delo's settings and plugins that decides how the studio and the assistant are put together. The `delorun` command and the desktop app each keep their own profile, as upstream's do, and share chats and workspaces. Technical note: upstream's profile. **layer** — a bundle, the profile patch, the home patch or an overlay. <a id="profile"></a>
 - **local bundle** — the bundle that Delo's CLI profiles add after upstream's web profile template, holding Delo's local integration rows; a profile's `--dump-config` names it beside each row it writes. Code: `@delo/bundle-local`. <a id="local-bundle"></a>
 - **profile history** — every saved version of the profile, naming what changed and who changed it. **undo** — restoring the version before the latest. **safe mode** — starting with the person's additions kept but not loaded. <a id="profile-history"></a>
 - **eject** — copying a plugin's source into the profile as an editable replacement for the original. <a id="eject"></a>
@@ -153,3 +173,7 @@ Each entry gives the term, what it means in plain words and, where they differ, 
 | reviewed (for badges) | tested with Delo X |
 | audited, audit findings (for plugins) | listed findings, the author's or a reviewer's claims |
 | end-to-end through any relay (for the desktop app) | the desktop app pins the home's TLS key where the home keeps one across certificate renewals |
+
+## Where to go next
+
+To learn how to use Delo, start with the [user guide](../guide/README.md) or [Install and first run](../guide/install.md). To see how Delo differs from DeepSeek Harness, read [Delorun and stock DeepSeek Harness](../guide/delo-vs-stock.md); to see the checks behind each difference, read the [parity checklist](parity.md). The [reference index](README.md) lists the developer pages.
