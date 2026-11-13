@@ -193,7 +193,7 @@ describe('delorun plugin', () => {
       ['plugin', '--profile', 'default', 'install', '--frozen-lockfile', '--registry=http://registry.example.test/'],
     ])
     expect(errors.join('')).toContain('  critical: GHSA-2222-3333-4444 (critical) affects good-plugin@1.0.0')
-    expect(errors.join('')).toContain('  warning: The registry http://registry.example.test/ is plain http, so a package could be altered in transit')
+    expect(errors.join('')).toContain('  warning: The registry http://registry.example.test/ is plain http, so a package and its integrity hash could be altered in transit')
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(true)
   })
 

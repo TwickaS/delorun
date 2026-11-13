@@ -296,8 +296,8 @@ describe('the check before installation', () => {
     const dir = profile([{ ...PLUGIN, dependencies: { 'left-pad': '1.3.0' } }, { ...DEPENDENCY, resolution: `{integrity: sha512-x, tarball: 'http://downloads.example.test/left-pad.tgz'}` }])
     const result = await check(dir, 'good-plugin', { registries: ['http://registry.example.test/', 'https://registry.npmjs.org/'] })
     expect(findings(result).filter(finding => finding.rule === 'insecure-source')).toEqual([
-      { rule: 'insecure-source', severity: 'warning', title: 'The registry http://registry.example.test/ is plain http, so a package could be altered in transit; the lockfile\'s integrity hashes still apply where it records them' },
-      { rule: 'insecure-source', severity: 'warning', title: 'left-pad is downloaded over plain http (http://downloads.example.test/left-pad.tgz), so it could be altered in transit; its integrity hash in the lockfile still applies' },
+      { rule: 'insecure-source', severity: 'warning', title: 'The registry http://registry.example.test/ is plain http, so a package and its integrity hash could be altered in transit; a lockfile hash only holds later installs to the bytes this one received' },
+      { rule: 'insecure-source', severity: 'warning', title: 'left-pad is downloaded over plain http (http://downloads.example.test/left-pad.tgz), so it could be altered in transit; its lockfile integrity hash only holds later installs to the bytes this one received' },
     ])
     expect(result.kind === 'checked' && result.blocking).toEqual([])
   })

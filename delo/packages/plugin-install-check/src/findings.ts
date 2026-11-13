@@ -114,8 +114,9 @@ const PLAIN_HTTP = /^(?:git\+)?http:\/\//iu
 
 /**
  * The plain-HTTP findings: a registry the installation asked, and each package fetched from a tarball or git URL, over
- * `http:`. Such a source is used, as stock does; the lockfile's integrity hash, where it records one, still holds a
- * later installation to the same bytes.
+ * `http:`. Such a source is used, as stock does. A lockfile integrity hash does not protect the resolution that records
+ * it, because that resolution reads the hash over the same plain-HTTP connection; it only holds a later installation to
+ * the bytes this one received.
  * @param input - the packages and the registries.
  * @returns one finding per plain-HTTP registry and package.
  */
@@ -123,14 +124,14 @@ function insecureFindings(input: FindingInput): InstallFinding[] {
   const plugin = input.packages[0]?.name ?? ''
   const registries = [...new Set(input.registries.filter(url => PLAIN_HTTP.test(url)))].map((url): InstallFinding => ({
     rule: 'insecure-source', package: plugin, path: LOCKFILE_PATH, line: 0, severity: 'warning',
-    title: `The registry ${url} is plain http, so a package could be altered in transit; the lockfile's integrity hashes still apply where it records them`,
+    title: `The registry ${url} is plain http, so a package and its integrity hash could be altered in transit; a lockfile hash only holds later installs to the bytes this one received`,
   }))
   const packages = input.packages.flatMap((pkg): InstallFinding[] => {
     const url = pkg.entry?.resolution.tarball ?? pkg.entry?.resolution.repo
     if (url === undefined || !PLAIN_HTTP.test(url)) return []
     return [{
       rule: 'insecure-source', package: pkg.name, version: pkg.reference, path: LOCKFILE_PATH, line: pkg.entry?.line ?? 0, severity: 'warning',
-      title: `${pkg.name} is downloaded over plain http (${url}), so it could be altered in transit${pkg.entry?.resolution.integrity === undefined ? '' : '; its integrity hash in the lockfile still applies'}`,
+      title: `${pkg.name} is downloaded over plain http (${url}), so it could be altered in transit${pkg.entry?.resolution.integrity === undefined ? '' : '; its lockfile integrity hash only holds later installs to the bytes this one received'}`,
     }]
   })
   return [...registries, ...packages]
