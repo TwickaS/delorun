@@ -84,6 +84,7 @@ External packages installed for runtime use or embedded in distributed Host or b
 | [`ajv`](https://github.com/ajv-validator/ajv) | MIT |
 | [`anser`](https://github.com/IonicaBizau/anser) | MIT |
 | [`asn1js`](https://github.com/PeculiarVentures/ASN1.js) | BSD-3-Clause |
+| [`aws4fetch`](https://github.com/mhart/aws4fetch) | MIT |
 | [`big.js`](https://github.com/MikeMcl/big.js) | MIT |
 | [`birpc`](https://github.com/antfu-collective/birpc) | MIT |
 | [`buffer`](https://github.com/feross/buffer) | MIT |
