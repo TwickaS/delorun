@@ -181,7 +181,7 @@ Load it with `sudo apparmor_parser -r /etc/apparmor.d/bwrap`, check that `bwrap 
 
 ## When nothing here fits
 
-Run `delorun doctor` to check Docker, the model key's format, the home, the studio's port, the release-log check and the last update check, and `delorun logs home` to read the running Delorun's recent records. [Where Delorun keeps its logs](logs.md) explains each log. A refusal that says "Report this" means Delorun found something it cannot explain: report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
+Run `delorun doctor` to check Docker, the model key's format, the home, the studio's port, the release-log check, the last update check and your CLI profile's plugins, and `delorun logs home` to read the running Delorun's recent records. [Where Delorun keeps its logs](logs.md) explains each log. A refusal that says "Report this" means Delorun found something it cannot explain: report it with the refusal's text: a suspected vulnerability privately, as [SECURITY.md](../../../SECURITY.md) describes, and anything else with the issue templates that [CONTRIBUTING.md](../../../CONTRIBUTING.md) names, or to support@delorun.com.
 
 ## For the technically curious
 

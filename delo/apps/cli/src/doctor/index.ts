@@ -358,7 +358,7 @@ export interface DoctorEnvironment {
 export function createDoctorCommand(environment: DoctorEnvironment): CliCommand {
   return {
     name: 'doctor',
-    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check and the plugins',
+    summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check, the last update check and the plugins',
     async run(args, context) {
       if (args.includes('--help') || args.includes('-h')) {
         context.stdout(DOCTOR_USAGE)
