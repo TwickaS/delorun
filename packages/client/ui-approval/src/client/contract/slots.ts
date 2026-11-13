@@ -41,6 +41,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       children: {
         'conversation.approval.detail': { kind: 'single'; scope: 'session' }
         'conversation.approval.action': { kind: 'list'; scope: 'session' }
+        'conversation.approval.choice': { kind: 'list'; scope: 'session' }
       }
     }
   }
@@ -58,6 +59,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: ApprovalActionOwnerProps
     }
+    /**
+     * Persistent choices on a card whose request carries `escalatesTo`; rendered in the decision row after Allow once,
+     * which draws as a secondary button while an entry reports a shown button through `offer`. An entry that offers
+     * nothing for the request renders nothing.
+     */
+    'conversation.approval.choice': {
+      kind: 'list'
+      scope: 'session'
+      owner: ApprovalChoiceOwnerProps
+    }
   }
 }
 
@@ -66,6 +77,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
  * `@deepseek-ai/dsh-user-approval`, which the `approval/request` consumer passes through unchanged.
  */
 export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent'
+
+/** The sandbox mode a sandbox escalation asks for; the values of `ApprovalEscalation` in `@deepseek-ai/dsh-user-approval`. */
+export type ApprovalEscalation = 'workspace-write' | 'danger-full-access'
 
 /** Stable identity handed to an optional approval-detail renderer. */
 export interface ApprovalDetailOwnerProps {
@@ -96,6 +110,27 @@ export interface ApprovalActionOwnerProps {
   canAnswer: () => boolean
 }
 
+/** Request facts and the card's answer handed to a choice in the decision row. */
+export interface ApprovalChoiceOwnerProps {
+  /** The sandbox mode the request asks for. */
+  escalatesTo: ApprovalEscalation
+  /** Tool requesting the decision, when the caller supplied it. */
+  toolName: string | undefined
+  /** Tool call correlated with the request, when supplied. */
+  callId: ToolCallId | undefined
+  /** As {@link ApprovalActionOwnerProps.allow}: answers the card as allowed through the same one-shot lock. */
+  allow: () => Promise<void>
+  /** As {@link ApprovalActionOwnerProps.answered}. */
+  answered: boolean
+  /** As {@link ApprovalActionOwnerProps.canAnswer}. */
+  canAnswer: () => boolean
+  /**
+   * Report whether the entry currently shows a button in the decision row; while any entry reports true, Allow once
+   * draws as a secondary button so the choice is the primary one. An entry reports false when it unmounts.
+   */
+  offer: (shown: boolean) => void
+}
+
 /** Client-visible fields of an approval request projected through Remote Events. */
 export interface ApprovalPresentationRequest {
   /** Tool requesting the decision. */
@@ -108,6 +143,8 @@ export interface ApprovalPresentationRequest {
   readonly displayReason?: { readonly en: string; readonly [locale: string]: string }
   /** What an `allowed-once` answer grants beyond an ordinary tool call, when it does. */
   readonly grants?: ApprovalGrant
+  /** The sandbox mode a sandbox escalation asks for, when the request is one. */
+  readonly escalatesTo?: ApprovalEscalation
   /** Cancellation projected from the Host waterfall. */
   readonly signal?: AbortSignal
 }
@@ -136,6 +173,8 @@ export class PendingApproval {
   readonly displayReason: ApprovalPresentationRequest['displayReason']
   /** Grant an `allowed-once` answer gives, when the asker declared one. */
   readonly grants: ApprovalGrant | undefined
+  /** The sandbox mode an escalation asked for, when the asker declared one. */
+  readonly escalatesTo: ApprovalEscalation | undefined
   /** Result returned by the Remote Event listener to the Host waterfall. */
   readonly result: Promise<ApprovalDecision>
 
@@ -159,6 +198,7 @@ export class PendingApproval {
     this.reason = request.reason
     this.displayReason = request.displayReason
     this.grants = request.grants
+    this.escalatesTo = request.escalatesTo
     const completion = Promise.withResolvers<ApprovalDecision>()
     this.result = completion.promise
     this.#resolve = completion.resolve
@@ -262,6 +302,8 @@ export interface ApprovalCardInput {
   toolName?: string
   /** Grant the request asks for; when present the card renders the `conversation.approval.action` list. */
   grants?: ApprovalGrant
+  /** The sandbox mode the request escalates to; when present the card renders the `conversation.approval.choice` list. */
+  escalatesTo?: ApprovalEscalation
   /** Caller-specific scope label; ordinary approvals use Allow once. */
   allowLabel?: string
   /** Whether the caller still accepts an answer. */

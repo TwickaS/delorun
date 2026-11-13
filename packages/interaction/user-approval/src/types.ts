@@ -69,6 +69,9 @@ declare module '@deepseek-ai/dsh-session/types' {
  */
 export type ApprovalGrant = 'full-access' | 'workspace-management' | 'external-agent'
 
+/** The sandbox modes a call can ask to escalate to; `read-only` is the floor and nothing escalates to it. */
+export type ApprovalEscalation = 'workspace-write' | 'danger-full-access'
+
 /** Client-safe payload declared for the approval answerer waterfall. */
 export interface ApprovalRequestEvent {
   /** Agent identity projected to the corresponding Client Context in transit. */
@@ -86,6 +89,12 @@ export interface ApprovalRequestEvent {
    * refuse a granting answer from a Peer that may not give that grant; a refusal still applies. Never persisted.
    */
   readonly grants?: ApprovalGrant
+  /**
+   * The sandbox mode a shell-command or file-operation sandbox escalation asks for, so a presenter can offer to switch
+   * the session to it; other requests leave it unset. Presentation only: never persisted, and no Host refuses an answer
+   * by it.
+   */
+  readonly escalatesTo?: ApprovalEscalation
   /** Cancellation lifetime of the pending request. */
   readonly signal?: AbortSignal
 }

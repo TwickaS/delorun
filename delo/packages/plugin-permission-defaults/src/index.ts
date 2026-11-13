@@ -218,7 +218,7 @@ export function fullAccessRefusal(workspace: string, problem?: string): string {
   const where = workspace === NO_WORKSPACE ? 'a chat with no workspace folder' : `the workspace ${JSON.stringify(workspace)}`
   const unreadable = problem === undefined ? '' : ` The permission store could not be read, so no consent counts (${problem}).`
   const command = workspace === NO_WORKSPACE ? 'delorun workspace full-access <folder> on' : `delorun workspace full-access ${shellQuote(workspace)} on`
-  return `full access for ${where} needs one consent for that workspace first: the person allows it at the home's own computer, with the approval card's "Allow full access for this workspace", in the studio's Settings, Permissions, or with \`${command}\`; until then keep the safer preset "${SAFER_PRESET}".${unreadable}`
+  return `full access for ${where} needs one consent for that workspace first: the person allows it at the home's own computer, with the approval card's "Allow for this chat", in the studio's Settings, Permissions, or with \`${command}\`; until then keep the safer preset "${SAFER_PRESET}".${unreadable}`
 }
 
 /** What reading the store again changed: the workspaces that gained a grant and those that lost one. */

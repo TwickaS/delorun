@@ -218,6 +218,7 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', locale)
+      ctx.provide('sessions', {})
       const describeSettings = vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } }))
       new TestRemote(ctx, { settings: { describe: describeSettings } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
@@ -288,6 +289,7 @@ describe('the plugin', () => {
     try {
       await ctx.plugin(SlotRegistry).await()
       ctx.provide('locale', new LocaleRuntime(ctx))
+      ctx.provide('sessions', {})
       new TestRemote(ctx, { settings: { describe: vi.fn(async () => ({ ok: true as const, value: { writable: true, hasDocument: true, namespaces: [] } })) } })
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
