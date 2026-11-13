@@ -8,12 +8,12 @@
 import { Button, SegmentedControl, Switch, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { useCallback, useLayoutEffect, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from 'react'
+import { useCallback, useId, useLayoutEffect, useState, useSyncExternalStore, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import {
   ART_PALETTES, ART_STRENGTHS, ART_STYLES, DEFAULT_SIDEBAR_SETTINGS, HEADER_ARTS, LIST_VIEWS, MAX_ART_SEED, SIDEBAR_WIDTH, SORT_ORDERS,
   type ArtPalette, type SidebarSettings,
 } from '../config.ts'
-import { StageBackdrop, TITLE_SCRIM_STYLE } from './StageArt.tsx'
+import { InkEdgeFilters, StageBackdrop } from './StageArt.tsx'
 import { GENERATIVE_SCENES } from './GenerativeArt.tsx'
 import css from './SettingsSection.module.css'
 
@@ -171,6 +171,10 @@ export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
   const current = snapshot.value ?? DEFAULT_SIDEBAR_SETTINGS
   const disabled = !snapshot.writable
   const [failed, setFailed] = useState(false)
+  // The tiles' brand draws through edge filters of the section's own, so a preview never depends on the sidebar's art being mounted.
+  const edgeId = useId()
+  const edgeIds = { brand: `${edgeId}-brand`, control: `${edgeId}-control` }
+  const edgedBrand: CSSProperties = { filter: `url("#${edgeIds.brand}")` }
   // A refused or rejected write shows the notice; the next write clears it.
   const attempt = (write: () => Promise<boolean>): void => {
     setFailed(false)
@@ -181,6 +185,7 @@ export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
   }
   return (
     <div className={css.section}>
+      <InkEdgeFilters ids={edgeIds} />
       {failed && <Toast text={t('settings.failed')} onDone={() => { setFailed(false) }} />}
       <section className={css.block} aria-labelledby="delo-sidebar-art">
         <div className={css.row}>
@@ -200,7 +205,7 @@ export function SidebarSettingsSection({ settings, t }: SidebarSettingsProps) {
               onClick={() => { if (current.headerArt !== art) save('headerArt', art) }}>
               <span className={css.preview}>
                 {art !== 'none' && <StageBackdrop scene={art} palette={current.artPalette} seed={current.artSeed} compact />}
-                <span className={css.previewBrand} style={art === 'none' ? undefined : TITLE_SCRIM_STYLE}>{t('settings.preview.brand')}</span>
+                <span className={css.previewBrand} style={art === 'none' ? undefined : edgedBrand}>{t('settings.preview.brand')}</span>
                 <span className={css.previewRows} aria-hidden="true"><span /><span /><span /></span>
               </span>
               <span className={css.tileFoot}>

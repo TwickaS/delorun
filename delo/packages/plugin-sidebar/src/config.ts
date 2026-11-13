@@ -126,10 +126,9 @@ export const Config = z.object({
   artStyle: z.union([...ART_STYLES]).default(DEFAULT_SIDEBAR_SETTINGS.artStyle).volatile(),
   sort: z.union([...SORT_ORDERS]).default(DEFAULT_SIDEBAR_SETTINGS.sort).volatile(),
   confirmUnpin: z.boolean().default(DEFAULT_SIDEBAR_SETTINGS.confirmUnpin).volatile(),
-  workspaceIcons: z.transform(z.dict(z.any()), (icons: Record<string, unknown>) => {
-    if (Object.keys(icons).length > MAX_WORKSPACE_ICONS) throw new z.ValidationError(`holds more than ${String(MAX_WORKSPACE_ICONS)} Workspace icons`, { path: ['workspaceIcons'] })
-    return icons
-  }, true).default({}).volatile(),
+  // A plain dict: the studio rehydrates this schema from its serialized form, which carries no transform callback, so a
+  // transform here fails every validation there. The host half refuses a stored value above `MAX_WORKSPACE_ICONS` at load.
+  workspaceIcons: z.dict(z.any()).default({}).volatile(),
   width: z.number().min(SIDEBAR_WIDTH.min).max(SIDEBAR_WIDTH.max).step(SIDEBAR_WIDTH.step).default(DEFAULT_SIDEBAR_SETTINGS.width).volatile(),
   updateNoticeRefreshMinutes: z.natural().min(UPDATE_NOTICE_REFRESH_MINUTES.min).max(UPDATE_NOTICE_REFRESH_MINUTES.max)
     .description('Minutes between the studio\'s reads of the update notice.').default(DEFAULT_SIDEBAR_SETTINGS.updateNoticeRefreshMinutes).volatile(),
