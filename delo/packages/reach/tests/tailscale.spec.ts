@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { StudioAddress } from '@delo/contract-admission'
 import { TAILSCALE_OPERATOR_COMMAND } from '@delo/contract-reach-providers'
-import { TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachSpec } from '../src/provider.ts'
+import { checkServeAccess, TailscalePrivateProvider, TAILSCALE_PRIVATE_VISIBILITY, tailscaleAddress, type ReachSpec } from '../src/provider.ts'
 import {
   isPermissionRefusal, parseServeRules, readServeRules, readTailscale, removeServe, systemTailscale, type TailscaleResult, type TailscaleRunner,
 } from '../src/tailscale.ts'
@@ -190,6 +190,33 @@ describe('the Tailscale private provider', () => {
     const silent = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: '' } })
     silent.config = ownRule(HOST, 443, 1)
     await expect(removeServe(silent.run, HOST, 443, TARGET)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_CONFLICT', detail: expect.stringContaining('failed (no reason given)') })
+  })
+
+  it('tests that the person may configure serve before anything is written, leaving no rule behind unless the home keeps its own', async () => {
+    const request = { host: HOST, servePort: 443, listenerPort: LISTENER_PORT, keepOwn: false, next: 'then try again' }
+    const fresh = fakeTailscale(HOST)
+    await checkServeAccess(fresh.run, request)
+    // Pins the test by configuring: the serve target is set and removed again, and nothing stays served.
+    expect(fresh.calls.filter(call => call[1] !== 'status')).toEqual([['serve', '--bg', '--https=443', TARGET], ['serve', '--https=443', 'off']])
+    expect(fresh.config).toEqual({ TCP: {}, Web: {} })
+    // A kept rule of this home is configured again unchanged; a stopped home's own rule is removed.
+    const kept = fakeTailscale(HOST)
+    kept.config = ownRule(HOST, 443, LISTENER_PORT)
+    await checkServeAccess(kept.run, { ...request, keepOwn: true })
+    expect(kept.config).toEqual(ownRule(HOST, 443, LISTENER_PORT))
+    const stale = fakeTailscale(HOST)
+    stale.config = ownRule(HOST, 443, LISTENER_PORT)
+    await checkServeAccess(stale.run, request)
+    expect(stale.config).toEqual({ TCP: {}, Web: {} })
+    const funnel = fakeTailscale(HOST)
+    funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
+    await expect(checkServeAccess(funnel.run, request)).rejects.toMatchObject({ code: 'TAILSCALE_FUNNEL_ON', detail: expect.stringContaining('then try again') })
+    expect(funnel.calls).toEqual([['serve', 'status', '--json']])
+    const denied = { code: 1, stdout: '', stderr: 'Access denied: serve config denied' }
+    await expect(checkServeAccess(fakeTailscale(HOST, { 'serve set': denied }).run, request)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining(TAILSCALE_OPERATOR_COMMAND) })
+    const foreign = fakeTailscale(HOST, { 'serve off': denied })
+    foreign.config = ownRule(HOST, 443, 1)
+    await expect(checkServeAccess(foreign.run, request)).rejects.toMatchObject({ code: 'TAILSCALE_SERVE_NOT_PERMITTED', detail: expect.stringContaining('may still serve home.example.ts.net:443') })
   })
 
   it('runs the system tailscale without a shell', async () => {

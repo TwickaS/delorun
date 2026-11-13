@@ -52,6 +52,8 @@ const request = z.discriminatedUnion('op', [
   z.strictObject({ ...base, op: z.literal('mcp.accept'), args: mcpReview }),
   z.strictObject({ ...base, op: z.literal('mcp.decline'), args: mcpReview }),
   z.strictObject({ ...base, op: z.literal('mcp.revoke'), args: mcpRevoke }),
+  z.strictObject({ ...base, op: z.literal('reach.status') }),
+  z.strictObject({ ...base, op: z.literal('reach.apply') }),
 ])
 
 /**

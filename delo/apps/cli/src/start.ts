@@ -7,7 +7,10 @@
  *   new start token, listens on the update channel and boots the profile, logging to the `home-<profile>` surface
  *   while the terminal also shows its output.
  * - `delorun start` starts the same command detached from the terminal, with standard input closed and its output
- *   in its log, and waits at most 120 seconds for the update channel to report `running`.
+ *   in its log, and waits at most 120 seconds for the update channel to report `running`. Detached means the home
+ *   process outlives the terminal; nothing starts it at login.
+ * - Without either option the profile's setup answer chooses; `--background` detaches this start whatever setup
+ *   answered, and a start that runs in this terminal because of that answer ends with how to start in the background.
  *
  * A second start for a profile whose home process answers prints that process and exits 0. A profile that skipped a
  * Delo bundle is refused before it boots, and one in which a row of a Delo bundle did not activate is shut down and
@@ -29,10 +32,13 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
 import { assertDeloInvariants, composeDeloProfile, NO_APPROVED_CONTENT, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
 import { HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delo/contract-home-layout'
+import type { ReachConfigRows } from '@delo/contract-reach-providers'
 import { START_WAIT_MS } from '@delo/contract-home-process'
 import { localDeviceApproval } from './devices/host.ts'
 import { localConsents } from './consents/host.ts'
-import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
+import { CountingChatGate, HomeProcess, HostNotStoppedError, listenProcessSignals, openHomeLog, captureHomeOutput, queryHomeStatus, refuseBootedHost, updateChannelProbe, type HandoverPipe, type HomeLog, type HomeProcessOptions, type LocalConsents, type LocalDeviceApproval, type LocalReach, type RunningHost, type StudioLinkResult, type UpdateSupport } from '@delo/home-process'
+import { localReach, reachRowsOf } from './reach/host.ts'
+import { readReachRow } from './reach/row.ts'
 import { resolveSurface, type DeloLogger } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
@@ -42,7 +48,7 @@ import { deloRowIds, inactiveDeloRows, inactiveRowsRefusal, type BootedRow, type
 import { registerHomeProcess } from './home-exclusion.ts'
 import { announceStudio } from './open/announce.ts'
 import { hostStudioLink } from './open/host-link.ts'
-import { computerOpener, type StudioOpener } from './open/studio.ts'
+import { computerOpener, profileFlag, type StudioOpener } from './open/studio.ts'
 import { shippedPackageManager } from './package-manager.ts'
 import { hasCliProfile, profileDirectory } from './profile.ts'
 import { readBackgroundAnswer } from './setup/background.ts'
@@ -222,6 +228,12 @@ export interface BootedProfile {
    * @returns what was moved and what stays.
    */
   readonly settleSecretValues: (home: string, profile: string) => Promise<SecretSettlement>
+  /**
+   * The reach service of `@delo/reach`, when the profile loads it ([reach host](./reach/host.ts)).
+   * @param rows - reads the profile's `delo-reach` row when `reach.apply` arrives.
+   * @returns the reach operations, or undefined without the service.
+   */
+  readonly reach?: (rows: () => ReachConfigRows) => LocalReach | undefined
 }
 
 /**
@@ -355,6 +367,7 @@ export async function runUpstreamProfile(options: RunProfileOptions, handlers: U
     watchChats: (gate) => { watchChats(ctx, gate) },
     devices: () => localDeviceApproval(ctx),
     consents: () => localConsents(ctx),
+    reach: rows => localReach(ctx, rows),
     watchUpdates: async options => watchUpdates(ctx, options),
     // The CLI profile's invariants require the service, so it is absent only in a profile that holds no turn.
     releaseTurns: () => { ctx.get('deloTurnGate')?.release() },
@@ -629,6 +642,7 @@ export function runningHost(booted: BootedProfile, request: Pick<StartRequest, '
   const atBootProtection = bootProtectionOf(atBoot, startOnly)
   return {
     ...withDevices(booted),
+    ...withReach(booted, request),
     chats,
     studio: () => {
       const address = booted.studio()
@@ -660,6 +674,18 @@ function withDevices(booted: BootedProfile): { readonly devices?: LocalDeviceApp
   const devices = booted.devices?.()
   const consents = booted.consents?.()
   return { ...devices === undefined ? {} : { devices }, ...consents === undefined ? {} : { consents } }
+}
+
+/**
+ * The running Host's reach operations, for the update channel's `reach.status` and `reach.apply`: an apply reads the
+ * profile's own `delo-reach` row, which `delorun reach on|off` wrote, when it arrives.
+ * @param booted - the booted profile.
+ * @param request - the home and profile.
+ * @returns `reach` when the profile loads `@delo/reach`, otherwise nothing.
+ */
+function withReach(booted: BootedProfile, request: Pick<StartRequest, 'home' | 'profile'>): { readonly reach?: LocalReach } {
+  const reach = booted.reach?.(() => reachRowsOf(readReachRow(request.home, request.profile)))
+  return reach === undefined ? {} : { reach }
 }
 
 /**
@@ -730,25 +756,56 @@ async function answeringStatus(home: string, profile: string): Promise<{ readonl
   }
 }
 
-/**
- * Whether `delorun start` detaches from the terminal: not when `--foreground` was given, and not when the profile's
- * setup answers say the person chose against running in the background. A missing answers record keeps the default.
- * @param foreground - whether `--foreground` was given.
- * @param profileDirectory - the CLI profile's directory.
- * @returns true when the home process starts detached.
- */
-export function startsDetached(foreground: boolean, profileDirectory: string): boolean {
-  return !foreground && readBackgroundAnswer(profileDirectory)
+/** How a start's command line asks it to run: `--foreground`, `--background`, or neither. */
+export interface StartFlags {
+  readonly foreground: boolean
+  readonly background: boolean
 }
 
-/** `delorun start [--foreground] [--profile <name>]`. */
+/** What a start runs as, and whether the command line or setup's answer chose it. */
+export interface StartChoice {
+  readonly detached: boolean
+  /** Whether the command line chose it with `--foreground` or `--background`. */
+  readonly explicit: boolean
+}
+
+/**
+ * Whether a start detaches from the terminal: `--background` detaches and `--foreground` does not, whatever setup
+ * answered; without either the profile's setup answer chooses, and a missing answers record keeps the default.
+ * @param command - the command's name, for the usage error.
+ * @param flags - the options given.
+ * @param profileDirectory - the CLI profile's directory.
+ * @returns the choice.
+ * @throws {CliError} {@link EXIT.usage} when both options are given.
+ */
+export function startChoice(command: string, flags: StartFlags, profileDirectory: string): StartChoice {
+  if (flags.foreground && flags.background) throw new CliError(EXIT.usage, `delorun${command === '' ? '' : ` ${command}`}: --background and --foreground cannot be used together; choose one`)
+  if (flags.background) return { detached: true, explicit: true }
+  if (flags.foreground) return { detached: false, explicit: true }
+  return { detached: readBackgroundAnswer(profileDirectory), explicit: false }
+}
+
+/**
+ * What a start that runs in this terminal because of setup's answer prints last.
+ * @param profile - the CLI profile, named with `--profile` unless it is the default.
+ * @returns the lines.
+ */
+export function foregroundHint(profile: string): string {
+  const flag = profileFlag(profile)
+  return `Delo runs in this terminal; closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background${flag}, or run delorun setup background${flag} to make that the default.\n`
+}
+
+/** `delorun start [--foreground | --background] [--open] [--profile <name>]`. */
 export const startCommand: CliCommand = {
   name: 'start',
-  summary: 'Start the home process in the background, or in this terminal with --foreground',
+  summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses',
   async run(args, context) {
-    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' } })
+    const values = parseOptions('start', args, { foreground: { type: 'boolean', default: false }, background: { type: 'boolean', default: false }, open: { type: 'boolean', default: false }, profile: { type: 'string' } })
     const { home, profile } = await prepareHome(context, values.profile)
-    if (startsDetached(values.foreground === true, profileDirectory(home.path, profile))) return startDetached(home.path, profile, context, values.open === true)
-    return startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env })
+    const choice = startChoice('start', { foreground: values.foreground === true, background: values.background === true }, profileDirectory(home.path, profile))
+    if (choice.detached) return startDetached(home.path, profile, context, values.open === true)
+    const result = await startForeground({ home: home.path, profile, open: values.open === true, output: context, env: context.env })
+    if (result === undefined && !choice.explicit) context.stdout(foregroundHint(profile))
+    return result
   },
 }

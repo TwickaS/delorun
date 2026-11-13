@@ -28,6 +28,7 @@ import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
 import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delo/reach'
+import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 
 /** The run's mode: Quick asks the `quick` sections, Full asks every section. */
@@ -382,7 +383,7 @@ export function defaultRegistry(catalog: () => Promise<ProviderCatalog> = instal
   registry.register(providerSection(once(catalog)), { order: 20 })
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
-  registry.register(reachSection(systemTailscale()), { order: REACH_SECTION_ORDER })
+  registry.register(reachSection(systemTailscale(), homeRuns), { order: REACH_SECTION_ORDER })
   registry.register(profileSection, { order: 50 })
   return registry
 }

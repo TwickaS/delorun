@@ -7,7 +7,8 @@
  *   factor the provider declares. Its policy is the address's `Host` rule, the `https` scheme, no launch token and the
  *   pre-login routes this package answers. Every request `admit` sees is stamped with the listener before any route
  *   runs, so the routes decide its arrival from the stamp. A request on a pre-login route is `pre-login`; any other
- *   request is admitted only with a live session cookie of that listener, and is refused with C4's code otherwise. A
+ *   request is admitted only with a live session cookie of that listener, and is refused with C4's code otherwise; a
+ *   browser that opens a page without one is sent to the sign-in page with `303`, carrying where it aimed. A
  *   request with a live session whose target is not on `REACH_DEVICE_PATHS` (`./reach-paths.ts`) is refused with
  *   `403 LOOPBACK_REQUIRED` before any route, upgrade handler or the fallback runs.
  * - **Peers.** Each device is one Peer per listener, created on its first admitted request and disposed when the device
@@ -33,7 +34,7 @@ import { REACH_SESSION_COOKIE, type ReachListenerId } from '@delo/contract-admis
 import type { IdentityFactor, LoopbackRequiredAction } from '@delo/contract-oidc-passkeys'
 import { stampListener } from './arrival.ts'
 import { ADMISSION_REFUSAL_STATUS } from '@delo/contract-admission'
-import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie } from './reach-routes.ts'
+import { pathnameOf, REACH_PRE_LOGIN_ROUTES, sessionCookie, signInLocation, targetOf } from './reach-routes.ts'
 import { createReachAccessPolicy, REACH_DEVICE, reachDevicePrincipal, type ReachDevicePrincipal } from './reach-access.ts'
 import { reachesDevicePath } from './reach-paths.ts'
 import { HOME_AUTH_HTTP_STATUS } from './errors.ts'
@@ -225,14 +226,14 @@ export class HomeAuthAuthenticator extends Authenticator {
     const route = REACH_PRE_LOGIN_ROUTES.find(candidate => matchesPreLogin(candidate, request.method, pathname))
     if (route !== undefined) return { kind: 'pre-login', route }
     const token = sessionTokenOf(cookieOf(request))
-    if (token === undefined) return refused('NOT_SIGNED_IN')
+    if (token === undefined) return signedOut(request, 'NOT_SIGNED_IN')
     // A signed-in device reaches only the listed paths (`./reach-paths.ts`); any other target, or none, is refused
     // after the session is checked, so an expired or rotated session still answers with its own code.
     const reachable = reachesDevicePath(request.url ?? '')
     // A 101 response is written by the upgrade handler, so a session rolls only on a request without `Upgrade`, and
     // never on a refused one, whose response would carry no cookie.
     const admission = this.ctx.homeAuth.admitToken(token, served.listener, { roll: reachable && headerOf(request, 'upgrade') === '' })
-    if (admission.kind === 'refused') return refused(admission.code)
+    if (admission.kind === 'refused') return signedOut(request, admission.code)
     if (!reachable) return { kind: 'refused', status: HOME_AUTH_HTTP_STATUS.LOOPBACK_REQUIRED, code: 'LOOPBACK_REQUIRED' }
     const { session, sessionId } = admission
     const key = `${served.listener}\u0000${session.deviceId}`
@@ -273,11 +274,36 @@ export class HomeAuthAuthenticator extends Authenticator {
 }
 
 /**
+ * Whether a request is a browser opening a page rather than a script reading a resource: a `GET` or `HEAD` that
+ * `Sec-Fetch-Mode` names a navigation, or, from a browser that sends no fetch metadata, that accepts HTML.
+ * @param request - the request.
+ * @returns whether it is a navigation.
+ */
+export function isNavigation(request: ConnectionIndexRequest): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false
+  const mode = headerOf(request, 'sec-fetch-mode')
+  if (mode !== '') return mode === 'navigate'
+  return headerOf(request, 'accept').toLowerCase().includes('text/html')
+}
+
+/**
+ * The refusal of a reach request without a live session: a navigation is sent to the sign-in page with where it aimed
+ * (C4), and any other request, a script's included, is answered C4's code as JSON.
+ * @param request - the request.
+ * @param code - C4's code.
+ * @returns the admission.
+ */
+function signedOut(request: ConnectionIndexRequest, code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED'): Admission {
+  const refusal = refused(code)
+  return isNavigation(request) ? { ...refusal, location: signInLocation(targetOf(request)) } : refusal
+}
+
+/**
  * A refusal with C4's status for its code.
  * @param code - the code.
  * @returns the admission.
  */
-function refused(code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED'): Admission {
+function refused(code: 'NOT_SIGNED_IN' | 'SESSION_EXPIRED' | 'ROTATION_REQUIRED'): Extract<Admission, { readonly kind: 'refused' }> {
   return { kind: 'refused', status: ADMISSION_REFUSAL_STATUS[code], code }
 }
 

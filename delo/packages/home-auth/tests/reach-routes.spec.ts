@@ -14,7 +14,7 @@ import type { StudioAddress } from '@delo/contract-admission'
 import { stampListener } from '../src/arrival.ts'
 import {
   approvalRequestHandler, approveHandler, assetHandler, challengeHandler, pathnameOf, pendingHandler, REACH_PATHS, SIGN_IN_ASSETS, sessionHandler,
-  signInPageHandler, windowHandler,
+  landingOf, signInLocation, signInPageHandler, windowHandler,
 } from '../src/reach-routes.ts'
 import type { RouteHandler } from '../src/routes.ts'
 import { homeFixture, keyOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
@@ -103,6 +103,21 @@ describe('the pre-login routes', () => {
     expect((await send('GET', `${REACH_PATHS.assets}/sign-in.js?reach`)).status).toBe(404)
     expect((await send('POST', `${REACH_PATHS.request}/some-id?reach`)).status).toBe(405)
     expect(pathnameOf({})).toBe('/')
+  })
+
+  it('serve the sign-in page with a landing on this address only, and send any other `next` to the page without it', async () => {
+    const page = (next: string): Promise<Reply> => send('GET', `${REACH_PATHS.signIn}?reach&next=${encodeURIComponent(next)}`)
+    expect((await page('/settings/devices?tab=1')).status).toBe(200)
+    // Pins the landing rule: an open redirect to another site, or a path the page cannot name exactly, is never served.
+    for (const next of ['//evil.example/x', '/\\evil.example', 'https://evil.example/', 'javascript:alert(1)', '/a/../b', '/a%2fb', '/a b', '/auth/devices', '', `/${'a'.repeat(2048)}`]) {
+      const reply = await page(next)
+      expect({ next, status: reply.status, location: reply.headers.location }).toEqual({ next, status: 303, location: REACH_PATHS.signIn })
+    }
+    const twice = await send('GET', `${REACH_PATHS.signIn}?reach&next=%2Fa&next=%2Fb`)
+    expect({ status: twice.status, location: twice.headers.location }).toEqual({ status: 303, location: REACH_PATHS.signIn })
+    expect([signInLocation('/'), signInLocation('/chat?x=1'), signInLocation('//evil.example')])
+      .toEqual(['/auth/sign-in', '/auth/sign-in?next=%2Fchat%3Fx%3D1', '/auth/sign-in'])
+    expect([landingOf('/chat'), landingOf('/auth'), landingOf('/x\u0000')]).toEqual(['/chat', undefined, undefined])
   })
 
   it('read and refuse request messages', async () => {

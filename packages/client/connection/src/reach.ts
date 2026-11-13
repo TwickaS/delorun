@@ -279,6 +279,12 @@ function preLoginTarget(
   return rest !== '' && !rest.includes('/') ? { kind: 'prefix', path: pattern.base } : undefined
 }
 
+/**
+ * A path on the listener's own origin that a refused admission may redirect a browser to: one leading `/` not followed by
+ * `/` or `\`, and no `\`, control character or space anywhere, so no browser reads it as another authority.
+ */
+const SAME_ORIGIN_PATH = /^\/(?![/\\])[^\\\u0000-\u0020\u007f]*$/u
+
 function refusalBody(code: string): string {
   return JSON.stringify({ error: code })
 }
@@ -417,6 +423,9 @@ class ReachDispatcher {
         return { kind: 'pass', nonce, headers: security, only: { route, refusal: refusal(REACH_REFUSAL_STATUS.NOT_SIGNED_IN, 'NOT_SIGNED_IN', security) } }
       }
       case 'refused':
+        if (admission.location !== undefined && kind === 'request' && (request.method === 'GET' || request.method === 'HEAD') && SAME_ORIGIN_PATH.test(admission.location)) {
+          return { kind: 'refuse', status: 303, headers: { ...security, location: admission.location, 'cache-control': 'no-store' }, body: '' }
+        }
         return { kind: 'refuse', ...refusal(admission.status, admission.code, security) }
       default: {
         const unknown: never = admission

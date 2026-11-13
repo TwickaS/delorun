@@ -25,6 +25,7 @@ import { CliError, EXIT, type ExitCode } from '../exit.ts'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { selectProfile } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
+import { readReachRow, signInAddress, type TailscalePrivateRow } from '../reach/row.ts'
 import { printable } from '../terminal-text.ts'
 
 /** What the command runs against. */
@@ -194,7 +195,7 @@ type Outcome = ExitCode | 'again'
 async function approve(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
   if (!dependencies.running(home, profile)) return failed(context, 'Delo is not running. Start it with delorun start, then run delorun devices approve again')
-  context.stdout('Waiting for a new device for up to 5 minutes. Open this home\'s address on it and choose Ask for approval.\n')
+  context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(readReachRow(home, profile))}\n`)
   for (;;) {
     const opened = final(await dependencies.send(home, profile, { op: 'devices.approve', args: {} }))
     if (opened.ok !== true) return failed(context, `the home refused: ${refusal(opened)}`)
@@ -207,6 +208,17 @@ async function approve(where: Where): Promise<ExitCode> {
     const outcome = choice.action === 'approve' ? await typeCode(where, choice.request) : await cancel(where, choice.request)
     if (outcome !== 'again') return outcome
   }
+}
+
+/**
+ * What the person opens on the new device: the sign-in address while the profile's remote access is on.
+ * @param row - the profile's Tailscale private row.
+ * @returns the sentence.
+ */
+function openLine(row: TailscalePrivateRow): string {
+  return row.enabled && row.address !== ''
+    ? `Open ${signInAddress(row.address)} on it and choose Ask for approval.`
+    : 'Remote access is off for this profile, so a phone cannot reach this home yet: turn it on with delorun reach on tailscale. Then open the sign-in address it prints on the device and choose Ask for approval.'
 }
 
 /**

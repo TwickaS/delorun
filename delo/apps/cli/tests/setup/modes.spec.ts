@@ -417,7 +417,7 @@ const FULL_TRANSCRIPT = `? How do you want to set up Delorun?
 Set up the CLI profile work at <work profile>.
 ? Install the delorun command? (runs npm install -g delorun@0.1.0) (Yes)
 = Yes
-Delorun is running in this terminal. Closing the terminal stops it.
+Delorun is running in this terminal. Closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background --profile work, or run delorun setup background --profile work to make that the default.
 Studio: http://127.0.0.1:4100/ (opened in your browser)
   delorun status --profile work
   delorun logs --follow --profile work
@@ -440,7 +440,7 @@ describe('Full setup', { timeout: TIMEOUT_MS }, () => {
     expect(readBackgroundAnswer(profileDirectory(home, 'work'))).toBe(false)
     expect(ending.started).toEqual(['foreground'])
     expect(ending.opened).toBe(1)
-    expect(screen()).toContain('Delorun is running in this terminal. Closing the terminal stops it.')
+    expect(screen()).toContain('Delorun is running in this terminal. Closing the terminal stops it. To keep it running after the terminal closes, start it with delorun start --background --profile work, or run delorun setup background --profile work to make that the default.')
     expect(screen()).toContain('  delorun status --profile work')
     expect(screen()).toContain('  delorun stop --profile work')
   })

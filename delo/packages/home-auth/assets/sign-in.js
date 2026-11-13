@@ -134,10 +134,18 @@ async function requestApproval(pair, jwk, deviceId) {
   await finish(pair, deviceId)
 }
 
+// Where the device lands once signed in: the `next` the sign-in route accepted, or the studio's page. The route
+// redirects any other `next` away before this script loads; the origin check keeps a landing on this address regardless.
+function landing() {
+  const next = new URLSearchParams(location.search).get('next')
+  if (next === null || !next.startsWith('/') || next.startsWith('//')) return '/'
+  return new URL(next, location.origin).origin === location.origin ? next : '/'
+}
+
 async function finish(pair, deviceId) {
   const signed = await signIn(pair, deviceId)
   if (signed.status === 201) {
-    location.replace('/')
+    location.replace(landing())
     return
   }
   show('error', signed.value.message ?? 'Signing in failed.')
@@ -150,7 +158,7 @@ async function main() {
   const deviceId = await deviceIdOf(jwk)
   const signed = await signIn(pair, deviceId)
   if (signed.status === 201) {
-    location.replace('/')
+    location.replace(landing())
     return
   }
   section('request')

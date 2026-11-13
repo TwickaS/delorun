@@ -323,6 +323,36 @@ describe('the reach service', () => {
     }
   })
 
+  it('applies new rows to a running home one change at a time, and answers nothing while the C16 switch is off', async () => {
+    const w = world()
+    const port = await chooseListenerPort(LISTENER_PORT_RANGE)
+    const fiber = await mount(w, { enabled: true, tailscalePrivate: { ...on(port).tailscalePrivate, enabled: false } })
+    expect(w.ctx.reach.mounted).toBe(true)
+    const rows = (enabled: boolean, address = ADDRESS) => ({ tailscalePrivate: { ...on(port).tailscalePrivate, enabled, address: address as never } })
+    // Two applies in a row run one after the other: the second stops what the first started before it starts again.
+    const [first, second] = await Promise.all([w.ctx.reach.apply(rows(true)), w.ctx.reach.apply(rows(true))])
+    expect(first).toEqual([{ option: 'tailscale-private', state: 'ready', address: ADDRESS }])
+    expect(second).toEqual(first)
+    expect(w.events.filter(event => event === 'open' || event === 'close')).toEqual(['open', 'close', 'open'])
+    await expect(isPortFree(port)).resolves.toBe(false)
+    await expect(w.ctx.reach.apply(rows(false))).resolves.toEqual([{ option: 'tailscale-private', state: 'off' }])
+    expect(w.tailscale.config).toEqual({ TCP: {}, Web: {} })
+    await expect(isPortFree(port)).resolves.toBe(true)
+    // A row that does not resolve leaves the option blocked with the resolver's code.
+    await expect(w.ctx.reach.apply(rows(true, 'http://not-https.example'))).resolves.toEqual([expect.objectContaining({ option: 'tailscale-private', state: 'blocked' })])
+    expect(w.logs.some(line => line.startsWith('warn reach: tailscale-private blocked ('))).toBe(true)
+    // A resolver that fails otherwise fails the apply, and the next apply still runs.
+    const broken = { tailscalePrivate: { get enabled(): boolean { throw new Error('unreadable row') } } } as never
+    await expect(w.ctx.reach.apply(broken)).rejects.toThrow('unreadable row')
+    await expect(w.ctx.reach.apply(rows(false))).resolves.toEqual([{ option: 'tailscale-private', state: 'off' }])
+    await fiber.dispose()
+    const off = world()
+    const unmounted = await mount(off, { ...on(port), enabled: false })
+    expect(off.ctx.reach.mounted).toBe(false)
+    await expect(off.ctx.reach.apply(rows(true))).resolves.toBeUndefined()
+    await unmounted.dispose()
+  })
+
   it('mounts nothing while the C16 switch is off', async () => {
     const w = world()
     routes.clear()
