@@ -46,6 +46,7 @@
         "delo/apps/npm-launcher/src/bin.ts",
         "delo/apps/install/src/download.ts",
         "delo/apps/cli/src/update/channel.ts",
+        "delo/apps/cli/src/update/from.ts",
         "delo/packages/release-verify/src/transport.ts"
       ]
     },
@@ -78,6 +79,10 @@
     }
   ],
   "local": [
+    {
+      "source": "delo/apps/install/src/manual-source.ts",
+      "reason": "Serves a person-supplied release folder through a fetch that answers from disk under a host name that never resolves, so it makes no request."
+    },
     {
       "source": "delo/packages/home-process/src/handover.ts",
       "reason": "Reads the handover pipe an update's predecessor passes as an inherited file descriptor."

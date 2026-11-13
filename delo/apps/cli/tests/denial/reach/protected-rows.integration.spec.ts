@@ -27,7 +27,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { StudioAddress } from '@delo/contract-admission'
 import {
-  DEFAULT_PERMISSION_REFUSAL, DeviceStore, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
+  DEFAULT_PERMISSION_REFUSAL, DeviceStore, HOME_AUTH_SWITCH, PROTECTED_ROW_REFUSAL, protectedEntryIdsOf, protectedPluginsIn, REACH_DEVICE_COMMANDS, REACH_SWITCH, switchOffRefusal, UNLISTED_COMMAND_REFUSAL,
 } from '@delo/home-auth'
 import { EXTERNAL_AGENT_CONSENT_SWITCH } from '@delo/plugin-delegation-consent'
 import { DELEGATION_CONSENT_ROW } from '@delo/plugin-delegation-consent/wire'
@@ -156,8 +156,12 @@ describe('an unlocked device and the protected plugin rows', () => {
     const namespaces = described.value.namespaces.map(view => view.ns)
     expect(namespaces.length).toBeGreaterThan(0)
     const decided = studio.ctx.homeAuth.computerOnlySwitches().map(target => target.ns)
-    expect(namespaces.filter(ns => protectedRows().some(row => row.rowId === ns))).toEqual(decided)
-    expect(decided).toEqual([DELEGATION_CONSENT_ROW])
+    // The home-auth and reach rows are refused as a whole, so a reach row without live fields (it is not described) is still decided.
+    const found = namespaces.filter(ns => protectedRows().some(row => row.rowId === ns))
+    expect(found.filter(ns => !decided.includes(ns))).toEqual([])
+    expect([...decided].sort()).toEqual([DELEGATION_CONSENT_ROW, HOME_AUTH_SWITCH.ns, REACH_SWITCH.ns].sort())
+    // Every computer-only switch names a protected row.
+    expect(decided.filter(ns => !protectedRows().some(row => row.rowId === ns))).toEqual([])
   })
 
   it('never switches a protected row off or on, and each stays enabled', async () => {

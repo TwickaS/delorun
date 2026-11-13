@@ -241,7 +241,8 @@ describe('scanFolder', () => {
     await rejection(scanFolder(bundle, { home: HOME }), 'CONTENT_TOO_LARGE')
     const { entries } = await scanFolder(bundle, LINKED)
     expect(entries.some((entry) => entry.path.startsWith('node_modules/@delo/') && entry.type === 'file')).toBe(true)
-    expect(entries.length).toBeLessThan(5000)
+    // The package's own files and the linked workspace packages grow with the source; a copy of the installed packages passes CONTENT_ENTRY_LIMIT (50 000).
+    expect(entries.length).toBeLessThan(10_000)
   }, 120_000)
 
   it('fails with the filesystem error when a link target cannot be examined', async () => {

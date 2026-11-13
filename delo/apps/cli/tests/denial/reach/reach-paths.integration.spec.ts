@@ -80,12 +80,15 @@ interface FetchDecision {
   readonly device: 'refused' | 'per-call' | 'read' | 'admitted'
   readonly reason: string
   readonly refusal?: string
+  /** The status a `read` route answers the probe, which names no argument; 200 when absent. A 400 shows the device was admitted. */
+  readonly answers?: number
 }
 
 const TRASH = 'the trash holds deleted chats and workspaces, and moving to, restoring from or deleting from it is not in the device rule'
 const FULL_ACCESS = 'turning a workspace\'s full access on or off is a full-access grant, which only the home\'s computer gives; the plugin refuses a device before upstream\'s gate, unless dangerous mode holds and the device holds an unlock'
 const MCP_ANSWER = 'accepting or revoking a stdio MCP server decides whether its command runs outside the sandbox, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
 const EXTERNAL_AGENT = 'allowing or revoking an external agent for a workspace decides whether a program outside the sandbox starts without asking, which only the home\'s computer decides; the plugin refuses a device before upstream\'s gate'
+const VERSIONS_WRITE = 'saving, trying and switching setup versions changes what runs, which only the home\'s computer does'
 const DANGEROUS_STATE = 'reading and turning off dangerous mode: the route admits only a device that holds a running unlock, and this device holds none; no route turns the mode on'
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
@@ -110,6 +113,10 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/deloMainChat.reports': { device: 'refused', reason: 'a count for the main chat\'s sidebar mark; a device reads the main chat itself through session/page' },
   '/api/deloTrust.bill': { device: 'read', reason: 'the trust badge shows on every studio page, a device\'s included (C15); the bill names what runs and what was checked, and no secret' },
   '/api/deloTrust.check': { device: 'refused', reason: 'Check now hashes the runtime and runs the release-log check, which only the home\'s computer starts' },
+  '/api/deloVersions.list': { device: 'read', reason: 'the setup versions screen lists the saved versions and which one runs, which a signed-in studio reads; it names no secret' },
+  '/api/deloVersions.changes': { device: 'read', reason: 'the setup versions screen compares a saved version with the running one, which a signed-in studio reads; the history\'s admission keeps secret fields out; the probe names no version, so the route answers 400 BAD_REQUEST', answers: 400 },
+  '/api/deloVersions.save': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
+  '/api/deloVersions.switch': { device: 'refused', reason: VERSIONS_WRITE, refusal: 'LOOPBACK_REQUIRED' },
   '/api/deloUpdateCheck.notice': { device: 'refused', reason: 'the update notice names the release that runs and how many installed plugins an update would turn off, and the update runs only at the computer' },
   '/api/deloTrash.list': { device: 'refused', reason: TRASH },
   '/api/deloTrash.deleteChat': { device: 'refused', reason: TRASH },
@@ -310,7 +317,7 @@ describe('the routes a signed-in device reaches', () => {
       const decision = FETCH_ROUTES[route.path]
       if (decision?.device === 'read') {
         // Pins the route's `admitPeer`: without it Connection refuses the device's read with `forbidden`.
-        expect.soft({ path: route.path, methods: route.methods, status: (await asPhone(route.path)).status }).toEqual({ path: route.path, methods: ['GET'], status: 200 })
+        expect.soft({ path: route.path, methods: route.methods, status: (await asPhone(route.path)).status }).toEqual({ path: route.path, methods: ['GET'], status: decision.answers ?? 200 })
         continue
       }
       if (decision?.device === 'admitted') {

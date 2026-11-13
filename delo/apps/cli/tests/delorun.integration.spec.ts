@@ -103,7 +103,7 @@ describe('delorun', { timeout: 60_000 }, () => {
     const first = delorun(['setup', '--yes'])
     expect(first.stderr).toBe('')
     expect(first.status).toBe(EXIT.ok)
-    expect(first.stdout).toContain(`Set up the CLI profile default at ${join(deloHome, 'profiles', 'default')}`)
+    expect(first.stdout).toContain('Delorun is set up. Nothing is running yet.')
     const manifest = JSON.parse(readFileSync(join(deloHome, 'profiles', 'default', 'package.json'), 'utf8')) as { dsh: { profile: { bundles: string[] } } }
     expect(manifest.dsh.profile.bundles).toEqual(DELO_PROFILE_BUNDLES)
     if (POSIX) {
@@ -386,7 +386,7 @@ describe('starting the home process', { timeout: 60_000 }, () => {
     expect(await sendHomeRequest(deloHome, 'default', { op: 'changes.reload' })).toEqual([{ ok: true, reload: { ok: true } }])
     const printed: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: false, output: { ...context, stdout: text => void printed.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
-    expect(printed.join('')).toContain('Delorun is already running for the profile default.')
+    expect(printed.join('')).toMatch(/^Delorun is already running for the profile default \(process \d+, started [^)]+\)\.\n/)
     expect(printed.join('')).toContain('Run delorun open to open the studio in your browser.\n')
     const opening: string[] = []
     expect(await startForeground({ home: deloHome, profile: 'default', open: true, output: { stdout: () => {}, stderr: text => void opening.push(text) }, env: context.env }, recording(seen))).toBe(EXIT.ok)
