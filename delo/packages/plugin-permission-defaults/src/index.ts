@@ -907,7 +907,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     const reason = reasonOf(error)
     ctx.logger.error(`permission-defaults: the row ${PERMISSION_DEFAULTS_ROW} failed to start a service, so commands get no network and full access is refused until it starts again: ${reason}`)
     failedGuard.fail(reason)
-    mountFailedRow(ctx, reason)
+    mountFailedRow(ctx)
     throw error
   }
 }

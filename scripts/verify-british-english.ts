@@ -140,13 +140,13 @@ export function findUsSpellings(source: string, options: { file?: string; markdo
   let fence: string | undefined
   for (const [index, raw] of source.split(/\r?\n/u).entries()) {
     if (markdown) {
-      const opener = /^\s*(`{3,}|~{3,})/u.exec(raw)
-      if (fence === undefined && opener) {
-        fence = opener[1]
+      const opener = /^\s*(`{3,}|~{3,})/u.exec(raw)?.[1]
+      if (fence === undefined && opener !== undefined) {
+        fence = opener
         continue
       }
       if (fence !== undefined) {
-        if (opener && opener[1].startsWith(fence.charAt(0)) && opener[1].length >= fence.length) fence = undefined
+        if (opener !== undefined && opener.startsWith(fence.charAt(0)) && opener.length >= fence.length) fence = undefined
         continue
       }
     }

@@ -14,7 +14,6 @@ export const PERMISSION_DEFAULTS_ROW = 'delo-permission-defaults'
 
 /**
  * Why a failed row refuses, and how to recover.
- * @param reason - why the service failed.
  * @returns the sentence the person and the model read.
  */
 export function failedRowNote(reason: string): string {
@@ -30,9 +29,8 @@ const mounted = new WeakMap<Context, (() => void)[]>()
  * context, not the row's, because a row whose start failed loses its own registrations, which would leave the seams
  * empty and the commands on the host's network. {@link clearFailedRow} removes them when the row starts again.
  * @param ctx - the row's context.
- * @param reason - why the service failed.
  */
-export function mountFailedRow(ctx: Context, reason: string): void {
+export function mountFailedRow(ctx: Context): void {
   const root = ctx.root
   const disposers = mounted.get(root) ?? []
   mounted.set(root, disposers)

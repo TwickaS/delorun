@@ -25,6 +25,7 @@
     { "path": "../../../packages/util/brand" },
     { "path": "../../../packages/util/home-paths" },
     { "path": "../../../packages/util/launch-environment" },
-    { "path": "../../../packages/util/official-bundles" }
+    { "path": "../../../packages/util/official-bundles" },
+    { "path": "../../packages/plugin-main-chat/tsconfig.host.json" }
   ]
 }
