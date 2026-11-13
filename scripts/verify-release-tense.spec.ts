@@ -8,6 +8,7 @@ describe('release-status policy', () => {
       '',
       'Delorun does not include a desktop app ([Roadmap and vision](roadmap.md)).',
       'macOS is not supported. Since 0.1.0 the launcher checks the release log.',
+      'A file removed before the launcher starts stops the run until the launcher reads it.',
     ].join('\n')
 
     expect(findReleaseTenseViolations('delo/docs/guide/install.md', source)).toEqual([])

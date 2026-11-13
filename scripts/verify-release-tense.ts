@@ -25,8 +25,8 @@ export const RELEASE_STATUS_PHRASES: readonly RegExp[] = [
   /coming soon/iu,
   /not yet released/iu,
   /has not been released/iu,
-  /until (?:the )?(?:launch|release)/iu,
-  /before (?:the )?(?:launch|public release|0\.1\.0)/iu,
+  /until (?:the )?(?:launch|release)\b/iu,
+  /before (?:the )?(?:launch|public release|0\.1\.0)\b/iu,
 ]
 
 /** One release-status phrase in a Markdown line. */
