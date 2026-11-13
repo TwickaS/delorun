@@ -72,7 +72,7 @@ Delorun holds itself to these rules:
 <details>
 <summary>Edge cases</summary>
 
-- If you run on Windows through WSL2, then commands can read Delorun's home, its secrets and its token, though they cannot write there — treat the model's commands as able to read them ([What Delorun protects](safety.md#the-sandbox)).
+- If you run on Windows, then commands can read Delorun's home, its secrets and its token, though they cannot write there — treat the model's commands as able to read them ([What Delorun protects](safety.md#the-sandbox)).
 - If you run on Linux without bubblewrap on a desktop, then Delorun refuses to run sandboxed commands at all — install bubblewrap.
 - If you chose [**Ask less (like DeepSeek Harness)**](../reference/glossary.md#ask-less) in setup, then the full-access, instruction-file, MCP server and scheduled-task consents are off, and the network setting is not available — run `delorun setup prompts` to choose Ask me first again.
 - If you want the stock look, then choose Stock in Settings, General, Look — **Delorun look** in the same place switches back.
