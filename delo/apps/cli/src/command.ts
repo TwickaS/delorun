@@ -7,6 +7,7 @@
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util'
 import { CliError, EXIT, type ExitCode } from './exit.ts'
+import { helpPointer } from './help.ts'
 import { ensureHomeTree, resolveDeloHome, type DeloHome } from '@delo/home'
 import { applyLaunchEnvironment } from './launch-environment.ts'
 import { selectProfile } from './profile.ts'
@@ -73,6 +74,20 @@ export async function prepareHome(context: CommandContext, profileFlag: string |
 }
 
 /**
+ * A command-line parser failure as a person reads it: what was wrong, then where the usage is.
+ * @param command - the command's name, or `''` for `delorun` itself.
+ * @param error - what `parseArgs` threw, or any other failure.
+ * @returns the usage error for a parser failure (an `ERR_PARSE_ARGS_*` code); `error` itself for any other failure.
+ */
+export function parseFailure(command: string, error: unknown): unknown {
+  if (!(error instanceof TypeError) || (error as NodeJS.ErrnoException).code?.startsWith('ERR_PARSE_ARGS') !== true) return error
+  const unknown = /^Unknown option '([^']+)'/.exec(error.message)
+  // The library's own advice about `--` is for scripts; the pointer to --help is for a person.
+  const problem = unknown === null ? error.message.replace(/\. To specify.*$/s, '').replace(/\.$/, '') : `unknown option ${unknown[1]!}`
+  return new CliError(EXIT.usage, `delorun${command === '' ? '' : ` ${command}`}: ${problem}. ${helpPointer(command)}`)
+}
+
+/**
  * Parse a command's options strictly, reporting a wrong one as a usage error.
  * @param command - the command's name, for the message.
  * @param args - the arguments.
@@ -84,11 +99,7 @@ export function parseOptions<T extends NonNullable<ParseArgsConfig['options']>>(
   try {
     return parseArgs({ args: [...args], options, strict: true, allowPositionals: false }).values
   } catch (error) {
-    // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
-    if (error instanceof TypeError && (error as NodeJS.ErrnoException).code?.startsWith('ERR_PARSE_ARGS') === true) {
-      throw new CliError(EXIT.usage, `delorun${command === '' ? '' : ` ${command}`}: ${error.message}`)
-    }
-    throw error
+    throw parseFailure(command, error)
   }
 }
 
@@ -109,10 +120,6 @@ export function parseCommandLine<T extends NonNullable<ParseArgsConfig['options'
     const { values, positionals } = parseArgs({ args: [...args], options, strict: true, allowPositionals: true })
     return { values, positionals }
   } catch (error) {
-    // parseArgs throws a TypeError with an ERR_PARSE_ARGS_* code for an unknown or malformed option.
-    if (error instanceof TypeError && (error as NodeJS.ErrnoException).code?.startsWith('ERR_PARSE_ARGS') === true) {
-      throw new CliError(EXIT.usage, `delorun ${command}: ${error.message}`)
-    }
-    throw error
+    throw parseFailure(command, error)
   }
 }
