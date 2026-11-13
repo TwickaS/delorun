@@ -16,7 +16,7 @@ import { boot, createRuntimeResolution, initProfile, loadProfileDirectory, Plugi
 import type { WebServer, WebRouteKind } from '@deepseek-ai/dsh-host-webserver'
 import { DELO_PROFILE_BUNDLES, LOCAL_BUNDLE } from '@delo/bundle-local/profile'
 
-/** The bundles of Delo's CLI profiles without `@delo/bundle-local`: upstream's web template and the studio bundle. */
+/** The bundles of Delorun's CLI profiles without `@delo/bundle-local`: upstream's web template and the studio bundle. */
 const ROUTE_BUNDLES = DELO_PROFILE_BUNDLES.filter(bundle => bundle !== LOCAL_BUNDLE)
 
 const REPO = fileURLToPath(new URL('../../../../../../', import.meta.url))
@@ -82,7 +82,7 @@ export interface Studio {
 
 /** Options of {@link bootStudio}. */
 export interface StudioOptions {
-  /** Boot every bundle of Delo's CLI profiles, `@delo/bundle-local` included. */
+  /** Boot every bundle of Delorun's CLI profiles, `@delo/bundle-local` included. */
   readonly local?: boolean
 }
 

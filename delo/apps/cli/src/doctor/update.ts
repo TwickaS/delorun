@@ -24,9 +24,9 @@ import type { CheckResult } from './checks.ts'
  * @throws {Error} when the running release's signed files do not read or verify.
  */
 export async function checkUpdate(home: string, profile: string, runtime: RunningRuntime, platform: () => RuntimePlatform, root: TrustedRootSource): Promise<CheckResult> {
-  if (!runtime.store) return { name: 'update', status: 'pass', message: 'this Delo does not run from the runtime store, so it checks no release channel.' }
+  if (!runtime.store) return { name: 'update', status: 'pass', message: 'this copy of Delorun was not installed by the launcher, so it checks for no updates.' }
   const record = await readUpdateCheck(home, profile)
-  if (record === undefined) return { name: 'update', status: 'pass', message: `no update check is recorded for this profile; it runs while Delo runs unless Settings → General → Updates turns it off, and ${UPDATE_COMMAND} --check runs one now.` }
+  if (record === undefined) return { name: 'update', status: 'pass', message: `no update check is recorded for this profile; it runs while Delorun runs unless Settings → General → Updates turns it off, and ${UPDATE_COMMAND} --check runs one now.` }
   if (record.failure !== undefined) {
     return { name: 'update', status: 'warn', message: `the last update check, at ${record.checked}, failed, so the studio shows no notice: ${failureText(record.failure)}. Run ${UPDATE_COMMAND} --check to try again.` }
   }

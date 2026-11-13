@@ -24,6 +24,7 @@ import { PURGE_RESIDUE_MAX_DAYS, TRASH_RETENTION_DAYS } from '@delo/contract-arc
 import { DELO_HOME_ENTRIES } from '@delo/contract-home-layout'
 import { DAY_MS, TrashError, TrashService, type DamagedItem, type PurgeReport, type TrashItem } from '@delo/trash'
 import { CliError, EXIT, type ExitCode } from '../exit.ts'
+import { parseFailure } from '../command.ts'
 import { quoted } from '../terminal-text.ts'
 import { isYes } from './terminal.ts'
 
@@ -32,7 +33,7 @@ export const TRASH_USAGE = 'Usage: delorun trash list [--json] | restore <id> | 
 
 /** What `delorun trash` runs with. */
 export interface TrashIo {
-  /** The Delo home. */
+  /** The Delorun home. */
   readonly home: string
   /** Write to standard output. */
   readonly stdout: (text: string) => void
@@ -134,7 +135,7 @@ export async function runTrash(args: readonly string[], io: TrashIo): Promise<Ex
   try {
     parsed = parseArgs({ args: [...args], options: { 'json': { type: 'boolean' }, 'clear-logs': { type: 'boolean' } }, strict: true, allowPositionals: true })
   } catch (error: unknown) {
-    throw new CliError(EXIT.usage, `delorun trash: ${(error as Error).message}\n${TRASH_USAGE}`)
+    throw parseFailure('trash', error)
   }
   const [action, id, ...extra] = parsed.positionals
   const wants = (count: number): void => {
@@ -212,7 +213,7 @@ async function purge(trash: TrashService, id: string | undefined, clearLogs: boo
   }
   const what = id === undefined ? `every item in the trash (${String(items.length)})` : `${items[0]!.kind} ${quoted(items[0]!.label)}`
   const logs = clearLogs ? ' Every operational log of this home is cleared too, not only this deletion\'s records.' : ''
-  const answer = await io.ask(`Delete ${what} forever? It is removed from every store Delo keeps on this computer and cannot be restored.${logs} [y/N] `)
+  const answer = await io.ask(`Delete ${what} forever? It is removed from every store Delorun keeps on this computer and cannot be restored.${logs} [y/N] `)
   if (!isYes(answer)) throw new CliError(EXIT.failed, `delorun trash ${id === undefined ? 'empty' : 'purge'}: nothing was deleted`)
   let last: PurgeReport | undefined
   for (const [index, item] of items.entries()) {

@@ -86,7 +86,7 @@ describe('the preview', () => {
   it('says when there is nothing of a kind to copy and nothing stays behind', () => {
     expect(previewText(EMPTY, OPTIONS)).toBe([
       'DeepSeek Harness home: "/stock" (read only; nothing in it changes)',
-      'Delo home: "/delo"',
+      'Delorun home: "/delo"',
       '',
       'Your chats and workspaces:',
       '  Chats: 0 chats to copy',
@@ -112,7 +112,7 @@ describe('the preview', () => {
     expect(text).not.toContain('Asked about one by one')
   })
 
-  it('names what is already in the Delo home, how the workspaces land, that a chat with full access opens on the safer preset, each skill and the keys by name', () => {
+  it('names what is already in the Delorun home, how the workspaces land, that a chat with full access opens on the safer preset, each skill and the keys by name', () => {
     const plan: DshHomeImportPlan = {
       ...EMPTY,
       chats: [{ path: 'sessions/_no-cwd/a', id: 'a', cwd: undefined, files: [file('a')], state: 'new' }, { path: 'sessions/_no-cwd/b', id: 'b', cwd: undefined, files: [file('b')], state: 'present' }],
@@ -124,22 +124,22 @@ describe('the preview', () => {
       bytes: 1,
     }
     const text = previewText(plan, OPTIONS)
-    expect(text).toContain('  Chats: 1 chat to copy; 1 already in the Delo home\n')
-    expect(text).toContain('  Attachments: 1 file to copy; 2 already in the Delo home\n')
-    expect(text).toContain('  Workspaces: 3 registrations, added to the Delo home\'s workspace list\n')
-    expect(text).toContain('  A chat that ran with full access opens on the safer preset until you allow full access for its workspace in Delo.\n')
+    expect(text).toContain('  Chats: 1 chat to copy; 1 already in the Delorun home\n')
+    expect(text).toContain('  Attachments: 1 file to copy; 2 already in the Delorun home\n')
+    expect(text).toContain('  Workspaces: 3 registrations, added to the Delorun home\'s workspace list\n')
+    expect(text).toContain('  A chat that ran with full access opens on the safer preset until you allow full access for its workspace in Delorun.\n')
     expect(text).toContain('  Skills (a skill can tell the agent what to do and which commands to run):\n    "review": 1 file, 9 bytes; "Reviews \\u001b[2J"\n    "b\\u001bad": 2 files, 1 byte\n')
     expect(text).toContain([
       '  Stored keys (copied on a yes):',
       '    "A": can be copied',
-      '    "B": already in the Delo home',
-      '    "C": not copied: the Delo home holds another value',
-      '    "D": not copied: only the DeepSeek key is offered; add other keys again in Delo',
+      '    "B": already in the Delorun home',
+      '    "C": not copied: the Delorun home holds another value',
+      '    "D": not copied: only the DeepSeek key is offered; add other keys again in Delorun',
     ].join('\n'))
     expect(text).toContain('  In all 1 byte to copy if you say yes to everything.')
     expect(text).not.toMatch(/\u001b/u)
     expect(previewText({ ...plan, registry: registry({ workspaces: 1, mode: 'present' }), credentials: { file: file('.credentials.yaml'), entries: [] } }, OPTIONS))
-      .toContain('  Workspaces: 1 registration, already in the Delo home\'s workspace list\n')
+      .toContain('  Workspaces: 1 registration, already in the Delorun home\'s workspace list\n')
     expect(previewText({ ...plan, credentials: { file: file('.credentials.yaml'), entries: [] } }, OPTIONS)).not.toContain('Stored keys')
   })
 
@@ -149,7 +149,7 @@ describe('the preview', () => {
       { id: 'w2', title: 'keys', path: '/home/me/.ssh', chats: 0, held: 'a hidden folder of your home folder, where settings and keys live' },
     ] }) }, OPTIONS)
     expect(text).toContain([
-      '  Workspaces: 1 registration, copied as the Delo home\'s workspace list',
+      '  Workspaces: 1 registration, copied as the Delorun home\'s workspace list',
       '    "work \\u200b" at "/work": 2 chats',
       '    "keys" at "/home/me/.ssh": held back, with its chats: a hidden folder of your home folder, where settings and keys live',
     ].join('\n'))
@@ -174,8 +174,8 @@ describe('the preview', () => {
       '        "sandbox": it is not one of the settings the import carries: the studio\'s looks and layout, the language and the default model by name (a row the import does not carry\\u0007)',
       '        "insert ./evil": it loads a plugin row, which the import never carries; add it again yourself if you trust it',
       '    "settings.yaml" (settings from an earlier release, which the next start moves into the profile): lands with 0 rows',
-      '    "a.yml" (the home patch, which applies to every profile): already in the Delo home',
-      '    "b.yml" (the home patch, which applies to every profile): nothing lands: the Delo home holds its own file of that name',
+      '    "a.yml" (the home patch, which applies to every profile): already in the Delorun home',
+      '    "b.yml" (the home patch, which applies to every profile): nothing lands: the Delorun home holds its own file of that name',
       '    "c.yml" (the home patch, which applies to every profile): nothing lands',
       '  Instructions',
     ].join('\n'))
@@ -188,7 +188,7 @@ describe('the preview', () => {
         { name: 'web', source: { file: file('profiles/web/package.json'), sha256: '' }, manifest: '{}', patch: layer({ kind: 'profile-patch', target: 'profiles/web/cordis.patch.yml' }), bundles: [], carry: ['The row x\u001b[2J does not land.'], plugins: [
           { name: 'a', kind: 'bundle', status: 'carried', note: 'ships' },
           { name: 'b', kind: 'plugin', status: 'install', note: 'from ^1' },
-          { name: 'c', kind: 'bundle', status: 'added', note: 'Delo\'s' },
+          { name: 'c', kind: 'bundle', status: 'added', note: 'Delorun\'s' },
           { name: 'd', kind: 'bundle', status: 'not-carried', note: 'retired' },
         ] },
         { name: 'plain', source: { file: file('profiles/plain/package.json'), sha256: '' }, manifest: '{}', patch: undefined, bundles: [], carry: [], plugins: [{ name: 'a', kind: 'bundle', status: 'carried', note: 'ships' }] },
@@ -199,7 +199,7 @@ describe('the preview', () => {
       '    "web":',
       '      carried      "a" (ships)',
       '      to install   "b" (from ^1)',
-      '      added        "c" (Delo\'s)',
+      '      added        "c" (Delorun\'s)',
       '      not carried  "d" (retired)',
       '      "profiles/web/cordis.patch.yml" (the profile\'s patch layer): lands with 1 row: "ui-chat"',
       '      The row x\\u001b[2J does not land.',
@@ -210,10 +210,10 @@ describe('the preview', () => {
     ].join('\n'))
   })
 
-  it('says how many lines the instructions hold, or that the Delo home holds them', () => {
+  it('says how many lines the instructions hold, or that the Delorun home holds them', () => {
     const instructions = { source: { file: file('AGENTS.md'), sha256: '' }, state: 'new' as const, text: '# notes\n', lines: 1 }
     expect(previewText({ ...EMPTY, instructions }, OPTIONS)).toContain('  Instructions: "AGENTS.md", 1 line, which every chat reads; shown before you are asked\n')
-    expect(previewText({ ...EMPTY, instructions: { ...instructions, state: 'present' } }, OPTIONS)).toContain('  Instructions: "AGENTS.md", already in the Delo home\n')
+    expect(previewText({ ...EMPTY, instructions: { ...instructions, state: 'present' } }, OPTIONS)).toContain('  Instructions: "AGENTS.md", already in the Delorun home\n')
   })
 
   it('groups what stays behind by reason, counts every entry, and names at most a few paths of each', () => {
@@ -225,12 +225,12 @@ describe('the preview', () => {
       skippedTotals: { logs: 250, unknown: 1, cache: 3 },
     }, OPTIONS)
     expect(text).toContain('What stays behind, and why:\n  1 entry: an entry the import does not know, so it is not carried\n    "x\\u202e": it holds \\u0007\n')
-    expect(text).toContain('  250 entries: logs, which Delo writes its own of\n    "logs/0"\n')
+    expect(text).toContain('  250 entries: logs, which Delorun writes its own of\n    "logs/0"\n')
     expect(text).toContain('    "logs/4"\n    and 245 more\n')
     expect(text).toContain('  3 entries: a cache, which is built again from what the import carries\n')
     expect(text).not.toContain('"logs/5"')
     // The groups follow the order of the reasons, not the order the walk met them in.
-    expect(text.indexOf('an entry the import does not know')).toBeLessThan(text.indexOf('logs, which Delo'))
+    expect(text.indexOf('an entry the import does not know')).toBeLessThan(text.indexOf('logs, which Delorun'))
   })
 })
 
@@ -259,11 +259,11 @@ describe('the categories', () => {
 
   it('asks each category its own question, each answered no unless the person says yes', () => {
     expect(categoryQuestion(full, 'profiles')).toBe('Copy 1 profile as shown, with their held-back rows written where nothing reads them? [y/N] ')
-    expect(categoryQuestion(full, 'settings')).toBe('Copy these settings into the Delo home, with the held-back rows written where nothing reads them? [y/N] ')
-    expect(categoryQuestion(full, 'instructions')).toBe('Copy these instructions? Every chat in Delo reads them. [y/N] ')
+    expect(categoryQuestion(full, 'settings')).toBe('Copy these settings into the Delorun home, with the held-back rows written where nothing reads them? [y/N] ')
+    expect(categoryQuestion(full, 'instructions')).toBe('Copy these instructions? Every chat in Delorun reads them. [y/N] ')
     expect(categoryQuestion(full, 'skills')).toBe('Copy 2 skills? A skill can tell the agent what to do. [y/N] ')
-    expect(categoryQuestion(full, 'credentials')).toBe('Copy 2 stored keys (DEEPSEEK_API_KEY, llm-deepseek/main) into the Delo home\'s credentials document, readable by you alone? [y/N] ')
-    expect(categoryQuestion(EMPTY, 'credentials')).toBe('Copy 0 stored keys () into the Delo home\'s credentials document, readable by you alone? [y/N] ')
+    expect(categoryQuestion(full, 'credentials')).toBe('Copy 2 stored keys (DEEPSEEK_API_KEY, llm-deepseek/main) into the Delorun home\'s credentials document, readable by you alone? [y/N] ')
+    expect(categoryQuestion(EMPTY, 'credentials')).toBe('Copy 0 stored keys () into the Delorun home\'s credentials document, readable by you alone? [y/N] ')
   })
 
   it('shows every line of the settings that land, escaped, and nothing of a layer that does not land', () => {

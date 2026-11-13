@@ -29,7 +29,7 @@ import type { LauncherAnchor } from './trusted-root.ts'
 
 /** The release that runs, as its stored, signed manifest states it. */
 export interface RunningRelease {
-  /** Delo's version. */
+  /** Delorun's version. */
   readonly delo: SemanticVersion
   /** Upstream's version. */
   readonly dsh: SemanticVersion
@@ -205,7 +205,7 @@ export function noticeLines(notice: UpdateNotice): readonly string[] {
   return notice.release.summary === undefined ? [noticeLine(notice)] : [noticeLine(notice), `  Release note: ${printable(notice.release.summary)}`]
 }
 
-/** What each failure means, in Delo's own words. */
+/** What each failure means, in Delorun's own words. */
 const FAILURE_TEXT: Readonly<Record<UpdateCheckFailure, string>> = {
   'running-release-unreadable': 'the running release\'s signed files, or the launcher\'s roots that anchor them, did not read or verify, so the channel to ask is unknown; run delorun verify',
   'trust-state-invalid': 'the home\'s trusted release root or timestamp could not be used; run delorun verify',
@@ -215,7 +215,7 @@ const FAILURE_TEXT: Readonly<Record<UpdateCheckFailure, string>> = {
   'unverified': 'the channel\'s timestamp, a root or the manifest did not verify',
   'log-bundle-invalid': 'the release\'s log bundle did not verify',
   'regressed': 'the channel answered with an older timestamp or an older release than an earlier check verified',
-  'internal': 'the check failed in Delo itself, or its record could not be written; see the home log',
+  'internal': 'the check failed in Delorun itself, or its record could not be written; see the home log',
 }
 
 /**
@@ -258,7 +258,7 @@ class RegressionError extends Error {
 
 /** What one check needs. */
 export interface CheckOptions {
-  /** The resolved Delo home. */
+  /** The resolved Delorun home. */
   readonly home: string
   /** The CLI profile, whose record the check writes. */
   readonly profile: string

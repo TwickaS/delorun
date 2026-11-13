@@ -125,7 +125,7 @@ export async function runProfileMigrations(home: string, profile: string, migrat
   const record = completedMigrations(home, profile)
   switch (record.kind) {
     case 'unreadable':
-      output.stderr(`delorun: Delo applied none of its one-time changes to the profile ${profile}, because ${record.path} does not read: ${record.reason}. The profile starts as it is. Removing that file lets the next start apply the changes this release makes to a profile an earlier release set up, such as adding the studio look; each change checks the profile first and skips what it already holds.\n`)
+      output.stderr(`delorun: Delorun applied none of its one-time changes to the profile ${profile}, because ${record.path} does not read: ${record.reason}. The profile starts as it is. Removing that file lets the next start apply the changes this release makes to a profile an earlier release set up, such as adding the studio look; each change checks the profile first and skips what it already holds.\n`)
       return []
     case 'read':
       if (record.fromRunDirectory !== undefined) {
@@ -163,11 +163,11 @@ export function studioBundleMigration(add: () => Promise<boolean>, output: Comma
     id: 'studio-bundle',
     async run() {
       try {
-        if (await add()) output.stderr(`delorun: added Delo's studio look to the profile ${profile}; Settings → General → Look switches back to the stock look.\n`)
+        if (await add()) output.stderr(`delorun: added Delorun's studio look to the profile ${profile}; Settings → General → Look switches back to the stock look.\n`)
         return true
       } catch (error) {
         if (!(error instanceof CliError)) throw error
-        output.stderr(`delorun: the profile ${profile} starts in the stock look, because Delo's studio look could not be added: ${error.message}\n`)
+        output.stderr(`delorun: the profile ${profile} starts in the stock look, because Delorun's studio look could not be added: ${error.message}\n`)
         return false
       }
     },

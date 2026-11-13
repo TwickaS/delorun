@@ -29,6 +29,7 @@ import { parseOptions, prepareHome, type CliCommand, type CommandContext } from 
 import { hasCliProfile, selectProfile } from '../profile.ts'
 import { profileFlag } from '../open/studio.ts'
 import { printable } from '../terminal-text.ts'
+import { askOnTerminal, isYes } from '../trash/terminal.ts'
 import { listenerPortFor, readReachRow, signInAddress, writeReachRow } from './row.ts'
 import { TRUST_STATEMENT } from './trust.ts'
 
@@ -52,10 +53,18 @@ export interface ReachDependencies {
    * @throws the connection's error when no home process answers.
    */
   readonly send: (home: string, profile: string, request: UnsignedRequest) => Promise<ResponseLine[]>
+  /**
+   * Ask one yes-or-no question on the terminal.
+   * @param question - the question, with its own prompt suffix.
+   * @returns the answer; the empty string when no terminal can ask.
+   */
+  readonly ask: (question: string) => Promise<string>
+  /** Whether a terminal can answer {@link ReachDependencies.ask}. */
+  readonly terminal: boolean
 }
 
 /** The usage line. */
-const USAGE = 'Usage: delorun reach status | on tailscale | off [--profile <name>]'
+const USAGE = 'Usage: delorun reach status | on tailscale [--yes] | off [--profile <name>]'
 
 /**
  * Whether a profile's home process runs.
@@ -90,7 +99,7 @@ export function createReachCommand(dependencies: ReachDependencies): CliCommand 
 }
 
 /** `delorun reach`, over the system's `tailscale`, the home lock and the home socket. */
-export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns, send: sendHomeRequest })
+export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns, send: sendHomeRequest, ask: askOnTerminal, terminal: process.stdin.isTTY === true && process.stdout.isTTY === true })
 
 /**
  * The home and profile of a command that changes the profile, refusing a home without the CLI profile.
@@ -100,11 +109,11 @@ export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTa
  * @returns the home path and the profile.
  * @throws {CliError} when the profile does not exist.
  */
-async function preparedProfile(command: string, args: readonly string[], context: CommandContext): Promise<{ readonly home: string; readonly profile: string }> {
-  const values = parseOptions(`reach ${command}`, args, { profile: { type: 'string' } })
+async function preparedProfile(command: string, args: readonly string[], context: CommandContext): Promise<{ readonly home: string; readonly profile: string; readonly yes: boolean }> {
+  const values = parseOptions(`reach ${command}`, args, command === 'on' ? { profile: { type: 'string' }, yes: { type: 'boolean', default: false } } : { profile: { type: 'string' } })
   const { home, profile } = await prepareHome(context, values.profile)
   if (!hasCliProfile(home.path, profile)) throw new CliError(EXIT.failed, `delorun reach: the profile ${profile} is not set up; run delorun setup first`)
-  return { home: home.path, profile }
+  return { home: home.path, profile, yes: 'yes' in values && values.yes === true }
 }
 
 /**
@@ -191,7 +200,7 @@ function optionsOf(value: unknown): readonly ReachOptionStatus[] | undefined {
 function liveLine(option: ReachOptionStatus): string {
   const at = option.address === undefined ? '' : ` at ${printable(option.address)}`
   const cause = option.cause === undefined ? '' : ` (${printable(option.cause)}): ${printable(option.detail ?? '')}`
-  return `Live: ${printable(option.option)} is ${printable(option.state)}${at}${cause}`
+  return `${option.option === 'tailscale-private' ? 'Remote access over Tailscale' : printable(option.option)} is ${printable(option.state)}${at}${cause}`
 }
 
 /** The live states in which the running home holds the option's fixed listener port. */
@@ -222,7 +231,10 @@ async function holdsListener(dependencies: ReachDependencies, home: string, prof
 async function turnOn(args: readonly string[], context: CommandContext, dependencies: ReachDependencies): Promise<typeof EXIT.ok | typeof EXIT.failed> {
   const [option, ...rest] = args
   if (option !== 'tailscale') throw new CliError(EXIT.usage, `delorun reach on: the one option this build offers is tailscale\n${USAGE}`)
-  const { home, profile } = await preparedProfile('on', rest, context)
+  const { home, profile, yes } = await preparedProfile('on', rest, context)
+  if (!yes && !dependencies.terminal) {
+    throw new CliError(EXIT.failed, 'delorun reach on tailscale: this changes Tailscale on this computer, and there is no terminal to ask you. Run it in a terminal, or add --yes to change it without a question.')
+  }
   const running = dependencies.running(home, profile)
   const row = readReachRow(home, profile)
   const holds = running && row.enabled && await holdsListener(dependencies, home, profile)
@@ -230,6 +242,10 @@ async function turnOn(args: readonly string[], context: CommandContext, dependen
   let listenerPort: number
   try {
     ({ dnsName } = await readTailscale(dependencies.tailscale))
+    if (!yes && !isYes(await dependencies.ask(`This changes Tailscale on this computer: Delorun tests Tailscale's serve setting now, and while Delorun runs, Tailscale serves your studio to your own devices at ${tailscaleAddress(dnsName, DEFAULT_SERVE_PORT)}. Continue? (y/N) `))) {
+      context.stderr('delorun reach on tailscale: nothing was changed. Run it again and answer y to turn remote access on.\n')
+      return EXIT.failed
+    }
     listenerPort = await listenerPortFor(row.listenerPort, holds)
     await checkServeAccess(dependencies.tailscale, { host: dnsName, servePort: DEFAULT_SERVE_PORT, listenerPort, keepOwn: holds, next: 'then run delorun reach on tailscale again' })
   } catch (error) {
@@ -241,18 +257,18 @@ async function turnOn(args: readonly string[], context: CommandContext, dependen
   writeReachRow(home, profile, { ...row, enabled: true, address, servePort: DEFAULT_SERVE_PORT, listenerPort })
   context.stdout([`Remote access is on for the profile ${profile} at ${address}`, '', ...TRUST_STATEMENT, '', ''].join('\n'))
   if (!running) {
-    context.stdout([`It starts with Delo: delorun start.`, ...addPhoneLines(address), ''].join('\n'))
+    context.stdout([`It starts with Delorun: delorun start.`, ...addPhoneLines(address), ''].join('\n'))
     return EXIT.ok
   }
   const answer = await askHome(dependencies, home, profile, 'reach.apply')
   if (answer.kind === 'unavailable') {
-    context.stderr(`delorun reach: the running Delo did not apply it: ${answer.reason}.\nRestart Delo to apply it: ${restartCommand(profile)}.\n`)
+    context.stderr(`delorun reach: the running Delorun did not apply it: ${answer.reason}.\nRestart Delorun to apply it: ${restartCommand(profile)}.\n`)
     return EXIT.failed
   }
   const tailscalePrivate = answer.options.find(entry => entry.option === 'tailscale-private')
   context.stdout(`${answer.options.map(liveLine).join('\n')}\n`)
   if (tailscalePrivate?.state !== 'ready') {
-    context.stderr(`delorun reach: the running Delo did not make the address ready. Fix what the line above names, then run delorun reach on tailscale again.\n`)
+    context.stderr(`delorun reach: the running Delorun did not make the address ready. Fix what the line above names, then run delorun reach on tailscale again.\n`)
     return EXIT.failed
   }
   context.stdout(`${addPhoneLines(address).join('\n')}\n`)
@@ -289,7 +305,7 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
   if (!running) return EXIT.ok
   const answer = await askHome(dependencies, home, profile, 'reach.apply')
   if (answer.kind === 'unavailable') {
-    context.stderr(`delorun reach: the running Delo did not close its remote listener: ${answer.reason}.\nRestart Delo to close it: ${restartCommand(profile)}.\n`)
+    context.stderr(`delorun reach: the running Delorun did not close its remote listener: ${answer.reason}.\nRestart Delorun to close it: ${restartCommand(profile)}.\n`)
     return EXIT.failed
   }
   context.stdout(`${answer.options.map(liveLine).join('\n')}\n`)
@@ -308,13 +324,13 @@ async function status(args: readonly string[], context: CommandContext, dependen
   const profile = selectProfile(values.profile, context.env)
   const home = (await resolveDeloHome(context.env)).path
   const row = readReachRow(home, profile)
-  const lines = [row.enabled ? `Tailscale private: on, ${row.address}` : 'Tailscale private: off']
+  const lines = [row.enabled ? `Remote access is on over Tailscale at ${row.address}.` : 'Remote access is off. Turn it on with delorun reach on tailscale.']
   if (!dependencies.running(home, profile)) {
-    lines.push('Delo is not running, so no remote listener is open.')
+    if (row.enabled) lines.push('Delorun is not running, so the address does not work until you run delorun start.')
   } else {
     const answer = await askHome(dependencies, home, profile, 'reach.status')
-    if (answer.kind === 'options') lines.push(...answer.options.map(liveLine))
-    else lines.push(`Delo is running, but its live state could not be read: ${answer.reason}. Settings → Devices in the studio on this computer shows it.`)
+    if (answer.kind === 'options') lines.push(...answer.options.filter(option => row.enabled || option.state !== 'off').map(liveLine))
+    else lines.push(`Delorun is running, but its live state could not be read: ${answer.reason}. Settings → Devices in the studio on this computer shows it.`)
   }
   if (row.enabled) lines.push(`Sign-in address: ${signInAddress(row.address)}`, ...addPhoneLines(row.address))
   context.stdout(`${lines.join('\n')}\n`)

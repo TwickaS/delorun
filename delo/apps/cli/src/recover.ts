@@ -30,7 +30,7 @@ import { isStoreError, RuntimeStore, type TrustedRootSource } from '@delo/runtim
 import { discardKeptData, listKeptData, recoverDataCopies } from '@delo/update'
 import type { ProfileVersionId } from '@deepseek-ai/dsh-plugin-manager/history'
 import { CliError, EXIT } from './exit.ts'
-import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
+import { parseFailure, prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { assertSoleDataUser, registerDataUser } from './home-exclusion.ts'
 import { cliRedactor } from './refusals.ts'
 import { removeSafeModeOverlay } from './safe-mode.ts'
@@ -76,7 +76,7 @@ function requested(args: readonly string[]): { readonly action: Requested, reado
   try {
     parsed = parseArgs({ args: [...args], options: RECOVER_OPTIONS, strict: true, allowPositionals: true })
   } catch (error) {
-    throw new CliError(EXIT.usage, `delorun recover: ${error instanceof Error ? error.message : String(error)}\n${USAGE}`)
+    throw parseFailure('recover', error)
   }
   const [name = 'status', argument, ...extra] = parsed.positionals
   const known = ACTIONS.find(action => action === name)
@@ -118,7 +118,7 @@ async function updateLines(home: string, profile: string): Promise<string[]> {
   const record = await readJournal(journalPath(home, profile))
   const lines = record === undefined
     ? ['No update is recorded for a rollback.']
-    : [`The recorded update from Delo ${record.from} to Delo ${record.to} is ${record.phase}; the chat data ${record.dataDiffers ? 'changes format' : 'keeps its format'}${record.dataDiffers ? `, and ${record.copy ? 'a copy was taken' : 'no copy was taken'}` : ''}.`]
+    : [`The recorded update from Delorun ${record.from} to Delorun ${record.to} is ${record.phase}; the chat data ${record.dataDiffers ? 'changes format' : 'keeps its format'}${record.dataDiffers ? `, and ${record.copy ? 'a copy was taken' : 'no copy was taken'}` : ''}.`]
   for (const kept of await listKeptData(home)) lines.push(`${kept.kind === 'copy' ? 'Chat-data copy' : 'Set-aside chat data'}: ${kept.path} (${String(kept.bytes)} bytes); remove it with delorun recover discard ${kept.path}.`)
   return lines
 }
@@ -186,7 +186,7 @@ export async function rollbackOffline(home: string, profile: string, profileOnly
       await removeStash(path)
     }
     for (const line of result.lines) context.stdout(`${line}\n`)
-    if (!profileOnly) context.stdout(`Start Delo with delorun start; the rollback completes once Delo ${record.from} starts healthy.\n`)
+    if (!profileOnly) context.stdout(`Start Delorun with delorun start; the rollback completes once Delorun ${record.from} starts healthy.\n`)
     return EXIT.ok
   } finally {
     release()

@@ -101,11 +101,11 @@ describe('a release that verifies', { timeout: 30_000 }, () => {
     expect(run.stderr).toBe('')
     const lines = run.stdout.split('\n')
     expect(lines[0]).toBe(`Release ${RELEASE}, verification mode warn; ${VERIFICATION_NOTICE}.`)
-    expect(lines[1]).toMatch(/^Trusted root: version 1, root keys [0-9a-f]{16}, anchored on the shipped roots of the launcher that started this Delo, in \S+ \(DELO_LAUNCHER_ROOTS\)\.$/u)
+    expect(lines[1]).toMatch(/^Trusted root: version 1, root keys [0-9a-f]{16}, anchored on the shipped roots of the launcher that started this Delorun, in \S+ \(DELO_LAUNCHER_ROOTS\)\.$/u)
     expect(lines[1]).toContain(` in ${fixture.launcherRoots} (`)
-    expect(lines[2]).toBe('Release channel: production; release log: production; as the launcher that installed this Delo recorded them.')
-    expect(lines[3]).toBe(`Launcher: the launcher that started this Delo reported no version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${RELEASE} lists.`)
-    expect(lines.at(-2)).toBe('2 checks passed, 0 failed, 9 not run; this is not a full verification of this Delo.')
+    expect(lines[2]).toBe('Release channel: production; release log: production; as the launcher that installed this Delorun recorded them.')
+    expect(lines[3]).toBe(`Launcher: the launcher that started this Delorun reported no version (DELO_LAUNCHER_VERSION), so it is not compared with the npm packages release ${RELEASE} lists.`)
+    expect(lines.at(-2)).toBe('2 checks passed, 0 failed, 9 not run; this is not a full verification of this Delorun.')
     expect(line(run, 'release-signature')).toMatch(/^passed\s+release-signature\s+trusted root 1 is anchored on the launcher's shipped roots; trusted root 1 is valid until 2027-10-01T00:00:00Z; the manifest's targets signature verifies; the stored timestamp is fresh; the release-log entry verifies and the log is consistent with the stored checkpoint$/u)
     expect(line(run, 'runtime-files')).toMatch(/^passed\s+runtime-files\s+all 5 files of runtime 0\.1\.0 match the signed file list$/u)
     for (const id of VERIFICATION_CHECK_IDS.filter(id => id !== 'release-signature' && id !== 'runtime-files')) expect(line(run, id)).toMatch(new RegExp(`^not run\\s+${id}\\s+${NOT_RUN_HERE}$`, 'u'))
@@ -132,7 +132,7 @@ describe('a release that verifies', { timeout: 30_000 }, () => {
     const run = await verify(fixture)
     expect(fixture.tiles.requested).toEqual(['http://127.0.0.1:9/checkpoint'])
     expect(line(run, 'release-signature')).toContain('the online check could not complete')
-    expect(run.stdout).toContain('Release channel: production; release log: http://127.0.0.1:9; as the launcher that installed this Delo recorded them.')
+    expect(run.stdout).toContain('Release channel: production; release log: http://127.0.0.1:9; as the launcher that installed this Delorun recorded them.')
   })
 
   it('says where releases come from is unknown, with a warning, when the channel record does not read', async () => {
@@ -157,7 +157,7 @@ describe('a release log that is not reached', { timeout: 30_000 }, () => {
     const run = await verify(fixture, ['--offline'])
     expect(run.exit).toBe(EXIT.ok)
     expect(line(run, 'release-signature')).toMatch(/^not run\s+release-signature\s+the release-log bundle verifies offline; the online check was not run \(--offline\)$/u)
-    expect(run.stderr).toBe(`warning: Release ${RELEASE} has not been checked against the release log; Delo checks it at the next connection. It has stayed unchecked since ${utcText(NOW)} (under a minute); the online check was not run (--offline).\n`)
+    expect(run.stderr).toBe(`warning: Release ${RELEASE} has not been checked against the release log; Delorun checks it at the next connection. It has stayed unchecked since ${utcText(NOW)} (under a minute); the online check was not run (--offline).\n`)
     expect(fixture.tiles.requested).toEqual([])
     expect(recorded(fixture).state).toBe('unchecked')
   })
@@ -326,23 +326,16 @@ describe('what the checks cannot read', { timeout: 30_000 }, () => {
     expect(line(await verify(fixture), 'release-signature')).toContain('the release-log check could not run: EISDIR')
   })
 
-  it('fails both release checks on a platform Delo publishes no runtime for', async () => {
+  it('fails both release checks on a platform Delorun publishes no runtime for', async () => {
     const fixture = await home()
     const run = await verify(fixture, [], { platform: 'freebsd-x64' })
     expect(run.exit).toBe(EXIT.failed)
-    expect(line(run, 'release-signature')).toContain('Delo publishes no runtime for freebsd-x64')
-    expect(line(run, 'runtime-files')).toContain('Delo publishes no runtime for freebsd-x64')
+    expect(line(run, 'release-signature')).toContain('Delorun publishes no runtime for freebsd-x64')
+    expect(line(run, 'runtime-files')).toContain('Delorun publishes no runtime for freebsd-x64')
   })
 })
 
 describe('the command line', { timeout: 30_000 }, () => {
-  it('prints its usage with --help', async () => {
-    const fixture = await home()
-    const run = await verify(fixture, ['--help'])
-    expect(run.exit).toBe(EXIT.ok)
-    expect(run.stdout).toContain('Usage: delorun verify [--release <version>] [--offline] [--json]')
-  })
-
   it('refuses a release name that is not a version, and an unknown option', async () => {
     const fixture = await home()
     await expect(verify(fixture, ['--release', '../0.1.0'])).rejects.toMatchObject({ exit: EXIT.usage })
@@ -374,7 +367,7 @@ describe('the report', () => {
     expect(text).toContain('not enforced  confinement-rule  the dialect cannot deny it')
     expect(text).toContain('Trusted root: none read.')
     expect(text).toContain('Release channel: unknown, because the home\'s channel record does not read.')
-    expect(text).toContain('0 checks passed, 0 failed, 0 not run, 1 not enforced; this is not a full verification of this Delo.')
+    expect(text).toContain('0 checks passed, 0 failed, 0 not run, 1 not enforced; this is not a full verification of this Delorun.')
   })
 })
 

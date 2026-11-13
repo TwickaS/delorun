@@ -78,7 +78,7 @@ const YES = { ...SETUP_DEFAULTS, importStockHome: true }
 const QUESTION = 'select: Copy your DeepSeek Harness chats, attachments and workspace list? They are only read, and nothing in them changes.'
 
 describe('setup\'s import section', () => {
-  it('applies only when the stock home is a directory and the Delo home holds no chat', () => {
+  it('applies only when the stock home is a directory and the Delorun home holds no chat', () => {
     expect(section.appliesTo(environment({}))).toBe(false)
     expect(section.appliesTo(environment())).toBe(false)
     put(person, '.dsh', 'a file')
@@ -86,7 +86,7 @@ describe('setup\'s import section', () => {
     const other = fresh('other')
     stockHome(join(other, '.dsh'))
     expect(section.appliesTo(environment({ HOME: other }))).toBe(true)
-    put(home, 'sessions/--p--/s9/session.v4.jsonl.zstd', 'a Delo chat')
+    put(home, 'sessions/--p--/s9/session.v4.jsonl.zstd', 'a Delorun chat')
     expect(homeHasChats(home)).toBe(true)
     expect(section.appliesTo(environment({ HOME: other }))).toBe(false)
   })
@@ -126,7 +126,7 @@ describe('setup\'s import section', () => {
     stockHome(join(person, '.dsh'))
     put(home, 'sessions/--other--/s1/session.v4.jsonl.zstd', 'another chat with the same id')
     expect(await ask([])).toEqual({ answers: { importStockHome: false }, status: 'seen' })
-    expect(recording.screen.join('\n')).toContain('the Delo home already holds the chat "s1" with other content')
+    expect(recording.screen.join('\n')).toContain('the Delorun home already holds the chat "s1" with other content')
   })
 
   it('copies the data of the plan it showed and nothing else on a yes, writes nothing on a no, and says what it did', async () => {
@@ -157,12 +157,12 @@ describe('setup\'s import section', () => {
     expect(existsSync(join(home, 'storages/workspace.json'))).toBe(false)
   })
 
-  it('refuses to write when the Delo home gained a chat after the preview, rather than merging it unasked', async () => {
+  it('refuses to write when the Delorun home gained a chat after the preview, rather than merging it unasked', async () => {
     stockHome(join(person, '.dsh'))
     await ask(['yes'])
     put(home, 'sessions/--other--/d1/session.v4.jsonl.zstd', 'a chat started after the preview')
     const refused = await section.apply(context(), YES).catch((error: unknown) => error)
-    expect((refused as CliError).message).toContain('the Delo home gained chats after the preview; run delorun import-home --merge')
+    expect((refused as CliError).message).toContain('the Delorun home gained chats after the preview; run delorun import-home --merge')
     expect(existsSync(join(home, 'storages/workspace.json'))).toBe(false)
   })
 
@@ -179,11 +179,11 @@ describe('setup\'s import section', () => {
   it('reports a refused import with its code', async () => {
     stockHome(join(person, '.dsh'))
     await ask(['yes'])
-    put(home, 'storages/workspace.json', 'a list the Delo home wrote after the preview')
+    put(home, 'storages/workspace.json', 'a list the Delorun home wrote after the preview')
     const refused = await section.apply(context(), YES).catch((error: unknown) => error)
     expect(refused).toBeInstanceOf(CliError)
     expect((refused as CliError).message).toContain('the DeepSeek Harness home was not imported (DSH_IMPORT_TARGET_REFUSED)')
-    expect(readFileSync(join(home, 'storages/workspace.json'), 'utf8')).toBe('a list the Delo home wrote after the preview')
+    expect(readFileSync(join(home, 'storages/workspace.json'), 'utf8')).toBe('a list the Delorun home wrote after the preview')
     expect(existsSync(join(home, 'sessions/--work--'))).toBe(false)
   })
 

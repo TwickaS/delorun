@@ -63,11 +63,11 @@ describe('delorun plugin check', () => {
     expect(exit).toBe(EXIT.ok)
     expect(out.split('\n')).toEqual([
       expect.stringMatching(/^example@1\.4\.0, read from .*package\.json; none of its files ran\.$/u),
-      'This is Delo 0.1.3 on DSH 0.2.2.',
+      'This is Delorun 0.1.3 on DSH 0.2.2.',
       'DSH axis: engines.dsh ">=0.2.2 <0.3.0" admits DSH 0.2.2; without engines.dsh every DSH peer must admit it, and engines.dsh alone decides when it is declared.',
-      'Delo axis: engines.delo admits Delo 0.1.3.',
+      'Delorun axis: engines.delo admits Delorun 0.1.3.',
       'The installer admits it on this release.',
-      'Within one Delo minor the DSH version stays the same; contract C22 states what each Delo version promises a plugin.',
+      'Within one Delorun minor the DSH version stays the same; the plugin guide states what each Delorun version promises a plugin.',
       '',
     ])
   })
@@ -84,18 +84,18 @@ describe('delorun plugin check', () => {
     expect(out).toContain('DSH axis: its DSH peers (@deepseek-ai/dsh-agent "^0.2.0") admits DSH 0.2.2;')
   })
 
-  it('names what is undeclared, and the range that targets the running Delo minor', async () => {
+  it('names what is undeclared, and the range that targets the running Delorun minor', async () => {
     const { exit, out } = await check(plugin({ name: 'stock-plugin', version: '1.0.0' }))
     expect(exit).toBe(EXIT.ok)
     expect(out).toContain('DSH axis: undeclared, so the plugin loads on any DSH. Declare "engines": { "dsh": "^0.2.2" }')
-    expect(out).toContain('Delo axis: undeclared, so the plugin loads on any Delo and Delo promises it nothing. To target Delorun 0.1.3 and its patches, declare "engines": { "delo": "^0.1.0" }.')
+    expect(out).toContain('Delorun axis: undeclared, so the plugin loads on any Delorun and Delorun promises it nothing. To target Delorun 0.1.3 and its patches, declare "engines": { "delo": "^0.1.0" }.')
   })
 
-  it('refuses a plugin whose Delo range does not admit this release, with the installer\'s own message', async () => {
+  it('refuses a plugin whose Delorun range does not admit this release, with the installer\'s own message', async () => {
     const { exit, out } = await check(plugin({ name: 'future', version: '2.0.0', engines: { delo: '>=0.2.0' } }))
     expect(exit).toBe(EXIT.failed)
-    expect(out).toContain('Delo axis: engines.delo ">=0.2.0" does not admit Delo 0.1.3.')
-    expect(out).toContain('The installer refuses it on this release: future@2.0.0 requires Delo >=0.2.0; this is Delo 0.1.3 on DSH 0.2.2.')
+    expect(out).toContain('Delorun axis: engines.delo ">=0.2.0" does not admit Delorun 0.1.3.')
+    expect(out).toContain('The installer refuses it on this release: future@2.0.0 requires Delorun >=0.2.0; this is Delorun 0.1.3 on DSH 0.2.2.')
   })
 
   it('reads the DSH peers when engines.dsh is absent, as upstream does', async () => {
@@ -107,13 +107,13 @@ describe('delorun plugin check', () => {
   })
 
   it('refuses declarations it cannot read', async () => {
-    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delo: 1 } }))).out).toContain('Delo axis: engines.delo is declared in a form Delo cannot read, so Delo refuses the plugin. Declare a range such as "^0.1.0".')
+    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delo: 1 } }))).out).toContain('Delorun axis: engines.delo is declared in a form Delorun cannot read, so Delorun refuses the plugin. Declare a range such as "^0.1.0".')
     const dsh = await check(plugin({ name: 'b', version: '1.0.0', engines: { dsh: 1 } }))
-    expect([dsh.exit, dsh.out.includes('DSH axis: engines.dsh or a DSH peer is declared in a form Delo cannot read.'), dsh.out.includes('The installer refuses it: ')]).toEqual([EXIT.failed, true, true])
+    expect([dsh.exit, dsh.out.includes('DSH axis: engines.dsh or a DSH peer is declared in a form Delorun cannot read.'), dsh.out.includes('The installer refuses it: ')]).toEqual([EXIT.failed, true, true])
     const peer = await check(plugin({ name: 'c', version: '1.0.0', peerDependencies: { '@deepseek-ai/dsh': 3 } }))
-    expect(peer.out).toContain('DSH axis: engines.dsh or a DSH peer is declared in a form Delo cannot read.')
+    expect(peer.out).toContain('DSH axis: engines.dsh or a DSH peer is declared in a form Delorun cannot read.')
     const engines = await check(plugin({ name: 'd', version: '1.0.0', engines: 'dsh' }))
-    expect([engines.exit, engines.out.includes('Delo axis: engines.delo is declared in a form Delo cannot read')]).toEqual([EXIT.failed, true])
+    expect([engines.exit, engines.out.includes('Delorun axis: engines.delo is declared in a form Delorun cannot read')]).toEqual([EXIT.failed, true])
     expect((await check(plugin({ engines: { delo: '^0.1.0' } }))).out).toContain('(no name)@(no version)')
   })
 

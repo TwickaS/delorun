@@ -120,7 +120,7 @@ function booted(composed: ComposedStart, overrides: readonly BootedRow[] = [], p
 }
 
 describe('a set-up CLI profile', { timeout: 60_000 }, () => {
-  it('composes with the sandbox overlay last, requires the sandbox row and every Delo row, and passes once booted as composed', async () => {
+  it('composes with the sandbox overlay last, requires the sandbox row and every Delorun row, and passes once booted as composed', async () => {
     const composed = await compose()
     expect(composed.patchFiles).toEqual([join(deloHome, 'run', 'default', 'sandbox.patch.yml')])
     expect(composed.required).toEqual(expect.arrayContaining([
@@ -238,7 +238,7 @@ describe('the services of the required rows', { timeout: 60_000 }, () => {
 })
 
 describe('a booted Host', { timeout: 60_000 }, () => {
-  it('refuses a Delo row that did not start or is disabled, and a missing turn gate', async () => {
+  it('refuses a Delorun row that did not start or is disabled, and a missing turn gate', async () => {
     const composed = await compose()
     const message = await refused(() => {
       assertDeloInvariants(composed, booted(composed, [
@@ -292,7 +292,7 @@ describe('a booted Host', { timeout: 60_000 }, () => {
 })
 
 describe('safe mode', { timeout: 60_000 }, () => {
-  it('exempts no required row: a person\'s row under a local name that claims a Delo row\'s id is refused, and so is a Delo row its overlay would disable', async () => {
+  it('exempts no required row: a person\'s row under a local name that claims a Delorun row\'s id is refused, and so is a Delorun row its overlay would disable', async () => {
     expect(await main(['recover', 'safe-mode'], context)).toBe(EXIT.ok)
     const path = appendToProfilePatch({ insert: [{ id: 'delo-fetch-guard', name: './allow-all.js' }] })
     const local = pathToFileURL(join(deloHome, 'profiles', 'default', 'allow-all.js')).href
@@ -305,7 +305,7 @@ describe('safe mode', { timeout: 60_000 }, () => {
     expect(await refused(() => { assertDeloInvariants(composed, booted(composed, [{ id: 'delo-trash', name: '@delo/plugin-trash', disabled: true, state: 'active' }])) })).toContain('delo-trash is disabled')
   })
 
-  it('lets an opt-in Delo row stay disabled, and still refuses a disabled row that is not opt-in', async () => {
+  it('lets an opt-in Delorun row stay disabled, and still refuses a disabled row that is not opt-in', async () => {
     const composed = await compose()
     const optIn = [...OPT_IN_ROWS]
     expect(optIn.length).toBeGreaterThan(0)
@@ -321,7 +321,7 @@ describe('safe mode', { timeout: 60_000 }, () => {
     const composed = await composeDeloProfile({ home: deloHome, profile: 'default', kind: 'cli', output: { ...context, stdout: (text) => { printed.push(text) } }, env: {}, osHome }, { prepareProfile: upstreamDependencies().prepareProfile, approvedPluginContent: NO_APPROVED_CONTENT })
     expect(composed.safe).toBeDefined()
     expect(composed.patchFiles.at(-1)).toBe(join(deloHome, 'run', 'default', 'sandbox.patch.yml'))
-    expect(printed.join('')).toContain('Delo starts in safe mode')
+    expect(printed.join('')).toContain('Delorun starts in safe mode')
   })
 })
 
@@ -395,7 +395,7 @@ describe('the headless profile', { timeout: 60_000 }, () => {
     manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => name !== HEADLESS_BUNDLE)
     writeFileSync(manifestPath, JSON.stringify(manifest))
     const message = await refused(() => compose('headless', 'headless'))
-    expect(message).toContain(`does not load Delo's headless bundle ${HEADLESS_BUNDLE}`)
+    expect(message).toContain(`does not load Delorun's headless bundle ${HEADLESS_BUNDLE}`)
     expect(message).toContain(`remove ${join(deloHome, 'profiles', 'headless', 'delo-migrations.json')}`)
     expect(message).toContain(`remove the folder ${join(deloHome, 'profiles', 'headless')}`)
   })
@@ -453,19 +453,19 @@ describe('the plugin manager\'s row', { timeout: 60_000 }, () => {
     await compose()
     const path = appendToProfilePatch({ id: 'plugin-manager', config: { protectedPlugins: ['@delo/plugin-fetch-guard'] } })
     const message = await refused(compose)
-    expect(message).toContain(`plugin-manager no longer protects ${PROTECTED.filter(name => name !== '@delo/plugin-fetch-guard').join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists (set in `)
+    expect(message).toContain(`plugin-manager no longer protects ${PROTECTED.filter(name => name !== '@delo/plugin-fetch-guard').join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delorun's bundle lists (set in `)
     expect(message).toContain(`, ${path})`)
   })
 
-  it('refuses a booted Host whose plugin manager protects fewer plugins than Delo\'s bundle lists', async () => {
+  it('refuses a booted Host whose plugin manager protects fewer plugins than Delorun\'s bundle lists', async () => {
     const composed = await compose()
     const manager = { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: false, state: 'active' as const, config: { protectedPlugins: [] } }
     expect(await refused(() => { assertDeloInvariants(composed, booted(composed, [manager])) })).toContain('plugin-manager no longer protects @delo/plugin-instruction-consent')
   })
 })
 
-describe('a Delo row from another copy of its package', { timeout: 60_000 }, () => {
-  it('refuses a same-named stand-in of a Delo bundle that the profile resolved, naming the row, the package and both places', async () => {
+describe('a Delorun row from another copy of its package', { timeout: 60_000 }, () => {
+  it('refuses a same-named stand-in of a Delorun bundle that the profile resolved, naming the row, the package and both places', async () => {
     // Resolution order puts the installation's copy first today; the invariant holds without relying on that order.
     const standIn = join(deloHome, 'profiles', 'default', 'node_modules', '@delo', 'bundle-local-stand-in')
     const prepared = await upstreamDependencies().prepareProfile('default')
@@ -476,11 +476,11 @@ describe('a Delo row from another copy of its package', { timeout: 60_000 }, () 
       prepareProfile: () => Promise.resolve({ ...prepared, profile: { ...prepared.profile, layers } }),
       approvedPluginContent: NO_APPROVED_CONTENT,
     }))
-    expect(message).toContain(`delo-fetch-guard loads @delo/bundle-local from ${standIn}, which is not this Delo's own copy in `)
+    expect(message).toContain(`delo-fetch-guard loads @delo/bundle-local from ${standIn}, which is not this Delorun's own copy in `)
     expect(message).toContain(`delo-update-gate loads @delo/bundle-local from ${standIn}`)
   })
 
-  it('records where each required Delo row resolves, inside this Delo\'s packages', async () => {
+  it('records where each required Delorun row resolves, inside this Delorun\'s packages', async () => {
     const composed = await compose()
     const installCheck = composed.rowPackages.filter(row => row.id === 'delo-plugin-install-check').map(row => row.packageName)
     expect(installCheck).toEqual(['@delo/bundle-local', '@delo/plugin-install-check'])

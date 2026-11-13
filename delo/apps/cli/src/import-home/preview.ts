@@ -76,14 +76,14 @@ export interface PreviewOptions {
 export function previewText(plan: DshHomeImportPlan, options: PreviewOptions): string {
   const lines = [
     `DeepSeek Harness home: ${quoted(plan.source)} (read only; nothing in it changes)`,
-    `Delo home: ${quoted(plan.target)}`,
+    `Delorun home: ${quoted(plan.target)}`,
     '',
     'Your chats and workspaces:',
     `  Chats: ${counted(plan.chats.filter(chat => chat.state === 'new').length, 'chat')} to copy${presentNote(plan.chats.filter(chat => chat.state === 'present').length)}`,
     `  Attachments: ${counted(plan.attachments.length, 'file')} to copy${presentNote(plan.attachmentsPresent)}`,
     `  Workspaces: ${workspaceLine(plan)}`,
     ...workspaceLines(plan),
-    ...plan.chats.length === 0 ? [] : ['  A chat that ran with full access opens on the safer preset until you allow full access for its workspace in Delo.'],
+    ...plan.chats.length === 0 ? [] : ['  A chat that ran with full access opens on the safer preset until you allow full access for its workspace in Delorun.'],
     ...unfinishedLines(plan, '  '),
     '',
     ...options.categories ? categoryLines(plan, options) : ['Profiles, settings, instructions, skills and stored keys are not copied here; run delorun import-home to review each and copy what you choose.'],
@@ -118,7 +118,7 @@ function categoryLines(plan: DshHomeImportPlan, options: PreviewOptions): string
  * @returns the note, or nothing when it holds none.
  */
 function presentNote(count: number): string {
-  return count === 0 ? '' : `; ${String(count)} already in the Delo home`
+  return count === 0 ? '' : `; ${String(count)} already in the Delorun home`
 }
 
 /**
@@ -140,9 +140,9 @@ function workspaceLines(plan: DshHomeImportPlan): string[] {
 function workspaceLine(plan: DshHomeImportPlan): string {
   if (plan.registry === undefined) return 'none to copy'
   const count = counted(plan.registry.workspaces, 'registration')
-  if (plan.registry.mode === 'copy') return `${count}, copied as the Delo home's workspace list`
-  if (plan.registry.mode === 'merge') return `${count}, added to the Delo home's workspace list`
-  return `${count}, already in the Delo home's workspace list`
+  if (plan.registry.mode === 'copy') return `${count}, copied as the Delorun home's workspace list`
+  if (plan.registry.mode === 'merge') return `${count}, added to the Delorun home's workspace list`
+  return `${count}, already in the Delorun home's workspace list`
 }
 
 /**
@@ -153,9 +153,9 @@ function workspaceLine(plan: DshHomeImportPlan): string {
  */
 function layerLines(layer: DshImportLayer, indent: string): string[] {
   const lands = layer.state === 'taken'
-    ? 'nothing lands: the Delo home holds its own file of that name'
+    ? 'nothing lands: the Delorun home holds its own file of that name'
     : layer.state === 'present'
-      ? 'already in the Delo home'
+      ? 'already in the Delorun home'
       : layer.carried === undefined ? 'nothing lands' : `lands with ${counted(layer.carriedLabels.length, 'row')}${layer.carriedLabels.length === 0 ? '' : `: ${layer.carriedLabels.map(quoted).join(', ')}`}`
   return [
     `${indent}${quoted(layer.target)} (${LAYER_LABELS[layer.kind]}): ${lands}`,
@@ -191,7 +191,7 @@ function profileLines(plan: DshHomeImportPlan): string[] {
 function instructionLine(plan: DshHomeImportPlan): string {
   const instructions = plan.instructions
   if (instructions === undefined) return 'none to copy'
-  if (instructions.state === 'present') return `${quoted(instructions.source.file.path)}, already in the Delo home`
+  if (instructions.state === 'present') return `${quoted(instructions.source.file.path)}, already in the Delorun home`
   return `${quoted(instructions.source.file.path)}, ${counted(instructions.lines, 'line')}, which every chat reads; shown before you are asked`
 }
 
@@ -205,9 +205,9 @@ function credentialLines(plan: DshHomeImportPlan, options: PreviewOptions): stri
   if (plan.credentials === undefined || plan.credentials.entries.length === 0) return []
   const states = {
     offered: 'can be copied',
-    present: 'already in the Delo home',
-    taken: 'not copied: the Delo home holds another value',
-    'not-carried': 'not copied: only the DeepSeek key is offered; add other keys again in Delo',
+    present: 'already in the Delorun home',
+    taken: 'not copied: the Delorun home holds another value',
+    'not-carried': 'not copied: only the DeepSeek key is offered; add other keys again in Delorun',
   } as const
   return [
     `  Stored keys (${options.credentials}):`,
@@ -325,14 +325,14 @@ export function categoryQuestion(plan: DshHomeImportPlan, category: DshImportCat
     case 'profiles':
       return `Copy ${counted(plan.profiles.length, 'profile')} as shown, with their held-back rows written where nothing reads them? [y/N] `
     case 'settings':
-      return 'Copy these settings into the Delo home, with the held-back rows written where nothing reads them? [y/N] '
+      return 'Copy these settings into the Delorun home, with the held-back rows written where nothing reads them? [y/N] '
     case 'instructions':
-      return 'Copy these instructions? Every chat in Delo reads them. [y/N] '
+      return 'Copy these instructions? Every chat in Delorun reads them. [y/N] '
     case 'skills':
       return `Copy ${counted(plan.skills.length, 'skill')}? A skill can tell the agent what to do. [y/N] `
     case 'credentials': {
       const offered = plan.credentials?.entries.filter(entry => entry.state === 'offered') ?? []
-      return `Copy ${counted(offered.length, 'stored key')} (${offered.map(entry => printable(entry.name)).join(', ')}) into the Delo home's credentials document, readable by you alone? [y/N] `
+      return `Copy ${counted(offered.length, 'stored key')} (${offered.map(entry => printable(entry.name)).join(', ')}) into the Delorun home's credentials document, readable by you alone? [y/N] `
     }
   }
 }

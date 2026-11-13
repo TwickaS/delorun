@@ -17,7 +17,7 @@ import { messageOf, readAnchoredRoot, readShippedRoots, trustFile } from '@delo/
 import { RuntimeStoreError, type TrustedRootSource } from '@delo/runtime-store'
 
 /** What a person does when no launcher roots anchor the stored root. */
-const START_WITH_LAUNCHER = 'start Delo with its launcher, the delorun command that npm or the install script installed, and run this again'
+const START_WITH_LAUNCHER = 'start Delorun with its launcher, the delorun command that npm or the install script installed, and run this again'
 
 /** The anchors one process reads: the roots its launcher ships and the stored root anchored on them. */
 export interface LauncherAnchor {
@@ -42,12 +42,12 @@ export function launcherAnchor(home: string, env: Readonly<Record<string, string
   const directory = env[DELO_LAUNCHER_ROOTS_ENV]
   const shipped = async (): Promise<readonly Uint8Array[]> => {
     if (directory === undefined || directory === '') {
-      throw new RuntimeStoreError('ROOT_NOT_ANCHORED', path, `this Delo was not started by its launcher, which names the release roots it ships in ${DELO_LAUNCHER_ROOTS_ENV}, so the root stored at ${path} cannot be anchored and no release is installed or started from it; ${START_WITH_LAUNCHER}`)
+      throw new RuntimeStoreError('ROOT_NOT_ANCHORED', path, `this Delorun was not started by its launcher, which names the release roots it ships in ${DELO_LAUNCHER_ROOTS_ENV}, so the root stored at ${path} cannot be anchored and no release is installed or started from it; ${START_WITH_LAUNCHER}`)
     }
     try {
       return await readShippedRoots(directory)
     } catch (error) {
-      throw new RuntimeStoreError('ROOT_NOT_ANCHORED', path, `the release roots of the launcher that started this Delo, at ${directory}, do not read (${messageOf(error)}), so the root stored at ${path} cannot be anchored; reinstall the launcher, then ${START_WITH_LAUNCHER}`, [], { cause: error })
+      throw new RuntimeStoreError('ROOT_NOT_ANCHORED', path, `the release roots of the launcher that started this Delorun, at ${directory}, do not read (${messageOf(error)}), so the root stored at ${path} cannot be anchored; reinstall the launcher, then ${START_WITH_LAUNCHER}`, [], { cause: error })
     }
   }
   const root = async (): Promise<RootMetadata> => {
@@ -55,7 +55,7 @@ export function launcherAnchor(home: string, env: Readonly<Record<string, string
     try {
       return (await readAnchoredRoot(home, roots)).metadata
     } catch (error) {
-      throw new RuntimeStoreError('ROOT_NOT_ANCHORED', path, `the root stored at ${path} is not one the launcher's release roots lead to (${messageOf(error)}), so no release is installed or started from it; install Delo again with its launcher`, ['reinstall'], { cause: error })
+      throw new RuntimeStoreError('ROOT_NOT_ANCHORED', path, `the root stored at ${path} is not one the launcher's release roots lead to (${messageOf(error)}), so no release is installed or started from it; install Delorun again with its launcher`, ['reinstall'], { cause: error })
     }
   }
   return { shipped, root }

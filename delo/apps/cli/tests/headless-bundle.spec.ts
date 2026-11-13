@@ -92,7 +92,7 @@ describe('the headless-bundle migration', () => {
     mkdirSync(join(home, 'profiles', HEADLESS_PROFILE), { recursive: true })
     expect(await runProfileMigrations(home, HEADLESS_PROFILE, [migration], { stdout: () => undefined, stderr: () => undefined })).toEqual([HEADLESS_BUNDLE_MIGRATION])
     expect(recorded()).toEqual(['headless-bundle'])
-    expect(text.join('')).toContain('added Delo\'s guards to the headless profile')
+    expect(text.join('')).toContain('added Delorun\'s safety checks to the headless profile')
     expect(await runProfileMigrations(home, HEADLESS_PROFILE, [migration], { stdout: () => undefined, stderr: () => undefined })).toEqual([])
     expect(calls).toBe(1)
   })

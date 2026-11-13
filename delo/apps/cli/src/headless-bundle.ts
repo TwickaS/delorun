@@ -45,7 +45,7 @@ export function headlessBundleMigration(add: () => Promise<boolean>, output: Com
   return {
     id: HEADLESS_BUNDLE_MIGRATION,
     async run() {
-      if (await add()) output.stderr(`delorun: added Delo's guards to the ${HEADLESS_PROFILE} profile: the fetch guard, the instruction write consent, the full-access consent and the turn gate.\n`)
+      if (await add()) output.stderr(`delorun: added Delorun's safety checks to the ${HEADLESS_PROFILE} profile (the web fetch check and the questions before full access, instruction edits and scheduled work). This happens once.\n`)
       return true
     },
   }

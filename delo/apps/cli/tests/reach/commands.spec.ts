@@ -67,6 +67,8 @@ function reach(overrides: Partial<ReachDependencies> = {}): ReturnType<typeof cr
     tailscale: tailscale(),
     running: () => false,
     send: () => Promise.resolve([{ stream: 'out', line: '' }] as never),
+    ask: () => Promise.resolve('y'),
+    terminal: true,
     ...overrides,
   })
 }
@@ -84,11 +86,11 @@ describe('delorun reach', () => {
     expect(row.listenerPort).toBeGreaterThanOrEqual(LISTENER_PORT_RANGE.min)
     expect(row.listenerPort).toBeLessThanOrEqual(LISTENER_PORT_RANGE.max)
     for (const line of TRUST_STATEMENT) expect(out.stdout).toContain(line)
-    expect(out.stdout).toContain('It starts with Delo')
+    expect(out.stdout).toContain('It starts with Delorun')
     expect(calls.flat()).not.toContain('sudo')
     // Pins the choice made once: turning it on again keeps the recorded port.
     await reach({ running: () => true }).run(['on', 'tailscale'], context)
-    expect(out.stderr).toContain('Restart Delo to apply it')
+    expect(out.stderr).toContain('Restart Delorun to apply it')
     expect(readReachRow(deloHome, 'default').listenerPort).toBe(row.listenerPort)
   })
 
@@ -104,7 +106,7 @@ describe('delorun reach', () => {
     expect(existsSync(join(deloHome, 'profiles', 'default', 'cordis.patch.yml'))).toBe(false)
   })
 
-  it('refuses while Funnel is on, and removes a rule it does not own, or any rule while Delo is stopped', async () => {
+  it('refuses while Funnel is on, and removes a rule it does not own, or any rule while Delorun is stopped', async () => {
     // Pins the Funnel refusal: remote access is not turned on for an address on the public internet.
     const funnel = fakeTailscale(HOST)
     funnel.config = { AllowFunnel: { [`${HOST}:443`]: true } }
@@ -162,7 +164,7 @@ describe('delorun reach', () => {
     expect(live.config).toEqual({ TCP: {}, Web: {} })
     expect(readReachRow(deloHome, 'default')).toEqual({ ...row, enabled: false })
     expect(out.stdout).toContain('Tailscale no longer serves this computer\'s studio.')
-    expect(out.stderr).toContain('Restart Delo to close it')
+    expect(out.stderr).toContain('Restart Delorun to close it')
     // Pins the confirmation: a rule still served after the removal fails the command with the reason.
     const stuck = fakeTailscale(HOST, { 'serve off': { code: 0, stdout: '', stderr: '' } })
     stuck.config = { Foreground: { session: ownRule(HOST, 443, row.listenerPort) } }
@@ -181,13 +183,13 @@ describe('delorun reach', () => {
 
   it('reports the row, and the running home\'s state', async () => {
     await reach().run(['status'], context)
-    expect(out.stdout).toContain('Tailscale private: off')
-    expect(out.stdout).toContain('Delo is not running')
+    expect(out.stdout).toContain('Remote access is off. Turn it on with delorun reach on tailscale.')
+    expect(out.stdout).toContain('Delorun is not running')
     await reach().run(['on', 'tailscale'], context)
     out.stdout = ''
     // The live state answers only the studio's own page, so a running home is pointed to, never asked over HTTP.
     await reach({ running: () => true }).run(['status'], context)
-    expect(out.stdout).toContain(`Tailscale private: on, https://${HOST}`)
+    expect(out.stdout).toContain(`Remote access is on over Tailscale at https://${HOST}`)
     expect(out.stdout).toContain('Settings → Devices')
   })
 
@@ -201,7 +203,7 @@ describe('delorun reach', () => {
     const ready = { option: 'tailscale-private', state: 'ready', address: `https://${HOST}` }
     await expect(reach({ running: () => true, send: answering(() => [{ ok: true, options: [ready] }]) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.ok)
     expect(sent).toEqual(['reach.apply'])
-    expect(out.stdout).toContain(`Live: tailscale-private is ready at https://${HOST}`)
+    expect(out.stdout).toContain(`Remote access over Tailscale is ready at https://${HOST}`)
     expect(out.stdout).toContain(`Open https://${HOST}/auth/sign-in on the phone`)
     const failures: [ResponseLine[] | Error, string][] = [
       [new Error('no socket'), 'the home process did not answer (no socket)'],
@@ -216,7 +218,7 @@ describe('delorun reach', () => {
       out.stderr = ''
       await expect(reach({ running: () => true, send: answering(op => (op === 'reach.apply' ? answer : [])) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
       expect(out.stderr).toContain(reason)
-      expect(out.stderr).toContain('Restart Delo to apply it: delorun stop, then delorun start.')
+      expect(out.stderr).toContain('Restart Delorun to apply it: delorun stop, then delorun start.')
     }
     out.stderr = ''
     // oxlint-disable-next-line prefer-promise-reject-errors -- a socket library that rejects with a bare value.
@@ -227,19 +229,19 @@ describe('delorun reach', () => {
     out.stderr = ''
     const blocked = { option: 'tailscale-private', state: 'blocked', cause: 'TAILSCALE_FUNNEL_ON', detail: 'Funnel is on' }
     await expect(reach({ running: () => true, send: answering(() => [{ ok: true, options: [blocked] }]) }).run(['on', 'tailscale'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stdout).toContain('Live: tailscale-private is blocked (TAILSCALE_FUNNEL_ON): Funnel is on')
+    expect(out.stdout).toContain('Remote access over Tailscale is blocked (TAILSCALE_FUNNEL_ON): Funnel is on')
     expect(out.stderr).toContain('did not make the address ready')
     // Off closes the running listener through the same request.
     out.stdout = ''
     await expect(reach({ running: () => true, send: answering(() => [{ ok: true, options: [{ option: 'tailscale-private', state: 'off' }] }]) }).run(['off'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).toContain('Live: tailscale-private is off')
+    expect(out.stdout).toContain('Remote access over Tailscale is off')
     out.stderr = ''
     await expect(reach({ running: () => true, send: answering(() => []) }).run(['off'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('Restart Delo to close it')
+    expect(out.stderr).toContain('Restart Delorun to close it')
     // Status reads the live state, and says when it cannot.
     out.stdout = ''
     await reach({ running: () => true, send: answering(() => [{ ok: true, options: [{ ...ready, state: 'degraded', cause: 'X' }] }]) }).run(['status'], context)
-    expect(out.stdout).toContain(`Live: tailscale-private is degraded at https://${HOST} (X): `)
+    expect(out.stdout).toContain(`Remote access over Tailscale is degraded at https://${HOST} (X): `)
     await reach({ running: () => true, send: answering(() => []) }).run(['status'], context)
     expect(out.stdout).toContain('its live state could not be read')
   })
@@ -262,7 +264,7 @@ describe('delorun reach', () => {
     await expect(unloaded?.apply()).resolves.toBeUndefined()
   })
 
-  it('reads a home\'s lock to tell whether Delo runs', async () => {
+  it('reads a home\'s lock to tell whether Delorun runs', async () => {
     expect(homeRuns(deloHome, 'default')).toBe(false)
     mkdirSync(runDirectory(deloHome, 'default'), { recursive: true, mode: 0o700 })
     const lock = await acquireHomeLock({ runDirectory: runDirectory(deloHome, 'default'), runtime: brandString<RuntimeVersion>('0.0.0'), probe: () => Promise.resolve('silent'), startId: newStartId() })
@@ -410,7 +412,7 @@ describe('delorun devices', () => {
 
   it('refuses an approval without a running home, a closed window, a refusal, a cancel and an unreadable list', async () => {
     await expect(devices({ running: () => false }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('Delo is not running')
+    expect(out.stderr).toContain('Delorun is not running')
     await expect(devices({ lines: [[{ ok: true, closesAt: 1, pending: [] }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     await expect(devices({ lines: [[{ ok: true, closesAt: 1 }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
     await expect(devices({ lines: [[{ ok: false, error: 'LOOPBACK_REQUIRED', detail: 'needs you' }]] }).command.run(['approve'], context)).resolves.toBe(EXIT.failed)
@@ -432,7 +434,7 @@ describe('delorun devices', () => {
 
   it('lists the home\'s devices from its records, and says when there is none', async () => {
     await expect(devices().command.run(['list'], context)).resolves.toBe(EXIT.ok)
-    expect(out.stdout).toContain('trusts no device yet')
+    expect(out.stdout).toContain('No device is trusted on this computer yet')
     const auth = new HomeAuth({ directory: join(deloHome, 'secrets', 'home-auth') })
     await auth.start()
     await auth.claim({ listener: 'loopback', host: '127.0.0.1:3080', source: 'local', ownerCode: (await auth.issueOwnerCode()).code, devicePublicKey: { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>('A'.repeat(43)), y: brandString<Base64Url>('B'.repeat(43)) }, label: 'This computer', address: brandString<StudioAddress>('http://127.0.0.1:3080') })
@@ -473,7 +475,7 @@ describe('delorun devices', () => {
     }
   })
 
-  it('removes a device through the home socket when Delo runs, or on the records when it does not', async () => {
+  it('removes a device through the home socket when Delorun runs, or on the records when it does not', async () => {
     const removed = devices({ lines: [[{ ok: true, removed: true, sessions: 2, connections: 1 }]] })
     await expect(removed.command.run(['remove', 'dev-1', '--profile', 'default'], context)).resolves.toBe(EXIT.ok)
     // Pins the channel: the removal goes over the home socket, which only the person's own command can use.
@@ -528,7 +530,7 @@ describe('the pieces the commands share', () => {
     expect(readReachRow(deloHome, 'default')).toEqual({ ...REACH_OFF, listenerPort: 23_456, serveCheckIntervalMs: 5000 })
   })
 
-  it('keeps a recorded listener port unless it is unset, or held by another program while Delo is stopped', async () => {
+  it('keeps a recorded listener port unless it is unset, or held by another program while Delorun is stopped', async () => {
     const port = await chooseListenerPort(LISTENER_PORT_RANGE)
     await expect(listenerPortFor(port, false)).resolves.toBe(port)
     const held = createServer()
@@ -652,9 +654,9 @@ describe('delorun devices elevate', () => {
 
   it('refuses without a running home, on a refusal, a cancel and an unreadable list', async () => {
     await expect(devices({ running: () => false }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('Delo is not running, so no device holds an unlock')
+    expect(out.stderr).toContain('Delorun is not running, so no device holds an unlock')
     await expect(devices({ lines: [[{ ok: false, error: 'LOOPBACK_REQUIRED', detail: 'needs you' }]] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('the home refused: LOOPBACK_REQUIRED (needs you)')
+    expect(out.stderr).toContain('Delorun refused: LOOPBACK_REQUIRED (needs you)')
     const listed = { ok: true, pending: [REQUEST], running: [RUNNING] }
     await expect(devices({ lines: [[listed]], answers: [undefined] }).command.run(['elevate'], context)).resolves.toBe(EXIT.failed)
     expect(out.stderr).toContain('cancelled; nothing changed')

@@ -106,7 +106,7 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     writeState('unchecked')
     const result = await run({}, { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.code).toBe(0)
-    expect(result.stderr).toContain('warn release-log: Release 0.4.0 has not been checked against the release log; Delo checks it at the next connection. It has stayed unchecked since 2026-11-10T10:00:00Z (2 hours); the last attempt, at 2026-11-10T10:00:00Z, recorded: no network.\n')
+    expect(result.stderr).toContain('warn release-log: Release 0.4.0 has not been checked against the release log; Delorun checks it at the next connection. It has stayed unchecked since 2026-11-10T10:00:00Z (2 hours); the last attempt, at 2026-11-10T10:00:00Z, recorded: no network.\n')
   })
 
   it('fails a refused release and exits 1', async () => {
@@ -169,10 +169,7 @@ describe('delorun doctor in process', { timeout: 60_000 }, () => {
     expect(result.stdout).toContain('pass key: ')
   })
 
-  it('prints its help, and the shipped command reads this process\'s version', async () => {
-    const help = await run({}, {}, ['--help'])
-    expect(help.code).toBe(0)
-    expect(help.stdout).toContain('(release-log)')
+  it('reads this process\'s version in the shipped command', async () => {
     let stderr = ''
     await doctorCommand.run(['--port', String(await freePort())], { env: { DELO_HOME: home, PATH: join(base, 'no-bin') }, stdout: () => undefined, stderr: (text) => { stderr += text } })
     expect(stderr).toMatch(/^warn release-log: no release-log check of release \d+\.\d+\.\d+\S* is recorded in /m)

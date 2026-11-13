@@ -238,7 +238,7 @@ describe('the check', { timeout: 60_000 }, () => {
     expect(server.seen).toEqual([])
   })
 
-  it('update-notice-unanchored: a Delo its launcher did not start reads no root, asks the channel nothing and records why', async () => {
+  it('update-notice-unanchored: a Delorun its launcher did not start reads no root, asks the channel nothing and records why', async () => {
     const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor: launcherAnchor(home, {}), timeoutMs: 1_000, now: clock, publication })
     expect(record.failure).toBe('running-release-unreadable')
     expect(server.seen).toEqual([])
@@ -290,7 +290,7 @@ describe('the check', { timeout: 60_000 }, () => {
     expect(doctor.message).not.toMatch(/[\u0000-\u001f\u007f]|owned/u)
   })
 
-  it('names each failure in Delo\'s own words, and an unknown error as Delo\'s own failure', () => {
+  it('names each failure in Delorun\'s own words, and an unknown error as Delorun\'s own failure', () => {
     for (const failure of UPDATE_CHECK_FAILURES) expect(failureText(failure)).toMatch(/^[ -~]+$/u)
     expect(failureOf(new Error('anything'), false)).toBe('internal')
     expect(failureOf(new Error('anything'), true)).toBe('deadline')
@@ -492,7 +492,7 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
     expect(await update(['--check'])).toBe(EXIT.failed)
     expect(output.stderr).toBe('delorun update --check: the check failed, so nothing is known about a newer release: the release host did not answer, answered with an error, or sent a file larger than its limit\n')
     expect(await update(['--check'], false)).toBe(EXIT.failed)
-    expect(output.stderr).toContain('does not run from the runtime store')
+    expect(output.stderr).toContain('was not installed by the launcher')
     await expect(update(['--check', '--yes'])).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(update(['--check', '--no-data-copy'])).rejects.toMatchObject({ exit: EXIT.usage })
     expect(await updateCommand.run(['--check'], context())).toBe(EXIT.failed)
@@ -500,7 +500,7 @@ describe('delorun update --check and delorun doctor', { timeout: 60_000 }, () =>
 
   it('reports the last check in delorun doctor', async () => {
     const store = { version: RUNNING, store: true }
-    expect(await checkUpdate(home, PROFILE, { ...store, store: false }, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('does not run from the runtime store') })
+    expect(await checkUpdate(home, PROFILE, { ...store, store: false }, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('was not installed by the launcher') })
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'pass', message: expect.stringContaining('no update check is recorded') })
     await check()
     expect(await checkUpdate(home, PROFILE, store, () => platform, anchor.root)).toMatchObject({ status: 'warn', message: expect.stringContaining('Delorun 0.2.0 is available') })

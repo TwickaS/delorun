@@ -60,7 +60,7 @@ export function reachSection(tailscale: TailscaleRunner, running: (home: string,
       const row = readReachRowAt(path)
       const listenerPort = await listenerPortFor(row.listenerPort, false)
       writeReachRowAt(path, { ...row, enabled: true, address: tailscaleAddress(dnsName, DEFAULT_SERVE_PORT), servePort: DEFAULT_SERVE_PORT, listenerPort })
-      return 'Remote access starts with Delo. Add your phone with delorun devices approve, then type the code it shows.'
+      return 'Remote access starts with Delorun. Add your phone with delorun devices approve, then type the code it shows.'
     },
   }
 }

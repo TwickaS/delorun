@@ -69,7 +69,7 @@ export type ComposeKind = 'cli' | 'headless'
 
 /** What a composition is given. */
 export interface ComposeRequest {
-  /** The prepared Delo home. */
+  /** The prepared Delorun home. */
   readonly home: string
   /** The profile's name. */
   readonly profile: string
@@ -147,15 +147,15 @@ export interface ComposedStart {
   readonly values: ReadonlyMap<string, Readonly<Record<string, unknown>>>
   /** The prompts answer the values follow, in the CLI profile. */
   readonly prompts: PromptsAnswer | undefined
-  /** Where each required Delo row's package resolves, real path, for the rows whose package resolves. */
+  /** Where each required Delorun row's package resolves, real path, for the rows whose package resolves. */
   readonly rowPackages: readonly RowPackage[]
-  /** The directory this Delo's own packages lie in ({@link deloPackagesRoot}). */
+  /** The directory this Delorun's own packages lie in ({@link deloPackagesRoot}). */
   readonly packagesRoot: string
   /** Whether the npm mirror is on ({@link npmMirrorOf}); the start passes it to the Host as `DELO_NPM_MIRROR`. */
   readonly npmMirror: boolean
 }
 
-/** Where a required Delo row's package, or the bundle that declares it, resolves. */
+/** Where a required Delorun row's package, or the bundle that declares it, resolves. */
 export interface RowPackage {
   /** The row. */
   readonly id: string
@@ -190,7 +190,7 @@ export const HEADLESS_ROW_VALUES: Readonly<Record<string, Readonly<Record<string
 /** The service an update's or a stop's wait attaches its gate to. */
 export const TURN_GATE_SERVICE = 'deloTurnGate'
 
-/** The bundle that declares the `sandbox` row: upstream's base bundle, under every profile Delo boots. */
+/** The bundle that declares the `sandbox` row: upstream's base bundle, under every profile Delorun boots. */
 export const SANDBOX_BUNDLE = '@deepseek-ai/dsh-base'
 
 /**
@@ -278,8 +278,8 @@ function refuseHeadlessWithoutBundle(home: string, resolvedProfile: ResolvedProf
   if (resolvedProfile.profile.layers.some(layer => layer.packageName === HEADLESS_BUNDLE)) return
   const record = migrationsPath(home, resolvedProfile.profile.name)
   throw new CliError(EXIT.failed, [
-    `delorun headless: the ${resolvedProfile.profile.name} profile does not load Delo's headless bundle ${HEADLESS_BUNDLE}, which holds the guards a headless task runs under, so Delo did not start the task.`,
-    `To fix it, remove ${record} so that the next delorun headless adds the bundle again, or remove the folder ${resolvedProfile.profile.dir} so that Delo creates the profile again with it.`,
+    `delorun headless: the ${resolvedProfile.profile.name} profile does not load Delorun's headless bundle ${HEADLESS_BUNDLE}, which holds the guards a headless task runs under, so Delorun did not start the task.`,
+    `To fix it, remove ${record} so that the next delorun headless adds the bundle again, or remove the folder ${resolvedProfile.profile.dir} so that Delorun creates the profile again with it.`,
   ].join('\n'))
 }
 
@@ -324,7 +324,7 @@ function standInViolations(composed: ComposedStart): Violation[] {
   return composed.rowPackages.flatMap((row): Violation[] => {
     const path = relative(composed.packagesRoot, row.dir)
     if (path !== '..' && !path.startsWith(`..${sep}`) && !path.startsWith(sep) && !/^[A-Za-z]:/u.test(path)) return []
-    return [{ subject: row.id, problem: `loads ${row.packageName} from ${row.dir}, which is not this Delo's own copy in ${composed.packagesRoot}; a package of that name installed elsewhere, such as in the profile, cannot stand in for it`, sources: [] }]
+    return [{ subject: row.id, problem: `loads ${row.packageName} from ${row.dir}, which is not this Delorun's own copy in ${composed.packagesRoot}; a package of that name installed elsewhere, such as in the profile, cannot stand in for it`, sources: [] }]
   })
 }
 
@@ -344,7 +344,7 @@ function pluginManagerViolations(composed: ComposedStart, row: { readonly config
     .flatMap(patch => isRecord(patch.config) && Array.isArray(patch.config.protectedPlugins) ? patch.config.protectedPlugins.filter((name): name is string => typeof name === 'string') : [])
   const dropped = [...new Set(declared)].filter(name => !kept.has(name))
   if (dropped.length === 0) return []
-  return [{ subject: PLUGIN_MANAGER_ROW, problem: `no longer protects ${dropped.join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delo's bundle lists`, sources: sourcesSetting(composed.layers, PLUGIN_MANAGER_ROW, patch => isRecord(patch.config) && 'protectedPlugins' in patch.config) }]
+  return [{ subject: PLUGIN_MANAGER_ROW, problem: `no longer protects ${dropped.join(', ')}; a patch of the row replaces its whole config, so restate protectedPlugins with every name Delorun's bundle lists`, sources: sourcesSetting(composed.layers, PLUGIN_MANAGER_ROW, patch => isRecord(patch.config) && 'protectedPlugins' in patch.config) }]
 }
 
 /**
@@ -509,7 +509,7 @@ function sandboxViolations(composed: ComposedStart, row: BootedRow): Violation[]
  */
 function refusal(profile: string, violations: readonly Violation[], booted: boolean): CliError {
   return new CliError(EXIT.failed, [
-    `delorun: the profile ${profile} would ${booted ? 'run' : 'boot'} without protections Delo requires, so Delo ${booted ? 'stopped it' : 'did not start it'}:`,
+    `delorun: the profile ${profile} would ${booted ? 'run' : 'boot'} without protections Delorun requires, so Delorun ${booted ? 'stopped it' : 'did not start it'}:`,
     ...violations.map(violation => `  ${violation.subject} ${violation.problem}${violation.sources.length === 0 ? '' : ` (set in ${violation.sources.join(', ')})`}`),
     `To fix it, remove those settings from the files named, or start without your plugins with: delorun recover safe-mode --profile ${profile}`,
   ].join('\n'))

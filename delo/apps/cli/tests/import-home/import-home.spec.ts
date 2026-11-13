@@ -33,13 +33,13 @@ function homes(): { readonly person: string, readonly source: string, readonly t
 
 /** The questions a full run asks, in order. */
 const QUESTIONS = [
-  'Copy your chats, attachments and workspace list into the Delo home? [y/N] ',
+  'Copy your chats, attachments and workspace list into the Delorun home? [y/N] ',
   'Copy 1 profile as shown, with their held-back rows written where nothing reads them? [y/N] ',
-  'Copy these settings into the Delo home, with the held-back rows written where nothing reads them? [y/N] ',
-  'Copy these instructions? Every chat in Delo reads them. [y/N] ',
+  'Copy these settings into the Delorun home, with the held-back rows written where nothing reads them? [y/N] ',
+  'Copy these instructions? Every chat in Delorun reads them. [y/N] ',
   'Show the instructions of the skill "review"? [y/N] ',
   'Copy 1 skill? A skill can tell the agent what to do. [y/N] ',
-  'Copy 1 stored key (DEEPSEEK_API_KEY) into the Delo home\'s credentials document, readable by you alone? [y/N] ',
+  'Copy 1 stored key (DEEPSEEK_API_KEY) into the Delorun home\'s credentials document, readable by you alone? [y/N] ',
 ]
 
 /** The paths each category lands, and the data that lands with any yes to the data. */
@@ -65,28 +65,28 @@ function heldFiles(target: string): string[] {
 }
 
 describe('delorun import-home', () => {
-  it('shows the whole preview on a dry run and writes nothing, not even the Delo home', async () => {
+  it('shows the whole preview on a dry run and writes nothing, not even the Delorun home', async () => {
     const { person, source, target } = homes()
     const before = snapshot(source)
     const run = await runCommand(['--dry-run'], { home: target, env: { HOME: person } })
     expect(run.code).toBe(EXIT.ok)
     expect(run.asked).toEqual([])
     expect(run.out).toContain(`DeepSeek Harness home: ${JSON.stringify(source)} (read only; nothing in it changes)`)
-    expect(run.out).toContain('Your chats and workspaces:\n  Chats: 2 chats to copy\n  Attachments: 1 file to copy\n  Workspaces: 1 registration, copied as the Delo home\'s workspace list\n    "work" at "/work": 1 chat\n')
+    expect(run.out).toContain('Your chats and workspaces:\n  Chats: 2 chats to copy\n  Attachments: 1 file to copy\n  Workspaces: 1 registration, copied as the Delorun home\'s workspace list\n    "work" at "/work": 1 chat\n')
     expect(run.out).toContain('Asked about one by one, and copied only if you say yes:')
     expect(run.out).toContain('      carried      "@deepseek-ai/dsh-base" (ships with DeepSeek Harness)')
     expect(run.out).toContain('      to install   "third-party-plugin" (from the registry, ^1.0.0)')
     expect(run.out).toContain('      not carried  "local-plugin" (installed from "file:/opt/local-plugin", which is not a registry version; if you trust it, add it again yourself)')
-    expect(run.out).toContain('      added        "@delo/bundle-local" (Delo\'s own bundle, which keeps Delo\'s privacy defaults in this profile)')
+    expect(run.out).toContain('      added        "@delo/bundle-local" (Delorun\'s own bundle, which keeps Delorun\'s privacy defaults in this profile)')
     expect(run.out).toContain('      "profiles/web/cordis.patch.yml" (the profile\'s patch layer): lands with 1 row: "ui-chat"\n        It holds 1 !!js expression; none of them is carried.\n')
     expect(run.out).toContain('          "webapp": it holds a !!js expression, which runs when the profile starts\n')
     expect(run.out).toContain('    "cordis.patch.yml" (the home patch, which applies to every profile): lands with 1 row: "ui-theme"\n')
     expect(run.out).toMatch(/ {6}Held back, written where nothing reads it, "archive\/stock-import\/import-[0-9a-f-]+\/held\/cordis\.patch\.yml":\n {8}"sandbox": it is not one of the settings the import carries: the studio's looks and layout, the language and the default model by name \(a row the import does not carry\)\n/u)
     expect(run.out).toContain('  Instructions: "AGENTS.md", 1 line, which every chat reads; shown before you are asked')
     expect(run.out).toContain('    "review": 1 file, 60 bytes; "Reviews a change"')
-    expect(run.out).toContain('    "DEEPSEEK_API_KEY": can be copied\n    "OTHER_KEY": not copied: only the DeepSeek key is offered; add other keys again in Delo\n')
-    expect(run.out).toContain('  1 entry: logs, which Delo writes its own of\n    "logs"')
-    expect(run.out).toContain('  1 entry: the install scripts the stock profile approved; a plugin\'s install script runs only after you approve it in Delo\n    "profiles/web/pnpm-workspace.yaml"')
+    expect(run.out).toContain('    "DEEPSEEK_API_KEY": can be copied\n    "OTHER_KEY": not copied: only the DeepSeek key is offered; add other keys again in Delorun\n')
+    expect(run.out).toContain('  1 entry: logs, which Delorun writes its own of\n    "logs"')
+    expect(run.out).toContain('  1 entry: the install scripts the stock profile approved; a plugin\'s install script runs only after you approve it in Delorun\n    "profiles/web/pnpm-workspace.yaml"')
     expect(run.out).toContain('Dry run: nothing was written.')
     expect(run.out).not.toContain(STOCK_SECRET)
     expect(existsSync(target)).toBe(false)
@@ -207,24 +207,24 @@ describe('delorun import-home', () => {
     expect(run.asked).toEqual([QUESTIONS[0]])
   })
 
-  it('refuses a Delo home that holds chats without --merge, and prints each reason with its code', async () => {
+  it('refuses a Delorun home that holds chats without --merge, and prints each reason with its code', async () => {
     const { person, target } = homes()
     mkdirSync(target, { mode: 0o700 })
-    put(target, 'sessions/--other--/d1/session.v4.jsonl.zstd', 'a Delo chat')
+    put(target, 'sessions/--other--/d1/session.v4.jsonl.zstd', 'a Delorun chat')
     put(target, 'sessions/--work--/s1/session.v4.jsonl.zstd', 'another chat with the same id')
     for (const args of [['--dry-run'], [], ['--merge', '--dry-run']]) {
       const run = await runCommand(args, { home: target, env: { HOME: person }, answers: ['y'] })
       expect(run.error).toBeInstanceOf(CliError)
       expect(run.asked).toEqual([])
       expect((run.error as CliError).message).toContain('delorun import-home: the import cannot go on, so nothing was imported:')
-      expect((run.error as CliError).message).toContain('DSH_IMPORT_ID_COLLISION: the Delo home already holds the chat "s1" with other content')
+      expect((run.error as CliError).message).toContain('DSH_IMPORT_ID_COLLISION: the Delorun home already holds the chat "s1" with other content')
     }
     expect(readFileSync(join(target, 'sessions/--work--/s1/session.v4.jsonl.zstd'), 'utf8')).toBe('another chat with the same id')
     const first = await runCommand([], { home: target, env: { HOME: person } })
     expect((first.error as CliError).message).toContain('DSH_IMPORT_HOME_HAS_CHATS')
   })
 
-  it('withdraws an interrupted import before it plans, keeps a file Delo wrote to since, and says so', async () => {
+  it('withdraws an interrupted import before it plans, keeps a file Delorun wrote to since, and says so', async () => {
     const { person, target } = homes()
     mkdirSync(target, { mode: 0o700 })
     const digest = (text: string): string => createHash('sha256').update(text).digest('hex')
@@ -232,16 +232,16 @@ describe('delorun import-home', () => {
     linkSync(join(target, STOCK_IMPORT_DIRECTORY, 'staging-x/files/AGENTS.md'), join(target, 'AGENTS.md'))
     put(target, `${STOCK_IMPORT_DIRECTORY}/staging-x/files/kept.md`, 'placed')
     linkSync(join(target, STOCK_IMPORT_DIRECTORY, 'staging-x/files/kept.md'), join(target, 'kept.md'))
-    writeFileSync(join(target, 'kept.md'), 'placed, then written to by Delo')
+    writeFileSync(join(target, 'kept.md'), 'placed, then written to by Delorun')
     put(target, `${STOCK_IMPORT_DIRECTORY}/${STOCK_IMPORT_JOURNAL}`, JSON.stringify({ v: 1, staging: 'staging-x', directories: [], entries: [
       { path: 'AGENTS.md', replace: false, sha256: digest('withdrawn notes') },
       { path: 'kept.md', replace: false, sha256: digest('placed') },
     ] }))
     const run = await runCommand([], { home: target, env: { HOME: person }, answers: ['y'] })
     expect(run.out).toContain('Withdrew an import that was interrupted: 1 file it had placed.')
-    expect(run.out).toContain('Left in place because Delo wrote to them since: "kept.md".')
+    expect(run.out).toContain('Left in place because Delorun wrote to them since: "kept.md".')
     expect(existsSync(join(target, 'AGENTS.md'))).toBe(false)
-    expect(readFileSync(join(target, 'kept.md'), 'utf8')).toBe('placed, then written to by Delo')
+    expect(readFileSync(join(target, 'kept.md'), 'utf8')).toBe('placed, then written to by Delorun')
     expect(existsSync(join(target, STOCK_IMPORT_DIRECTORY, 'staging-x'))).toBe(false)
   })
 
@@ -259,14 +259,14 @@ describe('delorun import-home', () => {
   it('takes --from with a leading ~, and refuses a missing stock home and a wrong command line with the usage code', async () => {
     const { target } = homes()
     const missing = await runCommand(['--from', join(target, 'nowhere'), '--dry-run'], { home: target })
-    expect((missing.error as CliError).message).toContain('DSH_IMPORT_SOURCE_UNUSABLE')
+    expect((missing.error as CliError).message).toContain('there is no DeepSeek Harness folder')
     for (const args of [['--max-size', '0'], ['--max-size', '1e9'], ['--max-size', '99999999999999999'], ['--nope'], ['extra']]) {
       expect(((await runCommand(args, { home: target, env: { HOME: '/' } })).error as CliError).exit).toBe(EXIT.usage)
     }
     const noHome = await runCommand(['--dry-run'], { home: target, env: { HOME: ' ' } })
     expect((noHome.error as CliError).message).toContain('give the DeepSeek Harness home with --from')
     const tilde = await runCommand(['--from', '~/no-such-stock-home-for-this-spec', '--dry-run'], { home: target })
-    expect((tilde.error as CliError).message).toContain('DSH_IMPORT_SOURCE_UNUSABLE')
+    expect((tilde.error as CliError).message).toContain('there is no DeepSeek Harness folder')
   })
 
   it('prints every name from the stock home with its controls escaped', async () => {

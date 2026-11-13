@@ -65,6 +65,7 @@ afterEach(() => {
 function recording(seen: RunProfileOptions[], stops: string[], overrides: readonly BootedRow[] = [], fatalRelease: HeadlessDependencies['fatalRelease'] = () => () => undefined): HeadlessDependencies {
   return {
     fatalRelease,
+    modelKey: () => Promise.resolve('sk-test'),
     prepareProfile: upstreamDependencies().prepareProfile,
     approvedPluginContent: NO_APPROVED_CONTENT,
     preStartSteps: upstreamDependencies().preStartSteps,
@@ -197,7 +198,7 @@ describe('delorun headless', { timeout: 60_000 }, () => {
   it('is the command delorun runs, over upstream\'s runner', () => {
     expect(headlessCommand.name).toBe('headless')
     expect(headlessDependencies().cwd()).toBe(process.cwd())
-    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'fatalRelease', 'loadEnvironment', 'preStartSteps', 'prepareProfile', 'runProfile'])
+    expect(Object.keys(headlessDependencies()).sort()).toEqual(['approvedPluginContent', 'cwd', 'fatalRelease', 'loadEnvironment', 'modelKey', 'preStartSteps', 'prepareProfile', 'runProfile'])
   })
 })
 

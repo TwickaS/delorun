@@ -98,7 +98,7 @@ export function createWorkspaceCommand(dependencies: WorkspaceDependencies): Cli
         }, positionals.slice(1))
       }
       if (action !== 'full-access') {
-        throw new CliError(EXIT.usage, `delorun workspace: ${action === undefined ? 'choose an action' : `unknown action ${JSON.stringify(action)}`}\n${USAGE}`)
+        throw new CliError(EXIT.usage, `delorun workspace: ${action === undefined ? 'choose what to change, full-access or external-agents' : `unknown action ${JSON.stringify(action)}, use full-access or external-agents`}.\n${USAGE}`)
       }
       const profile = selectProfile(values.profile, context.env)
       const home = (await resolveDeloHome(context.env)).path
@@ -173,7 +173,7 @@ async function entriesOf(home: string): Promise<ReadonlyMap<string, WorkspacePer
   const path = permissionStorePath(home)
   const read = await readPermissionStore(path)
   if (read.kind === 'refused') {
-    throw new CliError(EXIT.failed, `delorun workspace: Delo's record of full-access grants, ${path}, cannot be read (${read.problem}), so no grant counts and nothing was changed. Repair or remove that file, then run the command again.`)
+    throw new CliError(EXIT.failed, `delorun workspace: Delorun's record of full-access grants, ${path}, cannot be read (${read.problem}), so no grant counts and nothing was changed. Repair or remove that file, then run the command again.`)
   }
   return read.kind === 'readable' ? read.entries : new Map()
 }
@@ -259,7 +259,7 @@ async function change(where: Where, folder: string, on: boolean): Promise<ExitCo
     })
   } catch (error) {
     if (error instanceof CliError) throw error
-    throw new CliError(EXIT.failed, `delorun workspace: nothing was recorded, because Delo's record of full-access grants, ${path}, could not be changed (${reasonOf(error)}). Check that its folder belongs to you and that no other delorun command is changing it, then run ${again} again.`)
+    throw new CliError(EXIT.failed, `delorun workspace: nothing was recorded, because Delorun's record of full-access grants, ${path}, could not be changed (${reasonOf(error)}). Check that its folder belongs to you and that no other delorun command is changing it, then run ${again} again.`)
   }
   if (next === undefined) {
     return failed(context, `the full access of ${named} changed while you answered, so nothing was changed. Run ${again} again`)
@@ -271,7 +271,7 @@ async function change(where: Where, folder: string, on: boolean): Promise<ExitCo
   context.stdout(`Full access is off for ${named}; its chats start on the safer preset.\n`)
   const running = dependencies.runningProfiles(home)
   if (running.length > 0) {
-    context.stdout(`Delo runs in profile ${running.map(printable).join(', ')}: running chats there switch to the safer preset within a second.\n`)
+    context.stdout(`Delorun runs in profile ${running.map(printable).join(', ')}: running chats there switch to the safer preset within a second.\n`)
   }
   return EXIT.ok
 }

@@ -138,7 +138,7 @@ describe('the CLI profile\'s sandbox protection', () => {
     await expect(removeSandboxOverlay(home, 'default')).rejects.toThrow(/EISDIR|EPERM/)
   })
 
-  /** The upstream base bundle's bare row and Delo's bundle layer, whose `protectedHome` is an expression the overlay replaces. */
+  /** The upstream base bundle's bare row and Delorun's bundle layer, whose `protectedHome` is an expression the overlay replaces. */
   const BUNDLES = [
     ['@deepseek-ai/dsh-base', "- insert:\n    - id: sandbox\n      name: '@deepseek-ai/dsh-sandbox-local'\n"],
     ['@delo/bundle-local', '- id: sandbox\n  config:\n    protectedHome: !!js dshHomePath()\n    protectedHomeReadable: [runtimes]\n'],
@@ -180,7 +180,7 @@ describe('the CLI profile\'s sandbox protection', () => {
     expect(homePatchFile(home)).toBe(homePatchPath())
   })
 
-  it('replaces Delo\'s keys of the bundle layers and writes only the protection when no layer configures the row further', async () => {
+  it('replaces Delorun\'s keys of the bundle layers and writes only the protection when no layer configures the row further', async () => {
     const { home, osHome } = setUp()
     const protection = await protectionFor(home, osHome)
     const overlay = await writeSandboxOverlay(home, 'default', profileOf(BUNDLES), [], protection)
@@ -247,7 +247,7 @@ describe('the CLI profile\'s sandbox protection', () => {
     const { home, osHome } = setUp()
     const protection = await protectionFor(home, osHome)
     const profile = profileOf(BUNDLES, '- id: sandbox\n  config:\n    deniedSockets: !!js process.env.DENIED\n')
-    await expect(writeSandboxOverlay(home, 'default', profile, [], protection)).rejects.toThrow(`delorun: the sandbox row is configured with expressions (in ${profile.patchPath}); Delo adds its home protection to that row at start and can carry over plain values only`)
+    await expect(writeSandboxOverlay(home, 'default', profile, [], protection)).rejects.toThrow(`delorun: the sandbox row is configured with expressions (in ${profile.patchPath}); Delorun adds its home protection to that row at start and can carry over plain values only`)
     writeFileSync(homePatchFile(home), '- id: sandbox\n  config: !!js process.env.SANDBOX_CONFIG\n')
     await expect(writeSandboxOverlay(home, 'default', profileOf(BUNDLES), [], protection)).rejects.toThrow(`with expressions (in ${homePatchFile(home)})`)
     writeFileSync(homePatchFile(home), '- id: sandbox\n  config: 5\n')
@@ -258,7 +258,7 @@ describe('the CLI profile\'s sandbox protection', () => {
     const { home, osHome } = setUp()
     const protection = await protectionFor(home, osHome)
     const profile = profileOf(BUNDLES, '- id: sandbox\n  config:\n    runnerCommand: [/my-runner, --wrap]\n')
-    await expect(writeSandboxOverlay(home, 'default', profile, [], protection)).rejects.toThrow(`delorun: the sandbox row sets the runner itself (runnerCommand in ${profile.patchPath}); Delo's home protection requires the provider's built-in runner selection, so remove runnerCommand from that row in each file named`)
+    await expect(writeSandboxOverlay(home, 'default', profile, [], protection)).rejects.toThrow(`delorun: the sandbox row sets the runner itself (runnerCommand in ${profile.patchPath}); Delorun's home protection requires the provider's built-in runner selection, so remove runnerCommand from that row in each file named`)
   })
 
   it('refuses a runner the home patch sets over every profile, for either runner key', async () => {
@@ -277,7 +277,7 @@ describe('the CLI profile\'s sandbox protection', () => {
     const runner = ['@example/runner', '- id: sandbox\n  config:\n    runnerCommand: [/my-runner]\n    runnerFailureSignatures: [refused]\n'] as const
     const profile = profileOf([BUNDLES[0], runner, BUNDLES[1]], '- id: sandbox\n  config:\n    probeTimeoutMs: 5000\n')
     const source = `the bundle @example/runner (${profile.layers[1]?.patchPaths[0] ?? ''})`
-    await expect(writeSandboxOverlay(home, 'default', profile, [], protection)).rejects.toThrow(`(runnerCommand in ${source}; runnerFailureSignatures in ${source}); Delo's home protection requires the provider's built-in runner selection, so remove runnerCommand and runnerFailureSignatures from that row`)
+    await expect(writeSandboxOverlay(home, 'default', profile, [], protection)).rejects.toThrow(`(runnerCommand in ${source}; runnerFailureSignatures in ${source}); Delorun's home protection requires the provider's built-in runner selection, so remove runnerCommand and runnerFailureSignatures from that row`)
   })
 
   it('refuses a runner an overlay the start passes before its own sets, such as safe mode\'s', async () => {

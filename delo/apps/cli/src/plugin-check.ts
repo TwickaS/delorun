@@ -128,7 +128,7 @@ function dshLine(decision: AxisDecision, manifest: Readonly<Record<string, unkno
     case 'none':
       return `DSH axis: undeclared, so the plugin loads on any DSH. Declare "engines": { "dsh": "^${dsh}" }, or the range you test against, to state it.`
     case 'unreadable':
-      return 'DSH axis: engines.dsh or a DSH peer is declared in a form Delo cannot read.'
+      return 'DSH axis: engines.dsh or a DSH peer is declared in a form Delorun cannot read.'
     case 'unmet':
     case 'exempted':
     case 'not-carried':
@@ -146,15 +146,15 @@ function deloLine(decision: AxisDecision, delo: string): string {
   switch (decision.kind) {
     case 'none':
     case 'undeclared':
-      return `Delo axis: undeclared, so the plugin loads on any Delo and Delo promises it nothing. To target Delorun ${delo} and its patches, declare "engines": { "delo": "${targetRange(delo)}" }.`
+      return `Delorun axis: undeclared, so the plugin loads on any Delorun and Delorun promises it nothing. To target Delorun ${delo} and its patches, declare "engines": { "delo": "${targetRange(delo)}" }.`
     case 'unreadable':
-      return `Delo axis: engines.delo is declared in a form Delo cannot read, so Delo refuses the plugin. Declare a range such as "${targetRange(delo)}".`
+      return `Delorun axis: engines.delo is declared in a form Delorun cannot read, so Delorun refuses the plugin. Declare a range such as "${targetRange(delo)}".`
     case 'compatible':
-      return `Delo axis: engines.delo admits Delo ${delo}.`
+      return `Delorun axis: engines.delo admits Delorun ${delo}.`
     case 'unmet':
     case 'exempted':
     case 'not-carried':
-      return `Delo axis: engines.delo "${decision.requirement}" does not admit Delo ${delo}.`
+      return `Delorun axis: engines.delo "${decision.requirement}" does not admit Delorun ${delo}.`
   }
 }
 
@@ -175,7 +175,7 @@ export async function runPluginCheck(args: readonly string[], context: CommandCo
   const version = typeof manifest['version'] === 'string' ? manifest['version'] : '(no version)'
   const lines = [
     `${name}@${version}, read from ${join(directory, 'package.json')}; none of its files ran.`,
-    `This is Delo ${running.delo} on DSH ${running.dsh}.`,
+    `This is Delorun ${running.delo} on DSH ${running.dsh}.`,
   ]
   const axes = { from: running.dsh, to: running.dsh }
   const decisions = evaluatePluginAxes(manifest, { dsh: axes, delo: { from: running.delo, to: running.delo } }, { dsh: {}, delo: {} }, `${name}@${version}`)
@@ -190,7 +190,7 @@ export async function runPluginCheck(args: readonly string[], context: CommandCo
     verdict = `The installer refuses it: ${messageOf(error)}.`
     exit = EXIT.failed
   }
-  lines.push(verdict, 'Within one Delo minor the DSH version stays the same; contract C22 states what each Delo version promises a plugin.')
+  lines.push(verdict, 'Within one Delorun minor the DSH version stays the same; the plugin guide states what each Delorun version promises a plugin.')
   // Every line can carry the manifest's own strings, so each is printed with the characters a terminal acts on escaped.
   context.stdout(`${lines.map(printable).join('\n')}\n`)
   return exit

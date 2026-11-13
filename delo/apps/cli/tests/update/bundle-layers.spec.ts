@@ -16,7 +16,7 @@ const runtime = join(base, 'runtime')
 const profileDir = join(base, 'profile')
 const v = (text: string): SemanticVersion => brandString<SemanticVersion>(text)
 
-/** The target the specs check against: DSH 0.3.0 and Delo 1.1.0 on Linux, with no exemption. */
+/** The target the specs check against: DSH 0.3.0 and Delorun 1.1.0 on Linux, with no exemption. */
 const OPTIONS: BundleLayerOptions = { anchors: bundleAnchors(runtime, profileDir), versions: { dsh: v('0.3.0'), delo: v('1.1.0') }, exemptions: {}, platform: 'linux' }
 
 /** A patch inserting one row. */
@@ -201,8 +201,8 @@ describe('readBundleLayers', () => {
       writeBundle('target', 'both', bundle('both', { engines: { dsh: '^0.2.0', delo: '>=2.0.0' } }))
       const exemptions = { 'both@1.0.0': [v('0.3.0')] }
 
-      expect(await skipOf('delo-new')).toEqual({ package: 'delo-new', reason: 'it requires Delo >=2.0.0 and the target installs Delo 1.1.0', verification: 'verified' })
-      expect(await skipOf('both', { ...OPTIONS, exemptions })).toEqual({ package: 'both', reason: 'it requires DSH ^0.2.0 and the target runs DSH 0.3.0; it requires Delo >=2.0.0 and the target installs Delo 1.1.0', verification: 'verified' })
+      expect(await skipOf('delo-new')).toEqual({ package: 'delo-new', reason: 'it requires Delorun >=2.0.0 and the target installs Delorun 1.1.0', verification: 'verified' })
+      expect(await skipOf('both', { ...OPTIONS, exemptions })).toEqual({ package: 'both', reason: 'it requires DSH ^0.2.0 and the target runs DSH 0.3.0; it requires Delorun >=2.0.0 and the target installs Delorun 1.1.0', verification: 'verified' })
     })
 
     it('keeps reading the list after a bundle it skips', async () => {
@@ -215,7 +215,7 @@ describe('readBundleLayers', () => {
     })
   })
 
-  describe('metadata Delo cannot read', () => {
+  describe('metadata Delorun cannot read', () => {
     /**
      * Write a bundle and read its skip, which must be unverified.
      * @param name - the bundle.
@@ -231,7 +231,7 @@ describe('readBundleLayers', () => {
     }
 
     it('names a package.json that is not JSON, or not an object', async () => {
-      expect(await unverified('not-json', '{"name": ')).toMatch(/^Delo could not read its package\.json: SyntaxError: /u)
+      expect(await unverified('not-json', '{"name": ')).toMatch(/^Delorun could not read its package\.json: SyntaxError: /u)
       expect(await unverified('array', '[]')).toBe('its package.json is not a JSON object')
     })
 
@@ -245,17 +245,17 @@ describe('readBundleLayers', () => {
     })
 
     it('names engines, a peer range or a mismatched bundle\'s identity in a form upstream refuses', async () => {
-      expect(await unverified('null-engines', bundle('null-engines', { engines: null }))).toBe('its package.json declares engines in a form Delo cannot read')
-      expect(await unverified('number-dsh', bundle('number-dsh', { engines: { dsh: 3 } }))).toBe('its package.json declares engines in a form Delo cannot read')
-      expect(await unverified('number-delo', bundle('number-delo', { engines: { delo: false } }))).toBe('its package.json declares engines in a form Delo cannot read')
-      expect(await unverified('number-peer', bundle('number-peer', { peerDependencies: { 'left-pad': 1 } }))).toBe('its package.json declares peerDependencies in a form Delo cannot read')
-      expect(await unverified('nameless', { version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } }, engines: { dsh: '^0.2.0' } })).toBe('its package.json declares its name or version in a form Delo cannot read')
-      expect(await unverified('blank-version', bundle('blank-version', { version: ' ', engines: { dsh: '^0.2.0' } }))).toBe('its package.json declares its name or version in a form Delo cannot read')
+      expect(await unverified('null-engines', bundle('null-engines', { engines: null }))).toBe('its package.json declares engines in a form Delorun cannot read')
+      expect(await unverified('number-dsh', bundle('number-dsh', { engines: { dsh: 3 } }))).toBe('its package.json declares engines in a form Delorun cannot read')
+      expect(await unverified('number-delo', bundle('number-delo', { engines: { delo: false } }))).toBe('its package.json declares engines in a form Delorun cannot read')
+      expect(await unverified('number-peer', bundle('number-peer', { peerDependencies: { 'left-pad': 1 } }))).toBe('its package.json declares peerDependencies in a form Delorun cannot read')
+      expect(await unverified('nameless', { version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } }, engines: { dsh: '^0.2.0' } })).toBe('its package.json declares its name or version in a form Delorun cannot read')
+      expect(await unverified('blank-version', bundle('blank-version', { version: ' ', engines: { dsh: '^0.2.0' } }))).toBe('its package.json declares its name or version in a form Delorun cannot read')
     })
 
     it('names a patch file that is missing, not YAML or not a list of patch entries', async () => {
-      expect(await unverified('missing-patch', bundle('missing-patch'), {})).toMatch(/^Delo could not read its patch \.\/cordis\.patch\.yml: Error: ENOENT/u)
-      expect(await unverified('bad-yaml', bundle('bad-yaml'), { 'cordis.patch.yml': '- insert: [\n' })).toMatch(/^Delo could not read its patch \.\/cordis\.patch\.yml: YAMLParseError: [^\n]+$/u)
+      expect(await unverified('missing-patch', bundle('missing-patch'), {})).toMatch(/^Delorun could not read its patch \.\/cordis\.patch\.yml: Error: ENOENT/u)
+      expect(await unverified('bad-yaml', bundle('bad-yaml'), { 'cordis.patch.yml': '- insert: [\n' })).toMatch(/^Delorun could not read its patch \.\/cordis\.patch\.yml: YAMLParseError: [^\n]+$/u)
       expect(await unverified('empty-patch', bundle('empty-patch'), { 'cordis.patch.yml': '' })).toBe('its patch ./cordis.patch.yml is not a list of patch entries')
       expect(await unverified('scalar-entry', bundle('scalar-entry'), { 'cordis.patch.yml': '- just text\n' })).toBe('its patch ./cordis.patch.yml holds an entry that is not a mapping')
       expect(await unverified('map-insert', bundle('map-insert'), { 'cordis.patch.yml': '- insert:\n    name: plugin\n' })).toBe('its patch ./cordis.patch.yml holds an insert that is not a list')

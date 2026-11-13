@@ -104,7 +104,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     const port = await freePort()
     const result = doctor(['--port', String(port)], { DEEPSEEK_API_KEY: GOOD_KEY })
     expect(result.status).toBe(0)
-    expect(result.stderr).toMatch(new RegExp(`^warn release-log: Release ${RUNNING.replaceAll('.', '\\.')} has not been checked against the release log; Delo checks it at the next connection\\. It has stayed unchecked since \\S+Z \\(2 days\\); the last attempt, at \\S+Z, recorded: no network\\.$`, 'm'))
+    expect(result.stderr).toMatch(new RegExp(`^warn release-log: Release ${RUNNING.replaceAll('.', '\\.')} has not been checked against the release log; Delorun checks it at the next connection\\. It has stayed unchecked since \\S+Z \\(2 days\\); the last attempt, at \\S+Z, recorded: no network\\.$`, 'm'))
   })
 
   it.runIf(POSIX)('passes an answering Docker engine and prints its version', async () => {
@@ -198,7 +198,7 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
     expect(lines.map(line => /^(?:pass|warn|fail) ([\w-]+): /.exec(line)?.[1]).sort()).toEqual(CHECK_NAMES)
     expect(lines.find(line => line.includes(' docker: '))).toMatch(/^(?:pass|warn) docker: /)
     expect(lines.find(line => line.includes(' port: '))).toMatch(/^(?:pass|fail) port: /)
-    expect(lines.find(line => / update: /.test(line))).toMatch(/^pass update: this Delo does not run from the runtime store/)
+    expect(lines.find(line => / update: /.test(line))).toMatch(/^pass update: this copy of Delorun was not installed by the launcher/)
     expect(result.status).toBe(lines.some(line => line.startsWith('fail ')) ? 1 : 0)
     expect(result.stderr).not.toMatch(/\n\s+at /)
     expect(result.stdout + result.stderr).not.toContain('sk-')
@@ -234,8 +234,8 @@ describe('delorun doctor', { timeout: 60_000 }, () => {
   it('prints help that says no model is contacted and no command runs, and exits 0', () => {
     const result = doctor(['--help'])
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('No model is contacted, no request is sent and no command runs')
-    expect(result.stdout).toContain('default: the profile\'s studio port, or 3080 when the profile sets none')
+    expect(result.stdout).toContain('No model is contacted and no request is sent')
+    expect(result.stdout).toContain('default: the profile\'s studio port, or 3080')
   })
 
   it('reads the key stored in the home credentials document before the environment', async () => {

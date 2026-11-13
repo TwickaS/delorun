@@ -1,4 +1,4 @@
-/** Delo's bundles in a CLI profile: linking them with captured output, and the refusals of a start that lost any. */
+/** Delorun's bundles in a CLI profile: linking them with captured output, and the refusals of a start that lost any. */
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -76,7 +76,7 @@ function logged(): string[] {
   })
 }
 
-describe('linking Delo\'s bundles', () => {
+describe('linking Delorun\'s bundles', () => {
   it('links each bundle the resolution does not supply, with its output in the home log and one progress line', async () => {
     const operations: Operation[] = []
     const make = linking(operations, [LOCAL_BUNDLE], async (onOutput) => {
@@ -87,7 +87,7 @@ describe('linking Delo\'s bundles', () => {
     })
     await linkDeloBundles(home, PROFILE, ['@deepseek-ai/dsh-base', LOCAL_BUNDLE, STUDIO_BUNDLE], make, report)
     expect(progress).toEqual([LINKING_PROGRESS, 'done\n'])
-    expect(LINKING_PROGRESS).toBe('Linking Delo\'s parts into the profile… ')
+    expect(LINKING_PROGRESS).toBe('Linking Delorun\'s parts into the profile… ')
     expect(operations).toHaveLength(1)
     expect(operations[0]?.args).toEqual(['add', `link:${String(carriedPackageDirectory(STUDIO_BUNDLE))}`])
     expect(operations[0]?.options).toMatchObject({ execution: 'service' })
@@ -98,7 +98,7 @@ describe('linking Delo\'s bundles', () => {
     ])
   })
 
-  it('prints nothing and runs nothing when every Delo bundle is supplied', async () => {
+  it('prints nothing and runs nothing when every Delorun bundle is supplied', async () => {
     const operations: Operation[] = []
     await linkDeloBundles(home, PROFILE, [LOCAL_BUNDLE, STUDIO_BUNDLE], linking(operations, [LOCAL_BUNDLE, STUDIO_BUNDLE], () => Promise.resolve(0)), report)
     expect(operations).toEqual([])
@@ -108,7 +108,7 @@ describe('linking Delo\'s bundles', () => {
   it('refuses a bundle this installation does not carry before it prints or runs anything', async () => {
     const operations: Operation[] = []
     await expect(linkDeloBundles(home, PROFILE, ['@delo/not-carried'], linking(operations, [], () => Promise.resolve(0)), report))
-      .rejects.toThrow('this installation of Delo does not carry @delo/not-carried, which the CLI profile default needs; reinstall Delo')
+      .rejects.toThrow('this installation of Delorun does not carry @delo/not-carried, which the CLI profile default needs; reinstall Delorun')
     expect(operations).toEqual([])
     expect(progress).toEqual([])
   })
@@ -139,25 +139,25 @@ describe('linking Delo\'s bundles', () => {
 })
 
 describe('the packages this installation carries', () => {
-  it('finds the directory of a Delo package it carries, and none for one it does not', () => {
+  it('finds the directory of a Delorun package it carries, and none for one it does not', () => {
     expect(carriedPackageDirectory(LOCAL_BUNDLE)).toMatch(/bundle-local\/$/u)
     expect(carriedPackageDirectory('@delo/not-carried')).toBeUndefined()
   })
 })
 
-describe('a profile that skipped a Delo bundle', () => {
-  it('starts when no Delo bundle was skipped, and is refused with each skipped bundle\'s reason and fix otherwise', () => {
+describe('a profile that skipped a Delorun bundle', () => {
+  it('starts when no Delorun bundle was skipped, and is refused with each skipped bundle\'s reason and fix otherwise', () => {
     expect(() => { refuseSkippedDeloBundles({ name: PROFILE, skippedBundles: [{ packageName: '@deepseek-ai/dsh-extra', reason: 'not installed' }] }) }).not.toThrow()
     expect(() => { refuseSkippedDeloBundles({ name: PROFILE, skippedBundles: [{ packageName: LOCAL_BUNDLE, reason: 'not installed' }] }) })
-      .toThrow(`Delo's bundle, so Delo did not start:\n  ${LOCAL_BUNDLE}: not installed\n  To fix it, run: delorun plugin --profile default add link:${String(carriedPackageDirectory(LOCAL_BUNDLE))}`)
+      .toThrow(`Delorun's bundle, so Delorun did not start:\n  ${LOCAL_BUNDLE}: not installed\n  To fix it, run: delorun plugin --profile default add link:${String(carriedPackageDirectory(LOCAL_BUNDLE))}`)
     expect(() => {
       refuseSkippedDeloBundles({ name: PROFILE, skippedBundles: [{ packageName: LOCAL_BUNDLE, reason: 'a' }, { packageName: '@delo/not-carried', reason: 'b' }] })
-    }).toThrow('  @delo/not-carried: b\n  To fix it, reinstall Delo, or run: delorun plugin --profile default install')
+    }).toThrow('  @delo/not-carried: b\n  To fix it, reinstall Delorun, or run: delorun plugin --profile default install')
   })
 })
 
-describe('the rows of Delo\'s bundles', () => {
-  it('collects the ids a Delo layer inserts, nested lists included, and none from other layers', () => {
+describe('the rows of Delorun\'s bundles', () => {
+  it('collects the ids a Delorun layer inserts, nested lists included, and none from other layers', () => {
     const ids = deloRowIds({
       layers: [
         { packageName: LOCAL_BUNDLE, patches: [{ insert: [{ id: 'delo-privacy', name: LOCAL_BUNDLE, config: { nested: [{ id: 'inner', name: '@delo/inner' }] } }, 'text', null] }, {}] },
@@ -167,7 +167,7 @@ describe('the rows of Delo\'s bundles', () => {
     expect([...ids].sort()).toEqual(['delo-privacy', 'inner'])
   })
 
-  it('reports the enabled Delo rows that did not activate, with a fix for each', () => {
+  it('reports the enabled Delorun rows that did not activate, with a fix for each', () => {
     const rows: BootedRow[] = [
       { id: 'delo-privacy', name: LOCAL_BUNDLE, disabled: false, state: 'not-imported' },
       { id: 'delo-other', name: '@delo/not-carried', disabled: false, state: 'pending' },
@@ -179,10 +179,10 @@ describe('the rows of Delo\'s bundles', () => {
     const inactive = inactiveDeloRows(rows, new Set(['inserted']))
     expect(inactive.map(row => row.id)).toEqual(['delo-privacy', 'delo-other', 'inserted'])
     const message = inactiveRowsRefusal(PROFILE, inactive).message
-    expect(message).toContain('plugins of Delo\'s bundles did not start in the CLI profile default, so Delo stopped:')
+    expect(message).toContain('plugins of Delorun\'s bundles did not start in the CLI profile default, so Delorun stopped:')
     expect(message).toContain(`  delo-privacy (${LOCAL_BUNDLE}) failed to import\n  To fix it, build it in this source checkout with: pnpm --filter ${LOCAL_BUNDLE} run build`)
-    expect(message).toContain('  delo-other (@delo/not-carried) waits for a service that never came\n  To fix it, reinstall Delo')
+    expect(message).toContain('  delo-other (@delo/not-carried) waits for a service that never came\n  To fix it, reinstall Delorun')
     expect(message).toContain('  inserted (@deepseek-ai/dsh-x) failed to start')
-    expect(inactiveRowsRefusal(PROFILE, [rows[0] as BootedRow]).message).toContain('a plugin of Delo\'s bundles did not start')
+    expect(inactiveRowsRefusal(PROFILE, [rows[0] as BootedRow]).message).toContain('a plugin of Delorun\'s bundles did not start')
   })
 })

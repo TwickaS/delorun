@@ -230,13 +230,13 @@ describe('checkPort', () => {
     }
   })
 
-  it('passes a port this home\'s own studio holds, and says Delo holds it', async () => {
+  it('passes a port this home\'s own studio holds, and says Delorun holds it', async () => {
     const { server, port } = await listenOnEphemeralPort()
     try {
       expect(await checkPort(resolveStudioPort(undefined, port, 'default'), () => Promise.resolve(port))).toEqual({
         name: 'port',
         status: 'pass',
-        message: `port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by Delo's studio, which runs for the profile default.`,
+        message: `port ${String(port)} on 127.0.0.1, the studio port of the profile default, is in use by Delorun's studio, which runs for the profile default.`,
       })
     } finally {
       await closeServer(server)
@@ -291,7 +291,7 @@ describe('checkHome', { timeout: 60_000 }, () => {
     const home = join(base, 'absent')
     const result = await checkHome({ DELO_HOME: home }, 'default')
     expect(result.status).toBe('warn')
-    expect(result.message).toContain(`the Delo home at ${home} does not exist yet; delorun setup creates it at mode 0700.`)
+    expect(result.message).toContain(`the Delorun home at ${home} does not exist yet; delorun setup creates it at mode 0700.`)
     expect(existsSync(home)).toBe(false)
   })
 
@@ -344,7 +344,7 @@ describe('checkHome', { timeout: 60_000 }, () => {
     expect(result.message).toContain('HOME_INVALID')
   })
 
-  it('fails a home inside upstream\'s ~/.dsh, which Delo never touches', async () => {
+  it('fails a home inside upstream\'s ~/.dsh, which Delorun never touches', async () => {
     const result = await checkHome({ DELO_HOME: join(homedir(), '.dsh', 'delo') }, 'default')
     expect(result.status).toBe('fail')
     expect(result.message).toContain('HOME_IS_DSH_HOME')

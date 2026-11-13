@@ -104,7 +104,7 @@ describe('the headless profile booted with upstream\'s real profile runner', { t
     expect(run.report.turnGate?.modelRequests).toBeGreaterThan(0)
   })
 
-  it('refuses --permission-mode danger-full-access inside the Host when the runner is called without Delo\'s pre-boot check', () => {
+  it('refuses --permission-mode danger-full-access inside the Host when the runner is called without Delorun\'s pre-boot check', () => {
     const run = headlessDriver('permission-mode')
     // Upstream's runner reports the refusal and ends the process with a failure code; the session never took the mode.
     expect(run.report.runnerCalls).toBe(1)
@@ -121,7 +121,7 @@ describe('the headless profile booted with upstream\'s real profile runner', { t
     expect(run.status).toBe(1)
     expect(run.report.outcome).toBe('refused')
     expect(run.report.runnerCalls).toBe(0)
-    expect(run.report.message).toContain('would boot without protections Delo requires, so Delo did not start it')
+    expect(run.report.message).toContain('would boot without protections Delorun requires, so Delorun did not start it')
     expect(run.report.message).toContain(problem)
   })
 })

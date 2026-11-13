@@ -75,7 +75,7 @@ const SHORT_REQUEST_ID = 8
 export function createDevicesCommand(dependencies: DevicesDependencies): CliCommand {
   return {
     name: 'devices',
-    summary: 'The devices this home trusts: list, approve, elevate, remove, code',
+    summary: 'The devices you let sign in to your studio: list, approve, elevate, remove, code',
     async run(args, context) {
       const [action, ...rest] = args
       // `remove` names its device first: `delorun devices remove <device id> [--profile <name>]`. A device id is base64url
@@ -169,7 +169,7 @@ async function list(where: Where): Promise<ExitCode> {
     devices = []
   }
   where.context.stdout(devices.length === 0
-    ? 'This home trusts no device yet. Add one with delorun devices approve.\n'
+    ? 'No device is trusted on this computer yet. Add one with delorun devices approve.\n'
     : `${devices.map(deviceLine).join('\n')}\n`)
   return EXIT.ok
 }
@@ -198,13 +198,14 @@ type Outcome = ExitCode | 'again'
  */
 async function approve(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.running(home, profile)) return failed(context, 'Delo is not running. Start it with delorun start, then run delorun devices approve again')
+  if (!dependencies.terminal) return failed(context, 'delorun devices approve needs a terminal to type the code in. Run it in a terminal on this computer')
+  if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running. Start it with delorun start, then run delorun devices approve again')
   context.stdout(`Waiting for a new device for up to 5 minutes. ${openLine(readReachRow(home, profile))}\n`)
   for (;;) {
     const opened = final(await dependencies.send(home, profile, { op: 'devices.approve', args: {} }))
-    if (opened.ok !== true) return failed(context, `the home refused: ${refusal(opened)}`)
+    if (opened.ok !== true) return failed(context, `Delorun refused: ${refusal(opened)}`)
     const pending = pendingOf(opened.pending)
-    if (pending === undefined) return failed(context, 'the home answered with a list of requests this command cannot read')
+    if (pending === undefined) return failed(context, 'Delorun answered with a list of requests this command cannot read')
     if (pending.length === 0) return failed(context, 'No device asked for approval before the window closed. Run delorun devices approve again')
     context.stdout(`Devices asking for approval:\n${pending.map((request, index) => `  ${String(index + 1)}. ${pendingLine(request)}`).join('\n')}\n`)
     const choice = await choose(where, pending)
@@ -222,7 +223,7 @@ async function approve(where: Where): Promise<ExitCode> {
 function openLine(row: TailscalePrivateRow): string {
   return row.enabled && row.address !== ''
     ? `Open ${signInAddress(row.address)} on it and choose Ask for approval.`
-    : 'Remote access is off for this profile, so a phone cannot reach this home yet: turn it on with delorun reach on tailscale. Then open the sign-in address it prints on the device and choose Ask for approval.'
+    : 'Remote access is off for this profile, so a phone cannot reach your studio: turn it on with delorun reach on tailscale. Then open the sign-in address it prints on the device and choose Ask for approval.'
 }
 
 /**
@@ -380,12 +381,13 @@ interface Unlock {
  */
 async function elevate(where: Where): Promise<ExitCode> {
   const { home, profile, context, dependencies } = where
-  if (!dependencies.running(home, profile)) return failed(context, 'Delo is not running, so no device holds an unlock. Start it with delorun start')
+  if (!dependencies.terminal) return failed(context, 'delorun devices elevate needs a terminal to type the code in. Run it in a terminal on this computer')
+  if (!dependencies.running(home, profile)) return failed(context, 'Delorun is not running, so no device holds an unlock. Start it with delorun start')
   for (;;) {
     const listed = final(await dependencies.send(home, profile, { op: 'devices.elevate', args: {} }))
-    if (listed.ok !== true) return failed(context, `the home refused: ${refusal(listed)}`)
+    if (listed.ok !== true) return failed(context, `Delorun refused: ${refusal(listed)}`)
     const unlocks = unlocksOf(listed)
-    if (unlocks === undefined) return failed(context, 'the home answered with a list of unlocks this command cannot read')
+    if (unlocks === undefined) return failed(context, 'Delorun answered with a list of unlocks this command cannot read')
     if (unlocks.length === 0) {
       context.stdout('No device asks to unlock sensitive actions, and none holds an unlock.\n')
       return EXIT.ok
@@ -515,7 +517,7 @@ async function remove(where: Where, positional: readonly string[]): Promise<Exit
   // open connections close at once; a stopped home's records are changed directly.
   if (dependencies.running(home, profile)) {
     const answer = final(await dependencies.send(home, profile, { op: 'devices.remove', args: { deviceId } }))
-    if (answer.ok !== true) return failed(context, `the home refused: ${refusal(answer)}`)
+    if (answer.ok !== true) return failed(context, `Delorun refused: ${refusal(answer)}`)
     sessions = Number(answer.sessions)
   } else {
     try {

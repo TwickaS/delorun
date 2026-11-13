@@ -204,7 +204,7 @@ describe('delorun workspace full-access', () => {
     expect(out.stdout).toContain('Full access is already on')
     await expect(again.run(['full-access'], context)).resolves.toBe(EXIT.ok)
     expect(out.stdout).toContain('/elsewhere  safer preset')
-    await expect(again.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose an action') })
+    await expect(again.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose what to change') })
   })
 
   it('asks at the terminal, reading a cancel as no answer', async () => {
@@ -457,7 +457,7 @@ describe('delorun mcp', () => {
   })
 
   it('names the action it does not know, and an action without its server', async () => {
-    await expect(mcp().command.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose an action') })
+    await expect(mcp().command.run([], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('choose what to change') })
     await expect(mcp().command.run(['remove', 'files'], context)).rejects.toMatchObject({ exit: EXIT.usage, message: expect.stringContaining('"remove" is not list') })
     await expect(mcp().command.run(['list', 'files'], context)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(mcp().command.run(['accept', 'files', 'extra'], context)).rejects.toMatchObject({ exit: EXIT.usage })
@@ -479,8 +479,8 @@ describe('delorun mcp', () => {
       await expect(mcp({ lines: [[line]] }).command.run(['list'], context)).rejects.toMatchObject({ exit: EXIT.failed, message: expect.stringContaining('cannot read') })
     }
     await expect(mcp({ lines: [[{ ok: false, error: 'CONSENT_UNAVAILABLE', detail: 'no consent' }]] }).command.run(['list'], context))
-      .rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun mcp: the home refused: CONSENT_UNAVAILABLE (no consent)' })
-    await expect(mcp({ lines: [] }).command.run(['list'], context)).rejects.toMatchObject({ message: 'delorun mcp: the home refused: NO_ANSWER' })
+      .rejects.toMatchObject({ exit: EXIT.failed, message: 'delorun mcp: Delorun refused: CONSENT_UNAVAILABLE (no consent)' })
+    await expect(mcp({ lines: [] }).command.run(['list'], context)).rejects.toMatchObject({ message: 'delorun mcp: Delorun refused: NO_ANSWER' })
   })
 
   it('prints none for a start without arguments or environment variables', async () => {
@@ -496,7 +496,7 @@ describe('delorun mcp', () => {
     expect(out.stdout).toContain('Accepted files; it starts the next time Delo starts.')
     const refused = mcp({ answers: [true], lines: [LISTED, [{ ok: false, error: 'CONSENT_FAILED' }]] })
     await expect(refused.command.run(['accept', 'files'], context)).resolves.toBe(EXIT.failed)
-    expect(out.stderr).toContain('delorun mcp: the home refused: CONSENT_FAILED\n')
+    expect(out.stderr).toContain('delorun mcp: Delorun refused: CONSENT_FAILED\n')
     const declined = mcp({ lines: [LISTED, [{ ok: false, error: 'STALE_REVIEW' }]] })
     await expect(declined.command.run(['decline', 'files'], context)).resolves.toBe(EXIT.failed)
     const idle = mcp({ answers: [true], lines: [LISTED, [{ ok: true, stopped: 0 }]] })

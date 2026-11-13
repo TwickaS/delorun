@@ -67,8 +67,8 @@ describe('a runtime the launcher did not start', () => {
     store(shipped.bytes)
     for (const env of [{}, { [DELO_LAUNCHER_ROOTS_ENV]: '' }]) {
       const anchor = launcherAnchor(home, env)
-      await expect(anchor.root()).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED', remedies: [], detail: expect.stringContaining(`this Delo was not started by its launcher, which names the release roots it ships in ${DELO_LAUNCHER_ROOTS_ENV}`) })
-      await expect(anchor.shipped()).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED', detail: expect.stringContaining('start Delo with its launcher') })
+      await expect(anchor.root()).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED', remedies: [], detail: expect.stringContaining(`this Delorun was not started by its launcher, which names the release roots it ships in ${DELO_LAUNCHER_ROOTS_ENV}`) })
+      await expect(anchor.shipped()).rejects.toMatchObject({ code: 'ROOT_NOT_ANCHORED', detail: expect.stringContaining('start Delorun with its launcher') })
     }
   })
 
@@ -76,7 +76,7 @@ describe('a runtime the launcher did not start', () => {
     store(shipped.bytes)
     await expect(launcherAnchor(home, { [DELO_LAUNCHER_ROOTS_ENV]: join(base, 'missing') }).root()).rejects.toMatchObject({
       code: 'ROOT_NOT_ANCHORED',
-      detail: expect.stringContaining(`the release roots of the launcher that started this Delo, at ${join(base, 'missing')}, do not read`),
+      detail: expect.stringContaining(`the release roots of the launcher that started this Delorun, at ${join(base, 'missing')}, do not read`),
     })
   })
 })

@@ -31,6 +31,7 @@ import { prepareHome, type CliCommand, type CommandContext, type CommandResult }
 import { EXIT, type ExitCode } from './exit.ts'
 import { refuseLauncherOptions, runHeadless, type HeadlessDependencies } from './headless.ts'
 import { useHomeShared } from './home-exclusion.ts'
+import { resolveModelKey } from './model-key.ts'
 import { carriedOptions, checkResolved, forgetRemovedPlugins, installsPackages, profileCheckSettings, recordAfterInstall, registryUrls, resolveOnly, runMirror, takeAllowedAdvisories, withProfile, type ProfileCheckSettings } from './plugin-install-check.ts'
 import { readProfileRegistry } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { ensureCopyImport } from './pnpm-import.ts'
@@ -244,6 +245,7 @@ export function headlessDependencies(): HeadlessDependencies {
     approvedPluginContent: upstream.approvedPluginContent,
     preStartSteps: upstream.preStartSteps,
     cwd: () => process.cwd(),
+    modelKey: ({ home, env, output }) => resolveModelKey({ ...output, env }, home, 'DEEPSEEK_API_KEY'),
     runProfile: options => runUpstreamProfile(options, { signals: true, failLoud: false }),
     loadEnvironment: upstream.loadEnvironment,
     fatalRelease: upstream.fatalRelease,
@@ -266,9 +268,9 @@ export async function headless(args: readonly string[], context: CommandContext,
   return runHeadless({ home: home.path, args, output: context, env: context.env }, dependencies)
 }
 
-/** `delorun headless <task>`: upstream's one-task headless profile, composed as every Delo Host is. */
+/** `delorun headless <task>`: upstream's one-task headless profile, composed as every Delorun Host is. */
 export const headlessCommand: CliCommand = {
   name: 'headless',
-  summary: 'Answer one task and exit, as dsh headless does, under Delo\'s protections',
+  summary: 'Answer one task and exit, as dsh headless does, under Delorun\'s protections',
   run: (args, context) => headless(args, context),
 }

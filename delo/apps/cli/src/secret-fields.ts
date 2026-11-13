@@ -211,7 +211,7 @@ async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: C
   for (const place of found) {
     const field = describeSecretField(place.entryId, place)
     const stays = (reason: string): void => {
-      notices.push(`${path} holds a value for ${field}, which Delo left in place because ${reason}. The profile history saves no new version until it is gone from the file. ${secretFieldRemedy(place.references.length > 0)}`)
+      notices.push(`${path} holds a value for ${field}, which Delorun left in place because ${reason}. The profile history saves no new version until it is gone from the file. ${secretFieldRemedy(place.references.length > 0)}`)
     }
     const target = moveTarget(place)
     if ('stays' in target) {

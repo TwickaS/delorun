@@ -28,7 +28,7 @@ import type { UpdateReleaseChannel } from '@delo/runtime-store'
 export function runtimePlatformOf(platform: string, arch: string): RuntimePlatform {
   const name = `${platform}-${arch}`
   const known = RUNTIME_PLATFORMS.find(candidate => candidate === name)
-  if (known === undefined) throw new Error(`Delo publishes no runtime for ${name}`)
+  if (known === undefined) throw new Error(`Delorun publishes no runtime for ${name}`)
   return known
 }
 

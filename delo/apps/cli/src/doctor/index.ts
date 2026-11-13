@@ -29,110 +29,30 @@
  *
  * @module @delo/cli/doctor
  */
-import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HOME_STATUS_TIMEOUT_MS } from '@delo/contract-home-layout'
 import type { HomeStatus } from '@delo/contract-home-process'
-import { processExists, readHomeLock, readProtectedFile, resolveDeloHome, runDirectory } from '@delo/home'
+import { processExists, readHomeLock, resolveDeloHome, runDirectory } from '@delo/home'
 import { queryHomeStatus } from '@delo/home-process'
-import { parseDocument } from 'yaml'
 import { parseOptions, type CliCommand, type CommandContext } from '../command.ts'
 import { CliError, EXIT } from '../exit.ts'
-import { applyLaunchEnvironment, loadDeloEnvironment } from '../launch-environment.ts'
+import { applyLaunchEnvironment } from '../launch-environment.ts'
+import { resolveModelKey } from '../model-key.ts'
 import { profileDirectory, selectProfile } from '../profile.ts'
 import { isSetupProviderId, profileModelSelection, routeKeyReference, SETUP_PROVIDERS } from '../setup/providers.ts'
 import { profileStudioPort } from '../setup/sections.ts'
-import { CREDENTIALS_FILENAME } from '../setup/writes.ts'
 import { studioAddress } from '../status.ts'
 import { escapeDirectories } from '../sandbox-protection.ts'
 import { deloVersion } from '../version.ts'
 import { appArmorRestrictsUserNamespaces, checkSandbox, firstExisting, runBwrapProbe } from './sandbox.ts'
-import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, STUDIO_DEFAULT_PORT, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
+import { checkDocker, checkHome, checkKey, checkPort, dockerProbeEnvironment, resolveStudioPort, runDockerVersion, type CheckName, type CheckResult, type KeySubject } from './checks.ts'
 import { checkImportRecord, checkReleaseLog, type DshImportRecordReader } from './records.ts'
 import { checkUpdate } from './update.ts'
 import { runtimePlatformOf } from '../update/channel.ts'
 import { runtimeOfFile } from '../update/runtime.ts'
 import { launcherAnchor } from '../update/trusted-root.ts'
-
-/** The `delorun doctor --help` text. */
-const DOCTOR_USAGE = [
-  'Usage: delorun doctor [--port <n>]',
-  '',
-  'Checks the Delo home (home), the Docker engine (docker), the DeepSeek API key\'s format (key), the studio\'s port (port) and,',
-  'on Linux, whether bubblewrap can sandbox commands (sandbox),',
-  'then reads the running release\'s recorded release-log check (release-log): verified, unchecked since when and why, or refused,',
-  'and the last check for a newer release (update), which sends no request.',
-  'Prints one line per check: pass on standard output, warn or fail on standard error.',
-  'Exit codes: 0 when no check fails, 1 when one fails, 2 for a wrong command line. Warnings do not change the exit code.',
-  '',
-  'No model is contacted, no request is sent and no command runs, except the read-only probe `docker version` of the Docker',
-  'engine and, on Linux, `bwrap --ro-bind / / true`, which runs `true` in an empty sandbox; no container starts. The update line reports the last check delorun made; delorun update --check makes one now.',
-  'The key is checked by its format alone, and it is never printed.',
-  '',
-  `  --port <n>  the loopback port to check, from 1 to 65535 (default: the profile's studio port, or ${String(STUDIO_DEFAULT_PORT)} when the profile sets none)`,
-  '',
-].join('\n')
-
-/** The layers `delorun start` loads after the stored reference, in the order the credential provider ranks them. */
-const ENVIRONMENT_LAYERS = ['process', 'project-env', 'user-env'] as const
-
-/**
- * @param value - a parsed YAML value.
- * @returns whether it is a plain mapping.
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
- * The model key stored in the home's credentials document under a reference. The
- * file is read under C1's protected-file rule. A YAML error is reported by its
- * code only, because the parser's message quotes the source line, which holds the key.
- * @param home - the resolved Delo home.
- * @param variable - the credential reference.
- * @returns the stored value, or `undefined` when the file or its reference is absent or empty.
- * @throws {HomeLayoutError} `SECRET_FILE_MODE` when the file is laxer than 0600.
- * @throws {Error} when the file is not a YAML document.
- */
-async function storedKey(home: string, variable: string): Promise<string | undefined> {
-  const path = join(home, CREDENTIALS_FILENAME)
-  if (!existsSync(path)) return undefined
-  const document = parseDocument((await readProtectedFile(path)).toString('utf8'), { uniqueKeys: true })
-  const [first] = document.errors
-  if (first !== undefined) throw new Error(`${path} is not a readable credentials document (${first.code})`)
-  const data: unknown = document.toJS()
-  const refs: unknown = isRecord(data) ? data['refs'] : undefined
-  const value: unknown = isRecord(refs) ? refs[variable] : undefined
-  return typeof value === 'string' && value.length > 0 ? value : undefined
-}
-
-/**
- * The model key the model would use. The stored reference wins; otherwise
- * the first non-empty value from the environment layers wins. The launch
- * variables are set first because upstream's `.env` loader resolves the Delo
- * home from `DSH_HOME`.
- * @param context - the command's environment and output.
- * @param home - the resolved Delo home.
- * @param profile - the CLI profile, for the launch variables.
- * @param variable - the credential reference the provider reads.
- * @returns the key, or `undefined` when no source sets it.
- * @throws {Error} with the loader's message when a `.env` file sets a name only the launching environment may set, a
- *   `DELO_` name among them.
- * @throws {HomeLayoutError} `SECRET_FILE_MODE` when the credentials document is laxer than 0600.
- */
-async function resolveKey(context: CommandContext, home: string, profile: string, variable: string): Promise<string | undefined> {
-  applyLaunchEnvironment(home, profile)
-  const layered = loadDeloEnvironment(process.cwd(), line => { context.stderr(line) })
-  const stored = await storedKey(home, variable)
-  if (stored !== undefined) return stored
-  for (const source of ENVIRONMENT_LAYERS) {
-    const value = layered.getFrom(variable, [source])?.value
-    if (value !== undefined && value.length > 0) return value
-  }
-  return undefined
-}
 
 /**
  * The provider whose key new chats need: the route of the profile's `agent-default-model` row, which setup, Settings →
@@ -165,7 +85,7 @@ async function keyCheck(context: CommandContext, profile: string): Promise<Check
   if (typeof subject === 'string') {
     return { name: 'key', status: 'warn', message: `new chats start on ${subject}, whose row names no key variable, so its adapter finds the key itself; doctor checks only a key in a named variable.` }
   }
-  return checkKey(await resolveKey(context, home.path, profile, subject.variable), subject)
+  return checkKey(await (applyLaunchEnvironment(home.path, profile), resolveModelKey(context, home.path, subject.variable)), subject)
 }
 
 /**
@@ -287,10 +207,6 @@ export function createDoctorCommand(environment: DoctorEnvironment): CliCommand 
     name: 'doctor',
     summary: 'Check Docker, the DeepSeek API key format, the home, the studio port, the sandbox, the release-log check and the last update check',
     async run(args, context) {
-      if (args.includes('--help') || args.includes('-h')) {
-        context.stdout(DOCTOR_USAGE)
-        return EXIT.ok
-      }
       const values = parseOptions('doctor', args, { port: { type: 'string' } })
       const option = values.port === undefined ? undefined : parsePort(values.port)
       const profile = selectProfile(undefined, context.env)

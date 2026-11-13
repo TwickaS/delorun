@@ -39,55 +39,58 @@ export function studioAddress(studio: string | undefined): URL | undefined {
 /**
  * The lines `delorun status` prints for a home process's answer.
  * @param status - the answer.
+ * @param verbose - whether to add the process id, the start id and the previous version.
  * @returns the lines.
  */
-function statusLines(status: HomeStatus): string {
+function statusLines(status: HomeStatus, verbose: boolean): string {
   const studio = studioAddress(status.studio)
   return [
-    `state: ${status.state}`,
-    `pid: ${String(status.pid)}`,
-    `startId: ${status.startId}`,
-    `runtime: ${status.runtime.running} (current ${status.runtime.current}${status.runtime.previous === undefined ? '' : `, previous ${status.runtime.previous}`})`,
-    `chats: ${String(status.chats)}`,
-    ...status.update === undefined ? [] : [`update: ${status.update.phase} to ${status.update.target}`],
-    ...studio === undefined ? [] : [`studio: ${studio.href}`, OPEN_HINT],
+    `Delorun is ${status.state}.`,
+    ...studio === undefined ? [] : [`Studio: ${studio.href}`],
+    `Version: ${status.runtime.running}${verbose && status.runtime.previous !== undefined ? ` (previous ${status.runtime.previous})` : ''}`,
+    `Running chats: ${String(status.chats)}`,
+    ...status.update === undefined ? [] : [`Update: ${status.update.phase} to ${status.update.target}`],
+    ...verbose ? [`Process id: ${String(status.pid)}`, `Start id: ${status.startId}`] : [],
+    ...studio === undefined ? [] : [OPEN_HINT],
     '',
   ].join('\n')
 }
 
-/** `delorun status [--profile <name>] [--json]`. */
+/** `delorun status [--verbose] [--profile <name>] [--json]`. */
 export const statusCommand: CliCommand = {
   name: 'status',
-  summary: 'Show the home, the CLI profile and the state of its home process',
+  summary: 'Show whether Delorun is running, its studio address and its running chats; --verbose adds process details',
   async run(args, context) {
-    const values = parseOptions('status', args, { profile: { type: 'string' }, json: { type: 'boolean', default: false } })
+    const values = parseOptions('status', args, { profile: { type: 'string' }, json: { type: 'boolean', default: false }, verbose: { type: 'boolean', default: false } })
     const profile = selectProfile(values.profile, context.env)
     const home = await resolveDeloHome(context.env)
     const json = values.json === true
+    const verbose = values.verbose === true
     if (!json) {
-      context.stdout(`home: ${home.path}\nprofile: ${profile}\n`)
+      if (verbose) context.stdout(`Home: ${home.path}\nProfile: ${profile}\n`)
+      else if (profile !== 'default') context.stdout(`Profile: ${profile}\n`)
       if (home.ignoredDshHome !== undefined) {
-        context.stdout(`note: ${DSH_HOME_ENV} is set to ${home.ignoredDshHome}; delorun ignores it and runs with ${DSH_HOME_ENV}=${home.path}\n`)
+        context.stdout(`Note: ${DSH_HOME_ENV} is set to ${home.ignoredDshHome}; Delorun ignores it and uses ${DSH_HOME_ENV}=${home.path}\n`)
       }
     }
     const record = readHomeLock(runDirectory(home.path, profile))
     if (record === undefined || !holderAlive(record)) {
       if (json) context.stdout(`${JSON.stringify({ ok: false, state: 'not-running' })}\n`)
-      else context.stdout(record === undefined ? 'state: not running\n' : `state: not running (a lock left by process ${String(record.pid)}, which has exited, is replaced at the next start)\n`)
+      else context.stdout('Delorun is not running. Start it with delorun start.\n')
       return EXIT.notRunning
     }
     let answer
     try {
       answer = await queryHomeStatus(home.path, profile, HOME_STATUS_TIMEOUT_MS)
     } catch (error) {
-      context.stderr(`delorun status: process ${String(record.pid)} holds the profile's lock but its update channel did not answer: ${error instanceof Error ? error.message : String(error)}\n`)
+      context.stderr(`delorun status: Delorun looks to be running (process ${String(record.pid)}), but it did not answer: ${error instanceof Error ? error.message : String(error)}. Run delorun logs to see why.\n`)
       return EXIT.failed
     }
     if (!('state' in answer)) {
-      context.stderr(`delorun status: the home process refused the request: ${String(answer.error)}\n`)
+      context.stderr(`delorun status: Delorun refused the request: ${String(answer.error)}. Run delorun logs to see why.\n`)
       return EXIT.failed
     }
-    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer })}\n` : statusLines(answer as HomeStatus))
+    context.stdout(json ? `${JSON.stringify({ ok: true, status: answer })}\n` : statusLines(answer as HomeStatus, verbose))
     return EXIT.ok
   },
 }

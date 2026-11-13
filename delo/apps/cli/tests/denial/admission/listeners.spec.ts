@@ -14,7 +14,7 @@ import {
 } from './fixtures.ts'
 import { bootStudio, targetOf, type Registration, type Studio } from './studio.ts'
 
-/** Compile-time: Delo's contract types are values of the upstream seam's types. */
+/** Compile-time: Delorun's contract types are values of the upstream seam's types. */
 type Assignable<T extends U, U> = T
 export type ContractAdmissionFitsSeam = Assignable<Admission<PeerScope>, UpstreamAdmission>
 export type ContractPolicyFitsSeam = Assignable<ListenerPolicy, UpstreamPolicy>

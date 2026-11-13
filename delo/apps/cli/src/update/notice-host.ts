@@ -23,7 +23,7 @@ import { checkForUpdate, noticeLine, noticeOf, profileReader, readUpdateCheck, r
 
 /** What the Host's check needs. */
 export interface UpdateWatchOptions {
-  /** The resolved Delo home. */
+  /** The resolved Delorun home. */
   readonly home: string
   /** The CLI profile. */
   readonly profile: string

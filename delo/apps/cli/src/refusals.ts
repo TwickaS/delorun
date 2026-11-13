@@ -61,7 +61,7 @@ function profileSafetyRemedy(remedy: ProfileSafetyRemedy, context: RefusalContex
 
 /** How a {@link ProfileSafetyError} reads: whether the profile was left as it was, the code and detail, and its remedies. */
 const profileSafetyDescriber = refusalDescriber(ProfileSafetyError, (error, context) => ({
-  lead: error.refused ? 'Delo refused the change and left the profile as it was.' : 'Delo could not write the profile snapshot it takes before a change.',
+  lead: error.refused ? 'Delorun refused the change and left the profile as it was.' : 'Delorun could not write the profile snapshot it takes before a change.',
   reason: codedReason(error.code, error.detail),
   remedies: error.remedies.map(remedy => profileSafetyRemedy(remedy, context)),
 }))
@@ -80,13 +80,13 @@ function dataSafetyRefusal(error: DataSafetyError, context: RefusalContext): Ref
     case 'ROLLBACK_NEEDS_DATA_COPY':
       return homeProcessDescriber.describe(new HomeProcessError(error.code, error.detail), context)
     case 'DATA_RESTORE_INCONSISTENT':
-      return { lead: 'Delo did not restore the chat data: the restore\'s journal or directories are not in a state a restore leaves.', reason, remedies: [recoverStatus] }
+      return { lead: 'Delorun did not restore the chat data: the restore\'s journal or directories are not in a state a restore leaves.', reason, remedies: [recoverStatus] }
     case 'NOT_KEPT_DATA':
-      return { lead: 'Delo did not remove that path: it is not a copy or set-aside directory of this home.', reason, remedies: [`See what Delo keeps: delorun recover status${profileOption(context)}`] }
+      return { lead: 'Delorun did not remove that path: it is not a copy or set-aside directory of this home.', reason, remedies: [`See what Delorun keeps: delorun recover status${profileOption(context)}`] }
     case 'DATA_NOT_A_DIRECTORY':
-      return { lead: 'Delo did not copy the chat data: sessions/ or storages/ is a symbolic link or not a directory.', reason, remedies: [] }
+      return { lead: 'Delorun did not copy the chat data: sessions/ or storages/ is a symbolic link or not a directory.', reason, remedies: [] }
     case 'DATA_IN_USE':
-      return { lead: 'Delo did not remove or replace the copy: a restore or rollback runs, or an update record refers to it.', reason, remedies: [recoverStatus] }
+      return { lead: 'Delorun did not remove or replace the copy: a restore or rollback runs, or an update record refers to it.', reason, remedies: [recoverStatus] }
   }
 }
 
@@ -99,11 +99,11 @@ function updateReportRefusal(error: UpdateReportError): Refusal {
   const reason = codedReason(error.code, error.detail)
   switch (error.code) {
     case 'REPORT_TARGET_UNVERIFIED':
-      return { lead: 'Delo made no update report: the release did not verify.', reason, remedies: ['See every check: delorun verify'] }
+      return { lead: 'Delorun made no update report: the release did not verify.', reason, remedies: ['See every check: delorun verify'] }
     case 'REPORT_VERSION_INVALID':
-      return { lead: 'Delo made no update report: the version is not a semantic version.', reason, remedies: [] }
+      return { lead: 'Delorun made no update report: the version is not a semantic version.', reason, remedies: [] }
     case 'REPORT_DISPOSED':
-      return { lead: 'Delo stopped before the update report was ready.', reason, remedies: [] }
+      return { lead: 'Delorun stopped before the update report was ready.', reason, remedies: [] }
   }
 }
 
@@ -114,9 +114,9 @@ function updateReportRefusal(error: UpdateReportError): Refusal {
 export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
   refusalDescriber(CliError, error => ({ lead: error.message, remedies: [] })),
   refusalDescriber(SetupCancelled, error => ({ lead: error.message, remedies: [] })),
-  refusalDescriber(DeloVersionError, error => ({ lead: 'Delo could not read its own version.', reason: error.message, remedies: [] })),
-  refusalDescriber(DataInUseError, error => ({ lead: 'Delo did not go ahead: another process uses the chat data.', reason: error.detail, remedies: ['Wait for it to end, then run the same command again.'] })),
-  refusalDescriber(BundleReadError, error => ({ lead: `Delo could not read the metadata of the bundle ${error.bundle}.`, reason: codedReason(error.code, error.detail), remedies: [] })),
+  refusalDescriber(DeloVersionError, error => ({ lead: 'Delorun could not read its own version.', reason: error.message, remedies: [] })),
+  refusalDescriber(DataInUseError, error => ({ lead: 'Delorun did not go ahead: another process uses the chat data.', reason: error.detail, remedies: ['Wait for it to end, then run the same command again.'] })),
+  refusalDescriber(BundleReadError, error => ({ lead: `Delorun could not read the metadata of the bundle ${error.bundle}.`, reason: codedReason(error.code, error.detail), remedies: [] })),
   refusalDescriber(HostNotStoppedError, (error, context) => {
     // The refusal reads as it would alone, and the teardown that did not finish joins its reason.
     const refusal = describeFailure(error.cause, CLI_DESCRIBERS, context)
@@ -137,15 +137,15 @@ export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
   refusalDescriber(DataSafetyError, dataSafetyRefusal),
   refusalDescriber(UpdateReportError, updateReportRefusal),
   refusalDescriber(TrashError, (error, context) => ({
-    lead: 'Delo did not change the trash.',
+    lead: 'Delorun did not change the trash.',
     reason: codedReason(error.code, error.message),
     remedies: error.code === 'TRASH_ITEM_NOT_FOUND' ? [`See what the trash holds: delorun trash list${profileOption(context)}`] : [],
   })),
-  refusalDescriber(ReachError, error => ({ lead: 'Delo could not read or change what Tailscale serves for remote access.', reason: codedReason(error.code, error.detail), remedies: [] })),
-  refusalDescriber(UpdatePendingError, error => ({ lead: 'Delo started no new turn: an update is waiting for running chats.', reason: error.message, remedies: ['Send it again once Delo is back.'] })),
-  refusalDescriber(StartCheckPendingError, error => ({ lead: 'Delo started no new turn: its start check did not finish.', reason: error.message, remedies: ['Run delorun status and delorun logs to see what the start is doing.', 'Start Delo with delorun start, then send it again.'] })),
-  refusalDescriber(VerificationError, error => ({ lead: 'Delo refused a release file that did not verify.', reason: error.message, remedies: ['See every check: delorun verify'] })),
-  refusalDescriber(LogVerificationError, error => ({ lead: 'Delo refused the release: its release-log bundle did not verify.', reason: codedReason(error.failure, error.message), remedies: ['See every check: delorun verify'] })),
+  refusalDescriber(ReachError, error => ({ lead: 'Delorun could not read or change what Tailscale serves for remote access.', reason: codedReason(error.code, error.detail), remedies: [] })),
+  refusalDescriber(UpdatePendingError, error => ({ lead: 'Delorun started no new turn: an update is waiting for running chats.', reason: error.message, remedies: ['Send it again once Delorun is back.'] })),
+  refusalDescriber(StartCheckPendingError, error => ({ lead: 'Delorun started no new turn: its start check did not finish.', reason: error.message, remedies: ['Run delorun status and delorun logs to see what the start is doing.', 'Start Delorun with delorun start, then send it again.'] })),
+  refusalDescriber(VerificationError, error => ({ lead: 'Delorun refused a release file that did not verify.', reason: error.message, remedies: ['See every check: delorun verify'] })),
+  refusalDescriber(LogVerificationError, error => ({ lead: 'Delorun refused the release: its release-log bundle did not verify.', reason: codedReason(error.failure, error.message), remedies: ['See every check: delorun verify'] })),
   refusalDescriber(TileError, error => ({ lead: 'The release log served a tile that does not hold together.', reason: error.message, remedies: ['Report this if it repeats.'] })),
 ]
 

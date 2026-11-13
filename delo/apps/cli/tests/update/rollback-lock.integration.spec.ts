@@ -52,7 +52,7 @@ beforeEach(async () => {
     writeClosure(directory, files)
     return Promise.resolve(signedRelease(trusted.keys.targets, platform, '1.0.0', files))
   } })
-  const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: 'Before update to Delo 1.1.0', changedBy: { kind: 'person' } })
+  const snapshot = await recordSnapshot({ profileDir, homeDir: home, summary: 'Before update to Delorun 1.1.0', changedBy: { kind: 'person' } })
   record = { v: 1, from: v('1.0.0'), to: v('1.1.0'), phase: 'committed', startedAt: NOW.toISOString(), dataDiffers: false, copy: false, targetStarted: true, snapshot }
 }, 60_000)
 

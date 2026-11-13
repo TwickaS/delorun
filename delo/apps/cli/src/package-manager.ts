@@ -48,7 +48,7 @@ export function packageManagerFor(source: PackageManagerSource): ProfilePnpmInvo
   const root = closureRootOf(source.entry)
   if (root === undefined) return undefined
   const pnpm = join(root, ...CLOSURE_PNPM_ENTRY.split('/'))
-  if (!existsSync(pnpm)) throw new CliError(EXIT.failed, `delorun: this installation of Delo lacks its pnpm (${pnpm}), which plugin operations run; reinstall Delo`)
+  if (!existsSync(pnpm)) throw new CliError(EXIT.failed, `delorun: this installation of Delorun lacks its pnpm (${pnpm}), which plugin operations run; reinstall Delorun`)
   return {
     command: source.execPath,
     args: [pnpm],

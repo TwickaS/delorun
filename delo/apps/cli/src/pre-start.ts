@@ -17,7 +17,7 @@ import { runProfileMigrations, type ProfileMigration } from './profile-migration
 
 /** What a pre-start step is given. */
 export interface PreStartContext {
-  /** The prepared Delo home. */
+  /** The prepared Delorun home. */
   readonly home: string
   /** The profile about to boot. */
   readonly profile: string

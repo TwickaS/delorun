@@ -336,7 +336,7 @@ export function setNpmMirror(home: string, profileDir: string, installAnchor: st
   if (!existsSync(join(profileDir, 'package.json'))) throw new CliError(EXIT.failed, `delorun plugin mirror: ${profileDir} holds no profile; run delorun setup first`)
   const profile = loadProfileDirectory('delorun', profileDir, installAnchor)
   const row = composedRow(patchLayers(home, profile, []), INSTALL_CHECK_ROW)
-  if (row === undefined) throw new CliError(EXIT.failed, `delorun plugin mirror: the profile ${profile.name} has no ${INSTALL_CHECK_ROW} row, which holds the setting; it does not load Delo's bundle`)
+  if (row === undefined) throw new CliError(EXIT.failed, `delorun plugin mirror: the profile ${profile.name} has no ${INSTALL_CHECK_ROW} row, which holds the setting; it does not load Delorun's bundle`)
   const config = isRecord(row.config) ? row.config : {}
   if (!Object.values(config).every(isPlainValue)) throw new CliError(EXIT.failed, `delorun plugin mirror: the ${INSTALL_CHECK_ROW} row in ${profile.patchPath} sets a value with an expression; set npmMirror: ${String(on)} there by hand`)
   setPatchRow(profile.patchPath, { id: INSTALL_CHECK_ROW, config: { ...config, npmMirror: on } })

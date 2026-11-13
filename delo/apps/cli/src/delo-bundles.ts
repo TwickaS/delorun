@@ -20,7 +20,7 @@ import { LineCapture, type SurfaceLog } from '@delo/logs'
 import { CliError, EXIT } from './exit.ts'
 import { runsFromClosure } from './package-manager.ts'
 
-/** The npm scope of Delo's bundles and plugins. */
+/** The npm scope of Delorun's bundles and plugins. */
 export const DELO_BUNDLE_SCOPE = '@delo/'
 
 /** Profile plugin operations wait for the profile's package lock and pnpm's package lookups this long, as `dsh plugin` does. */
@@ -67,7 +67,7 @@ export function carriedPackageDirectory(packageName: string): string | undefined
 function packageFix(profile: string, packageName: string): string {
   const directory = carriedPackageDirectory(packageName)
   return directory === undefined
-    ? `reinstall Delo, or run: delorun plugin --profile ${profile} install`
+    ? `reinstall Delorun, or run: delorun plugin --profile ${profile} install`
     : `run: delorun plugin --profile ${profile} add link:${directory}`
 }
 
@@ -90,7 +90,7 @@ export interface LinkReport {
 }
 
 /** The start of the progress line a link prints. */
-export const LINKING_PROGRESS = 'Linking Delo\'s parts into the profile… '
+export const LINKING_PROGRESS = 'Linking Delorun\'s parts into the profile… '
 
 /**
  * Make each Delo bundle of a new CLI profile importable the way upstream makes
@@ -120,7 +120,7 @@ export async function linkDeloBundles(
     if (layered && importable.has(bundle)) return []
     const directory = carriedPackageDirectory(bundle)
     if (directory === undefined) {
-      throw new CliError(EXIT.failed, `delorun setup: this installation of Delo does not carry ${bundle}, which the CLI profile ${profile} needs; reinstall Delo`)
+      throw new CliError(EXIT.failed, `delorun setup: this installation of Delorun does not carry ${bundle}, which the CLI profile ${profile} needs; reinstall Delorun`)
     }
     return [{ bundle, directory }]
   })
@@ -160,9 +160,9 @@ export function refuseSkippedDeloBundles(profile: Pick<Profile, 'name' | 'skippe
   const skipped = profile.skippedBundles.filter(bundle => isDeloPackage(bundle.packageName))
   if (skipped.length === 0) return
   throw new CliError(EXIT.failed, [
-    `delorun: the profile ${profile.name} could not load Delo's ${skipped.length === 1 ? 'bundle' : 'bundles'}, so Delo did not start:`,
+    `delorun: the profile ${profile.name} could not load Delorun's ${skipped.length === 1 ? 'bundle' : 'bundles'}, so Delorun did not start:`,
     ...skipped.map(({ packageName, reason }) => `  ${packageName}: ${reason}\n  To fix it, ${packageFix(profile.name, packageName)}`),
-    'Without them the profile would start with DeepSeek Harness\'s own defaults: no Delo guard, and session logs uploaded to DeepSeek.',
+    'Without them the profile would start with DeepSeek Harness\'s own defaults: no Delorun guard, and session logs uploaded to DeepSeek.',
   ].join('\n'))
 }
 
@@ -233,7 +233,7 @@ export function inactiveDeloRows(rows: readonly BootedRow[], deloIds: ReadonlySe
 export function inactiveRowsRefusal(profile: string, rows: readonly BootedRow[]): CliError {
   const describe: Record<RowState, string> = { 'active': 'active', 'failed': 'failed to start', 'pending': 'waits for a service that never came', 'not-imported': 'failed to import' }
   return new CliError(EXIT.failed, [
-    `delorun: ${rows.length === 1 ? 'a plugin' : 'plugins'} of Delo's bundles did not start in the CLI profile ${profile}, so Delo stopped:`,
+    `delorun: ${rows.length === 1 ? 'a plugin' : 'plugins'} of Delorun's bundles did not start in the CLI profile ${profile}, so Delorun stopped:`,
     ...rows.map((row) => {
       const directory = carriedPackageDirectory(row.name)
       const fix = directory === undefined
@@ -241,6 +241,6 @@ export function inactiveRowsRefusal(profile: string, rows: readonly BootedRow[])
         : `build it in this source checkout with: pnpm --filter ${row.name} run build, then start again; if the profile does not list it, run: delorun plugin --profile ${profile} add link:${directory}`
       return `  ${row.id} (${row.name}) ${describe[row.state]}\n  To fix it, ${fix}`
     }),
-    'The warning above names the cause. Without these plugins Delo would run without its privacy settings and statements.',
+    'The warning above names the cause. Without these plugins Delorun would run without its privacy settings and statements.',
   ].join('\n'))
 }

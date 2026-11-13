@@ -195,7 +195,7 @@ export function describeOpening(outcome: OpenOutcome, profile: string): string {
     case 'browser-failed':
       return `No browser took the studio link. Run delorun open --print${flag} for a link that signs in once, within one minute.\n`
     case 'not-running':
-      return `Delo is not running for the profile ${profile}; start it with delorun start${flag}.\n`
+      return `Delorun is not running for the profile ${profile}; start it with delorun start${flag}.\n`
     case 'no-answer':
       return `The home process for the profile ${profile} is listening but did not answer in time; see delorun status${flag} and delorun logs${flag}.\n`
     case 'refused':

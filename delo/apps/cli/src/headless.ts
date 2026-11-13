@@ -41,6 +41,12 @@ export const REFUSED_LAUNCHER_OPTIONS = ['--profile', '--patch', '--from-default
 
 /** What a headless run calls outside this module; specs replace them. */
 export interface HeadlessDependencies extends ComposeDependencies {
+  /**
+   * Finds the DeepSeek API key the way the model would, before anything boots.
+   * @param request - the home, the output and the environment.
+   * @returns the key, or `undefined` when no source sets it.
+   */
+  readonly modelKey: (request: HeadlessRequest) => Promise<string | undefined>
   /** Loads the launch environment with upstream's `.env` layers. */
   readonly loadEnvironment: () => RunProfileOptions['environment']
   /** Boots the profile; upstream's `runProfile` in a real run. */
@@ -63,7 +69,7 @@ export interface HeadlessDependencies extends ComposeDependencies {
 
 /** What one headless run is given. */
 export interface HeadlessRequest {
-  /** The prepared Delo home. */
+  /** The prepared Delorun home. */
   readonly home: string
   /** The arguments after `headless`. */
   readonly args: readonly string[]
@@ -156,11 +162,11 @@ export async function refuseUngrantedFullAccess(home: string, args: readonly str
     case 'absent':
       break
     case 'refused':
-      throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, and Delo's record of full-access grants, ${permissionStorePath(home)}, cannot be read (${read.problem}), so no grant counts and Delo did not start the task. Repair or remove that file, then turn full access on for this folder again: delorun workspace full-access ${printable(shellQuote(workspace))} on`)
+      throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, and Delorun's record of full-access grants, ${permissionStorePath(home)}, cannot be read (${read.problem}), so no grant counts and Delorun did not start the task. Repair or remove that file, then turn full access on for this folder again: delorun workspace full-access ${printable(shellQuote(workspace))} on`)
     default:
       read satisfies never
   }
-  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delo did not start the task. Full access lets the task's commands read Delo's home and reach its channels. To grant it at this computer, run delorun workspace full-access ${printable(shellQuote(workspace))} on, or turn it on in the studio's Settings → Permissions; delorun headless in this folder then keeps that grant. Or run without full access.`)
+  throw new CliError(EXIT.failed, `delorun headless: ${requests.join(' and ')} asks for full access in ${JSON.stringify(workspace)}, which you have not granted full access, so Delorun did not start the task. Full access lets the task's commands read Delorun's home and reach its channels. To grant it at this computer, run delorun workspace full-access ${printable(shellQuote(workspace))} on, or turn it on in the studio's Settings → Permissions; delorun headless in this folder then keeps that grant. Or run without full access.`)
 }
 
 /**
@@ -171,7 +177,7 @@ export async function refuseUngrantedFullAccess(home: string, args: readonly str
 export function refuseLauncherOptions(args: readonly string[]): void {
   const refused = args.find(argument => REFUSED_LAUNCHER_OPTIONS.some(option => argument === option || argument.startsWith(`${option}=`)))
   if (refused === undefined) return
-  throw new CliError(EXIT.usage, `delorun headless: ${refused.split('=')[0]!} is refused: delorun headless boots the ${HEADLESS_PROFILE} profile through Delo's composition, with its sandbox protection last, so it takes no other profile and no extra layer; pass only the task's own arguments`)
+  throw new CliError(EXIT.usage, `delorun headless: ${refused.split('=')[0]!} is refused: delorun headless boots the ${HEADLESS_PROFILE} profile through Delorun's composition, with its sandbox protection last, so it takes no other profile and no extra layer; pass only the task's own arguments`)
 }
 
 /**
@@ -188,6 +194,9 @@ export function refuseLauncherOptions(args: readonly string[]): void {
  */
 export async function runHeadless(request: HeadlessRequest, dependencies: HeadlessDependencies): Promise<CommandResult> {
   refuseLauncherOptions(request.args)
+  if (await dependencies.modelKey(request) === undefined) {
+    throw new CliError(EXIT.failed, 'delorun headless: Delorun has no DeepSeek API key, so it cannot answer. Set DEEPSEEK_API_KEY in your shell, or run delorun setup key.')
+  }
   mkdirSync(runDirectory(request.home, HEADLESS_PROFILE), { recursive: true, mode: PRIVATE_DIR_MODE })
   await runPreStartSteps(dependencies.preStartSteps, { home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', successor: false, output: request.output })
   const composed = await composeDeloProfile({ home: request.home, profile: HEADLESS_PROFILE, kind: 'headless', output: request.output, env: request.env }, dependencies)

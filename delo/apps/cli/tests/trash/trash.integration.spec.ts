@@ -170,7 +170,7 @@ describe('delorun trash restore', () => {
 
     const refused = await refusal(trash(root, ['restore', id], { running: true }))
 
-    expect(refused.message).toContain('Delo is running for the profile default')
+    expect(refused.message).toContain('Delorun is running for the profile default')
     expect(refused.message).toContain('use the Trash section in the studio\'s Settings')
     expect((await trash(root, ['list'])).out).toContain(id)
   })
@@ -288,7 +288,7 @@ describe('delorun trash purge', () => {
     const id = await deleteChat(root, 'chat-a', 'chat')
 
     expect((await refusal(trash(root, ['purge', 'missing'], { answer: 'y' }))).message).toContain('no trash item carries the id "missing"')
-    expect((await refusal(trash(root, ['purge', id], { answer: 'y', running: true }))).message).toContain('Delo is running for the profile default')
+    expect((await refusal(trash(root, ['purge', id], { answer: 'y', running: true }))).message).toContain('Delorun is running for the profile default')
     expect((await trash(root, ['list'])).out).toContain(id)
   })
 })
@@ -335,7 +335,7 @@ describe('the command line', () => {
     const refused = await refusal(trash(newHome(), args))
 
     expect(refused.exit).toBe(2)
-    expect(refused.message).toContain('Usage: delorun trash')
+    expect(refused.message).toContain('Run delorun trash --help for usage.')
   })
 
   it('splits the profile flag out in both forms', () => {

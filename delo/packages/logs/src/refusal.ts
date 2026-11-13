@@ -11,8 +11,8 @@ import { LogsError } from './errors.ts'
 export const logsDescriber: RefusalDescriber<LogsError> = refusalDescriber(LogsError, (error) => {
   switch (error.code) {
     case 'PROFILE_INVALID':
-      return { lead: 'Delo refused the profile name for its logs.', reason: codedReason(error.code, error.message), remedies: [] }
+      return { lead: 'Delorun refused the profile name for its logs.', reason: codedReason(error.code, error.message), remedies: [] }
     case 'LOG_WRITE_FAILED':
-      return { lead: `Delo could not write or change the log${error.path === undefined ? '' : ` ${error.path}`}.`, reason: codedReason(error.code, error.message), remedies: [] }
+      return { lead: `Delorun could not write or change the log${error.path === undefined ? '' : ` ${error.path}`}.`, reason: codedReason(error.code, error.message), remedies: [] }
   }
 })

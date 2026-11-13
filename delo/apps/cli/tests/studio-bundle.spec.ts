@@ -80,7 +80,7 @@ describe('adding the studio bundle', () => {
     expect(calls[0]?.[1]).toMatch(/^link:.*bundle-studio\/$/u)
   })
 
-  it('leaves a profile that lists it, and one Delo\'s setup did not make, without asking for a linking', async () => {
+  it('leaves a profile that lists it, and one Delorun\'s setup did not make, without asking for a linking', async () => {
     const make = vi.fn(() => Promise.resolve(linking([])))
     manifest(JSON.stringify({ dsh: { profile: { bundles: [...UPSTREAM, LOCAL_BUNDLE, STUDIO_BUNDLE] } } }))
     expect(await addStudioBundle(home, 'default', make, report)).toBe(false)

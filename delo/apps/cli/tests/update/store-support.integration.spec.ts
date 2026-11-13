@@ -179,7 +179,7 @@ describe('storeUpdateSupport', () => {
   it('refuses an update with VERIFY_FAILED and a rollback report with ROLLBACK_TARGET_UNUSABLE when the launcher named no roots, installing nothing', async () => {
     const support = storeUpdateSupport(home, 'default', v('1.0.0'), SILENT, {})
     await expect(support.store.prepare(v('1.0.0'), () => {}, () => {})).rejects.toMatchObject({ code: 'VERIFY_FAILED', detail: expect.stringContaining('ROOT_NOT_ANCHORED') })
-    await expect(support.store.prepare(undefined, () => {}, () => {})).rejects.toMatchObject({ code: 'VERIFY_FAILED', detail: expect.stringContaining('start Delo with its launcher') })
+    await expect(support.store.prepare(undefined, () => {}, () => {})).rejects.toMatchObject({ code: 'VERIFY_FAILED', detail: expect.stringContaining('start Delorun with its launcher') })
     await expect(support.store.reportRollback(v('1.0.0'))).rejects.toMatchObject({ code: 'ROLLBACK_TARGET_UNUSABLE', detail: expect.stringContaining('ROOT_NOT_ANCHORED') })
     await expect(support.store.reportRollback(v('9.9.9'))).rejects.toMatchObject({ code: 'ROLLBACK_TARGET_UNUSABLE', detail: expect.stringContaining('NOT_INSTALLED') })
   })

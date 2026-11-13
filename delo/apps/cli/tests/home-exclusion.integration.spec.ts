@@ -118,7 +118,7 @@ describe('withHomeExclusive', () => {
       const refused = await withHomeExclusive({ home: root, profile: 'a', command: 'trash', instead: 'use the studio' }, async () => { ran = true }, answering('answered')).then(() => undefined, (error: unknown) => error)
 
       expect(refused).toBeInstanceOf(CliError)
-      expect((refused as CliError).message).toBe(`delorun trash: Delo is running for the profile work (process ${String(process.pid)}) and uses the stores this command changes; run delorun stop --profile work first, or use the studio`)
+      expect((refused as CliError).message).toBe(`delorun trash: Delorun is running for the profile work (process ${String(process.pid)}) and uses the stores this command changes; run delorun stop --profile work first, or use the studio`)
       expect(ran).toBe(false)
       expect(readHomeLock(runDirectory(root, 'a'))).toBeUndefined()
       expect(readHomeLock(runDirectory(root, 'work'))?.startId).toBe(running.record.startId)
@@ -155,7 +155,7 @@ describe('withHomeExclusive', () => {
 
     const refused = await withHomeExclusive({ home: root, profile: 'default', command: 'trash', instead: '' }, async () => undefined, leaving).then(() => undefined, (error: unknown) => error)
 
-    expect((refused as CliError).message).toBe('delorun trash: Delo is running for the profile default and uses the stores this command changes; run delorun stop --profile default first')
+    expect((refused as CliError).message).toBe('delorun trash: Delorun is running for the profile default and uses the stores this command changes; run delorun stop --profile default first')
   })
 })
 
@@ -242,7 +242,7 @@ describe('useHomeShared', () => {
     let stderr = ''
     const code = await main(['headless', 'say hello'], { env: { ...process.env, HOME: base, DELO_HOME: root }, stdout: () => {}, stderr: (text) => { stderr += text } })
     expect(code).toBe(EXIT.failed)
-    expect(stderr).toContain('delorun headless: an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot')
+    expect(stderr).toContain('delorun headless: an update of the profile default from Delorun 1.0.0 to Delorun 1.1.0 is snapshot')
     expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
   })
 })
@@ -274,7 +274,7 @@ describe('registerHomeProcess', () => {
     mkdirSync(join(root, 'data-copies'), { recursive: true })
     writeFileSync(join(root, 'data-copies', 'restore.json'), '{}')
     ;(await registerHomeProcess(root, 'default'))()
-    await expect(registerHomeProcess(root, 'work')).rejects.toThrow(new CliError(EXIT.failed, 'delorun start: an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot; wait for it to end, or run delorun recover status'))
+    await expect(registerHomeProcess(root, 'work')).rejects.toThrow(new CliError(EXIT.failed, 'delorun start: an update of the profile default from Delorun 1.0.0 to Delorun 1.1.0 is snapshot; wait for it to end, or run delorun recover status'))
     expect(readdirSync(join(root, 'run', DATA_USERS_DIRECTORY))).toEqual([])
   })
 
@@ -350,7 +350,7 @@ describe('finishInterruptedRestore', () => {
     const root = await interrupted()
     const pid = liveProcess()
     registerDataUser(root, 'shared', 'start', pid, 'work')
-    await expect(finishInterruptedRestore(root, 'default')).rejects.toThrow(new CliError(EXIT.failed, `delorun start: a restore of the chat data is unfinished and must complete before Delo starts, and the home process of the profile work (process ${String(pid)}) uses the chat data; wait for it to end, or stop it with delorun stop --profile work, then try again`))
+    await expect(finishInterruptedRestore(root, 'default')).rejects.toThrow(new CliError(EXIT.failed, `delorun start: a restore of the chat data is unfinished and must complete before Delorun starts, and the home process of the profile work (process ${String(pid)}) uses the chat data; wait for it to end, or stop it with delorun stop --profile work, then try again`))
     expect(readFileSync(join(root, 'data-copies', 'restore.json'), 'utf8')).toBe('{}')
     expect(ownRegistration(root)).toMatchObject({ mode: 'shared', command: 'start', profile: 'default' })
   })
@@ -402,7 +402,7 @@ describe('withHomeExclusive and the registered users', () => {
   it('refuses while an update is in progress, and passes an error that is not a refusal through', async () => {
     const root = newHome()
     await updateRecord(root, 'snapshot')
-    await expect(withHomeExclusive({ home: root, profile: 'default', command: 'import', instead: '' }, async () => undefined, answering('answered'))).rejects.toThrow(new CliError(EXIT.failed, 'delorun import: an update of the profile default from Delo 1.0.0 to Delo 1.1.0 is snapshot; wait for it to end, or run delorun recover status'))
+    await expect(withHomeExclusive({ home: root, profile: 'default', command: 'import', instead: '' }, async () => undefined, answering('answered'))).rejects.toThrow(new CliError(EXIT.failed, 'delorun import: an update of the profile default from Delorun 1.0.0 to Delorun 1.1.0 is snapshot; wait for it to end, or run delorun recover status'))
     writeFileSync(journalPath(root, 'default'), 'not a record')
     await expect(withHomeExclusive({ home: root, profile: 'default', command: 'import', instead: '' }, async () => undefined, answering('answered'))).rejects.not.toBeInstanceOf(CliError)
     expect(readHomeLock(runDirectory(root, 'default'))).toBeUndefined()

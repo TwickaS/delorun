@@ -91,7 +91,7 @@ function directory(base: string, prefix: string): string {
   return path
 }
 
-/** The provider as Delo's start configures it, from the real protection on this machine. */
+/** The provider as Delorun's start configures it, from the real protection on this machine. */
 async function provider(): Promise<LocalSandboxProvider> {
   const home = directory(tmpdir(), 'dsh-interop-home-')
   mkdirSync(join(home, 'run', 'default'), { recursive: true })

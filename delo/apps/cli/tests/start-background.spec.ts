@@ -44,7 +44,7 @@ describe('whether delorun start detaches', () => {
     expect(() => startChoice('', { foreground: true, background: true }, directory)).toThrow(/^delorun: --background/)
   })
 
-  it('tells a start that stays in the terminal how to keep Delo running after it closes', () => {
+  it('tells a start that stays in the terminal how to keep Delorun running after it closes', () => {
     expect(foregroundHint('default')).toContain('delorun start --background, or run delorun setup background to make that the default')
     expect(foregroundHint('work')).toContain('delorun start --background --profile work')
   })

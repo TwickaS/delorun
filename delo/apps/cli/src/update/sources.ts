@@ -35,7 +35,7 @@ const BUNDLE_TABLES_TIMEOUT_MS = 30_000
 
 /** What {@link storeReportSources} reads. */
 export interface StoreSourcesOptions {
-  /** The resolved Delo home. */
+  /** The resolved Delorun home. */
   readonly home: string
   /** The CLI profile. */
   readonly profile: string

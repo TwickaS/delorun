@@ -56,7 +56,7 @@ describe('checkReleaseLog', () => {
     expect(await checkReleaseLog(home, RELEASE, NOW)).toEqual({
       name: 'release-log',
       status: 'warn',
-      message: 'Release 0.4.0 has not been checked against the release log; Delo checks it at the next connection. It has stayed unchecked since 2026-11-10T09:00:00Z (3 hours); the last attempt, at 2026-11-10T11:50:00Z, recorded: the distributor did not answer again.',
+      message: 'Release 0.4.0 has not been checked against the release log; Delorun checks it at the next connection. It has stayed unchecked since 2026-11-10T09:00:00Z (3 hours); the last attempt, at 2026-11-10T11:50:00Z, recorded: the distributor did not answer again.',
     })
   })
 
