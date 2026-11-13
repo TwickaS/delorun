@@ -63,7 +63,7 @@ A release with version `<version>` (Delo's semantic version, without a leading `
 | `*.blockmap` | electron-updater's block maps of the desktop files. |
 | `latest.yml`, `latest-mac.yml` (stable); `beta.yml`, `beta-mac.yml` (beta) | electron-updater's feed files. They are not signed; the desktop app trusts only the manifest. |
 
-Release metadata that is not tied to one release is served as static files through GitHub Pages from a `Delo-Run` repository at `releases.delorun.com`: `root/<n>.root.json` for every root version `n` and `timestamp.json`. The host is not trusted: every file is signed, and a client refuses one that does not verify.
+Release metadata that is not tied to one release is served at `releases.delorun.com`: `root/<n>.root.json` for every root version `n` and `timestamp.json`. The same host serves every release file at `releases/download/v<version>/<file>`. Two mirrors serve the same bytes: the spare host `releases.delo.run` for every file, and the GitHub release of the tag for release files. A client tries a mirror only after the host before it fails on the network or by HTTP status, or serves bytes that do not match the signed reference. The hosts are not trusted: every file is signed, and a client refuses one that does not verify.
 
 ## Signature envelope
 

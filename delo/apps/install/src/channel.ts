@@ -18,7 +18,9 @@ import {
   RELEASE_FILE_SIZE_LIMITS,
   RELEASE_METADATA_ORIGIN,
   RELEASE_REPOSITORY_URL,
+  RELEASE_SPARE_ORIGIN,
   type ChannelPointer,
+  type FileRef,
   type ReleaseChannel as ChannelName,
   type ReleaseManifest,
   type RootMetadata,
@@ -30,7 +32,7 @@ import type { FilledRelease } from '@delo/runtime-store'
 import type { RuntimeChannel, ChannelRelease } from '@delo/runtime-store'
 import { parseRuntimeVersion } from '@delo/runtime-store'
 import { archiveFormat } from '@delo/release-formats/archive/entry'
-import { walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
+import { checkFileRef, walkRootChain, type TrustedRoot } from '@delo/release-formats/sign/verify'
 import { LOCAL_RELEASE_BUILDER } from '@delo/release-formats/sign/schemas'
 import { HomeLayoutError } from '@delo/home'
 import { ReleaseLogInternalError, type ReleaseLogTransport } from '@delo/release-verify/online'
@@ -44,8 +46,8 @@ import { readStoredRootBytes, readStoredRootChain, readStoredTimestamp, writeSto
 import { newestRootVersion, rootVersionOf, verifyChannelRelease, verifyDownloadedFile, verifyPlatformFiles, verifyStoredRoot, verifyTimestampUnderRoots, type VerifiedChannelRelease } from './verify.ts'
 
 /**
- * Where a release's files are published: contract C2's metadata host for `root/<n>.root.json` and `timestamp.json`,
- * and the GitHub release of the version's tag for every other file, named by its `FileRef`.
+ * Where a release's files are published: one origin for all of them, `root/<n>.root.json` and `timestamp.json`
+ * included, and the mirrors tried after it.
  */
 export interface ReleaseSource {
   /** The metadata host's origin, without a trailing slash. */
@@ -57,12 +59,41 @@ export interface ReleaseSource {
    * @returns the URL.
    */
   readonly files: (version: SemanticVersion, name: string) => string
+  /**
+   * Origins tried, in order, after the primary one fails to serve a file. Absent for a single-origin source, such as a
+   * staging channel.
+   */
+  readonly mirrors?: readonly ReleaseMirror[]
 }
 
-/** Contract C2's publication: metadata from `releases.delorun.com`, every other file from the version's GitHub release. */
+/** A mirror of a {@link ReleaseSource}; it serves the kinds of file it has a URL for and is skipped for the rest. */
+export interface ReleaseMirror {
+  /** The origin's host, as an install report names it. */
+  readonly name: string
+  /** The origin serving `root/<n>.root.json` and `timestamp.json`, without a trailing slash. */
+  readonly metadata?: string
+  /** The URL of one release file, as {@link ReleaseSource.files}. */
+  readonly files?: (version: SemanticVersion, name: string) => string
+}
+
+/**
+ * Contract C2's publication: every file from `releases.delorun.com`, then the version's GitHub release for release
+ * files, then the spare host `releases.delo.run` for every file. A mirror is tried only when the origin before it
+ * fails on the network or by HTTP status, or serves bytes that do not match the signed reference.
+ */
 export const RELEASE_SOURCE: ReleaseSource = {
   metadata: RELEASE_METADATA_ORIGIN,
-  files: (version, name) => `${RELEASE_REPOSITORY_URL}/releases/download/v${version}/${name}`,
+  files: (version, name) => `${RELEASE_METADATA_ORIGIN}/releases/download/v${version}/${name}`,
+  mirrors: [
+    { name: 'github.com', files: (version, name) => `${RELEASE_REPOSITORY_URL}/releases/download/v${version}/${name}` },
+    { name: new URL(RELEASE_SPARE_ORIGIN).hostname, metadata: RELEASE_SPARE_ORIGIN, files: (version, name) => `${RELEASE_SPARE_ORIGIN}/releases/download/v${version}/${name}` },
+  ],
+}
+
+/** One origin that can serve a file, with the URL it would serve it at. */
+interface Candidate {
+  readonly origin: string
+  readonly url: string
 }
 
 /** The most root versions one install walks past the root this home trusts; a timestamp that names more is refused unread. */
@@ -201,6 +232,56 @@ export class LauncherChannel implements RuntimeChannel {
     return { manifest: current.verified.manifest, timestamp: current.timestamp.version }
   }
 
+  /** The origins that serve a metadata file, primary first. */
+  private metadataCandidates(path: string): Candidate[] {
+    const primary = { origin: new URL(this.source.metadata).hostname, url: `${this.source.metadata}/${path}` }
+    const mirrors = (this.source.mirrors ?? []).flatMap(mirror => mirror.metadata === undefined ? [] : [{ origin: mirror.name, url: `${mirror.metadata}/${path}` }])
+    return [primary, ...mirrors]
+  }
+
+  /** The origins that serve a release file, primary first. */
+  private fileCandidates(version: SemanticVersion, name: string): Candidate[] {
+    const primary = { origin: new URL(this.source.files(version, name)).hostname, url: this.source.files(version, name) }
+    const mirrors = (this.source.mirrors ?? []).flatMap(mirror => mirror.files === undefined ? [] : [{ origin: mirror.name, url: mirror.files(version, name) }])
+    return [primary, ...mirrors]
+  }
+
+  /**
+   * Fetch one file from the first origin that serves bytes passing `check`. The next origin is tried only after a
+   * `DOWNLOAD_FAILED` (network or HTTP status) or a failed `check`; a refused download (`DOWNLOAD_REFUSED`) and the
+   * last origin's failure are thrown as they are. Bytes from a later origin pass the same `check`, and the skipped
+   * origins are reported as `origin-skipped`.
+   * @param candidates - the origins in order.
+   * @param name - the file's name for reports.
+   * @param get - fetches one URL.
+   * @param check - verifies what `get` returned against its signed reference; nothing to check when absent.
+   * @returns what `get` returned for the origin that served verified bytes.
+   */
+  private async fetchFrom<T>(candidates: readonly Candidate[], name: string, get: (url: string) => Promise<T>, check?: (value: T) => unknown): Promise<T> {
+    const skipped: Array<{ readonly origin: string, readonly reason: string }> = []
+    for (const [index, candidate] of candidates.entries()) {
+      const last = index === candidates.length - 1
+      let value: T
+      try {
+        value = await get(candidate.url)
+      } catch (error) {
+        if (last || !isInstallError(error, 'DOWNLOAD_FAILED')) throw error
+        skipped.push({ origin: candidate.origin, reason: messageOf(error) })
+        continue
+      }
+      try {
+        await check?.(value)
+      } catch (error) {
+        if (last) throw error
+        skipped.push({ origin: candidate.origin, reason: messageOf(error) })
+        continue
+      }
+      for (const failure of skipped) this.options.progress?.({ step: 'origin-skipped', name, failed: failure.origin, reason: failure.reason, served: candidate.origin })
+      return value
+    }
+    throw new InstallError('DOWNLOAD_FAILED', name, `no origin serves ${name}`)
+  }
+
   /**
    * Contract C2's client verification steps 1 to 3 and contract C18's bundle check over the channel's current release.
    * @param now - the clock, in Unix seconds.
@@ -210,7 +291,7 @@ export class LauncherChannel implements RuntimeChannel {
    * @returns what verified, with the bytes an install keeps.
    */
   private async current(now: number, target: RuntimeVersion | undefined, trust: 'record' | 'read-only'): Promise<Current> {
-    const stamp = await this.downloader.bytes(`${this.source.metadata}/timestamp.json`, RELEASE_FILE_SIZE_LIMITS.timestamp)
+    const stamp = await this.fetchFrom(this.metadataCandidates('timestamp.json'), 'timestamp.json', url => this.downloader.bytes(url, RELEASE_FILE_SIZE_LIMITS.timestamp))
     const roots = await this.rootChain(rootVersionOf(stamp.bytes))
     const stored = await readStoredTimestamp(this.options.home)
     const { root, timestamp } = verifyTimestampUnderRoots({ roots, timestamp: stamp.bytes, now, ...stored === undefined ? {} : { stored } })
@@ -229,8 +310,8 @@ export class LauncherChannel implements RuntimeChannel {
       asVersion(pointer.release)
       this.options.progress?.({ step: 'resolved', channel: this.options.channel, version: pointer.release })
     }
-    const manifest = await this.downloader.bytes(this.source.files(pointer.release, pointer.manifest.name), pointer.manifest.length)
-    const bundle = await this.downloader.bytes(this.source.files(pointer.release, bundleFileName(pointer.release)), RELEASE_LOG_BUNDLE_SIZE_LIMIT).catch((error: unknown) => {
+    const manifest = await this.fetchFrom(this.fileCandidates(pointer.release, pointer.manifest.name), pointer.manifest.name, url => this.downloader.bytes(url, pointer.manifest.length), downloaded => checkBytes(pointer.manifest, downloaded.bytes))
+    const bundle = await this.fetchFrom(this.fileCandidates(pointer.release, bundleFileName(pointer.release)), bundleFileName(pointer.release), url => this.downloader.bytes(url, RELEASE_LOG_BUNDLE_SIZE_LIMIT)).catch((error: unknown) => {
       // A release that publishes no bundle has no log entry to verify, which is the log check's failure, not the network's.
       if (isInstallError(error, 'DOWNLOAD_FAILED') && error.status === 404) {
         throw new InstallError('RELEASE_LOG_FAILED', bundleFileName(pointer.release), `release ${pointer.release} publishes no release-log bundle (the host answered 404), so its log entry cannot be verified; nothing was installed`, { cause: error })
@@ -276,9 +357,11 @@ export class LauncherChannel implements RuntimeChannel {
     try {
       const archivePath = join(scratch, artifacts.archive.name)
       this.options.progress?.({ step: 'downloading', name: artifacts.archive.name, bytes: artifacts.archive.length })
-      await this.downloader.file(this.source.files(manifest.version, artifacts.archive.name), Math.min(artifacts.archive.length, ARCHIVE_MAX_BYTES), archivePath)
-      await verifyDownloadedFile(artifacts.archive, archivePath)
-      const list = await this.downloader.bytes(this.source.files(manifest.version, artifacts.files.name), Math.min(artifacts.files.length, RELEASE_FILE_SIZE_LIMITS.files))
+      await this.fetchFrom(this.fileCandidates(manifest.version, artifacts.archive.name), artifacts.archive.name, async (url) => {
+        await rm(archivePath, { force: true })
+        await this.downloader.file(url, Math.min(artifacts.archive.length, ARCHIVE_MAX_BYTES), archivePath)
+      }, () => verifyDownloadedFile(artifacts.archive, archivePath))
+      const list = await this.fetchFrom(this.fileCandidates(manifest.version, artifacts.files.name), artifacts.files.name, url => this.downloader.bytes(url, Math.min(artifacts.files.length, RELEASE_FILE_SIZE_LIMITS.files)), downloaded => checkBytes(artifacts.files, downloaded.bytes))
       const files = verifyPlatformFiles({ root: release.root, manifest, platform: this.options.platform, bytes: list.bytes })
       const extracted = await extractArchive({ archive: archivePath, format, files, directory })
       return { manifest: resolved.manifestBytes, files: list.bytes, bundle: resolved.bundleBytes, staged: { fileList: artifacts.files.sha256, identities: extracted.identities } }
@@ -374,7 +457,7 @@ export class LauncherChannel implements RuntimeChannel {
     }
     for (let version = newest + 1; version <= target; version++) {
       const source = `${this.source.metadata}/root/${String(version)}.root.json`
-      const root = await this.downloader.bytes(source, RELEASE_FILE_SIZE_LIMITS.root)
+      const root = await this.fetchFrom(this.metadataCandidates(`root/${String(version)}.root.json`), source, url => this.downloader.bytes(url, RELEASE_FILE_SIZE_LIMITS.root))
       try {
         walkRootChain([...roots.slice(-1), root.bytes])
       } catch (error) {
@@ -383,6 +466,20 @@ export class LauncherChannel implements RuntimeChannel {
       roots.push(root.bytes)
     }
     return roots
+  }
+}
+
+/**
+ * Check downloaded bytes against their signed reference.
+ * @param ref - the reference.
+ * @param bytes - the downloaded bytes.
+ * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the length or SHA-256 differs.
+ */
+function checkBytes(ref: FileRef, bytes: Uint8Array): void {
+  try {
+    checkFileRef(ref, bytes)
+  } catch (error) {
+    throw new InstallError('INSTALL_VERIFY_FAILED', ref.name, messageOf(error), { cause: error })
   }
 }
 

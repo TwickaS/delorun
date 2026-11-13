@@ -18,12 +18,15 @@ import { uncheckedWarning } from '@delo/release-verify/start'
  * - `log-checked`: contract C18's online check found the release `verified`, or could not run (`unchecked`, with the
  *   reason). A check that failed refuses the install and reports no event.
  * - `downloading`: the runtime archive named by the signed manifest starts to download.
+ * - `origin-skipped`: an origin failed to serve a file (network or HTTP failure, or bytes that did not match the signed
+ *   reference) and the next origin was tried; `served` names the origin whose bytes were then used.
  */
 export type InstallProgress =
   | { readonly step: 'resolved', readonly channel: ReleaseChannel, readonly version: SemanticVersion }
   | { readonly step: 'signature-checked', readonly version: SemanticVersion, readonly rootVersion: number }
   | { readonly step: 'log-checked', readonly version: SemanticVersion, readonly state: 'verified' | 'unchecked', readonly detail?: string }
   | { readonly step: 'downloading', readonly name: string, readonly bytes: number }
+  | { readonly step: 'origin-skipped', readonly name: string, readonly failed: string, readonly reason: string, readonly served: string }
 
 /** An install step or the step its caller reports itself: the runtime store is about to publish the verified files. */
 export type InstallerProgress = InstallProgress | { readonly step: 'installing', readonly version: RuntimeVersion }
@@ -61,6 +64,8 @@ export function progressLines(event: InstallerProgress): readonly string[] {
       ]
     case 'downloading':
       return [`Downloading ${event.name} (${formatSize(event.bytes)}).\n`]
+    case 'origin-skipped':
+      return [`${event.failed} did not serve ${event.name} (${event.reason}); ${event.served} served it, and its bytes verified.\n`]
     case 'installing':
       return [`Installing release ${event.version}.\n`]
   }

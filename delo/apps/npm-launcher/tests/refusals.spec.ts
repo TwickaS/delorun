@@ -72,7 +72,7 @@ describe('a runtime store refusal', () => {
     const refusal = refusalFor(new RuntimeStoreError('RUNTIME_CHANGED', '/home/.delo/runtimes', 'what is wrong', remedies), CONTEXT)
     expect(refusal.text.split('\n').slice(2, -1)).toEqual([
       'What you can do:',
-      '  Install the release again: delorun update --profile work',
+      '  Repair the installation: npx delorun@latest repair (see Troubleshooting, #repair, in the guide).',
       '  Go back to the version before the last update: delorun recover rollback --profile work',
       '  Update the runtime: delorun update --profile work',
       '  Update the launcher to a version that reads this runtime.',

@@ -425,6 +425,9 @@ export const RELEASE_REPOSITORY_URL = 'https://github.com/Delo-Run/delo'
 /** Host of the release metadata (`root/<n>.root.json`, `timestamp.json`). */
 export const RELEASE_METADATA_ORIGIN = 'https://releases.delorun.com'
 
+/** The spare host that serves every release file, metadata included, when {@link RELEASE_METADATA_ORIGIN} fails. */
+export const RELEASE_SPARE_ORIGIN = 'https://releases.delo.run'
+
 /** Timestamp metadata lifetime: 3 days. */
 export const TIMESTAMP_LIFETIME_SECONDS = 259_200
 

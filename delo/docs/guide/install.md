@@ -66,7 +66,7 @@ Installing release 0.1.0.
 - **The public release log.** Every release is entered in a public, append-only log (Sigstore's), and an independent witness countersigns the log's state. The launcher checks the release's entry and the log's consistency. A log that answers with a contradiction stops the install. A log that cannot be reached leaves the release "not checked": the launcher installs it on its signature alone, prints a warning, and checks the log again at the next start that can reach it.
 - **At every start.** The launcher checks the installed files against their signed list, and hashes every file at least every 7 days; `DELO_RUNTIME_FULL_CHECK_DAYS` sets that interval from 0, every start, to 30 days. A start with a release installed needs no network.
 
-`delorun verify` runs these checks on demand and reports each one ([Daily use](daily-use.md#check-the-release-and-your-setup)). The launcher installs from releases.delorun.com and GitHub Releases only. It does not check the release's SBOM, and the npm package carries no build attestation. [What you trust when you use Delorun](trust.md) states what you still trust: Delorun's release keys and the hosts that serve releases.
+`delorun verify` runs these checks on demand and reports each one ([Daily use](daily-use.md#check-the-release-and-your-setup)). The launcher installs from releases.delorun.com, with GitHub Releases and a spare host of Delorun's as fallbacks, and from no other host. It does not check the release's SBOM, and the npm package carries no build attestation. [What you trust when you use Delorun](trust.md) states what you still trust: Delorun's release keys and the hosts that serve releases.
 
 ## Setup: Quick or Full
 

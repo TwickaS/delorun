@@ -278,7 +278,7 @@ describe('the built launcher against a local release', LIMIT, () => {
     const finished = await run(process.execPath, [join(built.directory, 'dist', 'bin.js'), '--version'], { PATH: process.env.PATH ?? '', DELO_HOME: join(served.directory, 'home') })
     expect(finished.status).toBe(1)
     expect(finished.stderr).toContain('This launcher cannot verify any release')
-    expect(finished.stderr).toContain('install Delo from its release page instead')
+    expect(finished.stderr).toContain('run npx delorun@latest, which ships the current release roots, instead')
     expect(readdirSync(join(served.directory, 'home', 'runtimes'))).toEqual([])
   })
 })

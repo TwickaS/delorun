@@ -4,7 +4,7 @@
     {
       "id": "update-check",
       "purpose": "Whether the release channel names a newer release: the channel's timestamp, any newer root file, and the newest release's manifest and release-log bundle, verified as an update verifies them.",
-      "hosts": ["releases.delorun.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"],
+      "hosts": ["releases.delorun.com", "releases.delo.run", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"],
       "when": "At a Host start when the last check is at least intervalHours old (24 by default), then every interval while the Host runs.",
       "sends": "Bare GET requests for the named files: no query, cookie, body, installation or plugin detail.",
       "switch": { "kind": "c16", "id": "update_check" },

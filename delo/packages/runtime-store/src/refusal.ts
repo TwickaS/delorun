@@ -18,7 +18,7 @@ export function storeRemedies(error: RuntimeStoreError, context: RefusalContext)
   return error.remedies.map((remedy) => {
     switch (remedy) {
       case 'reinstall':
-        return `Install the release again: delorun update${profile}`
+        return 'Repair the installation: npx delorun@latest repair (see Troubleshooting, #repair, in the guide).'
       case 'rollback':
         return `Go back to the version before the last update: delorun recover rollback${profile}`
       case 'update':

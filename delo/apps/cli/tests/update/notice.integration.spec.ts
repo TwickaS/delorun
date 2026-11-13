@@ -250,7 +250,7 @@ describe('the check', { timeout: 60_000 }, () => {
     try {
       vi.setSystemTime(new Date('2027-03-01T12:00:00.000Z'))
       const record = await checkForUpdate({ home, profile: PROFILE, platform, running: RUNNING, anchor, timeoutMs: 1_000, fetch: async (input) => { asked.push(String(input)); throw new Error('offline') } })
-      expect(asked).toEqual(['https://releases.delorun.com/timestamp.json'])
+      expect(asked).toEqual(['https://releases.delorun.com/timestamp.json', 'https://releases.delo.run/timestamp.json'])
       expect(record.failure).toBe('unreachable')
       expect(record.checked).toBe('2027-03-01T12:00:00.000Z')
     } finally {

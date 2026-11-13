@@ -292,7 +292,7 @@ export const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
  * else: the release-log check of contract C18 reads under a host list of its own, which names the log's origin and the
  * witness network's distributor, so neither list has to name the other's hosts.
  */
-export const RELEASE_DOWNLOAD_HOSTS = ['releases.delorun.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'] as const
+export const RELEASE_DOWNLOAD_HOSTS = ['releases.delorun.com', 'releases.delo.run', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'] as const
 
 /** A Delo release version naming one directory of the runtime store. */
 export type RuntimeVersion = Branded<'DeloRuntimeVersion'>
