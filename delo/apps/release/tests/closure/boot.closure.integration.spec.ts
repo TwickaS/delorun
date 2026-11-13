@@ -58,7 +58,7 @@ const cli = upstreamDependencies()
 let booted
 let rows = []
 try {
-  await startForeground({ home: home.path, profile, open: false, output: context }, {
+  await startForeground({ home: home.path, profile, open: false, output: context, env: context.env }, {
     ...cli,
     async runProfile(options) {
       booted = await cli.runProfile(options)

@@ -53,7 +53,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 
 - **CLI profile。** 由 `delorun setup` 创建、由 `delorun` 或 `delorun start` 启动的 profile：上游的 web 模板加上 `@delo/bundle-local` 与 `@delo/bundle-studio`。本页称为已构建的每项保护都在这里适用。
 - **`delorun headless`。** 它启动 home 的 `headless` profile：上游的 `headless` 模板加上 `@delo/bundle-headless`，运行在 C1 的沙箱 overlay 之下。抓取防护、指令写入、MCP 与计划任务的同意、完全访问同意以及回合闸门都适用，插件管理无法关闭它们，DeepSeek 的会话日志上传也与 CLI profile 一样关闭。会询问本人的防护会拒绝，因为该 profile 不组合任何批准应答者。对于没有在 home 的电脑上记录完全访问授权的工作目录，完全访问同意会拒绝完全访问；在参数或 `DSH_PERMISSION_MODE` 中请求完全访问也会在启动之前被提前拒绝。组合会拒绝不含该组合包的 `headless` profile，并且任务只在 Delo 检查过该组合包的行与服务之后才开始。该模板不挂载 MCP 客户端，也不挂载计划任务运行时；MCP 与计划任务的同意保护的是本人自己的 patch 添加的客户端或运行时。
-- **`delorun plugin`。** 它运行上游的 pnpm 操作，不带 Delo 的任何行：没有受保护的 home、没有被拒绝的套接字、没有同意、没有抓取防护，也没有隐私默认值。在 pnpm 运行之前，它把 profile 的包设为从 pnpm 的存储中复制；操作成功之后，它按 profile 中 `delo-plugin-install-check` 行的设置，对操作安装的内容运行[插件安装检查](#plugins)。让每个启动 Host 的命令都应用 Delo 的层，见[原生限制设计](../design/native-confinement.md#every-way-a-host-boots)。
+- **`delorun plugin`。** 它运行上游的 pnpm 操作，不带 Delo 的任何行：没有受保护的 home、没有被拒绝的套接字、没有同意、没有抓取防护，也没有隐私默认值。在 pnpm 运行之前，它把 profile 的包设为从 pnpm 的存储中复制；操作成功之后，它按 profile 中 `delo-plugin-install-check` 行的设置，对操作安装的内容运行[插件安装检查](#插件)。让每个启动 Host 的命令都应用 Delo 的层，见[原生限制设计](../design/native-confinement.md#every-way-a-host-boots)。
 - **桌面应用。** 它是上游的，未作改动，Delo 的任何行都不适用于它。
 - **Windows。** 沙箱只限制写入。受限命令可以读取整个 home，包括 Delo 的密钥、上游的凭据文件与启动令牌，并且不会对 home 运行任何权限模式或访问列表检查。
 
@@ -66,7 +66,7 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity.zh.md)
 - **会话**：chat 历史（其中常含密钥），以及附件、全文索引、溢出文件与浏览器中的草稿。
 - **Delo 的 home**：`~/.delo`，包括其密钥、每次启动的令牌、更新通道的套接字、已验证的发布根与检查点，以及运行时仓库（runtime store）。
 - **发布完整性**：已签名的发布清单、运行时文件与 npm 启动器，以及为它们签名的离线 root 与 targets 密钥。
-- **插件供应**：已安装的插件。profile 的 `pnpm-lock.yaml` 记录每个版本的 tarball 完整性或 git 提交，pnpm 只在获取 tarball 时用它核对，之后从不检查已安装的文件。Delo 的安装记录在[安装检查](#plugins)通过时写入，记下每个来自 npm、tarball 或 git 的插件每个已安装文件的 SHA-256，每次启动和 `delorun verify` 都用它比对已安装的文件。
+- **插件供应**：已安装的插件。profile 的 `pnpm-lock.yaml` 记录每个版本的 tarball 完整性或 git 提交，pnpm 只在获取 tarball 时用它核对，之后从不检查已安装的文件。Delo 的安装记录在[安装检查](#插件)通过时写入，记下每个来自 npm、tarball 或 git 的插件每个已安装文件的 SHA-256，每次启动和 `delorun verify` 都用它比对已安装的文件。
 
 <a id="parties-and-trust"></a>
 
@@ -213,7 +213,7 @@ Tailscale 私有提供方已构建（[C7](../contracts/c07-reach-providers.zh.md
 
 ### 插件索引与撤销
 
-插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）：除上游的锁文件之外，Delo 不固定任何插件版本，也无法停用任何已安装的版本。[C17](../contracts/c17-plugin-versions.zh.md) 对 DSH 或 Delo 版本要求未满足或无法读取的插件，在安装时拒绝、在启动时停用，并且从不为此导入插件代码。Delo 不读取插件代码；[安装检查](#plugins)读取锁文件、公告源与注册表的发布时间，并记录每个已安装的文件。
+插件索引与撤销列表尚未构建（[C13](../contracts/c13-catalogue-revocation.zh.md)）：除上游的锁文件之外，Delo 不固定任何插件版本，也无法停用任何已安装的版本。[C17](../contracts/c17-plugin-versions.zh.md) 对 DSH 或 Delo 版本要求未满足或无法读取的插件，在安装时拒绝、在启动时停用，并且从不为此导入插件代码。Delo 不读取插件代码；[安装检查](#插件)读取锁文件、公告源与注册表的发布时间，并记录每个已安装的文件。
 
 <a id="updates-and-rollback"></a>
 
