@@ -3,7 +3,7 @@
  * the copies kept until an update commits or ends, the restore that sets the newer data aside behind a journal, the
  * completion of a restore killed at any point, and the listing and guarded removal of kept data.
  */
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, renameSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, renameSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
@@ -413,6 +413,13 @@ describe('kept data', () => {
     await discardKeptData(home, 'runtimes.set-aside-20261113T120000Z', FREE)
     expect(await listKeptData(home)).toEqual([])
     expect(read('runtimes/store.json')).toBe('the live store')
+  })
+
+  it('removes a set-aside program store whose directories are read-only, as C1 installs them', async () => {
+    put('runtimes.set-aside-20261113T120000Z/0.1.0/app/file.js', 'program')
+    for (const directory of ['0.1.0/app', '0.1.0']) chmodSync(join(home, 'runtimes.set-aside-20261113T120000Z', directory), 0o555)
+    await discardKeptData(home, 'runtimes.set-aside-20261113T120000Z', FREE)
+    expect(await listKeptData(home)).toEqual([])
   })
 
   it('refuses to remove anything while a restore journal exists or a rollback runs, and a copy an update record refers to', async () => {
