@@ -44,8 +44,8 @@ describe('the Look row', () => {
     expect(screen.getByRole('alert').textContent).toBe(en.saveFailed)
   })
 
-  it('says where the look is switched back, and names the product Delorun', () => {
-    expect(en['look.lead']).toContain('General → Look')
+  it('says the switch stays on this row in both looks, and names the product Delorun', () => {
+    expect(en['look.lead']).toContain('This switch stays here in both looks.')
     expect(en['look.lead']).not.toContain('Delo ')
   })
 })
