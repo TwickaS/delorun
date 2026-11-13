@@ -207,7 +207,7 @@ function VersionRow({ t, fetch, computer, version, onSwitched }: {
           {t(changes === undefined ? 'changes.show' : 'changes.hide')}
         </Button>
         {version.current ? null : computer
-          ? <Button variant="primary" size="sm" disabled={busy} onClick={() => { void switchTo() }}>{t(busy ? 'switch.busy' : 'switch.action')}</Button>
+          ? <Button variant="outline" size="sm" disabled={busy} onClick={() => { void switchTo() }}>{t(busy ? 'switch.busy' : 'switch.action')}</Button>
           : <span className={css.description}>{t('doAtComputer')}</span>}
       </div>
     </div>
