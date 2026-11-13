@@ -221,7 +221,7 @@ Run it in a terminal. Delorun checks the release it installs the way an update d
 Use this only if `npx delorun@latest repair` cannot run. It needs no Delorun code.
 
 1. Stop Delorun: `delorun stop`, or end the `node` processes that run `@delo/cli`.
-2. Back up the whole home. On Linux or macOS: `cp -a ~/.delo ~/delo-backup-$(date +%F)`. On Windows: `robocopy %USERPROFILE%\.delo %USERPROFILE%\delo-backup /E /COPY:DAT`. `delorun export` saves single chats or workspaces only, so it is not a backup of settings and keys.
+2. Back up your data. Copying the whole home with `cp -a ~/.delo ~/delo-backup-$(date +%F)` also copies `runtimes/`, which holds every installed release at about 1.5 GB each, so check that `df -h ~` shows that much free space. Step 4 installs the programs again, so you can leave `runtimes/` out: `mkdir ~/delo-backup-$(date +%F) && tar -C ~/.delo --exclude=./runtimes -cf - . | tar -C ~/delo-backup-$(date +%F) -xf -`. `delorun export` saves single chats or workspaces only, so it is not a backup of settings and keys.
 3. Move the program aside, not your data: `mv ~/.delo/runtimes ~/.delo/runtimes.broken`, and `~/.delo/staging` too if it exists.
 4. Install again: `npx delorun@latest`. The program store is empty, so the launcher installs and checks the current release and starts it. Your chats, settings, keys and profiles are untouched.
 
