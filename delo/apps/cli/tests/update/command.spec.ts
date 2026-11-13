@@ -132,8 +132,8 @@ describe('reportLines', () => {
     expect(lines.slice(3)).toEqual([
       'No plugin, bundle or profile row changes.',
       'Your changes to Delo\'s own files (2):',
-      '  - Your change to app/a.js carries over to Delo 1.1.0.',
-      '  - Your change to app/b.js conflicts with Delo 1.1.0\'s file; the new release\'s file runs, and yours is kept beside it as app/b.js.mine.',
+      '  - Your change to app/a.js carries over to Delorun 1.1.0.',
+      '  - Your change to app/b.js conflicts with Delorun 1.1.0\'s file; the new release\'s file runs, and yours is kept beside it as app/b.js.mine.',
     ])
   })
 
@@ -141,8 +141,8 @@ describe('reportLines', () => {
     const lines = reportLines(report({ items: [CARRIED_FILE, MERGED_FILE] }))
 
     expect(lines.slice(5)).toEqual([
-      '  - Your change to app/a.js carries over to Delo 1.1.0.',
-      '  - Your change to app/c.js and Delo 1.1.0\'s change to it merge into a file neither has; read the merge before you confirm.',
+      '  - Your change to app/a.js carries over to Delorun 1.1.0.',
+      '  - Your change to app/c.js and Delorun 1.1.0\'s change to it merge into a file neither has; read the merge before you confirm.',
       '    --- a/app/c.js',
       '    +++ b/app/c.js',
       '    @@ -1,1 +1,1 @@',

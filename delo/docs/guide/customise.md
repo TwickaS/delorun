@@ -6,7 +6,7 @@ description: "Where to customise Delo: settings, the profile patch, agent preset
 
 English
 
-Delo has no release yet; this page describes the first release.
+This page describes how Delo works today.
 
 ## Summary
 

@@ -26,7 +26,7 @@ describe('c03-harness-change-carried', () => {
     const report = reportOf([{ file: FILE, merge }])
 
     expect(report.items).toEqual([{ kind: 'harness', subject: { file: FILE }, reason: 'harness-change-carried', effect: 'kept', verification: 'verified', detail: { merge }, actions: [] }])
-    expect(reasonMessage(report.items[0]!, report)).toBe(`Your change to ${FILE} carries over to Delo 1.0.0.`)
+    expect(reasonMessage(report.items[0]!, report)).toBe(`Your change to ${FILE} carries over to Delorun 1.0.0.`)
     expect(report.counts).toEqual({ disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0, harness: 1 })
     expect(confirmsWithoutAsking(report)).toBe(true)
   })
@@ -42,7 +42,7 @@ describe('c03-harness-change-merged', () => {
     const report = reportOf([{ file: FILE, merge: 'merged', result: RESULT, diff }])
 
     expect(report.items).toEqual([{ kind: 'harness', subject: { file: FILE }, reason: 'harness-change-merged', effect: 'changed', verification: 'verified', detail: { merge: 'merged', result: RESULT, diff }, actions: ['skip-update'] }])
-    expect(reasonMessage(report.items[0]!, report)).toBe(`Your change to ${FILE} and Delo 1.0.0's change to it merge into a file neither has; read the merge before you confirm.`)
+    expect(reasonMessage(report.items[0]!, report)).toBe(`Your change to ${FILE} and Delorun 1.0.0's change to it merge into a file neither has; read the merge before you confirm.`)
     expect(report.counts).toMatchObject({ changed: 1, harness: 1 })
   })
 
@@ -60,7 +60,7 @@ describe('c03-harness-conflict-keeps-mine', () => {
     const report = reportOf([{ file: FILE, merge }])
 
     expect(report.items).toEqual([{ kind: 'harness', subject: { file: FILE }, reason: 'harness-change-conflicts', effect: 'disabled', verification: 'verified', detail: { merge }, actions: ['skip-update'] }])
-    expect(reasonMessage(report.items[0]!, report)).toBe(`Your change to ${FILE} conflicts with Delo 1.0.0's file; the new release's file runs, and yours is kept beside it as ${FILE}.mine.`)
+    expect(reasonMessage(report.items[0]!, report)).toBe(`Your change to ${FILE} conflicts with Delorun 1.0.0's file; the new release's file runs, and yours is kept beside it as ${FILE}.mine.`)
     expect(report.counts).toMatchObject({ disabled: 1, harness: 1 })
   })
 
@@ -68,7 +68,7 @@ describe('c03-harness-conflict-keeps-mine', () => {
     const report = reportOf([{ file: FILE, merge: 'release-changed-removed' }])
 
     expect(report.items).toMatchObject([{ reason: 'harness-change-conflicts', effect: 'disabled', actions: ['skip-update'] }])
-    expect(reasonMessage(report.items[0]!, report)).toBe(`You removed ${FILE}, and Delo 1.0.0 changed it; the new release's file runs.`)
+    expect(reasonMessage(report.items[0]!, report)).toBe(`You removed ${FILE}, and Delorun 1.0.0 changed it; the new release's file runs.`)
   })
 
   it('keeps `--yes` from confirming a report with a conflicted file, whatever else carries', () => {

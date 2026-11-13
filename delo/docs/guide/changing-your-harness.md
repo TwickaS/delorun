@@ -4,7 +4,7 @@ description: "Changing what Delo runs: why a plugin you link from a folder runs 
 
 # Changing your harness
 
-Delo has no release yet; this page describes the first release.
+This page describes how Delo works today.
 
 ## Summary
 

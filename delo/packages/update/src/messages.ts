@@ -134,11 +134,11 @@ function dataMessage(item: ReportItem & { readonly kind: 'data' }, versions: Mes
  */
 function harnessMessage(item: ReportItem & { readonly kind: 'harness' }, versions: MessageVersions): string {
   const { file } = item.subject
-  if (item.reason === 'harness-change-merged') return `Your change to ${file} and Delo ${versions.to.delo}'s change to it merge into a file neither has; read the merge before you confirm.`
-  if (item.reason !== 'harness-change-conflicts') return `Your change to ${file} carries over to Delo ${versions.to.delo}.`
+  if (item.reason === 'harness-change-merged') return `Your change to ${file} and Delorun ${versions.to.delo}'s change to it merge into a file neither has; read the merge before you confirm.`
+  if (item.reason !== 'harness-change-conflicts') return `Your change to ${file} carries over to Delorun ${versions.to.delo}.`
   // A file the person removed has no content to keep beside the release's.
-  if (item.detail.merge === 'release-changed-removed') return `You removed ${file}, and Delo ${versions.to.delo} changed it; the new release's file runs.`
-  return `Your change to ${file} conflicts with Delo ${versions.to.delo}'s file; the new release's file runs, and yours is kept beside it as ${file}.mine.`
+  if (item.detail.merge === 'release-changed-removed') return `You removed ${file}, and Delorun ${versions.to.delo} changed it; the new release's file runs.`
+  return `Your change to ${file} conflicts with Delorun ${versions.to.delo}'s file; the new release's file runs, and yours is kept beside it as ${file}.mine.`
 }
 
 /**

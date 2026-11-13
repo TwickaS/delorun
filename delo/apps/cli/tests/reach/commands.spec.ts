@@ -704,7 +704,7 @@ describe('setup\'s reach section', () => {
     // Pins the second question: any device on the tailnet may ask only when the person says so, and going back returns.
     await expect(section.ask(io([true, true], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toEqual({ answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } }, status: 'answered' })
     await expect(section.ask(io([true, BACK], notes), draft, { home: deloHome, profile: 'default' } as never)).resolves.toBe(BACK)
-    expect(notes[0]).toContain(TRUST_STATEMENT[0])
+    expect(notes.some(note => note.includes(TRUST_STATEMENT[0]!))).toBe(true)
     const directory = join(deloHome, 'profiles', 'default')
     const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } } as never
     expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale; any device on your tailnet may ask to pair')

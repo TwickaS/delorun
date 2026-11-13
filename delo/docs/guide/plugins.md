@@ -6,7 +6,7 @@ description: "Writing a Delo plugin from nothing to running: delorun plugin new,
 
 English
 
-Delo has no release yet; this page describes the first release.
+This page describes how Delo works today.
 
 ## Summary
 
