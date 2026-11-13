@@ -13,7 +13,8 @@ import { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, Config, FULL_ACCESS_PRESET, permissionStorePath, PermissionDefaults, SAFER_PRESET } from '../src/index.ts'
+import type { PermissionDefaults } from '../src/index.ts'
+import { apply, Config, FULL_ACCESS_PRESET, permissionStorePath, SAFER_PRESET } from '../src/index.ts'
 import {
   DANGEROUS_WARNING_VERSION, dangerousGrantPath, deviceGrantsPath, readDangerousGrant, readDangerousGrantSync, removeDangerousGrant, serializePermissionStore,
   writeDangerousGrant,

@@ -13,7 +13,8 @@
  */
 import type {} from './full-access-grants.ts'
 import { basename, dirname } from 'node:path'
-import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
+import { Service, type Volatile } from '@deepseek-ai/cordis'
 import type {} from '@delo/logs/cordis'
 import schema from '@deepseek-ai/schemastery'
 import type { DeviceId, ReachListenerId } from '@delo/contract-admission'

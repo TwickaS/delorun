@@ -12,7 +12,8 @@ import {
   type FixtureFile,
   type FixtureHome,
 } from './support.ts'
-import { HomeRuntimeStore, RuntimeStoreError, type ChannelRelease, type OpenUpdateChannel, type PreparePhase, type ReleaseFileBytes } from '../src/index.ts'
+import type { RuntimeStoreError } from '../src/index.ts'
+import { HomeRuntimeStore, type ChannelRelease, type OpenUpdateChannel, type PreparePhase, type ReleaseFileBytes } from '../src/index.ts'
 
 const V1 = version('0.1.0')
 const V2 = version('0.2.0')

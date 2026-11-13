@@ -8,7 +8,8 @@
 import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, realpath, rename, rm, rmdir } from 'node:fs/promises'
 import { basename, dirname, join, sep } from 'node:path'
-import { Context, Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
+import { Service } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-subprocess'
@@ -26,7 +27,8 @@ import { folderName, WorkspaceRefusedError } from './service.ts'
 import type {
   CreateRequest, DeloWorkspaces, ImportRequest, ImportRow, InstructionsRequest, InstructionsResponse, TrashEntry, WorkspacesListing,
 } from './service.ts'
-import { ImportRecord, TrashRecord, workspacesDomain } from './spec.ts'
+import type { ImportRecord, TrashRecord } from './spec.ts'
+import { workspacesDomain } from './spec.ts'
 
 /** The folder under the root that holds trashed folders. A folder name cannot start with a dot, so no workspace takes its name. */
 const TRASH = '.delo-trash'
