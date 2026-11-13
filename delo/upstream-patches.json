@@ -1542,7 +1542,7 @@
       "path": "pnpm-workspace.yaml",
       "class": "security",
       "reason": "Adds Delo's workspace globs, the `!delo/apps/docs` exclusion, the `@simplewebauthn/server>@peculiar/asn1-schema` override that passkey signature checks need, and `allowBuilds: false` entries for Delo's packages. Upstream's lines are unchanged. Lead verdict: kept; the allowBuilds additions are all false, so build scripts run no more than stock. Adds the `patchedDependencies` entry for the MCP SDK stdio `argv0` patch. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "3a70a11f51485eb275594ee430b133f1a84d472fdcea23c025fc23141fa29475"
+      "sha256": "221491333bdb97d0766bbdd3cdb0a027027a2a0467ccd143273907abddc110c4"
     },
     {
       "path": "scripts/check-workspace-constraints.ts",
